@@ -40,7 +40,7 @@ ColumnLayout {
         error = "";
     }
     function execute() {
-        if (!selected || busy)
+        if (!selected || busy || !SessionServices.allows("power"))
             return;
         error = "";
         request.command = ["gnoblinctl", "session", pending];

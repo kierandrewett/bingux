@@ -1,0 +1,11 @@
+[Trigger]
+Type = Package
+Operation = Install
+Operation = Upgrade
+Target = filesystem
+Target = bingux-os
+
+[Action]
+Description = Setting Bingux OS identity files...
+When = PostTransaction
+Exec = /bin/sh -c 'install -m644 /usr/share/bingux/release/os-release /usr/lib/os-release && install -m644 /usr/share/bingux/release/issue /etc/issue && rm -f /etc/arch-release'

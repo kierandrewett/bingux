@@ -6,9 +6,15 @@ import json
 import os
 from pathlib import Path
 import re
-import tempfile
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from bingux_runtime import atomic_write  # noqa: E402
 
 ID = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
+# Session contexts a widget may declare. Only "desktop" is honoured today: the
+# lock screen and the greeter never load extensions (see docs/extensions.md).
+CONTEXTS = ("desktop", "locked", "greeter")
 
 
 def config_path():
@@ -64,12 +70,21 @@ def manifest(folder):
         seen.add(widget["id"])
         if not isinstance(widget.get("name"), str) or not widget["name"].strip():
             raise ValueError("Each widget needs a name")
+        contexts = widget.get("contexts", ["desktop"])
+        if (
+            not isinstance(contexts, list)
+            or not contexts
+            or any(context not in CONTEXTS for context in contexts)
+            or len(set(contexts)) != len(contexts)
+        ):
+            raise ValueError("contexts must list distinct values from " + ", ".join(CONTEXTS))
         result["widgets"].append(
             dict(
                 widget,
                 id=f"extension:{data['id']}/{widget['id']}",
                 extensionId=data["id"],
                 label=widget["name"],
+                contexts=contexts,
                 source=component(folder, widget.get("component")),
                 previewSource=component(folder, widget.get("preview", widget.get("component"))),
             )
@@ -131,16 +146,7 @@ def set_enabled(identifier, enabled):
     data["enabled"] = [item for item in data["enabled"] if item != identifier]
     if enabled:
         data["enabled"].append(identifier)
-    target = config_path()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(mode="w", dir=target.parent, delete=False) as output:
-        temporary = Path(output.name)
-        json.dump(data, output, indent=2)
-        output.write("\n")
-    try:
-        temporary.replace(target)
-    finally:
-        temporary.unlink(missing_ok=True)
+    atomic_write(config_path(), json.dumps(data, indent=2) + "\n")
 
 
 def main():

@@ -14,6 +14,21 @@ import tempfile
 import time
 
 
+# Command names that start a Bingux shell surface. Each is a symlink to
+# bingux-shell, which maps the name to a mode (see packages/bingux-shell).
+SHELL_COMMANDS = (
+    "bingux",
+    "bingux-lock",
+    "bingux-greeter",
+    "bingux-popouts",
+    "bingux-wallpaper",
+    "bingux-search-ui",
+    "bingux-switcher-ui",
+    "bingux-emoji-ui",
+    "bingux-capture-ui",
+)
+
+
 def install(source, destination, executable=False):
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source, destination)
@@ -38,33 +53,17 @@ def write_launcher(path, contents):
     path.chmod(0o755)
 
 
-def resolve_quickshell(no_systemd):
-    """Find a Quickshell binary compatible with the selected Gnoblin runtime.
+def resolve_tool(name):
+    """Absolute path of a desktop tool the shell calls, resolved at install time.
 
-    A source-installed Gnoblin can ship a matching Quickshell under its XDG
-    data directory.  Prefer it to a distribution `qs`: it is built with the
-    same Qt stack that Gnoblin starts for the user.  An explicit environment
-    override always wins, so distributions and shell developers remain free to
-    provide their own runtime.
+    Package builds run in a build root that lacks runtime tools, so a missing
+    tool falls back to the distribution path the package depends on.
     """
-    configured = os.environ.get("BINGUX_QUICKSHELL")
-    if configured:
-        if shutil.which(configured):
-            return configured
-        if not no_systemd:
-            raise ValueError(f"BINGUX_QUICKSHELL is not executable: {configured}")
-        return configured
-    data_home = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
-    gnoblin_runtime = data_home / "gnoblin/quickshell-fedora/bin/quickshell"
-    if gnoblin_runtime.is_file() and os.access(gnoblin_runtime, os.X_OK):
-        return str(gnoblin_runtime)
-    for candidate in ("gnoblin-quickshell", "qs", "quickshell"):
-        resolved = shutil.which(candidate)
-        if resolved:
-            return resolved
-    if not no_systemd:
-        raise ValueError("Quickshell was not found; install it or set BINGUX_QUICKSHELL")
-    return "qs"
+    path = shutil.which(name)
+    if path is None:
+        path = f"/usr/bin/{name}"
+        print(f"install-shell: {name} is not on PATH; the search config will use {path}", file=sys.stderr)
+    return path
 
 
 def systemctl_user(arguments, check=True):
@@ -134,17 +133,17 @@ def migrate_legacy_search_launcher(prefix):
     subprocess.run(
         [
             sys.executable,
-            str(prefix / "share/bingux/shell/migrate-search-config.py"),
+            str(prefix / "libexec/bingux/shell/migrate-search-config.py"),
             str(path),
             str(Path(sys.executable)),
-            str(prefix / "share/bingux/shell/launch-application.py"),
-            str(prefix / "share/bingux/shell/steam-games.py"),
+            str(prefix / "libexec/bingux/shell/launch-application.py"),
+            str(prefix / "libexec/bingux/shell/steam-games.py"),
         ],
         check=True,
     )
 
 
-def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=False):
+def build_payload(source, build, prefix, qml, target, managed=False):
     """Install payload files and return their paths relative to prefix."""
     payload = {
         build / "effects/libbinguxeffects.so": qml / "Bingux/Effects/libbinguxeffects.so",
@@ -153,13 +152,33 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         source / "packages/bingux-wayland-sync/qmldir": qml / "Bingux/Wayland/qmldir",
         build / "text/libbinguxtext.so": qml / "Bingux/Text/libbinguxtext.so",
         source / "packages/bingux-text-layout/qmldir": qml / "Bingux/Text/qmldir",
+        build / "bingux-shell/quickshell/src/bingux-shell": prefix / "bin/bingux-shell",
+        build / "bingux-shell.sxa": qml.parent / "bingux-shell.sxa",
         build / "bingux-audio-meter": prefix / "bin/bingux-audio-meter",
         build / "bingux-image-clipboard": prefix / "libexec/bingux/bingux-image-clipboard",
         build / "bingux-frame": prefix / "libexec/bingux/bingux-frame",
+        build / "cargo/release/bingux-config": prefix / "bin/bingux-config",
+        build / "cargo/release/bingux-helper": prefix / "bin/bingux-helper",
         build / "cargo/release/bingux-searchd": prefix / "bin/bingux-searchd",
         build / "cargo/release/bingux-statusd": prefix / "bin/bingux-statusd",
+        build / "cargo/release/bingux-session": prefix / "bin/bingux-session",
+        build / "cargo/release/xdg-desktop-portal-bingux": prefix / "libexec/bingux/xdg-desktop-portal-bingux",
+        build / "cargo/release/bingux-global-shortcuts": prefix / "libexec/bingux/bingux-global-shortcuts",
+        build / "cargo/release/bingux-settings": prefix / "bin/bingux-settings",
+        source / "packages/bingux-settings/bingux-settings.desktop": prefix
+        / "share/applications/bingux-settings.desktop",
         source / "scripts/bingux-clipboard-paste": prefix / "bin/bingux-clipboard-paste",
+        source / "scripts/bingux-greeter-session": prefix / "bin/bingux-greeter-session",
         source / "packaging/gnoblin/bingux.lua": prefix / "share/gnoblin/conf.d/bingux.lua",
+        source / "packaging/gnoblin/greeter.lua": prefix / "share/bingux/greeter/gnoblin.lua",
+        source / "packaging/greetd/config.toml": prefix / "share/bingux/greeter/greetd.toml",
+        source / "packaging/polkit/50-bingux-greeter.rules": prefix / "share/polkit-1/rules.d/50-bingux-greeter.rules",
+        source / "packaging/tmpfiles/bingux-greeter.conf": prefix / "lib/tmpfiles.d/bingux-greeter.conf",
+        source / "packaging/portal/bingux.portal": prefix / "share/xdg-desktop-portal/portals/bingux.portal",
+        source / "packaging/portal/org.freedesktop.impl.portal.desktop.bingux.service": prefix
+        / "share/dbus-1/services/org.freedesktop.impl.portal.desktop.bingux.service",
+        source / "packaging/portal/org.gnoblin.Shell.GlobalShortcutsProvider.service": prefix
+        / "share/dbus-1/services/org.gnoblin.Shell.GlobalShortcutsProvider.service",
     }
     missing = [str(path) for path in payload if not path.is_file()]
     if missing:
@@ -175,6 +194,14 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
             # QMLDIR is allowed to be outside PREFIX for package builders.
             installed.append(destination)
 
+    def write_generated(destination, text, executable=False):
+        destination_path = target(destination)
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        destination_path.write_text(text)
+        if executable:
+            destination_path.chmod(0o755)
+        installed.append(destination.relative_to(prefix))
+
     adwaita_source = source / "subprojects/adwaita-icon-theme"
     adwaita_assets = adwaita_source / "Adwaita"
     adwaita_index = adwaita_source / "index.theme"
@@ -182,7 +209,9 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         raise ValueError(
             "Adwaita icon theme submodule is missing; run git submodule update --init subprojects/adwaita-icon-theme"
         )
-    adwaita_install = prefix / "share/icons/Adwaita"
+    # Private to Bingux (AdwaitaIcons.qml reads BINGUX_ADWAITA_ICON_DIR), so it
+    # never collides with the distribution's adwaita-icon-theme under icons/.
+    adwaita_install = prefix / "share/bingux/icons/Adwaita"
     copy(adwaita_index, adwaita_install / "index.theme")
     for path in adwaita_assets.rglob("*"):
         if path.is_file():
@@ -199,13 +228,12 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
             folder_open,
         )
 
-    shell = prefix / "share/bingux/shell"
-    for path in (source / "shell/bingux").rglob("*"):
-        if not path.is_file() or "__pycache__" in path.parts or path.suffix == ".pyc":
-            continue
-        if path.name.endswith("Test.qml"):
-            continue
-        copy(path, shell / path.relative_to(source / "shell/bingux"))
+    # The QML, scripts and assets travel in the shell archive next to the QML
+    # plugins; bingux-shell unpacks it per user. The Python helpers the shell
+    # spawns are plain files under libexec, found through BINGUX_HELPER_DIR.
+    helpers = prefix / "libexec/bingux/shell"
+    for path in sorted((source / "shell/bingux").glob("*.py")):
+        copy(path, helpers / path.name)
     gnoblin_integration = prefix / "share/bingux/gnoblin"
     for path in (source / "shell/gnoblin").rglob("*"):
         if not path.is_file() or "__pycache__" in path.parts or path.suffix == ".pyc":
@@ -215,6 +243,8 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         executable = destination.parent == prefix / "bin" or destination in (
             prefix / "libexec/bingux/bingux-image-clipboard",
             prefix / "libexec/bingux/bingux-frame",
+            prefix / "libexec/bingux/xdg-desktop-portal-bingux",
+            prefix / "libexec/bingux/bingux-global-shortcuts",
         )
         if path == source / "packaging/gnoblin/bingux.lua":
             # GDM does not necessarily include the user's command-link folder
@@ -241,10 +271,39 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
                 '"/usr/local/libexec/bingux/bingux-frame"',
                 json.dumps(str(prefix / "libexec/bingux/bingux-frame")),
             )
-            destination_path = target(destination)
-            destination_path.parent.mkdir(parents=True, exist_ok=True)
-            destination_path.write_text(generated)
-            installed.append(destination.relative_to(prefix))
+            write_generated(destination, generated)
+        elif path == source / "packaging/gnoblin/greeter.lua":
+            # The greeter account has no shell profile; the autostart path must
+            # point at this install's wrapper.
+            generated = path.read_text()
+            for name in ("bingux-greeter", "bingux-statusd"):
+                generated = generated.replace(
+                    json.dumps("/usr/local/bin/" + name), json.dumps(str(prefix / ("bin/" + name)))
+                )
+            write_generated(destination, generated)
+        elif path in (
+            source / "packaging/portal/org.freedesktop.impl.portal.desktop.bingux.service",
+            source / "packaging/portal/org.gnoblin.Shell.GlobalShortcutsProvider.service",
+        ):
+            # D-Bus activation runs the installed backend, so Exec must follow the prefix.
+            write_generated(
+                destination,
+                path.read_text().replace("/usr/libexec/bingux", str(prefix / "libexec/bingux")),
+            )
+        elif path == source / "scripts/bingux-greeter-session":
+            write_generated(
+                destination,
+                path.read_text()
+                .replace(
+                    "GREETER_LUA=/usr/local/share/bingux/greeter/gnoblin.lua",
+                    "GREETER_LUA=" + shlex.quote(str(prefix / "share/bingux/greeter/gnoblin.lua")),
+                )
+                .replace(
+                    "SESSION_BIN=/usr/local/bin/bingux-session",
+                    "SESSION_BIN=" + shlex.quote(str(prefix / "bin/bingux-session")),
+                ),
+                executable=True,
+            )
         else:
             copy(path, destination, executable)
     entry_path = prefix / "share/gnoblin/scripts/bingux-text-input.js"
@@ -266,54 +325,38 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     if managed:
         copy(source / "scripts/install-shell.py", prefix / "libexec/bingux/install-shell.py", True)
 
-    common = (
-        "#!/bin/sh\nset -eu\nulimit -c 0\n# Optional: BINGUX_SOFTWARE_RENDERING=1|0 selects the shell rendering mode.\n"
-    )
-    common += "export BINGUX_QUICKSHELL=${BINGUX_QUICKSHELL:-" + shlex.quote(quickshell) + "}\n"
-    common += "export QML_IMPORT_PATH=" + shlex.quote(str(qml)) + "${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}\n"
-    common += (
-        "export XDG_DATA_DIRS="
-        + shlex.quote(str(prefix / "share"))
-        + ":${XDG_DATA_DIRS:-/usr/local/share:/usr/share}\n"
-    )
-    common += "export BINGUX_ADWAITA_ICON_DIR=" + shlex.quote(str(prefix / "share/icons/Adwaita")) + "\n"
-    common += "export BINGUX_CONFIG_PATH=" + shlex.quote(str(shell)) + "\n"
-    common += "export BINGUX_AUDIO_METER=" + shlex.quote(str(prefix / "bin/bingux-audio-meter")) + "\n"
+    # Each shell surface is bingux-shell under another name; the binary reads
+    # argv[0] and sets its own environment. Scripts that are not the shell
+    # keep a small launcher so binguxctl and the uninstaller find their files.
+    for name in SHELL_COMMANDS:
+        link = target(prefix / "bin" / name)
+        link.parent.mkdir(parents=True, exist_ok=True)
+        if link.is_symlink() or link.exists():
+            link.unlink()
+        link.symlink_to("bingux-shell")
+        installed.append(Path("bin") / name)
+    common = "#!/bin/sh\nset -eu\n"
+    common += "export BINGUX_PYTHON=${BINGUX_PYTHON:-" + shlex.quote(str(Path(sys.executable))) + "}\n"
+    common += "export BINGUX_QUICKSHELL=${BINGUX_QUICKSHELL:-" + shlex.quote(str(prefix / "bin/bingux-shell")) + "}\n"
     wrappers = {
-        "bingux": 'exec "${BINGUX_QUICKSHELL:-qs}" -p "$BINGUX_CONFIG_PATH" "$@"\n',
-        "bingux-search-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
-        + shlex.quote(str(shell / "SearchShell.qml"))
+        # binguxctl addresses the running shell's IPC by its QML path, which
+        # for an archive install is the unpacked cache directory.
+        "binguxctl": 'export BINGUX_CONFIG_PATH="${BINGUX_CONFIG_PATH:-$("$BINGUX_QUICKSHELL" --shell-dir)}"\n'
+        + 'exec "$BINGUX_PYTHON" '
+        + shlex.quote(str(prefix / "libexec/bingux/binguxctl.py"))
         + ' "$@"\n',
-        "bingux-switcher-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
-        + shlex.quote(str(shell / "SwitcherShell.qml"))
-        + ' "$@"\n',
-        "bingux-emoji-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
-        + shlex.quote(str(shell / "EmojiShell.qml"))
-        + ' "$@"\n',
-        "bingux-capture-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
-        + shlex.quote(str(shell / "CaptureShell.qml"))
-        + ' "$@"\n',
-        "bingux-popouts": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
-        + shlex.quote(str(shell / "PopoutsShell.qml"))
-        + ' "$@"\n',
-        "bingux-wallpaper": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
-        + shlex.quote(str(shell / "WallpaperShell.qml"))
-        + ' "$@"\n',
-        "bingux-lock": 'exec "${BINGUX_QUICKSHELL:-qs}" -p ' + shlex.quote(str(shell / "LockShell.qml")) + ' "$@"\n',
-        "binguxctl": "exec python3 " + shlex.quote(str(prefix / "libexec/bingux/binguxctl.py")) + ' "$@"\n',
         "bingux-frame": "exec " + shlex.quote(str(prefix / "libexec/bingux/bingux-frame")) + ' "$@"\n',
     }
     if managed:
         wrappers["bingux-uninstall"] = (
-            "exec python3 "
+            'exec "$BINGUX_PYTHON" '
             + shlex.quote(str(prefix / "libexec/bingux/install-shell.py"))
             + " --user --uninstall --prefix "
             + shlex.quote(str(prefix))
             + "\n"
         )
     for name, command in wrappers.items():
-        copy_text = target(prefix / "bin" / name)
-        write_launcher(copy_text, common + command)
+        write_launcher(target(prefix / "bin" / name), common + command)
         installed.append(Path("bin") / name)
 
     config = target(prefix / "share/bingux/search.json")
@@ -326,10 +369,10 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
                     # The daemon validates the executable path before it starts.
                     # Use the interpreter that ran this installer so the command
                     # remains valid when the user does not have python3 on PATH.
-                    "applicationLauncher": [str(Path(sys.executable)), str(shell / "launch-application.py")],
-                    "steamGameCatalog": [str(Path(sys.executable)), str(shell / "steam-games.py"), "--search"],
-                    "fileOpener": ["/usr/bin/xdg-open"],
-                    "clipboard": ["/usr/bin/wl-copy"],
+                    "applicationLauncher": [str(Path(sys.executable)), str(helpers / "launch-application.py")],
+                    "steamGameCatalog": [str(Path(sys.executable)), str(helpers / "steam-games.py"), "--search"],
+                    "fileOpener": [resolve_tool("xdg-open")],
+                    "clipboard": [resolve_tool("wl-copy")],
                 },
             },
             indent=2,
@@ -339,13 +382,13 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     installed.append(Path("share/bingux/search.json"))
 
     search_service = target(prefix / "libexec/bingux/search-service")
-    search_migrator = prefix / "share/bingux/shell/migrate-search-config.py"
-    application_launcher = prefix / "share/bingux/shell/launch-application.py"
-    steam_game_catalog = prefix / "share/bingux/shell/steam-games.py"
+    search_migrator = helpers / "migrate-search-config.py"
+    application_launcher = helpers / "launch-application.py"
+    steam_game_catalog = helpers / "steam-games.py"
     write_launcher(
         search_service,
         "#!/bin/sh\nset -eu\n"
-        + 'config="${XDG_CONFIG_HOME:-$HOME/.config}/bingux/search.json"\n'
+        + 'config="${XDG_CONFIG_HOME:-${HOME:?}/.config}/bingux/search.json"\n'
         + '[ -f "$config" ] || config='
         + shlex.quote(str(prefix / "share/bingux/search.json"))
         + "\n"
@@ -366,11 +409,13 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     search_command = target(prefix / "bin/bingux-search-service")
     write_launcher(
         search_command,
-        "#!/bin/sh\nset -eu\nexec " + shlex.quote(str(search_service)) + ' "$@"\n',
+        "#!/bin/sh\nset -eu\nexec " + shlex.quote(str(prefix / "libexec/bingux/search-service")) + ' "$@"\n',
     )
     installed.append(Path("libexec/bingux/search-service"))
     installed.append(Path("bin/bingux-search-service"))
     unit_sources = sorted((source / "packaging/systemd").glob("bingux*.service"))
+    unit_sources += sorted((source / "packaging/systemd").glob("bingux*.path"))
+    unit_sources.append(source / "packaging/systemd/xdg-desktop-portal-bingux.service")
     unit_sources.append(source / "packaging/systemd/bingux.target")
     for unit_source in unit_sources:
         unit = unit_source.read_text()
@@ -386,15 +431,9 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
 
 def integration_paths(prefix, managed=False):
     names = (
-        "bingux",
+        "bingux-shell",
+        *SHELL_COMMANDS,
         "bingux-search-service",
-        "bingux-search-ui",
-        "bingux-switcher-ui",
-        "bingux-emoji-ui",
-        "bingux-capture-ui",
-        "bingux-popouts",
-        "bingux-wallpaper",
-        "bingux-lock",
         "binguxctl",
         "bingux-frame",
         "bingux-clipboard-paste",
@@ -411,6 +450,10 @@ def integration_paths(prefix, managed=False):
         "bingux-capture-ui.service",
         "bingux-emoji-ui.service",
         "bingux-lock.service",
+        "bingux-greeter-export.service",
+        "bingux-greeter-export.path",
+        "xdg-desktop-portal-bingux.service",
+        "bingux-global-shortcuts.service",
     )
     bin_dir = Path(os.environ.get("XDG_BIN_HOME") or Path.home() / ".local/bin")
     config_dir = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
@@ -537,7 +580,6 @@ def install_user(source, build, prefix, qml, no_systemd):
     migrate_legacy_bingux_paths(links)
     migrate_legacy_quickshell_unit()
     ensure_integration_is_safe(links)
-    quickshell = resolve_quickshell(no_systemd)
     staging = Path(tempfile.mkdtemp(prefix=f".{prefix.name}.install-", dir=prefix.parent))
     backup = None
     committed = False
@@ -548,7 +590,6 @@ def install_user(source, build, prefix, qml, no_systemd):
             prefix,
             qml,
             lambda path: staging / path.relative_to(prefix),
-            quickshell,
             managed=True,
         )
         manifest = {
@@ -627,6 +668,10 @@ def uninstall_user(prefix, no_systemd):
         if path.is_symlink() and path.resolve() == target_path.resolve():
             path.unlink()
     shutil.rmtree(prefix)
+    # bingux-shell unpacks the shell archive here on first start.
+    cache = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "bingux/shell"
+    if cache.is_dir():
+        shutil.rmtree(cache)
     print(f"Removed Bingux install: {prefix}")
     print("  user configuration was kept")
 

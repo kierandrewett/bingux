@@ -51,7 +51,9 @@ def frontmatter(text):
             )
             facts[str(key)[:80]] = rendered[:512]
         return "".join(lines[end + 1 :]), facts, ""
-    except (ValueError, TypeError, RecursionError, ImportError):
+    except ImportError:
+        return text, {}, "YAML frontmatter needs python3-pyyaml, which is not installed."
+    except (ValueError, TypeError, RecursionError):
         return text, {}, "Frontmatter could not be parsed."
     except Exception:
         return text, {}, "Frontmatter could not be parsed."

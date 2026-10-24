@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import time
@@ -12,8 +13,12 @@ gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import GdkPixbuf  # noqa: E402 - Select GI versions before importing their modules.
 
 root = Path(__file__).resolve().parents[1] / "shell/bingux"
-fixture = root / "CaptureNotificationTest.qml"
+fixture_source = Path(__file__).resolve().parent / "qml/CaptureNotificationTest.qml"
 with tempfile.TemporaryDirectory(prefix=".capture-notify-proof-", dir=Path.home()) as temporary:
+    shell = Path(temporary) / "shell"
+    shutil.copytree(root, shell, ignore=shutil.ignore_patterns("__pycache__"))
+    fixture = shell / "CaptureNotificationTest.qml"
+    shutil.copy(fixture_source, fixture)
     path = Path(temporary) / "Screenshot preview.png"
     pixbuf = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, False, 8, 640, 160)
     pixbuf.fill(0x345ABAFF)

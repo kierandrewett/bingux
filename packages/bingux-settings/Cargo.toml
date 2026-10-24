@@ -1,0 +1,21 @@
+[package]
+name = "bingux-settings"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "Settings application for the Bingux desktop shell"
+
+[[bin]]
+name = "bingux-settings"
+path = "src/main.rs"
+
+[features]
+default = []
+# `bingux-settings --snapshot DIR` renders every page headlessly to PNG.
+snapshot = ["bingux-ui/testing"]
+
+[dependencies]
+freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar"] }
+bingux-ui = { path = "../bingux-ui" }
+bingux-portal = { path = "../bingux-portal" }

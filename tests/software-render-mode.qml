@@ -6,7 +6,6 @@ import Quickshell.Io
 ShellRoot {
     id: shellRoot
     readonly property var theme: Theme
-    readonly property var lockTheme: LockTheme
     FileView {
         id: result
         path: Quickshell.env("BINGUX_SOFTWARE_RENDER_TEST_RESULT")
@@ -46,8 +45,6 @@ ShellRoot {
                 compare(shellRoot.theme.captureRegionShade.a, 1);
                 compare(shellRoot.theme.recordingShade.a, 1);
                 compare(shellRoot.theme.captureHighlight.a, 1);
-                compare(shellRoot.lockTheme.background.a, 1);
-                compare(shellRoot.lockTheme.surface.a, 1);
             } else {
                 verify(shellRoot.theme.shellSurface.a < 1);
                 verify(shellRoot.theme.popupSurface.a < 1);

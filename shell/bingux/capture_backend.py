@@ -18,12 +18,15 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 from capture_clipboard import ClipboardError, copy_image_to_clipboard
-import gi
 
-gi.require_version("Gst", "1.0")
-gi.require_version("GdkPixbuf", "2.0")
-gi.require_version("GstVideo", "1.0")
-from gi.repository import Gio, GLib, Gst, GdkPixbuf, GstVideo  # noqa: E402 - Select GI versions before importing their modules.
+TAG = "capture"
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from bingux_runtime import require_gi  # noqa: E402
+
+require_gi(TAG, Gst="1.0", GdkPixbuf="2.0", GstVideo="1.0", Gio="2.0", GLib="2.0")
+from gi.repository import Gio, GLib, Gst, GdkPixbuf, GstVideo  # noqa: E402 - require_gi selects the typelib versions first.
+
 
 PORTAL = "org.freedesktop.portal.Desktop"
 PORTAL_PATH = "/org/freedesktop/portal/desktop"
@@ -185,8 +188,13 @@ def settings(record):
         result[key] = int(record.get(key, default))
         if result[key] not in values:
             raise ValueError("Invalid " + key)
-    for key in ("cursor", "copy"):
+    for key in ("cursor", "copy", "portal"):
         result[key] = bool(record.get(key, key == "copy"))
+    if result["portal"]:
+        # Portal requests save a PNG for the backend and never use the desktop picker or clipboard.
+        if result["kind"] != "screenshot" or result["target"] == "window":
+            raise ValueError("Portal requests support screenshots of a region or screen only")
+        result["copy"] = False
     if result["target"] == "region":
         region = record.get("region", {})
         result["region"] = {key: int(region.get(key, 0)) for key in ("x", "y", "width", "height")}
@@ -333,7 +341,7 @@ class Capture:
                 elif command == "stop":
                     self.stop(record.get("hoveredAt", 0))
                 elif command == "cancel":
-                    self.cancel()
+                    self.cancel(record.get("request"))
             except (ValueError, TypeError, OSError, GLib.Error, subprocess.SubprocessError) as error:
                 self.fail(str(error))
         return True
@@ -437,6 +445,12 @@ class Capture:
 
     def reserve_output(self):
         kind = self.job["kind"]
+        if self.job["portal"]:
+            # Same place and form as Gnoblin's portal screenshots: a private PNG in the temp directory.
+            fd, path = tempfile.mkstemp(prefix="gnoblin-screenshot-", dir=GLib.get_tmp_dir())
+            os.close(fd)
+            self.final = self.temporary = Path(path)
+            return
         directory = str(self.job.get("directory", "")).strip()
         if not directory:
             folder_type = (
@@ -470,6 +484,12 @@ class Capture:
                 self.complete()
                 return False
             self.clear_preview()
+            if self.job["portal"]:
+                # Portal requests never open a desktop picker: grim alone captures the region or whole desktop.
+                if not shutil.which("grim") or not self.grim():
+                    raise ValueError("Screenshot needs grim to capture without a picker")
+                self.complete()
+                return False
             if (
                 self.job["kind"] == "screenshot"
                 and self.job["target"] != "window"
@@ -863,24 +883,25 @@ class Capture:
                 copied = copy_image_to_clipboard(output, "image/" + job["format"])
             except (ClipboardError, OSError, GLib.Error):
                 pass  # Clipboard failure must not hide a successfully saved image.
-        if job["kind"] == "screenshot":
-            # The shutter confirms the complete screenshot action: the file is
-            # in its final location and the optional clipboard copy has ended.
-            play_shutter()
         notified = False
-        try:
-            notifier = subprocess.Popen(
-                [sys.executable, str(Path(__file__).with_name("capture-notify.py")), str(output), job["kind"]],
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                start_new_session=True,
-            )
-            # Actions remain available after the capture worker or shell reloads.
-            if select.select([notifier.stdout], [], [], 1)[0]:
-                notified = notifier.stdout.readline().strip() == b"notified"
-            notifier.stdout.close()
-        except OSError:
-            pass
+        if not job["portal"]:
+            if job["kind"] == "screenshot":
+                # The shutter confirms the complete screenshot action: the file is
+                # in its final location and the optional clipboard copy has ended.
+                play_shutter()
+            try:
+                notifier = subprocess.Popen(
+                    [sys.executable, str(Path(__file__).with_name("capture-notify.py")), str(output), job["kind"]],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    start_new_session=True,
+                )
+                # Actions remain available after the capture worker or shell reloads.
+                if select.select([notifier.stdout], [], [], 1)[0]:
+                    notified = notifier.stdout.readline().strip() == b"notified"
+                notifier.stdout.close()
+            except OSError:
+                pass
         self.emit(
             "saved", path=str(output), bytes=output.stat().st_size, copied=copied, kind=job["kind"], notified=notified
         )
@@ -920,7 +941,7 @@ class Capture:
             self.remote_fd = -1
         self.job = None
 
-    def cancel(self):
+    def cancel(self, request=None):
         if self.pipeline and self.job and self.job["kind"] == "recording":
             self.stop()
             return
@@ -933,7 +954,8 @@ class Capture:
         self.cleanup()
         if self.temporary and self.temporary.exists() and self.temporary.stat().st_size == 0:
             self.temporary.unlink()
-        self.emit("cancelled")
+        fields = {"request": request} if request else {}
+        self.emit("cancelled", **fields)
         self.clear_preview()
 
     def fail(self, message):

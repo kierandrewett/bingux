@@ -1,6 +1,10 @@
 [Unit]
 Description=Bingux status service
 PartOf=bingux.target
+# The greeter starts its own status service from Gnoblin's autostart; a second
+# copy from this user manager would refuse its socket.
+ConditionUser=!greeter
+ConditionUser=!greetd
 After=graphical-session.target
 
 [Service]

@@ -14,13 +14,14 @@ import preview_formats as formats
 import preview_extra as extra
 from preview_limits import MAX_FILE_BYTES as MAX_FILE_BYTES, check_file
 
-import cairo
-from PIL import Image, ImageCms
-import gi
+TAG = "preview-document"
 
-gi.require_version("GdkPixbuf", "2.0")
-gi.require_version("Poppler", "0.18")
-from gi.repository import GdkPixbuf, Gio, Poppler  # noqa: E402 - Select GI versions before importing their modules.
+from bingux_runtime import require_gi, require_modules  # noqa: E402
+
+cairo, Image, ImageCms = require_modules(TAG, "cairo", "PIL.Image", "PIL.ImageCms")
+require_gi(TAG, GdkPixbuf="2.0", Poppler="0.18", Gio="2.0")
+from gi.repository import GdkPixbuf, Gio, Poppler  # noqa: E402 - require_gi selects the typelib versions first.
+
 
 MAX_TEXT_BYTES = 256 * 1024
 TEXT_SUFFIXES = {

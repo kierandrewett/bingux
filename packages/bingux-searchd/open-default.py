@@ -12,7 +12,11 @@ def main():
     target = sys.argv[1]
     if not target.startswith(("https://", "http://")):
         os.execv("/usr/bin/xdg-open", ["xdg-open", target])
-    from gi.repository import Gio, GLib
+    try:
+        from gi.repository import Gio, GLib
+    except ImportError:
+        # Without PyGObject the portal is out of reach; xdg-open still opens the link.
+        os.execv("/usr/bin/xdg-open", ["xdg-open", target])
 
     connection = Gio.bus_get_sync(Gio.BusType.SESSION, None)
     token = "bingux" + uuid.uuid4().hex

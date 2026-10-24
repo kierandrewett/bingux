@@ -84,24 +84,24 @@ impl SearchConfig {
         let contents = fs::read_to_string(path)
             .with_context(|| format!("could not read search configuration {}", path.display()))?;
         let mut value: serde_json::Value = serde_json::from_str(&contents)?;
-        let preferences = std::env::var_os("XDG_CONFIG_HOME")
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
-            .map(|dir| dir.join("bingux/settings.json"));
-        if let Some(path) = preferences.filter(|p| p.is_file()) {
-            let data: serde_json::Value = serde_json::from_str(&fs::read_to_string(path)?)?;
-            if let Some(search) = data.get("search").and_then(|v| v.as_object()) {
-                for key in [
-                    "ai",
-                    "disabledProviders",
-                    "engines",
-                    "defaultEngine",
-                    "fileRoots",
-                ] {
-                    if let Some(setting) = search.get(key) {
-                        if key != "fileRoots" || !setting.is_null() {
-                            value[key] = setting.clone();
-                        }
+        // User preferences come from bingux.toml through bingux-config, which
+        // owns the schema. A missing file yields the defaults; an invalid one
+        // is reported so the daemon does not silently run without the user's
+        // engines.
+        let preferences = bingux_config::load()
+            .map_err(|error| anyhow::anyhow!("could not load user preferences: {error}"))?;
+        let data = bingux_config::legacy_json(&preferences);
+        if let Some(search) = data.get("search").and_then(|v| v.as_object()) {
+            for key in [
+                "ai",
+                "disabledProviders",
+                "engines",
+                "defaultEngine",
+                "fileRoots",
+            ] {
+                if let Some(setting) = search.get(key) {
+                    if key != "fileRoots" || !setting.is_null() {
+                        value[key] = setting.clone();
                     }
                 }
             }

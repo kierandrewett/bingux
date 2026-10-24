@@ -27,6 +27,8 @@ Scope {
         });
     }
     function appCommand(action, identity, query) {
+        if (action !== "list" && !SessionServices.allows("launch"))
+            return fail("Applications cannot be started from this session");
         if (action === "list") {
             const term = query.trim().toLowerCase();
             return ok({

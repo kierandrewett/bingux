@@ -130,7 +130,7 @@ class CapturePolicy(unittest.TestCase):
         for kind, has_output in (("screenshot", True), ("recording", True), ("screenshot", False)):
             with self.subTest(kind=kind, has_output=has_output), tempfile.TemporaryDirectory() as directory:
                 worker = capture.Capture.__new__(capture.Capture)
-                worker.job = {"kind": kind, "copy": False}
+                worker.job = {"kind": kind, "copy": False, "portal": False}
                 worker.final = Path(directory) / "saved"
                 worker.temporary = Path(directory) / "partial"
                 if has_output:
@@ -149,7 +149,7 @@ class CapturePolicy(unittest.TestCase):
     def test_shutter_waits_for_clipboard_copy(self):
         with tempfile.TemporaryDirectory() as directory:
             worker = capture.Capture.__new__(capture.Capture)
-            worker.job = {"kind": "screenshot", "copy": True, "format": "png"}
+            worker.job = {"kind": "screenshot", "copy": True, "format": "png", "portal": False}
             worker.final = Path(directory) / "saved.png"
             worker.temporary = Path(directory) / "partial.png"
             worker.temporary.write_bytes(b"capture")
@@ -173,6 +173,38 @@ class CapturePolicy(unittest.TestCase):
                 worker.complete()
 
             self.assertEqual(order, ["copy", "shutter"])
+
+    def test_portal_screenshot_is_silent_private_png(self):
+        job = capture.settings({"kind": "screenshot", "target": "screen", "portal": True, "copy": True})
+        self.assertFalse(job["copy"])
+        with self.assertRaises(ValueError):
+            capture.settings({"kind": "screenshot", "target": "window", "portal": True})
+        with self.assertRaises(ValueError):
+            capture.settings({"kind": "recording", "target": "screen", "portal": True})
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(capture.GLib, "get_tmp_dir", return_value=directory),
+        ):
+            worker = capture.Capture.__new__(capture.Capture)
+            worker.job = job
+            worker.reserve_output()
+            self.assertEqual(worker.final, worker.temporary)
+            self.assertEqual(worker.temporary.parent, Path(directory))
+            self.assertTrue(worker.temporary.name.startswith("gnoblin-screenshot-"))
+            self.assertEqual(worker.temporary.suffix, "")
+            worker.temporary.write_bytes(b"capture")
+            worker.cleanup = Mock()
+            worker.clear_preview = Mock()
+            worker.emit = Mock()
+            with (
+                patch.object(capture, "play_shutter") as shutter,
+                patch.object(capture.subprocess, "Popen") as popen,
+            ):
+                worker.complete()
+            shutter.assert_not_called()
+            popen.assert_not_called()
+            self.assertEqual(worker.emit.call_args.kwargs["copied"], False)
+            self.assertEqual(worker.emit.call_args.kwargs["notified"], False)
 
     def test_software_only_never_probes_hardware(self):
         worker = self.worker(["vah264enc", "nvh264enc", "x264enc", "openh264enc"], {"vah264enc", "openh264enc"})

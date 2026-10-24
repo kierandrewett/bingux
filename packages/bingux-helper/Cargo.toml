@@ -1,0 +1,18 @@
+[package]
+name = "bingux-helper"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "Helper commands for the Bingux shell, one binary, one subcommand per helper"
+
+[[bin]]
+name = "bingux-helper"
+path = "src/main.rs"
+
+[dependencies]
+libc = "0.2"
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"

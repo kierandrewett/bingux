@@ -181,7 +181,7 @@ ShellPopup {
     }
     Process {
         id: caretProbe
-        command: (Quickshell.env("BINGUX_CARET_HELPER") ? [Quickshell.env("BINGUX_CARET_HELPER")] : ["python3", decodeURIComponent(Qt.resolvedUrl("caret-anchor.py").toString().replace(/^file:\/\//, ""))]).concat([String(root.inputAnchor ? root.inputAnchor.pid : 0)])
+        command: (Quickshell.env("BINGUX_CARET_HELPER") ? [Quickshell.env("BINGUX_CARET_HELPER")] : [Python.python, Python.helper("caret-anchor.py")]).concat([String(root.inputAnchor ? root.inputAnchor.pid : 0)])
         stdout: StdioCollector {
             onStreamFinished: {
                 try {

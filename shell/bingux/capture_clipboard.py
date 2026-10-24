@@ -11,12 +11,15 @@ import os
 import select
 import shutil
 import subprocess
+import sys
 
-import gi
+TAG = "capture-clipboard"
 
-gi.require_version("Gdk", "4.0")
-gi.require_version("Gtk", "4.0")
-from gi.repository import Gdk, GLib, Gtk  # noqa: E402 - Select GI versions before importing their modules.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from bingux_runtime import require_gi  # noqa: E402
+
+require_gi(TAG, Gdk="4.0", Gtk="4.0", GLib="2.0")
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402 - require_gi selects the typelib versions first.
 
 
 class ClipboardError(RuntimeError):

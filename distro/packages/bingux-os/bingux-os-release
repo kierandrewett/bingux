@@ -1,0 +1,13 @@
+NAME="Bingux OS"
+PRETTY_NAME="Bingux OS"
+ID=bingux
+ID_LIKE=arch
+BUILD_ID=rolling
+ANSI_COLOR="38;2;23;147;209"
+HOME_URL="https://github.com/kierandrewett/bingux"
+DOCUMENTATION_URL="https://github.com/kierandrewett/bingux"
+SUPPORT_URL="https://github.com/kierandrewett/bingux/issues"
+BUG_REPORT_URL="https://github.com/kierandrewett/bingux/issues"
+LOGO=archlinux-logo
+VERSION_ID=0.1.0
+VERSION="0.1.0"

@@ -63,7 +63,7 @@ Scope {
     }
     Process {
         id: worker
-        command: Quickshell.env("BINGUX_CALENDAR_HELPER") ? [Quickshell.env("BINGUX_CALENDAR_HELPER")] : ["python3", "-u", decodeURIComponent(Qt.resolvedUrl("calendar-events.py").toString().replace(/^file:\/\//, ""))]
+        command: Quickshell.env("BINGUX_CALENDAR_HELPER") ? [Quickshell.env("BINGUX_CALENDAR_HELPER")] : [Python.python, "-u", Python.helper("calendar-events.py")]
         running: root.started
         stdinEnabled: true
         stdout: SplitParser {

@@ -153,6 +153,7 @@ PanelWindow {
     property string activeRequestId: ""
     property string activeActivationRequestId: ""
     property string activatedWebTitle: ""
+    property string activatedCommandTitle: ""
     property string webFocusOnClose: ""
     property var results: []
     property int selectedIndex: -1
@@ -204,6 +205,7 @@ PanelWindow {
     // Keep quick chat out of search until the feature is enabled again.
     property bool quickChatEnabled: false
     property bool chatMode: false
+    readonly property bool commandMode: searchInput.text.trim().charAt(0) === ">"
     property bool chatPending: false
     property string pendingChatPrompt: ""
     property string streamingChatText: ""
@@ -353,6 +355,7 @@ PanelWindow {
         activeActivationRequestId = "";
         activationPending = false;
         queryError = "";
+        activatedCommandTitle = "";
         closing = true;
         appMenu.visible = false;
         openAnimation.stop();
@@ -388,7 +391,7 @@ PanelWindow {
 
     function queryForSearch() {
         const trimmed = searchInput.text.trim();
-        if (!chatMode || trimmed === "" || (trimmed.charAt(0) === "!" || trimmed.charAt(0) === "?"))
+        if (commandMode || !chatMode || trimmed === "" || (trimmed.charAt(0) === "!" || trimmed.charAt(0) === "?"))
             return searchInput.text;
 
         return "!" + searchInput.text;
@@ -400,6 +403,14 @@ PanelWindow {
             prompt = prompt.slice(1).trim();
 
         return prompt;
+    }
+
+    function handleSearchEscape() {
+        if (commandMode && !activationPending) {
+            searchInput.clear();
+            return;
+        }
+        closeSearch();
     }
 
     function submitQuery() {
@@ -511,7 +522,7 @@ PanelWindow {
     }
 
     function completeSelectedName() {
-        if (awaitingResults || activationPending || selectedIndex < 0 || selectedIndex >= displayedResults.length)
+        if (commandMode || awaitingResults || activationPending || selectedIndex < 0 || selectedIndex >= displayedResults.length)
             return;
         const title = String(displayedResults[selectedIndex].title || "");
         if (!title)
@@ -582,6 +593,7 @@ PanelWindow {
         endDockLaunch();
         endLaunchFeedback();
         activatedWebTitle = result.providerId === "web" || result.providerId === "web-suggestions" ? result.title : "";
+        activatedCommandTitle = result.kind === "command" ? String(result.title || "") : "";
         activationPending = true;
         if (result.providerId === "applications" && result.kind === "application" && result.desktopId && dockView && typeof dockView.beginExternalLaunch === "function" && dockView.beginExternalLaunch(result.desktopId, result.title || ""))
             launchDesktopId = result.desktopId;
@@ -736,9 +748,11 @@ PanelWindow {
         function onRequestFailed(requestId, code) {
             if (requestId === root.activeActivationRequestId) {
                 const failedChat = root.chatPending;
+                const failedCommand = root.activatedCommandTitle;
                 root.endDockLaunch();
                 root.endLaunchFeedback();
                 root.activeActivationRequestId = "";
+                root.activatedCommandTitle = "";
                 root.activationPending = false;
                 root.chatPending = false;
                 root.chatTranscript = root.chatTranscript.map(entry => entry.pending ? {
@@ -746,7 +760,7 @@ PanelWindow {
                         message: (root.streamingChatText ? root.streamingChatText + "\n\n" : "") + "The AI request failed. Check your CLI login and model, then try again."
                     } : entry);
                 root.pendingChatPrompt = "";
-                root.queryError = failedChat ? "AI unavailable" : root.errorMessage(code);
+                root.queryError = failedChat ? "AI unavailable" : failedCommand !== "" ? "Could not run " + failedCommand + "." : root.errorMessage(code);
                 return;
             }
             if (requestId === root.activeRequestId) {
@@ -1000,7 +1014,7 @@ PanelWindow {
                             selectionColor: Theme.textSelection
                             selectedTextColor: Theme.text
                             verticalAlignment: TextInput.AlignVCenter
-                            Accessible.name: root.chatMode ? "Ask a follow-up" : "Search"
+                            Accessible.name: root.chatMode ? "Ask a follow-up" : root.commandMode ? "Command" : "Search"
                             onTextChanged: root.submitQuery()
                             Keys.onPressed: function (event) {
                                 if (event.key === Qt.Key_Menu || (event.key === Qt.Key_F10 && (event.modifiers & Qt.ShiftModifier))) {
@@ -1009,7 +1023,7 @@ PanelWindow {
                                         root.openAppMenu(root.displayedResults[root.selectedIndex], row.mapToItem(root.contentItem, 24, row.height));
                                     event.accepted = true;
                                 } else if (event.key === Qt.Key_Escape) {
-                                    root.closeSearch();
+                                    root.handleSearchEscape();
                                     event.accepted = true;
                                 } else if (event.key === Qt.Key_Left && root.previewOpen) {
                                     root.previewOpen = false;
@@ -1067,7 +1081,7 @@ PanelWindow {
                             width: Math.max(0, searchInput.x + searchInput.width - x)
                             elide: Text.ElideRight
                             clip: true
-                            visible: text !== "" && !root.awaitingResults && !root.closing && searchInput.cursorPosition === searchInput.length && searchInput.selectedText === "" && searchInput.preeditText === "" && searchInput.contentWidth < searchInput.width
+                            visible: text !== "" && !root.awaitingResults && !root.closing && !root.commandMode && searchInput.cursorPosition === searchInput.length && searchInput.selectedText === "" && searchInput.preeditText === "" && searchInput.contentWidth < searchInput.width
                             Accessible.ignored: true
                         }
 
@@ -1130,7 +1144,7 @@ PanelWindow {
                     Text {
                         visible: root.quickChatEnabled && searchInput.text.trim().startsWith("!") && root.chatPrompt() !== "" && root.queryComplete && root.results.length === 0 && !root.chatMode
                         Layout.fillWidth: true
-                        text: "Edit AI preferences in ~/.config/bingux/settings.json"
+                        text: "Set [search.ai] in ~/.config/bingux/bingux.toml or run bingux-config explain search.ai"
                         wrapMode: Text.Wrap
                         color: Theme.muted
                         font.family: Theme.fontFamily
@@ -1471,7 +1485,7 @@ PanelWindow {
             onActivated: if (appMenu.visible)
                 appMenu.visible = false
             else
-                root.closeSearch()
+                root.handleSearchEscape()
         }
         Shortcut {
             sequence: "Ctrl+0"

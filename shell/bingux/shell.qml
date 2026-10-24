@@ -352,12 +352,40 @@ ShellRoot {
 
     NotRespondingDialog {}
 
+    FirstLoginIntro {}
+
     OsdSurface {
         state: osdState
         dockSafeInset: dock.dockTopFromBottom + Theme.dockPadding
         sidebarScreen: terminalSidebar.screen
         leftInset: terminalSidebar.leftInset
         rightInset: terminalSidebar.rightInset
+    }
+
+    WorkspaceChangeState {
+        id: workspaceChange
+        source: WorkspaceState
+    }
+
+    WorkspaceChangeSurface {
+        state: workspaceChange
+        dockSafeInset: dock.dockTopFromBottom + Theme.dockPadding
+    }
+
+    IdentifyState {
+        id: identify
+    }
+
+    IdentifySurface {
+        state: identify
+    }
+
+    PadHelpState {
+        id: padHelp
+    }
+
+    PadHelpSurface {
+        state: padHelp
     }
 
     // Without seconds the clock wakes once a minute. Redrawing the bar every
@@ -403,9 +431,7 @@ ShellRoot {
             if (!target || !Number.isFinite(x) || !Number.isFinite(y))
                 return;
             root.closePanelsExcept(desktopMenuPopup);
-            desktopMenuPopup.screen = target;
-            desktopMenuPopup.requestedPosition = Qt.point(x, y);
-            desktopMenuPopup.visible = true;
+            desktopMenuPopup.openAt(target, x, y);
         }
         function status(): string {
             return JSON.stringify({
@@ -820,6 +846,8 @@ ShellRoot {
         }
         function chosen(item) {
             const name = item.widgetId || controlNames[defaultControls.indexOf(item)];
+            if (!DesktopLayout.allowed(name, SessionContext.mode))
+                return false;
             return customLayout ? DesktopLayout.placement(DesktopEditing.desktop, name) !== "" : name !== "workspaces" && !DesktopLayout.widget(name)?.panel && !name.startsWith("control-") && !name.startsWith("controls-");
         }
         function zoneFor(item) {
@@ -1041,7 +1069,8 @@ ShellRoot {
         margins.left: terminalSidebar.leftInset
         margins.right: terminalSidebar.rightInset
         // The bar slides down from above the screen edge once, when the dock first maps.
-        property real enterOffset: dock.startupReady ? 0 : Theme.barHeight
+        // A continued session already shows the bar where the greeter left it.
+        property real enterOffset: dock.startupReady || SessionContext.continuing ? 0 : Theme.barHeight
         Behavior on enterOffset {
             NumberAnimation {
                 duration: Theme.reducedMotion ? 0 : 360

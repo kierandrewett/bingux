@@ -1,0 +1,4 @@
+# Bingux OS package repository. pacman reads this through the [bingux-os]
+# section of /etc/pacman.conf. See distro/README.md for how the repository is
+# published.
+Server = https://github.com/kierandrewett/bingux/releases/download/pacman-x86_64

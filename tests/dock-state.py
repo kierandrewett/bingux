@@ -21,6 +21,7 @@ if test_name not in (
     "dock-launch-timeout",
     "dock-startup",
     "dock-menu-lazy",
+    "dock-window-actions",
 ):
     raise SystemExit("Unknown shell test")
 if not os.environ.get("WAYLAND_DISPLAY", "").startswith("gnoblin-gs-"):

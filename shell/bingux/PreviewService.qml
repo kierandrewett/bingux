@@ -55,7 +55,7 @@ Singleton {
     }
     Process {
         id: worker
-        command: Quickshell.env("BINGUX_PREVIEW_HELPER") ? [Quickshell.env("BINGUX_PREVIEW_HELPER"), "serve"] : ["python3", "-u", decodeURIComponent(Qt.resolvedUrl("preview-document.py").toString().replace(/^file:\/\//, "")), "serve"]
+        command: Quickshell.env("BINGUX_PREVIEW_HELPER") ? [Quickshell.env("BINGUX_PREVIEW_HELPER"), "serve"] : [Python.python, "-u", Python.helper("preview-document.py"), "serve"]
         stdinEnabled: true
         running: true
         stdout: SplitParser {

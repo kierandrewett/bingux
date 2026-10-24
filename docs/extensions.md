@@ -59,7 +59,8 @@ Start the shell with `BINGUX_NO_EXTENSIONS=1` to bypass all extensions during re
             "name": "Home status",
             "icon": "user-home-symbolic",
             "component": "Status.qml",
-            "preview": "Preview.qml"
+            "preview": "Preview.qml",
+            "contexts": ["desktop"]
         }
     ]
 }
@@ -79,6 +80,27 @@ several widgets, including several widgets that use the same component.
 shell-version whitelist. API 1 is the first contract under validation. New optional features
 can be added to it; incompatible changes need a new API version and a documented migration.
 Do not silently change API 1 behaviour or remove it with an ordinary shell update.
+
+### Session contexts
+
+`contexts` lists where a widget may appear. It is optional and defaults to
+`["desktop"]`. The accepted values are:
+
+| Value     | Where                                     | What runs there            |
+| --------- | ----------------------------------------- | -------------------------- |
+| `desktop` | The running desktop shell                 | Everything                 |
+| `locked`  | The lock screen's top bar (`bingux-lock`) | Status only, volume, power |
+| `greeter` | The login screen's top bar                | Status only, power         |
+
+The list must contain distinct values from that table; anything else is a
+manifest error and the extension is skipped.
+
+Today the lock screen and the greeter never load extensions at all, whatever
+they declare: an extension sees the whole shell through `unstable`, which is
+not acceptable before the user has authenticated. The field records intent so
+a later host can honour it without a manifest change. Built-in widgets use the
+same field in `shell/bingux/DesktopLayout.js`; see `docs/locking.md` for what
+the restricted bars show.
 
 ## Component context
 

@@ -440,7 +440,7 @@ PanelWindow {
 
     Process {
         id: steamGameCatalog
-        command: ["python3", decodeURIComponent(Qt.resolvedUrl("steam-games.py").toString().replace(/^file:\/\//, ""))]
+        command: [Python.python, Python.helper("steam-games.py")]
         running: Startup.settled
         stdout: StdioCollector {
             onStreamFinished: {
@@ -479,6 +479,35 @@ PanelWindow {
         id: dockTooltip
         screen: root.screen
         anchorBottom: root.dockTopFromBottom
+    }
+    DockWindowActions {
+        id: windowBridge
+    }
+    Loader {
+        id: windowMenuLoader
+        active: false
+        asynchronous: false
+    }
+    readonly property var windowMenu: windowMenuLoader.item
+    function ensureWindowMenu() {
+        if (!windowMenu) {
+            windowMenuLoader.setSource(Qt.resolvedUrl("DockWindowMenu.qml"), {
+                objectName: "dockWindowMenu",
+                bridge: windowBridge,
+                screen: Qt.binding(() => root.screen)
+            });
+            windowMenuLoader.active = true;
+            if (!windowMenu)
+                console.warn("Dock window menu failed to load:", windowMenuLoader.source.toString());
+        }
+        return windowMenu;
+    }
+    // point is in screen coordinates: the window menu's popup is screen-sized.
+    function openWindowActions(toplevel, x, y) {
+        if (!ensureWindowMenu())
+            return;
+        closeMenus();
+        windowMenu.openFor(toplevel, x, y, "");
     }
     Loader {
         id: folderPopupLoader
@@ -1374,13 +1403,15 @@ PanelWindow {
 
     function applicationLaunchCommand(desktopId, options, token) {
         const helper = Quickshell.env("BINGUX_APP_LAUNCHER_HELPER");
-        const command = (helper ? [helper] : ["python3", decodeURIComponent(Qt.resolvedUrl("launch-application.py").toString().replace(/^file:\/\//, ""))]).concat(options);
+        const command = (helper ? [helper] : [Python.python, Python.helper("launch-application.py")]).concat(options);
         if (token)
             command.push("--activation-token=" + token);
         return command.concat(["--", desktopId]);
     }
 
     function launchAction(group, actionId, source) {
+        if (!SessionServices.allows("launch"))
+            return;
         const desktopId = group.desktopEntry.id;
         root.withLaunchActivation(source, token => {
             Quickshell.execDetached(root.applicationLaunchCommand(desktopId, ["--notify-errors", "--action=" + actionId], token));
@@ -1388,6 +1419,8 @@ PanelWindow {
     }
 
     function launch(group, newWindow, source) {
+        if (!SessionServices.allows("launch"))
+            return;
         const serial = ++root.launchSequence;
         root.clearLaunchFailure(group.id);
         root.launchAttempts = Object.assign({}, root.launchAttempts, {

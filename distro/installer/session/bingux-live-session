@@ -1,0 +1,168 @@
+#!/bin/sh
+# Live session loop for the live account. greetd starts this as its
+# initial_session, so the live image boots straight into the installer.
+#
+# The loop runs one Gnoblin compositor at a time: the installer
+# (installer.lua) or the normal live desktop. bingux-live-switch records the
+# next mode in $XDG_RUNTIME_DIR/bingux-live/next and stops the running
+# compositor. With no next mode the compositor's exit ends the login, and
+# greetd shows the greeter as usual.
+#
+# A compositor that does not start is started again. On a busy machine
+# Gnoblin can give up while it starts: it exits with status 1 ("timed out
+# waiting for Gnoblin runtime configuration"), or it stays up on its built-in
+# defaults with no control socket and no installer. Either way the screen stays
+# black. The loop starts the compositor again, at most three times in all, when
+#   - it exits with a non-zero status in its first two minutes,
+#   - it has no control socket one minute after it started, or
+#   - it reports in the first minute that it fell back to its defaults or lost
+#     its Lua runtime.
+# The last try is never stopped by the watch, so a slow start still finishes.
+#
+# Everything this script and the compositor print goes to the journal under
+# the tag bingux-live-session (journalctl -t bingux-live-session).
+#
+# Usage: bingux-live-session [installer|live]   (default: installer)
+#
+# Settings for tests and for support work (seconds, whole numbers):
+#   BINGUX_LIVE_MAX_ATTEMPTS   tries in all (3)
+#   BINGUX_LIVE_START_WINDOW   an exit with an error this soon is a failed start (120)
+#   BINGUX_LIVE_WATCH          how long the watch waits for the control socket (60)
+#   BINGUX_LIVE_JOURNAL        0 keeps the output on the terminal (1)
+set -eu
+# shellcheck disable=SC3045 # dash and bash both accept -c; no core dumps from the live session
+ulimit -c 0
+
+if [ "${BINGUX_LIVE_JOURNAL:-1}" = 1 ] && [ -z "${BINGUX_LIVE_JOURNALLED:-}" ] && [ -x "$0" ] &&
+    command -v systemd-cat >/dev/null 2>&1 && systemd-cat -t bingux-live-session true 2>/dev/null; then
+    BINGUX_LIVE_JOURNALLED=1 exec systemd-cat -t bingux-live-session "$0" "$@"
+fi
+
+runtime="${XDG_RUNTIME_DIR:?bingux-live-session needs XDG_RUNTIME_DIR}"
+state="$runtime/bingux-live"
+socket="$runtime/gnoblin/compositor-v1.sock"
+fallback="$runtime/gnoblin/config-fallback"
+GNOBLIN="${BINGUX_LIVE_COMPOSITOR:-gnoblin}"
+INSTALLER_LUA="${BINGUX_INSTALLER_CONFIG:-/usr/share/bingux/installer/gnoblin.lua}"
+MAX_ATTEMPTS="${BINGUX_LIVE_MAX_ATTEMPTS:-3}"
+START_WINDOW="${BINGUX_LIVE_START_WINDOW:-120}"
+WATCH="${BINGUX_LIVE_WATCH:-60}"
+
+export XDG_SESSION_TYPE=wayland
+mkdir -p "$state"
+
+log() {
+    printf 'bingux-live-session: %s\n' "$*" >&2
+}
+
+# Seconds since boot, in hundredths: the loop must count real time, because a
+# busy machine makes every sleep longer than it asks.
+now() {
+    read -r up _ </proc/uptime
+    printf '%s\n' "${up%.*}${up#*.}"
+}
+
+# True when Gnoblin says that it runs on its built-in or last good
+# configuration, or that its Lua runtime is gone ("Lua runtime recovery
+# failed": the compositor stays up with no configuration and no installer).
+# The note is the state on one line and the message after it.
+fell_back() {
+    mark= text=
+    { read -r mark; read -r text; } 2>/dev/null <"$fallback" || true
+    case $mark in
+        defaults | last-good) return 0 ;;
+    esac
+    case $text in
+        "Lua runtime recovery failed"*) return 0 ;;
+    esac
+    return 1
+}
+
+# Watch one compositor start. Stops it, and records that in $state/stalled,
+# when it has no control socket after $WATCH seconds or reports a fallback.
+watch() {
+    pid=$1
+    limit=$(($(now) + WATCH * 100))
+    while kill -0 "$pid" 2>/dev/null; do
+        if fell_back; then
+            reason="it fell back to its built-in defaults"
+        elif [ "$(now)" -ge "$limit" ]; then
+            [ -S "$socket" ] && return 0
+            reason="it has no control socket after ${WATCH} s"
+        else
+            reason=
+        fi
+        if [ -n "$reason" ]; then
+            log "the compositor is not usable ($reason); stopping it"
+            : >"$state/stalled"
+            kill -TERM "$pid" 2>/dev/null || true
+            grace=$(($(now) + 1500))
+            while kill -0 "$pid" 2>/dev/null && [ "$(now)" -lt "$grace" ]; do
+                sleep 0.1
+            done
+            kill -KILL "$pid" 2>/dev/null || true
+            return 0
+        fi
+        sleep 0.2
+    done
+}
+
+mode="${1:-installer}"
+attempt=0
+while :; do
+    case $mode in
+        installer | live) ;;
+        *)
+            echo "bingux-live-session: unknown mode '$mode'" >&2
+            exit 2
+            ;;
+    esac
+    attempt=$((attempt + 1))
+    # The previous compositor is gone. Its socket and fallback note must not
+    # make this one look broken or healthy.
+    rm -f "$state/next" "$state/stalled" "$socket"
+    if fell_back; then
+        rm -f "$fallback"
+    fi
+    launched=$(now)
+    case $mode in
+        installer) "$GNOBLIN" --config "$INSTALLER_LUA" & ;;
+        live) "$GNOBLIN" & ;;
+    esac
+    pid=$!
+    printf '%s\n' "$pid" >"$state/pid"
+    log "started the $mode compositor, pid $pid (try $attempt of $MAX_ATTEMPTS)"
+    watcher=
+    if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+        watch "$pid" &
+        watcher=$!
+    fi
+    status=0
+    wait "$pid" || status=$?
+    if [ -n "$watcher" ]; then
+        kill "$watcher" 2>/dev/null || true
+        wait "$watcher" 2>/dev/null || true
+    fi
+    rm -f "$state/pid"
+
+    next=$(cat "$state/next" 2>/dev/null || true)
+    rm -f "$state/next"
+    case $next in
+        installer | live)
+            mode=$next
+            attempt=0
+            continue
+            ;;
+    esac
+
+    ran=$((($(now) - launched) / 100))
+    if [ -e "$state/stalled" ] || { [ "$status" -ne 0 ] && [ "$ran" -lt "$START_WINDOW" ]; }; then
+        rm -f "$state/stalled"
+        if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+            log "the compositor failed to start (status $status after ${ran} s); starting it again"
+            continue
+        fi
+        log "the compositor failed to start $attempt times (status $status); ending the live session"
+    fi
+    exit "$status"
+done

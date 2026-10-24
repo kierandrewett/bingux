@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
+bingux-config = { path = "../bingux-config" }
 gio = "0.21"
 libc = "0.2"
 ignore = "0.4"

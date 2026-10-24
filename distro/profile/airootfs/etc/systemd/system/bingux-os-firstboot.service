@@ -1,0 +1,12 @@
+[Unit]
+Description=Bingux OS live session setup
+Before=greetd.service
+ConditionPathExists=/usr/local/bin/bingux-os-firstboot
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/bingux-os-firstboot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

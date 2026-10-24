@@ -1,0 +1,53 @@
+#!/bin/sh
+# Start the Bingux login greeter session for greetd.
+#
+# greetd runs this as the greeter account on the configured VT with
+# GREETD_SOCK set. Gnoblin provides the compositor in greeter mode and
+# autostarts bingux-greeter from the packaged greeter configuration. The
+# installer rewrites the paths below for its selected prefix.
+set -eu
+# shellcheck disable=SC3045 # dash and bash both accept -c; no core dumps from the login screen
+ulimit -c 0
+
+# greetd does not set the session type; Gnoblin needs it to accept the login.
+export XDG_SESSION_TYPE=wayland
+
+# Distributions give the greetd account no usable home (Arch: `/`). Mutter's
+# session manager, fontconfig's cache and Gnoblin's state all need one; without
+# it the compositor aborts before the greeter appears. The persistent state
+# directory from tmpfiles is preferred, the runtime directory is the fallback.
+if [ ! -w "${HOME:-/}" ] || [ "${HOME:-/}" = / ]; then
+    HOME=/var/lib/bingux/greeter-home
+    if [ ! -w "$HOME" ] && [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+        HOME="$XDG_RUNTIME_DIR/bingux-greeter/home"
+        mkdir -p "$HOME"
+    fi
+    export HOME
+fi
+
+# logind keeps this account's user manager alive across a quick restart of the
+# login screen (log out, then greet again), and the helpers Gnoblin autostarted
+# for the old greeter are not tied to it. A second bingux-statusd refuses to
+# replace the first one's socket and Gnoblin then shows an error on the login
+# screen, so stop the old one first.
+pkill -x -u "$(id -u)" bingux-statusd 2>/dev/null || true
+GNOBLIN="${BINGUX_GREETER_COMPOSITOR:-gnoblin}"
+GREETER_LUA=/usr/local/share/bingux/greeter/gnoblin.lua
+SESSION_BIN=/usr/local/bin/bingux-session
+
+# The compositor paints the remembered account's wallpaper under the greeter
+# so its first frame is the picture, not black. The generated file lives in
+# the greeter account's runtime directory and loads the packaged
+# configuration first; if bingux-session fails the packaged file is used as is.
+config="$GREETER_LUA"
+runtime="${XDG_RUNTIME_DIR:-}"
+if [ -n "$runtime" ] && [ -d "$runtime" ] && background="$("$SESSION_BIN" greeter-background 2>/dev/null)"; then
+    mkdir -p "$runtime/bingux-greeter"
+    config="$runtime/bingux-greeter/gnoblin.lua"
+    {
+        printf 'gnoblin.load(%s)\n' "\"$GREETER_LUA\""
+        printf '%s' "$background"
+    } >"$config.tmp"
+    mv "$config.tmp" "$config"
+fi
+exec "$GNOBLIN" --greeter --config "$config" "$@"

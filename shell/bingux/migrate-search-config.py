@@ -1,19 +1,32 @@
 #!/usr/bin/env python3
-"""Migrate Bingux-owned search launcher defaults without replacing user settings."""
+"""Migrate Bingux-owned search launcher defaults without replacing user settings.
 
+Usage: migrate-search-config.py CONFIG INTERPRETER LAUNCHER STEAM_GAMES
+
+Rewrites only the applicationLauncher and steamGameCatalog commands that
+earlier Bingux releases wrote. Running it again changes nothing: the file is
+replaced only when a command actually differs, and never otherwise.
+"""
+
+import argparse
 import json
-import os
 from pathlib import Path
 import sys
-import tempfile
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from bingux_runtime import atomic_write, log  # noqa: E402
+
+TAG = "migrate-search"
 
 
 def migrate(path, launcher, steam_catalog):
+    """Return True when the file was rewritten; False when nothing needed changing."""
     if not path.is_file() or path.is_symlink():
         return False
     try:
         data = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
+    except (OSError, ValueError) as error:
+        log(TAG, f"left {path} alone: {error}")
         return False
     if not isinstance(data, dict) or not isinstance(data.get("commands"), dict):
         return False
@@ -47,29 +60,27 @@ def migrate(path, launcher, steam_catalog):
 
     if not changed:
         return False
-    mode = path.stat().st_mode & 0o777
-    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as stream:
-        temporary = Path(stream.name)
-        try:
-            json.dump(data, stream, indent=2)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-            os.chmod(temporary, mode)
-            os.replace(temporary, path)
-        finally:
-            temporary.unlink(missing_ok=True)
+    text = json.dumps(data, indent=2) + "\n"
+    atomic_write(path, text, mode=path.stat().st_mode & 0o777)
     return True
 
 
-def main(argv):
-    if len(argv) != 5:
-        raise SystemExit("usage: migrate-search-config.py CONFIG INTERPRETER LAUNCHER STEAM_GAMES")
-    interpreter = argv[2]
-    launcher = [interpreter, argv[3]]
-    steam_catalog = [interpreter, argv[4], "--search"]
-    migrate(Path(argv[1]), launcher, steam_catalog)
+def build_parser():
+    parser = argparse.ArgumentParser(
+        description="Point Bingux's search launcher config at the current helper scripts.",
+    )
+    parser.add_argument("config", type=Path, help="path to search.json")
+    parser.add_argument("interpreter", help="Python interpreter that runs the helpers")
+    parser.add_argument("launcher", help="absolute path to launch-application.py")
+    parser.add_argument("steam_games", help="absolute path to steam-games.py")
+    return parser
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+    migrate(args.config, [args.interpreter, args.launcher], [args.interpreter, args.steam_games, "--search"])
+    return 0
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    raise SystemExit(main())

@@ -12,6 +12,7 @@ source = Path(__file__).resolve().parents[1] / "shell/bingux"
 with tempfile.TemporaryDirectory(prefix="capture-reload-") as temporary:
     root = Path(temporary)
     shutil.copytree(source, root / "config", ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copy(Path(__file__).resolve().parent / "qml/CaptureReloadTest.qml", root / "config/CaptureReloadTest.qml")
     fixture = root / "config/CaptureReloadTest.qml"
     command = ["qs", "ipc", "--any-display", "-p", str(fixture), "call"]
     env = dict(os.environ, BINGUX_CAPTURE_SETTINGS_PATH=(root / "capture.ini").as_uri())

@@ -264,7 +264,7 @@ ShellPopup {
         }
     }
     function eventCommand(event) {
-        const command = ["python3", decodeURIComponent(Qt.resolvedUrl("calendar-launch.py").toString().replace(/^file:\/\//, "")), "--date", new Date(event.start * 1000).toLocaleDateString(Qt.locale(), "yyyy-MM-dd")];
+        const command = [Python.python, Python.helper("calendar-launch.py"), "--date", new Date(event.start * 1000).toLocaleDateString(Qt.locale(), "yyyy-MM-dd")];
         const parts = String(event.id || "").split("\n");
         if (parts.length === 3 && parts[0] && parts[1]) {
             if (!parts[2])

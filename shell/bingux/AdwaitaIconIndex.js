@@ -2,7 +2,6 @@
 .pragma library
 var aliases = {
     "battery-low": "battery-low-symbolic",
-    "org.gnome.Settings-symbolic": "emblem-system-symbolic",
     "screencast-stop-symbolic": "media-playback-stop-symbolic",
     "transform-move-symbolic": "object-select-symbolic",
 };

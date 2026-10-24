@@ -21,8 +21,9 @@ make install-user
 Everything is kept under `$XDG_DATA_HOME/bingux` (normally
 `~/.local/share/bingux`). Only convenience symlinks in `~/.local/bin` and
 `~/.config/systemd/user` point into that directory. Set `USER_PREFIX` to use a
-different absolute location, or set `BINGUX_QUICKSHELL` when the matching
-Quickshell executable is not on `PATH`.
+different absolute location. The shell runtime is built from source as
+`bingux-shell` (see `docs/standalone.md`); no separate Quickshell install is
+needed.
 
 Remove the complete managed payload with:
 
@@ -58,11 +59,24 @@ See [dock application menus](docs/dock-menus.md) for window and application acti
 See [sidebar panels](docs/sidebar-loading.md) for loading and retained content.
 
 See [desktop panels](docs/popup-loading.md) for first opening and dismissal.
+
+See [portals](docs/portals.md) for the Screenshot backend, its permission rules and the known state of each portal interface.
+
+See the [login screen](docs/login-screen.md) and [secure session locking](docs/locking.md)
+for the greeter and the lock screen, [Bingux OS](distro/README.md) for the live image,
+and [installing Bingux OS](docs/installer.md) for the installer.
 For shell behaviour and configuration, see the [shell guide](shell/bingux/README.md).
+If something does not start or shows no data, see [troubleshooting](docs/troubleshooting.md).
+
+[Bingux Settings](docs/settings.md) is the graphical front for shell and
+system settings; [configuration](docs/configuration.md) covers the file and CLI.
 
 ## Source layout
 
-- `shell/bingux/`: desktop UI, preference storage and Python helpers.
+- `shell/bingux/`: desktop UI and Python helpers.
+- `packages/bingux-config/`: configuration schema, `bingux.toml` store and CLI.
+- `packages/bingux-settings/`: the Settings application.
+- `packages/bingux-ui/`: the design system crate for Bingux's Freya applications.
 - `packages/`: search and metrics daemons, native plugins and helper programs.
 - `tests/`: component, input and integration checks.
 - `scripts/test-desktop`: starts an isolated nested desktop for testing.

@@ -251,7 +251,7 @@ Item {
         id: inputMenu
         objectName: "keyboardLayoutPopup"
         keyboardInteractive: !root.cycling
-        screen: root.parentWindow.screen
+        screen: root.parentWindow ? root.parentWindow.screen : null
         anchorWindow: root.parentWindow
         anchorItem: root
         popupWidth: 260

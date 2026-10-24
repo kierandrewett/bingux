@@ -1,6 +1,8 @@
+pub mod audio;
 pub mod extra;
 pub mod hardware;
 pub mod microphone;
+mod pactl;
 use serde::Serialize;
 use std::time::Duration;
 
@@ -94,6 +96,13 @@ impl OsdRequest {
     }
 }
 
+/// A logical monitor an OSD can be shown on, as the compositor reports it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OsdTarget {
+    pub monitor_index: i32,
+    pub output_names: Vec<String>,
+}
+
 fn output_names_are_valid(output_names: &[String]) -> bool {
     if output_names.is_empty()
         || output_names.len() > MAX_OSD_OUTPUT_NAMES
@@ -142,6 +151,216 @@ pub fn osd_json(request: &OsdRequest) -> Result<String, serde_json::Error> {
         label: &request.label,
         level: request.level,
         max_level: request.max_level,
+    })
+    .map(|record| format!("{record}\n"))
+}
+
+/// The only pad-help record version accepted from Gnoblin and sent to shell clients.
+pub const PAD_HELP_PROTOCOL_VERSION: u32 = 1;
+
+// Pad-help bounds keep a fully JSON-escaped record well below Quickshell's
+// 64 KiB line limit: label text is capped in total and identity fields are
+// short fixed-size strings.
+const MAX_PAD_HELP_DEVICE_ID_BYTES: usize = 128;
+const MAX_PAD_HELP_DEVICE_NAME_BYTES: usize = 128;
+const MAX_PAD_HELP_DEVICE_TYPE_BYTES: usize = 64;
+const MAX_PAD_HELP_LABEL_BYTES: usize = 256;
+const MAX_PAD_HELP_LABEL_BYTES_TOTAL: usize = 8 * 1024;
+const MAX_PAD_HELP_BUTTONS: usize = 64;
+const MAX_PAD_HELP_MODE_GROUPS: usize = 8;
+const MAX_PAD_HELP_SWITCH_BUTTONS: usize = 64;
+const MAX_PAD_HELP_FEATURES: usize = 32;
+
+/// Sent to every pad-help client when the Gnoblin bridge is lost, so an
+/// overlay never outlives the bridge that supplied its request.
+pub const PAD_HELP_CLEAR_RECORD: &str = "{\"protocolVersion\":1,\"type\":\"pad-help-clear\"}\n";
+
+/// The tablet pad whose help action Gnoblin reported.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PadHelpDevice {
+    pub id: String,
+    pub name: String,
+    pub device_type: String,
+}
+
+/// One pad button with its optional localised action label.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PadHelpButton {
+    pub button: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode_group: Option<u32>,
+}
+
+/// One pad mode group and the buttons that switch between its modes.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PadHelpModeGroup {
+    pub group: u32,
+    pub mode_count: u32,
+    pub switch_buttons: Vec<u32>,
+}
+
+/// The pad control kinds Gnoblin reports for help.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PadHelpFeatureKind {
+    Ring,
+    Strip,
+    Dial,
+}
+
+/// One ring, strip or dial with its optional clockwise or up label (positive)
+/// and counterclockwise or down label (negative).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PadHelpFeature {
+    #[serde(rename = "type")]
+    pub kind: PadHelpFeatureKind,
+    pub index: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub positive_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub negative_label: Option<String>,
+}
+
+/// Tablet-pad help metadata already resolved to a monitor. Pad-help records
+/// are published only on the pad-help-v1 socket, as OSD records are on osd-v2.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PadHelpRequest {
+    monitor_index: i32,
+    output_names: Vec<String>,
+    edition_mode: bool,
+    device: PadHelpDevice,
+    buttons: Vec<PadHelpButton>,
+    mode_groups: Vec<PadHelpModeGroup>,
+    features: Vec<PadHelpFeature>,
+}
+
+impl PadHelpRequest {
+    /// Construct a pad-help request only when every field stays within the
+    /// shell socket boundary.
+    pub fn new(
+        monitor_index: i32,
+        output_names: Vec<String>,
+        edition_mode: bool,
+        device: PadHelpDevice,
+        buttons: Vec<PadHelpButton>,
+        mode_groups: Vec<PadHelpModeGroup>,
+        features: Vec<PadHelpFeature>,
+    ) -> Option<Self> {
+        if monitor_index < 0
+            || !output_names_are_valid(&output_names)
+            || !device_is_valid(&device)
+            || !buttons_are_valid(&buttons)
+            || !mode_groups_are_valid(&mode_groups)
+            || !features_are_valid(&features)
+            || label_bytes(&buttons, &features) > MAX_PAD_HELP_LABEL_BYTES_TOTAL
+        {
+            return None;
+        }
+
+        Some(Self {
+            monitor_index,
+            output_names,
+            edition_mode,
+            device,
+            buttons,
+            mode_groups,
+            features,
+        })
+    }
+}
+
+fn text_is_valid(value: &str, max_bytes: usize) -> bool {
+    value.len() <= max_bytes && !contains_control_characters(value)
+}
+
+fn device_is_valid(device: &PadHelpDevice) -> bool {
+    !device.id.is_empty()
+        && text_is_valid(&device.id, MAX_PAD_HELP_DEVICE_ID_BYTES)
+        && text_is_valid(&device.name, MAX_PAD_HELP_DEVICE_NAME_BYTES)
+        && text_is_valid(&device.device_type, MAX_PAD_HELP_DEVICE_TYPE_BYTES)
+}
+
+fn label_is_valid(label: Option<&String>) -> bool {
+    label.is_none_or(|label| text_is_valid(label, MAX_PAD_HELP_LABEL_BYTES))
+}
+
+fn buttons_are_valid(buttons: &[PadHelpButton]) -> bool {
+    buttons.len() <= MAX_PAD_HELP_BUTTONS
+        && buttons.iter().enumerate().all(|(index, button)| {
+            label_is_valid(button.label.as_ref())
+                && !buttons[..index]
+                    .iter()
+                    .any(|earlier| earlier.button == button.button)
+        })
+}
+
+fn mode_groups_are_valid(groups: &[PadHelpModeGroup]) -> bool {
+    groups.len() <= MAX_PAD_HELP_MODE_GROUPS
+        && groups.iter().enumerate().all(|(index, group)| {
+            group.switch_buttons.len() <= MAX_PAD_HELP_SWITCH_BUTTONS
+                && !groups[..index]
+                    .iter()
+                    .any(|earlier| earlier.group == group.group)
+        })
+}
+
+fn features_are_valid(features: &[PadHelpFeature]) -> bool {
+    features.len() <= MAX_PAD_HELP_FEATURES
+        && features.iter().enumerate().all(|(index, feature)| {
+            label_is_valid(feature.positive_label.as_ref())
+                && label_is_valid(feature.negative_label.as_ref())
+                && !features[..index]
+                    .iter()
+                    .any(|earlier| earlier.kind == feature.kind && earlier.index == feature.index)
+        })
+}
+
+fn label_bytes(buttons: &[PadHelpButton], features: &[PadHelpFeature]) -> usize {
+    let button_labels = buttons.iter().filter_map(|button| button.label.as_ref());
+    let feature_labels = features
+        .iter()
+        .flat_map(|feature| [feature.positive_label.as_ref(), feature.negative_label.as_ref()])
+        .flatten();
+    button_labels.chain(feature_labels).map(String::len).sum()
+}
+
+#[derive(Serialize)]
+struct PadHelpRecord<'a> {
+    #[serde(rename = "protocolVersion")]
+    protocol_version: u32,
+    #[serde(rename = "type")]
+    record_type: &'static str,
+    #[serde(rename = "monitorIndex")]
+    monitor_index: i32,
+    #[serde(rename = "outputNames")]
+    output_names: &'a [String],
+    #[serde(rename = "editionMode")]
+    edition_mode: bool,
+    device: &'a PadHelpDevice,
+    buttons: &'a [PadHelpButton],
+    #[serde(rename = "modeGroups")]
+    mode_groups: &'a [PadHelpModeGroup],
+    features: &'a [PadHelpFeature],
+}
+
+/// Encode a newline-delimited JSON pad-help record for the transient shell socket.
+pub fn pad_help_json(request: &PadHelpRequest) -> Result<String, serde_json::Error> {
+    serde_json::to_string(&PadHelpRecord {
+        protocol_version: PAD_HELP_PROTOCOL_VERSION,
+        record_type: "pad-help",
+        monitor_index: request.monitor_index,
+        output_names: &request.output_names,
+        edition_mode: request.edition_mode,
+        device: &request.device,
+        buttons: &request.buttons,
+        mode_groups: &request.mode_groups,
+        features: &request.features,
     })
     .map(|record| format!("{record}\n"))
 }
@@ -388,10 +607,35 @@ fn parse_u64(value: Option<&str>) -> Result<u64, &'static str> {
 #[cfg(test)]
 mod tests {
     use super::{
-        DesktopState, InputSource, Metrics, OsdRequest, PrivacyState, byte_rate, cpu_percent,
-        metrics_json, metrics_with_desktop_state_json, osd_json, parse_cpu_stat, parse_meminfo,
-        parse_network_totals,
+        DesktopState, InputSource, Metrics, OsdRequest, PAD_HELP_CLEAR_RECORD,
+        PAD_HELP_PROTOCOL_VERSION, PadHelpButton, PadHelpDevice, PadHelpFeature,
+        PadHelpFeatureKind, PadHelpModeGroup, PadHelpRequest, PrivacyState, byte_rate,
+        cpu_percent, metrics_json, metrics_with_desktop_state_json, osd_json, pad_help_json,
+        parse_cpu_stat, parse_meminfo, parse_network_totals,
     };
+
+    fn pad_help_device() -> PadHelpDevice {
+        PadHelpDevice {
+            id: "wacom-pen-0".to_owned(),
+            name: "Intuos Pro Pad".to_owned(),
+            device_type: "pad".to_owned(),
+        }
+    }
+
+    fn pad_help_request(
+        buttons: Vec<PadHelpButton>,
+        features: Vec<PadHelpFeature>,
+    ) -> Option<PadHelpRequest> {
+        PadHelpRequest::new(
+            1,
+            vec!["DP-1".to_owned()],
+            false,
+            pad_help_device(),
+            buttons,
+            Vec::new(),
+            features,
+        )
+    }
 
     #[test]
     fn calculates_cpu_usage_from_total_and_idle_deltas() {
@@ -693,5 +937,132 @@ mod tests {
 
     fn output_names() -> Vec<String> {
         vec!["DP-1".to_owned()]
+    }
+
+    #[test]
+    fn serialises_a_transient_pad_help_record_for_the_shell() {
+        let request = PadHelpRequest::new(
+            1,
+            vec!["DP-1".to_owned()],
+            true,
+            pad_help_device(),
+            vec![
+                PadHelpButton {
+                    button: 1,
+                    label: Some("Undo".to_owned()),
+                    mode_group: None,
+                },
+                PadHelpButton {
+                    button: 2,
+                    label: None,
+                    mode_group: Some(0),
+                },
+            ],
+            vec![PadHelpModeGroup {
+                group: 0,
+                mode_count: 2,
+                switch_buttons: vec![2],
+            }],
+            vec![PadHelpFeature {
+                kind: PadHelpFeatureKind::Ring,
+                index: 0,
+                positive_label: Some("Zoom in".to_owned()),
+                negative_label: None,
+            }],
+        )
+        .unwrap();
+
+        assert_eq!(
+            pad_help_json(&request).unwrap(),
+            "{\"protocolVersion\":1,\"type\":\"pad-help\",\"monitorIndex\":1,\"outputNames\":[\"DP-1\"],\"editionMode\":true,\"device\":{\"id\":\"wacom-pen-0\",\"name\":\"Intuos Pro Pad\",\"deviceType\":\"pad\"},\"buttons\":[{\"button\":1,\"label\":\"Undo\"},{\"button\":2,\"modeGroup\":0}],\"modeGroups\":[{\"group\":0,\"modeCount\":2,\"switchButtons\":[2]}],\"features\":[{\"type\":\"ring\",\"index\":0,\"positiveLabel\":\"Zoom in\"}]}\n"
+        );
+    }
+
+    #[test]
+    fn clear_record_matches_the_pad_help_protocol_version() {
+        assert_eq!(PAD_HELP_PROTOCOL_VERSION, 1);
+        assert_eq!(
+            PAD_HELP_CLEAR_RECORD,
+            "{\"protocolVersion\":1,\"type\":\"pad-help-clear\"}\n"
+        );
+    }
+
+    #[test]
+    fn rejects_malformed_pad_help_payloads() {
+        // A negative monitor index cannot name an output.
+        assert!(
+            PadHelpRequest::new(
+                -1,
+                vec!["DP-1".to_owned()],
+                false,
+                pad_help_device(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            )
+            .is_none()
+        );
+        // Control characters in device identity are refused.
+        let mut device = pad_help_device();
+        device.name = "Pad\nInjected".to_owned();
+        assert!(
+            PadHelpRequest::new(
+                0,
+                vec!["DP-1".to_owned()],
+                false,
+                device,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            )
+            .is_none()
+        );
+        // Duplicate button numbers would make the overlay ambiguous.
+        assert!(
+            pad_help_request(
+                vec![
+                    PadHelpButton {
+                        button: 3,
+                        label: None,
+                        mode_group: None,
+                    },
+                    PadHelpButton {
+                        button: 3,
+                        label: None,
+                        mode_group: None,
+                    },
+                ],
+                Vec::new(),
+            )
+            .is_none()
+        );
+        // Total label bytes are bounded, so a record stays inside the socket line limit.
+        let long = "x".repeat(256);
+        let oversized = (0..40)
+            .map(|button| PadHelpButton {
+                button,
+                label: Some(long.clone()),
+                mode_group: None,
+            })
+            .collect();
+        assert!(pad_help_request(oversized, Vec::new()).is_none());
+    }
+
+    #[test]
+    fn allows_pad_help_requests_without_labels() {
+        let request = pad_help_request(
+            vec![PadHelpButton {
+                button: 0,
+                label: None,
+                mode_group: None,
+            }],
+            vec![PadHelpFeature {
+                kind: PadHelpFeatureKind::Strip,
+                index: 0,
+                positive_label: None,
+                negative_label: None,
+            }],
+        );
+        assert!(request.is_some());
     }
 }

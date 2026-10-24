@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-import copy
 import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+BINARY = os.environ.get("BINGUX_CONFIG_BIN") or shutil.which("bingux-config")
 
 
 def load(name, path):
@@ -18,8 +20,26 @@ def load(name, path):
     return module
 
 
+def save_desktop(patch):
+    """Validate a desktop patch through bingux-config, which owns the schema.
+
+    Raises ValueError with the binary's message when the patch is rejected.
+    """
+    if not BINARY:
+        raise RuntimeError("bingux-config not found; set BINGUX_CONFIG_BIN")
+    reply = subprocess.run(
+        [BINARY, "save"],
+        input=json.dumps({"desktop": patch}),
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    if reply.returncode != 0:
+        raise ValueError(reply.stdout.strip() or reply.stderr.strip())
+
+
 extensions = load("extensions", ROOT / "shell/bingux/extensions.py")
-settings = load("settings", ROOT / "shell/bingux/settings-backend.py")
 
 
 class Extensions(unittest.TestCase):
@@ -91,18 +111,16 @@ class Extensions(unittest.TestCase):
             self.assertTrue(extensions.discover()["errors"])
 
     def test_missing_widget_placement_is_preserved_and_duplicates_rejected(self):
-        desktop = copy.deepcopy(settings.DEFAULTS["desktop"])
-        desktop["layout"] = {
+        layout = {
             "top-left": [],
             "top-center": [],
             "top-right": ["extension:missing/widget"],
             "dock": [],
             "sidebar": [],
         }
-        settings.validate_desktop(desktop)
-        desktop["layout"]["dock"] = ["extension:missing/widget"]
+        save_desktop({"layout": layout})
         with self.assertRaises(ValueError):
-            settings.validate_desktop(desktop)
+            save_desktop({"layout": {**layout, "dock": ["extension:missing/widget"]}})
 
 
 if __name__ == "__main__":

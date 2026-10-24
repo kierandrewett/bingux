@@ -43,7 +43,9 @@ Variants {
             readonly property size decodeSize: Qt.size(Math.ceil(width * window.devicePixelRatio), Math.ceil(height * window.devicePixelRatio))
 
             function show(image) {
-                const first = firstShow;
+                // A continued session already shows the greeter's blurred copy
+                // of this picture: the sharp one crossfades over it, no zoom.
+                const first = firstShow && !SessionContext.continuing;
                 firstShow = false;
                 front.z = 0;
                 image.z = 1;
@@ -118,6 +120,8 @@ Variants {
                 acceptedButtons: Qt.RightButton
                 onPressed: mouse => {
                     const shellPath = Quickshell.shellPath("shell.qml");
+                    // The installed launchers export BINGUX_QUICKSHELL. Packaged
+                    // installs require /usr/bin/qs, which is the fallback.
                     const quickshell = Quickshell.env("BINGUX_QUICKSHELL") || "qs";
                     Quickshell.execDetached([quickshell, "-p", shellPath, "ipc", "call", "shell", "desktopMenu", window.screen.name, String(mouse.x), String(mouse.y)]);
                 }

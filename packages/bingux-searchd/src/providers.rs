@@ -16,6 +16,7 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::command;
 use crate::config::SearchConfig;
 use crate::matching::SearchQuery;
 use crate::protocol::{ProviderResult, ResultKind};
@@ -222,6 +223,10 @@ impl LocalProviders {
     pub fn query(&self, query: &str, limit: usize) -> Vec<Candidate> {
         if limit == 0 {
             return Vec::new();
+        }
+
+        if command::is_command_query(query) {
+            return command::command_candidate(query).into_iter().collect();
         }
 
         if query.trim().starts_with(['!', '?']) {

@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh the login-screen wallpaper when the Bingux configuration changes
+PartOf=bingux.target
+ConditionUser=!greeter
+ConditionUser=!greetd
+
+[Path]
+PathChanged=%E/bingux/bingux.toml
+Unit=bingux-greeter-export.service
+
+[Install]
+WantedBy=bingux.target

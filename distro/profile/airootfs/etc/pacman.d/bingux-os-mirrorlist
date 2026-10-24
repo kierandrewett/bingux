@@ -1,0 +1,5 @@
+# Live image: the Bingux OS packages on this image come first, so installing
+# from the live system needs no network for them. The installed system gets the
+# package's own mirrorlist, which lists the published repository only.
+Server = file:///opt/bingux-os/repo
+Server = https://github.com/kierandrewett/bingux/releases/download/pacman-x86_64

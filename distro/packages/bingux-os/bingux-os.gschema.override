@@ -1,0 +1,4 @@
+[org.gnome.desktop.background]
+picture-uri='file:///usr/share/backgrounds/bingux-os/default.jpg'
+picture-uri-dark='file:///usr/share/backgrounds/bingux-os/default.jpg'
+primary-color='#101523'

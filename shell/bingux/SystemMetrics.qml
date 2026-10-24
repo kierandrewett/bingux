@@ -248,11 +248,11 @@ Pill {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             width: Math.max(0, Math.min(42, readout.width - reading.x - reading.width - 6))
-            visible: width > 0
+            visible: width > 0 && root.history.length > 0 && root.chartTime - root.history[0].at >= 10000
             height: 12
             history: root.history
             endTime: root.chartTime
-            duration: Math.min(60000, Math.max(10000, root.history.length ? root.chartTime - root.history[0].at : 60000))
+            duration: 60000
             metric: readout.metric
             fixedMaximum: root.maximumFor(readout.metric, miniChart.peak)
             lineColor: readout.metric === "cpu" || readout.metric === "receive" ? Theme.accent : Theme.text

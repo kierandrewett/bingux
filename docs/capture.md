@@ -132,6 +132,21 @@ folder. Bingux renames it after the muxer finishes, without buffering the record
 in memory. Non-empty failed recordings are preserved for recovery. Screen sharing
 uses desktop portal permissions.
 
+## Portal requests
+
+`binguxctl capture request` lets a script or the Bingux portal backend capture a region
+or the whole desktop. A request has a caller-chosen ID. `--interactive` opens the normal
+region selector with the screenshot mode. `--desktop` captures every output with no picker.
+The request state is kept for ten minutes, with at most fifteen finished requests. An ID
+cannot be reused while its entry is kept.
+
+Requests save a private PNG in the temporary directory, as Gnoblin's portal screenshots do.
+The result path names that file. Requests never copy to the clipboard, send a
+notification, or play the shutter. Only one capture runs at a time, so
+a second request fails at once. A saved window target does not open the window
+picker for a request: the request uses the region selector instead. See
+[binguxctl](binguxctl.md) for the command and reply formats.
+
 ## Shortcuts
 
 Alt+S is delivered through the running capture process's `ShortcutSession`.
@@ -168,10 +183,12 @@ python3 tests/capture-recording-controls-live.py
 # Also records the default system audio and microphone devices for three seconds
 # each, then both together. Checks AAC tracks, duration and full decode:
 python3 tests/capture-live.py --audio
-qs -p shell/bingux/CapturePreviewTest.qml
+tests/qml/run.sh CapturePreviewTest.qml
 # The interaction fixture checks frozen previews, drawing and resizing, inline
 # capture options, keyboard control and Escape without recording:
-qs -p shell/bingux/CaptureInteractionTest.qml
+tests/qml/run.sh CaptureInteractionTest.qml
+# The request fixture checks request IDs, duplicate reservation and cancel states:
+tests/qml/run.sh CaptureRequestTest.qml
 ```
 
 Live checks cover CPU and automatic H.264 recording, including duration and full

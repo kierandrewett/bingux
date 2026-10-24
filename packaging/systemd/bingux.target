@@ -5,7 +5,15 @@ Description=Bingux helper services
 # are started by Gnoblin's Lua autostart; only the helper daemons belong here.
 PartOf=graphical-session.target
 After=graphical-session.target
-Wants=bingux-searchd.service bingux-statusd.service
+# Gnoblin runs `systemctl --user start gnoblin-session.target` before it starts
+# the process that sends the compositor its configuration, and the compositor
+# gives up after 10 s without it. A target waits for every unit it wants unless
+# it opts out, so the helpers below, the wallpaper export in particular (about
+# 4 s of CPU), held the compositor back and a busy start ended with a black
+# screen or a lost login (5f53de8.iso: 6.5 s with the default, 0.4 s without,
+# on four busy CPUs). The helpers start in the background instead.
+DefaultDependencies=no
+Wants=bingux-searchd.service bingux-statusd.service xdg-desktop-portal-bingux.service bingux-global-shortcuts.service bingux-greeter-export.service bingux-greeter-export.path
 
 [Install]
 WantedBy=gnoblin-session.target

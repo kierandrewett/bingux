@@ -8,11 +8,14 @@ import os
 from pathlib import Path
 import shutil
 import statistics
+import sys
 import subprocess
 import threading
 import time
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE / "lib"))
+import shell_source  # noqa: E402
 BUS_NAME = "org.mpris.MediaPlayer2.bingux_idle_fixture"
 OBJECT_PATH = "/org/mpris/MediaPlayer2"
 ROOT_IFACE = "org.mpris.MediaPlayer2"
@@ -43,11 +46,8 @@ def prepare(args):
     shell = baseline / "shell.qml"
     text = shell.read_text()
     assert "native-media-idle" not in text, "Already instrumented"
-    assert text.count("import QtQuick.Window") == 1
-    text = text.replace("import QtQuick.Window", "import QtQuick.Window\nimport QtTest", 1)
-    end = text.rfind("}")
-    assert end >= 0 and not text[end + 1 :].strip()
-    shell.write_text(text[:end] + (HERE / "native-media-idle.inc.qml").read_text() + text[end:])
+    text = shell_source.replace_once(text, "import QtQuick.Window", "import QtQuick.Window\nimport QtTest", "test import seam")
+    shell.write_text(shell_source.insert_before_root_end(text, (HERE / "native-media-idle.inc.qml").read_text()))
     shutil.copytree(baseline, candidate, symlinks=True)
     (candidate / "MediaControls.qml").unlink()
     shutil.copy2(args.candidate, candidate / "MediaControls.qml")

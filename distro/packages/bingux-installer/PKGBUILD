@@ -1,0 +1,56 @@
+# Bingux OS installer: root daemon (socket-activated), client CLI that
+# partition, copy and configure a target disk, and the live installer session
+# (installer shell archive, session scripts) from the live image.
+# The container build supplies bingux-installer-src.tar.xz: the installer/ tree
+# from distro/installer, shell/bingux and scripts/pack-shell.py (see
+# distro/container-build.sh).
+# shellcheck shell=bash disable=SC2034
+pkgname=bingux-installer
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Bingux OS installer: privileged daemon and client that install Bingux OS from the live image'
+arch=('any')
+url='https://github.com/kierandrewett/bingux'
+license=('GPL-3.0-or-later')
+depends=('python' 'python-blivet' 'parted' 'gptfdisk' 'dosfstools' 'e2fsprogs' 'btrfs-progs'
+    'cryptsetup' 'rsync' 'openssl' 'util-linux' 'squashfs-tools' 'mkinitcpio' 'systemd'
+    'grub' 'efibootmgr' 'ntfs-3g' 'bingux' 'bingux-os' 'gnoblin')
+makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
+options=('!debug')
+install=bingux-installer.install
+source=('bingux-installer-src.tar.xz')
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/installer" || return
+    python -m build --wheel --no-isolation
+    # The installer shell: the base Bingux shell with the installer overlay, one
+    # archive that bingux-installer-ui runs.
+    python3 "$srcdir/scripts/pack-shell.py" --source "$srcdir/shell/bingux" \
+        --overlay "$srcdir/installer/shell" --entries '{"installer": "InstallerShell.qml"}' \
+        --version "$pkgver" "$srcdir/bingux-installer.sxa"
+}
+
+package() {
+    cd "$srcdir/installer" || return
+    python -m installer --destdir="$pkgdir" dist/*.whl
+
+    local unit
+    for unit in systemd/*.socket systemd/*.service; do
+        install -Dm644 "$unit" -t "$pkgdir/usr/lib/systemd/system/"
+    done
+    # Group bingux-install gates the socket; created by systemd-sysusers.
+    install -Dm644 systemd/bingux-installer.sysusers "$pkgdir/usr/lib/sysusers.d/bingux-installer.conf"
+
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+
+    # Live session: the installer shell archive, the session loop and the installer's Gnoblin config.
+    install -Dm644 "$srcdir/bingux-installer.sxa" "$pkgdir/usr/lib/bingux/bingux-installer.sxa"
+    local launcher
+    for launcher in bingux-installer-ui bingux-live-session bingux-live-switch; do
+        install -Dm755 "$srcdir/installer/session/$launcher" -t "$pkgdir/usr/bin/"
+    done
+    install -Dm644 "$srcdir/installer/gnoblin/installer.lua" "$pkgdir/usr/share/bingux/installer/gnoblin.lua"
+    install -Dm644 "$srcdir/installer/session/bingux-install-live.desktop" -t "$pkgdir/usr/share/applications/"
+    install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
+}

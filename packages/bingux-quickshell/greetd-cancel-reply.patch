@@ -1,0 +1,53 @@
+From: Bingux <bingux@localhost>
+Subject: [PATCH] greetd: consume the reply to cancel_session
+
+greetd answers every request, including cancel_session, with a success or
+error message. The connection sent cancel_session and moved to Inactive at
+once, so a create_session issued before that reply arrived treated the
+cancel's success as the end of authentication and reported ReadyToLaunch
+for a user who had not been authenticated. Count outstanding cancel
+requests and drop their replies.
+---
+ src/services/greetd/connection.cpp | 11 +++++++++++
+ src/services/greetd/connection.hpp |  1 +
+ 2 files changed, 12 insertions(+)
+
+diff --git a/src/services/greetd/connection.cpp b/src/services/greetd/connection.cpp
+--- a/src/services/greetd/connection.cpp
++++ b/src/services/greetd/connection.cpp
+@@ -112,6 +112,7 @@ void GreetdConnection::setActive(bool active) {
+ 			this->sendRequest({
+ 			    {"type", "cancel_session"},
+ 			});
++			this->mPendingCancelReplies++;
+ 
+ 			this->setInactive();
+ 		}
+@@ -151,6 +152,16 @@ void GreetdConnection::onSocketReady() {
+ 
+ 	qCDebug(logGreetd).noquote() << "Received greetd response:" << text;
+ 
++	// A cancel_session reply says nothing about the session created after
++	// it. Discard it so an immediate create_session is not confused with a
++	// completed authentication.
++	if (this->mPendingCancelReplies > 0 && (type == "success" || type == "error")) {
++		this->mPendingCancelReplies--;
++		qCDebug(logGreetd) << "Discarded reply to cancel_session.";
++		if (this->socket.bytesAvailable() > 0) this->onSocketReady();
++		return;
++	}
++
+ 	if (type == "success") {
+ 		switch (this->mState) {
+ 		case GreetdState::Authenticating:
+diff --git a/src/services/greetd/connection.hpp b/src/services/greetd/connection.hpp
+--- a/src/services/greetd/connection.hpp
++++ b/src/services/greetd/connection.hpp
+@@ -70,6 +70,7 @@ private:
+ 	bool mTargetActive = false;
+ 	bool mExitAfterLaunch = false;
+ 	QString mMessage;
++	int mPendingCancelReplies = 0;
+ 	bool mResponseRequired = false;
+ 	QString mUser;
+ 	QLocalSocket socket;

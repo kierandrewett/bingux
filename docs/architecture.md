@@ -4,15 +4,20 @@ Bingux is a desktop shell. It owns the user-facing surfaces and their local
 state. It does not own the compositor, login manager, system package profile or
 machine hardware configuration.
 
-The shell is a normal Quickshell configuration. Native helpers and daemons are
-small packages with typed sockets or QML interfaces. Extensions add trusted QML
-without changing the shell's built-in layout model.
+The shell is a Quickshell configuration run by `bingux-shell`, a build of
+Quickshell with the Bingux runtime patches and a Bingux entry point
+(`packages/bingux-shell`). The QML ships as one packed archive that the binary
+unpacks per user. Native helpers and daemons are small packages with typed
+sockets or QML interfaces. Extensions add trusted QML without changing the
+shell's built-in layout model.
 
 ## Runtime layers
 
 | Layer              | Location                     | Responsibility                                                           |
 | ------------------ | ---------------------------- | ------------------------------------------------------------------------ |
 | Shell              | `shell/bingux/`              | Draws the top bar, dock, sidebar, popouts and control centre.            |
+| Shell runtime      | `packages/bingux-shell/`     | Quickshell built into `bingux-shell`; runs the packed shell archive.     |
+| Python helpers     | `shell/bingux/*.py`          | Desktop glue the shell spawns; installed under `libexec/bingux/shell`.   |
 | Native helpers     | `packages/`                  | Builds the search, status, audio and QML plugin helpers.                 |
 | User state         | `$XDG_CONFIG_HOME/bingux/`   | Stores layout, settings, search, notes and extension enable state.       |
 | Extension registry | `shell/bingux/extensions.py` | Discovers trusted extension manifests and preserves disabled placements. |
@@ -65,6 +70,23 @@ shell access. This keeps the supported interface useful without repeating the
 rigid extension restrictions found in other desktop shells.
 
 Read [Extensions](extensions.md) for the manifest and lifecycle contract.
+
+## Session contexts
+
+Three `bingux-shell` processes share the widget code: the desktop shell, the
+lock client (`bingux-lock`) and the login greeter (`bingux-greeter`). The
+`SessionContext` singleton names which one is running (`desktop`, `locked`,
+`greeter`); `LockShell` and `GreeterShell` set it before anything else loads.
+
+Two tables follow from it. `DesktopLayout.js` gives every widget a `contexts`
+list and `allowed(id, mode)` decides what a bar may show. `SessionServices`
+holds the capability table (`locked`: volume, power; `greeter`: power) and
+every action path that launches, searches, opens tray menus, shows
+notification content, changes settings or power asks `allows(capability)`
+before acting. Extensions never load outside the desktop. The lock screen and
+the greeter therefore reuse the bar's widgets without inheriting the desktop's
+reach. [Secure session locking](locking.md) lists what the restricted bar
+shows; [Login screen](login-screen.md) covers the greeter.
 
 ## Native helpers
 

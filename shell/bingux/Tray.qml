@@ -118,7 +118,7 @@ Item {
                         if (event.key === Qt.Key_Return || event.key === Qt.Key_Space) {
                             if (modelData.onlyMenu && modelData.hasMenu)
                                 trayButton.openTrayMenu();
-                            else
+                            else if (SessionServices.allows("trayMenus"))
                                 modelData.activate();
                             event.accepted = true;
                         } else if (event.key === Qt.Key_Escape && trayButton.trayMenuOpenRequested) {
@@ -133,6 +133,8 @@ Item {
                         trayMenuRequestHandle = null;
                     }
                     function openTrayMenu() {
+                        if (!SessionServices.allows("trayMenus"))
+                            return;
                         trayMenuRequestHandle = trayMenuHandle;
                         trayMenuOpenRequested = true;
                         trayMenuOpenTimeout.restart();
@@ -295,10 +297,10 @@ Item {
                             if (mouse.button === Qt.LeftButton) {
                                 if (trayButton.modelData.onlyMenu && trayButton.modelData.hasMenu) {
                                     trayButton.openTrayMenu();
-                                } else {
+                                } else if (SessionServices.allows("trayMenus")) {
                                     trayButton.modelData.activate();
                                 }
-                            } else if (mouse.button === Qt.MiddleButton) {
+                            } else if (mouse.button === Qt.MiddleButton && SessionServices.allows("trayMenus")) {
                                 trayButton.modelData.secondaryActivate();
                             } else if (mouse.button === Qt.RightButton && trayButton.modelData.hasMenu) {
                                 trayButton.openTrayMenu();

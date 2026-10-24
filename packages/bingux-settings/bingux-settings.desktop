@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Settings
+Comment=Change Bingux and system settings
+Exec=bingux-settings %u
+Icon=preferences-system
+Terminal=false
+Categories=Settings;DesktopSettings;
+Keywords=Preferences;Configuration;Appearance;Display;Sound;Network;Bluetooth;Power;Keyboard;Mouse;
+StartupWMClass=bingux-settings
+StartupNotify=true

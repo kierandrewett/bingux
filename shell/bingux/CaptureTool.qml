@@ -26,7 +26,7 @@ Scope {
         return captureWindows.find(window => x >= window.x && y >= window.y && x < window.x + window.width && y < window.y + window.height) || null;
     }
     function hoverWindow(screen, x, y) {
-        if (preferences.target !== "window" || !directWindowPicker)
+        if (captureTarget !== "window" || !directWindowPicker)
             return;
         activeScreen = screen;
         selectedWindow = windowAt(screen.x + x, screen.y + y);
@@ -52,6 +52,12 @@ Scope {
     property int countdown: 0
     property rect recordingRegion: Qt.rect(0, 0, 0, 0)
     property string recordingTarget: ""
+    property var requests: new Map()
+    property string activeRequest: ""
+    readonly property bool requesting: activeRequest !== ""
+    readonly property string captureKind: requesting ? "screenshot" : preferences.kind
+    readonly property string captureTarget: requesting && preferences.target === "window" ? "region" : preferences.target
+    property bool desktopPending: false
     readonly property bool recording: state === "recording"
     readonly property bool busy: ["countdown", "starting", "recording", "finalizing"].includes(state)
     readonly property string elapsedText: Math.floor(elapsed / 60).toString() + ":" + (elapsed % 60).toString().padStart(2, "0")
@@ -149,6 +155,13 @@ Scope {
     function send(record) {
         worker.write(JSON.stringify(record) + "\n");
     }
+    function sendCancel() {
+        // Name the active request so a late cancelled echo cannot end a newer request.
+        send({
+            command: "cancel",
+            request: activeRequest || undefined
+        });
+    }
     function open() {
         if (!worker.running)
             worker.running = true;
@@ -157,9 +170,7 @@ Scope {
             return;
         }
         if (busy) {
-            send({
-                command: "cancel"
-            });
+            sendCancel();
             return;
         }
         if (opened || state === "preparing") {
@@ -221,9 +232,8 @@ Scope {
         previewRequest++;
         if (!busy) {
             state = "idle";
-            send({
-                command: "cancel"
-            });
+            sendCancel();
+            finishRequest("cancelled");
         }
     }
     function stop(hoveredAt = 0) {
@@ -232,9 +242,163 @@ Scope {
             hoveredAt: hoveredAt
         });
     }
+    function requestIdError(id) {
+        if (!/^[A-Za-z0-9._-]{1,64}$/.test(id))
+            return "Invalid request ID";
+        pruneRequests();
+        return requests.has(id) ? "Request ID already used" : "";
+    }
+    function rememberRequest(id, outcome, path = "", message = "") {
+        requests.set(id, {
+            id: id,
+            state: outcome,
+            path: path,
+            message: message,
+            updated: Date.now()
+        });
+        pruneRequests();
+    }
+    function pruneRequests() {
+        // Finished requests live for ten minutes, at most 15 besides the active one.
+        const cutoff = Date.now() - 600000;
+        const finished = Array.from(requests.values()).filter(entry => entry.id !== activeRequest && entry.updated >= cutoff).sort((a, b) => b.updated - a.updated).slice(0, 15).map(entry => entry.id);
+        for (const entry of Array.from(requests.values()))
+            if (entry.id !== activeRequest && !finished.includes(entry.id))
+                requests.delete(entry.id);
+    }
+    function finishRequest(outcome, path = "", message = "") {
+        if (!activeRequest)
+            return;
+        const id = activeRequest;
+        activeRequest = "";
+        desktopPending = false;
+        rememberRequest(id, outcome, path, message);
+    }
+    function takeRequested() {
+        // Requests capture a region or a whole screen only; the backend never opens a picker for them.
+        const s = activeScreen;
+        captureSession.requested = false;
+        opened = false;
+        state = "countdown";
+        optionsOpen = false;
+        send({
+            command: "capture",
+            kind: "screenshot",
+            target: captureTarget === "screen" ? "screen" : "region",
+            screen: s.name,
+            previewToken: root.previewToken,
+            region: {
+                x: Math.round(s.x + region.x),
+                y: Math.round(s.y + region.y),
+                width: Math.round(region.width),
+                height: Math.round(region.height)
+            },
+            cursor: false,
+            copy: false,
+            delay: 0,
+            format: "png",
+            backend: "auto",
+            portal: true
+        });
+    }
+    function beginInteractiveRequest(id, mode) {
+        if (mode !== "screenshot")
+            return {
+                ok: false,
+                error: "Unknown capture mode"
+            };
+        const error = requestIdError(id);
+        if (error)
+            return {
+                ok: false,
+                error: error
+            };
+        if (busy || opened || state === "preparing")
+            return {
+                ok: false,
+                error: "A capture is already in progress"
+            };
+        activeRequest = id;
+        rememberRequest(id, "pending");
+        open();
+        return {
+            ok: true
+        };
+    }
+    function beginDesktopRequest(id) {
+        const error = requestIdError(id);
+        if (error)
+            return {
+                ok: false,
+                error: error
+            };
+        if (busy || opened || state === "preparing")
+            return {
+                ok: false,
+                error: "A capture is already in progress"
+            };
+        activeRequest = id;
+        rememberRequest(id, "pending");
+        captureSession.requested = false;
+        // The desktop capture needs the recorder worker, so it waits for the worker's ready event.
+        state = "preparing";
+        desktopPending = true;
+        if (!worker.running)
+            worker.running = true;
+        if (ready)
+            sendDesktopCapture();
+        return {
+            ok: true
+        };
+    }
+    function sendDesktopCapture() {
+        // No target screen: grim captures every output as one desktop image, with no picker.
+        desktopPending = false;
+        state = "starting";
+        send({
+            command: "capture",
+            kind: "screenshot",
+            target: "screen",
+            previewToken: "",
+            cursor: false,
+            copy: false,
+            delay: 0,
+            format: "png",
+            backend: "auto",
+            portal: true
+        });
+    }
+    function requestStatus(id) {
+        pruneRequests();
+        const entry = requests.get(id);
+        return {
+            id: id,
+            state: entry ? entry.state : "unknown",
+            path: entry ? entry.path : "",
+            message: entry ? entry.message : ""
+        };
+    }
+    function cancelRequest(id) {
+        if (!activeRequest || id !== activeRequest)
+            return {
+                ok: false,
+                error: "Request is not pending"
+            };
+        if (busy)
+            sendCancel();
+        else
+            close();
+        return {
+            ok: true
+        };
+    }
     function take() {
         if (!ready || busy)
             return;
+        if (activeRequest) {
+            takeRequested();
+            return;
+        }
         if (preferences.target === "window" && (!capabilities.window || (directWindowPicker && !selectedWindow)))
             return;
         const s = activeScreen;
@@ -273,7 +437,9 @@ Scope {
         if (event.event === "ready") {
             capabilities = event;
             ready = true;
-            if (state === "preparing")
+            if (desktopPending)
+                sendDesktopCapture();
+            else if (state === "preparing")
                 preparePreview();
         } else if (event.event === "preview") {
             if (state !== "preparing" || event.request !== previewRequest)
@@ -303,25 +469,35 @@ Scope {
         } else if (event.event === "finalizing") {
             state = "finalizing";
         } else if (event.event === "saved") {
+            const portalRequest = activeRequest !== "";
             state = "saved";
             savedPath = event.path;
             partialPath = "";
             message = (event.kind === "recording" ? "Recording saved" : "Screenshot saved") + (event.copied ? " · Copied to clipboard" : "");
-            if (!event.notified)
+            finishRequest("saved", event.path);
+            if (!portalRequest && !event.notified)
                 console.warn("Capture saved; desktop notification acknowledgement pending or unavailable");
         } else if (event.event === "error") {
+            const portalRequest = activeRequest !== "";
             captureSession.requested = false;
             state = "error";
             message = event.message;
             partialPath = event.partial || "";
-            notifyError();
-        } else if (event.event === "cancelled" && state !== "preparing") {
-            state = "idle";
+            finishRequest("error", "", event.message);
+            if (!portalRequest)
+                notifyError();
+        } else if (event.event === "cancelled") {
+            // A late echo for an earlier cancel must not end a newer request.
+            if ((event.request || "") !== activeRequest)
+                return;
+            if (state !== "preparing")
+                state = "idle";
+            finishRequest("cancelled");
         }
     }
     Process {
         id: worker
-        command: Quickshell.env("BINGUX_CAPTURE_HELPER") ? [Quickshell.env("BINGUX_CAPTURE_HELPER")] : ["python3", "-u", decodeURIComponent(Qt.resolvedUrl("capture_service.py").toString().replace(/^file:\/\//, ""))]
+        command: Quickshell.env("BINGUX_CAPTURE_HELPER") ? [Quickshell.env("BINGUX_CAPTURE_HELPER")] : [Python.python, "-u", Python.helper("capture_service.py")]
         running: true
         stdinEnabled: true
         stdout: SplitParser {
@@ -334,14 +510,16 @@ Scope {
             }
         }
         onExited: {
-            const wasActive = root.opened || root.busy;
+            // Portal requests report failure through their result, not a notification.
+            const notify = (root.opened || root.busy) && root.activeRequest === "";
             root.ready = false;
             if (root.state !== "error") {
                 root.state = "error";
                 root.message = "Capture connection stopped. Open Capture to reconnect to the recorder.";
             }
-            if (wasActive)
+            if (notify)
                 root.notifyError();
+            root.finishRequest("error", "", root.message);
         }
     }
     IpcHandler {
@@ -400,12 +578,12 @@ Scope {
                     ok: false,
                     error: "Open the capture selector before taking a capture"
                 });
-            if (preferences.target === "window" && !root.capabilities.window)
+            if (captureTarget === "window" && !root.capabilities.window)
                 return JSON.stringify({
                     ok: false,
                     error: "Window capture is unavailable"
                 });
-            if (preferences.target === "window" && root.directWindowPicker && !root.selectedWindow)
+            if (captureTarget === "window" && root.directWindowPicker && !root.selectedWindow)
                 return JSON.stringify({
                     ok: false,
                     error: "Select a window first"
@@ -420,11 +598,21 @@ Scope {
         }
         function cancel(): void {
             if (root.busy)
-                root.send({
-                    command: "cancel"
-                });
+                root.sendCancel();
             else
                 root.close();
+        }
+        function requestInteractive(id: string, mode: string): string {
+            return JSON.stringify(root.beginInteractiveRequest(id, mode || "screenshot"));
+        }
+        function requestDesktop(id: string): string {
+            return JSON.stringify(root.beginDesktopRequest(id));
+        }
+        function requestResult(id: string): string {
+            return JSON.stringify(root.requestStatus(id));
+        }
+        function cancelRequest(id: string): string {
+            return JSON.stringify(root.cancelRequest(id));
         }
         function status(): string {
             return JSON.stringify({
@@ -494,11 +682,11 @@ Scope {
             function edgeCoordinate(value, extent) {
                 return value <= 1 ? 0 : value >= extent - 1 ? extent : value;
             }
-            readonly property rect selection: active && preferences.target === "region" ? root.region : Qt.rect(0, 0, width, height)
+            readonly property rect selection: active && captureTarget === "region" ? root.region : Qt.rect(0, 0, width, height)
             Image {
                 anchors.fill: parent
                 source: root.previews[overlay.modelData.name]?.plain || ""
-                visible: preferences.kind === "screenshot"
+                visible: captureKind === "screenshot"
                 fillMode: Image.Stretch
                 cache: false
             }
@@ -507,7 +695,7 @@ Scope {
                 source: root.previews[overlay.modelData.name]?.cursor || ""
                 fillMode: Image.Stretch
                 cache: false
-                visible: preferences.kind === "screenshot" && preferences.cursor
+                visible: captureKind === "screenshot" && preferences.cursor
             }
             Shortcut {
                 sequence: "Escape"
@@ -526,19 +714,19 @@ Scope {
             Shortcut {
                 sequence: "Tab"
                 context: Qt.ApplicationShortcut
-                enabled: root.opened && overlay.active && preferences.target === "window" && root.directWindowPicker && !root.optionsOpen
+                enabled: root.opened && overlay.active && captureTarget === "window" && root.directWindowPicker && !root.optionsOpen
                 onActivated: root.cycleWindow(1)
             }
             Shortcut {
                 sequence: "Shift+Tab"
                 context: Qt.ApplicationShortcut
-                enabled: root.opened && overlay.active && preferences.target === "window" && root.directWindowPicker && !root.optionsOpen
+                enabled: root.opened && overlay.active && captureTarget === "window" && root.directWindowPicker && !root.optionsOpen
                 onActivated: root.cycleWindow(-1)
             }
             Rectangle {
                 anchors.fill: parent
                 color: Theme.captureWindowShade
-                visible: !overlay.active || preferences.target === "window"
+                visible: !overlay.active || captureTarget === "window"
             }
             Rectangle {
                 x: 0
@@ -546,7 +734,7 @@ Scope {
                 width: parent.width
                 height: overlay.selection.y
                 color: Theme.captureRegionShade
-                visible: overlay.active && preferences.target === "region"
+                visible: overlay.active && captureTarget === "region"
             }
             Rectangle {
                 x: 0
@@ -554,7 +742,7 @@ Scope {
                 width: overlay.selection.x
                 height: overlay.selection.height
                 color: Theme.captureRegionShade
-                visible: overlay.active && preferences.target === "region"
+                visible: overlay.active && captureTarget === "region"
             }
             Rectangle {
                 x: overlay.selection.x + overlay.selection.width
@@ -562,7 +750,7 @@ Scope {
                 width: parent.width - x
                 height: overlay.selection.height
                 color: Theme.captureRegionShade
-                visible: overlay.active && preferences.target === "region"
+                visible: overlay.active && captureTarget === "region"
             }
             Rectangle {
                 x: 0
@@ -570,7 +758,7 @@ Scope {
                 width: parent.width
                 height: parent.height - y
                 color: Theme.captureRegionShade
-                visible: overlay.active && preferences.target === "region"
+                visible: overlay.active && captureTarget === "region"
             }
 
             MouseArea {
@@ -578,29 +766,29 @@ Scope {
                 objectName: "captureRegionDraw"
                 anchors.fill: parent
                 preventStealing: true
-                hoverEnabled: preferences.target === "window" && root.directWindowPicker
+                hoverEnabled: captureTarget === "window" && root.directWindowPicker
                 onEntered: root.hoverWindow(overlay.modelData, mouseX, mouseY)
                 onClicked: mouse => {
-                    if (preferences.target !== "window" || !root.directWindowPicker)
+                    if (captureTarget !== "window" || !root.directWindowPicker)
                         return;
                     root.hoverWindow(overlay.modelData, mouse.x, mouse.y);
                     if (root.selectedWindow)
                         root.take();
                 }
-                cursorShape: preferences.target === "region" ? Qt.CrossCursor : Qt.ArrowCursor
+                cursorShape: captureTarget === "region" ? Qt.CrossCursor : Qt.ArrowCursor
                 property point origin
                 onPressed: mouse => {
-                    root.regionDragging = preferences.target === "region";
+                    root.regionDragging = captureTarget === "region";
                     root.activeScreen = overlay.modelData;
                     origin = Qt.point(overlay.edgeCoordinate(mouse.x, overlay.width), overlay.edgeCoordinate(mouse.y, overlay.height));
-                    if (preferences.target === "region")
+                    if (captureTarget === "region")
                         root.region = Qt.rect(Math.min(origin.x, overlay.width - 2), Math.min(origin.y, overlay.height - 2), 2, 2);
                 }
                 onReleased: root.regionDragging = false
                 onCanceled: root.regionDragging = false
                 onPositionChanged: mouse => {
                     root.hoverWindow(overlay.modelData, mouse.x, mouse.y);
-                    if (!pressed || preferences.target !== "region")
+                    if (!pressed || captureTarget !== "region")
                         return;
                     const x = overlay.edgeCoordinate(mouse.x, overlay.width);
                     const y = overlay.edgeCoordinate(mouse.y, overlay.height);
@@ -610,7 +798,7 @@ Scope {
             Rectangle {
                 objectName: "captureWindowHighlight"
                 readonly property var window: root.selectedWindow
-                visible: preferences.target === "window" && root.directWindowPicker && window !== null
+                visible: captureTarget === "window" && root.directWindowPicker && window !== null
                 x: window ? Math.max(0, window.x - overlay.modelData.x) : 0
                 y: window ? Math.max(0, window.y - overlay.modelData.y) : 0
                 width: window ? Math.max(0, Math.min(overlay.width, window.x + window.width - overlay.modelData.x) - x) : 0
@@ -648,20 +836,20 @@ Scope {
             }
             Rectangle {
                 id: selectionBorder
-                visible: overlay.active && preferences.target !== "window"
-                x: preferences.target === "screen" ? 4 : root.region.x
-                y: preferences.target === "screen" ? 4 : root.region.y
-                width: preferences.target === "screen" ? overlay.width - 8 : root.region.width
-                height: preferences.target === "screen" ? overlay.height - 8 : root.region.height
+                visible: overlay.active && captureTarget !== "window"
+                x: captureTarget === "screen" ? 4 : root.region.x
+                y: captureTarget === "screen" ? 4 : root.region.y
+                width: captureTarget === "screen" ? overlay.width - 8 : root.region.width
+                height: captureTarget === "screen" ? overlay.height - 8 : root.region.height
                 color: "transparent"
                 border.color: "white"
                 border.width: 1
-                radius: preferences.target === "screen" ? 12 : 2
+                radius: captureTarget === "screen" ? 12 : 2
                 MouseArea {
                     objectName: "captureRegionMove"
                     anchors.fill: parent
                     preventStealing: true
-                    enabled: preferences.target === "region"
+                    enabled: captureTarget === "region"
                     cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                     property point origin
                     property rect initial
@@ -682,7 +870,7 @@ Scope {
                     }
                 }
                 Repeater {
-                    model: preferences.target === "region" ? [
+                    model: captureTarget === "region" ? [
                         {
                             x: 0,
                             y: 0
@@ -782,7 +970,7 @@ Scope {
                     }
                 }
                 Rectangle {
-                    visible: preferences.target === "region"
+                    visible: captureTarget === "region"
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: parent.y < 40 ? 12 : -36
                     width: sizeLabel.implicitWidth + Theme.padding * 2
@@ -861,7 +1049,7 @@ Scope {
                     }
                     Keys.onPressed: event => {
                         const delta = event.modifiers & Qt.ShiftModifier ? 10 : 1;
-                        if (preferences.target === "region" && [Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down].includes(event.key)) {
+                        if (captureTarget === "region" && [Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down].includes(event.key)) {
                             const dx = event.key === Qt.Key_Left ? -delta : event.key === Qt.Key_Right ? delta : 0;
                             const dy = event.key === Qt.Key_Up ? -delta : event.key === Qt.Key_Down ? delta : 0;
                             root.region = Qt.rect(Math.max(0, Math.min(overlay.width - root.region.width, root.region.x + dx)), Math.max(0, Math.min(overlay.height - root.region.height, root.region.y + dy)), root.region.width, root.region.height);
@@ -994,8 +1182,8 @@ Scope {
                                     Layout.fillHeight: true
                                     hoverEnabled: true
                                     checkable: true
-                                    checked: preferences.target === modelData
-                                    enabled: modelData !== "window" || !root.ready || !!root.capabilities.window
+                                    checked: captureTarget === modelData
+                                    enabled: modelData !== "window" || (!requesting && (!root.ready || !!root.capabilities.window))
                                     objectName: "captureTarget" + modelData
                                     Accessible.name: modelData === "region" ? "Selection" : modelData === "screen" ? "Screen" : "Window"
                                     onClicked: preferences.target = modelData
@@ -1053,7 +1241,8 @@ Scope {
                                             height: 26
                                             hoverEnabled: true
                                             checkable: true
-                                            checked: preferences.kind === modelData
+                                            checked: captureKind === modelData
+                                            enabled: !requesting
                                             objectName: "captureMode" + modelData
                                             Accessible.name: modelData === "screenshot" ? "Screenshot" : "Recording"
                                             onClicked: preferences.kind = modelData
@@ -1086,8 +1275,8 @@ Scope {
                                 width: 48
                                 height: 48
                                 hoverEnabled: true
-                                Accessible.name: preferences.kind === "recording" ? "Start recording" : "Take screenshot"
-                                enabled: root.ready && (preferences.target !== "window" || (!!root.capabilities.window && (!root.directWindowPicker || root.selectedWindow !== null)))
+                                Accessible.name: captureKind === "recording" ? "Start recording" : "Take screenshot"
+                                enabled: root.ready && (captureTarget !== "window" || (!!root.capabilities.window && (!root.directWindowPicker || root.selectedWindow !== null)))
                                 onClicked: root.take()
                                 background: Rectangle {
                                     radius: width / 2
@@ -1099,7 +1288,7 @@ Scope {
                                         anchors.fill: parent
                                         anchors.margins: 5
                                         radius: width / 2
-                                        color: preferences.kind === "recording" ? Theme.recordingIndicator : Theme.text
+                                        color: captureKind === "recording" ? Theme.recordingIndicator : Theme.text
                                         opacity: shutter.down ? 0.65 : shutter.hovered ? 0.85 : 1
                                     }
                                 }
@@ -1143,6 +1332,7 @@ Scope {
                     enabled: root.optionsOpen
                     opacity: Math.max(0, toolbar.settingsProgress * 2 - 1)
                     preferences: root.settings
+                    kind: root.captureKind
                     audioAvailable: !!root.capabilities.audio
                     onPickingFolderChanged: root.pickingFolder = pickingFolder
                     onBack: root.optionsOpen = false

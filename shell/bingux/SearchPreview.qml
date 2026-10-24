@@ -7,7 +7,7 @@ Item {
     id: root
     property string path: ""
     property string title: ""
-    readonly property var helperCommand: Quickshell.env("BINGUX_PREVIEW_HELPER") ? [Quickshell.env("BINGUX_PREVIEW_HELPER")] : ["python3", decodeURIComponent(Qt.resolvedUrl("preview-document.py").toString().replace(/^file:\/\//, ""))]
+    readonly property var helperCommand: Quickshell.env("BINGUX_PREVIEW_HELPER") ? [Quickshell.env("BINGUX_PREVIEW_HELPER")] : [Python.python, Python.helper("preview-document.py")]
     function zoomBy(steps) {
         if (document.item && document.item.details && !switching)
             document.item.setZoom(document.item.targetZoom * Math.pow(1.1, steps));

@@ -1,0 +1,32 @@
+#!/bin/sh
+# Switch the running live session between the installer and the live desktop.
+#
+#   bingux-live-switch installer   Install Bingux (the installer UI)
+#   bingux-live-switch live        Try Bingux (the normal live desktop)
+#
+# bingux-live-session runs the compositor and starts the requested mode when
+# this command stops the current one. Only the live account has a running
+# session, so this fails when none is running.
+set -eu
+
+case ${1:-} in
+    installer | live) ;;
+    *)
+        echo "usage: bingux-live-switch installer|live" >&2
+        exit 2
+        ;;
+esac
+
+state="${XDG_RUNTIME_DIR:?bingux-live-switch needs XDG_RUNTIME_DIR}/bingux-live"
+if [ ! -r "$state/pid" ]; then
+    echo "bingux-live-switch: no live session is running" >&2
+    exit 1
+fi
+
+printf '%s\n' "$1" >"$state/next.tmp"
+mv "$state/next.tmp" "$state/next"
+if ! kill -TERM "$(cat "$state/pid")" 2>/dev/null; then
+    rm -f "$state/next"
+    echo "bingux-live-switch: the live compositor is not running" >&2
+    exit 1
+fi

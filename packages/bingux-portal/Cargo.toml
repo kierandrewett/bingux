@@ -1,0 +1,28 @@
+[package]
+name = "bingux-portal"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "xdg-desktop-portal backend that enforces Bingux portal permissions"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "xdg-desktop-portal-bingux"
+path = "src/main.rs"
+
+[[bin]]
+name = "bingux-global-shortcuts"
+path = "src/bin/bingux-global-shortcuts.rs"
+
+[dependencies]
+async-io = "2"
+async-process = "2.5"
+futures-util = "0.3"
+libc = "0.2"
+serde = { version = "1", features = [ "derive" ] }
+serde_json = "1"
+toml = "1"
+zbus = { version = "5.13", default-features = false, features = [ "async-io" ] }

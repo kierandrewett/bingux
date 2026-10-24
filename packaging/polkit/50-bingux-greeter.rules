@@ -1,0 +1,14 @@
+// Let the greeter account restart or shut down from the Bingux login screen.
+// Nobody is logged in while the greeter runs, so this matches GDM's policy.
+polkit.addRule(function (action, subject) {
+    if (subject.user !== "greeter" && subject.user !== "greetd") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    if (action.id === "org.freedesktop.login1.power-off" ||
+        action.id === "org.freedesktop.login1.power-off-multiple-sessions" ||
+        action.id === "org.freedesktop.login1.reboot" ||
+        action.id === "org.freedesktop.login1.reboot-multiple-sessions") {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

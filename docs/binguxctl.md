@@ -12,6 +12,10 @@ binguxctl capture take                    # Press Capture with the current selec
 binguxctl capture stop                    # Finish the current recording
 binguxctl capture cancel
 binguxctl capture status                  # JSON, including savedPath and elapsed time
+binguxctl capture request photo-1 --interactive   # Choose a region; prints JSON
+binguxctl capture request photo-2 --desktop       # Capture every output; prints JSON
+binguxctl capture result photo-1                  # JSON: pending, saved, cancelled, error or unknown
+binguxctl capture cancel-request photo-1          # Cancel a pending request
 binguxctl search query "firefox"
 binguxctl controls open
 binguxctl calendar toggle
@@ -23,15 +27,22 @@ binguxctl sidebar edge right
 binguxctl keyboard next
 binguxctl emoji open
 binguxctl privacy status
+binguxctl ipc introduction show          # Open the first-login introduction
+binguxctl identify show DP-1 HDMI-1      # Label DP-1 as 1 and HDMI-1 as 2
+binguxctl identify hide                  # Remove display labels now
 binguxctl status
 binguxctl reload
 ```
+
+`identify show CONNECTOR...` labels the named displays in the order given: the first connector is shown as 1, the second as 2, and so on. The labels last five seconds and replace any earlier labels. `identify hide` removes them immediately. Connector names are the Output values on the Displays page, such as `DP-1`. See [desktop shell](desktop-shell.md#display-identification) for the behaviour when outputs change.
 
 Opening capture is idempotent. `capture toggle` retains the keyboard shortcut's
 behaviour: open/close the selector, cancel a countdown, or stop a recording.
 `capture take` requires a ready selector. `--mode` and `--target` apply only to
 `capture open`; omitted options retain the UI preferences. Capturing and setting
 Do Not Disturb are asynchronous; their status commands report the resulting state.
+
+`capture request ID --interactive` opens the region selector for a request and `capture request ID --desktop` captures every output without a picker. Both print `{"ok":true}` or `{"ok":false,"error":"..."}` at once. `capture result ID` prints `{"id":"ID","state":"pending|saved|cancelled|error|unknown","path":"...","message":"..."}`; `unknown` means no such request. `capture cancel-request ID` cancels a pending request. IDs are 1 to 64 letters, digits, dots, underscores or dashes. Only one capture runs at a time. Requests never copy to the clipboard or send a notification. A request made while the target preference is window fails, because requests capture regions or screens only.
 
 Search, calendar, controls, metrics, keyboard and notifications accept `open`,
 `close`, `toggle` and `status`. `sidebar` also supports `popout`, `dock`, `select`
@@ -50,16 +61,18 @@ JSON. Failures print a diagnostic to stderr and return nonzero. Only an explicit
 repeated because the command may already have executed.
 
 The native package installs the command and uses `capture toggle` for the
-capture shortcut. It selects the configured Quickshell package and configuration
-name. For a development instance:
+capture shortcut. The installed `binguxctl` addresses the running shell
+through `bingux-shell --shell-dir`, the directory the archive was unpacked
+into. For a development instance running from a checkout:
 
 ```sh
-binguxctl --quickshell /path/to/qs --path /path/to/shell status
+binguxctl --quickshell /path/to/bingux-shell --path /path/to/shell/bingux status
 binguxctl --config bingux status
 ```
 
 The equivalent defaults are `BINGUX_QUICKSHELL`, `BINGUX_CONFIG_PATH` and
-`BINGUX_CONFIG_NAME`. Explicit options take precedence. Reload affects the shell;
+`BINGUX_CONFIG_NAME`. Without `BINGUX_QUICKSHELL`, `binguxctl` uses the first of
+`gnoblin-quickshell`, `qs` and `quickshell` found on `PATH`. Explicit options take precedence. Reload affects the shell;
 an active capture can be finalised by the outgoing capture worker.
 
 Screenshots play GNOME's `screen-capture` sound event after a successful save.
@@ -233,3 +246,19 @@ controls and preferences that have not loaded yet return errors.
 including Mullvad, Tailscale and saved NetworkManager VPNs when available.
 Connect and disconnect require an exact returned ID and respect the backend's
 availability and busy state. Use `vpn status` to check completion and errors.
+
+## Settings
+
+```sh
+binguxctl settings                        # Open the first settings page
+binguxctl settings appearance
+binguxctl settings desktop
+binguxctl settings search
+```
+
+`settings [PANEL]` launches `bingux-settings PANEL` detached and returns
+immediately. Panels are `appearance`, `background`, `desktop`, `search`,
+`display`, `sound`, `network`, `bluetooth`, `power`, `keyboard`, `mouse`,
+`datetime`, `users` and `about`. An unknown or omitted panel opens the first
+page. Set `BINGUX_SETTINGS_BIN` to run a development build instead of the
+installed `bingux-settings` executable.

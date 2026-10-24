@@ -13,10 +13,12 @@ Nested rectangular backgrounds use `Theme.insetRadius(outerRadius, padding)`:
 For example, a 20px popup with 8px padding gives its menu rows a 12px radius.
 Circular indicators, slider handles and pills retain their circular geometry.
 Top bar controls use full-height hit targets and hover-only backgrounds.
-Volume, mute, microphone, display brightness, and keyboard brightness requests
-show a temporary OSD above the dock. It uses the shared shell styling, displays
-the device name when available, eases the level bar, and fades away without
-scaling. Bingux disables Gnoblin's native OSD and installs a compatibility event
+Volume and microphone changes, and compositor requests such as privacy-screen
+and tablet-pad feedback, show a temporary OSD above the dock. It uses the shared
+shell styling, displays the device name when available, eases the level bar,
+and fades away without scaling. `bingux-statusd` supplies the volume and
+microphone records. Display and keyboard brightness have no producer yet. Bingux
+disables Gnoblin's native OSD and installs a compatibility event
 bridge for running compositors that predate the native OSD signal.
 Dock buttons are square, with icons centred independently of their indicators.
 Pinned apps come first, followed by unpinned running apps after a divider.
@@ -64,9 +66,9 @@ animation for each menu. Tray, keyboard, dock, calendar, and control-centre menu
 all use this component.
 
 Right-click empty wallpaper for Change Background… or Display Settings, which
-open the background or display page in GNOME Settings (gnome-control-center). The
-menu opens at the pointer, clamps to the screen edges, and closes on Escape or
-a press outside.
+open the `background` or `display` page of Bingux Settings (`bingux-settings`,
+see `docs/settings.md`). The menu opens at the pointer, clamps to the screen
+edges, and closes on Escape or a press outside.
 
 Run `QUICKSHELL_BIN=/path/to/matching/quickshell tests/popup-motion.sh` for real
 window, pointer, keyboard, interruption, and reopening checks. Repeat with

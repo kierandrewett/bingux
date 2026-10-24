@@ -30,7 +30,7 @@ Scope {
 
     Process {
         id: monitor
-        command: ["python3", "-u", decodeURIComponent(Qt.resolvedUrl("session-activity.py").toString().replace(/^file:\/\//, "")), String(root.idleThresholdMs)]
+        command: [Python.python, "-u", Python.helper("session-activity.py"), String(root.idleThresholdMs)]
         stdout: SplitParser {
             onRead: data => {
                 try {

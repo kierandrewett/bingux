@@ -60,6 +60,15 @@ local defaults = {
         -- GDM does not promise the user's command-link directory on PATH.
         bingux = { "/usr/local/libexec/bingux/bingux-frame", "--compact" },
     },
+    -- Bingux serves Screenshot. It is tried first; Gnoblin's own backend
+    -- and then any installed backend follow when Bingux is not installed.
+    -- Other interfaces use Gnoblin's backend, then the first installed one.
+    portals = {
+        default = { "gnoblin", "*" },
+        interfaces = {
+            ["org.freedesktop.impl.portal.Screenshot"] = { "bingux", "gnoblin", "*" },
+        },
+    },
     protocols = {
         -- These protocols are used by Bingux panels and capture/search surfaces.
         ["wlr-layer-shell"] = true,
