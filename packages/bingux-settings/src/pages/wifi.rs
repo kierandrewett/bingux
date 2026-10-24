@@ -14,9 +14,9 @@ use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
     Group, Overlays, PageHeader, ResponseKind, SpinnerSize, Status, Tokens, action_strip,
-    centered_caption, dialog, heading, icon_button, page_column, row, sheet, skeleton, spinner,
-    status, strip_action, switch_row, text_field, use_overlays, use_page_busy, use_page_header,
-    use_tokens,
+    centered_caption, dialog, heading, icon_button, page_column, row, sheet, sheet_column,
+    skeleton, spinner, status, strip_action, switch_row, text_field, use_overlays, use_page_busy,
+    use_page_header, use_tokens,
 };
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 use bingux_ui::style::*;
@@ -445,7 +445,6 @@ struct Ui {
     /// Shown inside the open sheet, such as "Enter the Wi-Fi password."
     sheet_error: State<Option<String>>,
     password: State<String>,
-    show_password: State<bool>,
     /// The Wi-Fi and airplane values the user just set, shown until the
     /// backend has applied them and the list has been read again.
     wifi_pending: State<Option<bool>>,
@@ -473,7 +472,6 @@ fn use_ui() -> Ui {
         busy: use_state(|| None::<String>),
         sheet_error: use_state(|| None::<String>),
         password: use_state(String::new),
-        show_password: use_state(|| false),
         wifi_pending: use_state(|| None::<bool>),
         airplane_pending: use_state(|| None::<bool>),
         hidden_ssid: use_state(String::new),
@@ -643,14 +641,19 @@ impl Ui {
     fn open_join(self, ssid: String) {
         let mut password = self.password;
         password.set(String::new());
-        let mut show = self.show_password;
-        show.set(false);
         let mut error = self.sheet_error;
         error.set(None);
+        self.show_join(ssid, false);
+    }
+
+    /// The join sheet. Connect waits for a password. Re-shown on each edit so
+    /// the primary action follows the field.
+    fn show_join(self, ssid: String, ready: bool) {
         let press = ssid.clone();
         self.overlays.show_sheet(
             sheet(ssid.clone(), JoinBody { ui: self, ssid })
-                .primary("Connect", move |_| self.join_now(press.clone())),
+                .primary("Connect", move |_| self.join_now(press.clone()))
+                .primary_enabled(ready),
         );
     }
 
@@ -674,13 +677,18 @@ impl Ui {
         ssid.set(String::new());
         let mut password = self.hidden_password;
         password.set(String::new());
-        let mut show = self.show_password;
-        show.set(false);
         let mut error = self.sheet_error;
         error.set(None);
+        self.show_hidden(false);
+    }
+
+    /// The hidden network sheet. Connect waits for a network name. Re-shown on
+    /// each edit so the primary action follows the field.
+    fn show_hidden(self, ready: bool) {
         self.overlays.show_sheet(
-            sheet("Connect to hidden network", HiddenBody { ui: self })
-                .primary("Connect", move |_| self.connect_hidden()),
+            sheet("Hidden network", HiddenBody { ui: self })
+                .primary("Connect", move |_| self.connect_hidden())
+                .primary_enabled(ready),
         );
     }
 
@@ -706,13 +714,18 @@ impl Ui {
         name.set("Hotspot".to_string());
         let mut password = self.hotspot_password;
         password.set(String::new());
-        let mut show = self.show_password;
-        show.set(false);
         let mut error = self.sheet_error;
         error.set(None);
+        self.show_hotspot(false);
+    }
+
+    /// The hotspot sheet. Turn on waits for a name and a password of the
+    /// minimum length. Re-shown on each edit so the primary action follows the fields.
+    fn show_hotspot(self, ready: bool) {
         self.overlays.show_sheet(
             sheet("Wi-Fi hotspot", HotspotBody { ui: self })
-                .primary("Turn on", move |_| self.start_hotspot()),
+                .primary("Turn on", move |_| self.start_hotspot())
+                .primary_enabled(ready),
         );
     }
 
@@ -780,10 +793,13 @@ impl Component for JoinBody {
     fn render(&self) -> impl IntoElement {
         let ui = self.ui;
         let submit = self.ssid.clone();
-        let field = text_field(ui.password, move |_: String| ui.join_now(submit.clone()));
-        let field = field.password();
+        let ssid = self.ssid.clone();
+        let field = text_field(ui.password, move |_: String| ui.join_now(submit.clone()))
+            .on_change(move |text: String| ui.show_join(ssid.clone(), !text.is_empty()))
+            .autofocus()
+            .password();
         let error = ui.sheet_error.read().clone();
-        page_column()
+        sheet_column()
             .child(Group::new(None::<String>).row(row("Password").trailing(field)))
             .maybe_child(error.map(|text| Element::from(status(Status::Error(text)))))
     }
@@ -799,12 +815,14 @@ impl Component for HiddenBody {
     fn render(&self) -> impl IntoElement {
         let ui = self.ui;
         let name = text_field(ui.hidden_ssid, move |_: String| ui.connect_hidden())
+            .on_change(move |text: String| ui.show_hidden(!text.trim().is_empty()))
+            .autofocus()
             .placeholder("Network name");
         let password = text_field(ui.hidden_password, move |_: String| ui.connect_hidden())
-            .placeholder("Leave empty for an open network");
-        let password = password.password();
+            .placeholder("Blank if open")
+            .password();
         let error = ui.sheet_error.read().clone();
-        page_column()
+        sheet_column()
             .child(
                 Group::new(None::<String>)
                     .row(row("Network name").trailing(name))
@@ -814,7 +832,7 @@ impl Component for HiddenBody {
     }
 }
 
-/// The hotspot sheet body: a network name, a password of at least eight characters and the show toggle.
+/// The hotspot sheet body: a network name and a password of at least eight characters.
 #[derive(Clone, PartialEq)]
 struct HotspotBody {
     ui: Ui,
@@ -824,12 +842,22 @@ impl Component for HotspotBody {
     fn render(&self) -> impl IntoElement {
         let ui = self.ui;
         let name = text_field(ui.hotspot_name, move |_: String| ui.start_hotspot())
+            .on_change(move |text: String| {
+                let password_ok =
+                    ui.hotspot_password.read().chars().count() >= HOTSPOT_PASSWORD_MIN;
+                ui.show_hotspot(!text.trim().is_empty() && password_ok);
+            })
+            .autofocus()
             .placeholder("Network name");
         let password = text_field(ui.hotspot_password, move |_: String| ui.start_hotspot())
-            .placeholder("At least 8 characters");
-        let password = password.password();
+            .on_change(move |text: String| {
+                let name_ok = !ui.hotspot_name.read().trim().is_empty();
+                ui.show_hotspot(name_ok && text.chars().count() >= HOTSPOT_PASSWORD_MIN);
+            })
+            .placeholder("8+ characters")
+            .password();
         let error = ui.sheet_error.read().clone();
-        page_column()
+        sheet_column()
             .child(
                 Group::new(None::<String>)
                     .row(row("Network name").trailing(name))

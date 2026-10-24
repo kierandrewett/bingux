@@ -10,15 +10,13 @@ use super::connection_editor::{
     Edit, FIELDS, IPV4_METHODS, IPV6_METHODS, METERED_CHOICES, Profile, SECURITY_CHOICES,
     modify_args, parse_profile, security_args, unescape,
 };
-use crate::icons::Icon;
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
-    Group, Overlays, ResponseKind, Status, caption, checkbox, choice_row, dialog, icon_button, row,
-    sheet, status, switch_row, text_field, use_overlays,
+    Group, Overlays, ResponseKind, Status, caption, choice_row, dialog, row, sheet, sheet_column,
+    skeleton, status, switch_row, text_field, use_overlays,
 };
 use bingux_ui::controls::tabs;
 use bingux_ui::group::form_row;
-use bingux_ui::style::*;
 
 const QUICK: Duration = Duration::from_secs(5);
 const APPLY: Duration = Duration::from_secs(30);
@@ -49,7 +47,6 @@ pub struct Editor {
     error: State<Option<String>>,
     busy: State<bool>,
     tab: State<String>,
-    show_password: State<bool>,
     autoconnect: State<bool>,
     everyone: State<bool>,
     metered: State<String>,
@@ -77,7 +74,6 @@ pub fn use_editor() -> Editor {
         error: use_state(|| None::<String>),
         busy: use_state(|| false),
         tab: use_state(|| "details".to_string()),
-        show_password: use_state(|| false),
         autoconnect: use_state(|| false),
         everyone: use_state(|| true),
         metered: use_state(|| "unknown".to_string()),
@@ -132,8 +128,43 @@ fn options(list: &[(&str, &str)]) -> Vec<(String, String)> {
         .collect()
 }
 
+/// A saved profile standing in for NetworkManager. Snapshot builds only:
+/// `BINGUX_SETTINGS_FAKE_WIFI_PROFILE` makes every profile a WPA2 profile with these values.
+#[cfg(feature = "snapshot")]
+fn fake_loaded(name: &str) -> Option<Loaded> {
+    std::env::var_os("BINGUX_SETTINGS_FAKE_WIFI_PROFILE")?;
+    Some(Loaded {
+        profile: Profile {
+            id: name.to_string(),
+            autoconnect: true,
+            everyone: true,
+            metered: "unknown".to_string(),
+            key_mgmt: "wpa-psk".to_string(),
+            psk: "correct horse battery".to_string(),
+            ipv4_method: "auto".to_string(),
+            ipv6_method: "auto".to_string(),
+            ..Profile::default()
+        },
+        live: vec![
+            (
+                "Hardware address".to_string(),
+                "3C:52:82:11:9A:F0".to_string(),
+            ),
+            ("IP address".to_string(), "192.168.1.42/24".to_string()),
+        ],
+    })
+}
+
+#[cfg(not(feature = "snapshot"))]
+fn fake_loaded(_name: &str) -> Option<Loaded> {
+    None
+}
+
 /// Read one profile and the live facts of its device. Values come back as NetworkManager stores them.
 fn load_profile(name: &str) -> Result<Loaded, CommandError> {
+    if let Some(loaded) = fake_loaded(name) {
+        return Ok(loaded);
+    }
     let fields = FIELDS.join(",");
     let output = system::run(
         "nmcli",
@@ -246,7 +277,6 @@ impl Editor {
         put(self.error, None, self);
         put(self.busy, false, self);
         put(self.tab, "details".to_string(), self);
-        put(self.show_password, false, self);
         self.show();
         background_then(
             move || load_profile(&name),
@@ -417,14 +447,11 @@ impl Component for EditorBody {
         let editor = self.editor;
         let wireless = self.wireless;
 
-        let mut column = rect().tw_layout(&[flex_col(), w_full(), gap(S3)]);
+        let mut column = sheet_column();
         let Some(loaded) = editor.loaded.read().clone() else {
             match editor.error.read().clone() {
                 Some(text) => column = column.child(status(Status::Error(text))),
-                None => {
-                    column =
-                        column.child(status(Status::Loading("Reading network settings.".into())))
-                }
+                None => column = column.child(skeleton()),
             }
             return column;
         };
@@ -485,13 +512,7 @@ fn details_tab(editor: Editor, loaded: &Loaded) -> Element {
             .destructive()
             .on_press(move |_| editor.confirm_forget()),
     );
-    Element::from(
-        rect()
-            .tw_layout(&[flex_col(), w_full()])
-            .child(facts)
-            .child(settings)
-            .child(forget),
-    )
+    Element::from(sheet_column().child(facts).child(settings).child(forget))
 }
 
 fn identity_tab(editor: Editor, loaded: &Loaded, wireless: bool) -> Element {
@@ -552,7 +573,6 @@ fn ip_tab(editor: Editor, version: u8) -> Element {
 
 /// The Security tab: the key type, the password and a reveal control.
 fn security_tab(editor: Editor) -> Element {
-    let shown = *editor.show_password.read();
     let key = editor.key_mgmt.read().clone();
     let mut group = Group::titled("Security").row(choice_row(
         "Security",
@@ -563,36 +583,9 @@ fn security_tab(editor: Editor) -> Element {
     if key != "none" {
         let field = text_field(editor.psk, |_: String| {})
             .on_change(move |_: String| editor.show())
-            .placeholder("Password");
-        let field = if shown { field } else { field.password() };
-        let reveal = icon_button(
-            if shown {
-                Icon::ViewConceal
-            } else {
-                Icon::ViewReveal
-            },
-            move |_| put(editor.show_password, !shown, editor),
-        )
-        .tooltip(if shown {
-            "Hide password"
-        } else {
-            "Show password"
-        });
-        group = group
-            .row(
-                row("Password").trailing(
-                    rect()
-                        .tw_layout(&[flex_row(), items(Align::Center), gap(S2)])
-                        .child(reveal)
-                        .child(field),
-                ),
-            )
-            .row(Element::from(
-                checkbox(shown, move |value: bool| {
-                    put(editor.show_password, value, editor)
-                })
-                .text("Show password"),
-            ));
+            .placeholder("Password")
+            .password();
+        group = group.row(form_row("Password", field));
     }
     Element::from(group)
 }
