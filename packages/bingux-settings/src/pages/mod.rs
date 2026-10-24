@@ -19,6 +19,7 @@ pub mod datetime;
 pub mod desktop;
 pub mod displays;
 pub mod gnoblin;
+pub mod loading;
 pub mod keyboard;
 pub mod mouse;
 pub mod network;

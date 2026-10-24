@@ -10,18 +10,21 @@ use std::time::{Duration, Instant};
 use freya::prelude::*;
 
 use crate::pages::gnoblin::{self, Json};
+use crate::pages::loading::{has_touchpad_hint, veiled};
 use crate::system::{self, CommandError, CommandResult, background, optimistic_then};
 use crate::theme::Tokens;
 use crate::ui::typography::{BODY, EMPHASIS};
 use crate::ui::{
-    Group, Overlays, Row, Status, caption, choice_row, level_row, page_column, row, skeleton,
-    status, switch_row, use_overlays, use_tokens,
+    Group, Overlays, Row, Status, caption, choice_row, level_row, page_column, row, status,
+    switch_row, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
 
 const MOUSE: &str = "org.gnome.desktop.peripherals.mouse";
 
 const TOUCHPAD: &str = "org.gnome.desktop.peripherals.touchpad";
+
+const INTERFACE: &str = "org.gnome.desktop.interface";
 
 /// The range of the double-click time slider, in milliseconds.
 const DOUBLE_CLICK_MIN: u32 = 100;
@@ -34,6 +37,7 @@ struct Mouse {
     left_handed: bool,
     accel_profile: String,
     double_click: u32,
+    primary_paste: bool,
 }
 
 #[derive(Clone, PartialEq)]
@@ -46,6 +50,8 @@ struct Touchpad {
     speed: f64,
     disable_while_typing: bool,
     send_events: String,
+    accel_profile: String,
+    left_handed: String,
 }
 
 #[derive(Clone, PartialEq)]
@@ -88,6 +94,8 @@ fn fake_touchpad() -> Option<Touchpad> {
         speed: 0.0,
         disable_while_typing: true,
         send_events: "enabled".to_string(),
+        accel_profile: "default".to_string(),
+        left_handed: "mouse".to_string(),
     })
 }
 
@@ -112,6 +120,8 @@ fn load_touchpad() -> Result<Option<Touchpad>, CommandError> {
         speed: get_speed(TOUCHPAD)?,
         disable_while_typing: get_bool(TOUCHPAD, "disable-while-typing")?,
         send_events: system::unquote(&system::gsettings_get(TOUCHPAD, "send-events")?),
+        accel_profile: system::unquote(&system::gsettings_get(TOUCHPAD, "accel-profile")?),
+        left_handed: system::unquote(&system::gsettings_get(TOUCHPAD, "left-handed")?),
     }))
 }
 
@@ -122,12 +132,44 @@ fn load() -> Result<Model, CommandError> {
         left_handed: get_bool(MOUSE, "left-handed")?,
         accel_profile: system::unquote(&system::gsettings_get(MOUSE, "accel-profile")?),
         double_click: get_u32(MOUSE, "double-click")?,
+        primary_paste: get_bool(INTERFACE, "gtk-enable-primary-paste")?,
     };
     Ok(Model {
         mouse,
         touchpad: load_touchpad()?,
         overrides: gnoblin::overrides(),
     })
+}
+
+/// The page as it shows before its first read lands: GNOME's defaults in the
+/// real layout, so the rows keep their places when the values arrive. A
+/// touchpad is shown when one is attached or stood in for.
+fn placeholder() -> Model {
+    Model {
+        mouse: Mouse {
+            natural_scroll: false,
+            speed: -0.071,
+            left_handed: false,
+            accel_profile: "default".to_string(),
+            double_click: 400,
+            primary_paste: true,
+        },
+        touchpad: fake_touchpad().or_else(|| {
+            has_touchpad_hint().then(|| Touchpad {
+                tap_to_click: true,
+                natural_scroll: true,
+                two_finger_scrolling: true,
+                edge_scrolling: false,
+                click_method: "fingers".to_string(),
+                speed: 0.0,
+                disable_while_typing: false,
+                send_events: "enabled".to_string(),
+                accel_profile: "default".to_string(),
+                left_handed: "mouse".to_string(),
+            })
+        }),
+        overrides: Json::Null,
+    }
 }
 
 /// Shows `change` on the model at once, writes it in the background and
@@ -523,6 +565,12 @@ const SEND_EVENTS: [(&str, &str); 3] = [
     ),
     ("disabled", "Off"),
 ];
+
+/// Touchpad primary button choices. `mouse` maps the touchpad's buttons like a
+/// mouse's, with the same primary button.
+const PRIMARY_BUTTON: [(&str, &str); 3] =
+    [("right", "Right"), ("left", "Left"), ("mouse", "Mouse")];
+
 /// How a touchpad click is told apart: by fingers, by the bottom corners, or
 /// not at all.
 const CLICK_METHOD: [(&str, &str); 4] = [
@@ -619,10 +667,9 @@ impl Component for MousePage {
         let overlays = use_overlays();
         let tokens = use_tokens();
 
-        let Some(result) = loaded.read().clone() else {
-            return page_column().child(skeleton());
-        };
-        let model = match result {
+        let result = loaded.read().clone();
+        let loading = result.is_none();
+        let model = match result.unwrap_or_else(|| Ok(placeholder())) {
             Ok(model) => model,
             Err(e) => {
                 return page_column().child(
@@ -669,6 +716,17 @@ impl Component for MousePage {
                     .double_click(mouse.double_click, |model, ms| {
                         model.mouse.double_click = ms
                     }),
+            )
+            .row(
+                setting(
+                    INTERFACE,
+                    "mouse",
+                    "gtk-enable-primary-paste",
+                    "Middle click paste",
+                )
+                .switch(mouse.primary_paste, |model, on| {
+                    model.mouse.primary_paste = on
+                }),
             );
 
         let touchpad_group = model.touchpad.as_ref().map(|pad| {
@@ -759,6 +817,16 @@ impl Component for MousePage {
                         with_touchpad(model, |tp| tp.speed = speed)
                     }),
                 )
+                .row(touchpad("accel-profile", "Pointer acceleration").choice(
+                    &ACCEL_PROFILES,
+                    &pad.accel_profile,
+                    |model, value| with_touchpad(model, |tp| tp.accel_profile = value),
+                ))
+                .row(touchpad("left-handed", "Primary button").choice(
+                    &PRIMARY_BUTTON,
+                    &pad.left_handed,
+                    |model, value| with_touchpad(model, |tp| tp.left_handed = value),
+                ))
                 .row(
                     touchpad("disable-while-typing", "Disable while typing")
                         .switch(pad.disable_while_typing, |model, on| {
@@ -774,10 +842,11 @@ impl Component for MousePage {
             .row(ClickTest { within_ms: mouse.double_click }.into_element())
             .row(ScrollTest.into_element());
 
-        page_column()
+        let page = page_column()
             .child(mouse_group)
             .maybe_child(touchpad_group)
-            .child(test_group)
+            .child(test_group);
+        veiled(page, loading)
     }
 }
 

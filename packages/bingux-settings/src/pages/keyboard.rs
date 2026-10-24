@@ -11,6 +11,7 @@ use freya::prelude::*;
 
 use crate::icons::Icon;
 use crate::pages::gnoblin::{self, Json};
+use crate::pages::loading::veiled;
 use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{
     self, CommandError, CommandResult, background, background_then, optimistic_then,
@@ -36,6 +37,7 @@ const WM_KEYS: &str = "org.gnome.desktop.wm.keybindings";
 const SHORTCUTS: &str = "keyboard-shortcuts";
 const DELAY_RANGE: (f64, f64) = (100.0, 2000.0);
 const INTERVAL_RANGE: (f64, f64) = (10.0, 200.0);
+const BLINK_TIME_RANGE: (f64, f64) = (100.0, 2500.0);
 
 /// Caps Lock choices: each is an XKB option, and "" leaves Caps Lock alone.
 const CAPS_LOCK: [(&str, &str); 4] = [
@@ -71,6 +73,7 @@ struct Model {
     xkb_options: Vec<String>,
     overrides: Json,
     cursor_blink: bool,
+    cursor_blink_time: f64,
 }
 
 /// One built-in shortcut action, as Gnoblin lists it.
@@ -96,8 +99,8 @@ struct ShortcutList {
     config_path: Option<String>,
 }
 
-fn gsettings_u32(key: &str) -> Result<f64, CommandError> {
-    let raw = system::gsettings_get(KEYBOARD, key)?;
+fn gsettings_u32(schema: &str, key: &str) -> Result<f64, CommandError> {
+    let raw = system::gsettings_get(schema, key)?;
     raw.trim()
         .trim_start_matches("uint32 ")
         .parse::<f64>()
@@ -176,12 +179,13 @@ fn fake_shortcuts() -> Option<ShortcutList> {
 
 fn load() -> Result<Model, CommandError> {
     let repeat = system::gsettings_get(KEYBOARD, "repeat")? == "true";
-    let delay_ms = gsettings_u32("delay")?;
-    let interval_ms = gsettings_u32("repeat-interval")?;
+    let delay_ms = gsettings_u32(KEYBOARD, "delay")?;
+    let interval_ms = gsettings_u32(KEYBOARD, "repeat-interval")?;
     let remember_numlock = system::gsettings_get(KEYBOARD, "remember-numlock-state")? == "true";
     let numlock_on = system::gsettings_get(KEYBOARD, "numlock-state")? == "true";
     let xkb_options = parse_list(&system::gsettings_get(INPUT_SOURCES, "xkb-options")?);
     let cursor_blink = system::gsettings_get(INTERFACE, "cursor-blink")? == "true";
+    let cursor_blink_time = gsettings_u32(INTERFACE, "cursor-blink-time")?;
     Ok(Model {
         repeat,
         delay_ms,
@@ -190,8 +194,25 @@ fn load() -> Result<Model, CommandError> {
         numlock_on,
         xkb_options,
         cursor_blink,
+        cursor_blink_time,
         overrides: gnoblin::overrides(),
     })
+}
+
+/// The page as it shows before its first read lands: the values this machine
+/// reads, so the rows keep their places when the real values arrive.
+fn placeholder() -> Model {
+    Model {
+        repeat: true,
+        delay_ms: 500.0,
+        interval_ms: 30.0,
+        remember_numlock: false,
+        numlock_on: false,
+        xkb_options: Vec::new(),
+        overrides: Json::Null,
+        cursor_blink: true,
+        cursor_blink_time: 1200.0,
+    }
 }
 
 /// Shows `change` on the model at once, writes it in the background and
@@ -566,10 +587,9 @@ impl Component for KeyboardPage {
             }
         });
 
-        let Some(result) = loaded.read().clone() else {
-            return page_column().child(skeleton());
-        };
-        let model = match result {
+        let result = loaded.read().clone();
+        let loading = result.is_none();
+        let model = match result.unwrap_or_else(|| Ok(placeholder())) {
             Ok(model) => model,
             Err(e) => {
                 return page_column().child(
@@ -773,6 +793,30 @@ impl Component for KeyboardPage {
                 .subtitle("Type two keys to make accented letters and symbols.")
             }
         };
+        // The blink speed only matters while the cursor blinks, so it is nested
+        // under the switch and shown while it is on.
+        let blink_nested: Vec<Element> = if model.cursor_blink {
+            let blink: Element = slider_row(
+                "Blink speed",
+                to_percent(model.cursor_blink_time, BLINK_TIME_RANGE),
+                move |percent: f64| {
+                    let ms = from_percent(percent, BLINK_TIME_RANGE);
+                    commit(
+                        loaded,
+                        overlays,
+                        move |current| current.cursor_blink_time = f64::from(ms),
+                        move || {
+                            system::gsettings_set(INTERFACE, "cursor-blink-time", &ms.to_string())
+                        },
+                    )
+                },
+            )
+            .value_text(format!("{} ms", model.cursor_blink_time))
+            .into();
+            vec![blink]
+        } else {
+            Vec::new()
+        };
         let cursor_blink_row =
             switch_row("Cursor blinking", model.cursor_blink, move |next: bool| {
                 commit(
@@ -787,7 +831,8 @@ impl Component for KeyboardPage {
                         )
                     },
                 )
-            });
+            })
+            .nested(model.cursor_blink, blink_nested);
         typing_group = typing_group.row(cursor_blink_row).row(caps_row);
 
         // Compose and the alternate characters key both type accented letters
@@ -875,12 +920,13 @@ impl Component for KeyboardPage {
         }
         let shortcuts = Group::titled("Shortcuts").row(shortcuts_row);
 
-        page_column()
+        let page = page_column()
             .child(repeat_group)
             .child(typing_group)
             .child(special_group)
             .child(sources)
-            .child(shortcuts)
+            .child(shortcuts);
+        veiled(page, loading)
     }
 }
 
