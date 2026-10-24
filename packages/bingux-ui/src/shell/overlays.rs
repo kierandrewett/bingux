@@ -392,7 +392,7 @@ impl Component for DialogLayer {
 
         rect()
             .position(Position::new_absolute().top(0.0).left(0.0))
-            .layer(Layer::OverlayLevel(8))
+            .layer(Layer::OverlayLevel(10))
             .tw(
                 &tokens,
                 &[w_screen(), h_screen(), center(), bg(Paint::Scrim)],
@@ -476,7 +476,7 @@ impl Component for ToastLayer {
 
         rect()
             .position(Position::new_absolute().bottom(S6.px()).left(0.0))
-            .layer(Layer::OverlayLevel(9))
+            .layer(Layer::OverlayLevel(11))
             .tw(&tokens, &[w_screen(), flex_col(), items(Align::Center)])
             .child(
                 rect()
