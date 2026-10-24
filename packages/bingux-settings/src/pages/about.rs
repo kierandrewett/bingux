@@ -9,7 +9,7 @@ use freya::prelude::*;
 
 use crate::system::{self, CommandResult};
 use crate::theme::Tokens;
-use crate::ui::typography::{CAPTION, EMPHASIS, Ink, TITLE, VALUE};
+use crate::ui::typography::{CAPTION, EMPHASIS, Ink, TITLE};
 use crate::ui::{
     Group, Icon, Overlays, PopupAction, PopupActions, Status, Window, action_button, caption,
     form_row, icon, menu_item, page_column, popup, popup_column, property_row, section_label,
@@ -235,20 +235,16 @@ fn collect() -> Facts {
     }
 }
 
-/// The hardware tiles, in reading order.
-fn hardware_specs(facts: &Facts) -> Vec<(&'static str, Icon, String)> {
-    vec![
-        ("Processor", Icon::Computer, facts.processor.clone()),
-        ("Memory", Icon::ViewGrid, facts.memory.clone()),
-        ("Graphics", Icon::VideoGeneric, facts.graphics.clone()),
-        ("Display", Icon::Display, facts.display.clone()),
-    ]
-}
-
-/// The software rows, in reading order.
+/// The rows of the System details group, in reading order.
 fn system_specs(facts: &Facts) -> Vec<(&'static str, String)> {
     vec![
+        ("Operating system", facts.os.clone()),
+        ("Version", facts.os_version.clone()),
         ("Kernel", facts.kernel.clone()),
+        ("Processor", facts.processor.clone()),
+        ("Memory", facts.memory.clone()),
+        ("Graphics", facts.graphics.clone()),
+        ("Display", facts.display.clone()),
         ("Uptime", facts.uptime.clone()),
         ("Desktop", facts.gnoblin.clone()),
         ("Settings version", env!("CARGO_PKG_VERSION").to_string()),
@@ -260,24 +256,19 @@ fn summary(facts: &Facts, name: &str) -> String {
     let mut lines = vec![
         format!("Device name: {name}"),
         format!("Hardware model: {}", facts.model),
-        format!("Operating system: {}", facts.os),
     ];
-    lines.extend(
-        hardware_specs(facts)
-            .into_iter()
-            .map(|(title, _, value)| format!("{title}: {value}")),
-    );
     lines.extend(
         system_specs(facts)
             .into_iter()
             .map(|(title, value)| format!("{title}: {value}")),
     );
-    if let Some((used, total)) = facts.disk {
-        lines.push(format!(
+    match facts.disk {
+        Some((used, total)) => lines.push(format!(
             "Storage: {} used of {}",
             size_text(used),
             size_text(total)
-        ));
+        )),
+        None => lines.push("Storage: Unknown".to_string()),
     }
     lines.join("\n")
 }
@@ -297,112 +288,6 @@ fn or_blank(text: String) -> String {
     } else {
         text
     }
-}
-
-/// Whether a pointer press is a right click, which opens the copy menu.
-fn is_secondary(event: &Event<PointerEventData>) -> bool {
-    matches!(event.data(), PointerEventData::Mouse(mouse) if mouse.button == Some(MouseButton::Right))
-}
-
-/// One hardware spec as a tile: its icon and name on the top line, its value
-/// under them, all on one left edge. The tile has a fixed height, so every
-/// tile in a row is the same size whatever its value. A right click copies the
-/// value. Until the value arrives it is a bar, so the tile keeps its shape.
-#[derive(Clone, PartialEq)]
-struct SpecTile {
-    title: &'static str,
-    icon: Icon,
-    value: String,
-}
-
-impl Component for SpecTile {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let overlays = use_overlays();
-        let copied = self.value.clone();
-        let tile = rect()
-            .tw(&tokens, BOX)
-            .tw(
-                &tokens,
-                &[
-                    w_flex(),
-                    h(Dim::RowTall),
-                    justify(Align::Center),
-                    gap(S1),
-                    px(GUTTER),
-                ],
-            )
-            .on_pointer_down(move |event: Event<PointerEventData>| {
-                if !is_secondary(&event) {
-                    return;
-                }
-                let at = event.global_location();
-                let text = copied.clone();
-                overlays.show_menu(
-                    (at.x as f32, at.y as f32),
-                    vec![menu_item("Copy", move |_| copy(text.clone(), overlays))],
-                );
-            })
-            .child(
-                rect()
-                    .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
-                    .child(icon(self.icon, IconSize::Row, Paint::Muted.color(&tokens)))
-                    .child(CAPTION.in_ink(Ink::Muted).label(&tokens, self.title)),
-            );
-        if self.value.is_empty() {
-            tile.child(rect().tw(
-                &tokens,
-                &[
-                    w(Dim::SkeletonValue),
-                    h(Dim::SkeletonLine),
-                    rounded(Radius::Mark),
-                    bg(Paint::Control),
-                ],
-            ))
-        } else {
-            tile.child(
-                SelectableText::new()
-                    .span(VALUE.span(&tokens, self.value.clone()))
-                    .max_lines(1)
-                    .line_height(VALUE.leading)
-                    .width(Size::fill())
-                    .text_overflow(TextOverflow::Ellipsis),
-            )
-        }
-    }
-}
-
-/// The hardware tiles: two to a row on the desktop, one to a row on a touch
-/// screen. Every gap is the card gutter, so the grid lines up with the cards.
-fn spec_grid(tokens: &Tokens, specs: Vec<(&'static str, Icon, String)>) -> Element {
-    let mut tiles = specs
-        .into_iter()
-        .map(|(title, icon, value)| SpecTile { title, icon, value }.into_element());
-    if touch() {
-        let rows: Vec<Element> = tiles.collect();
-        return rect()
-            .tw(tokens, &[flex_col(), w_full(), gap(GUTTER)])
-            .children(rows)
-            .into();
-    }
-    let mut rows: Vec<Element> = Vec::new();
-    while let Some(first) = tiles.next() {
-        let mut pair = rect()
-            .tw(
-                tokens,
-                &[flex_row(), w_full(), grow_children(), gap(GUTTER)],
-            )
-            .child(first);
-        match tiles.next() {
-            Some(second) => pair = pair.child(second),
-            None => pair = pair.child(rect().tw(tokens, &[w_flex()])),
-        }
-        rows.push(pair.into());
-    }
-    rect()
-        .tw(tokens, &[flex_col(), w_full(), gap(GUTTER)])
-        .children(rows)
-        .into()
 }
 
 /// A titled section: its name above its body, with the name on the card edge.
@@ -547,6 +432,7 @@ impl Component for AboutPage {
         use_page_busy(loaded.is_none());
         // Until the facts arrive every value is blank, and each line keeps its
         // height, so nothing moves when the values fill in.
+        let arrived = loaded.is_some();
         let facts = loaded.unwrap_or_default();
         let name = shown
             .read()
@@ -630,7 +516,7 @@ impl Component for AboutPage {
         );
 
         let storage = {
-            let (value, unit, total, fraction) = match facts.disk {
+            let (value, unit, total, fraction, capacity) = match facts.disk {
                 Some((used, total)) => {
                     let (value, unit) = size_parts(used);
                     (
@@ -638,16 +524,42 @@ impl Component for AboutPage {
                         format!("{unit} used"),
                         format!("{} total", size_text(total)),
                         used as f64 / total.max(1) as f64,
+                        format!("{} used of {}", size_text(used), size_text(total)),
                     )
                 }
-                None => ("\u{a0}".to_string(), String::new(), String::new(), 0.0),
+                // Once the facts have arrived, a disk that could not be read says so.
+                None if arrived => (
+                    "Unknown".to_string(),
+                    String::new(),
+                    String::new(),
+                    0.0,
+                    "Unknown".to_string(),
+                ),
+                None => (
+                    "\u{a0}".to_string(),
+                    String::new(),
+                    String::new(),
+                    0.0,
+                    String::new(),
+                ),
             };
+            let copied = capacity.clone();
+            let capacity_row =
+                property_row("Capacity", or_blank(capacity))
+                    .context_menu(vec![menu_item("Copy", move |_| {
+                        copy(copied.clone(), overlays)
+                    })]);
             rect()
-                .tw(&tokens, BOX)
-                .child(usage_meter(value, unit, total, fraction))
+                .tw(&tokens, &[flex_col(), gap(GUTTER)])
+                .child(
+                    rect()
+                        .tw(&tokens, BOX)
+                        .child(usage_meter(value, unit, total, fraction)),
+                )
+                .child(Group::new(None).rows(std::iter::once(capacity_row.into())))
         };
 
-        let software = system_specs(&facts).into_iter().map(|(title, value)| {
+        let details = system_specs(&facts).into_iter().map(|(title, value)| {
             let copied = value.clone();
             property_row(title, or_blank(value))
                 .context_menu(vec![menu_item("Copy", move |_| {
@@ -660,15 +572,10 @@ impl Component for AboutPage {
             .child(hero)
             .child(section(
                 &tokens,
-                "Hardware",
-                spec_grid(&tokens, hardware_specs(&facts)),
+                "System details",
+                Group::new(None).rows(details),
             ))
             .child(section(&tokens, "Storage", storage))
-            .child(section(
-                &tokens,
-                "Software",
-                Group::new(None).rows(software),
-            ))
     }
 }
 

@@ -13,6 +13,7 @@
 //! desktop in each scheme. The font subpage lives in `appearance/fonts.rs`.
 
 mod fonts;
+mod interface;
 
 pub use fonts::FontPage;
 
@@ -34,9 +35,10 @@ use crate::theme::{Scheme, SharedTokens, Tokens, accent_names, read_gsettings};
 use crate::ui::typography::{BODY, EMPHASIS};
 use crate::ui::{
     Group, Icon, Overlays, Status, icon, menu_item, menu_separator, page_column, row, row_button,
-    skeleton, status, use_overlays, use_tokens,
+    skeleton_shape, status, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
+use interface::{Interface, Setting, accessibility_group, text_size_row, theme_group};
 
 const INTERFACE: &str = "org.gnome.desktop.interface";
 const WALLPAPER_KEY: &str = "desktop.wallpaper";
@@ -53,6 +55,8 @@ struct Model {
     /// The desktop settings, which the picture's dock and sidebar follow.
     /// `None` when they could not be read.
     desktop: Option<desktop::Model>,
+    /// The GNOME interface keys and installed themes; `None` when they could not be read.
+    interface: Option<Interface>,
 }
 
 type Loaded = Result<Model, CommandError>;
@@ -74,6 +78,7 @@ fn load() -> Loaded {
         font,
         gsettings,
         desktop: desktop::load().ok(),
+        interface: Interface::read(),
     })
 }
 
@@ -161,6 +166,28 @@ fn apply_scheme(shared: State<Tokens>, overlays: Overlays, scheme: Scheme) {
     optimistic(shared, Some(overlays), previous, value, move || {
         system::gsettings_set(INTERFACE, "color-scheme", &text).map(|_| ())
     });
+}
+
+/// Stores one interface key at once and writes it in the background. The model
+/// is reloaded once the write has landed, and a failed write puts the old value
+/// back with a toast.
+fn change(mut model: State<Option<Loaded>>, overlays: Overlays, setting: Setting) {
+    let previous = model.read().clone();
+    let Some(Ok(current)) = previous.clone() else {
+        return;
+    };
+    let mut value = current;
+    if let Some(interface) = value.interface.as_mut() {
+        interface.apply_local(&setting);
+    }
+    optimistic_then(
+        model,
+        Some(overlays),
+        previous,
+        Some(Ok(value)),
+        move || setting.write(),
+        move || background_then(load, move |loaded| model.set(Some(loaded))),
+    );
 }
 
 /// One accent circle, set in a box of the control size so the row keeps an
@@ -312,9 +339,20 @@ impl Component for AppearancePage {
         let shared = use_consume::<SharedTokens>().0;
         let tokens = use_tokens();
         let navigator = use_navigator();
+        let on_setting = move |setting: Setting| change(model, overlays, setting);
 
         let Some(loaded) = model.read().clone() else {
-            return page_column().child(skeleton());
+            // The picture comes first, then the groups, so the hero keeps its
+            // place while the data loads.
+            return page_column()
+                .child(framed(
+                    &tokens,
+                    Element::from(rect().tw(
+                        &tokens,
+                        &[w_full(), h(Dim::ArrangementHeight), bg(Paint::Control)],
+                    )),
+                ))
+                .child(skeleton_shape(&[2, 2, 3, 3, 1, 1]));
         };
         let model_value = match loaded {
             Ok(value) => value,
@@ -410,12 +448,30 @@ impl Component for AppearancePage {
                     .description(
                         "The desktop uses it straight away. This window uses it after it is reopened.",
                     )
+                    .rows(
+                        model_value
+                            .interface
+                            .as_ref()
+                            .map(|interface| text_size_row(interface, on_setting)),
+                    )
                     .row(
                         row("Font")
                             .value(font_name)
                             .navigates()
                             .on_press(move |_| navigator.push(Route::Font)),
                     ),
+            )
+            .maybe_child(
+                model_value
+                    .interface
+                    .as_ref()
+                    .map(|interface| Element::from(theme_group(interface, on_setting))),
+            )
+            .maybe_child(
+                model_value
+                    .interface
+                    .as_ref()
+                    .map(|interface| Element::from(accessibility_group(interface, on_setting))),
             )
             .maybe_child(model_value.gsettings.then(|| {
                 Element::from(

@@ -6,8 +6,8 @@
 use std::time::Duration;
 
 use crate::ui::{
-    Group, Icon, Overlays, Row, Status, dropdown, level_row, page_column, row, segmented, skeleton,
-    status, switch_row, use_overlays, use_tokens,
+    Group, Icon, Overlays, Row, Status, dropdown, level_row, page_column, row, segmented,
+    skeleton_shape, status, switch_row, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
 use freya::prelude::*;
@@ -17,7 +17,7 @@ use crate::system::{self, CommandError, background, background_then, optimistic_
 
 pub(crate) mod preview;
 
-use preview::desktop_preview;
+use preview::{desktop_preview, framed};
 
 /// Control Centre tiles: the camelCase key in `dump`, its label and its icon.
 const TILES: [(&str, &str, Icon); 5] = [
@@ -52,6 +52,8 @@ pub(crate) struct Model {
     dock_scroll_direction: String,
     tiles: [bool; 5],
     public_ip_lookup: bool,
+    /// GNOME's removable-media and recent-file keys; `None` when they cannot be read.
+    gnome: Option<Gnome>,
 }
 
 impl Model {
@@ -92,6 +94,7 @@ impl Model {
             dock_scroll_direction: text(desktop, "dockScrollDirection")?,
             tiles,
             public_ip_lookup: flag(privacy, "publicIpLookup")?,
+            gnome: None,
         })
     }
 }
@@ -142,7 +145,9 @@ fn size_for_percent(percent: f64) -> u32 {
 pub(crate) fn load() -> Result<Model, CommandError> {
     let text = system::run(&bingux_config(), &["dump"], Duration::from_secs(5))?;
     let json = Json::parse(&text).map_err(|_| CommandError(UNREADABLE.to_string()))?;
-    Model::from_json(&json).map_err(CommandError)
+    let mut model = Model::from_json(&json).map_err(CommandError)?;
+    model.gnome = Gnome::read();
+    Ok(model)
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -150,6 +155,7 @@ enum Change {
     Set(&'static str, String),
     Unset(&'static str),
     Tiles([bool; 5]),
+    Gnome(GnomeSetting),
 }
 
 impl Model {
@@ -174,8 +180,151 @@ impl Model {
             Change::Unset("desktop.sidebar_edge") => self.sidebar_edge = None,
             Change::Unset(_) => {}
             Change::Tiles(tiles) => self.tiles = *tiles,
+            Change::Gnome(setting) => {
+                if let Some(gnome) = self.gnome.as_mut() {
+                    gnome.apply_local(*setting);
+                }
+            }
         }
     }
+}
+
+/// GNOME's removable-media and recent-file keys. They are read and written with
+/// gsettings, so GTK applications and the portal see the same values.
+const MEDIA: &str = "org.gnome.desktop.media-handling";
+const PRIVACY: &str = "org.gnome.desktop.privacy";
+
+#[derive(Clone, Debug, PartialEq)]
+struct Gnome {
+    automount: bool,
+    automount_open: bool,
+    /// Whether programs run from inserted media: the inverse of `autorun-never`.
+    autorun: bool,
+    remember_recent: bool,
+    /// Days to keep recent files; -1 keeps them for ever.
+    recent_max_age: i32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum GnomeSetting {
+    Automount(bool),
+    AutomountOpen(bool),
+    Autorun(bool),
+    RememberRecent(bool),
+    RecentMaxAge(i32),
+}
+
+impl Gnome {
+    fn read() -> Option<Self> {
+        let get = |schema: &str, key: &str| {
+            system::gsettings_get(schema, key)
+                .ok()
+                .map(|value| value.trim().to_string())
+        };
+        Some(Self {
+            automount: get(MEDIA, "automount")? == "true",
+            automount_open: get(MEDIA, "automount-open")? == "true",
+            autorun: get(MEDIA, "autorun-never")? == "false",
+            remember_recent: get(PRIVACY, "remember-recent-files")? == "true",
+            recent_max_age: get(PRIVACY, "recent-files-max-age")?.parse().ok()?,
+        })
+    }
+
+    fn apply_local(&mut self, setting: GnomeSetting) {
+        match setting {
+            GnomeSetting::Automount(on) => self.automount = on,
+            GnomeSetting::AutomountOpen(on) => self.automount_open = on,
+            GnomeSetting::Autorun(on) => self.autorun = on,
+            GnomeSetting::RememberRecent(on) => self.remember_recent = on,
+            GnomeSetting::RecentMaxAge(days) => self.recent_max_age = days,
+        }
+    }
+}
+
+impl GnomeSetting {
+    /// Writes the key with `gsettings set`.
+    fn write(self) -> Result<String, CommandError> {
+        let (schema, key, value) = match self {
+            Self::Automount(on) => (MEDIA, "automount", on.to_string()),
+            Self::AutomountOpen(on) => (MEDIA, "automount-open", on.to_string()),
+            // autorun-never is the inverse of "run programs from media".
+            Self::Autorun(on) => (MEDIA, "autorun-never", (!on).to_string()),
+            Self::RememberRecent(on) => (PRIVACY, "remember-recent-files", on.to_string()),
+            Self::RecentMaxAge(days) => (PRIVACY, "recent-files-max-age", days.to_string()),
+        };
+        system::gsettings_set(schema, key, &value)
+    }
+}
+
+/// "Removable media": what happens when a drive is plugged in.
+fn media_group(ctx: Ctx, gnome: &Gnome) -> Group {
+    Group::titled("Removable media")
+        .row(switch_row(
+            "Mount drives when they are plugged in",
+            gnome.automount,
+            move |on: bool| write(ctx, Change::Gnome(GnomeSetting::Automount(on))),
+        ))
+        .row(switch_row(
+            "Open the folder after mounting",
+            gnome.automount_open,
+            move |on: bool| write(ctx, Change::Gnome(GnomeSetting::AutomountOpen(on))),
+        ))
+        .row(switch_row(
+            "Run programs from removable media",
+            gnome.autorun,
+            move |on: bool| write(ctx, Change::Gnome(GnomeSetting::Autorun(on))),
+        ))
+}
+
+/// "Privacy": the public IP lookup, then the recent-file keys when they can be read.
+fn privacy_group(ctx: Ctx, public_ip: bool, gnome: Option<&Gnome>) -> Group {
+    let mut group = Group::titled("Privacy").row(
+        switch_row("Show my public IP address", public_ip, move |on: bool| {
+            write(ctx, Change::Set("privacy.public_ip_lookup", on.to_string()))
+        })
+        .subtitle("Looks it up with an online service. Shown in the Control Centre.")
+        .leading(Icon::ViewConceal),
+    );
+    if let Some(gnome) = gnome {
+        let days = gnome.recent_max_age;
+        group = group
+            .row(switch_row(
+                "Remember recent files",
+                gnome.remember_recent,
+                move |on: bool| write(ctx, Change::Gnome(GnomeSetting::RememberRecent(on))),
+            ))
+            .row(menu_row(
+                "Forget recent files after",
+                recent_age_options(days),
+                &days.to_string(),
+                move |key: String| {
+                    if let Ok(days) = key.parse() {
+                        write(ctx, Change::Gnome(GnomeSetting::RecentMaxAge(days)));
+                    }
+                },
+            ));
+    }
+    group
+}
+
+/// Options for "Forget recent files after", in days. The current value is kept
+/// when it is not one of the presets.
+fn recent_age_options(current: i32) -> Vec<(String, String)> {
+    let mut days: Vec<i32> = vec![-1, 1, 7, 30, 90];
+    if !days.contains(&current) {
+        days.push(current);
+    }
+    days.sort_unstable();
+    days.into_iter()
+        .map(|days| {
+            let label = match days {
+                -1 => "Never".to_string(),
+                1 => "1 day".to_string(),
+                days => format!("{days} days"),
+            };
+            (days.to_string(), label)
+        })
+        .collect()
 }
 
 fn apply(change: &Change) -> Result<(), CommandError> {
@@ -184,6 +333,7 @@ fn apply(change: &Change) -> Result<(), CommandError> {
     let result = match change {
         Change::Set(key, value) => system::run(&program, &["set", *key, value.as_str()], timeout),
         Change::Unset(key) => system::run(&program, &["unset", *key], timeout),
+        Change::Gnome(setting) => setting.write(),
         Change::Tiles(tiles) => {
             let patch = tiles_patch(*tiles);
             system::run_with_stdin(&program, &["save"], Some(patch.as_str()), timeout)
@@ -292,7 +442,15 @@ impl Component for DesktopPage {
         let searching = bingux_ui::search_highlight::current().is_some();
 
         let Some(loaded) = model.read().clone() else {
-            return page_column().child(skeleton());
+            return page_column()
+                .child(framed(
+                    &tokens,
+                    Element::from(rect().tw(
+                        &tokens,
+                        &[w_full(), h(Dim::ArrangementHeight), bg(Paint::Control)],
+                    )),
+                ))
+                .child(skeleton_shape(&[3, 2, 4, 2, 5, 3, 4]));
         };
         let m = match loaded {
             Ok(model_value) => model_value,
@@ -428,19 +586,8 @@ impl Component for DesktopPage {
                         )
                     })),
             )
-            .child(
-                Group::titled("Privacy").row(
-                    switch_row(
-                        "Show my public IP address",
-                        m.public_ip_lookup,
-                        move |on: bool| {
-                            write(ctx, Change::Set("privacy.public_ip_lookup", on.to_string()))
-                        },
-                    )
-                    .subtitle("Looks it up with an online service. Shown in the Control Centre.")
-                    .leading(Icon::ViewConceal),
-                ),
-            )
+            .maybe_child(m.gnome.as_ref().map(|gnome| media_group(ctx, gnome)))
+            .child(privacy_group(ctx, m.public_ip_lookup, m.gnome.as_ref()))
     }
 }
 

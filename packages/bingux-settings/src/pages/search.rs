@@ -10,11 +10,13 @@ use freya::prelude::*;
 
 use crate::icons::Icon;
 use crate::pages::bingux_config;
-use crate::system::{self, CommandError, CommandResult, background, background_then};
+use crate::system::{
+    self, CommandError, CommandResult, background, background_then, optimistic_then,
+};
 use crate::ui::{
     Group, Overlays, PopupAction, PopupActions, ResponseKind, Row, Status, Window, caption,
     choice_row, dialog, form_row, icon_button, page_column, popup, popup_column, primary_button,
-    row, skeleton, slider_row, status, switch, switch_row, text_field, use_overlays,
+    row, skeleton_shape, slider_row, status, switch, switch_row, text_field, use_overlays,
     use_popup_actions, use_tokens, use_window,
 };
 use bingux_ui::shell::menu_item;
@@ -59,6 +61,7 @@ struct Model {
     previews_enabled: bool,
     prewarm: bool,
     max_megabytes: i64,
+    recursive_search: Option<String>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -364,12 +367,54 @@ fn parse_dump(text: &str) -> Result<Model, CommandError> {
             .and_then(Json::as_bool)
             .ok_or_else(|| missing("previews.prewarm"))?,
         max_megabytes,
+        recursive_search: None,
     })
 }
 
 fn load() -> Result<Model, CommandError> {
     let dump = system::run(&bingux_config(), &["dump"], TIMEOUT)?;
-    parse_dump(&dump)
+    let mut model = parse_dump(&dump)?;
+    model.recursive_search = recursive_search();
+    Ok(model)
+}
+
+const NAUTILUS: &str = "org.gnome.nautilus.preferences";
+const RECURSIVE_SEARCH: &str = "recursive-search";
+const RECURSIVE_SEARCH_OPTIONS: [(&str, &str); 3] = [
+    ("always", "Always"),
+    ("local-only", "Local folders only"),
+    ("never", "Never"),
+];
+
+/// Nautilus's `recursive-search`, read with `gsettings`. `None` without
+/// gsettings or with a value the page does not offer, which hides the row.
+fn recursive_search() -> Option<String> {
+    let value = system::gsettings_get(NAUTILUS, RECURSIVE_SEARCH).ok()?;
+    let value = value.trim().trim_matches('\'').to_string();
+    RECURSIVE_SEARCH_OPTIONS
+        .iter()
+        .any(|(id, _)| *id == value)
+        .then_some(value)
+}
+
+/// Shows `value` at once, writes it with `gsettings` and reloads. A failed
+/// write puts the previous value back with a toast.
+fn set_recursive_search(ctx: Ctx, value: String) {
+    let previous = ctx.model.read().clone();
+    let Some(Ok(current)) = previous.clone() else {
+        return;
+    };
+    let mut shown = current;
+    shown.recursive_search = Some(value.clone());
+    let quoted = format!("'{value}'");
+    optimistic_then(
+        ctx.model,
+        Some(ctx.overlays),
+        previous,
+        Some(Ok(shown)),
+        move || system::gsettings_set(NAUTILUS, RECURSIVE_SEARCH, &quoted).map(|_| ()),
+        move || reload(ctx),
+    );
 }
 
 /// Quotes `value` as a TOML basic string.
@@ -541,11 +586,9 @@ pub struct SearchPage;
 
 impl Component for SearchPage {
     fn render(&self) -> impl IntoElement {
-        let model = system::cached("search");
+        let model = system::use_cached("search", load);
         let overlays = use_overlays();
         let ctx = Ctx { model, overlays };
-
-        use_hook(move || reload(ctx));
 
         // Snapshot only: BINGUX_SETTINGS_SNAPSHOT_OPEN=remove-engine or
         // remove-folder asks that question once the page has loaded, so the
@@ -578,7 +621,9 @@ impl Component for SearchPage {
         });
 
         let Some(loaded) = model.read().clone() else {
-            return page_column().child(skeleton()).into_element();
+            return page_column()
+                .child(skeleton_shape(&[7, 3, 3, 3, 1]))
+                .into_element();
         };
 
         let data = match loaded {
@@ -933,6 +978,18 @@ fn files_group(data: &Model, ctx: Ctx) -> Group {
     let mut group = Group::titled("File search").description(
         "Files in these folders appear in search results. With none listed, the home folders are searched.",
     );
+    if let Some(recursive) = &data.recursive_search {
+        let options = RECURSIVE_SEARCH_OPTIONS
+            .iter()
+            .map(|(id, label)| (id.to_string(), label.to_string()))
+            .collect();
+        group = group.row(choice_row(
+            "Search subfolders",
+            options,
+            recursive,
+            move |value: String| set_recursive_search(ctx, value),
+        ));
+    }
     match &data.file_roots {
         None => {
             group = group.row(row("Folders").value("Home folders"));
