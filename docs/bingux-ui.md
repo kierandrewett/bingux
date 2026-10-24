@@ -471,6 +471,15 @@ Durations go through `tokens.motion(MOVE_MS)`, so reduced motion makes every
 motion an instant change. `use_presence` is the hook under `presence`; overlays
 keep a private copy with the same timing.
 
+### Keyboard focus
+
+Controls draw their focus ring with `focus_ring(focus(), radius)` from
+`motion.rs`. The ring is a 2 px accent border set outside the control, and it
+grows out from the control and fades in when keyboard focus arrives (`FOCUS_IN_MS`),
+then fades out when focus leaves (`FOCUS_OUT_MS`). Pointer focus draws no ring.
+The ring takes the control's corner radius plus its outset, so it follows the
+shape of the control.
+
 ## Gallery and snapshots
 
 The gallery shows every component live:

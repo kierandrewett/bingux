@@ -217,8 +217,13 @@ impl Component for TextField {
             } else {
                 Paint::Transparent
             })),
+            // Keyboard focus is the animated ring, so the field draws no border of
+            // its own for it. While the field's own menu is open, the edge keeps
+            // the accent colour.
             focus_border_fill: Some(paint(if invalid {
                 Paint::Danger
+            } else if menu_open {
+                Paint::Accent
             } else {
                 Paint::Transparent
             })),

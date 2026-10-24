@@ -8,10 +8,10 @@ mod pages;
 use bingux_ui::controls::text_field::text_field;
 use bingux_ui::controls::{dropdown, primary_button, switch};
 use bingux_ui::group::Group;
-use bingux_ui::rows::row;
 use bingux_ui::prelude::{
     OverlayHost, PopupAction, PopupActions, WindowHost, popup, use_popup_actions, use_window,
 };
+use bingux_ui::rows::row;
 use bingux_ui::snapshot::{Snapshot, snapshot};
 use bingux_ui::style::{Paint, S3, Tw, bg, flex_col, gap};
 use bingux_ui::surface::use_tokens;
@@ -308,6 +308,41 @@ fn main() {
         .save(&path);
     println!("[snapshot] wrote {path}");
 
+    // Keyboard focus: Tab lands on a control and its accent ring animates in.
+    // One frame is captured 30 ms in (mid-animation) and one once settled.
+    let mut shot = Snapshot::new(
+        move || {
+            Element::from(
+                rect()
+                    .expanded()
+                    .tw(&tokens, &[bg(Paint::Bg)])
+                    .child(Gallery {
+                        initial: Page::Buttons,
+                    }),
+            )
+        },
+        size,
+    );
+    let path = format!("{out}/focus-ring-search-2frames.png");
+    shot.settle(std::time::Duration::from_millis(400))
+        .key(Key::Named(NamedKey::Tab))
+        .settle(std::time::Duration::from_millis(32))
+        .save(&path);
+    println!("[snapshot] wrote {path}");
+    let path = format!("{out}/focus-ring-search-settled.png");
+    shot.settle(std::time::Duration::from_millis(400))
+        .save(&path);
+    println!("[snapshot] wrote {path}");
+    let path = format!("{out}/focus-ring-button-2frames.png");
+    shot.key(Key::Named(NamedKey::Tab))
+        .settle(std::time::Duration::from_millis(32))
+        .save(&path);
+    println!("[snapshot] wrote {path}");
+    let path = format!("{out}/focus-ring-button-settled.png");
+    shot.settle(std::time::Duration::from_millis(400))
+        .save(&path);
+    println!("[snapshot] wrote {path}");
+
     // Keyboard navigation: click Buttons in the sidebar, then ArrowDown
     // twice should land on Feedback.
     let mut shot = Snapshot::new(
@@ -390,7 +425,9 @@ fn main() {
                     rect()
                         .expanded()
                         .tw(&tokens, &[bg(Paint::Bg)])
-                        .child(Themed { child: FocusScene.into_element() }),
+                        .child(Themed {
+                            child: FocusScene.into_element(),
+                        }),
                 )
             },
             (WINDOW_SIZE.0, 520.0),
@@ -414,7 +451,9 @@ fn main() {
                 rect()
                     .expanded()
                     .tw(&tokens, &[bg(Paint::Bg)])
-                    .child(Themed { child: FocusScene.into_element() }),
+                    .child(Themed {
+                        child: FocusScene.into_element(),
+                    }),
             )
         },
         (WINDOW_SIZE.0, 520.0),
@@ -465,16 +504,14 @@ impl Component for FocusScene {
             Group::new("Focus".to_string())
                 .row(row("Button").trailing(primary_button("Save", |_| {}).compact()))
                 .row(row("Switch").trailing(switch(on(), move |next| on.set(next))))
-                .row(
-                    row("Dropdown").trailing(dropdown(
-                        vec![
-                            ("en".to_string(), "English".to_string()),
-                            ("de".to_string(), "Deutsch".to_string()),
-                        ],
-                        language.read().clone(),
-                        move |next: String| language.set(next),
-                    )),
-                )
+                .row(row("Dropdown").trailing(dropdown(
+                    vec![
+                        ("en".to_string(), "English".to_string()),
+                        ("de".to_string(), "Deutsch".to_string()),
+                    ],
+                    language.read().clone(),
+                    move |next: String| language.set(next),
+                )))
                 .row(row("Text field").trailing(text_field(name, |_| {})))
                 .row(row("Row").subtitle("Opens nothing").on_press(|_| {})),
         )

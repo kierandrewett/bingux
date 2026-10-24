@@ -226,7 +226,11 @@ impl Snapshot {
                 .set(NavigationMode::Keyboard);
         });
         self.runner.press_key(key);
-        self.runner.sync_and_update();
+        // Focus moves on the frame after the key lands, and the ring's
+        // transition starts once focus is known, so run a few frames.
+        for _ in 0..3 {
+            self.runner.sync_and_update();
+        }
         self.capture_frame();
         self
     }

@@ -365,18 +365,19 @@ impl Component for FocusRing {
         // The ring's outer edge sits this far outside the control, so the
         // ring's corner radius is the control's plus this distance.
         let outset = FOCUS_GAP + FOCUS_TRAVEL * (1.0 - progress) + Dim::Ring.px();
+        // Freya does not size an absolute box from opposite edges, so the
+        // ring sits at its top-left corner and takes its size from the parent.
         rect()
-            .position(
-                Position::new_absolute()
-                    .top(-outset)
-                    .right(-outset)
-                    .bottom(-outset)
-                    .left(-outset),
-            )
+            .position(Position::new_absolute().top(-outset).left(-outset))
+            .width(Size::func(move |ctx| Some(ctx.parent + outset + outset)))
+            .height(Size::func(move |ctx| Some(ctx.parent + outset + outset)))
             .opacity(progress)
             .tw(
                 &tokens,
-                &[rounded_by(self.radius, outset), border(Line::Ring(Paint::Accent))],
+                &[
+                    rounded_by(self.radius, outset),
+                    border(Line::Ring(Paint::Accent)),
+                ],
             )
     }
 }
