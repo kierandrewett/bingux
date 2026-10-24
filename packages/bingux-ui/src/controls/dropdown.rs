@@ -156,11 +156,12 @@ impl Component for Dropdown {
             .map(|(_, text)| text.chars().count())
             .max()
             .unwrap_or(0) as f32;
-        // An application icon and its gap come before the label.
+        // An icon and its gap come before the label. A symbol is the height of
+        // the text; an application icon is one step larger so it stays legible.
         let icon_space = if self.icons.is_empty() {
             0.0
         } else {
-            IconSize::AppSmall.px() + S2.px()
+            IconSize::Control.px() + S2.px()
         };
         // The measured width is only maths; the bounds come from tokens.
         let width = match self.fixed_width {
@@ -326,7 +327,9 @@ impl Component for Dropdown {
                         } else {
                             Paint::Control
                         },
-                        enabled && hovering(),
+                        // The button stays lit while its list is open, so it
+                        // reads as the owner of the list.
+                        enabled && (hovering() || open()),
                         enabled && pressing(),
                         false,
                     ),
@@ -501,11 +504,13 @@ impl Component for DropdownItem {
         rect()
             .a11y_role(AccessibilityRole::MenuItem)
             .tw(&tokens, MENU_ITEM)
+            // The selected option keeps the fill it has when highlighted, so
+            // it does not dim when the pointer moves to another option.
             .tw(
                 &tokens,
                 &[surface(
                     Paint::Transparent,
-                    hovering() || self.highlighted,
+                    hovering() || self.highlighted || self.selected,
                     pressing(),
                     self.selected,
                 )],
@@ -555,7 +560,7 @@ impl Component for DropdownItem {
 /// The icon before an option's label: an application icon or a symbol.
 fn option_icon(icon: OptionIcon, colour: Color) -> Element {
     match icon {
-        OptionIcon::App(name) => app_icon(name, IconSize::AppSmall).into(),
-        OptionIcon::Symbol(symbol) => icons::icon(symbol, IconSize::AppSmall, colour).into(),
+        OptionIcon::App(name) => app_icon(name, IconSize::Control).into(),
+        OptionIcon::Symbol(symbol) => icons::icon(symbol, IconSize::Text, colour).into(),
     }
 }

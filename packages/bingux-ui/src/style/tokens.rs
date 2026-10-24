@@ -44,6 +44,10 @@ pub const S12: Space = Space(48.0);
 /// on a phone: row text, hairlines and controls start this far in.
 pub const GUTTER: Space = S4;
 
+/// How far a disabled control or menu item fades: clearly unavailable, still
+/// readable.
+pub const DISABLED_OPACITY: f32 = 0.45;
+
 /// Corner radius, by what it rounds.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Radius {
@@ -92,6 +96,9 @@ pub(crate) const TEXT_HERO: f32 = 36.0;
 pub enum IconSize {
     /// Chevrons, ticks and other marks inside a control: 12 px.
     Mark,
+    /// A symbol set in a line of body text, such as before a dropdown's
+    /// label: 14 px, the height of the text.
+    Text,
     /// Glyphs in buttons and fields: 16 px.
     Control,
     /// Row and sidebar icons: 18 px.
@@ -110,6 +117,7 @@ impl IconSize {
     pub const fn px(self) -> f32 {
         match self {
             IconSize::Mark => 12.0,
+            IconSize::Text => 14.0,
             IconSize::Control => 16.0,
             IconSize::Row => 18.0,
             IconSize::Hero => 48.0,
@@ -210,6 +218,13 @@ pub enum Dim {
     PreviewTitleBar,
     /// A compact chart: 120 px.
     Chart,
+    /// The speaker test's room circle: 320 px across.
+    SpeakerRoom,
+    /// A speaker button in the test: 56 px.
+    SpeakerButton,
+    /// The speaker test popup: 440 px wide and tall.
+    SpeakerPopupWidth,
+    SpeakerPopupHeight,
     /// The display arrangement preview: 360 x 240.
     ArrangementWidth,
     ArrangementHeight,
@@ -304,6 +319,10 @@ impl Dim {
             Dim::PreviewBar => 4.0,
             Dim::PreviewTitleBar => 16.0,
             Dim::Chart => 120.0,
+            Dim::SpeakerRoom => 360.0,
+            Dim::SpeakerButton => 56.0,
+            Dim::SpeakerPopupWidth => 480.0,
+            Dim::SpeakerPopupHeight => 480.0,
             Dim::ArrangementWidth => 360.0,
             Dim::ArrangementHeight => 240.0,
             Dim::ArrangementHint => 260.0,

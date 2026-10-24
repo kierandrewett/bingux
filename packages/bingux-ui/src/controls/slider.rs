@@ -8,7 +8,6 @@ use crate::style::*;
 use crate::surface::{use_enabled, use_tokens};
 use crate::typography::{CAPTION, Ink};
 
-const DISABLED_OPACITY: f32 = 0.45;
 /// Width of the 100% tick on the track, in px.
 const TICK_WIDTH: f32 = 2.0;
 /// Height of the 100% tick, as a fraction of the thumb: taller than the track.
@@ -31,6 +30,9 @@ pub struct Slider {
     max: f64,
     /// A tick on the track at this percent, such as the 100% clipping point.
     mark: Option<f64>,
+    /// Where the travel turns to the danger colour, in percent, such as the
+    /// clipping zone past 100%. The value still goes that high.
+    danger_from: Option<f64>,
     enabled: bool,
     on_moved: EventHandler<f64>,
     width: Dim,
@@ -44,6 +46,7 @@ pub fn slider(value: f64, on_moved: impl Into<EventHandler<f64>>) -> Slider {
         value,
         max: PERCENT,
         mark: None,
+        danger_from: None,
         enabled: true,
         on_moved: on_moved.into(),
         width: Dim::Field,
@@ -96,6 +99,13 @@ impl Slider {
     /// starts to clip. The tick does not limit the value.
     pub fn mark(mut self, percent: f64) -> Self {
         self.mark = Some(percent);
+        self
+    }
+
+    /// Paint the travel past `percent` in the danger colour. It does not
+    /// limit the value.
+    pub fn danger_from(mut self, percent: f64) -> Self {
+        self.danger_from = Some(percent);
         self
     }
 }
@@ -207,6 +217,7 @@ impl Component for Slider {
             Dim::SliderTrack.px()
         };
         let fill_paint = if enabled { Paint::Accent } else { Paint::Muted };
+        let danger_from = self.danger_from;
         // Whole pixels keep the knob's edge crisp; a fractional left blurs it.
         let thumb_x = (travel * ((value / max) as f32)).round();
         let centre_x = thumb_size / 2.0 + thumb_x;
@@ -256,6 +267,24 @@ impl Component for Slider {
                     .width(Size::px(fill_width))
                     .height(Size::px(track_height))
                     .tw(&tokens, &[rounded(Radius::Pill), bg(fill_paint)]),
+            )
+            // The part of the fill past `danger_from`, drawn over the accent fill.
+            .maybe_child(
+                danger_from
+                    .filter(|point| enabled && value > *point)
+                    .map(|point| {
+                        let left = thumb_size / 2.0 + (travel * ((point / max) as f32)).round();
+                        rect()
+                            .layer(Layer::Relative(1))
+                            .position(
+                                Position::new_absolute()
+                                    .top(centre - track_height / 2.0)
+                                    .left(left),
+                            )
+                            .width(Size::px((centre_x - left).max(0.0)))
+                            .height(Size::px(track_height))
+                            .tw(&tokens, &[rounded(Radius::Pill), bg(Paint::Danger)])
+                    }),
             )
             .maybe_child(mark.filter(|point| *point < max).map(|point| {
                 // Taller than the track and in the text colour, so the tick

@@ -476,7 +476,18 @@ impl Component for Row {
             .maybe_child({
                 let leading: Option<Element> = match self.leading {
                     Some(leading) => {
-                        Some(icons::icon(leading, IconSize::Row, icon_paint.color(&tokens)).into())
+                        let glyph = icons::icon(leading, IconSize::Row, icon_paint.color(&tokens));
+                        // With a subtitle, the icon sits on the title line at
+                        // the top instead of between the two lines. The column
+                        // spans the row's height so its first child is at the top.
+                        Some(if single_line {
+                            glyph.into()
+                        } else {
+                            rect()
+                                .tw(&tokens, &[h_full(), flex_col(), pt(S0_5)])
+                                .child(glyph)
+                                .into()
+                        })
                     }
                     None => self.leading_space.then(|| {
                         rect()
@@ -564,17 +575,16 @@ impl Component for NestedRows {
     }
 }
 
-/// A row with a switch on the right. The whole row toggles it.
+/// A row with a switch on the right. Only the switch toggles: a press on the
+/// rest of the row does nothing, so a stray click on the text never changes
+/// a setting.
 pub fn switch_row(
     title: impl Into<String>,
     on: bool,
     on_toggle: impl Into<EventHandler<bool>>,
 ) -> Row {
     let on_toggle = on_toggle.into();
-    let press = on_toggle.clone();
-    row(title)
-        .trailing(switch(on, move |next: bool| on_toggle.call(next)))
-        .pressed(move |_| press.call(!on))
+    row(title).trailing(switch(on, move |next: bool| on_toggle.call(next)))
 }
 
 /// A level row for a setting: the title and its value over a full-width
@@ -601,6 +611,7 @@ pub struct LevelRow {
     value_text: Option<String>,
     max: f64,
     mark: Option<f64>,
+    danger_from: Option<f64>,
     enabled: bool,
     on_moved: EventHandler<f64>,
     footer: Option<Element>,
@@ -621,6 +632,7 @@ pub fn level_row(
         value_text: None,
         max: 100.0,
         mark: None,
+        danger_from: None,
         enabled: true,
         footer: None,
         context_menu: Vec::new(),
@@ -640,6 +652,13 @@ impl LevelRow {
     /// It does not limit the value.
     pub fn mark(mut self, percent: f64) -> Self {
         self.mark = Some(percent);
+        self
+    }
+
+    /// Paint the travel past `percent` in the danger colour, such as the
+    /// clipping zone past 100%. The value still goes that high.
+    pub fn danger_from(mut self, percent: f64) -> Self {
+        self.danger_from = Some(percent);
         self
     }
 
@@ -733,6 +752,9 @@ impl Component for LevelRow {
         let mut track = slider(value, self.on_moved.clone()).max(self.max);
         if let Some(mark) = self.mark {
             track = track.mark(mark);
+        }
+        if let Some(point) = self.danger_from {
+            track = track.danger_from(point);
         }
         rect()
             .tw(&tokens, ROW_STACKED)

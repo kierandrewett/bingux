@@ -9,7 +9,6 @@ use crate::icons::{self, Icon};
 use crate::style::*;
 use crate::surface::{is_activation_key, use_tokens};
 use crate::typography::{BODY, Ink};
-const DISABLED_OPACITY: f32 = 0.45;
 
 /// One action in a strip.
 #[derive(PartialEq, Clone)]

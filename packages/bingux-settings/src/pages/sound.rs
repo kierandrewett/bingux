@@ -8,22 +8,23 @@
 //! background and polled every five seconds.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use freya::prelude::*;
 use serde_json::Value;
 
-use bingux_ui::prelude::{Window, popup, use_window};
+use bingux_ui::prelude::{Ink, Window, popup, use_window};
 use bingux_ui::style::*;
 use bingux_ui::theme::Tokens;
 use bingux_ui::typography::CAPTION;
 
 use crate::apps;
-use crate::system::{self, CommandError, background, background_then};
+use crate::system::{self, CommandError, background_then};
 use crate::ui::{
     Group, Icon, LevelRow, Overlays, Status, action_button, app_icon, caption, dropdown, hstack,
-    icon, icon_button, level_row, menu_item, page_column, popup_column, row, status, switch_row,
-    use_overlays, use_tokens,
+    icon, icon_button, level_row, menu_item, page_column, row, status, switch_row, use_overlays,
+    use_tokens,
 };
 
 use self::meter::{LevelMeter, Source};
@@ -422,7 +423,7 @@ fn read_level(kind: Kind, devices: &[Device]) -> Result<Option<Level>, CommandEr
     };
     let text = system::run("wpctl", &["get-volume", kind.target()], TIMEOUT)?;
     let (volume, muted) = parse_volume(&text)
-        .ok_or_else(|| CommandError("The volume could not be read.".to_string()))?;
+        .ok_or_else(|| CommandError("Could not read the volume.".to_string()))?;
     Ok(Some(Level {
         id: default.id,
         volume,
@@ -887,6 +888,21 @@ fn identify(stream: &mut Stream, apps: &[apps::AppEntry]) {
     stream.app = app.map(|app| app.id);
 }
 
+/// The sound state, loaded in the background. Each load takes a new epoch and
+/// only the newest load may write its result, so a slow read that started
+/// before a write cannot overwrite the state the write just produced.
+static EPOCH: AtomicU64 = AtomicU64::new(0);
+
+fn reload(model: ModelState) {
+    let epoch = EPOCH.fetch_add(1, Ordering::SeqCst) + 1;
+    background_then(load, move |result| {
+        if EPOCH.load(Ordering::SeqCst) == epoch {
+            let mut model = model;
+            model.set(Some(result));
+        }
+    });
+}
+
 /// Run a `wpctl` write on a background thread, then toast a failure and
 /// reload the model so the page shows what the backend now reports.
 fn apply(args: Vec<String>, model: ModelState, overlays: Overlays) {
@@ -899,7 +915,7 @@ fn apply(args: Vec<String>, model: ModelState, overlays: Overlays) {
             if let Err(e) = result {
                 overlays.toast(e.0);
             }
-            background(model, load);
+            reload(model);
         },
     );
 }
@@ -1203,7 +1219,7 @@ fn tone_wav(channels: usize, lit: usize) -> Vec<u8> {
 fn play_tone(sink: &str, names: &[String], lit: usize) -> Result<(), CommandError> {
     let path = std::env::temp_dir().join(format!("bingux-sound-test-{}-{lit}.wav", names.len()));
     std::fs::write(&path, tone_wav(names.len(), lit))
-        .map_err(|e| CommandError(format!("The test tone could not be written: {e}")))?;
+        .map_err(|e| CommandError(format!("Could not write the test tone: {e}")))?;
     let file = path.to_string_lossy().into_owned();
     let short: Vec<&str> = names.iter().map(|name| short_channel(name)).collect();
     let map = short.join(",");
@@ -1233,34 +1249,179 @@ fn play_tone(sink: &str, names: &[String], lit: usize) -> Result<(), CommandErro
     .map_err(|_| CommandError("Install pw-play or paplay to test the speakers.".to_string()))
 }
 
-fn play_test(overlays: Overlays, mix: &Mix, lit: usize) {
-    let sink = mix.sink.clone();
-    let names: Vec<String> = mix.channels.iter().map(|(name, _)| name.clone()).collect();
-    background_then(
-        move || play_tone(&sink, &names, lit),
-        move |result| {
-            if let Err(e) = result {
-                overlays.toast(e.0);
-            }
-        },
-    );
+/// Where each speaker sits in the room, in pixels from its centre. The front
+/// pair and the centre are at the top, the sides level with the middle, and
+/// the rear pair and subwoofer at the bottom, as the speakers sit in a room.
+fn speaker_offset(name: &str) -> (f32, f32) {
+    match name {
+        "front-left" => (-115.0, -85.0),
+        "front-right" => (115.0, -85.0),
+        "front-center" => (0.0, -130.0),
+        "side-left" => (-150.0, 0.0),
+        "side-right" => (150.0, 0.0),
+        "rear-left" => (-115.0, 85.0),
+        "rear-right" => (115.0, 85.0),
+        "rear-center" => (0.0, 130.0),
+        "lfe" => (60.0, 140.0),
+        _ => (0.0, 0.0),
+    }
 }
 
-/// The test sheet: one button per speaker of the default output.
+/// Play one channel: its freedesktop voice sample through that speaker only.
+/// A channel without a sample (the subwoofer) plays the tone instead. Runs on
+/// the task pool; `pw-play` routes to one channel, `paplay` is the fallback.
+fn play_channel(sink: &str, names: &[String], name: &str) -> Result<(), CommandError> {
+    let sample = format!("/usr/share/sounds/freedesktop/stereo/audio-channel-{name}.oga");
+    if !std::path::Path::new(&sample).exists() {
+        let lit = names.iter().position(|n| n == name).unwrap_or(0);
+        return play_tone(sink, names, lit);
+    }
+    let channel = short_channel(name);
+    // WirePlumber would upmix the mono sample onto both ports. `stream.dont-remix`
+    // keeps it on the one channel named by `--channel-map`, checked with pw-link.
+    if system::run(
+        "pw-play",
+        &[
+            "-P",
+            "{ stream.dont-remix = true }",
+            "--target",
+            sink,
+            "--channel-map",
+            channel,
+            sample.as_str(),
+        ],
+        TIMEOUT,
+    )
+    .is_ok()
+    {
+        return Ok(());
+    }
+    let device = format!("--device={sink}");
+    let channel_map = format!("--channel-map={name}");
+    system::run(
+        "paplay",
+        &[device.as_str(), channel_map.as_str(), sample.as_str()],
+        TIMEOUT,
+    )
+    .map(|_| ())
+    .map_err(|_| CommandError("Install pw-play or paplay to test the speakers.".to_string()))
+}
+
+/// The speaker test: a room with one round button per speaker, each placed
+/// where that speaker sits. The centre shows the channel while it plays.
+#[derive(Clone, PartialEq)]
+struct SpeakerTest {
+    mix: Mix,
+    overlays: Overlays,
+}
+
+impl Component for SpeakerTest {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let playing = use_state(|| None::<String>);
+        let names: Vec<String> = self
+            .mix
+            .channels
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect();
+        let centre = Dim::SpeakerRoom.px() / 2.0;
+        let half = Dim::SpeakerButton.px() / 2.0;
+        let playing_name = playing.read().clone();
+        let label = match &playing_name {
+            Some(name) => channel_label(name),
+            None => "Select a speaker".to_string(),
+        };
+
+        let mut room = rect().tw(
+            &tokens,
+            &[
+                w(Dim::SpeakerRoom),
+                h(Dim::SpeakerRoom),
+                rounded(Radius::Pill),
+                bg(Paint::Control),
+            ],
+        );
+        room = room.child(
+            rect()
+                .position(Position::new_absolute().top(centre - 12.0).left(0.0))
+                .tw_layout(&[w_full()])
+                .child(
+                    hstack(S0)
+                        .tw_layout(&[w_full(), justify(Align::Center)])
+                        .child(CAPTION.label(&tokens, label)),
+                ),
+        );
+        for name in &names {
+            let (dx, dy) = speaker_offset(name);
+            let ringed = playing_name.as_deref() == Some(name.as_str());
+            let sink = self.mix.sink.clone();
+            let names = names.clone();
+            let channel = name.clone();
+            let overlays = self.overlays;
+            let mut playing = playing;
+            let button = rect()
+                .position(
+                    Position::new_absolute()
+                        .left(centre + dx - half)
+                        .top(centre + dy - half),
+                )
+                .a11y_focusable(true)
+                .a11y_role(AccessibilityRole::Button)
+                .a11y_alt(channel_label(name))
+                .tw(
+                    &tokens,
+                    &[
+                        w(Dim::SpeakerButton),
+                        h(Dim::SpeakerButton),
+                        rounded(Radius::Pill),
+                        bg(Paint::Card),
+                        border(if ringed {
+                            Line::Stroke(Dim::Ring, Paint::Accent)
+                        } else {
+                            Line::Outline
+                        }),
+                    ],
+                )
+                .on_press(move |_| {
+                    if playing.read().is_some() {
+                        return;
+                    }
+                    playing.set(Some(channel.clone()));
+                    let (sink, names, channel) = (sink.clone(), names.clone(), channel.clone());
+                    let mut playing = playing;
+                    background_then(
+                        move || play_channel(&sink, &names, &channel),
+                        move |result| {
+                            playing.set(None);
+                            if let Err(e) = result {
+                                overlays.toast(e.0);
+                            }
+                        },
+                    );
+                })
+                .child(
+                    rect()
+                        .tw_layout(&[w_full(), h_full(), center()])
+                        .child(icon(
+                            Icon::Speakers,
+                            IconSize::Row,
+                            Ink::Text.color(&tokens),
+                        )),
+                );
+            room = room.child(button);
+        }
+        room
+    }
+}
+
+/// The test sheet: a room with one button per speaker of the default output.
 fn open_test(ctx: Ctx, mix: Mix) {
     let overlays = ctx.overlays;
-    let mut group =
-        Group::new(None::<String>).description("Each button plays a tone through one speaker.");
-    for (lit, (name, _)) in mix.channels.iter().enumerate() {
-        let mix = mix.clone();
-        group = group.row(
-            row(channel_label(name)).trailing(action_button("Play", move |_| {
-                play_test(overlays, &mix, lit)
-            })),
-        );
-    }
-    ctx.window
-        .open(popup("Test speakers", popup_column().child(group)));
+    ctx.window.open(
+        popup("Test speakers", SpeakerTest { mix, overlays })
+            .size(Dim::SpeakerPopupWidth.px(), Dim::SpeakerPopupHeight.px()),
+    );
 }
 
 /// Optimistic default device: the new default shows at once and the next poll
@@ -1380,7 +1541,7 @@ fn volume_slider(
 ) -> LevelRow {
     let slider = level_row(title, percent, on_moved);
     if above {
-        slider.max(ABOVE_MAX).mark(100.0)
+        slider.max(ABOVE_MAX).mark(100.0).danger_from(100.0)
     } else {
         slider
     }
@@ -1630,11 +1791,11 @@ fn by_application(streams: &[Stream]) -> Vec<Vec<Stream>> {
 fn use_sound_model() -> ModelState {
     let model = system::cached("sound");
     use_hook(move || {
-        background(model, load);
+        reload(model);
         spawn(async move {
             loop {
                 timer(POLL).await;
-                background(model, load);
+                reload(model);
             }
         });
     });
@@ -1672,8 +1833,7 @@ impl Component for SoundPage {
             Some(Err(e)) => {
                 return veiled(
                     page_column().child(
-                        status(Status::Error(e.0))
-                            .action("Try again", move |_| background(ctx.model, load)),
+                        status(Status::Error(e.0)).action("Try again", move |_| reload(ctx.model)),
                     ),
                     false,
                 );
@@ -1712,7 +1872,7 @@ impl Component for SoundPage {
                             IconSize::Control,
                             Paint::Muted.color(&tokens),
                         ))
-                        .child(caption("No application is playing or recording sound.")),
+                        .child(caption("Nothing is playing or recording.")),
                 ),
             );
         } else {

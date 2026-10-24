@@ -397,6 +397,17 @@ pub fn freya_theme(tokens: &Tokens) -> Theme {
         overlay: Color::from_af32rgb(0.2, 255, 255, 255),
         shadow: Color::from_af32rgb(0.6, 0, 0, 0),
     };
+    // Freya's own tooltips (icon buttons, the busy spinner) take the same dark
+    // bubble as Bingux's tooltip_icon, not the sidebar colour Freya uses.
+    theme.set(
+        "tooltip",
+        TooltipThemePreference {
+            background: Preference::Specific(tokens.tooltip_surface),
+            color: Preference::Reference("text_primary"),
+            border_fill: Preference::Specific(tokens.tooltip_outline),
+            font_size: Preference::Specific(crate::typography::CAPTION.size),
+        },
+    );
     theme
 }
 

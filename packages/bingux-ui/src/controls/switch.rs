@@ -9,7 +9,6 @@ use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
 
 const THUMB_INSET: f32 = 2.0;
-const DISABLED_OPACITY: f32 = 0.45;
 /// Thumb travel eases over 100 ms and its width over 80 ms.
 const TRAVEL_MS: u64 = 100;
 const WIDTH_MS: u64 = 80;

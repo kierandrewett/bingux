@@ -200,9 +200,9 @@ impl Component for MenuRow {
         let enabled = self.item.enabled;
         let close = self.close;
         let on_press = self.item.on_press.clone();
-        let ink = if !enabled {
-            Ink::Muted
-        } else if self.item.destructive {
+        // A disabled item keeps its colour and fades like any disabled
+        // control, so it reads as unavailable at a glance.
+        let ink = if enabled && self.item.destructive {
             Ink::Danger
         } else {
             Ink::Text
@@ -223,6 +223,7 @@ impl Component for MenuRow {
             .a11y_role(AccessibilityRole::MenuItem)
             .a11y_enabled(enabled)
             .tw(&tokens, MENU_ITEM)
+            .maybe(!enabled, |element| element.opacity(DISABLED_OPACITY))
             .tw(
                 &tokens,
                 &[surface(

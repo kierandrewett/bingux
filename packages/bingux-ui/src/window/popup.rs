@@ -18,9 +18,9 @@ use crate::address::Address;
 use crate::controls::button::{action_button, primary_button};
 use crate::layout::divider;
 use crate::shell::overlays::{OverlayLayers, OverlayStack, Overlays, use_presence};
+use crate::shell::window::HeaderBar;
 use crate::style::*;
 use crate::surface::use_tokens;
-use crate::typography::{Ink, SECTION};
 
 /// How long the popup takes to fade and scale in or out, and the resize takes.
 const MOTION_MS: u64 = 150;
@@ -207,35 +207,15 @@ impl Component for PopupFrame {
         });
         let cancel = action_button("Cancel", move |_: ()| window.close()).compact();
 
-        let header = rect()
-            .tw(
-                &tokens,
-                &[
-                    w_full(),
-                    flex_row(),
-                    grow_children(),
-                    items(Align::Center),
-                    px(S4),
-                    py(S3),
-                ],
-            )
-            // Cancel and the primary action take equal room on each side, so
-            // the title stays centred.
-            .child(rect().tw(&tokens, &[w_flex(), flex_row()]).child(cancel))
-            .child(
-                SECTION
-                    .in_ink(Ink::Text)
-                    .label(&tokens, title.clone())
-                    .width(Size::flex(3.0))
-                    .max_lines(1)
-                    .text_overflow(TextOverflow::Ellipsis)
-                    .text_align(TextAlign::Center),
-            )
-            .child(
-                rect()
-                    .tw(&tokens, &[w_flex(), flex_row(), justify(Align::End)])
-                    .maybe_child(primary_element),
-            );
+        // The same header bar a window has: its height, inset and centred
+        // title, so a popup reads as a small window and not a custom panel.
+        let header = HeaderBar::new(title.clone())
+            .fill(Paint::Bg)
+            .leading(cancel);
+        let header = match primary_element {
+            Some(primary) => header.trailing(primary),
+            None => header,
+        };
 
         // The panel takes focus when the popup opens. A text field marked
         // `autofocus` is created after it, and freya keeps the last request.

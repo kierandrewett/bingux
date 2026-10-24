@@ -278,11 +278,12 @@ impl Component for TextField {
             input = input.placeholder(placeholder.clone());
         }
         if let Some(icon) = self.leading {
-            // With a column the glyph is a fixed-width box at row size, so the
-            // text lines up with the rows that share the column. Without one
-            // the glyph sits at control size, tucked against the text.
+            // With a column the glyph is a fixed-width box at row size, with the
+            // rows' icon-to-text gap, so the glyph and the text line up with the
+            // rows that share the column. Without one the glyph sits at control
+            // size, tucked against the text.
             let (glyph_size, after) = match self.leading_column {
-                Some(_) => (IconSize::Row, S3),
+                Some(_) => (IconSize::Row, S2),
                 None => (IconSize::Control, S1),
             };
             let mut glyph = rect()
