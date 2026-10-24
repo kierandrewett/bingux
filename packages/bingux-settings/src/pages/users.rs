@@ -16,8 +16,9 @@ use crate::system::{
 };
 use crate::theme::Tokens;
 use crate::ui::{
-    Group, Overlays, Status, action_button, avatar, caption, form_row, heading, menu_item,
-    page_column, row, sheet, sheet_column, skeleton, status, text_field, use_overlays, use_tokens,
+    Group, Overlays, PopupAction, PopupActions, Status, Window, action_button, avatar, caption,
+    form_row, heading, menu_item, page_column, popup, popup_column, row, skeleton, status,
+    text_field, use_overlays, use_popup_actions, use_tokens, use_window,
 };
 use bingux_ui::style::*;
 
@@ -336,6 +337,7 @@ struct PasswordSheet {
     /// True while `passwd` runs. The sheet stays open and submit is ignored.
     busy: State<bool>,
     overlays: Overlays,
+    window: Window,
 }
 
 /// The sheet's fields, held by the page that opens it.
@@ -347,6 +349,7 @@ fn use_password() -> PasswordSheet {
         error: use_state(|| None::<String>),
         busy: use_state(|| false),
         overlays: use_overlays(),
+        window: use_window(),
     }
 }
 
@@ -380,10 +383,8 @@ impl PasswordSheet {
 
     /// Shows the sheet with whatever is in the fields.
     fn show(self) {
-        self.overlays.show_sheet(
-            sheet("Change password", PasswordBody { sheet: self })
-                .primary("Change", move |_| self.submit()),
-        );
+        self.window
+            .open(popup("Change password", PasswordBody { sheet: self }));
     }
 
     fn clear(self) {
@@ -400,7 +401,7 @@ impl PasswordSheet {
     /// Checks the fields, then changes the password in the background. The
     /// sheet stays open with a busy line until `passwd` answers; a failure
     /// keeps the fields and shows `passwd`'s message.
-    fn submit(self) {
+    fn submit(self, window: Window) {
         let mut busy = self.busy;
         if *busy.read() {
             return;
@@ -423,7 +424,7 @@ impl PasswordSheet {
                 match result {
                     Ok(()) => {
                         self.clear();
-                        self.overlays.close_sheet();
+                        window.close();
                         self.overlays.toast("Password changed.".to_string());
                     }
                     Err(message) => {
@@ -458,9 +459,17 @@ struct PasswordBody {
 impl Component for PasswordBody {
     fn render(&self) -> impl IntoElement {
         let sheet = self.sheet;
-        let current = text_field(sheet.current, move |_: String| sheet.submit()).password();
-        let new = text_field(sheet.new, move |_: String| sheet.submit()).password();
-        let confirm = text_field(sheet.confirm, move |_: String| sheet.submit()).password();
+        let window = use_window();
+        use_popup_actions(PopupActions {
+            primary: Some(PopupAction {
+                label: "Change".into(),
+                enabled: true,
+                on_press: EventHandler::new(move |_: ()| sheet.submit(window)),
+            }),
+        });
+        let current = text_field(sheet.current, move |_: String| sheet.submit(window)).password();
+        let new = text_field(sheet.new, move |_: String| sheet.submit(window)).password();
+        let confirm = text_field(sheet.confirm, move |_: String| sheet.submit(window)).password();
         let error = sheet.error.read().clone();
         let busy = *sheet.busy.read();
         let mismatch = {
@@ -468,7 +477,7 @@ impl Component for PasswordBody {
             let confirm_text = sheet.confirm.read();
             !confirm_text.is_empty() && *confirm_text != *new_text
         };
-        sheet_column()
+        popup_column()
             .child(caption(
                 "Enter your current password, then the new one twice.",
             ))
@@ -501,6 +510,7 @@ struct NameSheet {
     saved: State<String>,
     model: State<Option<Result<Vec<Account>, CommandError>>>,
     overlays: Overlays,
+    window: Window,
 }
 
 /// The rename sheet's state, held by the account page that opens it.
@@ -514,6 +524,7 @@ fn use_name(
         saved: use_state(|| account.real_name.clone()),
         model,
         overlays: use_overlays(),
+        window: use_window(),
     }
 }
 
@@ -526,27 +537,19 @@ impl NameSheet {
     }
 
     fn show(self, path: String) {
-        self.overlays.show_sheet(
-            sheet(
-                "Change full name",
-                NameBody {
-                    sheet: self,
-                    path: path.clone(),
-                },
-            )
-            .primary("Change", move |_| self.submit(path.clone())),
-        );
+        self.window
+            .open(popup("Change full name", NameBody { sheet: self, path }));
     }
 
     /// Shows the new name at once and writes it in the background. A failure
     /// puts back the last name the system accepted.
-    fn submit(self, path: String) {
+    fn submit(self, path: String, window: Window) {
         let name = self.field.read().clone();
         let previous = self.saved.read().clone();
         let accepted = name.clone();
         let model = self.model;
         let mut saved = self.saved;
-        self.overlays.close_sheet();
+        window.close();
         optimistic_then(
             self.shown,
             Some(self.overlays),
@@ -572,8 +575,21 @@ impl Component for NameBody {
     fn render(&self) -> impl IntoElement {
         let sheet = self.sheet;
         let path = self.path.clone();
-        let field = text_field(sheet.field, move |_: String| sheet.submit(path.clone()));
-        sheet_column().child(Group::new(None::<String>).row(form_row("Full name", field)))
+        let window = use_window();
+        let on_press_path = path.clone();
+        use_popup_actions(PopupActions {
+            primary: Some(PopupAction {
+                label: "Change".into(),
+                enabled: true,
+                on_press: EventHandler::new(move |_: ()| {
+                    sheet.submit(on_press_path.clone(), window)
+                }),
+            }),
+        });
+        let field = text_field(sheet.field, move |_: String| {
+            sheet.submit(path.clone(), window)
+        });
+        popup_column().child(Group::new(None::<String>).row(form_row("Full name", field)))
     }
 }
 

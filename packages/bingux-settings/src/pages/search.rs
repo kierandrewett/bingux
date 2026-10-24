@@ -12,9 +12,10 @@ use crate::icons::Icon;
 use crate::pages::bingux_config;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Overlays, ResponseKind, Row, Status, caption, choice_row, dialog, form_row, icon_button,
-    page_column, primary_button, row, sheet, sheet_column, skeleton, slider_row, status, switch,
-    switch_row, text_field, use_overlays, use_tokens,
+    Group, Overlays, PopupAction, PopupActions, ResponseKind, Row, Status, Window, caption,
+    choice_row, dialog, form_row, icon_button, page_column, popup, popup_column, primary_button,
+    row, skeleton, slider_row, status, switch, switch_row, text_field, use_overlays,
+    use_popup_actions, use_tokens, use_window,
 };
 use bingux_ui::shell::menu_item;
 use bingux_ui::style::*;
@@ -738,7 +739,7 @@ fn confirm_remove(ctx: Ctx, name: &str, default: &str, without: &[Engine]) {
     );
 }
 
-/// The add-engine row. Its sheet writes the full engines array with the new engine appended.
+/// The add-engine row. Its popup writes the full engines array with the new engine appended.
 #[derive(PartialEq)]
 struct AddEngine {
     engines: Vec<Engine>,
@@ -747,6 +748,7 @@ struct AddEngine {
 
 impl Component for AddEngine {
     fn render(&self) -> impl IntoElement {
+        let window = use_window();
         let form = EngineForm {
             name: use_state(String::new),
             shortcut: use_state(String::new),
@@ -755,7 +757,7 @@ impl Component for AddEngine {
         };
         let engines = self.engines.clone();
         // Snapshot only: BINGUX_SETTINGS_SNAPSHOT_OPEN=add-engine opens the
-        // add sheet once the page has loaded, so it can be captured.
+        // add popup once the page has loaded, so it can be captured.
         #[cfg(feature = "snapshot")]
         {
             let engines = self.engines.clone();
@@ -763,7 +765,7 @@ impl Component for AddEngine {
                 if std::env::var("BINGUX_SETTINGS_SNAPSHOT_OPEN").is_ok_and(|v| v == "add-engine") {
                     spawn(async move {
                         timer(std::time::Duration::from_millis(2500)).await;
-                        open_engine_sheet(form, engines);
+                        open_engine_sheet(window, form, engines);
                     });
                 }
             });
@@ -773,13 +775,13 @@ impl Component for AddEngine {
             name.set(String::new());
             shortcut.set(String::new());
             url.set(String::new());
-            open_engine_sheet(form, engines.clone());
+            open_engine_sheet(window, form, engines.clone());
         };
         row("Add a search engine…").trailing(primary_button("Add", open).compact())
     }
 }
 
-/// The add-engine fields. Copy, so the row, the sheet body and the Add action share them.
+/// The add-engine fields. Copy, so the row, the popup body and the Add action share them.
 #[derive(Clone, Copy, PartialEq)]
 struct EngineForm {
     name: State<String>,
@@ -839,23 +841,13 @@ fn engine_ready(name: &str, shortcut: &str, url: &str, engines: &[Engine]) -> bo
         && problems.url.is_none()
 }
 
-/// Opens the add-engine sheet. Called again on every edit, so the Add button follows the fields.
-fn open_engine_sheet(form: EngineForm, engines: Vec<Engine>) {
-    let (name, shortcut, url) = engine_fields(form);
-    let ready = engine_ready(&name, &shortcut, &url, &engines);
-    let body = EngineBody {
-        form,
-        engines: engines.clone(),
-    };
-    form.ctx.overlays.show_sheet(
-        sheet("Add a search engine", body)
-            .primary("Add", move |_| add_engine(form, engines.clone()))
-            .primary_enabled(ready),
-    );
+/// Opens the add-engine popup. Its body reads the form, so the Add button follows the fields.
+fn open_engine_sheet(window: Window, form: EngineForm, engines: Vec<Engine>) {
+    window.open(popup("Add a search engine", EngineBody { form, engines }));
 }
 
-/// Writes the engines with the new one appended. The sheet closes only once the write succeeds.
-fn add_engine(form: EngineForm, engines: Vec<Engine>) {
+/// Writes the engines with the new one appended. The popup closes only once the write succeeds.
+fn add_engine(form: EngineForm, engines: Vec<Engine>, window: Window) {
     let (name, shortcut, url) = engine_fields(form);
     if !engine_ready(&name, &shortcut, &url, &engines) {
         return;
@@ -874,14 +866,14 @@ fn add_engine(form: EngineForm, engines: Vec<Engine>) {
         set_args("search.engines", engines_toml(&list)),
         move |ok| {
             if ok {
-                ctx.overlays.close_sheet();
+                window.close();
                 reload(ctx);
             }
         },
     );
 }
 
-/// The add-engine sheet body. It reads the form state, so the fields and their problems redraw as they change.
+/// The add-engine popup body. It reads the form state, so the fields and problems redraw as they change.
 #[derive(Clone, PartialEq)]
 struct EngineBody {
     form: EngineForm,
@@ -891,17 +883,23 @@ struct EngineBody {
 impl Component for EngineBody {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let window = use_window();
         let form = self.form;
         let engines = self.engines.clone();
-        let edited = move |_: String| open_engine_sheet(form, engines.clone());
-        let (_, shortcut, url) = engine_fields(form);
+        let (name, shortcut, url) = engine_fields(form);
         let problems = engine_problems(&shortcut, &url, &self.engines);
+        use_popup_actions(PopupActions {
+            primary: Some(PopupAction {
+                label: "Add".into(),
+                enabled: engine_ready(&name, &shortcut, &url, &self.engines),
+                on_press: EventHandler::new(move |_: ()| add_engine(form, engines.clone(), window)),
+            }),
+        });
         let fields = Group::new(None::<String>)
             .row(form_row(
                 "Name",
                 rect().tw(&tokens, &[w(Dim::Field)]).child(
                     text_field(form.name, |_: String| {})
-                        .on_change(edited.clone())
                         .width(Dim::Field)
                         .placeholder("Example Search"),
                 ),
@@ -910,7 +908,6 @@ impl Component for EngineBody {
                 "Shortcut",
                 rect().tw(&tokens, &[w(Dim::Field)]).child(
                     text_field(form.shortcut, |_: String| {})
-                        .on_change(edited.clone())
                         .width(Dim::Field)
                         .placeholder("ex"),
                 ),
@@ -919,7 +916,6 @@ impl Component for EngineBody {
                 "Web address",
                 rect().tw(&tokens, &[w(Dim::Field)]).child(
                     text_field(form.url, |_: String| {})
-                        .on_change(edited)
                         .width(Dim::Field)
                         .placeholder("https://example.com/?q={query}"),
                 ),
@@ -929,7 +925,7 @@ impl Component for EngineBody {
         let hint = problems.shortcut.or(problems.url).unwrap_or(
             "Type the shortcut in search to use this engine. Put {query} in the address where the search words go.",
         );
-        sheet_column().child(fields).child(caption(hint))
+        popup_column().child(fields).child(caption(hint))
     }
 }
 

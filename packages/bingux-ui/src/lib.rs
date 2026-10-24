@@ -9,6 +9,8 @@
 //! [`theme::provide_tokens`] at the window root and read with
 //! [`surface::use_tokens`].
 
+pub mod address;
+pub mod app;
 pub mod app_icon;
 pub mod charts;
 pub mod controls;
@@ -26,9 +28,12 @@ pub mod surface;
 pub mod task;
 pub mod theme;
 pub mod typography;
+pub mod window;
 
 /// Everything an application window normally needs.
 pub mod prelude {
+    pub use crate::address::Address;
+    pub use crate::app::{Application, current_address, navigate, use_address};
     pub use crate::app_icon::{AppIcon, app_icon};
     pub use crate::charts::{
         Curve, Segment, Series, Unit, bar_chart, donut, line_chart, ring, sparkline,
@@ -40,7 +45,7 @@ pub mod prelude {
     };
     pub use crate::icons::{Icon, icon};
     pub use crate::layout::{
-        boxed, clamp, divider, hstack, page_column, sheet_column, spacer, vstack,
+        boxed, clamp, divider, hstack, page_column, popup_column, spacer, vstack,
     };
     pub use crate::rows::{
         ChoiceList, EntryRow, ExpanderRow, LevelRow, Row, choice_list, choice_row, entry_row,
@@ -48,12 +53,16 @@ pub mod prelude {
     };
     pub use crate::shell::{
         Banner, BannerKind, Dialog, HeaderBar, MenuButton, MenuItem, NavItem, NavigationSplitView,
-        OverlayHost, Overlays, PageAction, PageHeader, Profile, ResponseKind, SearchField, Sheet,
-        SheetAction, StatusPage, WindowControls, banner, dialog, menu_button, menu_item,
-        menu_separator, sheet, status_page, use_overlays, use_page_busy, use_page_header,
+        OverlayHost, Overlays, PageAction, PageHeader, Profile, ResponseKind, SearchField,
+        StatusPage, WindowControls, banner, dialog, menu_button, menu_item, menu_separator,
+        status_page, use_overlays, use_page_busy, use_page_header,
     };
     pub use crate::style::*;
     pub use crate::surface::use_tokens;
     pub use crate::theme::{Scheme, SharedTokens, Tokens, provide_tokens};
     pub use crate::typography::{self, Ink, TextStyle, styled_label, styled_paragraph};
+    pub use crate::window::{
+        Popup, PopupAction, PopupActions, Window, WindowHost, popup, use_main_window,
+        use_popup_actions, use_window,
+    };
 }

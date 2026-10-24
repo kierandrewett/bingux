@@ -1,10 +1,14 @@
 //! The window: bingux-ui's navigation split view over the page registry.
+//!
+//! The window's address is the state. The sidebar's selected page and the
+//! subpage shown are both derived from it, and a change to either one (a
+//! sidebar click, a row, Back, a forwarded address) goes through the address.
 
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 
 use crate::pages::PageId;
-use crate::routes::{Route, provide_navigator, use_navigator};
+use crate::routes::{Route, page_of, use_navigator};
 use crate::search_results::SearchResults;
 use crate::settings_index;
 
@@ -30,13 +34,11 @@ impl NavItem for PageId {
     }
 }
 
-/// Window root. `initial` is the page named on the command line, and
-/// `subpage` the subpage named after it, if any. With `list_first`, a narrow
-/// window opens on the list of pages: no page was asked for.
+/// Window root. The page or subpage shown is the window's address, provided
+/// by [`bingux_ui::app::Application`] or a snapshot. With `list_first`, a
+/// narrow window opens on the list of pages: no page was asked for.
 #[derive(PartialEq)]
 pub struct App {
-    pub initial: PageId,
-    pub subpage: Option<Route>,
     pub list_first: bool,
 }
 
@@ -44,21 +46,37 @@ impl Component for App {
     fn render(&self) -> impl IntoElement {
         let tokens = provide_tokens();
         use_hook(crate::pages::prefetch_all);
-        let page = use_state(|| self.initial);
-        let navigator = provide_navigator(page, self.subpage.iter().cloned().collect());
-        let open = navigator.routes();
-        let top: Option<Route> = open.last().cloned();
+        let address = use_address();
+        let start = page_of(&address).unwrap_or(PageId::ALL[0]);
+        let page = use_state(move || start);
+        // The address decides the sidebar page: a row or a forwarded address
+        // that names another page moves the sidebar to it.
+        let mut sidebar = page;
+        use_side_effect_with_deps(&address, move |address: &Address| {
+            if let Some(target) = page_of(address)
+                && *sidebar.peek() != target
+            {
+                sidebar.set(target);
+            }
+        });
+        // The sidebar decides the address: a click on a page opens its top
+        // level, unless the address already names that page.
+        let selected = page();
+        use_side_effect_with_deps(&selected, move |selected: &PageId| {
+            if current_address().as_ref().and_then(page_of) != Some(*selected) {
+                navigate(selected.address());
+            }
+        });
+        let navigator = use_navigator();
+        let top = Route::from_address(&address);
         let signed_in = crate::pages::users::use_signed_in();
         let content: Element = match &top {
             Some(route) => route.render(),
-            None => {
-                let current = page();
-                rect()
-                    .tw(&tokens, PAGE)
-                    .child(current.render())
-                    .child(RelatedPages { page: current })
-                    .into()
-            }
+            None => rect()
+                .tw(&tokens, PAGE)
+                .child(selected.render())
+                .child(RelatedPages { page: selected })
+                .into(),
         };
         let query = use_state(crate::search_results::initial_query);
         let results: Element = SearchResults { query }.into();

@@ -231,7 +231,8 @@ fn open_row_menu(
 /// A read-only value on the right of a row. It is selectable: Ctrl+C copies
 /// it, and a right click offers Copy. It stays on one line, and a long value
 /// is cut with an ellipsis. `field` sets the value in the controls' column
-/// (a property row); otherwise it sizes to its text up to a limit.
+/// (a property row); otherwise it shares the row with the title, up to a
+/// limit.
 #[derive(PartialEq)]
 struct ValueText {
     text: String,
@@ -248,11 +249,7 @@ impl Component for ValueText {
             .line_height(VALUE.leading)
             .text_align(TextAlign::End)
             .text_overflow(TextOverflow::Ellipsis);
-        let value = if self.field {
-            value.width(Size::fill())
-        } else {
-            value.width(Size::px(VALUE_MAX_WIDTH))
-        };
+        let value = value.width(Size::fill());
         let text = self.text.clone();
         let wrapper = rect().on_pointer_down(move |event: Event<PointerEventData>| {
             let text = text.clone();
@@ -263,10 +260,14 @@ impl Component for ValueText {
             })];
             open_row_menu(overlays, &items, &event);
         });
+        // A value shares the row with the title and is capped at its width, so
+        // a narrow window shrinks it and the title keeps its room.
         let wrapper = if self.field {
             wrapper.tw(&tokens, &[w(Dim::Field)])
         } else {
             wrapper
+                .width(Size::flex(1.0))
+                .max_width(Size::px(VALUE_MAX_WIDTH))
         };
         wrapper.child(value)
     }
@@ -397,7 +398,11 @@ impl Component for Row {
             .maybe_child(subtitle_line);
         let trailing = (self.trailing.is_some() || self.selected || self.navigates).then(|| {
             rect()
+                .tw(&tokens, &[pr(S3)])
                 .tw(&tokens, ROW_TRAILING)
+                // Half the row at most, so a long value shrinks inside it and
+                // the title and chevron keep their room.
+                .max_width(Size::percent(50.0))
                 .maybe_child(self.trailing.clone())
                 .maybe_child((self.selected && !self.navigates).then(|| {
                     icons::icon(Icon::Check, IconSize::Mark, Paint::Accent.color(&tokens))

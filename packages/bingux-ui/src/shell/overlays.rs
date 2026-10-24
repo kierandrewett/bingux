@@ -12,7 +12,6 @@ use freya::prelude::*;
 
 use crate::controls::button::{ActionButton, action_button, primary_button};
 use crate::shell::menu::{Menu, MenuItem, MenuLayer};
-use crate::shell::sheet::{Sheet, SheetLayer};
 use crate::style::*;
 use crate::surface::{is_activation_key, use_tokens};
 use crate::theme::Tokens;
@@ -112,8 +111,6 @@ pub struct Toast {
 pub struct Overlays {
     dialog: State<Option<Dialog>>,
     dialog_closing: State<bool>,
-    sheet: State<Option<Sheet>>,
-    sheet_closing: State<bool>,
     menu: State<Option<Menu>>,
     menu_closing: State<bool>,
     toasts: State<Vec<(u64, Toast)>>,
@@ -139,27 +136,6 @@ impl Overlays {
         if *self.dialog_closing.read() {
             self.dialog.set(None);
             self.dialog_closing.set(false);
-        }
-    }
-
-    /// Open `sheet`, replacing any sheet already open.
-    pub fn show_sheet(mut self, sheet: Sheet) {
-        self.sheet_closing.set(false);
-        self.sheet.set(Some(sheet));
-    }
-
-    /// Close the open sheet. The primary action calls this once its work
-    /// succeeds; Cancel and Escape call it themselves.
-    pub fn close_sheet(mut self) {
-        if self.sheet.read().is_some() && !*self.sheet_closing.read() {
-            self.sheet_closing.set(true);
-        }
-    }
-
-    pub(crate) fn finish_sheet(mut self) {
-        if *self.sheet_closing.read() {
-            self.sheet.set(None);
-            self.sheet_closing.set(false);
         }
     }
 
@@ -314,8 +290,6 @@ impl Component for OverlayHost {
             toasts: State::create(Vec::new()),
             next_toast: State::create(0),
             toast_closing: State::create(None),
-            sheet: State::create(None),
-            sheet_closing: State::create(false),
             menu: State::create(None),
             menu_closing: State::create(false),
         });
@@ -324,24 +298,17 @@ impl Component for OverlayHost {
         let dialog_closing = *overlays.dialog_closing.read();
         let toast = overlays.toasts.read().first().cloned();
         let toast_closing = *overlays.toast_closing.read();
-        let sheet = overlays.sheet.read().clone();
-        let sheet_closing = *overlays.sheet_closing.read();
         let menu = overlays.menu.read().clone();
         let menu_closing = *overlays.menu_closing.read();
 
         rect()
             .expanded()
-            .child(self.child.clone())
+            .child(crate::window::WindowHost::new(self.child.clone()))
             .maybe_child(toast.map(|(id, toast)| ToastLayer {
                 overlays,
                 id,
                 toast,
                 closing: toast_closing == Some(id),
-            }))
-            .maybe_child(sheet.map(|sheet| SheetLayer {
-                overlays,
-                sheet,
-                closing: sheet_closing,
             }))
             .maybe_child(dialog.map(|dialog| DialogLayer {
                 overlays,

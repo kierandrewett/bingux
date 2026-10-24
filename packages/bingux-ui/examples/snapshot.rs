@@ -6,7 +6,9 @@
 mod pages;
 
 use bingux_ui::controls::text_field::text_field;
-use bingux_ui::prelude::{OverlayHost, sheet, use_overlays};
+use bingux_ui::prelude::{
+    OverlayHost, PopupAction, PopupActions, WindowHost, popup, use_popup_actions, use_window,
+};
 use bingux_ui::snapshot::{Snapshot, snapshot};
 use bingux_ui::style::{Paint, S3, Tw, bg, flex_col, gap};
 use bingux_ui::surface::use_tokens;
@@ -141,7 +143,7 @@ fn main() {
     Snapshot::new(
         move || {
             Element::from(Themed {
-                child: OverlayHost::new(SheetOpen { long: false }).into(),
+                child: WindowHost::new(OverlayHost::new(SheetOpen { long: false })).into(),
             })
         },
         size,
@@ -155,7 +157,7 @@ fn main() {
     Snapshot::new(
         move || {
             Element::from(Themed {
-                child: OverlayHost::new(SheetOpen { long: true }).into(),
+                child: WindowHost::new(OverlayHost::new(SheetOpen { long: true })).into(),
             })
         },
         size,
@@ -173,7 +175,7 @@ fn main() {
         Snapshot::new(
             move || {
                 Element::from(Themed {
-                    child: OverlayHost::new(FormSheetOpen { security }).into(),
+                    child: WindowHost::new(OverlayHost::new(FormSheetOpen { security })).into(),
                 })
             },
             size,
@@ -298,24 +300,12 @@ struct SheetOpen {
 
 impl Component for SheetOpen {
     fn render(&self) -> impl IntoElement {
-        let overlays = use_overlays();
+        let window = use_window();
         let tokens = use_tokens();
         let long = self.long;
         let name = use_state(String::new);
         use_side_effect(move || {
-            let mut body = rect()
-                .tw(&tokens, &[flex_col(), gap(S3)])
-                .child(text_field(name, |_| {}).placeholder("Network name"));
-            if long {
-                for index in 0..14 {
-                    body = body.child(label().text(format!("Row {index}")));
-                }
-            }
-            overlays.show_sheet(
-                sheet("Add a network", body)
-                    .primary("Save", move |_| overlays.close_sheet())
-                    .primary_enabled(!name.read().trim().is_empty()),
-            );
+            window.open(popup("Add a network", SheetOpenBody { name, long }));
         });
         rect()
             .expanded()
@@ -323,6 +313,37 @@ impl Component for SheetOpen {
             .child(Gallery {
                 initial: Page::Feedback,
             })
+    }
+}
+
+/// The body of the sheet opened by [`SheetOpen`].
+#[derive(PartialEq)]
+struct SheetOpenBody {
+    name: State<String>,
+    long: bool,
+}
+
+impl Component for SheetOpenBody {
+    fn render(&self) -> impl IntoElement {
+        let window = use_window();
+        let tokens = use_tokens();
+        let name = self.name;
+        use_popup_actions(PopupActions {
+            primary: Some(PopupAction {
+                label: "Save".into(),
+                enabled: !name.read().trim().is_empty(),
+                on_press: EventHandler::new(move |_: ()| window.close()),
+            }),
+        });
+        let mut body = rect()
+            .tw(&tokens, &[flex_col(), gap(S3)])
+            .child(text_field(name, |_| {}).placeholder("Network name"));
+        if self.long {
+            for index in 0..14 {
+                body = body.child(label().text(format!("Row {index}")));
+            }
+        }
+        body
     }
 }
 
@@ -335,7 +356,7 @@ struct FormSheetOpen {
 
 impl Component for FormSheetOpen {
     fn render(&self) -> impl IntoElement {
-        let overlays = use_overlays();
+        let window = use_window();
         let tokens = use_tokens();
         let security = self.security;
         let name = use_state(String::new);
@@ -344,8 +365,8 @@ impl Component for FormSheetOpen {
         let password = use_state(String::new);
         let auto_connect = use_state(|| true);
         use_side_effect(move || {
-            overlays.show_sheet(
-                sheet(
+            window.open(
+                popup(
                     "Add a network",
                     pages::FormDemoBody {
                         name,
@@ -355,9 +376,7 @@ impl Component for FormSheetOpen {
                         auto_connect,
                     },
                 )
-                .tabs(pages::FormDemoTabs { tab })
-                .primary("Save", move |_| overlays.close_sheet())
-                .primary_enabled(!name.read().trim().is_empty()),
+                .tabs(pages::FormDemoTabs { tab }),
             );
         });
         rect()

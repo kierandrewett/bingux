@@ -160,7 +160,7 @@ pub const MENU_ITEM: Recipe = &[
     gap(S3),
     rounded(Radius::Control),
 ];
-/// A dialog or sheet card.
+/// A dialog or popup card.
 pub const DIALOG: Recipe = &[
     flex_col(),
     p(S6),
@@ -201,15 +201,25 @@ pub const SIDEBAR_SEARCH: Recipe = &[
     h(Dim::Header),
     px(S2),
 ];
-/// A page in the sidebar list.
+/// A row in the sidebar: a page, the profile or a search result.
 pub const NAV_ITEM: Recipe = &[
     flex_row(),
     items(Align::Center),
     w_full(),
     h(Dim::NavItem),
-    px(S3),
-    gap(S3),
+    px(S2),
+    gap(S2),
     rounded(Radius::Control),
 ];
+/// The icon column of a sidebar row: a box of the column width with the icon centred.
+pub const NAV_ICON: Recipe = &[
+    flex_row(),
+    items(Align::Center),
+    center(),
+    w(Dim::NavIcon),
+    h(Dim::NavIcon),
+];
+/// The hairline between the sidebar and the page, full height.
+pub const SPLIT_HAIRLINE: Recipe = &[w(Dim::Hairline), h_full(), bg(Paint::Separator)];
 /// The name of a group of pages in the sidebar.
-pub const NAV_LABEL: Recipe = &[w_full(), px(S3), pt(S4), pb(S1)];
+pub const NAV_LABEL: Recipe = &[w_full(), px(S2), pt(S4), pb(S1)];

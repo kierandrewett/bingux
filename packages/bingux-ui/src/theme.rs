@@ -6,6 +6,7 @@
 //! Nothing outside this module hard-codes a colour, size, radius or duration;
 //! components read them from [`Tokens`].
 
+use crate::task::use_resource;
 use freya::prelude::*;
 
 /// The shell's own font.
@@ -144,41 +145,45 @@ pub struct Tokens {
 
 impl Tokens {
     /// Builds the palette for an accent name and colour scheme.
+    ///
+    /// The layers follow GNOME: the content is the base layer, the sidebar
+    /// sits one step off it, and the group cards, controls and popups step
+    /// up from there. Hover, press and selection are white (dark) or black
+    /// (light) overlays, so they read on every layer.
     pub fn new(accent_name: &'static str, scheme: Scheme, reduced_motion: bool) -> Self {
         let accent = accent_for(accent_name, scheme.is_dark());
+        let p = if scheme.is_dark() {
+            Palette::dark()
+        } else {
+            Palette::light()
+        };
         Self {
             accent,
             accent_name,
             scheme,
             reduced_motion,
-            // The shell's flat surfaces (`flatSurfaces` in Theme.qml), computed
-            // once: popupSurface is the window, shellSurface the sidebar and
-            // elevated the group cards, buttons and fields.
-            bg: rgba(0.1716, 0.1716, 0.1716, 1.0),
-            surface: rgba(0.1716, 0.1716, 0.1716, 1.0),
-            sidebar: rgba(0.0960, 0.0960, 0.0960, 1.0),
-            elevated: rgba(0.2054, 0.2054, 0.2109, 1.0),
-            control: rgba(0.2560, 0.2560, 0.2629, 1.0),
-            separator: rgba(0.980, 0.980, 0.980, 0.08),
-            card: rgba(0.2054, 0.2054, 0.2109, 1.0),
-            // State layers drawn over any base, as ControlCentreButtonSurface
-            // does: hover 0.34 at 0.42, pressed 0.46 at 0.72, selected 0.28
-            // at 0.44.
-            hover: rgba(0.42, 0.42, 0.44, 0.1428),
-            pressed: rgba(0.52, 0.52, 0.54, 0.3312),
-            selection: rgba(1.0, 1.0, 1.0, 0.09),
-            border: rgba(1.0, 1.0, 1.0, 1.0),
-            outline: rgba(0.314, 0.314, 0.314, 0.75),
-            text: rgba(0.980, 0.980, 0.980, 1.0),
-            muted: rgba(0.690, 0.690, 0.690, 1.0),
-            bar_divider: rgba(0.980, 0.980, 0.980, 0.08),
-            success: rgba(0.561, 0.941, 0.643, 1.0),
-            warning: rgba(0.976, 0.941, 0.420, 1.0),
-            danger: rgba(1.0, 0.482, 0.388, 1.0),
+            bg: p.content,
+            surface: p.content,
+            sidebar: p.sidebar,
+            elevated: p.card,
+            control: p.control,
+            separator: p.separator,
+            card: p.card,
+            hover: p.hover,
+            pressed: p.pressed,
+            selection: p.selection,
+            border: p.border,
+            outline: p.outline,
+            text: p.text,
+            muted: p.muted,
+            bar_divider: p.separator,
+            success: p.success,
+            warning: p.warning,
+            danger: p.danger,
             accent_foreground: rgba(1.0, 1.0, 1.0, 1.0),
             tooltip_surface: rgba(0.12, 0.12, 0.13, 0.82),
             tooltip_outline: rgba(1.0, 1.0, 1.0, 0.16),
-            popover: rgba(0.2054, 0.2054, 0.2109, 1.0),
+            popover: p.popup,
         }
     }
 
@@ -186,6 +191,82 @@ impl Tokens {
     pub fn motion(&self, ms: u64) -> u64 {
         if self.reduced_motion { 0 } else { ms }
     }
+}
+
+/// The surface and ink colours of one colour scheme.
+struct Palette {
+    /// Page content and the header bar: the base layer.
+    content: Color,
+    /// Sidebar, one step off the content.
+    sidebar: Color,
+    /// Group cards on a page.
+    card: Color,
+    /// Buttons, fields and dropdowns sitting on a card.
+    control: Color,
+    /// Dialogs, popovers and menus: the topmost opaque layer, the
+    /// `Tokens::popover` surface.
+    popup: Color,
+    separator: Color,
+    hover: Color,
+    pressed: Color,
+    selection: Color,
+    border: Color,
+    outline: Color,
+    text: Color,
+    muted: Color,
+    success: Color,
+    warning: Color,
+    danger: Color,
+}
+
+impl Palette {
+    fn dark() -> Self {
+        Self {
+            content: hex(0x222226),
+            sidebar: hex(0x2e2e32),
+            card: hex(0x343438),
+            control: hex(0x424246),
+            popup: hex(0x3a3a3e),
+            separator: rgba(1.0, 1.0, 1.0, 0.08),
+            hover: rgba(1.0, 1.0, 1.0, 0.06),
+            pressed: rgba(1.0, 1.0, 1.0, 0.10),
+            selection: rgba(1.0, 1.0, 1.0, 0.10),
+            border: rgba(1.0, 1.0, 1.0, 1.0),
+            outline: rgba(0.314, 0.314, 0.314, 0.75),
+            text: rgba(0.980, 0.980, 0.980, 0.98),
+            muted: rgba(1.0, 1.0, 1.0, 0.69),
+            success: hex(0x8ff0a4),
+            warning: hex(0xf9f06b),
+            danger: hex(0xff7b63),
+        }
+    }
+
+    fn light() -> Self {
+        Self {
+            content: hex(0xfafafb),
+            sidebar: hex(0xebebed),
+            card: hex(0xffffff),
+            control: hex(0xf1f1f3),
+            popup: hex(0xffffff),
+            separator: rgba(0.0, 0.0, 0.0, 0.10),
+            hover: rgba(0.0, 0.0, 0.0, 0.05),
+            pressed: rgba(0.0, 0.0, 0.0, 0.08),
+            selection: rgba(0.0, 0.0, 0.0, 0.08),
+            border: rgba(0.0, 0.0, 0.0, 1.0),
+            outline: rgba(0.0, 0.0, 0.0, 0.20),
+            text: hex(0x2e2e32),
+            muted: hex(0x6b6b70),
+            success: hex(0x26a269),
+            warning: hex(0xcd9309),
+            danger: hex(0xc01c28),
+        }
+    }
+}
+
+/// An opaque colour from a 0xRRGGBB value.
+fn hex(value: u32) -> Color {
+    let channel = |shift: u32| ((value >> shift) & 0xff) as f32 / 255.0;
+    rgba(channel(16), channel(8), channel(0), 1.0)
 }
 
 /// Reads `BINGUX_REDUCED_MOTION=1` from the environment.
@@ -221,10 +302,29 @@ pub fn load_tokens() -> Tokens {
     let accent = read_gsettings("accent-color")
         .map(|raw| normalise_accent(&raw))
         .unwrap_or(DEFAULT_ACCENT);
-    let scheme = read_gsettings("color-scheme")
+    // The snapshot harness pins the scheme so both palettes can be rendered
+    // without changing the desktop setting.
+    let scheme = std::env::var("BINGUX_SETTINGS_SNAPSHOT_SCHEME")
+        .ok()
         .map(|raw| Scheme::from_gsettings(&raw))
+        .or_else(|| read_gsettings("color-scheme").map(|raw| Scheme::from_gsettings(&raw)))
         .unwrap_or(Scheme::PreferDark);
     Tokens::new(accent, scheme, reduced_motion_from_env())
+}
+
+/// Tokens shown until the GNOME settings have been read on the task pool.
+/// The default accent and dark scheme match the shell's own defaults.
+fn startup_tokens() -> Tokens {
+    Tokens::new(
+        DEFAULT_ACCENT,
+        Scheme::PreferDark,
+        reduced_motion_from_env(),
+    )
+}
+
+/// Pool job for [`provide_tokens`]: reads the settings with `gsettings`.
+fn load_settings_tokens(_: ()) -> Result<Tokens, String> {
+    Ok(load_tokens())
 }
 
 /// Shared, live palette for the whole window. Pages that change the accent
@@ -237,8 +337,17 @@ pub struct SharedTokens(pub State<Tokens>);
 /// Freya's component theme and follows live accent changes. Call once in
 /// the window root's `render`; it uses hooks. Returns the current tokens.
 pub fn provide_tokens() -> Tokens {
-    let tokens = use_hook(|| SharedTokens(State::create(load_tokens())));
+    let tokens = use_hook(|| SharedTokens(State::create(startup_tokens())));
     use_hook(move || watch_appearance(tokens.0));
+    let loaded = use_resource((), load_settings_tokens);
+    let mut shared = tokens.0;
+    use_side_effect(move || {
+        loaded.with(|resource| {
+            if let Some(next) = resource.value() {
+                shared.set_if_modified(*next);
+            }
+        });
+    });
     use_provide_root_context(|| tokens);
     let current = *tokens.0.read();
     let mut theme_state = use_init_theme(|| freya_theme(&current));
@@ -252,7 +361,8 @@ pub fn provide_tokens() -> Tokens {
 /// Builds Freya's component theme from the tokens so built-in controls
 /// (switches, sliders, selects, inputs) use the Bingux palette.
 pub fn freya_theme(tokens: &Tokens) -> Theme {
-    let mut theme = dark_theme();
+    let dark = tokens.scheme.is_dark();
+    let mut theme = if dark { dark_theme() } else { light_theme() };
     let accent = tokens.accent;
     theme.colors = ColorsSheet {
         primary: accent,
@@ -263,9 +373,9 @@ pub fn freya_theme(tokens: &Tokens) -> Theme {
         error: tokens.danger,
         info: accent,
         background: tokens.bg,
-        surface_primary: rgba(0.27, 0.27, 0.28, 1.0),
-        surface_secondary: rgba(0.22, 0.22, 0.23, 1.0),
-        surface_tertiary: rgba(0.16, 0.16, 0.17, 1.0),
+        surface_primary: tokens.card,
+        surface_secondary: tokens.control,
+        surface_tertiary: tokens.sidebar,
         surface_inverse: rgba(0.78, 0.78, 0.78, 1.0),
         surface_inverse_secondary: rgba(0.85, 0.85, 0.85, 1.0),
         surface_inverse_tertiary: rgba(0.92, 0.92, 0.92, 1.0),
@@ -275,7 +385,11 @@ pub fn freya_theme(tokens: &Tokens) -> Theme {
         text_primary: tokens.text,
         text_secondary: tokens.muted,
         text_placeholder: tokens.muted.with_a(170),
-        text_inverse: rgba(0.08, 0.08, 0.08, 1.0),
+        text_inverse: if dark {
+            rgba(0.08, 0.08, 0.08, 1.0)
+        } else {
+            rgba(1.0, 1.0, 1.0, 1.0)
+        },
         text_highlight: accent,
         focus: accent,
         active: tokens.pressed,

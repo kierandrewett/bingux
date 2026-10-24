@@ -1,6 +1,6 @@
 //! About: the device, its operating system and the hardware it runs on. The
 //! facts are read once in the background when the page opens. The device name
-//! can be changed in a sheet, and every fact can be copied as text.
+//! can be changed in a popup, and every fact can be copied as text.
 
 use std::time::Duration;
 
@@ -11,9 +11,10 @@ use crate::system::{self, CommandResult};
 use crate::theme::Tokens;
 use crate::ui::typography::{CAPTION, EMPHASIS, Ink, TITLE, VALUE};
 use crate::ui::{
-    Group, Icon, Overlays, Status, action_button, caption, form_row, icon, menu_item, page_column,
-    property_row, section_label, sheet, sheet_column, status, text_field, usage_meter,
-    use_overlays, use_page_busy, use_tokens,
+    Group, Icon, Overlays, PopupAction, PopupActions, Status, Window, action_button, caption,
+    form_row, icon, menu_item, page_column, popup, popup_column, property_row, section_label,
+    status, text_field, usage_meter, use_overlays, use_page_busy, use_popup_actions, use_tokens,
+    use_window,
 };
 
 /// How long `hostnamectl` may take to write the new name.
@@ -429,24 +430,21 @@ struct RenameSheet {
 
 impl RenameSheet {
     /// Opens the sheet with `name` in its field.
-    fn open(self, name: String) {
+    fn open(self, name: String, window: Window) {
         let mut draft = self.draft;
         let mut error = self.error;
         draft.set(name);
         error.set(None);
-        self.show();
+        self.show(window);
     }
 
-    fn show(self) {
-        self.overlays.show_sheet(
-            sheet("Device name", RenameBody { sheet: self })
-                .primary("Rename", move |_| self.submit()),
-        );
+    fn show(self, window: Window) {
+        window.open(popup("Device name", RenameBody { sheet: self }));
     }
 
     /// Checks the name, then writes it in the background. The hero shows the
     /// new name at once; a failure puts the old one back and says why.
-    fn submit(self) {
+    fn submit(self, window: Window) {
         let name = self.draft.read().trim().to_string();
         let mut error = self.error;
         if let Err(problem) = valid_hostname(&name) {
@@ -464,7 +462,7 @@ impl RenameSheet {
                     .map(|facts| facts.hostname.clone())
             })
             .unwrap_or_default();
-        self.overlays.close_sheet();
+        window.close();
         error.set(None);
         system::optimistic(
             self.shown,
@@ -507,9 +505,17 @@ struct RenameBody {
 impl Component for RenameBody {
     fn render(&self) -> impl IntoElement {
         let sheet = self.sheet;
-        let field = text_field(sheet.draft, move |_: String| sheet.submit());
+        let window = use_window();
+        use_popup_actions(PopupActions {
+            primary: Some(PopupAction {
+                label: "Rename".into(),
+                enabled: true,
+                on_press: EventHandler::new(move |_: ()| sheet.submit(window)),
+            }),
+        });
+        let field = text_field(sheet.draft, move |_: String| sheet.submit(window));
         let error = sheet.error.read().clone();
-        sheet_column()
+        popup_column()
             .child(Group::new(None::<String>).row(form_row("Device name", field)))
             .child(caption(
                 "Other devices on your network use this name. Letters, numbers and hyphens, up to 63 characters.",
@@ -525,6 +531,7 @@ impl Component for AboutPage {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let overlays = use_overlays();
+        let window = use_window();
         let model = system::use_cached("about", collect);
         let shown = use_state(|| None::<String>);
         let draft = use_state(String::new);
@@ -610,7 +617,9 @@ impl Component for AboutPage {
                 .child(
                     rect()
                         .tw(&tokens, &[flex_row(), gap(S2)])
-                        .child(action_button("Rename", move |_| rename.open(name.clone())))
+                        .child(action_button("Rename", move |_| {
+                            rename.open(name.clone(), window)
+                        }))
                         .child(
                             action_button("Copy system info", move |_| {
                                 copy(copy_text.clone(), overlays)

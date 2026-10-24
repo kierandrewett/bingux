@@ -5,7 +5,6 @@ pub mod menu;
 pub mod navigation;
 pub mod overlays;
 pub mod sections;
-pub mod sheet;
 pub mod status_page;
 pub mod window;
 
@@ -17,6 +16,5 @@ pub use navigation::{
 pub use overlays::{
     Dialog, DialogResponse, OverlayHost, Overlays, ResponseKind, Toast, dialog, use_overlays,
 };
-pub use sheet::{Sheet, SheetAction, sheet};
 pub use status_page::{Banner, BannerKind, StatusPage, banner, status_page};
 pub use window::{HeaderBar, WindowControls, drag_on_pointer_down, with_window};

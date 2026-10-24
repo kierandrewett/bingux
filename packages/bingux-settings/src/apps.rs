@@ -193,6 +193,17 @@ pub fn installed() -> Vec<AppEntry> {
     rescan()
 }
 
+/// The name of application `app_id` if the list is already read, without
+/// reading it. A deep link names its page with this, so it never waits on the
+/// desktop files; `None` means the name is not known yet.
+pub fn cached_name(app_id: &str) -> Option<String> {
+    let list = LIST.lock().ok()?;
+    let (_, apps) = list.as_ref()?;
+    apps.iter()
+        .find(|app| app.id == app_id)
+        .map(|app| app.name.clone())
+}
+
 /// Read every desktop file now and replace the reused list.
 pub fn rescan() -> Vec<AppEntry> {
     let apps = read_installed();

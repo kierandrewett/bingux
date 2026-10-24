@@ -16,9 +16,10 @@ use crate::system::{
     self, CommandError, CommandResult, background, background_then, optimistic_then,
 };
 use crate::ui::{
-    Group, Overlays, Status, caption, choice_row, page_column, row, row_button, search_field,
-    sheet, sheet_column, skeleton, slider_row, status, switch_row, text_field, use_overlays,
+    Group, Overlays, Status, caption, choice_row, page_column, popup_column, row, row_button,
+    search_field, skeleton, slider_row, status, switch_row, text_field, use_overlays,
 };
+use bingux_ui::prelude::{Window, popup, use_window};
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 
 mod input_source;
@@ -278,6 +279,7 @@ struct SourceEdits {
     state: State<Option<Result<SourcesConfig, String>>>,
     catalog: State<Option<Vec<(Source, String)>>>,
     overlays: Overlays,
+    window: Window,
     busy: State<bool>,
 }
 
@@ -311,8 +313,8 @@ impl SourceEdits {
 /// Opens the sheet that adds a source from the catalogue.
 fn open_add_sheet(edits: SourceEdits) {
     edits
-        .overlays
-        .show_sheet(sheet("Add an input source", AddBody { edits }));
+        .window
+        .open(popup("Add an input source", AddBody { edits }));
 }
 
 /// The most catalogue rows the add sheet lists at once. The rest are one
@@ -329,18 +331,19 @@ struct AddBody {
 impl Component for AddBody {
     fn render(&self) -> impl IntoElement {
         let edits = self.edits;
+        let window = use_window();
         let query = use_state(String::new);
         let config = match edits.state.read().clone() {
             Some(Ok(config)) => config,
             Some(Err(message)) => {
-                return Element::from(sheet_column().child(status(Status::Error(message))));
+                return Element::from(popup_column().child(status(Status::Error(message))));
             }
-            None => return Element::from(sheet_column().child(skeleton())),
+            None => return Element::from(popup_column().child(skeleton())),
         };
         // Borrowed, not cloned: the catalogue has hundreds of entries.
         let catalog_guard = edits.catalog.read();
         let Some(catalog) = &*catalog_guard else {
-            return Element::from(sheet_column().child(skeleton()));
+            return Element::from(popup_column().child(skeleton()));
         };
         let needle = query.read().trim().to_lowercase();
         let matches: Vec<&(Source, String)> = catalog
@@ -353,7 +356,7 @@ impl Component for AddBody {
             })
             .collect();
         let total = matches.len();
-        let mut column = sheet_column().child(search_field(query, |_| {}).fill_width());
+        let mut column = popup_column().child(search_field(query, |_| {}).fill_width());
         if total == 0 {
             let message = if needle.is_empty() {
                 "Every input source is already in the list."
@@ -372,7 +375,7 @@ impl Component for AddBody {
                         .subtitle(kind_label(&source.kind))
                         .on_press(move |_| {
                             edits.run(Edit::Add(add.clone()));
-                            edits.overlays.close_sheet();
+                            window.close();
                         })
                         .into()
                 });
@@ -542,6 +545,7 @@ impl Component for KeyboardPage {
         let catalog_state = system::use_cached("keyboard-catalog", sources::catalog);
         let sources_busy = use_state(|| false);
         let overlays = use_overlays();
+        let window = use_window();
         let navigator = use_navigator();
         let try_text = use_state(String::new);
         // Snapshot only: BINGUX_SETTINGS_SNAPSHOT_OPEN=add-input opens the
@@ -555,6 +559,7 @@ impl Component for KeyboardPage {
                         state: sources_state,
                         catalog: catalog_state,
                         overlays,
+                        window,
                         busy: sources_busy,
                     });
                 });
@@ -817,6 +822,7 @@ impl Component for KeyboardPage {
             state: sources_state,
             catalog: catalog_state,
             overlays,
+            window,
             busy: sources_busy,
         };
         let busy = *sources_busy.read();

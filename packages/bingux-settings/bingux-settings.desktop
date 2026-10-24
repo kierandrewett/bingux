@@ -2,35 +2,36 @@
 Type=Application
 Name=Settings
 Comment=Change Bingux and system settings
-Exec=bingux-settings
+Exec=bingux-settings %u
 Icon=bingux-settings
 Terminal=false
 Categories=Settings;DesktopSettings;
 Keywords=Preferences;Configuration;Appearance;Display;Sound;Network;Bluetooth;Power;Keyboard;Mouse;
+MimeType=x-scheme-handler/bingux-settings;
 StartupWMClass=bingux-settings
 StartupNotify=true
 Actions=Network;Bluetooth;Displays;Sound;Appearance;Power;
 
 [Desktop Action Network]
 Name=Network
-Exec=bingux-settings network
+Exec=bingux-settings bingux-settings://wifi
 
 [Desktop Action Bluetooth]
 Name=Bluetooth
-Exec=bingux-settings bluetooth
+Exec=bingux-settings bingux-settings://bluetooth
 
 [Desktop Action Displays]
 Name=Displays
-Exec=bingux-settings display
+Exec=bingux-settings bingux-settings://display
 
 [Desktop Action Sound]
 Name=Sound
-Exec=bingux-settings sound
+Exec=bingux-settings bingux-settings://sound
 
 [Desktop Action Appearance]
 Name=Appearance
-Exec=bingux-settings background
+Exec=bingux-settings bingux-settings://background
 
 [Desktop Action Power]
 Name=Power
-Exec=bingux-settings power
+Exec=bingux-settings bingux-settings://power

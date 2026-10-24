@@ -1,6 +1,6 @@
 //! Tabs: a row of equal tabs on a quiet rail where the selected tab is raised,
 //! as the segmented control and GNOME's view switcher. Unlike the segmented
-//! control it fills its width and stays a rail on a phone, so a sheet can
+//! control it fills its width and stays a rail on a phone, so a popup can
 //! use it to switch between pages of one form. The row uses a roving tab stop: only the selected
 //! tab takes focus from Tab and Shift+Tab. Left and Right arrows move the
 //! selection and focus to the neighbouring tab, and Home and End go to the

@@ -436,6 +436,7 @@ impl Component for FeedbackPage {
         let sheet_security = use_state(|| "personal".to_string());
         let sheet_password = use_state(String::new);
         let sheet_auto = use_state(|| true);
+        let window = use_window();
         let overlays = use_overlays();
         page_column()
         .child(Group::new("Skeleton".to_string()).description("Shown for a page before its data has arrived.".to_string()))
@@ -479,9 +480,9 @@ impl Component for FeedbackPage {
                     row("Banner").trailing(action_button("Show again", move |_| notice.set(true)).compact()),
                 )
                 .row(
-                    row("Sheet").trailing(action_button("Open", move |_| {
-                        overlays.show_sheet(
-                            sheet(
+                    row("Popup").trailing(action_button("Open", move |_| {
+                        window.open(
+                            popup(
                                 "Add a network",
                                 FormDemoBody {
                                     name: sheet_name,
@@ -491,10 +492,8 @@ impl Component for FeedbackPage {
                                     auto_connect: sheet_auto,
                                 },
                             )
-                            .tabs(FormDemoTabs { tab: sheet_tab })
-                            .primary("Save", move |_| overlays.close_sheet())
-                            .primary_enabled(!sheet_name.read().trim().is_empty()),
-                        )
+                            .tabs(FormDemoTabs { tab: sheet_tab }),
+                        );
                     })
                     .compact()),
                 )
@@ -834,11 +833,20 @@ pub struct FormDemoBody {
 
 impl Component for FormDemoBody {
     fn render(&self) -> impl IntoElement {
+        let window = use_window();
+        let name = self.name;
+        use_popup_actions(PopupActions {
+            primary: Some(PopupAction {
+                label: "Save".into(),
+                enabled: !name.read().trim().is_empty(),
+                on_press: EventHandler::new(move |_: ()| window.close()),
+            }),
+        });
         let tab = self.tab;
         let mut security = self.security;
         let mut auto_connect = self.auto_connect;
         if tab.read().as_str() == "security" {
-            sheet_column().child(
+            popup_column().child(
                 Group::new(None::<String>)
                     .row(form_row(
                         "Security",
@@ -857,7 +865,7 @@ impl Component for FormDemoBody {
                     )),
             )
         } else {
-            sheet_column().child(
+            popup_column().child(
                 Group::new(None::<String>)
                     .row(form_row(
                         "Network name",

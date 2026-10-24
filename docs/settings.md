@@ -16,15 +16,38 @@ with a page name starts on that page.
 
 - Search for "Settings" or open it from the dock and the Control Centre.
 - Right-click the wallpaper for Change Background… or Display Settings.
-- From a terminal: `bingux-settings [PANEL]` or `binguxctl settings [PANEL]`.
+- From a terminal: `bingux-settings [ADDRESS]` or `binguxctl settings [ADDRESS]`.
+- From a link or `xdg-open`: `xdg-open bingux-settings://wifi/saved`. The desktop entry registers the `bingux-settings` scheme.
 
 Panels: `network`, `bluetooth`, `background` (Appearance), `desktop`,
 `search`, `display`, `sound`, `power`, `keyboard`, `mouse`, `datetime`,
 `users`, `applications`, `about`. An unknown or omitted panel opens the
-first page. `PANEL/SUBPAGE` opens a subpage: `applications/default` opens
-Default applications, and `applications/` followed by an application's
-desktop id, for example `applications/org.gnome.Nautilus`, opens that
-application.
+first page. An address names a page or a subpage. The scheme and the
+`bingux-settings://` prefix may be left off on the command line:
+
+| Address                       | Opens                                                                |
+| ----------------------------- | -------------------------------------------------------------------- |
+| `wifi`                        | Wi-Fi page                                                           |
+| `wifi/saved`                  | Saved networks subpage                                               |
+| `wifi/network/<ssid>`         | A Wi-Fi network's details                                            |
+| `wired/<device>`              | A wired connection's details                                         |
+| `wired/vpn/<name>`            | A VPN's details                                                      |
+| `bluetooth/<mac>`             | A Bluetooth device's details                                         |
+| `applications/default`        | Default applications                                                 |
+| `applications/default/<kind>` | One default application kind, such as `applications/default/browser` |
+| `applications/<desktop-id>`   | An application, for example `applications/org.gnome.Nautilus`        |
+| `display/<index>`             | A display's details                                                  |
+| `keyboard/shortcuts`          | Shortcuts                                                            |
+| `keyboard/input/<kind>/<id>`  | An input source's subpage                                            |
+| `datetime/timezone`           | Time zone                                                            |
+| `background/font`             | Font                                                                 |
+| `users/<path>`                | A user account                                                       |
+
+Only one Settings window runs at a time. A second `bingux-settings` with an
+address sends that address to the running window over
+`$XDG_RUNTIME_DIR/bingux-settings.sock`; the window navigates there, raises
+itself, and the second process exits. A socket left by a crashed instance
+is replaced.
 
 Set `BINGUX_REDUCED_MOTION=1` to disable animations.
 
@@ -81,9 +104,9 @@ and its battery level. Forget asks first and returns to the list when the
 device is gone. A device with no name shows as Unnamed device.
 
 Users lists the accounts that AccountsService knows, with the signed-in person first. Each account is a row with its avatar, its full name, and its user name and type underneath (the type alone when the account has no full name). Pressing a row opens that account's page, titled with the account's name. The list and the account page show the data loaded last time at once, and a skeleton on first open.
-The account page opens with a large initials tile, the full name and the account type. Account is one group: Full name, User name, Account type, Automatic login and Account locked. Full name is one row with the name on the right. Pressing it opens a sheet titled Change full name, with a Full name row and a Change button. A new name shows at once and is written in the background. If the write fails, the old name comes back and a toast says why.
+The account page opens with a large initials tile, the full name and the account type. Account is one group: Full name, User name, Account type, Automatic login and Account locked. Full name is one row with the name on the right. Pressing it opens a popup titled Change full name, with a Full name row and a Change button. A new name shows at once and is written in the background. If the write fails, the old name comes back and a toast says why.
 
-Password appears only on the signed-in account. It is one row, Your password, with a Change password button. The button opens a sheet titled Change password, with a caption, Current, New and Retype rows and a Change button. While the change runs the sheet stays open with a "Changing your password..." line, and a second press is ignored. If the new passwords differ a caption says so as you type. A failed change keeps the fields and shows the reason in the sheet; success closes the sheet and a toast confirms it.
+Password appears only on the signed-in account. It is one row, Your password, with a Change password button. The button opens a popup titled Change password, with a caption, Current, New and Retype rows and a Change button. While the change runs the popup stays open with a "Changing your password..." line, and a second press is ignored. If the new passwords differ a caption says so as you type. A failed change keeps the fields and shows the reason in the popup; success closes the popup and a toast confirms it.
 Each account row has a right-click menu with Open, and Change password for the signed-in account. If the list cannot load, the page shows the error with a Try again action.
 
 Wi-Fi opens Network details from the settings button on a saved or connected
@@ -95,7 +118,7 @@ editor with the address, DNS and security tabs. Below the strip are the signal
 strength in words, the frequency band, the security and the speed.
 Date and Time opens the time zone as a searchable list of cities. The
 zone list shows each UTC offset only for
-the selected zone. Set date and time opens a sheet with Date (day, month and
+the selected zone. Set date and time opens a popup with Date (day, month and
 year) and Time (hour and minute) rows and a Set button.
 The switches on the Date and time page and the clock format row also have a
 right-click menu with the same change.
@@ -111,20 +134,20 @@ Settings has no store of its own. Every page reads and writes the system
 that owns the setting, so changes made elsewhere show up here and the other
 way round.
 
-| Page            | Backend                                                                                                                                                                                   | Notes                                                                                                                                                                                                                                                                                                                |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Appearance      | `bingux-config desktop.wallpaper`, `appearance.font_family`, GSettings `org.gnome.desktop.interface`                                                                                      | The font is picked from the installed families on a subpage. Accent colour and colour scheme are the keys GTK apps and the portal read, and are hidden without gsettings.                                                                                                                                            |
-| Desktop, Search | `bingux-config` (`~/.config/bingux/bingux.toml`)                                                                                                                                          | Same validation as `bingux-config set`. See [configuration](configuration.md).                                                                                                                                                                                                                                       |
-| Displays        | `org.gnome.Mutter.DisplayConfig` over D-Bus, GSettings night light                                                                                                                        | Drag a display to place it; right-click it for Make main, Rotate, Disable or Settings. Apply tries the layout for 15 seconds and reverts unless kept; Keep writes a persistent layout (`~/.config/monitors.xml`). Each display is a row that opens its own page. Night light can follow a schedule.                  |
-| Sound           | `wpctl` (WirePlumber)                                                                                                                                                                     | Default devices (inline list, or a subpage with three or more), device kind icons from device properties, volumes, mute, and a row for each application.                                                                                                                                                             |
-| Network         | `nmcli` (NetworkManager)                                                                                                                                                                  | Wi-Fi, airplane mode. Each wired connection and each VPN is a row that opens its details subpage, with the same connect and disconnect actions as its right-click menu.                                                                                                                                              |
-| Bluetooth       | `bluetoothctl` (BlueZ)                                                                                                                                                                    | Power, visibility, scan, pair, connect, auto-connect, forget. Each device is a row that opens its Device details subpage.                                                                                                                                                                                            |
-| Power           | `powerprofilesctl`, `upower`, GSettings session and screensaver                                                                                                                           | Blank screen and lock delays. The power mode cards apply at once and go back if the change is refused.                                                                                                                                                                                                               |
-| Keyboard, Mouse | GSettings `org.gnome.desktop.peripherals.*`, `gnoblinctl input`                                                                                                                           | See the note below.                                                                                                                                                                                                                                                                                                  |
-| Date and Time   | `timedatectl`, GSettings clock format, `bingux-config desktop.clock_seconds`                                                                                                              | Time zone and manual time may ask for authorisation.                                                                                                                                                                                                                                                                 |
-| Users           | AccountsService over D-Bus                                                                                                                                                                | Full name changes may ask for authorisation.                                                                                                                                                                                                                                                                         |
-| Applications    | Desktop entries in `XDG_DATA_DIRS`, `gio mime`, `wpctl`                                                                                                                                   | Installed applications with their icons, a page for each, and the default application for each kind of file.                                                                                                                                                                                                         |
-| About           | `/etc/os-release`, DMI (`/sys/devices/virtual/dmi/id`), `/proc/cpuinfo`, `/proc/meminfo`, `lspci`, `/sys/class/drm`, `/proc/uptime`, `df`, `uname`, `gnoblinctl --version`, `hostnamectl` | Facts load in the background, and each tile shows a bar until its value arrives. The device card renames the device through `hostnamectl`, which may ask for authorisation, and copies a summary of every fact. Hardware and software values copy on right-click. Storage is the space used on the root file system. |
+| Page            | Backend                                                                                                                                                                                   | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Appearance      | `bingux-config desktop.wallpaper`, `appearance.font_family`, GSettings `org.gnome.desktop.interface`                                                                                      | The font is picked from the installed families on a subpage. Accent colour and colour scheme are the keys GTK apps and the portal read, and are hidden without gsettings.                                                                                                                                                                                                                                                                                                              |
+| Desktop, Search | `bingux-config` (`~/.config/bingux/bingux.toml`)                                                                                                                                          | Same validation as `bingux-config set`. See [configuration](configuration.md).                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Displays        | `org.gnome.Mutter.DisplayConfig` over D-Bus, GSettings night light                                                                                                                        | Drag a display to place it; right-click it for Make main, Rotate, Disable or Settings. Apply appears under the arrangement, and on a display's own page, only once the layout has changed. It tries the layout for 15 seconds and reverts unless kept; Keep writes a persistent layout (`~/.config/monitors.xml`). Each display is a row that opens its own page. With several displays, Identify sits on the Displays header and numbers each one. Night light can follow a schedule. |
+| Sound           | `wpctl` (WirePlumber)                                                                                                                                                                     | Default devices (inline list, or a subpage with three or more), device kind icons from device properties, volumes, mute, and a row for each application.                                                                                                                                                                                                                                                                                                                               |
+| Network         | `nmcli` (NetworkManager)                                                                                                                                                                  | Wi-Fi, airplane mode. Each wired connection and each VPN is a row that opens its details subpage, with the same connect and disconnect actions as its right-click menu.                                                                                                                                                                                                                                                                                                                |
+| Bluetooth       | `bluetoothctl` (BlueZ)                                                                                                                                                                    | Power, visibility, scan, pair, connect, auto-connect, forget. Each device is a row that opens its Device details subpage.                                                                                                                                                                                                                                                                                                                                                              |
+| Power           | `powerprofilesctl`, `upower`, GSettings session and screensaver                                                                                                                           | Blank screen and lock delays. The power mode cards apply at once and go back if the change is refused.                                                                                                                                                                                                                                                                                                                                                                                 |
+| Keyboard, Mouse | GSettings `org.gnome.desktop.peripherals.*`, `gnoblinctl input`                                                                                                                           | See the note below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Date and Time   | `timedatectl`, GSettings clock format, `bingux-config desktop.clock_seconds`                                                                                                              | Time zone and manual time may ask for authorisation.                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Users           | AccountsService over D-Bus                                                                                                                                                                | Full name changes may ask for authorisation.                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Applications    | Desktop entries in `XDG_DATA_DIRS`, `gio mime`, `wpctl`                                                                                                                                   | Installed applications with their icons, a page for each, and the default application for each kind of file.                                                                                                                                                                                                                                                                                                                                                                           |
+| About           | `/etc/os-release`, DMI (`/sys/devices/virtual/dmi/id`), `/proc/cpuinfo`, `/proc/meminfo`, `lspci`, `/sys/class/drm`, `/proc/uptime`, `df`, `uname`, `gnoblinctl --version`, `hostnamectl` | Facts load in the background, and each tile shows a bar until its value arrives. The device card renames the device through `hostnamectl`, which may ask for authorisation, and copies a summary of every fact. Hardware and software values copy on right-click. Storage is the space used on the root file system.                                                                                                                                                                   |
 
 A page can replace the sentence under its title with its current state when
 that helps (the connection on Wi-Fi and Network, the battery level on Power).
@@ -138,10 +161,7 @@ On Wi-Fi, Network, Bluetooth and Displays, each item (a Wi-Fi network, a wired c
 
 The sidebar search finds pages first, then settings. Each settings row shows
 the page it lives on under its title. Up and Down move through the results,
-Enter opens the highlighted one, and Esc clears the search. Pages that list their
-index entries (Wi-Fi, Bluetooth, Displays and Applications) show at most eight
-per page; a longer query narrows them. Other pages show the controls whose
-labels match. Ctrl+F moves focus to the search field. The list of searchable settings
+Enter opens the highlighted one, and Esc clears the search. A query that matches a page's own name or keywords, such as "sound", lists that page as a block with a row that opens it, followed by its matching index entries (at most eight in all); its controls are not filtered. Pages that list their index entries (Wi-Fi, Bluetooth, Displays and Applications) show at most eight per page; a longer query narrows them. Other pages show the controls whose labels match. Ctrl+F moves focus to the search field. The list of searchable settings
 is `src/settings_index.rs`; add a row there when a page gains a setting, with
 plain words a person might type in the keywords column.
 
@@ -159,7 +179,7 @@ passwd entry); pressing it opens Users. The pages sit under group names
 (Connections, Devices, Desktop, System). Search results appear under a
 Settings name, and the person is hidden while a search is typed.
 
-The Keyboard page has five groups. Key repeat holds Repeat keys, with Delay before repeat and Repeat speed nested under it and shown only while it is on, and a Try it box to test them. Typing holds Cursor blinking and Remember Num Lock state; Num Lock on at sign-in is nested under that switch and shown only while remembering is off. Special character entry holds Compose key and Alternate characters key. Input sources lists each layout or input method with its kind. Pressing a source opens its subpage, and Add an input source opens a sheet of the layouts and methods not yet in the list. Separate input per window sits under the list. Shortcuts has a summary row that shows how many shortcuts Gnoblin lists once it has answered, and opens a read-only list of every shortcut, grouped by what it acts on. Shortcuts are set in the Gnoblin Lua file, and the Configuration group opens it with Open file when its path is known. Each change shows at once and is written in the background. If the write fails, the control goes back to its old value and a toast says why.
+The Keyboard page has five groups. Key repeat holds Repeat keys, with Delay before repeat and Repeat speed nested under it and shown only while it is on, and a Try it box to test them. Typing holds Cursor blinking and Remember Num Lock state; Num Lock on at sign-in is nested under that switch and shown only while remembering is off. Special character entry holds Compose key and Alternate characters key. Input sources lists each layout or input method with its kind. Pressing a source opens its subpage, and Add an input source opens a popup of the layouts and methods not yet in the list. Separate input per window sits under the list. Shortcuts has a summary row that shows how many shortcuts Gnoblin lists once it has answered, and opens a read-only list of every shortcut, grouped by what it acts on. Shortcuts are set in the Gnoblin Lua file, and the Configuration group opens it with Open file when its path is known. Each change shows at once and is written in the background. If the write fails, the control goes back to its old value and a toast says why.
 
 ## Mouse
 
@@ -186,7 +206,7 @@ slider back to its centre snaps it onto the mark.
 If "Allow volume above 100%" is on, the volume slider runs to 150% with a
 tick at 100%, the point where the sound starts to clip.
 
-"Test speakers" opens a sheet with one button for each speaker of the output.
+"Test speakers" opens a popup with one button for each speaker of the output.
 Each button plays a short tone through that speaker only, so a wrong wire or a
 silent channel shows at once.
 
@@ -283,7 +303,7 @@ snapshot (`gnoblinctl --json config show`) and show such rows read-only with
 the subtitle "Managed by your desktop configuration". Keyboard layouts and input
 methods come only from Gnoblin's `input_sources` table in the Lua file. The
 Keyboard page lists them under Input sources with their names from the XKB
-database (`evdev.xml`) and IBus. Its Add sheet chooses one from those lists;
+database (`evdev.xml`) and IBus. Its Add popup chooses one from those lists;
 pressing a source opens its subpage, where Move up, Move down and Remove act
 on it; the same three are in its right-click menu. Each change rewrites only
 that table, keeps the file's comments, and asks Gnoblin to reload it; the file
@@ -325,7 +345,10 @@ cargo run --manifest-path packages/bingux-settings/Cargo.toml --features snapsho
 ```
 
 Set `BINGUX_SETTINGS_SNAPSHOT_CLICK="x,y[;x,y]"` to click those window
-points after the page loads and before the capture. This drives a real
+points after the page loads and before the capture. Each click waits
+`BINGUX_SETTINGS_SNAPSHOT_CLICK_SETTLE_MS` (default 1000) before the next
+step, so a popup's open animation can be caught mid-frame at 60, 120 or 220 ms
+by setting a short settle. This drives a real
 write; for example clicking the Repeat keys switch on the Keyboard page
 changes `org.gnome.desktop.peripherals.keyboard repeat`, which `gsettings
 get` then shows. Set `BINGUX_SETTINGS_SNAPSHOT_SIZE="WxH"` to capture at

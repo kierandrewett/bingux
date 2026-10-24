@@ -427,16 +427,53 @@ static FOLDED: std::sync::LazyLock<Vec<(PageId, &'static str, String)>> =
             .collect()
     });
 
+/// The words of `query`, folded to lower case.
+fn query_words(query: &str) -> Vec<String> {
+    query.split_whitespace().map(str::to_lowercase).collect()
+}
+
+/// Whether `haystack` contains every word of `words`.
+fn contains_all(haystack: &str, words: &[String]) -> bool {
+    words.iter().all(|word| haystack.contains(word.as_str()))
+}
+
 /// The settings whose title or words contain every word of `query`, ignoring
 /// case, in index order. An empty query matches nothing.
 pub fn matching(query: &str) -> Vec<(PageId, &'static str)> {
-    let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+    let words = query_words(query);
     if words.is_empty() {
         return Vec::new();
     }
     FOLDED
         .iter()
-        .filter(|(_, _, haystack)| words.iter().all(|word| haystack.contains(word.as_str())))
+        .filter(|(_, _, haystack)| contains_all(haystack, &words))
         .map(|(page, title, _)| (*page, *title))
+        .collect()
+}
+
+/// Each page's title and sidebar words folded to lower case once.
+static PAGES_FOLDED: std::sync::LazyLock<Vec<(PageId, String)>> = std::sync::LazyLock::new(|| {
+    PageId::ALL
+        .iter()
+        .map(|page| {
+            (
+                *page,
+                format!("{} {}", page.title(), page.keywords()).to_lowercase(),
+            )
+        })
+        .collect()
+});
+
+/// The pages whose own title or words contain every word of `query`, ignoring
+/// case. An empty query matches nothing.
+pub fn matching_pages(query: &str) -> Vec<PageId> {
+    let words = query_words(query);
+    if words.is_empty() {
+        return Vec::new();
+    }
+    PAGES_FOLDED
+        .iter()
+        .filter(|(_, haystack)| contains_all(haystack, &words))
+        .map(|(page, _)| *page)
         .collect()
 }

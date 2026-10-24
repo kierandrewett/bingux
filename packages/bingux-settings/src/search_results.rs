@@ -1,8 +1,10 @@
-//! The search results: each page's real controls, filtered to the matches and
-//! stacked under the page's highlighted heading. A page with no match is
-//! hidden. Pages that are too heavy or cannot be filtered sensibly are listed
-//! by their index entries instead. Choosing an index entry opens its page and
-//! clears the search.
+//! The search results. A page whose own title or words match the search is
+//! listed whole: a row opens it, with its index entries under it, and its
+//! controls are not filtered. Other pages show their real controls, filtered
+//! to the matches and stacked under the page's highlighted heading. A page
+//! with no match is hidden. Pages that are too heavy or cannot be filtered
+//! sensibly are listed by their index entries instead. Choosing a row opens
+//! its page and clears the search.
 
 use bingux_ui::prelude::*;
 use bingux_ui::search_highlight;
@@ -26,8 +28,8 @@ pub fn initial_query() -> String {
     }
 }
 
-/// Most index entries listed under one page. A short query can match a page's
-/// whole index, so the list is capped; a longer query narrows it.
+/// Most rows listed under one page, its own row included. A short query can
+/// match a page's whole index, so the list is capped; a longer query narrows it.
 const MAX_INDEX_ROWS: usize = 8;
 
 /// Pages listed by their index entries rather than rendered in place. Wi-Fi
@@ -45,6 +47,17 @@ fn index_only(page: PageId) -> bool {
 fn open_page(navigator: Navigator, page: PageId, mut query: State<String>) {
     navigator.goto(page);
     query.set(String::new());
+}
+
+/// A row labelled `title` that opens `page` and clears the search.
+fn open_row(navigator: Navigator, page: PageId, query: State<String>, title: &str) -> Element {
+    row(title)
+        .navigates()
+        .on_press(move |_| open_page(navigator, page, query))
+        .context_menu(vec![menu_item("Open page", move |_| {
+            open_page(navigator, page, query)
+        })])
+        .into()
 }
 
 /// Replaces the page content while the search box has text.
@@ -69,22 +82,31 @@ impl Component for SearchResults {
             return body;
         }
         let hits = settings_index::matching(&text);
+        let own_pages = settings_index::matching_pages(&text);
         let mut listed = 0usize;
         for page in PageId::ALL.iter().copied() {
-            if index_only(page) {
+            if own_pages.contains(&page) {
+                // The page itself matches, so it is listed whole and its
+                // controls are not filtered.
+                let mut rows = vec![open_row(navigator, page, query, page.title())];
+                rows.extend(
+                    hits.iter()
+                        .filter(|(hit_page, title)| *hit_page == page && *title != page.title())
+                        .take(MAX_INDEX_ROWS - 1)
+                        .map(|(_, title)| open_row(navigator, page, query, title)),
+                );
+                listed += rows.len();
+                body = body.child(search_highlight::page_block(
+                    page.title(),
+                    page.icon(),
+                    Group::new(None).unfiltered().rows(rows).into(),
+                ));
+            } else if index_only(page) {
                 let rows: Vec<Element> = hits
                     .iter()
                     .filter(|(hit_page, _)| *hit_page == page)
                     .take(MAX_INDEX_ROWS)
-                    .map(|(_, title)| {
-                        row(*title)
-                            .navigates()
-                            .on_press(move |_| open_page(navigator, page, query))
-                            .context_menu(vec![menu_item("Open page", move |_| {
-                                open_page(navigator, page, query)
-                            })])
-                            .into()
-                    })
+                    .map(|(_, title)| open_row(navigator, page, query, title))
                     .collect();
                 if !rows.is_empty() {
                     listed += rows.len();

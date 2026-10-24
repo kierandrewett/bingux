@@ -161,7 +161,7 @@ impl TextField {
     }
 
     /// Take keyboard focus when the field first appears, such as the first
-    /// field of a sheet. Only one field should ask for it.
+    /// field of a popup. Only one field should ask for it.
     pub fn autofocus(mut self) -> Self {
         self.autofocus = true;
         self
@@ -254,13 +254,13 @@ impl Component for TextField {
                         input_id.request_unfocus();
                         false
                     }
-                    // A single-line Enter bubbles up, so a sheet can act on it.
+                    // A single-line Enter bubbles up, so a popup can act on it.
                     Key::Named(NamedKey::Enter) if !multiline => true,
                     // Tab moves focus, as Freya's own field does.
                     Key::Named(NamedKey::Tab) => false,
                     _ => {
                         // Keys the field edits stay here: a multiline Enter
-                        // must not trigger a sheet's primary action.
+                        // must not trigger a popup's primary action.
                         event.stop_propagation();
                         event.prevent_default();
                         true

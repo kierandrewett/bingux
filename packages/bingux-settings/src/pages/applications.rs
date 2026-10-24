@@ -45,13 +45,13 @@ const SOURCES: [Source; 7] = [
 
 /// A kind of file or link and the content types that stand for it. The
 /// first type is the one the choices are read from; every type is set.
-struct Kind {
-    title: &'static str,
+pub(crate) struct Kind {
+    pub(crate) title: &'static str,
     icon: Icon,
     mimes: &'static [&'static str],
 }
 
-const KINDS: [Kind; 9] = [
+pub(crate) const KINDS: [Kind; 9] = [
     Kind {
         title: "Web",
         icon: Icon::WebBrowser,

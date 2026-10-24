@@ -130,6 +130,17 @@ fn wired_title(devices: &[WiredDevice], index: usize) -> String {
     }
 }
 
+/// The header title of the wired device `device`, from the device list loaded
+/// at start-up. `None` until that list has loaded. A page opened by address
+/// knows only the device, so this gives it the same title its row shows.
+pub fn cached_wired_title(device: &str) -> Option<String> {
+    let model = system::cached::<Loaded>("network");
+    let loaded = model.read();
+    let devices = loaded.as_ref()?.as_ref().ok()?;
+    let index = devices.iter().position(|known| known.name == device)?;
+    Some(wired_title(devices, index))
+}
+
 /// Split a terse listing of `NAME,TYPE` pairs into `(name, type)` pairs.
 fn parse_pairs(text: &str) -> Vec<(String, String)> {
     text.lines()

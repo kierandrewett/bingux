@@ -13,10 +13,10 @@ use crate::icons::{self, Icon};
 use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
-    Group, Overlays, PageHeader, ResponseKind, SpinnerSize, Status, Tokens, action_strip,
-    centered_caption, dialog, heading, icon_button, page_column, row, sheet, sheet_column,
-    skeleton, spinner, status, strip_action, switch_row, text_field, use_overlays, use_page_busy,
-    use_page_header, use_tokens,
+    Group, Overlays, PageHeader, PopupAction, PopupActions, ResponseKind, SpinnerSize, Status,
+    Tokens, Window, action_strip, centered_caption, dialog, heading, icon_button, page_column,
+    popup, popup_column, row, skeleton, spinner, status, strip_action, switch_row, text_field,
+    use_overlays, use_page_busy, use_page_header, use_popup_actions, use_tokens, use_window,
 };
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 use bingux_ui::style::*;
@@ -442,7 +442,7 @@ fn band_label(freq: &str) -> String {
 struct Ui {
     model: State<Option<Result<Model, CommandError>>>,
     busy: State<Option<String>>,
-    /// Shown inside the open sheet, such as "Enter the Wi-Fi password."
+    /// Shown inside the open popup, such as "Enter the Wi-Fi password."
     sheet_error: State<Option<String>>,
     password: State<String>,
     /// The Wi-Fi and airplane values the user just set, shown until the
@@ -454,11 +454,12 @@ struct Ui {
     hotspot_name: State<String>,
     hotspot_password: State<String>,
     overlays: Overlays,
+    window: Window,
     navigator: Navigator,
     editor: Editor,
 }
 
-/// Sheet bodies are components that read the page state themselves, so their
+/// Popup bodies are components that read the page state themselves, so their
 /// props never change; the state handles carry the updates.
 impl PartialEq for Ui {
     fn eq(&self, _: &Self) -> bool {
@@ -479,6 +480,7 @@ fn use_ui() -> Ui {
         hotspot_name: use_state(String::new),
         hotspot_password: use_state(String::new),
         overlays: use_overlays(),
+        window: use_window(),
         navigator: use_navigator(),
         editor: use_editor(),
     }
@@ -637,33 +639,28 @@ impl Ui {
         );
     }
 
-    /// The password sheet for a secured network that is not saved yet.
+    /// The password popup for a secured network that is not saved yet.
     fn open_join(self, ssid: String) {
         let mut password = self.password;
         password.set(String::new());
         let mut error = self.sheet_error;
         error.set(None);
-        self.show_join(ssid, false);
+        self.show_join(ssid);
     }
 
-    /// The join sheet. Connect waits for a password. Re-shown on each edit so
-    /// the primary action follows the field.
-    fn show_join(self, ssid: String, ready: bool) {
-        let press = ssid.clone();
-        self.overlays.show_sheet(
-            sheet(ssid.clone(), JoinBody { ui: self, ssid })
-                .primary("Connect", move |_| self.join_now(press.clone()))
-                .primary_enabled(ready),
-        );
+    /// The join popup. Connect waits for a password.
+    fn show_join(self, ssid: String) {
+        self.window
+            .open(popup(ssid.clone(), JoinBody { ui: self, ssid }));
     }
 
-    fn join_now(self, ssid: String) {
+    fn join_now(self, ssid: String, window: Window) {
         let password = self.password.read().clone();
         if password.is_empty() {
             self.sheet_error("Enter the Wi-Fi password.");
             return;
         }
-        self.overlays.close_sheet();
+        window.close();
         self.connect(ssid, Some(password));
     }
 
@@ -679,20 +676,16 @@ impl Ui {
         password.set(String::new());
         let mut error = self.sheet_error;
         error.set(None);
-        self.show_hidden(false);
+        self.show_hidden();
     }
 
-    /// The hidden network sheet. Connect waits for a network name. Re-shown on
-    /// each edit so the primary action follows the field.
-    fn show_hidden(self, ready: bool) {
-        self.overlays.show_sheet(
-            sheet("Hidden network", HiddenBody { ui: self })
-                .primary("Connect", move |_| self.connect_hidden())
-                .primary_enabled(ready),
-        );
+    /// The hidden network popup. Connect waits for a network name.
+    fn show_hidden(self) {
+        self.window
+            .open(popup("Hidden network", HiddenBody { ui: self }));
     }
 
-    fn connect_hidden(self) {
+    fn connect_hidden(self, window: Window) {
         let ssid = self.hidden_ssid.read().trim().to_string();
         if ssid.is_empty() {
             self.sheet_error("Enter the network name.");
@@ -700,7 +693,7 @@ impl Ui {
         }
         let password = self.hidden_password.read().clone();
         let password = (!password.is_empty()).then_some(password);
-        self.overlays.close_sheet();
+        window.close();
         let label = format!("Connecting to {ssid}.");
         self.act(
             &label,
@@ -716,20 +709,16 @@ impl Ui {
         password.set(String::new());
         let mut error = self.sheet_error;
         error.set(None);
-        self.show_hotspot(false);
+        self.show_hotspot();
     }
 
-    /// The hotspot sheet. Turn on waits for a name and a password of the
-    /// minimum length. Re-shown on each edit so the primary action follows the fields.
-    fn show_hotspot(self, ready: bool) {
-        self.overlays.show_sheet(
-            sheet("Wi-Fi hotspot", HotspotBody { ui: self })
-                .primary("Turn on", move |_| self.start_hotspot())
-                .primary_enabled(ready),
-        );
+    /// The hotspot popup. Turn on waits for a name and a password of the minimum length.
+    fn show_hotspot(self) {
+        self.window
+            .open(popup("Wi-Fi hotspot", HotspotBody { ui: self }));
     }
 
-    fn start_hotspot(self) {
+    fn start_hotspot(self, window: Window) {
         let name = self.hotspot_name.read().trim().to_string();
         let password = self.hotspot_password.read().clone();
         if name.is_empty() {
@@ -740,7 +729,7 @@ impl Ui {
             self.sheet_error("The password needs at least 8 characters.");
             return;
         }
-        self.overlays.close_sheet();
+        window.close();
         self.act(
             "Turning on the Wi-Fi hotspot.",
             move || start_hotspot(&name, &password),
@@ -781,7 +770,7 @@ fn network_count(count: usize) -> String {
     }
 }
 
-/// The password sheet body. It reads the page's state, so it redraws as the
+/// The password popup body. It reads the page's state, so it redraws as the
 /// fields change.
 #[derive(Clone, PartialEq)]
 struct JoinBody {
@@ -792,20 +781,30 @@ struct JoinBody {
 impl Component for JoinBody {
     fn render(&self) -> impl IntoElement {
         let ui = self.ui;
+        let window = use_window();
+        let press = self.ssid.clone();
         let submit = self.ssid.clone();
-        let ssid = self.ssid.clone();
-        let field = text_field(ui.password, move |_: String| ui.join_now(submit.clone()))
-            .on_change(move |text: String| ui.show_join(ssid.clone(), !text.is_empty()))
-            .autofocus()
-            .password();
+        let ready = !ui.password.read().is_empty();
+        use_popup_actions(PopupActions {
+            primary: Some(PopupAction {
+                label: "Connect".into(),
+                enabled: ready,
+                on_press: EventHandler::new(move |_: ()| ui.join_now(press.clone(), window)),
+            }),
+        });
+        let field = text_field(ui.password, move |_: String| {
+            ui.join_now(submit.clone(), window)
+        })
+        .autofocus()
+        .password();
         let error = ui.sheet_error.read().clone();
-        sheet_column()
+        popup_column()
             .child(Group::new(None::<String>).row(row("Password").trailing(field)))
             .maybe_child(error.map(|text| Element::from(status(Status::Error(text)))))
     }
 }
 
-/// The hidden network sheet body: a name, an optional password and the show toggle.
+/// The hidden network popup body: a name, an optional password and the show toggle.
 #[derive(Clone, PartialEq)]
 struct HiddenBody {
     ui: Ui,
@@ -814,15 +813,25 @@ struct HiddenBody {
 impl Component for HiddenBody {
     fn render(&self) -> impl IntoElement {
         let ui = self.ui;
-        let name = text_field(ui.hidden_ssid, move |_: String| ui.connect_hidden())
-            .on_change(move |text: String| ui.show_hidden(!text.trim().is_empty()))
+        let window = use_window();
+        let ready = !ui.hidden_ssid.read().trim().is_empty();
+        use_popup_actions(PopupActions {
+            primary: Some(PopupAction {
+                label: "Connect".into(),
+                enabled: ready,
+                on_press: EventHandler::new(move |_: ()| ui.connect_hidden(window)),
+            }),
+        });
+        let name = text_field(ui.hidden_ssid, move |_: String| ui.connect_hidden(window))
             .autofocus()
             .placeholder("Network name");
-        let password = text_field(ui.hidden_password, move |_: String| ui.connect_hidden())
-            .placeholder("Blank if open")
-            .password();
+        let password = text_field(ui.hidden_password, move |_: String| {
+            ui.connect_hidden(window)
+        })
+        .placeholder("Blank if open")
+        .password();
         let error = ui.sheet_error.read().clone();
-        sheet_column()
+        popup_column()
             .child(
                 Group::new(None::<String>)
                     .row(row("Network name").trailing(name))
@@ -832,7 +841,7 @@ impl Component for HiddenBody {
     }
 }
 
-/// The hotspot sheet body: a network name and a password of at least eight characters.
+/// The hotspot popup body: a network name and a password of at least eight characters.
 #[derive(Clone, PartialEq)]
 struct HotspotBody {
     ui: Ui,
@@ -841,23 +850,26 @@ struct HotspotBody {
 impl Component for HotspotBody {
     fn render(&self) -> impl IntoElement {
         let ui = self.ui;
-        let name = text_field(ui.hotspot_name, move |_: String| ui.start_hotspot())
-            .on_change(move |text: String| {
-                let password_ok =
-                    ui.hotspot_password.read().chars().count() >= HOTSPOT_PASSWORD_MIN;
-                ui.show_hotspot(!text.trim().is_empty() && password_ok);
-            })
+        let window = use_window();
+        let name_ok = !ui.hotspot_name.read().trim().is_empty();
+        let password_ok = ui.hotspot_password.read().chars().count() >= HOTSPOT_PASSWORD_MIN;
+        use_popup_actions(PopupActions {
+            primary: Some(PopupAction {
+                label: "Turn on".into(),
+                enabled: name_ok && password_ok,
+                on_press: EventHandler::new(move |_: ()| ui.start_hotspot(window)),
+            }),
+        });
+        let name = text_field(ui.hotspot_name, move |_: String| ui.start_hotspot(window))
             .autofocus()
             .placeholder("Network name");
-        let password = text_field(ui.hotspot_password, move |_: String| ui.start_hotspot())
-            .on_change(move |text: String| {
-                let name_ok = !ui.hotspot_name.read().trim().is_empty();
-                ui.show_hotspot(name_ok && text.chars().count() >= HOTSPOT_PASSWORD_MIN);
-            })
-            .placeholder("8+ characters")
-            .password();
+        let password = text_field(ui.hotspot_password, move |_: String| {
+            ui.start_hotspot(window)
+        })
+        .placeholder("8+ characters")
+        .password();
         let error = ui.sheet_error.read().clone();
-        sheet_column()
+        popup_column()
             .child(
                 Group::new(None::<String>)
                     .row(row("Network name").trailing(name))

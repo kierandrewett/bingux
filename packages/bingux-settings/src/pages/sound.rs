@@ -13,6 +13,7 @@ use std::time::Duration;
 use freya::prelude::*;
 use serde_json::Value;
 
+use bingux_ui::prelude::{Window, popup, use_window};
 use bingux_ui::style::*;
 use bingux_ui::theme::Tokens;
 use bingux_ui::typography::CAPTION;
@@ -21,8 +22,8 @@ use crate::apps;
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
     Group, Icon, LevelRow, Overlays, Status, action_button, app_icon, caption, dropdown, hstack,
-    icon, icon_button, level_row, menu_item, page_column, row, sheet, sheet_column, skeleton,
-    status, switch_row, use_overlays, use_tokens,
+    icon, icon_button, level_row, menu_item, page_column, popup_column, row, skeleton, status,
+    switch_row, use_overlays, use_tokens,
 };
 
 use self::meter::{LevelMeter, Source};
@@ -212,6 +213,7 @@ struct Job {
 struct Ctx {
     model: ModelState,
     overlays: Overlays,
+    window: Window,
     queue: VolumeQueue,
 }
 
@@ -1213,7 +1215,8 @@ fn open_test(ctx: Ctx, mix: Mix) {
             })),
         );
     }
-    overlays.show_sheet(sheet("Test speakers", sheet_column().child(group)));
+    ctx.window
+        .open(popup("Test speakers", popup_column().child(group)));
 }
 
 /// Optimistic default device: the new default shows at once and the next poll
@@ -1581,6 +1584,7 @@ fn use_sound_model() -> ModelState {
 fn use_ctx() -> Ctx {
     let model = use_sound_model();
     let overlays = use_overlays();
+    let window = use_window();
     let queue = VolumeQueue {
         pending: use_state(Vec::new),
         busy: use_state(|| false),
@@ -1588,6 +1592,7 @@ fn use_ctx() -> Ctx {
     Ctx {
         model,
         overlays,
+        window,
         queue,
     }
 }

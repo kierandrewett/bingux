@@ -7,7 +7,9 @@ use super::sources::{self, Edit, Source};
 use super::{SourceEdits, kind_label};
 use crate::icons::Icon;
 use crate::system;
-use crate::ui::{Group, Status, page_column, property_row, row, skeleton, status, use_overlays};
+use crate::ui::{
+    Group, Status, page_column, property_row, row, skeleton, status, use_overlays, use_window,
+};
 
 /// The page for `source`. It reads the list the keyboard page reads, so it
 /// shows the same position and enables the actions the list would.
@@ -21,11 +23,13 @@ impl Component for InputSourcePage {
         let sources_state = system::use_cached("keyboard-sources", sources::read);
         let catalog_state = system::use_cached("keyboard-catalog", sources::catalog);
         let overlays = use_overlays();
+        let window = use_window();
         let busy = use_state(|| false);
         let edits = SourceEdits {
             state: sources_state,
             catalog: catalog_state,
             overlays,
+            window,
             busy,
         };
 

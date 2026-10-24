@@ -27,7 +27,7 @@ pub fn action_row(note: Option<&str>, action: impl IntoElement) -> Element {
         .into()
 }
 
-/// A form row for a sheet or page: the label at the left and a control at the
+/// A form row for a popup or page: the label at the left and a control at the
 /// right, on the row height and the gutter. Put rows in a [`Group`].
 pub fn form_row(label: impl Into<String>, control: impl Into<Element>) -> Element {
     FormRow {

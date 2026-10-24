@@ -57,7 +57,12 @@ impl Component for ActionStrip {
         // The divider is as tall as the cell less a gutter at each end.
         let mut bar = rect().tw(&tokens, BOX).tw(
             &tokens,
-            &[h(Dim::StripCell), flex_row(), grow_children(), items(Align::Center)],
+            &[
+                h(Dim::StripCell),
+                flex_row(),
+                grow_children(),
+                items(Align::Center),
+            ],
         );
         for (index, action) in self.actions.iter().enumerate() {
             if index > 0 {

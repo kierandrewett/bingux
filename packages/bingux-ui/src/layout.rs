@@ -42,9 +42,9 @@ pub fn clamp(max: Dim, child: impl Into<Element>) -> Rect {
     )
 }
 
-/// The root of a sheet's body: groups 24 px apart, closer than on a page so a
+/// The root of a popup's body: groups 24 px apart, closer than on a page so a
 /// form stays in one view.
-pub fn sheet_column() -> Rect {
+pub fn popup_column() -> Rect {
     rect().tw_layout(&[flex_col(), w_full(), gap(S6)])
 }
 

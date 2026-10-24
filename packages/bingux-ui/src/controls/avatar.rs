@@ -38,7 +38,7 @@ fn account_picture(user: String) -> Result<Option<PathBuf>, String> {
 /// The default glyph's size inside an avatar of `size`.
 fn glyph_size(size: Dim) -> IconSize {
     match size {
-        Dim::Box7 | Dim::Box11 => IconSize::Row,
+        Dim::NavIcon | Dim::Box7 | Dim::Box11 => IconSize::Row,
         Dim::Box24 => IconSize::Hero,
         _ => IconSize::Control,
     }

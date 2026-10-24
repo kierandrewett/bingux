@@ -69,6 +69,95 @@ pub struct Profile<T> {
     pub target: T,
 }
 
+#[derive(Clone, PartialEq)]
+pub enum SidebarMark {
+    /// A page icon, in the text colour when the row is selected.
+    Icon(Icon),
+    /// The account avatar for a login name.
+    Avatar(String),
+}
+
+/// A row of the sidebar: a page, the profile or a search result. Every sidebar
+/// row is this component, so they share the icon column, the label start, the
+/// neutral selection layer and the hover, press and focus states.
+#[derive(Clone, PartialEq)]
+pub struct SidebarRow {
+    pub mark: SidebarMark,
+    pub label: String,
+    pub selected: bool,
+    pub on_press: EventHandler<()>,
+    /// Keys other than Enter and Space, such as the arrows. Enter and Space
+    /// press the row.
+    pub on_key: Option<EventHandler<Event<KeyboardEventData>>>,
+}
+
+impl Component for SidebarRow {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let mut hovering = use_state(|| false);
+        let mut pressing = use_state(|| false);
+        let a11y_id = use_a11y();
+        let focus = use_focus(a11y_id);
+        let selected = self.selected;
+        let on_press = self.on_press.clone();
+        let on_press_key = self.on_press.clone();
+        let on_key = self.on_key.clone();
+        let icon_color = if selected {
+            Paint::Text.color(&tokens)
+        } else {
+            Paint::Muted.color(&tokens)
+        };
+        let column = rect().tw(&tokens, NAV_ICON);
+        let column = match &self.mark {
+            SidebarMark::Icon(icon) => column.child(icons::icon(*icon, IconSize::Row, icon_color)),
+            SidebarMark::Avatar(user) => {
+                column.child(crate::controls::avatar(user.clone(), Dim::NavIcon))
+            }
+        };
+        rect()
+            .tw(&tokens, NAV_ITEM)
+            .tw(
+                &tokens,
+                &[surface(
+                    Paint::Transparent,
+                    hovering(),
+                    pressing(),
+                    selected,
+                )],
+            )
+            .a11y_id(a11y_id)
+            .a11y_focusable(true)
+            .a11y_role(AccessibilityRole::Tab)
+            .a11y_builder(move |builder| builder.set_selected(selected))
+            .tw(&tokens, &[focus_ring(focus())])
+            .on_pointer_enter(move |_| hovering.set(true))
+            .on_pointer_leave(move |_| {
+                hovering.set(false);
+                pressing.set_if_modified(false);
+            })
+            .on_pointer_down(move |_: Event<PointerEventData>| pressing.set(true))
+            .on_global_pointer_up(move |_| pressing.set_if_modified(false))
+            .on_press(move |_: Event<PressEventData>| {
+                on_press.call(());
+                a11y_id.request_focus();
+            })
+            .on_key_down(move |event: Event<KeyboardEventData>| {
+                if is_activation_key(&event.key) {
+                    event.stop_propagation();
+                    on_press_key.call(());
+                } else if let Some(on_key) = &on_key {
+                    on_key.call(event);
+                }
+            })
+            .child(column)
+            .child(
+                BODY.label(&tokens, self.label.clone())
+                    .max_lines(1)
+                    .text_overflow(TextOverflow::Ellipsis),
+            )
+    }
+}
+
 #[derive(PartialEq)]
 struct ProfileCard<T: NavItem> {
     profile: Profile<T>,
@@ -80,66 +169,26 @@ struct ProfileCard<T: NavItem> {
 impl<T: NavItem> Component for ProfileCard<T> {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let mut hovering = use_state(|| false);
-        let mut pressing = use_state(|| false);
-        let a11y_id = use_a11y();
-        let focus = use_focus(a11y_id);
         let target = self.profile.target;
         let mut selected = self.selected;
         let mut sidebar_open = self.sidebar_open;
         let full_page = self.full_page;
-        let user = crate::controls::avatar::current_user();
-        let name = self.profile.name.clone();
-        let is_selected = selected() == target;
-        // The avatar is centred on the icon column of the sidebar items, so it
-        // is drawn larger than the icon's slot and pulled back over it.
-        let slot = IconSize::Row.px();
-        let overhang = (Dim::Box7.px() - slot) / 2.0;
+        let row = SidebarRow {
+            mark: SidebarMark::Avatar(crate::controls::avatar::current_user()),
+            label: self.profile.name.clone(),
+            selected: selected() == target,
+            on_press: (move |_: ()| {
+                selected.set(target);
+                if full_page {
+                    sidebar_open.set(false);
+                }
+            })
+            .into(),
+            on_key: None,
+        };
         rect()
             .tw(&tokens, &[w_full(), px(S2), pt(S1), pb(S2)])
-            .child(
-                rect()
-                    .a11y_id(a11y_id)
-                    .a11y_focusable(true)
-                    .a11y_role(AccessibilityRole::Button)
-                    .tw(&tokens, &[focus_ring(focus())])
-                    .tw(&tokens, NAV_ITEM)
-                    .tw(
-                        &tokens,
-                        &[surface(
-                            Paint::Transparent,
-                            hovering(),
-                            pressing(),
-                            is_selected,
-                        )],
-                    )
-                    .on_pointer_enter(move |_| hovering.set(true))
-                    .on_pointer_leave(move |_| {
-                        hovering.set(false);
-                        pressing.set_if_modified(false);
-                    })
-                    .on_pointer_down(move |_: Event<PointerEventData>| pressing.set(true))
-                    .on_global_pointer_up(move |_| pressing.set_if_modified(false))
-                    .on_press(move |_: Event<PressEventData>| {
-                        selected.set(target);
-                        if full_page {
-                            sidebar_open.set(false);
-                        }
-                        a11y_id.request_focus();
-                    })
-                    .child(
-                        rect().width(Size::px(slot)).height(Size::px(slot)).child(
-                            rect()
-                                .position(Position::new_absolute().top(-overhang).left(-overhang))
-                                .child(crate::controls::avatar(user, Dim::Box7)),
-                        ),
-                    )
-                    .child(
-                        BODY.label(&tokens, name)
-                            .max_lines(1)
-                            .text_overflow(TextOverflow::Ellipsis),
-                    ),
-            )
+            .child(Element::from(row))
     }
 }
 
@@ -750,20 +799,13 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 }
             })
             .maybe_child((!narrow).then(|| sidebar(false)))
+            .maybe_child((!narrow).then(|| rect().tw(&tokens, SPLIT_HAIRLINE)))
             .child(
                 rect()
                     // Sizes change with the touch density, so a change
                     // remounts the page and it is laid out again.
                     .key(narrow)
                     .tw(&tokens, &[w_flex(), h_full(), bg(Paint::Bg)])
-                    // On a desktop window the page is a rounded panel inset
-                    // in the sidebar's frame.
-                    .maybe(!narrow, |panel| {
-                        panel.tw(
-                            &tokens,
-                            &[my(S2), mr(S2), rounded(Radius::Card), clip()],
-                        )
-                    })
                     .child(if overlay {
                         Element::from(
                             rect()
@@ -995,49 +1037,18 @@ struct SearchHitRow {
 
 impl Component for SearchHitRow {
     fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let mut hovering = use_state(|| false);
-        let mut pressing = use_state(|| false);
-        let a11y_id = use_a11y();
-        let focus = use_focus(a11y_id);
         let mut scroll = self.scroll;
         let offset = self.hit.offset;
-        rect()
-            .tw(&tokens, NAV_ITEM)
-            .tw(
-                &tokens,
-                &[surface(Paint::Transparent, hovering(), pressing(), false)],
-            )
-            .a11y_id(a11y_id)
-            .a11y_focusable(true)
-            .a11y_role(AccessibilityRole::Tab)
-            .tw(&tokens, &[focus_ring(focus())])
-            .on_pointer_enter(move |_| hovering.set(true))
-            .on_pointer_leave(move |_| {
-                hovering.set(false);
-                pressing.set_if_modified(false);
-            })
-            .on_pointer_down(move |_: Event<PointerEventData>| pressing.set(true))
-            .on_global_pointer_up(move |_| pressing.set_if_modified(false))
-            .on_press(move |_: Event<PressEventData>| {
+        Element::from(SidebarRow {
+            mark: SidebarMark::Icon(self.hit.icon),
+            label: self.hit.title.clone(),
+            selected: false,
+            on_press: (move |_: ()| {
                 scroll.scroll_to_y((section_top() - offset as f32).round() as i32);
             })
-            .on_key_down(move |event: Event<KeyboardEventData>| {
-                if is_activation_key(&event.key) {
-                    event.stop_propagation();
-                    scroll.scroll_to_y((section_top() - offset as f32).round() as i32);
-                }
-            })
-            .child(icons::icon(
-                self.hit.icon,
-                IconSize::Row,
-                Paint::Muted.color(&tokens),
-            ))
-            .child(
-                BODY.label(&tokens, self.hit.title.clone())
-                    .max_lines(1)
-                    .text_overflow(TextOverflow::Ellipsis),
-            )
+            .into(),
+            on_key: None,
+        })
     }
 }
 
@@ -1082,79 +1093,47 @@ struct NavEntry<T: NavItem> {
 
 impl<T: NavItem> Component for NavEntry<T> {
     fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let mut hovering = use_state(|| false);
-        let mut pressing = use_state(|| false);
-        let a11y_id = use_a11y();
-        let focus = use_focus(a11y_id);
         let item = self.item;
         let siblings = self.siblings.clone();
         let mut selected = self.selected;
         let mut sidebar_open = self.sidebar_open;
         let full_page = self.full_page;
         let is_selected = selected() == item;
-        let icon_color = if is_selected {
-            Paint::Accent.color(&tokens)
-        } else {
-            Paint::Muted.color(&tokens)
-        };
-        rect()
-            .tw(&tokens, NAV_ITEM)
-            .tw(
-                &tokens,
-                &[surface(
-                    Paint::Transparent,
-                    hovering(),
-                    pressing(),
-                    is_selected,
-                )],
-            )
-            .a11y_id(a11y_id)
-            .a11y_focusable(true)
-            .a11y_role(AccessibilityRole::Tab)
-            .a11y_builder(move |builder| builder.set_selected(is_selected))
-            .tw(&tokens, &[focus_ring(focus())])
-            .on_pointer_enter(move |_| hovering.set(true))
-            .on_pointer_leave(move |_| {
-                hovering.set(false);
-                pressing.set_if_modified(false);
-            })
-            .on_pointer_down(move |_: Event<PointerEventData>| pressing.set(true))
-            .on_global_pointer_up(move |_| pressing.set_if_modified(false))
-            .on_press(move |_: Event<PressEventData>| {
+        Element::from(SidebarRow {
+            mark: SidebarMark::Icon(item.icon()),
+            label: item.title().to_string(),
+            selected: is_selected,
+            on_press: (move |_: ()| {
                 selected.set(item);
                 if full_page {
                     sidebar_open.set(false);
                 }
-                a11y_id.request_focus();
             })
-            .on_key_down(move |event: Event<KeyboardEventData>| {
-                // Walk from the selected item, not this entry: focus stays
-                // here while repeated arrows move the selection on.
-                let position = siblings.iter().position(|other| *other == selected());
-                let target = match &event.key {
-                    key if is_activation_key(key) => Some(item),
-                    Key::Named(NamedKey::ArrowDown) => {
-                        position.and_then(|index| siblings.get(index + 1)).copied()
+            .into(),
+            on_key: Some(
+                (move |event: Event<KeyboardEventData>| {
+                    // Walk from the selected item, not this entry: focus stays
+                    // here while repeated arrows move the selection on.
+                    let position = siblings.iter().position(|other| *other == selected());
+                    let target = match &event.key {
+                        Key::Named(NamedKey::ArrowDown) => {
+                            position.and_then(|index| siblings.get(index + 1)).copied()
+                        }
+                        Key::Named(NamedKey::ArrowUp) => position
+                            .and_then(|index| index.checked_sub(1))
+                            .and_then(|index| siblings.get(index))
+                            .copied(),
+                        Key::Named(NamedKey::Home) => siblings.first().copied(),
+                        Key::Named(NamedKey::End) => siblings.last().copied(),
+                        _ => None,
+                    };
+                    if let Some(target) = target {
+                        event.stop_propagation();
+                        selected.set(target);
                     }
-                    Key::Named(NamedKey::ArrowUp) => position
-                        .and_then(|index| index.checked_sub(1))
-                        .and_then(|index| siblings.get(index))
-                        .copied(),
-                    Key::Named(NamedKey::Home) => siblings.first().copied(),
-                    Key::Named(NamedKey::End) => siblings.last().copied(),
-                    _ => None,
-                };
-                if let Some(target) = target {
-                    event.stop_propagation();
-                    selected.set(target);
-                }
-            })
-            .child(icons::icon(item.icon(), IconSize::Row, icon_color))
-            .child(
-                BODY.label(&tokens, item.title())
-                    .max_lines(1)
-                    .text_overflow(TextOverflow::Ellipsis),
-            )
+                })
+                .into(),
+            ),
+        })
     }
 }

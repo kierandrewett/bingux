@@ -55,7 +55,7 @@ pub enum Radius {
     Control,
     /// Group cards and tiles.
     Card,
-    /// Dialogs, sheets, menus, popovers and toasts.
+    /// Dialogs, popups, menus, popovers and toasts.
     Overlay,
     /// A large tile such as a status-page icon well.
     Tile,
@@ -139,6 +139,9 @@ pub enum Dim {
     MenuSeparator,
     /// A page in the sidebar list: 40 px, 56 px for a finger.
     NavItem,
+    /// The icon column of a sidebar row, shared by page icons, the search
+    /// glyph and the account avatar: 24 px.
+    NavIcon,
     /// The header bar: 48 px.
     Header,
     /// A window button (minimise, maximise, close): a 24 px circle in a
@@ -156,8 +159,10 @@ pub enum Dim {
     Menu,
     /// A dialog card: 400 px.
     Dialog,
-    /// A sheet card: 520 px.
-    Sheet,
+    /// A popup's width: 520 px.
+    PopupWidth,
+    /// A popup's height until it asks for another: 480 px. Its body scrolls.
+    PopupHeight,
     /// A dropdown's option list: 240 px, never narrower than its button.
     DropdownMenu,
     /// The widest a dropdown button gets before its label is cut: 360 px.
@@ -260,6 +265,7 @@ impl Dim {
             Dim::MenuItem => 36.0,
             Dim::MenuSeparator => 8.0,
             Dim::NavItem => pick(40.0, 56.0),
+            Dim::NavIcon => 24.0,
             Dim::Header => 48.0,
             Dim::WindowControl => 24.0,
             Dim::WindowControlTarget => 32.0,
@@ -268,7 +274,8 @@ impl Dim {
             Dim::FieldApps => pick(260.0, FIELD_TOUCH),
             Dim::Menu => 220.0,
             Dim::Dialog => 400.0,
-            Dim::Sheet => 520.0,
+            Dim::PopupWidth => 520.0,
+            Dim::PopupHeight => 600.0,
             Dim::DropdownMenu => 240.0,
             Dim::DropdownMax => 360.0,
             Dim::MenuList => 320.0,
@@ -342,7 +349,7 @@ pub enum Paint {
     Control,
     /// Menus, popovers and dialogs.
     Popover,
-    /// The dimmed layer behind a dialog or sheet: black at 40 %.
+    /// The dimmed layer behind a dialog or popup: black at 40 %.
     Scrim,
     /// The clear layer behind a menu or dropdown list. It paints nothing,
     /// but Freya lets presses, the wheel and hover reach a box below only
@@ -492,7 +499,7 @@ pub enum Elevation {
     /// Menus, dropdown lists, toasts and chart tooltips: 8 px down, 24 px
     /// blur.
     Raised,
-    /// Dialogs and sheets: 16 px down, 48 px blur.
+    /// Dialogs and popups: 16 px down, 48 px blur.
     Floating,
     /// A slider knob: 1 px down, 3 px blur.
     Knob,

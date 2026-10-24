@@ -148,10 +148,11 @@ def parser():
         command.add_argument("action", nargs="?", default="status", choices=actions)
     settings = commands.add_parser("settings", help="Open Bingux Settings, optionally at a panel")
     settings.add_argument(
-        "panel",
+        "address",
         nargs="?",
         default="",
-        help="Panel name, for example sound, network, display or appearance; PANEL/SUBPAGE opens a subpage",
+        metavar="ADDRESS",
+        help="Panel or address to open, for example sound, wifi/saved or bingux-settings://display/0",
     )
     ipc = commands.add_parser("ipc", help="Call any public IPC method directly")
     ipc.add_argument("target")
@@ -411,13 +412,32 @@ SETTINGS_PANELS = (
 )
 
 
-def open_settings(panel, cli, spawn=subprocess.Popen):
+def settings_address_panel(address):
+    """The sidebar panel an address names, or None when it names none.
+
+    Accepts a bare address (`wifi/saved`) or a `bingux-settings://` address.
+    """
+    scheme, separator, rest = address.partition("://")
+    if separator and scheme != "bingux-settings":
+        return None
+    if not separator:
+        rest = address
+    path = rest.split("#", 1)[0].split("?", 1)[0]
+    segments = [segment for segment in path.split("/") if segment]
+    if segments and segments[0] in SETTINGS_PANELS:
+        return segments[0]
+    return None
+
+
+def open_settings(address, cli, spawn=subprocess.Popen):
     """Start the Settings application as its own session so it outlives binguxctl."""
-    # PANEL/SUBPAGE opens a subpage; only the panel is checked here.
-    if panel and panel.split("/", 1)[0] not in SETTINGS_PANELS:
-        cli.error("Unknown settings panel; choose one of " + ", ".join(SETTINGS_PANELS))
+    if address and settings_address_panel(address) is None:
+        cli.error(
+            "Unknown settings address; use a panel such as sound, or an address such as "
+            "wifi/saved or bingux-settings://display/0. Panels: " + ", ".join(SETTINGS_PANELS)
+        )
     executable = os.environ.get("BINGUX_SETTINGS_BIN", "bingux-settings")
-    command = [executable, *([panel] if panel else [])]
+    command = [executable, *([address] if address else [])]
     try:
         spawn(
             command,
@@ -436,7 +456,7 @@ def main(argv=None):
     cli = parser()
     args = cli.parse_args(argv)
     if args.command == "settings":
-        return open_settings(args.panel, cli)
+        return open_settings(args.address, cli)
     call = invocation(args, cli)
     path = args.path or (None if args.config else os.environ.get("BINGUX_CONFIG_PATH"))
     target = args.target if args.command == "ipc" else args.command

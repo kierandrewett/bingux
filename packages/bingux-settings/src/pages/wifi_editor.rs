@@ -1,6 +1,6 @@
-//! The connection editor sheet: one saved profile, edited on five tabs. Apply sends every changed
-//! value in one `nmcli connection modify` call. The sheet's state lives in the page that opens it, because
-//! a sheet's body and primary action are fixed when it is shown; each change shows the sheet again.
+//! The connection editor popup: one saved profile, edited on five tabs. Apply sends every changed
+//! value in one `nmcli connection modify` call. The editor's state lives in the page that opens it,
+//! so the popup body and tabs read it and redraw as values change.
 
 use std::time::Duration;
 
@@ -12,8 +12,9 @@ use super::connection_editor::{
 };
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
-    Group, Overlays, ResponseKind, Status, caption, choice_row, dialog, row, sheet, sheet_column,
-    skeleton, status, switch_row, text_field, use_overlays,
+    Group, Overlays, PopupAction, PopupActions, ResponseKind, Status, Window, caption, choice_row,
+    dialog, popup, popup_column, row, skeleton, status, switch_row, text_field, use_overlays,
+    use_popup_actions, use_window,
 };
 use bingux_ui::controls::tabs;
 use bingux_ui::group::form_row;
@@ -21,7 +22,7 @@ use bingux_ui::group::form_row;
 const QUICK: Duration = Duration::from_secs(5);
 const APPLY: Duration = Duration::from_secs(30);
 
-/// What the sheet is about: the profile's name, whether it is Wi-Fi, and the facts
+/// What the popup is about: the profile's name, whether it is Wi-Fi, and the facts
 /// the caller already knows, such as signal and band.
 #[derive(Clone, PartialEq)]
 pub struct Target {
@@ -37,11 +38,12 @@ struct Loaded {
     live: Vec<(String, String)>,
 }
 
-/// The editor's state. Every field is a `State` handle, so the sheet body and its
+/// The editor's state. Every field is a `State` handle, so the popup body and its
 /// event handlers can read and write the same values.
 #[derive(Clone, Copy, PartialEq)]
 pub struct Editor {
     overlays: Overlays,
+    window: Window,
     target: State<Option<Target>>,
     loaded: State<Option<Loaded>>,
     error: State<Option<String>>,
@@ -69,6 +71,7 @@ pub struct Editor {
 pub fn use_editor() -> Editor {
     Editor {
         overlays: use_overlays(),
+        window: use_window(),
         target: use_state(|| None::<Target>),
         loaded: use_state(|| None::<Loaded>),
         error: use_state(|| None::<String>),
@@ -93,7 +96,7 @@ pub fn use_editor() -> Editor {
     }
 }
 
-/// The sheet's tabs. Wired connections have no Security tab.
+/// The popup's tabs. Wired connections have no Security tab.
 fn tab_options(wireless: bool) -> Vec<(String, String)> {
     let mut list = options(&[
         ("details", "Details"),
@@ -116,10 +119,9 @@ fn selected_tab(stored: &str, offered: &[(String, String)]) -> String {
     }
 }
 
-/// Set one state and show the sheet again, so Apply reflects the new value.
-fn put<T: 'static>(mut state: State<T>, value: T, editor: Editor) {
+/// Set one state; the popup body reads it and redraws.
+fn put<T: 'static>(mut state: State<T>, value: T) {
     state.set(value);
-    editor.show();
 }
 
 fn options(list: &[(&str, &str)]) -> Vec<(String, String)> {
@@ -269,46 +271,52 @@ fn run_nmcli(args: &[String], timeout: Duration) -> Result<(), CommandError> {
 }
 
 impl Editor {
-    /// Open the editor for `target`. The sheet appears at once with a loading line; the profile fills it in.
+    /// Open the editor for `target`. The popup shows a loading line until the profile arrives.
     pub fn open(self, target: Target) {
         let name = target.name.clone();
-        put(self.target, Some(target), self);
-        put(self.loaded, None, self);
-        put(self.error, None, self);
-        put(self.busy, false, self);
-        put(self.tab, "details".to_string(), self);
-        self.show();
+        let wireless = target.wireless;
+        put(self.target, Some(target));
+        put(self.loaded, None);
+        put(self.error, None);
+        put(self.busy, false);
+        put(self.tab, "details".to_string());
+        let body = EditorBody {
+            editor: self,
+            wireless,
+        };
+        let strip = EditorTabs {
+            editor: self,
+            wireless,
+        };
+        self.window.open(popup(name.clone(), body).tabs(strip));
         background_then(
             move || load_profile(&name),
-            move |result| {
-                match result {
-                    Ok(loaded) => self.fill(loaded),
-                    Err(error) => put(self.error, Some(error.0), self),
-                }
-                self.show();
+            move |result| match result {
+                Ok(loaded) => self.fill(loaded),
+                Err(error) => put(self.error, Some(error.0)),
             },
         );
     }
 
     fn fill(self, loaded: Loaded) {
         let profile = loaded.profile.clone();
-        put(self.autoconnect, profile.autoconnect, self);
-        put(self.everyone, profile.everyone, self);
-        put(self.metered, profile.metered.clone(), self);
-        put(self.key_mgmt, profile.key_mgmt.clone(), self);
-        put(self.ipv4_method, profile.ipv4_method.clone(), self);
-        put(self.ipv6_method, profile.ipv6_method.clone(), self);
-        put(self.id, profile.id.clone(), self);
-        put(self.cloned_mac, profile.cloned_mac.clone(), self);
-        put(self.mtu, profile.mtu.clone(), self);
-        put(self.psk, profile.psk.clone(), self);
-        put(self.ipv4_addresses, profile.ipv4_addresses.clone(), self);
-        put(self.ipv4_gateway, profile.ipv4_gateway.clone(), self);
-        put(self.ipv4_dns, profile.ipv4_dns.clone(), self);
-        put(self.ipv6_addresses, profile.ipv6_addresses.clone(), self);
-        put(self.ipv6_gateway, profile.ipv6_gateway.clone(), self);
-        put(self.ipv6_dns, profile.ipv6_dns.clone(), self);
-        put(self.loaded, Some(loaded), self);
+        put(self.autoconnect, profile.autoconnect);
+        put(self.everyone, profile.everyone);
+        put(self.metered, profile.metered.clone());
+        put(self.key_mgmt, profile.key_mgmt.clone());
+        put(self.ipv4_method, profile.ipv4_method.clone());
+        put(self.ipv6_method, profile.ipv6_method.clone());
+        put(self.id, profile.id.clone());
+        put(self.cloned_mac, profile.cloned_mac.clone());
+        put(self.mtu, profile.mtu.clone());
+        put(self.psk, profile.psk.clone());
+        put(self.ipv4_addresses, profile.ipv4_addresses.clone());
+        put(self.ipv4_gateway, profile.ipv4_gateway.clone());
+        put(self.ipv4_dns, profile.ipv4_dns.clone());
+        put(self.ipv6_addresses, profile.ipv6_addresses.clone());
+        put(self.ipv6_gateway, profile.ipv6_gateway.clone());
+        put(self.ipv6_dns, profile.ipv6_dns.clone());
+        put(self.loaded, Some(loaded));
     }
 
     /// The values as the form shows them now.
@@ -339,54 +347,21 @@ impl Editor {
         modify_all(&loaded.profile, &self.edit())
     }
 
-    /// Show the sheet with the current Apply state: enabled only when loaded, idle, valid and changed.
-    fn show(self) {
-        let Some(target) = self.target.read().clone() else {
-            return;
-        };
-        let ready = !*self.busy.read()
-            && self.loaded.read().is_some()
-            && self.edit().problems().is_empty()
-            && self.pending().is_some();
-        let label = if *self.busy.read() {
-            "Applying"
-        } else {
-            "Apply"
-        };
-        let options = tab_options(target.wireless);
-        let selected = selected_tab(&self.tab.read(), &options);
-        let strip = tabs(options, &selected, move |key: String| {
-            put(self.tab, key, self)
-        });
-        let body = EditorBody {
-            editor: self,
-            wireless: target.wireless,
-        };
-        self.overlays.show_sheet(
-            sheet(target.name, body)
-                .tabs(strip)
-                .primary(label, move |_| self.apply())
-                .primary_enabled(ready),
-        );
-    }
-
-    fn apply(self) {
+    fn apply(self, window: Window) {
         let Some(args) = self.pending() else {
-            self.overlays.close_sheet();
+            window.close();
             return;
         };
-        put(self.busy, true, self);
-        put(self.error, None, self);
-        self.show();
+        put(self.busy, true);
+        put(self.error, None);
         background_then(
             move || run_nmcli(&args, APPLY),
             move |result| {
-                put(self.busy, false, self);
+                put(self.busy, false);
                 match result {
-                    Ok(()) => self.overlays.close_sheet(),
+                    Ok(()) => window.close(),
                     Err(error) => {
                         self.overlays.toast(error.0);
-                        self.show();
                     }
                 }
             },
@@ -394,7 +369,7 @@ impl Editor {
     }
 
     /// Ask first: forgetting drops the saved password.
-    fn confirm_forget(self) {
+    fn confirm_forget(self, window: Window) {
         let Some(target) = self.target.read().clone() else {
             return;
         };
@@ -406,14 +381,13 @@ impl Editor {
             )
             .cancel("Cancel")
             .response("Forget", ResponseKind::Destructive, move |_| {
-                self.forget(name.clone())
+                self.forget(name.clone(), window)
             }),
         );
     }
 
-    fn forget(self, name: String) {
-        put(self.busy, true, self);
-        self.show();
+    fn forget(self, name: String, window: Window) {
+        put(self.busy, true);
         background_then(
             move || {
                 run_nmcli(
@@ -422,12 +396,11 @@ impl Editor {
                 )
             },
             move |result| {
-                put(self.busy, false, self);
+                put(self.busy, false);
                 match result {
-                    Ok(()) => self.overlays.close_sheet(),
+                    Ok(()) => window.close(),
                     Err(error) => {
                         self.overlays.toast(error.0);
-                        self.show();
                     }
                 }
             },
@@ -435,7 +408,7 @@ impl Editor {
     }
 }
 
-/// The sheet body. It reads the editor state, so it redraws as values change.
+/// The popup body. It reads the editor state, so it redraws as values change.
 #[derive(Clone, PartialEq)]
 struct EditorBody {
     editor: Editor,
@@ -446,8 +419,23 @@ impl Component for EditorBody {
     fn render(&self) -> impl IntoElement {
         let editor = self.editor;
         let wireless = self.wireless;
+        let window = use_window();
 
-        let mut column = sheet_column();
+        let busy = *editor.busy.read();
+        let ready = !busy
+            && editor.loaded.read().is_some()
+            && editor.edit().problems().is_empty()
+            && editor.pending().is_some();
+        let label = if busy { "Applying" } else { "Apply" };
+        use_popup_actions(PopupActions {
+            primary: Some(PopupAction {
+                label: label.into(),
+                enabled: ready,
+                on_press: EventHandler::new(move |_: ()| editor.apply(window)),
+            }),
+        });
+
+        let mut column = popup_column();
         let Some(loaded) = editor.loaded.read().clone() else {
             match editor.error.read().clone() {
                 Some(text) => column = column.child(status(Status::Error(text))),
@@ -462,7 +450,7 @@ impl Component for EditorBody {
             "ipv4" => ip_tab(editor, 4),
             "ipv6" => ip_tab(editor, 6),
             "security" => security_tab(editor),
-            _ => details_tab(editor, &loaded),
+            _ => details_tab(editor, &loaded, window),
         };
         column = column.child(content);
 
@@ -481,7 +469,25 @@ impl Component for EditorBody {
     }
 }
 
-fn details_tab(editor: Editor, loaded: &Loaded) -> Element {
+/// The popup's tab strip. It reads the live tab, so the selection follows the state.
+#[derive(Clone, PartialEq)]
+struct EditorTabs {
+    editor: Editor,
+    wireless: bool,
+}
+
+impl Component for EditorTabs {
+    fn render(&self) -> impl IntoElement {
+        let editor = self.editor;
+        let options = tab_options(self.wireless);
+        let selected = selected_tab(&editor.tab.read(), &options);
+        Element::from(tabs(options, &selected, move |key: String| {
+            put(editor.tab, key)
+        }))
+    }
+}
+
+fn details_tab(editor: Editor, loaded: &Loaded, window: Window) -> Element {
     let Some(target) = editor.target.read().clone() else {
         return Element::from(rect());
     };
@@ -494,46 +500,43 @@ fn details_tab(editor: Editor, loaded: &Loaded) -> Element {
         .row(switch_row(
             "Connect automatically",
             *editor.autoconnect.read(),
-            move |value: bool| put(editor.autoconnect, value, editor),
+            move |value: bool| put(editor.autoconnect, value),
         ))
         .row(switch_row(
             "Available to other users",
             *editor.everyone.read(),
-            move |value: bool| put(editor.everyone, value, editor),
+            move |value: bool| put(editor.everyone, value),
         ))
         .row(choice_row(
             "Metered connection",
             metered,
             &editor.metered.read(),
-            move |value: String| put(editor.metered, value, editor),
+            move |value: String| put(editor.metered, value),
         ));
     let forget = Group::new(None::<String>).row(
         row("Forget network")
             .destructive()
-            .on_press(move |_| editor.confirm_forget()),
+            .on_press(move |_| editor.confirm_forget(window)),
     );
-    Element::from(sheet_column().child(facts).child(settings).child(forget))
+    Element::from(popup_column().child(facts).child(settings).child(forget))
 }
 
 fn identity_tab(editor: Editor, loaded: &Loaded, wireless: bool) -> Element {
-    let mut group = Group::titled("Identity").row(field_row("Name", editor.id, editor));
+    let mut group = Group::titled("Identity").row(field_row("Name", editor.id));
     if wireless {
         if !loaded.profile.bssid.is_empty() {
             group = group.row(row("BSSID").value(loaded.profile.bssid.clone()));
         }
         group = group
-            .row(field_row("Cloned MAC address", editor.cloned_mac, editor))
-            .row(field_row("MTU", editor.mtu, editor));
+            .row(field_row("Cloned MAC address", editor.cloned_mac))
+            .row(field_row("MTU", editor.mtu));
     }
     Element::from(group)
 }
 
-/// One label on the left and an editable field on the right. The field reshows the sheet on each change.
-fn field_row(title: &str, value: State<String>, editor: Editor) -> Element {
-    form_row(
-        title,
-        text_field(value, |_: String| {}).on_change(move |_: String| editor.show()),
-    )
+/// One label on the left and an editable field on the right.
+fn field_row(title: &str, value: State<String>) -> Element {
+    form_row(title, text_field(value, |_: String| {}))
 }
 
 /// The IPv4 or IPv6 tab: the method, then the addresses, gateway and DNS servers for that method.
@@ -563,11 +566,11 @@ fn ip_tab(editor: Editor, version: u8) -> Element {
             "Method",
             options(methods),
             &selected,
-            move |value: String| put(method, value, editor),
+            move |value: String| put(method, value),
         ))
-        .row(field_row("Addresses", addresses, editor))
-        .row(field_row("Gateway", gateway, editor))
-        .row(field_row("DNS servers", dns, editor));
+        .row(field_row("Addresses", addresses))
+        .row(field_row("Gateway", gateway))
+        .row(field_row("DNS servers", dns));
     Element::from(group)
 }
 
@@ -578,11 +581,10 @@ fn security_tab(editor: Editor) -> Element {
         "Security",
         options(SECURITY_CHOICES),
         &key,
-        move |value: String| put(editor.key_mgmt, value, editor),
+        move |value: String| put(editor.key_mgmt, value),
     ));
     if key != "none" {
         let field = text_field(editor.psk, |_: String| {})
-            .on_change(move |_: String| editor.show())
             .placeholder("Password")
             .password();
         group = group.row(form_row("Password", field));
