@@ -415,6 +415,18 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
     (PageId::About, "Bingux version", "release system version"),
 ];
 
+/// The index with each entry's title and words folded to lower case once, so
+/// a keystroke only folds the query.
+static FOLDED: std::sync::LazyLock<Vec<(PageId, &'static str, String)>> =
+    std::sync::LazyLock::new(|| {
+        SETTINGS
+            .iter()
+            .map(|(page, title, keywords)| {
+                (*page, *title, format!("{title} {keywords}").to_lowercase())
+            })
+            .collect()
+    });
+
 /// The settings whose title or words contain every word of `query`, ignoring
 /// case, in index order. An empty query matches nothing.
 pub fn matching(query: &str) -> Vec<(PageId, &'static str)> {
@@ -422,12 +434,9 @@ pub fn matching(query: &str) -> Vec<(PageId, &'static str)> {
     if words.is_empty() {
         return Vec::new();
     }
-    SETTINGS
+    FOLDED
         .iter()
-        .filter(|(_, title, keywords)| {
-            let haystack = format!("{title} {keywords}").to_lowercase();
-            words.iter().all(|word| haystack.contains(word.as_str()))
-        })
+        .filter(|(_, _, haystack)| words.iter().all(|word| haystack.contains(word.as_str())))
         .map(|(page, title, _)| (*page, *title))
         .collect()
 }

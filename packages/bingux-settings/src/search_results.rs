@@ -55,6 +55,9 @@ impl Component for SearchResults {
         let navigator = use_navigator();
         let query = self.query;
         search_highlight::provide(query);
+        // Every in-place section counts itself here while it shows. Declared
+        // before the early return so the hook order never depends on the query.
+        let shown_sections = use_state(|| 0usize);
 
         let text = query.read().clone();
         let mut body = rect().tw(&tokens, PAGE);
@@ -62,8 +65,6 @@ impl Component for SearchResults {
             return body;
         }
         let hits = settings_index::matching(&text);
-        // Every in-place section counts itself here while it shows.
-        let shown_sections = use_state(|| 0usize);
         let mut listed = 0usize;
         for page in PageId::ALL.iter().copied() {
             if index_only(page) {

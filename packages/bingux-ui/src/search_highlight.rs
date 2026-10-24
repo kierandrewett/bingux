@@ -60,11 +60,16 @@ pub fn paragraph(style: TextStyle, tokens: &Tokens, text: &str) -> Element {
 /// paragraph options chains them onto the result and falls back on `None`.
 pub fn marked(style: TextStyle, tokens: &Tokens, text: &str) -> Option<Paragraph> {
     let ranges = marks(text)?;
+    // A highlight change alone is a style-only diff: Freya keeps the old
+    // layout and never re-measures the new element, so its paragraph is
+    // missing at render (paragraph.rs `render` unwraps it). Keying by the
+    // ranges makes each highlight set a new element that is measured.
     Some(
         style
             .paragraph(tokens, text)
-            .highlights(ranges)
-            .highlight_color(mark_colour(tokens)),
+            .highlights(ranges.clone())
+            .highlight_color(mark_colour(tokens))
+            .key(ranges),
     )
 }
 
