@@ -303,13 +303,13 @@ def switch_x(frame: np.ndarray, y: float) -> float:
     return x - SWITCH_WIDTH / 2
 
 
-MAP_OCEAN = (31, 31, 31)  # the sea colour of the time zone map (shell/bingux InstallerTimezonePage.qml)
+MAP_OCEAN = (30, 31, 34)  # the rendered sea of the time zone map: black at 30% over the card (shell/bingux InstallerTimezonePage.qml)
 
 
 def map_rect(frame: np.ndarray) -> tuple[int, int, int, int]:
     """The time zone map as (left, top, right, bottom) in screen pixels: the bounding box of its sea colour,
     which covers every map pixel that is neither land nor a city dot. The list and the label never use it."""
-    ys, xs = np.nonzero(np.all(frame == MAP_OCEAN, axis=2))
+    ys, xs = np.nonzero(np.all(np.abs(frame.astype(int) - MAP_OCEAN) <= 3, axis=2))
     if xs.size == 0:
         raise RuntimeError("time zone map not on screen")
     return int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
