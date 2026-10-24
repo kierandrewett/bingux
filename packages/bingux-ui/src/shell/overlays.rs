@@ -332,11 +332,6 @@ impl Component for OverlayHost {
         rect()
             .expanded()
             .child(self.child.clone())
-            .maybe_child(dialog.map(|dialog| DialogLayer {
-                overlays,
-                dialog,
-                closing: dialog_closing,
-            }))
             .maybe_child(toast.map(|(id, toast)| ToastLayer {
                 overlays,
                 id,
@@ -347,6 +342,11 @@ impl Component for OverlayHost {
                 overlays,
                 sheet,
                 closing: sheet_closing,
+            }))
+            .maybe_child(dialog.map(|dialog| DialogLayer {
+                overlays,
+                dialog,
+                closing: dialog_closing,
             }))
             .maybe_child(menu.map(|menu| MenuLayer {
                 overlays,
