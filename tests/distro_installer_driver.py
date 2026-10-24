@@ -169,8 +169,9 @@ class Match:
 
 
 def _beside(word: Word, box: Word) -> bool:
-    """`word` shares the line with `box` and is close enough to read as the same sentence."""
-    if abs(word.cy - box.cy) >= box.height / 2:
+    """`word` shares the line with `box` and is close enough to read as the same sentence. A glyph with no
+    letter or digit (the back chevron beside a page title) is not text and never counts."""
+    if not _norm(word.text) or abs(word.cy - box.cy) >= box.height / 2:
         return False
     gap = max(word.x0 - box.x1, box.x0 - word.x1)
     return gap < 2 * box.height
