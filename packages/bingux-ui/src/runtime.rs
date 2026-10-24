@@ -1,14 +1,15 @@
 //! Running system commands without blocking the UI thread.
 //!
-//! Freya's event loop is single threaded, so every command runs on a std
-//! thread and hands its result back through a channel that a Freya task
-//! polls. Every command has a timeout and a readable failure message.
+//! Freya's event loop is single threaded. Commands run on the shared worker
+//! pool in [`crate::task`] and hand their result back to a Freya task, which
+//! applies it on the UI thread. Every command has a timeout and a readable
+//! failure message.
 
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use crate::shell::overlays::Overlays;
+use crate::task::spawn_blocking;
 use freya::prelude::*;
 
 /// A readable failure from a system command.
@@ -148,29 +149,15 @@ pub fn run_with_stdin(
     }))
 }
 
-/// Run `work` on a background thread and deliver its result to `state`.
+/// Run `work` on the task pool and store its result in `state`.
 ///
-/// Call from an event handler or `use_hook`; never from inside `render`
-/// without a hook, or every render would start a new thread.
+/// Call from an event handler or `use_hook`, never from inside `render`.
 pub fn background<T: Send + 'static>(
     mut state: State<Option<T>>,
     work: impl FnOnce() -> T + Send + 'static,
 ) {
-    let (sender, receiver) = mpsc::channel();
-    std::thread::spawn(move || {
-        let _ = sender.send(work());
-    });
     spawn(async move {
-        loop {
-            match receiver.try_recv() {
-                Ok(value) => {
-                    state.set(Some(value));
-                    return;
-                }
-                Err(mpsc::TryRecvError::Empty) => timer(Duration::from_millis(30)).await,
-                Err(mpsc::TryRecvError::Disconnected) => return,
-            }
-        }
+        state.set(Some(spawn_blocking(work).await));
     });
 }
 
@@ -215,27 +202,14 @@ pub fn prefetch<T: Send + 'static>(key: &'static str, load: fn() -> T) {
     background(cached_state::<T>(key), load);
 }
 
-/// Run `work` in the background and call `done` with its result on the UI
+/// Run `work` on the task pool and call `done` with its result on the UI
 /// thread, for actions that update several pieces of state.
 pub fn background_then<T: Send + 'static>(
     work: impl FnOnce() -> T + Send + 'static,
     done: impl FnOnce(T) + 'static,
 ) {
-    let (sender, receiver) = mpsc::channel();
-    std::thread::spawn(move || {
-        let _ = sender.send(work());
-    });
     spawn(async move {
-        loop {
-            match receiver.try_recv() {
-                Ok(value) => {
-                    done(value);
-                    return;
-                }
-                Err(mpsc::TryRecvError::Empty) => timer(Duration::from_millis(30)).await,
-                Err(mpsc::TryRecvError::Disconnected) => return,
-            }
-        }
+        done(spawn_blocking(work).await);
     });
 }
 

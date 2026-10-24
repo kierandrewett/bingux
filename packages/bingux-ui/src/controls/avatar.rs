@@ -9,6 +9,7 @@ use freya::prelude::*;
 use crate::icons::{self, Icon};
 use crate::style::*;
 use crate::surface::use_tokens;
+use crate::task::use_resource;
 
 /// An avatar of `size` for the account with login name `user`.
 pub fn avatar(user: impl Into<String>, size: Dim) -> Avatar {
@@ -24,13 +25,14 @@ pub fn current_user() -> String {
 }
 
 /// Where AccountsService keeps the picture of `user`. The Bingux shell reads
-/// the same file for the signed-in account.
-fn account_picture(user: &str) -> Option<PathBuf> {
+/// the same file for the signed-in account. It stats the disk, so it runs on
+/// the task pool through [`use_resource`], never in `render`.
+fn account_picture(user: String) -> Result<Option<PathBuf>, String> {
     if user.is_empty() || user.contains('/') {
-        return None;
+        return Ok(None);
     }
-    let path = PathBuf::from("/var/lib/AccountsService/icons").join(user);
-    path.is_file().then_some(path)
+    let path = PathBuf::from("/var/lib/AccountsService/icons").join(&user);
+    Ok(path.is_file().then_some(path))
 }
 
 /// The default glyph's size inside an avatar of `size`.
@@ -62,7 +64,9 @@ impl Component for Avatar {
                 clip(),
             ],
         );
-        match account_picture(&self.user) {
+        let picture = use_resource(self.user.clone(), account_picture);
+        let path = picture.with(|state| state.value().cloned().flatten());
+        match path {
             Some(path) => {
                 let px = self.size.px();
                 frame.child(

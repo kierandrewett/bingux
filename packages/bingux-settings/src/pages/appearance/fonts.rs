@@ -314,7 +314,6 @@ impl Component for FontPage {
         })
         .into();
 
-        let fonts_timer = std::time::Instant::now();
         let filter_key = filter.read().clone();
         let query_text = query.read().clone();
         let found = matching(&catalogue, &filter_key, &query_text);
@@ -360,7 +359,6 @@ impl Component for FontPage {
         let mut list = Group::new(None::<String>)
             .description(format!("{total} fonts"))
             .rows(rows);
-        eprintln!("FONTS_RENDER_US {}", fonts_timer.elapsed().as_micros());
         if names.is_empty() {
             list = list.row(status(Status::Empty("Nothing matches.".to_string())));
         }

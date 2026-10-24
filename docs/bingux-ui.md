@@ -305,6 +305,19 @@ previous, value, work)`. It shows `value` at once, runs `work` in the
   toasts the error. `runtime::optimistic_then` also takes `done`, which runs on
   the UI thread after success, for a reload of a cached model. The control never
   waits on the command.
+- **Blocking work runs on the executor.** `task::spawn_blocking(f)` runs `f`
+  on a bounded worker pool (four to eight threads, following the CPU count) and
+  returns a future a Freya `spawn` task can `.await`. `task::use_resource(key,
+load)` loads a `Resource<T>` in the background: it is `Loading`, then
+  `Ready(T)`, or `Error(String)` when `load` fails; `refresh()` reloads it and
+  keeps the old value as `Refreshing(T)`. The load stops when its component
+  unmounts. The `runtime` helpers (`background`, `background_then`,
+  `use_cached`, `prefetch`, `optimistic`) use the same pool.
+- **Never on the UI thread.** Do not run `Command`, `runtime::run`, a file
+  read, `apps::installed()`, a gsettings or `bingux-config` call in `render`,
+  a `use_hook` or `use_memo` body, or directly in an event handler. Put it in
+  `use_resource`, `background` or `optimistic`, and render the previous value
+  or `Loading` until it returns.
 - **Controls are the shell's.** The switch is 36 x 20 with a 16 px thumb. The
   slider has a 6 px track (8 px while dragging), an accent fill and a 16 px
   white knob on a soft shadow. Buttons are filled with
@@ -323,8 +336,8 @@ previous, value, work)`. It shows `value` at once, runs `work` in the
 - **A message** (loading, empty, error) is a `status` row inside a group; only
   an error is tinted. A page that has no data yet shows `skeleton()`, not text.
 - **Chrome.** The header bar carries the window buttons, Back and the busy
-  spinner. On a desktop window the page is a rounded panel inset in the
-  window frame, which is the sidebar colour. A page starts with its title
+  spinner. On a desktop window the sidebar and the page are flush, split by a
+  hairline, and the page header sits on the content colour. A page starts with its title
   row: `PAGE_TITLE`, one sentence from `NavItem::lead` (or the page's
   `PageHeader::subtitle` status when it sets one) and the page's action at the
   right. On a phone the title is in the header and the sentence is the first
@@ -334,8 +347,10 @@ previous, value, work)`. It shows `value` at once, runs `work` in the
   (`ScrolledTitle`, 220 ms, ease-out).
   The sidebar is a search field, the signed-in person
   (`NavigationSplitView::profile`, which opens `Profile::target`), then rows
-  under `NavItem::group` names, with a neutral selection layer and an accent
-  icon on the selected row.
+  under `NavItem::group` names. Every sidebar row, page, profile or search
+  result, is the public `SidebarRow` component (`SidebarMark::Icon` or
+  `SidebarMark::Avatar`), so they share one icon column and label inset, a
+  neutral selection layer and an accent icon on the selected row.
 - The window is opaque and square. Gnoblin draws the corners, border and
   shadow, so an application sets no corner radius, transparency or shadow on
   its root.

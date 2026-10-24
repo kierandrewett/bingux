@@ -138,8 +138,10 @@ On Wi-Fi, Network, Bluetooth and Displays, each item (a Wi-Fi network, a wired c
 
 The sidebar search finds pages first, then settings. Each settings row shows
 the page it lives on under its title. Up and Down move through the results,
-Enter opens the highlighted one, and Esc clears the search. At most 20 results
-show. Ctrl+F moves focus to the search field. The list of searchable settings
+Enter opens the highlighted one, and Esc clears the search. Pages that list their
+index entries (Wi-Fi, Bluetooth, Displays and Applications) show at most eight
+per page; a longer query narrows them. Other pages show the controls whose
+labels match. Ctrl+F moves focus to the search field. The list of searchable settings
 is `src/settings_index.rs`; add a row there when a page gains a setting, with
 plain words a person might type in the keywords column.
 

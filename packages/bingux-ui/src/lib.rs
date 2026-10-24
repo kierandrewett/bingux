@@ -23,6 +23,7 @@ pub mod shell;
 pub mod snapshot;
 pub mod style;
 pub mod surface;
+pub mod task;
 pub mod theme;
 pub mod typography;
 

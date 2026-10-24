@@ -26,6 +26,10 @@ pub fn initial_query() -> String {
     }
 }
 
+/// Most index entries listed under one page. A short query can match a page's
+/// whole index, so the list is capped; a longer query narrows it.
+const MAX_INDEX_ROWS: usize = 8;
+
 /// Pages listed by their index entries rather than rendered in place. Wi-Fi
 /// and Bluetooth list devices that appear and disappear, the displays page
 /// draws the arrangement canvas and its own banner, and Applications lists
@@ -71,6 +75,7 @@ impl Component for SearchResults {
                 let rows: Vec<Element> = hits
                     .iter()
                     .filter(|(hit_page, _)| *hit_page == page)
+                    .take(MAX_INDEX_ROWS)
                     .map(|(_, title)| {
                         row(*title)
                             .navigates()
