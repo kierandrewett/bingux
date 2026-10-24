@@ -167,7 +167,7 @@ pub const DIALOG: Recipe = &[
     p(S6),
     gap(S4),
     rounded(Radius::Overlay),
-    bg(Paint::Popover),
+    bg(Paint::Bg),
     border(Line::Hairline),
     shadow(Elevation::Floating),
 ];
