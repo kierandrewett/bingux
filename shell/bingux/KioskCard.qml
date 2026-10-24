@@ -200,7 +200,7 @@ Rectangle {
             height: root.footerHeight
             background: Rectangle {
                 radius: widePrimary.cornerRadius
-                color: !widePrimary.enabled ? Theme.elevated : widePrimary.down ? Qt.darker(Theme.accent, 1.2) : widePrimary.hovered ? Qt.lighter(Theme.accent, 1.1) : Theme.accent
+                color: !widePrimary.enabled ? Theme.elevated : widePrimary.down ? Qt.darker(Theme.accent, 1.6) : widePrimary.hovered ? Qt.darker(Theme.accent, 1.3) : Qt.darker(Theme.accent, 1.4)
                 border.width: widePrimary.activeFocus ? 2 : 0
                 border.color: Theme.text
             }

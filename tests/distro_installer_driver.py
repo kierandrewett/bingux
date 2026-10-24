@@ -148,9 +148,12 @@ def _passes(frame: np.ndarray):
 
 
 def _sources(frame: np.ndarray):
-    """As _passes, then the thresholded bands at two cut-offs: the slow last resort, the first one tried first."""
+    """As _passes, then the thresholded bands at three cut-offs, tried in turn: 156 for light text on a dark
+    fill, 200 for white text on a light fill (the Continue fill of the installed build before the darker
+    wide-card accent; 230 reads it as "Sonia"), then 100 as the slow last resort."""
     yield from _passes(frame)
     yield ocr_bands(frame, 156)
+    yield ocr_bands(frame, 200)
     yield ocr_bands(frame, 100)
 
 
