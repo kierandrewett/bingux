@@ -3,7 +3,7 @@
 //! Interaction is a set of alpha layers drawn over the surface a control
 //! sits on: selection, then hover or press, as
 //! `ControlCentreButtonSurface.qml` does. Apply it with
-//! [`crate::style::surface`]; keyboard focus is [`crate::style::focus_ring`].
+//! [`crate::style::surface`]; keyboard focus is [`crate::motion::focus_ring`].
 
 use freya::prelude::*;
 

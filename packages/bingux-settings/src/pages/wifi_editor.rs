@@ -579,7 +579,7 @@ impl Component for EditorBody {
             && needs_reconnect(args)
         {
             column = column.child(caption(
-                "The network reconnects to apply the name, address, DNS or security changes.",
+                "Applying reconnects the network to save name, address, DNS or security changes.",
             ));
         }
         column
@@ -732,8 +732,8 @@ fn identity_tab(editor: Editor, loaded: &Loaded, wireless: bool) -> Element {
 /// What Wake on LAN does for each choice.
 fn wake_on_lan_caption(mode: &str) -> &'static str {
     match mode {
-        "magic" => "The computer wakes when it receives a magic packet from the network.",
-        "none" => "The computer does not wake from the network.",
+        "magic" => "Wakes when it receives a magic packet from the network.",
+        "none" => "Does not wake from the network.",
         _ => "Follows the system setting.",
     }
 }

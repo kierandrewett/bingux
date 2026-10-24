@@ -14,10 +14,12 @@ use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
     Group, Overlays, PageHeader, PopupAction, PopupActions, ResponseKind, SpinnerSize, Status,
-    Tokens, Window, action_strip, centered_caption, dialog, heading, icon_button, page_column,
-    popup, popup_column, row, skeleton, spinner, status, strip_action, switch_row, text_field,
-    use_overlays, use_page_busy, use_page_header, use_popup_actions, use_tokens, use_window,
+    Tokens, Window, action_strip, caption, centered_caption, dialog, heading, icon_button,
+    page_column, popup, popup_column, row, skeleton, spinner, status, strip_action, switch_row,
+    text_field, use_overlays, use_page_busy, use_page_header, use_popup_actions, use_tokens,
+    use_window,
 };
+use bingux_ui::layout::hstack;
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 use bingux_ui::style::*;
 
@@ -928,7 +930,7 @@ fn visible_section(ui: Ui, model: &Model, tokens: Tokens) -> Element {
 }
 
 /// One row per network. The signal icon leads; a lock marks a secured network;
-/// a check mark marks the connected network and the subtitle says "Saved" for a
+/// a check mark marks the connected network and a caption says "Saved" for a
 /// saved one. A gear opens the connection editor for a network that is connected
 /// or saved.
 fn network_rows(ui: Ui, networks: &[Network], tokens: Tokens) -> Vec<Element> {
@@ -939,10 +941,11 @@ fn network_rows(ui: Ui, networks: &[Network], tokens: Tokens) -> Vec<Element> {
                 .leading_signal(signal_level(network.signal), network.secured);
             let connecting = ui.busy.read().as_deref()
                 == Some(format!("Connecting to {}.", network.ssid).as_str());
+            let mut saved = false;
             if network.in_use {
                 item = item.selected(true);
             } else if network.saved {
-                item = item.subtitle("Saved");
+                saved = true;
             }
 
             let mut cluster = rect().tw_layout(&[flex_row(), gap(S2), items(Align::Center)]);
@@ -972,8 +975,14 @@ fn network_rows(ui: Ui, networks: &[Network], tokens: Tokens) -> Vec<Element> {
                     ui.join(&press);
                 }
             });
+            let slot = action_slot(Some(Element::from(cluster)));
+            let trailing = if saved {
+                Element::from(hstack(S2).child(caption("Saved")).child(slot))
+            } else {
+                slot
+            };
             Element::from(
-                item.trailing(action_slot(Some(Element::from(cluster))))
+                item.trailing(trailing)
                     .context_menu(network_menu(ui, network)),
             )
         })
@@ -1034,7 +1043,7 @@ fn hotspot_row(ui: Ui, model: &Model) -> Element {
             let stop = name.clone();
             Element::from(
                 row("Turn off Wi-Fi hotspot")
-                    .subtitle(format!("On: {name}"))
+                    .value(format!("On: {name}"))
                     .on_press(move |_| ui.stop_hotspot(stop.clone())),
             )
         }
@@ -1091,6 +1100,7 @@ impl Component for WifiPage {
         let mut header = PageHeader {
             subtitle: Some(wifi_subtitle(shown.as_ref())),
             action: None,
+            ..Default::default()
         };
         if let Some(on) = master {
             header = header.switch("Wi-Fi", on, move |next: bool| ui.set_wifi(next));
@@ -1214,6 +1224,7 @@ impl Component for NetworkPage {
         let tokens = use_tokens();
         use_polling(ui);
         use_page_busy(ui.busy.read().is_some());
+        use_page_header(PageHeader::default().hero_title());
 
         // Go back to the list once the network is neither in range nor saved.
         let gone = self.ssid.clone();

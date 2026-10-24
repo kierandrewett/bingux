@@ -11,13 +11,14 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use crate::controls::button::{ActionButton, action_button, primary_button};
-use crate::shell::menu::{Menu, MenuItem, MenuLayer};
+use crate::shell::menu::{Menu, MenuItem, MenuLayer, MenuNav};
 use crate::style::*;
 use crate::surface::{is_activation_key, use_tokens};
 use crate::theme::Tokens;
 use crate::typography::{BODY, EMPHASIS, Ink, SECTION};
 
-/// The toast pill: 44 px tall, text then action and dismiss, on a raised popover.
+/// The toast pill: 44 px tall, text then action and dismiss, on the same dark
+/// floating surface as a tooltip.
 const TOAST: Recipe = &[
     flex_row(),
     items(Align::Center),
@@ -26,8 +27,8 @@ const TOAST: Recipe = &[
     pr(S1),
     gap(S3),
     rounded(Radius::Pill),
-    bg(Paint::Popover),
-    border(Line::Outline),
+    bg(Paint::Floating),
+    border(Line::Stroke(Dim::Hairline, Paint::FloatingOutline)),
     shadow(Elevation::Raised),
 ];
 
@@ -113,6 +114,11 @@ pub struct Overlays {
     dialog_closing: State<bool>,
     menu: State<Option<Menu>>,
     menu_closing: State<bool>,
+    /// The focus node of the open menu's panel. The panel takes focus when it
+    /// opens; when it closes, focus goes back to the owner only if the panel
+    /// still holds it.
+    pub(crate) menu_panel: AccessibilityId,
+    pub(crate) menu_nav: State<MenuNav>,
     toasts: State<Vec<(u64, Toast)>>,
     toast_closing: State<Option<u64>>,
     next_toast: State<u64>,
@@ -127,6 +133,8 @@ impl Overlays {
             dialog_closing: State::create_in_scope(false, scope),
             menu: State::create_in_scope(None, scope),
             menu_closing: State::create_in_scope(false, scope),
+            menu_panel: AccessibilityId::new_unique(),
+            menu_nav: State::create_in_scope(MenuNav::default(), scope),
             toasts: State::create_in_scope(Vec::new(), scope),
             toast_closing: State::create_in_scope(None, scope),
             next_toast: State::create_in_scope(0, scope),
@@ -155,13 +163,38 @@ impl Overlays {
 
     /// Open a menu of `items` at `at`, a point in window coordinates. The
     /// menu closes when an item is picked, on Escape, or on a press outside it.
-    pub fn show_menu(mut self, at: (f32, f32), items: Vec<MenuItem>) {
+    pub fn show_menu(self, at: (f32, f32), items: Vec<MenuItem>) {
+        self.show_menu_from(None, at, items, false);
+    }
+
+    /// Open a menu of `items` at `at`, owned by the control `owner`. A menu
+    /// opened from the keyboard highlights its first item. When the menu
+    /// closes, focus returns to `owner` if the menu still holds it.
+    pub(crate) fn show_menu_from(
+        mut self,
+        owner: Option<AccessibilityId>,
+        at: (f32, f32),
+        items: Vec<MenuItem>,
+        keyboard: bool,
+    ) {
         self.menu_closing.set(false);
+        self.menu_nav.set(MenuNav::new(owner, &items, keyboard));
         self.menu.set(Some(Menu {
             x: at.0,
             y: at.1,
             items,
         }));
+    }
+
+    /// Whether the open menu was opened by the control `owner`.
+    pub(crate) fn menu_owned_by(self, owner: AccessibilityId) -> bool {
+        self.menu.read().is_some() && self.menu_nav.read().owner == Some(owner)
+    }
+
+    /// Close the open menu from the keyboard. Focus returns to the owner when
+    /// the menu finishes closing.
+    pub(crate) fn dismiss_menu_by_key(self) {
+        self.close_menu();
     }
 
     /// Close the open menu.
@@ -171,10 +204,21 @@ impl Overlays {
         }
     }
 
+    /// Remove the menu once it has animated out. Focus goes back to the owner
+    /// only if the panel still holds it, so an item that opened a popup or
+    /// moved focus keeps its new focus.
     pub(crate) fn finish_menu(mut self) {
-        if *self.menu_closing.read() {
-            self.menu.set(None);
-            self.menu_closing.set(false);
+        if !*self.menu_closing.read() {
+            return;
+        }
+        let owner = self.menu_nav.peek().owner;
+        let panel_focused =
+            *Platform::get().current_window().focused_accessibility_id.peek() == self.menu_panel;
+        self.menu.set(None);
+        self.menu_nav.set(MenuNav::default());
+        self.menu_closing.set(false);
+        if let (Some(owner), true) = (owner, panel_focused) {
+            owner.request_focus();
         }
     }
 
@@ -537,19 +581,11 @@ impl Component for ToastLayer {
                     )
                     .maybe_child(action)
                     .child(
-                        rect()
-                            .a11y_role(AccessibilityRole::Button)
-                            .a11y_alt("Dismiss")
-                            .tw(
-                                &tokens,
-                                &[w(Dim::Box7), h(Dim::Box7), rounded(Radius::Card), center()],
-                            )
-                            .on_press(move |_: Event<PressEventData>| overlays.dismiss_toast(id))
-                            .child(crate::icons::icon(
-                                crate::icons::Icon::WindowClose,
-                                IconSize::Mark,
-                                Paint::Muted.color(&tokens),
-                            )),
+                        crate::controls::icon_button(crate::icons::Icon::WindowClose, move |_| {
+                            overlays.dismiss_toast(id)
+                        })
+                        .size(Dim::Box7)
+                        .tooltip("Dismiss"),
                     ),
             )
     }

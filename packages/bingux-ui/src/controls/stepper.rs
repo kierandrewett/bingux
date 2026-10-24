@@ -5,6 +5,7 @@
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
+use crate::motion::focus_ring;
 use crate::style::*;
 use crate::surface::{use_enabled, use_tokens};
 use crate::typography::{BODY, Ink};
@@ -136,11 +137,11 @@ impl Component for Stepper {
                     px(S0_5),
                     rounded(Radius::Control),
                     bg(Paint::Control),
-                    focus_ring(focus()),
                 ],
             )
             .maybe(!enabled, |element| element.opacity(0.45))
             .maybe(enabled, |element| element.on_key_down(on_key_down))
+            .child(focus_ring(focus(), Radius::Control))
             .child(step_button(Icon::ListRemove, can_decrement, move |_| {
                 decrement();
                 a11y_id.request_focus();

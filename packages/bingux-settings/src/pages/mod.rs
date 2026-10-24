@@ -11,6 +11,7 @@ use crate::icons::Icon;
 pub use crate::system::bingux_config;
 
 pub mod about;
+pub mod accessibility;
 pub mod appearance;
 pub mod applications;
 pub mod bluetooth;
@@ -36,6 +37,7 @@ pub enum PageId {
     Network,
     Bluetooth,
     Appearance,
+    Accessibility,
     Desktop,
     Search,
     Displays,
@@ -54,6 +56,7 @@ pub enum PageId {
 pub fn prefetch_all() {
     about::prefetch();
     appearance::prefetch();
+    accessibility::prefetch();
     applications::prefetch();
     bluetooth::prefetch();
     datetime::prefetch();
@@ -71,7 +74,7 @@ pub fn prefetch_all() {
 
 impl PageId {
     /// Sidebar order.
-    pub const ALL: [PageId; 14] = [
+    pub const ALL: [PageId; 15] = [
         PageId::WiFi,
         PageId::Network,
         PageId::Bluetooth,
@@ -84,6 +87,7 @@ impl PageId {
         PageId::Desktop,
         PageId::Search,
         PageId::Applications,
+        PageId::Accessibility,
         PageId::DateTime,
         PageId::About,
     ];
@@ -94,6 +98,7 @@ impl PageId {
             Self::Network => "Network",
             Self::Bluetooth => "Bluetooth",
             Self::Appearance => "Appearance",
+            Self::Accessibility => "Accessibility",
             Self::Desktop => "Desktop and dock",
             Self::Search => "Search",
             Self::Displays => "Displays",
@@ -105,27 +110,6 @@ impl PageId {
             Self::Users => "Users",
             Self::Applications => "Applications",
             Self::About => "About",
-        }
-    }
-
-    /// One sentence under the page title that says what the page is for.
-    pub fn lead(self) -> &'static str {
-        match self {
-            Self::WiFi => "Connect to a wireless network and manage the ones you saved.",
-            Self::Network => "Wired connections, VPNs and the proxy.",
-            Self::Bluetooth => "Pair headphones, keyboards and other devices.",
-            Self::Appearance => "Wallpaper, accent colour, font and light or dark mode.",
-            Self::Desktop => "The dock, the top bar and the Control Centre.",
-            Self::Search => "Where search looks and which web searches it offers.",
-            Self::Displays => "Resolution, scale and where each screen sits.",
-            Self::Sound => "Speakers, microphones and the volume of each app.",
-            Self::Power => "Battery, power mode and when the screen turns off.",
-            Self::Keyboard => "Typing, key repeat, shortcuts and input languages.",
-            Self::Mouse => "Pointer speed, scrolling and touchpad gestures.",
-            Self::DateTime => "The time, the date and the time zone.",
-            Self::Users => "The accounts on this computer.",
-            Self::Applications => "Default apps and what each installed app can do.",
-            Self::About => "This computer and the software on it.",
         }
     }
 
@@ -148,6 +132,7 @@ impl PageId {
             Self::DateTime => &[PageId::Power, PageId::About],
             Self::Users => &[PageId::About, PageId::DateTime],
             Self::About => &[PageId::Displays, PageId::Users],
+            Self::Accessibility => &[PageId::Keyboard, PageId::Mouse],
         }
     }
 
@@ -158,7 +143,7 @@ impl PageId {
             Self::WiFi | Self::Network | Self::Bluetooth => "connections",
             Self::Displays | Self::Sound | Self::Power | Self::Keyboard | Self::Mouse => "devices",
             Self::Appearance | Self::Desktop | Self::Search | Self::Applications => "desktop",
-            Self::DateTime | Self::Users | Self::About => "system",
+            Self::Accessibility | Self::DateTime | Self::Users | Self::About => "system",
         }
     }
 
@@ -169,6 +154,7 @@ impl PageId {
             Self::Network => "ethernet wired cable vpn proxy internet",
             Self::Bluetooth => "headphones devices pair",
             Self::Appearance => "wallpaper background accent colour color theme dark light",
+            Self::Accessibility => "accessibility screen reader keyboard sticky slow bounce mouse keys pointer contrast large text cursor animations scrollbars",
             Self::Desktop => "dock sidebar bar clock control centre layout",
             Self::Search => "providers engines files previews assistant",
             Self::Displays => "monitor screen resolution scale night light",
@@ -189,6 +175,7 @@ impl PageId {
             Self::Network => Icon::NetworkWired,
             Self::Bluetooth => Icon::Bluetooth,
             Self::Appearance => Icon::Appearance,
+            Self::Accessibility => Icon::Accessibility,
             Self::Desktop => Icon::Desktop,
             Self::Search => Icon::Search,
             Self::Displays => Icon::Display,
@@ -210,6 +197,7 @@ impl PageId {
             Self::Network => "wired",
             Self::Bluetooth => "bluetooth",
             Self::Appearance => "background",
+            Self::Accessibility => "accessibility",
             Self::Desktop => "desktop",
             Self::Search => "search",
             Self::Displays => "display",
@@ -234,6 +222,7 @@ impl PageId {
             "wired" | "ethernet" => Self::Network,
             "bluetooth" => Self::Bluetooth,
             "background" | "appearance" => Self::Appearance,
+            "accessibility" | "a11y" => Self::Accessibility,
             "desktop" => Self::Desktop,
             "search" => Self::Search,
             "display" | "displays" => Self::Displays,
@@ -257,6 +246,7 @@ impl PageId {
             Self::Network => network::NetworkPage.into(),
             Self::Bluetooth => bluetooth::BluetoothPage.into(),
             Self::Appearance => appearance::AppearancePage.into(),
+            Self::Accessibility => accessibility::AccessibilityPage.into(),
             Self::Desktop => desktop::DesktopPage.into(),
             Self::Search => search::SearchPage.into(),
             Self::Displays => displays::DisplaysPage.into(),

@@ -1,31 +1,24 @@
 //! The GNOME interface keys that Appearance shows beside the wallpaper and
-//! the font: text size, the icon and cursor themes, the cursor size, high
-//! contrast and animations.
+//! the font: the text size, the icon theme and the cursor theme.
 //!
-//! They live in `org.gnome.desktop.interface` and
-//! `org.gnome.desktop.a11y.interface`, so GTK applications, the portal and the
-//! compositor all see a change. Each control shows its new value at once, the
-//! write runs in the background, and a failed write puts the old value back
-//! with a toast (see `appearance::change`). The two theme lists are read from
-//! the icon directories, so only themes that are installed are offered.
+//! They live in `org.gnome.desktop.interface`, so GTK applications, the portal
+//! and the compositor all see a change. Each control shows its new value at
+//! once, the write runs in the background, and a failed write puts the old
+//! value back with a toast (see `appearance::change`). The two theme lists are
+//! read from the icon directories, so only themes that are installed are
+//! offered.
 
 use std::path::{Path, PathBuf};
 
 use crate::system::{self, CommandError};
-use crate::ui::{Group, dropdown, row, segmented, switch_row};
+use crate::ui::{Group, dropdown, row};
 use bingux_ui::style::*;
 use freya::prelude::*;
 
 const INTERFACE: &str = "org.gnome.desktop.interface";
-const A11Y: &str = "org.gnome.desktop.a11y.interface";
-
-/// What "Large text" sets, as GNOME Settings does.
-const LARGE_TEXT: f64 = 1.25;
 /// Text sizes offered, in percent. The current one is added when it is not
 /// among them, so a value set elsewhere still shows.
 const TEXT_SIZES: [u32; 8] = [80, 90, 100, 110, 125, 150, 175, 200];
-/// The cursor sizes GNOME Settings offers.
-const CURSOR_SIZES: [u32; 5] = [24, 32, 48, 64, 96];
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Theme {
@@ -38,11 +31,8 @@ pub struct Theme {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Interface {
     text_scale: f64,
-    cursor_size: u32,
     cursor_theme: String,
     icon_theme: String,
-    animations: bool,
-    high_contrast: bool,
     cursor_themes: Vec<Theme>,
     icon_themes: Vec<Theme>,
 }
@@ -51,11 +41,8 @@ pub struct Interface {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Setting {
     TextScale(f64),
-    CursorSize(u32),
     CursorTheme(String),
     IconTheme(String),
-    Animations(bool),
-    HighContrast(bool),
 }
 
 impl Interface {
@@ -63,17 +50,13 @@ impl Interface {
     /// when a key cannot be read.
     pub fn read() -> Option<Self> {
         let text = |schema: &str, key: &str| system::gsettings_get(schema, key).ok();
-        let cursor_size = text(INTERFACE, "cursor-size")?.trim().parse().ok()?;
         Some(Self {
             text_scale: text(INTERFACE, "text-scaling-factor")?
                 .trim()
                 .parse()
                 .ok()?,
-            cursor_size,
             cursor_theme: system::unquote(&text(INTERFACE, "cursor-theme")?),
             icon_theme: system::unquote(&text(INTERFACE, "icon-theme")?),
-            animations: text(INTERFACE, "enable-animations")?.trim() == "true",
-            high_contrast: text(A11Y, "high-contrast")?.trim() == "true",
             cursor_themes: themes(ThemeKind::Cursor),
             icon_themes: themes(ThemeKind::Icon),
         })
@@ -83,11 +66,8 @@ impl Interface {
     pub fn apply_local(&mut self, setting: &Setting) {
         match setting {
             Setting::TextScale(scale) => self.text_scale = *scale,
-            Setting::CursorSize(size) => self.cursor_size = *size,
             Setting::CursorTheme(id) => self.cursor_theme = id.clone(),
             Setting::IconTheme(id) => self.icon_theme = id.clone(),
-            Setting::Animations(on) => self.animations = *on,
-            Setting::HighContrast(on) => self.high_contrast = *on,
         }
     }
 }
@@ -97,11 +77,8 @@ impl Setting {
     pub fn write(&self) -> Result<(), CommandError> {
         let (schema, key, value) = match self {
             Setting::TextScale(scale) => (INTERFACE, "text-scaling-factor", format!("{scale:.2}")),
-            Setting::CursorSize(size) => (INTERFACE, "cursor-size", size.to_string()),
             Setting::CursorTheme(id) => (INTERFACE, "cursor-theme", quoted(id)),
             Setting::IconTheme(id) => (INTERFACE, "icon-theme", quoted(id)),
-            Setting::Animations(on) => (INTERFACE, "enable-animations", on.to_string()),
-            Setting::HighContrast(on) => (A11Y, "high-contrast", on.to_string()),
         };
         system::gsettings_set(schema, key, &value).map(|_| ())
     }
@@ -210,7 +187,7 @@ fn text_size_options(current: u32) -> Vec<(String, String)> {
     }
     sizes
         .into_iter()
-        .map(|percent| (percent.to_string(), format!("{percent} %")))
+        .map(|percent| (percent.to_string(), format!("{percent}%")))
         .collect()
 }
 
@@ -243,22 +220,13 @@ pub fn text_size_row(
         .into()
 }
 
-/// "Themes": the icon theme, the cursor theme and the cursor size.
+/// "Themes": the icon theme and the cursor theme.
 pub fn theme_group(interface: &Interface, on_change: impl Into<EventHandler<Setting>>) -> Group {
     let on_change: EventHandler<Setting> = on_change.into();
     let icons = theme_options(&interface.icon_themes, &interface.icon_theme);
     let cursors = theme_options(&interface.cursor_themes, &interface.cursor_theme);
-    let mut sizes: Vec<u32> = CURSOR_SIZES.to_vec();
-    if !sizes.contains(&interface.cursor_size) {
-        sizes.push(interface.cursor_size);
-    }
-    let size_options: Vec<(String, String)> = sizes
-        .into_iter()
-        .map(|size| (size.to_string(), size.to_string()))
-        .collect();
     let on_icons = on_change.clone();
-    let on_cursors = on_change.clone();
-    let on_size = on_change;
+    let on_cursors = on_change;
     Group::titled("Themes")
         .row(
             row("Icons").trailing(
@@ -277,47 +245,5 @@ pub fn theme_group(interface: &Interface, on_change: impl Into<EventHandler<Sett
                 )
                 .min_width(Dim::Field),
             ),
-        )
-        .row(row("Cursor size").trailing(segmented(
-            size_options,
-            &interface.cursor_size.to_string(),
-            move |key: String| {
-                if let Ok(size) = key.parse() {
-                    on_size.call(Setting::CursorSize(size));
-                }
-            },
-        )))
-}
-
-/// "Accessibility": large text, high contrast and animations.
-pub fn accessibility_group(
-    interface: &Interface,
-    on_change: impl Into<EventHandler<Setting>>,
-) -> Group {
-    let on_change: EventHandler<Setting> = on_change.into();
-    let large = interface.text_scale >= LARGE_TEXT;
-    let on_large = on_change.clone();
-    let on_contrast = on_change.clone();
-    let on_animations = on_change;
-    Group::titled("Accessibility")
-        .row(
-            switch_row("Large text", large, move |on: bool| {
-                on_large.call(Setting::TextScale(if on { LARGE_TEXT } else { 1.0 }))
-            })
-            .subtitle("Makes the text 25 % larger."),
-        )
-        .row(
-            switch_row("High contrast", interface.high_contrast, move |on: bool| {
-                on_contrast.call(Setting::HighContrast(on))
-            })
-            .subtitle("Stronger outlines and colours, so controls stand out."),
-        )
-        .row(
-            switch_row(
-                "Reduce animations",
-                !interface.animations,
-                move |on: bool| on_animations.call(Setting::Animations(!on)),
-            )
-            .subtitle("Windows and menus appear without movement."),
         )
 }

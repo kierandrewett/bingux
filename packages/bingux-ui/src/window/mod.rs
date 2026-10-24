@@ -133,13 +133,14 @@ impl Window {
         }
     }
 
-    /// Change the size. A popup animates to it and stays inside its parent
-    /// with a margin; the main window asks the compositor.
+    /// Change the size. A popup animates to it and stays between its minimum
+    /// and the window less its margin; the main window asks the compositor.
+    /// Dragged edges call this too, so both kinds of resize clamp the same way.
     pub fn resize_to(self, width: f32, height: f32) {
         match self.entry() {
             Some(entry) => {
                 let mut size = entry.size;
-                size.set_if_modified((width, height));
+                size.set_if_modified(entry.clamp((width, height)));
             }
             None if self.id.is_none() => with_window(move |window| {
                 let _ = window.request_inner_size(freya::winit::dpi::LogicalSize::new(

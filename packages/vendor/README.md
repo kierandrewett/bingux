@@ -21,6 +21,11 @@ The only changes are scroll feel for a desktop:
   for 3 s after the last scroll or pointer movement, then fades out over
   400 ms, and fades back in over 120 ms (upstream: it vanishes after 0.8 to
   1.6 s with no fade). The idle check runs every 200 ms.
+- `freya-components/src/scrollviews/shared.rs`, `scrollbar.rs`, `scrollview.rs`
+  and `virtual_scrollview.rs`: `ScrollView::scrollbar_inset_bottom(px)` keeps
+  a vertical bar `px` clear of the bottom edge, so a page that touches a
+  rounded window corner does not sit on it. The track, thumb and cursor maths
+  subtract the inset (`end_inset`); the default is 0 (upstream).
 
 Both crates are MIT licensed by the Freya authors. Tests and examples are not
 copied. Drop this directory and the patch entries when upstream exposes these

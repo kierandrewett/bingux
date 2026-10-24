@@ -8,6 +8,7 @@ use std::rc::Rc;
 
 use freya::prelude::*;
 
+use crate::motion::focus_ring;
 use crate::style::*;
 use crate::surface::{use_enabled, use_tokens};
 use crate::typography::{BODY, Ink};
@@ -157,9 +158,9 @@ impl Component for Segment {
                         pressing(),
                         false,
                     ),
-                    focus_ring(focus()),
                 ],
             )
+            .child(focus_ring(focus(), Radius::Inner))
             .maybe(self.selected, |element| {
                 element.tw(&tokens, &[shadow(Elevation::Knob)])
             })

@@ -538,6 +538,7 @@ dependencies = [
  "bytes",
  "freya",
  "libc",
+ "serde",
  "serde_json",
 ]
 
@@ -548,7 +549,10 @@ dependencies = [
  "accesskit",
  "bytes",
  "freya",
+ "freya-components",
  "freya-testing",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

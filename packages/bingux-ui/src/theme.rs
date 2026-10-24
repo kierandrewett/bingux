@@ -137,8 +137,8 @@ pub struct Tokens {
     pub warning: Color,
     pub danger: Color,
     pub accent_foreground: Color,
-    pub tooltip_surface: Color,
-    pub tooltip_outline: Color,
+    pub floating: Color,
+    pub floating_outline: Color,
     /// Opaque surface for menus and popovers that float over content.
     pub popover: Color,
 }
@@ -181,8 +181,8 @@ impl Tokens {
             warning: p.warning,
             danger: p.danger,
             accent_foreground: rgba(1.0, 1.0, 1.0, 1.0),
-            tooltip_surface: rgba(0.12, 0.12, 0.13, 0.82),
-            tooltip_outline: rgba(1.0, 1.0, 1.0, 0.16),
+            floating: rgba(0.12, 0.12, 0.13, 0.82),
+            floating_outline: rgba(1.0, 1.0, 1.0, 0.16),
             popover: p.popup,
         }
     }
@@ -402,9 +402,9 @@ pub fn freya_theme(tokens: &Tokens) -> Theme {
     theme.set(
         "tooltip",
         TooltipThemePreference {
-            background: Preference::Specific(tokens.tooltip_surface),
+            background: Preference::Specific(tokens.floating),
             color: Preference::Reference("text_primary"),
-            border_fill: Preference::Specific(tokens.tooltip_outline),
+            border_fill: Preference::Specific(tokens.floating_outline),
             font_size: Preference::Specific(crate::typography::CAPTION.size),
         },
     );

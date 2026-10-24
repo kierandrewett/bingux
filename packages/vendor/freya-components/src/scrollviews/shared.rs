@@ -121,9 +121,11 @@ const MIN_SCROLLBAR_SIZE: f32 = 50.0;
 
 pub const SCROLLBAR_MARGIN: f32 = 3.0;
 
-/// Thumb size, scrollable content range and thumb travel range inside the track.
-fn get_thumb_ranges(inner_size: f32, viewport_size: f32) -> (f32, f32, f32) {
-    let track_size = viewport_size - SCROLLBAR_MARGIN * 2.0;
+/// Thumb size, scrollable content range and thumb travel range inside the
+/// track. `end_inset` is the room kept clear at the track's far end (bottom
+/// for a vertical bar); it is Bingux's addition, see the vendor README.
+fn get_thumb_ranges(inner_size: f32, viewport_size: f32, end_inset: f32) -> (f32, f32, f32) {
+    let track_size = viewport_size - SCROLLBAR_MARGIN * 2.0 - end_inset;
     let viewable_ratio = viewport_size / inner_size;
     let minimum_thumb_size = if track_size > MIN_SCROLLBAR_SIZE {
         MIN_SCROLLBAR_SIZE
@@ -147,31 +149,34 @@ pub fn get_scrollbar_pos_and_size(
     inner_size: f32,
     viewport_size: f32,
     scroll_position: f32,
+    end_inset: f32,
 ) -> (f32, f32) {
     if viewport_size <= MIN_SCROLLBAR_SIZE || viewport_size >= inner_size {
         return (0.0, 0.0);
     }
 
     let (scrollbar_size, available_scroll_range, available_thumb_range) =
-        get_thumb_ranges(inner_size, viewport_size);
+        get_thumb_ranges(inner_size, viewport_size, end_inset);
 
     let normalized_scroll = -scroll_position / available_scroll_range;
     let scrollbar_position = normalized_scroll * available_thumb_range;
 
     (scrollbar_position, scrollbar_size)
 }
+
 #[doc(hidden)]
 pub fn get_scroll_position_from_cursor(
     cursor_position: f32,
     inner_size: f32,
     viewport_size: f32,
+    end_inset: f32,
 ) -> i32 {
     if viewport_size <= MIN_SCROLLBAR_SIZE || viewport_size >= inner_size {
         return 0;
     }
 
     let (_, available_scroll_range, available_thumb_range) =
-        get_thumb_ranges(inner_size, viewport_size);
+        get_thumb_ranges(inner_size, viewport_size, end_inset);
 
     // Clamp cursor position
     let cursor_clamped = (cursor_position - SCROLLBAR_MARGIN).clamp(0.0, available_thumb_range);
@@ -251,11 +256,11 @@ mod tests {
             let inner_size = viewport_size * 2.;
             let track_size = viewport_size - SCROLLBAR_MARGIN * 2.;
 
-            let (_, thumb_size) = get_scrollbar_pos_and_size(inner_size, viewport_size, 0.);
+            let (_, thumb_size) = get_scrollbar_pos_and_size(inner_size, viewport_size, 0., 0.);
 
             assert!(thumb_size < track_size);
             assert_eq!(
-                get_scroll_position_from_cursor(viewport_size, inner_size, viewport_size),
+                get_scroll_position_from_cursor(viewport_size, inner_size, viewport_size, 0.),
                 -viewport_size as i32
             );
         }

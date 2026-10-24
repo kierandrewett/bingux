@@ -5,7 +5,9 @@
 //! applies it on the UI thread. Every command has a timeout and a readable
 //! failure message.
 
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::shell::overlays::Overlays;
@@ -168,17 +170,25 @@ thread_local! {
         std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
-/// The long-lived state for `key`, created empty on first use.
-fn cached_state<T: 'static>(key: &'static str) -> State<Option<T>> {
+/// The long-lived state for `key`. On first use it is created holding
+/// `init()`; every later call returns the same state.
+fn cached_entry<T: 'static>(
+    key: &'static str,
+    init: impl FnOnce() -> Option<T>,
+) -> State<Option<T>> {
     MODELS.with(|models| {
         let mut models = models.borrow_mut();
         let entry = models
             .entry(key)
-            .or_insert_with(|| Box::new(State::<Option<T>>::create_global(None)));
+            .or_insert_with(|| Box::new(State::<Option<T>>::create_global(init())));
         *entry
             .downcast_ref::<State<Option<T>>>()
             .expect("a model key is always used with one type")
     })
+}
+
+fn cached_state<T: 'static>(key: &'static str) -> State<Option<T>> {
+    cached_entry(key, || None)
 }
 
 /// A page's data: the last value that was loaded, at once, and a quiet
@@ -200,6 +210,152 @@ pub fn cached<T: 'static>(key: &'static str) -> State<Option<T>> {
 /// when the user gets to it. Call once at start-up, from a hook.
 pub fn prefetch<T: Send + 'static>(key: &'static str, load: fn() -> T) {
     background(cached_state::<T>(key), load);
+}
+
+/// The persistent cache. A page's last good value is kept on disk, so the
+/// page has its data at once when Settings starts, before the first load has
+/// finished. Each key is a file at `$XDG_CACHE_HOME/<app-id>/<key>.json`, or
+/// under `~/.cache` when `XDG_CACHE_HOME` is unset or relative. The app id is
+/// the name of the running program.
+///
+/// The file holds the value in an envelope with a format number. A file that
+/// cannot be read, does not parse or has another format number is ignored, as
+/// if it were not there.
+const CACHE_FORMAT: u32 = 1;
+
+/// Makes each save's temporary file name unique, so two saves never share one.
+static SAVE_SEQ: AtomicU64 = AtomicU64::new(0);
+
+#[derive(serde::Serialize)]
+struct SavedRef<'a, T> {
+    format: u32,
+    value: &'a T,
+}
+
+#[derive(serde::Deserialize)]
+struct Saved<T> {
+    format: u32,
+    value: T,
+}
+
+fn cache_file(key: &str) -> Option<PathBuf> {
+    let base = std::env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))?;
+    // Linux appends " (deleted)" to the path of a program whose file has been
+    // rebuilt since it started; the id is the same program either way.
+    let app = std::env::current_exe()
+        .ok()?
+        .file_stem()?
+        .to_string_lossy()
+        .trim_end_matches(" (deleted)")
+        .to_owned();
+    // The key names a file, so any character that is not part of a plain name
+    // becomes "_".
+    let name: String = key
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    Some(base.join(app).join(format!("{name}.json")))
+}
+
+/// The saved value for `key`, or `None` when there is no file this build can
+/// read.
+fn read_saved<T: serde::de::DeserializeOwned>(key: &str) -> Option<T> {
+    let text = std::fs::read_to_string(cache_file(key)?).ok()?;
+    let saved: Saved<T> = serde_json::from_str(&text).ok()?;
+    (saved.format == CACHE_FORMAT).then_some(saved.value)
+}
+
+/// Save `value` for `key`. The file is replaced by a rename, and it is not
+/// rewritten when it already holds the same text, so a page that refreshes
+/// every few seconds does not write to disk each time. A failure goes to
+/// stderr only: the cache is an optimisation the page does not depend on.
+fn write_saved<T: serde::Serialize>(key: &str, value: &T) {
+    let Some(path) = cache_file(key) else {
+        return;
+    };
+    let Ok(text) = serde_json::to_string(&SavedRef {
+        format: CACHE_FORMAT,
+        value,
+    }) else {
+        return;
+    };
+    if std::fs::read_to_string(&path).is_ok_and(|old| old == text) {
+        return;
+    }
+    let seq = SAVE_SEQ.fetch_add(1, Ordering::Relaxed);
+    let tmp = path.with_extension(format!("{}.{seq}.tmp", std::process::id()));
+    let result = path
+        .parent()
+        .map_or(Ok(()), |dir| std::fs::create_dir_all(dir))
+        .and_then(|()| std::fs::write(&tmp, &text))
+        .and_then(|()| std::fs::rename(&tmp, &path));
+    if let Err(error) = result {
+        let _ = std::fs::remove_file(&tmp);
+        eprintln!("could not save the cache for {key}: {error}");
+    }
+}
+
+/// Run `load` and save its value under `key` when it succeeds. Call this from
+/// the background, never from `render`. A failed load saves nothing, so the
+/// last good value stays on disk.
+pub fn load_persistent<T: serde::Serialize, E>(
+    key: &'static str,
+    load: fn() -> Result<T, E>,
+) -> Result<T, E> {
+    let value = load()?;
+    write_saved(key, &value);
+    Ok(value)
+}
+
+/// The state for `key`, as [`cached`] gives it. On first use it starts with
+/// the saved value, read here from the local file, so the page has its data
+/// before its first render. A file that cannot be read starts it empty.
+/// Call from a hook or start-up code, never from `render`.
+pub fn cached_persistent<T, E>(key: &'static str) -> State<Option<Result<T, E>>>
+where
+    T: serde::de::DeserializeOwned + 'static,
+    E: 'static,
+{
+    cached_entry(key, || read_saved::<T>(key).map(Ok))
+}
+
+/// Start loading `key` before its page is opened. The saved value is shown
+/// first, then `load` runs and replaces it, and its result is saved. Call
+/// once at start-up, as with [`prefetch`].
+pub fn prefetch_persistent<T, E>(key: &'static str, load: fn() -> Result<T, E>)
+where
+    T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
+    E: Send + 'static,
+{
+    background(cached_persistent::<T, E>(key), move || {
+        load_persistent(key, load)
+    });
+}
+
+/// As [`use_cached`], with the persistent cache: the saved value is shown at
+/// once, then `load` refreshes it and the result is saved. Call from `render`.
+pub fn use_cached_persistent<T, E>(
+    key: &'static str,
+    load: fn() -> Result<T, E>,
+) -> State<Option<Result<T, E>>>
+where
+    T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
+    E: Send + 'static,
+{
+    use_hook(move || {
+        let state = cached_persistent::<T, E>(key);
+        background(state, move || load_persistent(key, load));
+        state
+    })
 }
 
 /// Run `work` on the task pool and call `done` with its result on the UI

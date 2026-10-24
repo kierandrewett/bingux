@@ -9,6 +9,7 @@ use freya::prelude::*;
 
 use crate::app_icon::app_icon;
 use crate::icons::{self, Icon};
+use crate::motion::focus_ring;
 use crate::shell::overlays::input_shield;
 use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
@@ -333,9 +334,9 @@ impl Component for Dropdown {
                         enabled && pressing(),
                         false,
                     ),
-                    focus_ring(focus()),
                 ],
             )
+            .child(focus_ring(focus(), Radius::Control))
             // On a phone the value sits at the row's end with no box; on a
             // desktop it is a filled control with the chevron at its end.
             .tw(&tokens, if touch { PHONE_VALUE } else { DESKTOP_VALUE })

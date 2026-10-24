@@ -14,10 +14,12 @@
 
 mod fonts;
 mod interface;
+mod wallpapers;
 
 pub use fonts::FontPage;
+use wallpapers::WallpaperPicker;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 use freya::prelude::*;
@@ -34,11 +36,11 @@ use crate::system::{
 use crate::theme::{Scheme, SharedTokens, Tokens, accent_names, read_gsettings};
 use crate::ui::typography::{BODY, EMPHASIS};
 use crate::ui::{
-    Group, Icon, Overlays, Status, icon, menu_item, menu_separator, page_column, row, row_button,
+    Group, Icon, Overlays, Status, icon, menu_item, menu_separator, page_column, row,
     skeleton_shape, status, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
-use interface::{Interface, Setting, accessibility_group, text_size_row, theme_group};
+use interface::{Interface, Setting, text_size_row, theme_group};
 
 const INTERFACE: &str = "org.gnome.desktop.interface";
 const WALLPAPER_KEY: &str = "desktop.wallpaper";
@@ -414,39 +416,13 @@ impl Component for AppearancePage {
 
         page_column()
             .child(picture)
-            .child(
-                Group::titled("Wallpaper")
-                    .row(match wallpaper_path {
-                        Some(path) => row(file_name(&path)).trailing(
-                            rect()
-                                .tw(&tokens, &[flex_row(), items(Align::Center), gap(S3)])
-                                // On a phone the row has no room for the picture
-                                // beside the name and the button.
-                                .maybe_child(
-                                    (!touch()).then(|| wallpaper_thumbnail(&tokens, &path)),
-                                )
-                                .child(row_button("Choose picture", move |_| {
-                                    choose_wallpaper(model, overlays)
-                                })),
-                        ),
-                        None => row("No picture chosen")
-                            .subtitle("The system wallpaper is in use.")
-                            .trailing(row_button("Choose picture", move |_| {
-                                choose_wallpaper(model, overlays)
-                            })),
-                    })
-                    .row(
-                        row("System wallpaper")
-                            .subtitle("Go back to the wallpaper that came with the system.")
-                            .trailing(row_button("Use it", move |_| {
-                                set_wallpaper(model, overlays, None)
-                            })),
-                    ),
-            )
+            .child(WallpaperPicker {
+                current: model_value.wallpaper.clone(),
+            })
             .child(
                 Group::titled("Font")
                     .description(
-                        "The desktop uses it straight away. This window uses it after it is reopened.",
+                        "The desktop applies it immediately. This window applies it when reopened.",
                     )
                     .rows(
                         model_value
@@ -467,12 +443,6 @@ impl Component for AppearancePage {
                     .as_ref()
                     .map(|interface| Element::from(theme_group(interface, on_setting))),
             )
-            .maybe_child(
-                model_value
-                    .interface
-                    .as_ref()
-                    .map(|interface| Element::from(accessibility_group(interface, on_setting))),
-            )
             .maybe_child(model_value.gsettings.then(|| {
                 Element::from(
                     Group::titled("Accent colour").row(
@@ -480,7 +450,13 @@ impl Component for AppearancePage {
                             .tw(&tokens, BOX_BODY)
                             .tw(
                                 &tokens,
-                                &[flex_row(), wrap(S2), items(Align::Center), gap(S2)],
+                                &[
+                                    flex_row(),
+                                    wrap(S2),
+                                    justify(Align::Center),
+                                    items(Align::Center),
+                                    gap(S2),
+                                ],
                             )
                             .children(swatches),
                     ),
@@ -542,31 +518,11 @@ impl Component for AppearancePage {
             }))
             .maybe_child((!model_value.gsettings).then(|| {
                 Element::from(status(Status::Info(
-                    "\"Accent colour\" and \"Colour scheme\" are not available on this system.".into(),
+                    "\"Accent colour\" and \"Colour scheme\" are not available on this system."
+                        .into(),
                 )))
             }))
     }
-}
-
-/// Wallpaper thumbnail: a small rounded crop of the picture, 96 by 36.
-fn wallpaper_thumbnail(tokens: &Tokens, path: &str) -> Element {
-    rect()
-        .tw(
-            tokens,
-            &[
-                w(Dim::Box24),
-                h(Dim::Box9),
-                rounded(Radius::Control),
-                clip(),
-            ],
-        )
-        .child(
-            ImageViewer::new(PathBuf::from(path))
-                .width(Size::fill())
-                .height(Size::fill())
-                .aspect_ratio(AspectRatio::Max),
-        )
-        .into()
 }
 
 /// Start loading this page's data before it is opened.

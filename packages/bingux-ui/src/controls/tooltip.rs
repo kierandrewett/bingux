@@ -93,7 +93,7 @@ impl Component for TooltipIcon {
             .tw(&tokens, TOOLTIP)
             .tw(
                 &tokens,
-                &[border(Line::Stroke(Dim::Hairline, Paint::TooltipOutline))],
+                &[border(Line::Stroke(Dim::Hairline, Paint::FloatingOutline))],
             )
             .child(
                 CAPTION

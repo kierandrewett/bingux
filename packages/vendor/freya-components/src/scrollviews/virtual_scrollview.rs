@@ -520,12 +520,17 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
         let vertical_scrollbar_is_visible =
             is_scrollbar_visible(self.show_scrollbar, inner_height, size.read().area.height());
 
-        let (scrollbar_x, scrollbar_width) =
-            get_scrollbar_pos_and_size(inner_width, size.read().area.width(), rendered_position.x);
+        let (scrollbar_x, scrollbar_width) = get_scrollbar_pos_and_size(
+            inner_width,
+            size.read().area.width(),
+            rendered_position.x,
+            0.,
+        );
         let (scrollbar_y, scrollbar_height) = get_scrollbar_pos_and_size(
             inner_height,
             size.read().area.height(),
             rendered_position.y,
+            0.,
         );
 
         let (container_width, content_width) = get_container_sizes(self.layout.width.clone());
@@ -661,6 +666,7 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
                     cursor_y as f32,
                     inner_height,
                     size.read().area.height(),
+                    0.0,
                 );
 
                 scroll_controller.scroll_to_y(scroll_position);
@@ -672,6 +678,7 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
                     cursor_x as f32,
                     inner_width,
                     size.read().area.width(),
+                    0.0,
                 );
 
                 scroll_controller.scroll_to_x(scroll_position);
@@ -845,6 +852,8 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
                             thumb_offset: scrollbar_y,
                             track_size: Size::px(size.read().area.height()),
                             thumb_length: scrollbar_height,
+                            // Bingux patch: the virtual list has no bottom inset.
+                            end_inset: 0.,
                         }))
                     })),
             )
@@ -862,6 +871,8 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
                     thumb_offset: scrollbar_x,
                     track_size: Size::px(size.read().area.width()),
                     thumb_length: scrollbar_width,
+                    // Bingux patch: the virtual list has no bottom inset.
+                    end_inset: 0.,
                 }))
             }))
     }

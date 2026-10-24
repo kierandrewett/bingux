@@ -837,7 +837,7 @@ impl Component for MousePage {
 
         let test_group = Group::titled("Test your settings")
             .description(
-                "Double-click the box to check the double-click speed. Scroll the list to check scrolling.",
+                "Double-click the box to test double-click speed. Scroll the list to test scrolling.",
             )
             .row(ClickTest { within_ms: mouse.double_click }.into_element())
             .row(ScrollTest.into_element());

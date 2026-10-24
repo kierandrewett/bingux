@@ -912,7 +912,6 @@ impl Component for KeyboardPage {
         };
         let mut shortcuts_row = row("View and customise shortcuts")
             .leading(Icon::PreferencesDesktopKeyboardShortcuts)
-            .subtitle("See every shortcut and what it does.")
             .navigates()
             .on_press(move |_| navigator.push(Route::Shortcuts));
         if let Some(count) = shortcut_count {

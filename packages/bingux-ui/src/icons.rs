@@ -28,6 +28,7 @@ pub enum Icon {
     Power,
     Keyboard,
     Mouse,
+    Accessibility,
     Clock,
     Users,
     About,
@@ -124,7 +125,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 112] = [
+    pub const ALL: [Icon; 113] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -145,6 +146,7 @@ impl Icon {
         Self::Power,
         Self::Keyboard,
         Self::Mouse,
+        Self::Accessibility,
         Self::Clock,
         Self::Users,
         Self::About,
@@ -264,6 +266,9 @@ impl Icon {
             Self::Power => include_bytes!("../icons/battery-level-100-symbolic.svg"),
             Self::Keyboard => include_bytes!("../icons/input-keyboard-symbolic.svg"),
             Self::Mouse => include_bytes!("../icons/input-mouse-symbolic.svg"),
+            Self::Accessibility => {
+                include_bytes!("../icons/preferences-desktop-accessibility-symbolic.svg")
+            }
             Self::Clock => include_bytes!("../icons/preferences-system-time-symbolic.svg"),
             Self::Users => include_bytes!("../icons/system-users-symbolic.svg"),
             Self::About => include_bytes!("../icons/help-about-symbolic.svg"),

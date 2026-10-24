@@ -14,7 +14,7 @@ use std::time::Duration;
 use freya::prelude::*;
 use serde_json::Value;
 
-use bingux_ui::prelude::{Ink, Window, popup, use_window};
+use bingux_ui::prelude::{Window, popup, use_window};
 use bingux_ui::style::*;
 use bingux_ui::theme::Tokens;
 use bingux_ui::typography::CAPTION;
@@ -74,6 +74,14 @@ impl Kind {
             Kind::Input => "Input device",
         }
     }
+
+    /// The title of this kind's volume slider.
+    fn volume_title(self) -> &'static str {
+        match self {
+            Kind::Output => "Output volume",
+            Kind::Input => "Input volume",
+        }
+    }
 }
 
 impl Kind {
@@ -87,7 +95,7 @@ impl Kind {
 }
 
 /// What a device is. It picks the device's icon.
-#[derive(Clone, Copy, Default, PartialEq)]
+#[derive(Clone, Copy, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 enum Form {
     Headphones,
     Speakers,
@@ -113,7 +121,7 @@ impl Form {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Device {
     id: u32,
     /// The port, such as "Headphones". The device's own name when the port
@@ -140,7 +148,7 @@ impl Device {
 }
 
 /// Volume of the default device of one kind, as `wpctl get-volume` reports it.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Level {
     id: u32,
     /// 0.0 to 1.0, as wpctl uses it.
@@ -148,7 +156,7 @@ struct Level {
     muted: bool,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Stream {
     id: u32,
     name: String,
@@ -191,7 +199,7 @@ fn summary_of(streams: &[Stream]) -> String {
     }
 }
 
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Model {
     outputs: Vec<Device>,
     inputs: Vec<Device>,
@@ -434,7 +442,7 @@ fn read_level(kind: Kind, devices: &[Device]) -> Result<Option<Level>, CommandEr
 /// The output's channels as pactl reports them, each with its volume as a
 /// fraction. Volumes are written per channel, so balance, fade and subwoofer
 /// can each be set on their own.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Mix {
     /// The default sink's name, which pactl writes to.
     sink: String,
@@ -895,12 +903,15 @@ static EPOCH: AtomicU64 = AtomicU64::new(0);
 
 fn reload(model: ModelState) {
     let epoch = EPOCH.fetch_add(1, Ordering::SeqCst) + 1;
-    background_then(load, move |result| {
-        if EPOCH.load(Ordering::SeqCst) == epoch {
-            let mut model = model;
-            model.set(Some(result));
-        }
-    });
+    background_then(
+        move || system::load_persistent("sound", load),
+        move |result| {
+            if EPOCH.load(Ordering::SeqCst) == epoch {
+                let mut model = model;
+                model.set(Some(result));
+            }
+        },
+    );
 }
 
 /// Run a `wpctl` write on a background thread, then toast a failure and
@@ -1068,7 +1079,7 @@ fn update_mix(ctx: Ctx, change: impl FnOnce(&mut Shape)) {
 
 /// The balance, fade and subwoofer rows, shown when the output has the
 /// channels for them, then a row that opens the test sheet.
-fn mix_rows(mix: &Mix, ctx: Ctx, tokens: Tokens) -> Vec<Element> {
+fn mix_rows(mix: &Mix, ctx: Ctx) -> Vec<Element> {
     let shape = Shape::of(&mix.channels);
     let mut rows: Vec<Element> = Vec::new();
     if mix.has(is_left) && mix.has(is_right) {
@@ -1084,7 +1095,6 @@ fn mix_rows(mix: &Mix, ctx: Ctx, tokens: Tokens) -> Vec<Element> {
             .max(200.0)
             .mark(100.0)
             .value_text(side_text(shape.balance, "Left", "Right"))
-            .footer(side_labels(tokens, "Left", "Right"))
             .into(),
         );
     }
@@ -1097,7 +1107,6 @@ fn mix_rows(mix: &Mix, ctx: Ctx, tokens: Tokens) -> Vec<Element> {
             .max(100.0)
             .mark(50.0)
             .value_text(side_text(shape.fade, "Rear", "Front"))
-            .footer(side_labels(tokens, "Rear", "Front"))
             .into(),
         );
     }
@@ -1114,13 +1123,11 @@ fn mix_rows(mix: &Mix, ctx: Ctx, tokens: Tokens) -> Vec<Element> {
     rows
 }
 
-/// A balance, fade or subwoofer slider. It has the same blank leading box and
-/// trailing box as the volume slider, so every track starts and ends at one
-/// x-position within the card.
+/// A balance, fade or subwoofer slider. Its blank control box is the width of
+/// a mute button, so every track starts and ends at one x-position within the
+/// card, as the volume slider's does.
 fn mix_slider(title: &str, value: f64, on_moved: impl Into<EventHandler<f64>>) -> LevelRow {
-    level_row(title, value, on_moved)
-        .leading(rect().tw_layout(&[w(Dim::IconBox)]))
-        .trailing(rect().tw_layout(&[w(Dim::Box9)]))
+    level_row(title, value, on_moved).control(rect().tw_layout(&[w(Dim::Box9)]))
 }
 
 /// Snap a balance or fade within 2% of its centre onto the centre.
@@ -1137,17 +1144,6 @@ fn side_text(value: f64, low: &str, high: &str) -> String {
     } else {
         format!("{high} {:.0}%", value * 100.0)
     }
-}
-
-/// The names at the two ends of a balance or fade track, on one baseline.
-/// Each name is a single line that keeps its own width; the high end sits at
-/// the right edge.
-fn side_labels(tokens: Tokens, low: &str, high: &str) -> Element {
-    hstack(S1)
-        .tw_layout(&[w_full(), justify(Align::Between)])
-        .child(CAPTION.label(&tokens, low.to_string()))
-        .child(CAPTION.label(&tokens, high.to_string()))
-        .into()
 }
 
 /// Name a channel as a person reads it.
@@ -1354,64 +1350,46 @@ impl Component for SpeakerTest {
         );
         for name in &names {
             let (dx, dy) = speaker_offset(name);
-            let ringed = playing_name.as_deref() == Some(name.as_str());
             let sink = self.mix.sink.clone();
             let names = names.clone();
             let channel = name.clone();
             let overlays = self.overlays;
             let mut playing = playing;
-            let button = rect()
-                .position(
-                    Position::new_absolute()
-                        .left(centre + dx - half)
-                        .top(centre + dy - half),
-                )
-                .a11y_focusable(true)
-                .a11y_role(AccessibilityRole::Button)
-                .a11y_alt(channel_label(name))
-                .tw(
-                    &tokens,
-                    &[
-                        w(Dim::SpeakerButton),
-                        h(Dim::SpeakerButton),
-                        rounded(Radius::Pill),
-                        bg(Paint::Card),
-                        border(if ringed {
-                            Line::Stroke(Dim::Ring, Paint::Accent)
-                        } else {
-                            Line::Outline
-                        }),
-                    ],
-                )
-                .on_press(move |_| {
-                    if playing.read().is_some() {
-                        return;
-                    }
-                    playing.set(Some(channel.clone()));
-                    let (sink, names, channel) = (sink.clone(), names.clone(), channel.clone());
-                    let mut playing = playing;
-                    background_then(
-                        move || play_channel(&sink, &names, &channel),
-                        move |result| {
-                            playing.set(None);
-                            if let Err(e) = result {
-                                overlays.toast(e.0);
-                            }
-                        },
-                    );
-                })
-                .child(
-                    rect()
-                        .tw_layout(&[w_full(), h_full(), center()])
-                        .child(icon(
-                            Icon::Speakers,
-                            IconSize::Row,
-                            Ink::Text.color(&tokens),
-                        )),
+            let speaker = icon_button(Icon::Speakers, move |_| {
+                if playing.read().is_some() {
+                    return;
+                }
+                playing.set(Some(channel.clone()));
+                let (sink, names, channel) = (sink.clone(), names.clone(), channel.clone());
+                let mut playing = playing;
+                background_then(
+                    move || play_channel(&sink, &names, &channel),
+                    move |result| {
+                        playing.set(None);
+                        if let Err(e) = result {
+                            overlays.toast(e.0);
+                        }
+                    },
                 );
-            room = room.child(button);
+            })
+            .size(Dim::SpeakerButton)
+            .filled()
+            .active(playing_name.as_deref() == Some(name.as_str()))
+            .tooltip(&channel_label(name));
+            // The room is a diagram: each speaker sits at its place in it.
+            room = room.child(
+                rect()
+                    .position(
+                        Position::new_absolute()
+                            .left(centre + dx - half)
+                            .top(centre + dy - half),
+                    )
+                    .child(speaker),
+            );
         }
-        room
+        rect()
+            .tw_layout(&[w_full(), h_full(), center()])
+            .child(room)
     }
 }
 
@@ -1541,7 +1519,11 @@ fn volume_slider(
 ) -> LevelRow {
     let slider = level_row(title, percent, on_moved);
     if above {
-        slider.max(ABOVE_MAX).mark(100.0).danger_from(100.0)
+        slider
+            .max(ABOVE_MAX)
+            .mark(100.0)
+            .mark_label("100%")
+            .danger_from(100.0)
     } else {
         slider
     }
@@ -1598,13 +1580,12 @@ fn device_dropdown_row(kind: Kind, devices: &[Device], test: Option<Mix>, ctx: C
     let selected = default
         .map(|device| device.id.to_string())
         .unwrap_or_default();
-    let form = default.map(|device| device.form).unwrap_or_default();
     let options: Vec<(String, String)> = devices
         .iter()
         .map(|device| (device.id.to_string(), device.full_name()))
         .collect();
     let icons: Vec<Icon> = devices.iter().map(|device| device.form.icon()).collect();
-    let mut item = row(kind.device_title()).leading(form.icon()).trailing(
+    let mut item = row(kind.device_title()).trailing(
         dropdown(options, selected, move |value: String| {
             if let Ok(id) = value.parse::<u32>() {
                 set_default(ctx, kind, id);
@@ -1681,31 +1662,34 @@ fn channel_group(
         let id = level.id;
         let mute_to = !level.muted;
         group = group.row(
-            volume_slider("Volume", level.volume * 100.0, above, move |value: f64| {
-                let percent = percent_of(value, above);
-                if has_mix {
-                    update_mix(ctx, move |shape| shape.volume = f64::from(percent) / 100.0);
-                } else {
-                    update_level(ctx.model, kind, |current| {
-                        current.volume = f64::from(percent) / 100.0;
-                    });
-                    set_volume(
-                        ctx.queue,
-                        ctx.overlays,
-                        wpctl_volume_job(id, percent, above),
-                    );
-                }
-            })
-            // The blank leading box lines the text up with the device rows above.
-            .leading(rect().tw_layout(&[w(Dim::IconBox)]))
-            .trailing(mute_button(level.volume, level.muted, move |_| {
+            volume_slider(
+                kind.volume_title(),
+                level.volume * 100.0,
+                above,
+                move |value: f64| {
+                    let percent = percent_of(value, above);
+                    if has_mix {
+                        update_mix(ctx, move |shape| shape.volume = f64::from(percent) / 100.0);
+                    } else {
+                        update_level(ctx.model, kind, |current| {
+                            current.volume = f64::from(percent) / 100.0;
+                        });
+                        set_volume(
+                            ctx.queue,
+                            ctx.overlays,
+                            wpctl_volume_job(id, percent, above),
+                        );
+                    }
+                },
+            )
+            .control(mute_button(level.volume, level.muted, move |_| {
                 update_level(ctx.model, kind, |current| current.muted = mute_to);
                 set_mute(ctx, id, mute_to);
             })),
         );
     }
     if let Some(mix) = mix {
-        group = group.rows(mix_rows(mix, ctx, tokens));
+        group = group.rows(mix_rows(mix, ctx));
     }
     // The boost only applies to the output, so the switch is shown there alone.
     if kind == Kind::Output {
@@ -1713,9 +1697,7 @@ fn channel_group(
             switch_row("Allow volume above 100%", above, move |on: bool| {
                 set_above_100(ctx, on)
             })
-            .subtitle("Boosts quiet audio. It can distort.")
-            // The blank leading box lines the text up with the volume rows above.
-            .leading_space(),
+            .subtitle("Boosts quiet audio. It can distort."),
         );
     }
     group
@@ -1748,7 +1730,7 @@ fn app_row(streams: &[Stream], above: bool, ctx: Ctx) -> Element {
                 source: Source::Stream,
                 compact: false,
             })
-            .trailing(mute_button(volume, muted, move |_| {
+            .control(mute_button(volume, muted, move |_| {
                 toggle_stream_mute(ctx, &mute_ids, muted)
             }))
             .context_menu(vec![
@@ -1789,7 +1771,7 @@ fn by_application(streams: &[Stream]) -> Vec<Vec<Stream>> {
 
 /// Poll the sound state while the page is open, and load it once now.
 fn use_sound_model() -> ModelState {
-    let model = system::cached("sound");
+    let model = use_hook(|| system::cached_persistent::<Model, CommandError>("sound"));
     use_hook(move || {
         reload(model);
         spawn(async move {
@@ -1927,5 +1909,5 @@ impl Component for AppSound {
 
 /// Start loading this page's data before it is opened.
 pub fn prefetch() {
-    system::prefetch("sound", load);
+    system::prefetch_persistent("sound", load);
 }

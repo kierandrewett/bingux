@@ -6,6 +6,9 @@
 mod pages;
 
 use bingux_ui::controls::text_field::text_field;
+use bingux_ui::controls::{dropdown, primary_button, switch};
+use bingux_ui::group::Group;
+use bingux_ui::rows::row;
 use bingux_ui::prelude::{
     OverlayHost, PopupAction, PopupActions, WindowHost, popup, use_popup_actions, use_window,
 };
@@ -197,7 +200,8 @@ fn main() {
         let mut shot = Snapshot::new(
             move || {
                 Element::from(Themed {
-                    child: WindowHost::new(OverlayHost::new(FormSheetOpen { security: true })).into(),
+                    child: WindowHost::new(OverlayHost::new(FormSheetOpen { security: true }))
+                        .into(),
                 })
             },
             size,
@@ -276,6 +280,34 @@ fn main() {
         .save(&path);
     println!("[snapshot] wrote {path}");
 
+    // The Actions menu opened by a click, then driven from the keyboard: five
+    // Downs reach Sort by, and Right opens its submenu.
+    let mut shot = Snapshot::new(
+        move || {
+            Element::from(
+                rect()
+                    .expanded()
+                    .tw(&tokens, &[bg(Paint::Bg)])
+                    .child(Gallery {
+                        initial: Page::Buttons,
+                    }),
+            )
+        },
+        size,
+    );
+    let path = format!("{out}/menu-keys.png");
+    shot.settle(std::time::Duration::from_millis(400))
+        .click(890.0, 215.0)
+        .settle(std::time::Duration::from_millis(300));
+    for _ in 0..5 {
+        shot.key(Key::Named(NamedKey::ArrowDown))
+            .settle(std::time::Duration::from_millis(100));
+    }
+    shot.key(Key::Named(NamedKey::ArrowRight))
+        .settle(std::time::Duration::from_millis(400))
+        .save(&path);
+    println!("[snapshot] wrote {path}");
+
     // Keyboard navigation: click Buttons in the sidebar, then ArrowDown
     // twice should land on Feedback.
     let mut shot = Snapshot::new(
@@ -341,6 +373,66 @@ fn main() {
         .settle(std::time::Duration::from_millis(200))
         .save(&path);
     println!("[snapshot] wrote {path}");
+
+    // Keyboard focus rings: Tab reaches each kind of control in turn. Every
+    // capture is a fresh tree, so the same number of presses lands on the same
+    // stop each time.
+    for (file, presses) in [
+        ("focus-button", 1),
+        ("focus-switch", 2),
+        ("focus-dropdown", 3),
+        ("focus-text-field", 4),
+        ("focus-row", 5),
+    ] {
+        let mut shot = Snapshot::new(
+            move || {
+                Element::from(
+                    rect()
+                        .expanded()
+                        .tw(&tokens, &[bg(Paint::Bg)])
+                        .child(Themed { child: FocusScene.into_element() }),
+                )
+            },
+            (WINDOW_SIZE.0, 520.0),
+        );
+        let path = format!("{out}/{file}.png");
+        shot.settle(std::time::Duration::from_millis(600));
+        for _ in 0..presses {
+            shot.key(Key::Named(NamedKey::Tab))
+                .settle(std::time::Duration::from_millis(400));
+        }
+        shot.save(&path);
+        println!("[snapshot] wrote {path}");
+    }
+
+    // The ring mid-animation: it grows out and fades in on arrival, then grows
+    // back out and fades away when Tab moves focus on. Short settles catch it
+    // partway through the 160 ms (in) and 120 ms (out) transitions.
+    let mut shot = Snapshot::new(
+        move || {
+            Element::from(
+                rect()
+                    .expanded()
+                    .tw(&tokens, &[bg(Paint::Bg)])
+                    .child(Themed { child: FocusScene.into_element() }),
+            )
+        },
+        (WINDOW_SIZE.0, 520.0),
+    );
+    let early = format!("{out}/focus-in-30ms.png");
+    let late = format!("{out}/focus-in-80ms.png");
+    let leaving = format!("{out}/focus-out-30ms.png");
+    shot.settle(std::time::Duration::from_millis(600))
+        .key(Key::Named(NamedKey::Tab))
+        .settle(std::time::Duration::from_millis(30))
+        .save(&early)
+        .settle(std::time::Duration::from_millis(50))
+        .save(&late)
+        .settle(std::time::Duration::from_millis(600))
+        .key(Key::Named(NamedKey::Tab))
+        .settle(std::time::Duration::from_millis(30))
+        .save(&leaving);
+    println!("[snapshot] wrote {early}, {late}, {leaving}");
 }
 
 /// Provides the tokens, as an application root does, for a capture that
@@ -357,6 +449,35 @@ impl Component for Themed {
             .expanded()
             .tw(&tokens, &[bg(Paint::Bg)])
             .child(self.child.clone())
+    }
+}
+
+/// The controls a keyboard user Tabs through: one of each kind, in a column.
+#[derive(PartialEq)]
+struct FocusScene;
+
+impl Component for FocusScene {
+    fn render(&self) -> impl IntoElement {
+        let mut on = use_state(|| true);
+        let mut language = use_state(|| "en".to_string());
+        let name = use_state(|| "Kieran".to_string());
+        rect().expanded().child(
+            Group::new("Focus".to_string())
+                .row(row("Button").trailing(primary_button("Save", |_| {}).compact()))
+                .row(row("Switch").trailing(switch(on(), move |next| on.set(next))))
+                .row(
+                    row("Dropdown").trailing(dropdown(
+                        vec![
+                            ("en".to_string(), "English".to_string()),
+                            ("de".to_string(), "Deutsch".to_string()),
+                        ],
+                        language.read().clone(),
+                        move |next: String| language.set(next),
+                    )),
+                )
+                .row(row("Text field").trailing(text_field(name, |_| {})))
+                .row(row("Row").subtitle("Opens nothing").on_press(|_| {})),
+        )
     }
 }
 

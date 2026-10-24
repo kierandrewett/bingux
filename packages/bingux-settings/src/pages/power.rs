@@ -294,7 +294,7 @@ fn profile_label(name: &str) -> String {
 fn profile_meaning(name: &str) -> &'static str {
     match name {
         "power-saver" => "Uses less power. Slower under heavy load.",
-        "balanced" => "The usual choice for most work.",
+        "balanced" => "Good for most work.",
         "performance" => "Fastest. Uses more power and runs warmer.",
         _ => "",
     }
@@ -608,7 +608,7 @@ fn battery_group(battery: &Battery) -> Group {
         Some(health) => group.row(
             row("Battery health")
                 .leading(Icon::BatteryLevel50)
-                .subtitle("Full charge capacity compared with when the battery was new")
+                .subtitle("Full charge capacity compared with a new battery")
                 .value(health.clone()),
         ),
         None => group,
@@ -674,7 +674,7 @@ impl Component for PowerPage {
             .and_then(|model| header_subtitle(&model.battery));
         use_page_header(PageHeader {
             subtitle,
-            action: None,
+            ..PageHeader::default()
         });
 
         let (model, loading) = match loaded.read().clone() {

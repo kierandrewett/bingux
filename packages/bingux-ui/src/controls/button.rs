@@ -5,6 +5,7 @@ use freya::prelude::*;
 
 use crate::controls::progress::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
+use crate::motion::focus_ring;
 use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
 use crate::typography::{BODY, EMPHASIS, Ink};
@@ -144,7 +145,6 @@ impl Component for ActionButton {
                     px(S3),
                     gap(S2),
                     surface(base, hovering(), pressing(), false),
-                    focus_ring(focus()),
                 ],
             )
             // A flat button has no fill, so a minimum width would only centre
@@ -195,6 +195,7 @@ impl Component for ActionButton {
                     .label(&tokens, self.text.clone())
                     .max_lines(1),
             )
+            .child(focus_ring(focus(), Radius::Control))
     }
 }
 
@@ -261,7 +262,6 @@ impl Component for RowButton {
                     center(),
                     px(S3),
                     surface(base, hovering(), pressing(), false),
-                    focus_ring(focus()),
                 ],
             )
             .maybe(enabled, |element| {
@@ -294,6 +294,7 @@ impl Component for RowButton {
                     .label(&tokens, self.text.clone())
                     .max_lines(1),
             )
+            .child(focus_ring(focus(), Radius::Control))
     }
 }
 
@@ -305,6 +306,8 @@ pub struct IconButton {
     tooltip: Option<String>,
     on_press: EventHandler<()>,
     danger: bool,
+    filled: bool,
+    active: bool,
 }
 
 pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconButton {
@@ -314,6 +317,8 @@ pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconBut
         tooltip: None,
         on_press: on_press.into(),
         danger: false,
+        filled: false,
+        active: false,
     }
 }
 
@@ -333,6 +338,20 @@ impl IconButton {
         self.danger = true;
         self
     }
+
+    /// A control fill at rest, for a button that stands on its own rather
+    /// than in a header bar.
+    pub fn filled(mut self) -> Self {
+        self.filled = true;
+        self
+    }
+
+    /// Ring the button in the accent colour, for the one button of a set
+    /// that is on or playing.
+    pub fn active(mut self, active: bool) -> Self {
+        self.active = active;
+        self
+    }
 }
 
 impl Component for IconButton {
@@ -348,6 +367,8 @@ impl Component for IconButton {
         // layer from `surface` then sits over it.
         let base = if self.danger && hovering() {
             Paint::Danger
+        } else if self.filled {
+            Paint::Control
         } else {
             Paint::Transparent
         };
@@ -365,9 +386,11 @@ impl Component for IconButton {
                     w(self.size),
                     h(self.size),
                     surface(base, hovering(), pressing(), false),
-                    focus_ring(focus()),
                 ],
             )
+            .maybe(self.active, |element| {
+                element.tw(&tokens, &[border(Line::Stroke(Dim::Ring, Paint::Accent))])
+            })
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| {
                 hovering.set(false);
@@ -389,6 +412,7 @@ impl Component for IconButton {
                     on_key.call(());
                 }
             })
+            .child(focus_ring(focus(), Radius::Pill))
             .child(icons::icon(
                 self.icon,
                 IconSize::Control,

@@ -65,6 +65,9 @@ pub enum Radius {
     Tile,
     /// Fully round: switches, avatars, swatches, badges.
     Pill,
+    /// The window's own corner: the shell draws its frame at this radius, so
+    /// anything that touches the window's bottom edge keeps clear of it.
+    Window,
 }
 
 impl Radius {
@@ -76,6 +79,7 @@ impl Radius {
             Radius::Card => 16.0,
             Radius::Overlay => 20.0,
             Radius::Tile => 24.0,
+            Radius::Window => 12.0,
             Radius::Pill => 999.0,
         }
     }
@@ -136,6 +140,9 @@ pub enum Dim {
     Row,
     /// A row with a subtitle at its smallest: 72 px.
     RowTall,
+    /// A row whose subtitle is one line: its natural height, 63 px at mouse
+    /// density. Lists that mount rows lazily size their slots with this.
+    RowSubtitle,
     /// A control in a row (dropdown, field, segmented control, stepper,
     /// compact button): 36 px, 44 px for a finger.
     Control,
@@ -275,6 +282,7 @@ impl Dim {
         match self {
             Dim::Row => pick(56.0, 60.0),
             Dim::RowTall => 72.0,
+            Dim::RowSubtitle => 63.0,
             Dim::Control => pick(36.0, 44.0),
             Dim::Button => pick(40.0, 48.0),
             Dim::MenuItem => 36.0,
@@ -402,11 +410,14 @@ pub enum Paint {
     DangerSoft,
     Success,
     Warning,
-    Tooltip,
+    /// The dark surface of anything that floats over the window for a
+    /// moment: tooltips and toasts.
+    Floating,
     /// The unfilled part of a spinner ring: the text colour at low strength,
     /// so it reads under any spinner ink.
     Track,
-    TooltipOutline,
+    /// The faint edge of a floating surface.
+    FloatingOutline,
     /// A colour from the accent palette, shown as a swatch. The name picks
     /// the accent, tinted for the current scheme.
     Swatch(&'static str),
@@ -473,8 +484,8 @@ impl Paint {
             Paint::DangerSoft => crate::surface::over(tokens.danger.with_af32(0.12), tokens.card),
             Paint::Success => tokens.success,
             Paint::Warning => tokens.warning,
-            Paint::Tooltip => tokens.tooltip_surface,
-            Paint::TooltipOutline => tokens.tooltip_outline,
+            Paint::Floating => tokens.floating,
+            Paint::FloatingOutline => tokens.floating_outline,
             Paint::Tint(tone) => tone.color(tokens).with_af32(0.16),
             Paint::TintEdge(tone) => tone.color(tokens).with_af32(0.28),
             Paint::Track => tokens.text.with_af32(0.22),
@@ -508,8 +519,6 @@ pub enum Line {
     Edge(Paint),
     /// A 2 px ring in a paint: the selected swatch or preview card.
     Ring(Paint),
-    /// The keyboard focus ring: 2 px accent when `true`, nothing otherwise.
-    Focus(bool),
 }
 
 /// A drop shadow, by how high the box floats.

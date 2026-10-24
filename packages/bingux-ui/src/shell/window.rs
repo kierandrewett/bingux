@@ -5,8 +5,9 @@ use freya::prelude::*;
 
 use crate::controls::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
+use crate::motion::focus_ring;
 use crate::style::*;
-use crate::surface::use_tokens;
+use crate::surface::{is_activation_key, use_tokens};
 use crate::typography::EMPHASIS;
 
 /// Run `callback` with the winit window of the current Freya window.
@@ -205,6 +206,8 @@ struct WindowControl {
 impl Component for WindowControl {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let a11y_id = use_a11y();
+        let focus = use_focus(a11y_id);
         let mut hovering = use_state(|| false);
         let action = self.action;
         let fill = match (hovering(), self.danger) {
@@ -223,25 +226,36 @@ impl Component for WindowControl {
                     center(),
                 ],
             )
+            .a11y_id(a11y_id)
+            .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Button)
             .a11y_alt(self.tooltip)
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| hovering.set(false))
             .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
+            .on_key_down(move |event: Event<KeyboardEventData>| {
+                if is_activation_key(&event.key) {
+                    event.stop_propagation();
+                    run_window_action(action);
+                }
+            })
             .on_press(move |event: Event<PressEventData>| {
                 event.stop_propagation();
-                match action {
-                    Action::Minimize => with_window(|window| window.set_minimized(true)),
-                    Action::ToggleMaximize => {
-                        with_window(|window| window.set_maximized(!window.is_maximized()))
-                    }
-                    Action::Close => Platform::get().close_window(Platform::window_id()),
-                }
+                run_window_action(action);
             })
             .child(icons::icon(
                 self.icon,
                 IconSize::Control,
                 Paint::Text.color(&tokens),
             ))
+            .child(focus_ring(focus(), Radius::Pill))
+    }
+}
+
+fn run_window_action(action: Action) {
+    match action {
+        Action::Minimize => with_window(|window| window.set_minimized(true)),
+        Action::ToggleMaximize => with_window(|window| window.set_maximized(!window.is_maximized())),
+        Action::Close => Platform::get().close_window(Platform::window_id()),
     }
 }

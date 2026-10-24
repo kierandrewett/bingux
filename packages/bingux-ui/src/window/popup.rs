@@ -31,6 +31,13 @@ const OPEN_SCALE: f32 = 0.94;
 const POPUP_MAX_WIDTH_PERCENT: f32 = 94.0;
 /// The tallest a popup grows, as a share of the window height.
 const POPUP_MAX_HEIGHT_PERCENT: f32 = 80.0;
+/// The smallest a popup gets when an edge is dragged, or its starting size
+/// when that is smaller.
+const POPUP_MIN_WIDTH: f32 = 320.0;
+const POPUP_MIN_HEIGHT: f32 = 240.0;
+/// The width of the band along each edge and in each corner that resizes the
+/// popup when dragged.
+const RESIZE_BAND: f32 = 8.0;
 /// The height of the tab rail under the header, when a popup has tabs.
 fn tabs_height() -> f32 {
     Dim::Control.px() + S3.px()
@@ -118,6 +125,8 @@ pub(crate) struct PopupEntry {
     pub parent: Option<u64>,
     pub title: State<String>,
     pub size: State<(f32, f32)>,
+    /// The smallest size a resize can reach.
+    pub min: (f32, f32),
     pub closing: State<bool>,
     pub actions: State<PopupActions>,
     pub address: Option<Address>,
@@ -128,11 +137,13 @@ pub(crate) struct PopupEntry {
 
 impl PopupEntry {
     pub(crate) fn new(scope: ScopeId, id: u64, parent: Option<u64>, popup: Popup) -> Self {
+        let (width, height) = popup.dimensions;
         Self {
             id,
             parent,
             title: State::create_in_scope(popup.title, scope),
             size: State::create_in_scope(popup.dimensions, scope),
+            min: (width.min(POPUP_MIN_WIDTH), height.min(POPUP_MIN_HEIGHT)),
             closing: State::create_in_scope(false, scope),
             actions: State::create_in_scope(PopupActions::default(), scope),
             address: popup.address,
@@ -141,6 +152,143 @@ impl PopupEntry {
             overlays: Overlays::in_scope(scope),
         }
     }
+
+    /// `size` limited to the popup's minimum and to the window less its
+    /// margin. Code-driven and dragged resizes both go through this.
+    pub(crate) fn clamp(&self, (width, height): (f32, f32)) -> (f32, f32) {
+        let window = *Platform::get().current_window().root_size.peek();
+        let max_width = (window.width * POPUP_MAX_WIDTH_PERCENT / 100.0).max(self.min.0);
+        let max_height = (window.height * POPUP_MAX_HEIGHT_PERCENT / 100.0).max(self.min.1);
+        (
+            width.clamp(self.min.0, max_width),
+            height.clamp(self.min.1, max_height),
+        )
+    }
+}
+
+/// A drag on a resize handle: the edges it moves, where the pointer began and
+/// the size the popup had then.
+#[derive(Clone, Copy, PartialEq)]
+struct ResizeDrag {
+    /// Which edges move: -1 for left or top, 1 for right or bottom, 0 for
+    /// neither. The popup grows by twice the drag, so it stays centred.
+    edges: (f32, f32),
+    start: (f32, f32),
+    size: (f32, f32),
+}
+
+/// One of the eight handles on the panel's edges and corners.
+fn resize_handle(
+    mut resize: State<Option<ResizeDrag>>,
+    size: State<(f32, f32)>,
+    edges: (f32, f32),
+    position: Position,
+    width: Size,
+    height: Size,
+    cursor: CursorIcon,
+) -> Rect {
+    rect()
+        .position(position)
+        .layer(Layer::Relative(2))
+        .width(width)
+        .height(height)
+        .cursor(cursor)
+        .on_pointer_down(move |event: Event<PointerEventData>| {
+            event.stop_propagation();
+            let at = event.global_location();
+            resize.set(Some(ResizeDrag {
+                edges,
+                start: (at.x as f32, at.y as f32),
+                size: *size.peek(),
+            }));
+        })
+}
+
+/// The eight handles on the panel's edges and corners. Each is one band wide
+/// and sits inside the edge, so the panel's clip does not cut it off.
+fn resize_handles(
+    resize: State<Option<ResizeDrag>>,
+    size: State<(f32, f32)>,
+    (width, height): (f32, f32),
+) -> Vec<Rect> {
+    let band = RESIZE_BAND;
+    let inner_width = (width - 2.0 * band).max(0.0);
+    let inner_height = (height - 2.0 * band).max(0.0);
+    let at = |top: f32, left: f32| Position::new_absolute().top(top).left(left);
+    vec![
+        resize_handle(
+            resize,
+            size,
+            (0.0, -1.0),
+            at(0.0, band),
+            Size::px(inner_width),
+            Size::px(band),
+            CursorIcon::NsResize,
+        ),
+        resize_handle(
+            resize,
+            size,
+            (0.0, 1.0),
+            at(height - band, band),
+            Size::px(inner_width),
+            Size::px(band),
+            CursorIcon::NsResize,
+        ),
+        resize_handle(
+            resize,
+            size,
+            (-1.0, 0.0),
+            at(band, 0.0),
+            Size::px(band),
+            Size::px(inner_height),
+            CursorIcon::EwResize,
+        ),
+        resize_handle(
+            resize,
+            size,
+            (1.0, 0.0),
+            at(band, width - band),
+            Size::px(band),
+            Size::px(inner_height),
+            CursorIcon::EwResize,
+        ),
+        resize_handle(
+            resize,
+            size,
+            (-1.0, -1.0),
+            at(0.0, 0.0),
+            Size::px(band),
+            Size::px(band),
+            CursorIcon::NwseResize,
+        ),
+        resize_handle(
+            resize,
+            size,
+            (1.0, -1.0),
+            at(0.0, width - band),
+            Size::px(band),
+            Size::px(band),
+            CursorIcon::NeswResize,
+        ),
+        resize_handle(
+            resize,
+            size,
+            (-1.0, 1.0),
+            at(height - band, 0.0),
+            Size::px(band),
+            Size::px(band),
+            CursorIcon::NeswResize,
+        ),
+        resize_handle(
+            resize,
+            size,
+            (1.0, 1.0),
+            at(height - band, width - band),
+            Size::px(band),
+            Size::px(band),
+            CursorIcon::NwseResize,
+        ),
+    ]
 }
 
 /// Draws one popup: its scrim, its panel, and the `Window` it provides to its
@@ -176,23 +324,31 @@ impl Component for PopupFrame {
             manager.remove(id)
         });
 
+        // A drag on an edge follows the pointer, so it does not animate; the
+        // code-driven resizes still ease to their new size.
+        let mut resize = use_state(|| None::<ResizeDrag>);
         let motion = tokens.motion(MOTION_MS);
         let target = *entry.size.read();
-        let (width, height) =
-            use_animation_transition(target, move |from: (f32, f32), to: (f32, f32)| {
-                (
-                    AnimNum::new(from.0, to.0)
-                        .time(motion)
-                        .function(Function::Quad)
-                        .ease(Ease::Out),
-                    AnimNum::new(from.1, to.1)
-                        .time(motion)
-                        .function(Function::Quad)
-                        .ease(Ease::Out),
-                )
-            })
-            .get()
-            .value();
+        let animated = use_animation_transition(target, move |from: (f32, f32), to: (f32, f32)| {
+            let time = if resize.peek().is_some() { 0 } else { motion };
+            (
+                AnimNum::new(from.0, to.0)
+                    .time(time)
+                    .function(Function::Quad)
+                    .ease(Ease::Out),
+                AnimNum::new(from.1, to.1)
+                    .time(time)
+                    .function(Function::Quad)
+                    .ease(Ease::Out),
+            )
+        })
+        .get()
+        .value();
+        let (width, height) = if resize.read().is_some() {
+            target
+        } else {
+            animated
+        };
 
         let title = entry.title.read().clone();
         let actions = entry.actions.read().clone();
@@ -215,6 +371,21 @@ impl Component for PopupFrame {
         let header = match primary_element {
             Some(primary) => header.trailing(primary),
             None => header,
+        };
+
+        // A drag sets the size from where the pointer began. Each dragged side
+        // moves by the drag, so the popup grows by twice it and stays centred.
+        let on_drag = move |event: Event<PointerEventData>| {
+            let Some(drag) = *resize.peek() else {
+                return;
+            };
+            let at = event.global_location();
+            let dx = at.x as f32 - drag.start.0;
+            let dy = at.y as f32 - drag.start.1;
+            window.resize_to(
+                drag.size.0 + 2.0 * drag.edges.0 * dx,
+                drag.size.1 + 2.0 * drag.edges.1 * dy,
+            );
         };
 
         // The panel takes focus when the popup opens. A text field marked
@@ -255,6 +426,8 @@ impl Component for PopupFrame {
                     action.on_press.call(());
                 }
             })
+            .on_capture_global_pointer_move(on_drag)
+            .on_global_pointer_up(move |_| resize.set_if_modified(None))
             .child(header)
             .maybe_child(entry.tabs.clone().map(|tabs| {
                 rect()
@@ -273,7 +446,9 @@ impl Component for PopupFrame {
                             .tw(&tokens, &[w_full(), p(S4)])
                             .child(entry.content.clone()),
                     ),
-            );
+            )
+            // The handles come last so they sit above the content.
+            .children(resize_handles(resize, entry.size, (width, height)));
 
         rect()
             .position(Position::new_absolute().top(0.0).left(0.0))

@@ -16,9 +16,9 @@ use crate::system::{
 };
 use crate::theme::Tokens;
 use crate::ui::{
-    Group, Overlays, PopupAction, PopupActions, Status, Window, action_button, avatar, caption,
-    form_row, heading, menu_item, page_column, popup, popup_column, row, skeleton_shape, status,
-    text_field, use_overlays, use_popup_actions, use_tokens, use_window,
+    Group, Overlays, PageHeader, PopupAction, PopupActions, Status, Window, action_button, avatar,
+    caption, form_row, heading, menu_item, page_column, popup, popup_column, row, skeleton_shape,
+    status, text_field, use_overlays, use_page_header, use_popup_actions, use_tokens, use_window,
 };
 use bingux_ui::style::*;
 
@@ -273,6 +273,7 @@ impl Component for AccountDetails {
         let tokens: Tokens = use_tokens();
         let password = use_password();
         let name = use_name(account, model);
+        use_page_header(PageHeader::default().hero_title());
         let path = account.path.clone();
         let name_row = row("Full name")
             .value(name.shown.read().clone())
@@ -299,7 +300,6 @@ impl Component for AccountDetails {
         let password_group = account.current.then(|| {
             Element::from(
                 Group::titled("Password")
-                    .description("Changes the password you sign in with.")
                     .row(
                         row("Your password")
                             .trailing(action_button("Change password", move |_| password.open())),
@@ -495,7 +495,7 @@ impl Component for PasswordBody {
                     .row(form_row("New", new))
                     .row(form_row("Retype", confirm)),
             )
-            .maybe_child(mismatch.then(|| caption("The new passwords do not match yet.")))
+            .maybe_child(mismatch.then(|| caption("The new passwords do not match.")))
             .maybe_child(error.map(|text| Element::from(status(Status::Error(text)))))
             .maybe_child(busy.then(|| {
                 Element::from(status(Status::Loading(

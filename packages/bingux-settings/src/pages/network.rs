@@ -417,6 +417,7 @@ impl Component for WiredPage {
         let overlays = use_overlays();
         let editor = use_editor();
         let model = system::use_cached("network", load);
+        use_page_header(PageHeader::default().hero_title());
 
         // Go back to the list once the device is gone.
         let gone = self.device.clone();
@@ -505,6 +506,7 @@ impl Component for VpnPage {
         let navigator = use_navigator();
         let overlays = use_overlays();
         let model = system::use_cached("vpn", load_vpns);
+        use_page_header(PageHeader::default().hero_title());
 
         // Go back to the list once the profile is gone.
         let gone = self.name.clone();
@@ -601,6 +603,7 @@ impl Component for NetworkPage {
         use_page_header(PageHeader {
             subtitle,
             action: None,
+            ..Default::default()
         });
         // Wired and VPN are both drawn on the first frame, so no group
         // appears in a second pass once its data arrives.

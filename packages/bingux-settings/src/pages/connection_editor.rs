@@ -317,7 +317,7 @@ pub fn cloned_mac_caption(mode: &str) -> &'static str {
         "random" => "Uses a new random address each time it connects.",
         "stable" => "Uses a random address that stays the same on this network.",
         "address" => "Uses the address you type here.",
-        _ => "Uses the adapter's own address, as NetworkManager chooses.",
+        _ => "Uses the adapter's own address.",
     }
 }
 

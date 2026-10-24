@@ -5,6 +5,7 @@ use accesskit::Toggled;
 use freya::animation::*;
 use freya::prelude::*;
 
+use crate::motion::focus_ring;
 use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
 
@@ -91,7 +92,6 @@ impl Component for Switch {
                 ],
             )
             .maybe(!on, |element| element.tw(&tokens, &[border(Line::Outline)]))
-            .tw(&tokens, &[focus_ring(focus())])
             .maybe(!enabled, |element| element.opacity(DISABLED_OPACITY))
             .maybe(enabled, |element| {
                 element
@@ -140,5 +140,6 @@ impl Component for Switch {
                         &[h(Dim::SwitchThumb), rounded(Radius::Pill), bg(thumb)],
                     ),
             )
+            .child(focus_ring(focus(), Radius::Pill))
     }
 }

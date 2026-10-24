@@ -139,22 +139,26 @@ impl Component for ControlsPage {
                     )
                     .row(row("Disabled").trailing(slider(30.0, |_| {}).enabled(false))),
             )
+            .child(radio_rows(
+                Some("Radio rows".to_string()),
+                vec![
+                    radio_row("Small", radio.read().as_str() == "small", move |_: ()| {
+                        radio.set("small".to_string())
+                    })
+                    .subtitle("Compact"),
+                    radio_row("Medium", radio.read().as_str() == "medium", move |_: ()| {
+                        radio.set("medium".to_string())
+                    }),
+                    radio_row("Large", radio.read().as_str() == "large", move |_: ()| {
+                        radio.set("large".to_string())
+                    })
+                    .subtitle("Easier to read"),
+                    radio_row("Unavailable", false, |_: ()| {}).enabled(false),
+                    radio_row("Selected but unavailable", true, |_: ()| {}).enabled(false),
+                ],
+            ))
             .child(
                 Group::new("Choice".to_string())
-                    .row(
-                        row("Radio group").subtitle("Horizontal layout").trailing(
-                            radio_group(
-                                vec![
-                                    ("small".into(), "Small".into()),
-                                    ("medium".into(), "Medium".into()),
-                                    ("large".into(), "Large".into()),
-                                ],
-                                radio.read().clone(),
-                                move |key: String| radio.set(key),
-                            )
-                            .horizontal(),
-                        ),
-                    )
                     .row(choice_row(
                         "Segmented",
                         vec![
@@ -229,7 +233,7 @@ impl Component for ButtonsPage {
         page_column()
             .child(
                 Group::new("Menus".to_string())
-                    .description("Opens where the pointer is pressed.")
+                    .description("Opens where the pointer is pressed, or from the keyboard.")
                     .row(row("Menu").trailing(menu_button(
                         "Actions",
                         vec![
@@ -239,6 +243,15 @@ impl Component for ButtonsPage {
                             menu_separator(),
                             menu_item("Show hidden files", |_| {}).checked(true),
                             menu_item("Show preview", |_| {}).checked(false),
+                            menu_separator(),
+                            submenu(
+                                "Sort by",
+                                vec![
+                                    menu_item("Name", |_| {}).checked(true),
+                                    menu_item("Size", |_| {}).checked(false),
+                                    menu_item("Date modified", |_| {}).checked(false),
+                                ],
+                            ),
                             menu_separator(),
                             menu_item("Delete", |_| {}).destructive(),
                         ],

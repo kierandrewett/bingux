@@ -68,6 +68,8 @@ pub struct ScrollBarContext {
     pub thumb_offset: f32,
     pub track_size: Size,
     pub thumb_length: f32,
+    /// Bingux patch: room kept clear at the far end of the track (bottom for Y).
+    pub end_inset: f32,
 }
 
 /// Pointer event handlers for a custom scrollbar thumb.
@@ -152,6 +154,7 @@ impl ComponentOwned for ScrollBar {
             thumb_offset,
             track_size,
             thumb_length,
+            end_inset,
             ..
         } = context;
         let mut hovering = use_state(|| false);
@@ -235,7 +238,13 @@ impl ComponentOwned for ScrollBar {
                 0.,
                 Size::px(cross_size),
                 Size::fill(),
-                Gaps::new(SCROLLBAR_MARGIN, cross_gap, SCROLLBAR_MARGIN, 0.),
+                // Bingux patch: `end_inset` keeps the bottom of the bar clear of a rounded window edge.
+                Gaps::new(
+                    SCROLLBAR_MARGIN,
+                    cross_gap,
+                    SCROLLBAR_MARGIN + end_inset,
+                    0.,
+                ),
                 Size::px(20.),
                 Size::Inner,
                 0.,

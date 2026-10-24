@@ -12,6 +12,7 @@ use std::rc::Rc;
 
 use freya::prelude::*;
 
+use crate::motion::focus_ring;
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::typography::{BODY, Ink};
@@ -148,7 +149,6 @@ impl Component for Tab {
                         pressing(),
                         false,
                     ),
-                    focus_ring(focus()),
                 ],
             )
             .maybe(self.selected, |element| {
@@ -174,5 +174,6 @@ impl Component for Tab {
                     .label(&tokens, self.text.clone())
                     .max_lines(1),
             )
+            .child(focus_ring(focus(), Radius::Inner))
     }
 }

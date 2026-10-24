@@ -101,6 +101,8 @@ pub enum Util {
     Margin(Sides, Space),
     Gap(Space),
     Rounded(Radius),
+    /// `Radius` plus a run-time number of pixels.
+    RoundedBy(Radius, f32),
     Bg(Paint),
     /// The text colour children inherit.
     Ink(Paint),
@@ -186,6 +188,11 @@ pub const fn gap(space: Space) -> Util {
 pub const fn rounded(radius: Radius) -> Util {
     Util::Rounded(radius)
 }
+/// `radius` plus `extra` pixels, for a box whose outer edge sits `extra` px
+/// outside a control, such as a focus ring. `extra` may change at run time.
+pub fn rounded_by(radius: Radius, extra: f32) -> Util {
+    Util::RoundedBy(radius, extra)
+}
 pub const fn bg(paint: Paint) -> Util {
     Util::Bg(paint)
 }
@@ -203,10 +210,6 @@ pub const fn border(line: Line) -> Util {
 }
 pub const fn shadow(elevation: Elevation) -> Util {
     Util::Shadow(elevation)
-}
-/// The keyboard focus ring, drawn while `focus` is keyboard focus.
-pub fn focus_ring(focus: Focus) -> Util {
-    Util::Border(Line::Focus(focus == Focus::Keyboard))
 }
 pub const fn surface(base: Paint, hover: bool, press: bool, selected: bool) -> Util {
     Util::Surface {
@@ -369,8 +372,6 @@ fn line_border(tokens: &Tokens, line: Line) -> Border {
             let width = width.px();
             one(side(width, width, width, width), paint.color(tokens))
         }
-        Line::Focus(true) => one(side(ring, ring, ring, ring), tokens.accent),
-        Line::Focus(false) => Border::new(),
     }
 }
 
@@ -432,6 +433,7 @@ fn apply_layout(rect: Rect, util: Util) -> Rect {
         }
         Util::Gap(space) => rect.spacing(space.px()),
         Util::Rounded(radius) => rect.corner_radius(radius.px()),
+        Util::RoundedBy(radius, extra) => rect.corner_radius(radius.px() + extra),
         Util::Bg(_) | Util::Ink(_) | Util::Font(_) | Util::Surface { .. } | Util::Border(_) => rect,
         Util::Shadow(elevation) => {
             let (y, blur, opacity) = elevation.params();

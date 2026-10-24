@@ -4,17 +4,23 @@
 //! and trailing content. Convenience constructors pair a row with a
 //! switch, slider, choice or text field.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use accesskit::Toggled;
 use freya::animation::*;
 use freya::prelude::*;
 
 use crate::app_icon::app_icon;
 use crate::controls::dropdown::dropdown;
+use crate::controls::radio::{RadioMark, next_enabled};
 use crate::controls::segmented::segmented;
 use crate::controls::slider::slider;
 use crate::controls::switch::switch;
 use crate::controls::text_field::text_field;
 use crate::group::{SlotFilter, card_rows, use_row_lit, use_row_match};
 use crate::icons::{self, Icon};
+use crate::motion::focus_ring;
 use crate::search_highlight::{self, MatchSink};
 use crate::shell::menu::{MenuItem, menu_item};
 use crate::shell::overlays::Overlays;
@@ -29,7 +35,7 @@ struct RowPressable(State<bool>);
 
 /// One row: optional leading icon, title, optional subtitle, and trailing
 /// content. The whole row is the target when `on_press` is set.
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Row {
     title: String,
     subtitle: Option<String>,
@@ -53,6 +59,11 @@ pub struct Row {
     /// Whether the trailing content is a read-only value. The title and the
     /// value then share the row evenly, and a long value is cut to its half.
     value_trailing: bool,
+    /// Whether the subtitle is kept to one line, cut with an ellipsis, and the
+    /// row takes the subtitle height. See [`Row::subtitle_one_line`].
+    subtitle_one_line: bool,
+    /// The radio of a radio row, set by [`radio_row`].
+    radio: Option<RadioChoice>,
 }
 
 pub fn row(title: impl Into<String>) -> Row {
@@ -76,6 +87,8 @@ pub fn row(title: impl Into<String>) -> Row {
         nested: None,
         font: None,
         value_trailing: false,
+        subtitle_one_line: false,
+        radio: None,
     }
 }
 
@@ -97,6 +110,14 @@ impl Row {
 
     pub fn maybe_subtitle(mut self, subtitle: Option<String>) -> Self {
         self.subtitle = subtitle.filter(|text| !text.is_empty());
+        self
+    }
+
+    /// Keeps the subtitle to one line, cut with an ellipsis when it is too
+    /// wide. The row keeps its natural height, so a list of such rows has
+    /// one height per row: `Dim::RowSubtitle` at mouse density.
+    pub fn subtitle_one_line(mut self) -> Self {
+        self.subtitle_one_line = true;
         self
     }
 
@@ -296,10 +317,15 @@ impl Component for Row {
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
-        let a11y_id = use_a11y();
+        let generated_id = use_a11y();
+        let radio = self.radio.as_ref();
+        let a11y_id = radio
+            .and_then(|choice| choice.a11y_id)
+            .unwrap_or(generated_id);
         let focus = use_focus(a11y_id);
         provide_enabled(self.enabled);
         let interactive = self.on_press.is_some() && self.enabled;
+        let focusable = interactive && radio.is_none_or(|choice| choice.tab_stop);
         let mut pressable = use_provide_context(|| RowPressable(State::create(interactive)));
         pressable.0.set_if_modified(interactive);
         // Only a row that opens something, such as one with a chevron, lights
@@ -371,6 +397,7 @@ impl Component for Row {
                 )
                 .into(),
         };
+        let subtitle_lines = if self.subtitle_one_line { 1 } else { 3 };
         // A subtitle wraps onto a second or third line, so a row that has one
         // grows to fit it. A row without one has the row height, and its
         // text is centred by the row.
@@ -384,7 +411,7 @@ impl Component for Row {
                     .into(),
                 None => match search_highlight::marked(CAPTION, &tokens, subtitle) {
                     Some(marked) => marked
-                        .max_lines(3)
+                        .max_lines(subtitle_lines)
                         .text_overflow(TextOverflow::Ellipsis)
                         .width(Size::fill())
                         .into(),
@@ -392,13 +419,13 @@ impl Component for Row {
                     // starts from, so a pressable row keeps its text plain.
                     None if !interactive => CAPTION
                         .selectable(&tokens, subtitle.clone())
-                        .max_lines(3)
+                        .max_lines(subtitle_lines)
                         .text_overflow(TextOverflow::Ellipsis)
                         .width(Size::fill())
                         .into(),
                     None => CAPTION
                         .paragraph(&tokens, subtitle.clone())
-                        .max_lines(3)
+                        .max_lines(subtitle_lines)
                         .text_overflow(TextOverflow::Ellipsis)
                         .width(Size::fill())
                         .into(),
@@ -431,24 +458,27 @@ impl Component for Row {
         let on_press = self.on_press.clone();
         let face = rect()
             .a11y_id(a11y_id)
-            .a11y_focusable(interactive)
-            .a11y_role(if interactive {
+            .a11y_focusable(focusable)
+            .a11y_role(if radio.is_some() {
+                AccessibilityRole::RadioButton
+            } else if interactive {
                 AccessibilityRole::Button
             } else {
                 AccessibilityRole::GenericContainer
             })
+            .maybe(radio.is_some(), |element| {
+                let checked = radio.is_some_and(|choice| choice.selected);
+                element.a11y_builder(move |builder| builder.set_toggled(Toggled::from(checked)))
+            })
             .tw(&tokens, if single_line { ROW } else { ROW_TALL })
             .tw(
                 &tokens,
-                &[
-                    surface(
-                        Paint::Transparent,
-                        activatable && hovering(),
-                        activatable && pressing(),
-                        self.selected,
-                    ),
-                    focus_ring(focus()),
-                ],
+                &[surface(
+                    Paint::Transparent,
+                    activatable && hovering(),
+                    activatable && pressing(),
+                    self.selected,
+                )],
             )
             .on_pointer_down(move |event: Event<PointerEventData>| {
                 if open_row_menu(overlays, &menu, &event) {
@@ -473,6 +503,15 @@ impl Component for Row {
                         a11y_id.request_focus();
                     })
             })
+            .maybe_child(radio.map(|choice| {
+                rect()
+                    .opacity(if self.enabled { 1.0 } else { DISABLED_OPACITY })
+                    .child(RadioMark {
+                        selected: choice.selected,
+                        hover: hovering() && self.enabled,
+                        press: pressing() && self.enabled,
+                    })
+            }))
             .maybe_child({
                 let leading: Option<Element> = match self.leading {
                     Some(leading) => {
@@ -512,7 +551,14 @@ impl Component for Row {
                     .map(|name| app_icon(name.clone(), IconSize::App)),
             )
             .child(text_column)
-            .maybe_child(trailing);
+            .maybe_child(trailing)
+            .child(focus_ring(focus(), Radius::Control));
+        let face = match radio.and_then(|choice| choice.nav.clone()) {
+            Some(nav) => {
+                face.on_key_down(move |event: Event<KeyboardEventData>| radio_arrow(&nav, event))
+            }
+            None => face,
+        };
         let Some((_, rows)) = &self.nested else {
             return face.into_element();
         };
@@ -587,8 +633,8 @@ pub fn switch_row(
     row(title).trailing(switch(on, move |next: bool| on_toggle.call(next)))
 }
 
-/// A level row for a setting: the title and its value over a full-width
-/// slider. `value` and the callback use 0 to 100.
+/// A level row for a setting: a title on the left and a slider filling the
+/// rest of the line. `value` and the callback use 0 to 100.
 pub fn slider_row(
     title: impl Into<String>,
     value: f64,
@@ -597,20 +643,25 @@ pub fn slider_row(
     level_row(title, value, on_moved)
 }
 
-/// A level row: the title and its value on one line, with a slider as wide
-/// as the row beneath. Use it where the slider is the point of the row, such
-/// as a volume. An optional leading element (an icon or a mute button) sits
-/// before the text and an optional trailing one after it.
+/// The share of a level row's width the title takes on a desktop. Sliders in
+/// one box then start at the same x, when they share the same control slot.
+const TITLE_SHARE: f32 = 34.0;
+
+/// A level row: a title, an optional control such as a mute button, and a
+/// slider that fills the rest of the line. A value, if set, sits at the far
+/// right. On a phone the title takes the first line and the slider the
+/// second, under it.
 #[derive(PartialEq)]
 pub struct LevelRow {
     title: String,
     subtitle: Option<String>,
     leading: Option<Element>,
-    trailing: Option<Element>,
+    control: Option<Element>,
     value: f64,
     value_text: Option<String>,
     max: f64,
     mark: Option<f64>,
+    mark_label: Option<String>,
     danger_from: Option<f64>,
     enabled: bool,
     on_moved: EventHandler<f64>,
@@ -627,11 +678,12 @@ pub fn level_row(
         title: title.into(),
         subtitle: None,
         leading: None,
-        trailing: None,
+        control: None,
         value,
         value_text: None,
         max: 100.0,
         mark: None,
+        mark_label: None,
         danger_from: None,
         enabled: true,
         footer: None,
@@ -655,6 +707,13 @@ impl LevelRow {
         self
     }
 
+    /// A label under the track, centred on the mark, such as "100%" for a
+    /// boost. It shows only with a mark, and once the track is measured.
+    pub fn mark_label(mut self, text: impl Into<String>) -> Self {
+        self.mark_label = Some(text.into());
+        self
+    }
+
     /// Paint the travel past `percent` in the danger colour, such as the
     /// clipping zone past 100%. The value still goes that high.
     pub fn danger_from(mut self, percent: f64) -> Self {
@@ -662,8 +721,8 @@ impl LevelRow {
         self
     }
 
-    /// The text at the right of the title line, such as "500 ms". Without
-    /// it the row shows the value as a percentage.
+    /// The text at the far right of the row, such as "500 ms". Without it the
+    /// row shows no readout, and the value never wraps.
     pub fn value_text(mut self, text: impl Into<String>) -> Self {
         self.value_text = Some(text.into());
         self
@@ -680,13 +739,17 @@ impl LevelRow {
         self
     }
 
+    /// An element before the title, such as an app icon.
     pub fn leading(mut self, leading: impl Into<Element>) -> Self {
         self.leading = Some(leading.into());
         self
     }
 
-    pub fn trailing(mut self, trailing: impl Into<Element>) -> Self {
-        self.trailing = Some(trailing.into());
+    /// An element between the title and the slider, such as a mute button.
+    /// Give a blank `Dim::Box9` where a row has none, so its slider starts
+    /// at the same x as the rows that do.
+    pub fn control(mut self, control: impl Into<Element>) -> Self {
+        self.control = Some(control.into());
         self
     }
 
@@ -721,78 +784,134 @@ impl Component for LevelRow {
         });
         use_row_match(row_hit);
         let ink = if self.enabled { Ink::Text } else { Ink::Muted };
-        let heading = rect()
-            .tw(
-                &tokens,
-                &[
-                    flex_row(),
-                    grow_children(),
-                    items(Align::Center),
-                    w_full(),
-                    gap(S2),
-                ],
-            )
-            .child(
-                rect()
-                    .tw(&tokens, &[w_flex()])
-                    .child(search_highlight::label(
-                        BODY.in_ink(ink),
-                        &tokens,
-                        &self.title,
-                    )),
-            )
-            .child(
-                VALUE.label(
-                    &tokens,
-                    self.value_text
-                        .clone()
-                        .unwrap_or_else(|| format!("{}%", value.round() as i64)),
-                ),
-            );
-        let mut track = slider(value, self.on_moved.clone()).max(self.max);
+        let compact = touch();
+        // The track's measured width places the boost label under its tick.
+        let mut track_width = use_state(|| 0.0_f32);
+
+        let title = search_highlight::label(BODY.in_ink(ink), &tokens, &self.title);
+        let subtitle: Option<Element> = self.subtitle.as_ref().map(|subtitle| -> Element {
+            match search_highlight::marked(CAPTION, &tokens, subtitle) {
+                Some(marked) => marked
+                    .max_lines(1)
+                    .text_overflow(TextOverflow::Ellipsis)
+                    .into(),
+                // A level row has no press, so its subtitle can be selected.
+                None => CAPTION
+                    .selectable(&tokens, subtitle.clone())
+                    .max_lines(1)
+                    .text_overflow(TextOverflow::Ellipsis)
+                    .into(),
+            }
+        });
+        let title_block = rect()
+            .tw(&tokens, &[flex_col(), gap(S0_5), w_flex()])
+            .child(title)
+            .maybe_child(subtitle);
+        let readout: Option<Element> = self.value_text.as_ref().map(|text| -> Element {
+            rect()
+                .tw(&tokens, &[flex_row(), justify(Align::End), w_full()])
+                .child(VALUE.label(&tokens, text.clone()).max_lines(1))
+                .into()
+        });
+
+        let mut track = slider(value, self.on_moved.clone()).max(self.max).fill();
         if let Some(mark) = self.mark {
             track = track.mark(mark);
         }
         if let Some(point) = self.danger_from {
             track = track.danger_from(point);
         }
-        rect()
-            .tw(&tokens, ROW_STACKED)
-            .tw(
-                &tokens,
-                &[flex_row(), grow_children(), items(Align::Center), gap(S4)],
-            )
-            .on_pointer_down(move |event: Event<PointerEventData>| {
-                open_row_menu(overlays, &menu, &event);
-            })
-            .maybe_child(self.leading.clone())
+        let measured = track_width();
+        let boost_label: Option<Element> = match (self.mark, &self.mark_label) {
+            (Some(point), Some(text)) if measured > 0.0 => {
+                // The tick is where the thumb's centre sits at `point`: half
+                // a thumb in, then the travel up to it. The label is centred
+                // on that x, so its box starts half a label to the left.
+                let thumb = Dim::SliderThumb.px();
+                let travel = (measured - thumb).max(1.0);
+                let ratio = (point / self.max).clamp(0.0, 1.0) as f32;
+                let left = (thumb / 2.0 + travel * ratio - Dim::Box9.px() / 2.0).max(0.0);
+                Some(
+                    rect()
+                        .tw(&tokens, &[flex_row(), w_full()])
+                        .child(rect().width(Size::px(left)))
+                        .child(
+                            rect()
+                                .tw(&tokens, &[w(Dim::Box9), flex_row(), justify(Align::Center)])
+                                .child(
+                                    CAPTION
+                                        .in_ink(Ink::Muted)
+                                        .label(&tokens, text.clone())
+                                        .max_lines(1),
+                                ),
+                        )
+                        .into(),
+                )
+            }
+            _ => None,
+        };
+        let track_block = rect()
+            .tw(&tokens, &[flex_col(), w_flex(), gap(S1)])
             .child(
                 rect()
-                    .tw(&tokens, &[flex_col(), w_flex(), gap(S2)])
-                    .child(
-                        rect()
-                            .tw(&tokens, ROW_TEXT)
-                            .tw(&tokens, &[w_full()])
-                            .child(heading)
-                            .maybe_child(self.subtitle.as_ref().map(|subtitle| -> Element {
-                                match search_highlight::marked(CAPTION, &tokens, subtitle) {
-                                    Some(marked) => marked
-                                        .max_lines(1)
-                                        .text_overflow(TextOverflow::Ellipsis)
-                                        .into(),
-                                    // A level row has no press, so its subtitle can be selected.
-                                    None => CAPTION
-                                        .selectable(&tokens, subtitle.clone())
-                                        .max_lines(1)
-                                        .text_overflow(TextOverflow::Ellipsis)
-                                        .into(),
-                                }
-                            })),
-                    )
-                    .child(track.fill())
-                    .maybe_child(self.footer.clone()),
+                    .width(Size::fill())
+                    .on_sized(move |event: Event<SizedEventData>| {
+                        track_width.set_if_modified(event.area.width());
+                    })
+                    .child(track),
             )
-            .maybe_child(self.trailing.clone())
+            .maybe_child(boost_label)
+            .maybe_child(readout)
+            .maybe_child(self.footer.clone());
+
+        let outer = rect()
+            .tw(&tokens, &[w_full(), px(GUTTER), py(S3)])
+            .on_pointer_down(move |event: Event<PointerEventData>| {
+                open_row_menu(overlays, &menu, &event);
+            });
+        if compact {
+            let title_line = rect()
+                .tw(
+                    &tokens,
+                    &[flex_row(), items(Align::Center), gap(S2), w_full()],
+                )
+                .maybe_child(self.leading.clone())
+                .child(title_block);
+            let track_line = rect()
+                .tw(
+                    &tokens,
+                    &[flex_row(), items(Align::Center), gap(S4), w_full()],
+                )
+                .maybe_child(self.control.clone())
+                .child(track_block);
+            outer
+                .tw(&tokens, &[flex_col(), gap(S2)])
+                .child(title_line)
+                .child(track_line)
+        } else {
+            let title_side = rect()
+                .tw(
+                    &tokens,
+                    &[flex_row(), items(Align::Center), gap(S4), h(Dim::Control)],
+                )
+                .width(Size::percent(TITLE_SHARE))
+                .maybe_child(self.leading.clone())
+                .child(title_block);
+            let control: Option<Element> = self.control.clone().map(|control| -> Element {
+                rect()
+                    .tw(
+                        &tokens,
+                        &[flex_row(), items(Align::Center), h(Dim::Control)],
+                    )
+                    .child(control)
+                    .into()
+            });
+            outer
+                .tw(&tokens, &[flex_row(), items(Align::Start), gap(S4)])
+                .child(title_side)
+                .maybe_child(control)
+                .child(track_block)
+        }
     }
 }
 
@@ -814,6 +933,152 @@ pub fn choice_row(
         return row(title).trailing(segmented(options, selected, on_select));
     }
     row(title).trailing(dropdown(options, selected, on_select).min_width(Dim::Field))
+}
+
+/// The selected state of one option in a radio group, set by [`radio_row`].
+#[derive(Clone, PartialEq)]
+struct RadioChoice {
+    selected: bool,
+    on_select: EventHandler<()>,
+    /// Whether the row is the group's tab stop, the only row Tab reaches.
+    tab_stop: bool,
+    /// The row's focus target, set by the group.
+    a11y_id: Option<AccessibilityId>,
+    nav: Option<RadioNav>,
+}
+
+/// What a radio row needs to hand selection and focus to its neighbours.
+#[derive(Clone, PartialEq)]
+struct RadioNav {
+    items: Rc<Vec<NavItem>>,
+    index: usize,
+}
+
+#[derive(Clone, PartialEq)]
+struct NavItem {
+    id: AccessibilityId,
+    /// `None` when the option cannot be chosen, as a disabled row.
+    on_select: Option<EventHandler<()>>,
+}
+
+/// Moves a radio group's selection with the arrow keys: the next or previous
+/// option that can be chosen is selected and takes focus, wrapping at the ends.
+fn radio_arrow(nav: &RadioNav, event: Event<KeyboardEventData>) {
+    let forward = match &event.key {
+        Key::Named(NamedKey::ArrowDown | NamedKey::ArrowRight) => true,
+        Key::Named(NamedKey::ArrowUp | NamedKey::ArrowLeft) => false,
+        _ => return,
+    };
+    let items = &nav.items;
+    let Some(next) = next_enabled(items.len(), nav.index, forward, |index| {
+        items[index].on_select.is_some()
+    }) else {
+        return;
+    };
+    event.stop_propagation();
+    let item = &items[next];
+    if let Some(on_select) = &item.on_select {
+        on_select.call(());
+    }
+    item.id.request_focus();
+}
+
+/// A row that is one option of a radio group: a radio on its leading edge,
+/// set when `selected`. Pressing the row selects it. Put the rows in a
+/// [`radio_rows`] group, which gives them the arrow keys and the tab stop.
+pub fn radio_row(
+    title: impl Into<String>,
+    selected: bool,
+    on_select: impl Into<EventHandler<()>>,
+) -> Row {
+    let on_select = on_select.into();
+    let mut row = row(title).on_press(on_select.clone());
+    row.radio = Some(RadioChoice {
+        selected,
+        on_select,
+        tab_stop: false,
+        a11y_id: None,
+        nav: None,
+    });
+    row
+}
+
+/// A group of [`radio_row`]s under an optional title. Up and Down move the
+/// selection between the rows, and only the selected row is in the tab order.
+#[derive(PartialEq)]
+pub struct RadioRows {
+    title: Option<String>,
+    rows: Vec<Row>,
+    extra: Vec<Element>,
+}
+
+/// A group of radio rows; `title` is the card's heading, if any.
+pub fn radio_rows(title: impl Into<Option<String>>, rows: Vec<Row>) -> RadioRows {
+    RadioRows {
+        title: title.into(),
+        rows,
+        extra: Vec::new(),
+    }
+}
+
+impl RadioRows {
+    /// A row after the options, such as an empty-state line.
+    pub fn row(mut self, row: impl Into<Element>) -> Self {
+        self.extra.push(row.into());
+        self
+    }
+}
+
+impl Component for RadioRows {
+    fn render(&self) -> impl IntoElement {
+        // One focus target per row, kept for the life of the group so a row
+        // keeps its target when the options around it change.
+        let ids = use_hook(|| Rc::new(RefCell::new(Vec::<AccessibilityId>::new())));
+        let ids: Vec<AccessibilityId> = {
+            let mut ids = ids.borrow_mut();
+            while ids.len() < self.rows.len() {
+                ids.push(AccessibilityId::new_unique());
+            }
+            ids[..self.rows.len()].to_vec()
+        };
+        let items: Rc<Vec<NavItem>> = Rc::new(
+            self.rows
+                .iter()
+                .zip(&ids)
+                .map(|(row, id)| NavItem {
+                    id: *id,
+                    on_select: row
+                        .radio
+                        .as_ref()
+                        .filter(|_| row.enabled && row.on_press.is_some())
+                        .map(|choice| choice.on_select.clone()),
+                })
+                .collect(),
+        );
+        // The selected option is the tab stop; with none selected, the first
+        // option that can be chosen is.
+        let tab_stop = self
+            .rows
+            .iter()
+            .position(|row| row.radio.as_ref().is_some_and(|choice| choice.selected))
+            .filter(|&index| items[index].on_select.is_some())
+            .or_else(|| items.iter().position(|item| item.on_select.is_some()));
+        let rows = self.rows.iter().enumerate().map(|(index, row)| {
+            let mut row = row.clone();
+            if let Some(choice) = row.radio.as_mut() {
+                choice.a11y_id = Some(ids[index]);
+                choice.tab_stop = tab_stop == Some(index);
+                choice.nav = Some(RadioNav {
+                    items: items.clone(),
+                    index,
+                });
+            }
+            Element::from(row)
+        });
+        crate::group::Group::new(self.title.clone())
+            .rows(rows)
+            .rows(self.extra.clone())
+    }
 }
 
 /// A row with a text field on the right; `on_submit` fires on Enter.
@@ -950,7 +1215,7 @@ impl Component for ExpanderRow {
 /// time zones or fonts is narrowed by typing, not drawn whole.
 const CHOICE_LIST_LIMIT: usize = 60;
 
-/// A filter field above a card of options with a tick on the chosen one,
+/// A filter field above a card of options with a radio on the chosen one,
 /// for a subpage that picks one value from a long list (a time zone, a font).
 /// `options` are `(key, label)` pairs; `on_select` receives the chosen key.
 #[derive(PartialEq)]
@@ -1004,16 +1269,18 @@ impl Component for ChoiceList {
             matching.insert(0, chosen);
         }
         let hidden = matching.len().saturating_sub(CHOICE_LIST_LIMIT);
-        let rows = matching.iter().take(CHOICE_LIST_LIMIT).map(|(key, label)| {
-            let on_select = self.on_select.clone();
-            let chosen = key.clone();
-            Element::from(
-                row(label.clone())
-                    .selected(*key == self.selected)
-                    .on_press(move |_| on_select.call(chosen.clone())),
-            )
-        });
-        let mut list = crate::group::Group::new(None::<String>).rows(rows);
+        let rows: Vec<Row> = matching
+            .iter()
+            .take(CHOICE_LIST_LIMIT)
+            .map(|(key, label)| {
+                let on_select = self.on_select.clone();
+                let chosen = key.clone();
+                radio_row(label.clone(), *key == self.selected, move |_: ()| {
+                    on_select.call(chosen.clone())
+                })
+            })
+            .collect();
+        let mut list = radio_rows(None::<String>, rows);
         if matching.is_empty() {
             list = list.row(crate::group::status(crate::group::Status::Empty(
                 "Nothing matches.".to_string(),
@@ -1026,7 +1293,7 @@ impl Component for ChoiceList {
                     .placeholder(self.placeholder.clone())
                     .fill_width(),
             )
-            .child(list)
+            .child(Element::from(list))
             .maybe_child((hidden > 0).then(|| {
                 rect()
                     .tw(&tokens, &[w_full(), px(GUTTER)])

@@ -17,6 +17,7 @@ use freya::prelude::*;
 
 use crate::controls::{action_button, icon_button, search_field};
 use crate::icons::{self, Icon};
+use crate::motion::{crossfade, focus_ring};
 use crate::shell::sections::{self, SearchHit};
 use crate::shell::window::{HeaderBar, WindowControls};
 use crate::style::*;
@@ -34,10 +35,6 @@ pub trait NavItem: Copy + PartialEq + 'static {
     }
     /// Extra words the search field matches, space separated.
     fn keywords(self) -> &'static str {
-        ""
-    }
-    /// One sentence under the page title that says what the page is for.
-    fn lead(self) -> &'static str {
         ""
     }
 }
@@ -129,7 +126,6 @@ impl Component for SidebarRow {
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Tab)
             .a11y_builder(move |builder| builder.set_selected(selected))
-            .tw(&tokens, &[focus_ring(focus())])
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| {
                 hovering.set(false);
@@ -155,6 +151,7 @@ impl Component for SidebarRow {
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
             )
+            .child(focus_ring(focus(), Radius::Control))
     }
 }
 
@@ -245,11 +242,21 @@ pub struct PageAction {
 pub struct PageHeader {
     pub subtitle: Option<String>,
     pub action: Option<PageAction>,
+    /// Set by [`PageHeader::hero_title`]: the page's hero already names it, so
+    /// the large title row is left out.
+    pub hero: bool,
 }
 
 impl PageHeader {
     pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
         self.subtitle = Some(subtitle.into());
+        self
+    }
+
+    /// Leaves out the large page title, for a page whose hero already names
+    /// it. The header bar shows the title from the start instead.
+    pub fn hero_title(mut self) -> Self {
+        self.hero = true;
         self
     }
 
@@ -285,34 +292,44 @@ impl PageHeader {
     }
 }
 
-/// The headers that pages have set, most recent last. The last one is shown.
+/// The headers that pages have set, each with the page it belongs to.
 #[derive(Clone, Copy, PartialEq)]
-struct PageHeaders(State<Vec<(u64, PageHeader)>>);
+struct PageHeaders(State<Vec<(u64, PageKey, PageHeader)>>);
+
+/// The page on screen, provided to its descendants on every render so a page
+/// header can say which page it belongs to.
+#[derive(Clone, PartialEq)]
+struct PageRoute(PageKey);
 
 /// Shows `header` in the header bar while the calling page is open. Call it
 /// on every render with the header the page wants; a changed header replaces
-/// the one shown.
+/// the one shown. A header belongs to the page it was set on, so a subpage
+/// never shows the header of the page it was opened from.
 pub fn use_page_header(header: PageHeader) {
     static NEXT_ID: AtomicU64 = AtomicU64::new(1);
     let id = use_hook(|| NEXT_ID.fetch_add(1, Ordering::Relaxed));
     let headers = use_try_consume::<PageHeaders>().map(|found| found.0);
-    use_side_effect_with_deps(&header, move |header| {
-        let Some(mut headers) = headers else { return };
+    // Read on every render, not once: the page can change without remounting.
+    let route = try_consume_context::<PageRoute>().map(|route| route.0);
+    use_side_effect_with_deps(&(route.clone(), header.clone()), move |(route, header)| {
+        let (Some(mut headers), Some(route)) = (headers, route.clone()) else {
+            return;
+        };
         let shown = headers
             .peek()
             .iter()
-            .find(|(other, _)| *other == id)
-            .map(|(_, set)| set.clone());
-        if shown.as_ref() == Some(header) {
+            .find(|(other, _, _)| *other == id)
+            .map(|(_, page, set)| (page.clone(), set.clone()));
+        if shown == Some((route.clone(), header.clone())) {
             return;
         }
         let mut list = headers.write();
-        list.retain(|(other, _)| *other != id);
-        list.push((id, header.clone()));
+        list.retain(|(other, _, _)| *other != id);
+        list.push((id, route, header.clone()));
     });
     use_drop(move || {
         if let Some(mut headers) = headers {
-            headers.write().retain(|(other, _)| *other != id);
+            headers.write().retain(|(other, _, _)| *other != id);
         }
     });
 }
@@ -332,7 +349,7 @@ impl PageMotion {
     fn ms(self) -> u64 {
         match self {
             PageMotion::Fade => 120,
-            PageMotion::Push | PageMotion::Pop => 160,
+            PageMotion::Push | PageMotion::Pop => 250,
         }
     }
 }
@@ -375,30 +392,36 @@ fn page_column(content: Element, side: Space, page_width: Dim, inset: bool) -> i
 }
 
 /// The title row at the top of a page on a desktop window: the page name
-/// large, a sentence under it that says what the page is for, and the page's
-/// action at the right.
-fn title_row(tokens: &Tokens, title: String, lead: String, action: Option<Element>) -> Element {
+/// large unless the page's hero already names it, the page's status line
+/// under it when it sets one, and the page's action at the right.
+fn title_row(
+    tokens: &Tokens,
+    title: Option<String>,
+    status: String,
+    action: Option<Element>,
+) -> Element {
     rect()
         .tw(tokens, PAGE_HEAD)
         .child(
             rect()
                 .tw(tokens, PAGE_HEAD_TEXT)
-                .child(
+                .maybe_child(title.map(|title| -> Element {
                     PAGE_TITLE
                         .label(tokens, title)
                         .max_lines(1)
-                        .text_overflow(TextOverflow::Ellipsis),
-                )
-                .maybe_child((!lead.is_empty()).then(|| lead_line(tokens, &lead))),
+                        .text_overflow(TextOverflow::Ellipsis)
+                        .into()
+                }))
+                .maybe_child((!status.is_empty()).then(|| status_line(tokens, &status))),
         )
         .maybe_child(action)
         .into()
 }
 
-/// The sentence under a page title.
-fn lead_line(tokens: &Tokens, lead: &str) -> Element {
+/// The status line under a page title, when the page sets one.
+fn status_line(tokens: &Tokens, status: &str) -> Element {
     BODY.in_ink(Ink::Muted)
-        .paragraph(tokens, lead)
+        .paragraph(tokens, status)
         .width(Size::fill())
         .into()
 }
@@ -494,6 +517,15 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let mut sidebar_open = use_state(move || narrow && start_on_list);
         let side = if narrow { S4 } else { S8 };
         let selected = self.selected;
+        // The page on screen. Headers are kept per page, so a subpage never
+        // shows the header of the page it was opened from.
+        let index = self
+            .items
+            .iter()
+            .position(|item| *item == selected())
+            .unwrap_or(0);
+        let page_key: PageKey = (index, self.subpage.as_ref().map(|s| s.title.clone()));
+        provide_context(PageRoute(page_key.clone()));
         let scroll = use_scroll_controller(ScrollConfig::default);
         // The pages with results, when the split view searches.
         let search_hits = self
@@ -525,8 +557,10 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let page_header = page_headers
             .0
             .read()
-            .last()
-            .map(|(_, header)| header.clone())
+            .iter()
+            .rev()
+            .find(|(_, page, _)| *page == page_key)
+            .map(|(_, _, header)| header.clone())
             .unwrap_or_default();
         // On a narrow window a page goes back to the list of pages.
         let to_list: EventHandler<()> = (move |_: ()| {
@@ -544,22 +578,18 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             None if searching => narrow.then(|| clear_search.clone()),
             None => (narrow && !show_list).then(|| to_list.clone()),
         };
-        let (title, mut lead) = match &self.subpage {
-            Some(subpage) => (subpage.title.clone(), String::new()),
-            None if searching => ("Search results".to_string(), String::new()),
-            None => (
-                selected().title().to_string(),
-                selected().lead().to_string(),
-            ),
+        let title = match &self.subpage {
+            Some(subpage) => subpage.title.clone(),
+            None if searching => "Search results".to_string(),
+            None => selected().title().to_string(),
         };
         let page_header = if show_list || searching {
             PageHeader::default()
         } else {
             page_header
         };
-        if let Some(status) = &page_header.subtitle {
-            lead = status.clone();
-        }
+        let status = page_header.subtitle.clone().unwrap_or_default();
+        let hero = page_header.hero;
         let action: Option<Element> = page_header.action.map(|action| match action {
             PageAction {
                 on_press,
@@ -573,18 +603,18 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let header = if show_list {
             HeaderBar::new(self.app_title.clone()).fill(Paint::Bg)
         } else {
-            let header = HeaderBar::new(if narrow { title.clone() } else { String::new() })
-                .busy(busy)
-                .fill(if overlay { Paint::Frosted } else { Paint::Bg });
+            let header = HeaderBar::new(if narrow || hero {
+                title.clone()
+            } else {
+                String::new()
+            })
+            .busy(busy)
+            .fill(if overlay { Paint::Frosted } else { Paint::Bg });
             match &back {
-                Some(on_back) => {
-                    let on_back = on_back.clone();
-                    header.leading(
-                        icon_button(Icon::GoPrevious, move |_| on_back.call(()))
-                            .size(Dim::WindowControlTarget)
-                            .tooltip("Back"),
-                    )
-                }
+                Some(on_back) => header.leading(crossfade(PageBack {
+                    page: page_key.clone(),
+                    on_back: on_back.clone(),
+                })),
                 None => header,
             }
         };
@@ -600,9 +630,12 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let head: Option<Element> = if show_list {
             None
         } else if narrow {
-            (!lead.is_empty()).then(|| lead_line(&tokens, &lead))
+            (!status.is_empty()).then(|| status_line(&tokens, &status))
+        } else if hero && status.is_empty() && action.is_none() {
+            None
         } else {
-            Some(title_row(&tokens, title.clone(), lead, action))
+            let title = (!hero).then(|| title.clone());
+            Some(title_row(&tokens, title, status, action))
         };
         // Results replace the page content while the search has text.
         let shown: Element = match results {
@@ -620,12 +653,6 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         // Page changes move the content. A subpage slides in from the right, a
         // pop slides it out to the right, and a sidebar switch cross-fades. The
         // page being replaced stays on screen in `memory` while the motion runs.
-        let index = self
-            .items
-            .iter()
-            .position(|item| *item == selected())
-            .unwrap_or(0);
-        let page_key: PageKey = (index, self.subpage.as_ref().map(|s| s.title.clone()));
         let memory = use_hook(|| Rc::new(RefCell::new(PageMemory::default())));
         let mut generation = use_state(|| 0u64);
         let anim_memory = memory.clone();
@@ -713,7 +740,9 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             .opacity(in_opacity)
             .layer(Layer::Relative(in_layer))
             .child(
+                // Bingux patch: keep the bar clear of the rounded window corner.
                 ScrollView::new_controlled(scroll)
+                    .scrollbar_inset_bottom(Radius::Window.px() + 3.0)
                     .drag_scrolling(false)
                     .child(
                         rect()
@@ -747,10 +776,14 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 scroll,
                 top: edge_top,
             });
-        let header = if narrow || show_list {
+        let header = if narrow || show_list || hero {
             header
         } else {
-            header.title_slot(ScrolledTitle { scroll, title })
+            header.title_slot(crossfade(PageTitle {
+                page: page_key.clone(),
+                scroll,
+                title,
+            }))
         };
         rect()
             .expanded()
@@ -833,17 +866,18 @@ const HEADER_BLUR: f32 = 20.0;
 /// depth, so this sits above the deepest page content and below overlays.
 const HEADER_LAYER: i16 = 1500;
 
-/// How far the page has to scroll before its title row is out of view and
-/// the title moves to the header bar.
-const TITLE_SCROLLED_OUT: i32 = 48;
-
-/// How long the header title takes to slide into place.
-const TITLE_SLIDE_MS: u64 = 220;
+/// The scroll distance, in pixels, where the header title starts to appear.
+/// Above it the title row at the top of the page is still fully visible.
+const TITLE_FADE_FROM: f32 = 24.0;
+/// The scroll distance where the header title is fully shown. The title row
+/// has scrolled out of view by then, so the two never show together.
+const TITLE_FADE_TO: f32 = 56.0;
 /// How far below its resting place the header title starts, in pixels.
 const TITLE_SLIDE_PX: f32 = 8.0;
 
-/// The page title in the header bar, centred, shown once the title row at
-/// the top of the page has scrolled out of view.
+/// The page title in the header bar, centred. It is a pure function of the
+/// page's scroll offset: it fades and rises in step with the scroll, so
+/// dragging the page back up reverses it exactly, with no timed animation.
 #[derive(PartialEq)]
 struct ScrolledTitle {
     scroll: ScrollController,
@@ -853,28 +887,67 @@ struct ScrolledTitle {
 impl Component for ScrolledTitle {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let shown = -<(i32, i32)>::from(self.scroll).1 > TITLE_SCROLLED_OUT;
-        let duration = tokens.motion(TITLE_SLIDE_MS);
-        let anim = use_animation_transition(shown, move |_, _| {
-            AnimNum::new(0.0, 1.0)
-                .time(duration)
-                .function(Function::Expo)
-                .ease(Ease::Out)
-        });
-        let progress = anim.get().value().clamp(0.0, 1.0);
+        let scrolled = (-<(i32, i32)>::from(self.scroll).1).max(0) as f32;
+        let progress =
+            ((scrolled - TITLE_FADE_FROM) / (TITLE_FADE_TO - TITLE_FADE_FROM)).clamp(0.0, 1.0);
         let title = EMPHASIS
             .label(&tokens, self.title.clone())
             .width(Size::fill())
             .text_align(TextAlign::Center)
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis);
-        rect().tw_layout(&[w_full()]).maybe_child(shown.then(|| {
-            rect()
-                .width(Size::fill())
-                .offset_y((1.0 - progress) * TITLE_SLIDE_PX)
-                .opacity(progress)
-                .child(title)
-        }))
+        rect()
+            .tw_layout(&[w_full()])
+            .maybe_child((progress > 0.0).then(|| {
+                rect()
+                    .width(Size::fill())
+                    .offset_y((1.0 - progress) * TITLE_SLIDE_PX)
+                    .opacity(progress)
+                    .child(title)
+            }))
+    }
+}
+
+/// The page title in the header bar. Crossfade compares it by page and title,
+/// so the title fades when the page changes and not on every scroll.
+#[derive(Clone, PartialEq)]
+struct PageTitle {
+    page: PageKey,
+    scroll: ScrollController,
+    title: String,
+}
+
+impl Component for PageTitle {
+    fn render(&self) -> impl IntoElement {
+        ScrolledTitle {
+            scroll: self.scroll,
+            title: self.title.clone(),
+        }
+    }
+}
+
+/// The header's Back button. Crossfade compares it by page only, so it fades
+/// when the page changes and not on every render.
+#[derive(Clone)]
+struct PageBack {
+    page: PageKey,
+    on_back: EventHandler<()>,
+}
+
+impl PartialEq for PageBack {
+    fn eq(&self, other: &Self) -> bool {
+        self.page == other.page
+    }
+}
+
+impl Component for PageBack {
+    fn render(&self) -> impl IntoElement {
+        let on_back = self.on_back.clone();
+        let button: Element = icon_button(Icon::GoPrevious, move |_| on_back.call(()))
+            .size(Dim::WindowControlTarget)
+            .tooltip("Back")
+            .into();
+        button
     }
 }
 
@@ -1077,6 +1150,9 @@ fn search_band(query: State<String>, search_id: AccessibilityId) -> impl IntoEle
         search_field(query, |_: String| {})
             .a11y_id(search_id)
             .well()
+            // The glyph shares the page icons' 24 px column, so it sits above
+            // them and the placeholder lines up with the page names.
+            .leading_column(Dim::NavIcon)
             .fill_width(),
     )
 }

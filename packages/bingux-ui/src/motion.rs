@@ -309,3 +309,74 @@ impl Component for AnimatedNumber {
         styled_label(self.style, format!("{:.*}", self.decimals, shown))
     }
 }
+
+/// The gap, in pixels, between a control's edge and the inner edge of its
+/// focus ring once the ring has settled.
+pub const FOCUS_GAP: f32 = 2.0;
+/// How far outside its settled place the ring starts, in pixels. The ring
+/// travels this far inward as focus arrives and outward as it leaves.
+pub const FOCUS_TRAVEL: f32 = 4.0;
+/// Focus arrives in this long, ease out.
+pub const FOCUS_IN_MS: u64 = 160;
+/// Focus leaves in this long, ease out. Leaving is quicker so the ring never
+/// lingers after the control has lost focus.
+pub const FOCUS_OUT_MS: u64 = 120;
+
+/// The keyboard focus ring of a control. Place it as the last child of the
+/// control's root box, with the control's own corner radius, so it sits around
+/// the control without changing its layout.
+///
+/// Only keyboard focus draws the ring. On arrival it grows in from outside and
+/// fades in; on departure it grows back out and fades away. It is absolutely
+/// positioned, so the ring never moves its neighbours. Reduced motion makes
+/// both changes instant.
+#[derive(Clone, PartialEq)]
+pub struct FocusRing {
+    focus: Focus,
+    radius: Radius,
+}
+
+/// The focus ring of a control with corner radius `radius`, drawn while
+/// `focus` is keyboard focus.
+pub fn focus_ring(focus: Focus, radius: Radius) -> FocusRing {
+    FocusRing { focus, radius }
+}
+
+impl Component for FocusRing {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let target = if self.focus == Focus::Keyboard {
+            1.0
+        } else {
+            0.0
+        };
+        let in_ms = tokens.motion(FOCUS_IN_MS);
+        let out_ms = tokens.motion(FOCUS_OUT_MS);
+        // One progress value drives both the offset and the opacity, so the
+        // ring grows and fades together in each direction.
+        let progress = use_animation_transition(target, move |from: f32, to: f32| {
+            AnimNum::new(from, to)
+                .time(if to > from { in_ms } else { out_ms })
+                .function(Function::Quad)
+                .ease(Ease::Out)
+        })
+        .get()
+        .value();
+        // The ring's outer edge sits this far outside the control, so the
+        // ring's corner radius is the control's plus this distance.
+        let outset = FOCUS_GAP + FOCUS_TRAVEL * (1.0 - progress) + Dim::Ring.px();
+        rect()
+            .position(
+                Position::new_absolute()
+                    .top(-outset)
+                    .right(-outset)
+                    .bottom(-outset)
+                    .left(-outset),
+            )
+            .opacity(progress)
+            .tw(
+                &tokens,
+                &[rounded_by(self.radius, outset), border(Line::Ring(Paint::Accent))],
+            )
+    }
+}

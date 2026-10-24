@@ -1607,9 +1607,7 @@ struct Countdown {
 impl Component for Countdown {
     fn render(&self) -> impl IntoElement {
         let seconds = *self.remaining.read();
-        caption(format!(
-            "It reverts in {seconds} seconds if you do not keep it."
-        ))
+        caption(format!("Reverts in {seconds} seconds unless you keep it."))
     }
 }
 
@@ -1877,7 +1875,7 @@ fn arrangement_group(
     tokens: Tokens,
 ) -> Group {
     Group::titled("Arrangement")
-        .description("Each box is one display, in the place it has on the desktop.")
+        .description("Each box is one display, placed as it is on the desktop.")
         .row(
             Arrangement {
                 ctx,
@@ -2283,17 +2281,30 @@ fn apply_row(ctx: Ctx) -> Element {
 }
 
 /// The state every Displays page shares. The main page and a display's own
-/// page read the same draft and error, so an edit on one shows on the other.
+/// page read the same draft, so an edit on one shows on the other.
+///
+/// An error shows as a toast, not a banner on the page: a banner that came and
+/// went while a display was dragged moved the whole page. The toast fires once
+/// per message and the error is cleared, so the same message can show again.
 fn use_page_ctx(model: State<Option<Page>>) -> Ctx {
+    let mut error = use_state::<Option<String>>(|| None);
+    let overlays = use_overlays();
+    use_side_effect(move || {
+        let message = error.read().clone();
+        if let Some(message) = message {
+            overlays.toast(message);
+            error.set(None);
+        }
+    });
     Ctx {
         model,
-        error: use_state::<Option<String>>(|| None),
+        error,
         night_ticket: use_state::<u64>(|| 0),
         prompt: use_state::<u64>(|| 0),
         remaining: use_state::<u64>(|| KEEP_SECONDS),
         selected: use_state::<usize>(|| 0),
         drag: use_state::<Option<Drag>>(|| None),
-        overlays: use_overlays(),
+        overlays,
     }
 }
 
@@ -2301,7 +2312,7 @@ fn use_page_ctx(model: State<Option<Page>>) -> Ctx {
 /// display's own page, so the arrangement stays the only shared control.
 fn monitor_list_group(ctx: Ctx, monitors: &[Monitor], navigator: Navigator) -> Group {
     let description = if monitors.len() > 1 {
-        "Choose a display to change its resolution, scale and orientation. Identify numbers each display, in the order of this list."
+        "Choose a display to change its resolution, scale or orientation. Identify numbers each display in list order."
     } else {
         "Choose a display to change its resolution, scale and orientation."
     };
@@ -2363,9 +2374,6 @@ impl Component for DisplaysPage {
         let Some(loaded) = model.read().clone() else {
             return page.child(skeleton());
         };
-        if let Some(message) = ctx.error.read().clone() {
-            page = page.child(status(Status::Error(message)));
-        }
 
         page = match loaded.displays {
             Err(failure) => page.child(
@@ -2430,13 +2438,10 @@ impl Component for DisplayPage {
         let model = system::use_cached("displays", load);
         let ctx = use_page_ctx(model);
 
-        let mut page = page_column();
+        let page = page_column();
         let Some(loaded) = model.read().clone() else {
             return page.child(skeleton());
         };
-        if let Some(message) = ctx.error.read().clone() {
-            page = page.child(status(Status::Error(message)));
-        }
         match loaded.displays {
             Err(failure) => page.child(
                 status(Status::Error(failure.0)).action("Try again", move |_| reload(model)),

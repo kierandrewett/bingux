@@ -18,7 +18,7 @@ use bingux_ui::prelude::*;
 use bingux_ui::runtime::{optimistic, optimistic_then};
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 
-use crate::apps::{self, AppEntry, Details, Removal, Source};
+use crate::apps::{self, AppEntry, Details, Removal};
 use crate::pages::sound::AppSound;
 use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background_then};
@@ -33,17 +33,6 @@ const ROW_ICON_SIZE: u32 = 64;
 
 /// The other sizes `AppIcon` asks for: the dropdown (40) and the page head (128).
 const OTHER_ICON_SIZES: [u32; 2] = [40, 128];
-
-/// Every source, in the order the source filter lists them.
-const SOURCES: [Source; 7] = [
-    Source::Flatpak,
-    Source::Snap,
-    Source::AppImage,
-    Source::Rpm,
-    Source::Nix,
-    Source::Local,
-    Source::System,
-];
 
 /// A kind of file or link and the content types that stand for it. The
 /// first type is the one the choices are read from; every type is set.
@@ -126,6 +115,8 @@ struct Model {
     all_icons: bool,
     /// The default and the registered applications for each kind, once read.
     choices: Option<Result<Vec<Choice>, CommandError>>,
+    /// The default and the registered applications for each other content type.
+    file_types: Option<Result<Vec<FileType>, CommandError>>,
 }
 
 fn desktop_id(file: &str) -> String {
@@ -133,14 +124,19 @@ fn desktop_id(file: &str) -> String {
 }
 
 /// Parse `gio mime TYPE`: the default application and the registered ones.
+/// `gio` lists each registered application under both "Registered" and
+/// "Recommended", so each id is kept once, in the order first seen.
 fn parse_mime(text: &str) -> (Option<String>, Vec<String>) {
     let mut current = None;
-    let mut candidates = Vec::new();
+    let mut candidates: Vec<String> = Vec::new();
     for line in text.lines() {
         if line.starts_with("Default application for") {
             current = line.rsplit_once(": ").map(|(_, file)| desktop_id(file));
         } else if line.starts_with('\t') && line.trim().ends_with(".desktop") {
-            candidates.push(desktop_id(line));
+            let id = desktop_id(line);
+            if !candidates.contains(&id) {
+                candidates.push(id);
+            }
         }
     }
     (current, candidates)
@@ -160,6 +156,8 @@ enum Update {
     AllIcons,
     /// The default and registered applications for each kind.
     Choices(Result<Vec<Choice>, CommandError>),
+    /// The default and registered applications for each other content type.
+    FileTypes(Result<Vec<FileType>, CommandError>),
 }
 
 /// Counts loads. A load that has been superseded stops writing to the page.
@@ -222,6 +220,7 @@ fn apply(current: &mut Model, update: Update) {
         Update::RowIcons => current.icons = true,
         Update::AllIcons => current.all_icons = true,
         Update::Choices(choices) => current.choices = Some(choices),
+        Update::FileTypes(types) => current.file_types = Some(types),
     }
 }
 
@@ -229,11 +228,13 @@ fn apply(current: &mut Model, update: Update) {
 /// and the defaults follow on their own threads.
 fn stream_load(sender: mpsc::Sender<Update>) {
     let mut installed = apps::rescan();
+    let types = other_types(&installed);
     let _ = sender.send(Update::Names(installed.clone()));
 
     let choices_sender = sender.clone();
     std::thread::spawn(move || {
         let _ = choices_sender.send(Update::Choices(load_choices()));
+        let _ = choices_sender.send(Update::FileTypes(load_file_types(&types)));
     });
 
     let icon_names: Vec<String> = installed.iter().map(|app| app.icon.clone()).collect();
@@ -312,10 +313,6 @@ fn size_text(bytes: u64) -> String {
         }
     }
     format!("{bytes} B")
-}
-
-fn source_of(app: &AppEntry) -> Option<Source> {
-    app.details.as_ref().map(|details| details.source)
 }
 
 fn set_limit(mut limit: State<usize>, value: usize) {
@@ -500,7 +497,6 @@ fn set_default(model: ModelState, kind: usize, app: String, overlays: Overlays) 
 enum Sort {
     Name,
     Size,
-    Source,
 }
 
 fn app_row(app: &AppEntry, navigator: Navigator, icons: bool) -> Row {
@@ -589,19 +585,42 @@ fn app_entry(
     )
 }
 
-/// The source filter: every source with at least one application, with counts.
-fn source_options(apps: &[AppEntry]) -> Vec<(String, String)> {
-    let mut options = vec![("all".to_string(), format!("All sources ({})", apps.len()))];
-    for (index, source) in SOURCES.iter().enumerate() {
-        let count = apps
-            .iter()
-            .filter(|app| source_of(app) == Some(*source))
-            .count();
-        if count > 0 {
-            options.push((index.to_string(), format!("{} ({count})", source.label())));
+/// Sets the installed list's order and shows the first page again.
+fn set_sort(mut sort: State<Sort>, limit: State<usize>, order: Sort) {
+    sort.set(order);
+    set_limit(limit, PAGE);
+}
+
+/// The search toggle and the sort menu, in the Installed group's header.
+/// Closing the search also clears its text, so no hidden filter stays on.
+fn installed_tools(
+    searching: State<bool>,
+    query: State<String>,
+    sort: State<Sort>,
+    limit: State<usize>,
+    order: Sort,
+) -> Element {
+    let search = icon_button(Icon::Search, move |_| {
+        let mut searching = searching;
+        let mut query = query;
+        let open = *searching.read();
+        if open {
+            query.set(String::new());
+            set_limit(limit, PAGE);
         }
-    }
-    options
+        searching.set(!open);
+    })
+    .tooltip("Search");
+    let sort_menu = menu_button(
+        "Sort",
+        vec![
+            menu_item("Name", move |_| set_sort(sort, limit, Sort::Name))
+                .checked(order == Sort::Name),
+            menu_item("Size", move |_| set_sort(sort, limit, Sort::Size))
+                .checked(order == Sort::Size),
+        ],
+    );
+    hstack(S2).child(search).child(sort_menu).into()
 }
 
 #[derive(PartialEq)]
@@ -611,7 +630,7 @@ impl Component for ApplicationsPage {
     fn render(&self) -> impl IntoElement {
         let model = use_apps();
         let query = use_state(String::new);
-        let source = use_state(|| None::<Source>);
+        let searching = use_state(|| false);
         let sort = use_state(|| Sort::Name);
         let limit = use_state(|| PAGE);
         let busy = use_state(|| false);
@@ -625,17 +644,15 @@ impl Component for ApplicationsPage {
             .map(browser_default)
             .unwrap_or_default();
         let loaded = model.read().clone();
-        let (filters, list) = match loaded {
-            None => (None, Group::titled("Installed").row(skeleton_row())),
+        let list = match loaded {
+            None => Group::titled("Installed").row(skeleton_row()),
             Some(data) => {
                 let needle = query.read().trim().to_lowercase();
-                let wanted = *source.read();
                 let order = *sort.read();
                 let mut shown: Vec<&AppEntry> = data
                     .apps
                     .iter()
                     .filter(|app| needle.is_empty() || app.name.to_lowercase().contains(&needle))
-                    .filter(|app| wanted.is_none_or(|kind| source_of(app) == Some(kind)))
                     .collect();
                 match order {
                     Sort::Name => shown.sort_by_key(|app| app.name.to_lowercase()),
@@ -643,12 +660,6 @@ impl Component for ApplicationsPage {
                         let size = app.details.as_ref().and_then(|details| details.size);
                         (
                             std::cmp::Reverse(size.unwrap_or(0)),
-                            app.name.to_lowercase(),
-                        )
-                    }),
-                    Sort::Source => shown.sort_by_key(|app| {
-                        (
-                            source_of(app).map(|kind| kind.label()),
                             app.name.to_lowercase(),
                         )
                     }),
@@ -669,59 +680,13 @@ impl Component for ApplicationsPage {
                         ),
                     ));
                 }
-                let list = if rows.is_empty() {
-                    Group::titled("Installed")
-                        .row(status(Status::Empty("No application matches.".to_string())))
+                let group = Group::titled("Installed")
+                    .trailing(installed_tools(searching, query, sort, limit, order));
+                if rows.is_empty() {
+                    group.row(status(Status::Empty("No applications match.".to_string())))
                 } else {
-                    Group::titled("Installed").rows(rows)
-                };
-
-                let source_id = wanted
-                    .and_then(|kind| SOURCES.iter().position(|item| *item == kind))
-                    .map_or("all".to_string(), |index| index.to_string());
-                let sort_id = match order {
-                    Sort::Name => "name",
-                    Sort::Size => "size",
-                    Sort::Source => "source",
-                };
-                let filters = Group::new(None)
-                    .row(
-                        row("Source").trailing(
-                            dropdown(source_options(&data.apps), source_id, move |id: String| {
-                                let mut source = source;
-                                source.set(
-                                    id.parse::<usize>()
-                                        .ok()
-                                        .and_then(|index| SOURCES.get(index).copied()),
-                                );
-                                set_limit(limit, PAGE);
-                            })
-                            .min_width(Dim::Field),
-                        ),
-                    )
-                    .row(
-                        row("Sort by").trailing(
-                            dropdown(
-                                vec![
-                                    ("name".to_string(), "Name".to_string()),
-                                    ("size".to_string(), "Size".to_string()),
-                                    ("source".to_string(), "Source".to_string()),
-                                ],
-                                sort_id,
-                                move |id: String| {
-                                    let mut sort = sort;
-                                    sort.set(match id.as_str() {
-                                        "size" => Sort::Size,
-                                        "source" => Sort::Source,
-                                        _ => Sort::Name,
-                                    });
-                                    set_limit(limit, PAGE);
-                                },
-                            )
-                            .min_width(Dim::Field),
-                        ),
-                    );
-                (Some(filters), list)
+                    group.rows(rows)
+                }
             }
         };
 
@@ -734,8 +699,10 @@ impl Component for ApplicationsPage {
                         .on_press(move |_| navigator.push(Route::DefaultApps)),
                 ),
             )
-            .child(search_field(query, move |_| set_limit(limit, PAGE)).fill_width())
-            .maybe_child(filters)
+            .child(reveal(
+                *searching.read(),
+                search_field(query, move |_| set_limit(limit, PAGE)).fill_width(),
+            ))
             .child(list)
     }
 }
@@ -1157,6 +1124,7 @@ impl Component for DefaultAppsPage {
                 .child(search_field(query, |_| {}).fill_width())
                 .child(kind_placeholder());
         };
+        let limit = use_state(|| PAGE);
         let choices = match &data.choices {
             None => {
                 return page_column()
@@ -1182,10 +1150,33 @@ impl Component for DefaultAppsPage {
                     || current.is_some_and(|name| name.to_lowercase().contains(&needle))
             })
             .collect();
-        let list = if shown.is_empty() {
-            Group::new(None).row(status(Status::Empty("No file type matches.".to_string())))
-        } else {
-            Group::new(None).rows(shown.into_iter().map(|choice| {
+        let other = match &data.file_types {
+            None => None,
+            Some(Err(failure)) => Some(Element::from(
+                Group::titled("Other file types").row(
+                    status(Status::Error(failure.0.clone()))
+                        .action("Try again", move |_| start_load(model)),
+                ),
+            )),
+            Some(Ok(types)) => {
+                let matching: Vec<&FileType> = types
+                    .iter()
+                    .filter(|file| {
+                        let current = file.current.as_ref().map(|id| app_name(&data.apps, id));
+                        needle.is_empty()
+                            || file.mime.to_lowercase().contains(&needle)
+                            || current.is_some_and(|name| name.to_lowercase().contains(&needle))
+                    })
+                    .collect();
+                (!matching.is_empty()).then(|| {
+                    Element::from(file_type_group(
+                        model, overlays, &data.apps, &matching, limit,
+                    ))
+                })
+            }
+        };
+        let kinds = (!shown.is_empty()).then(|| {
+            Element::from(Group::new(None).rows(shown.into_iter().map(|choice| {
                 let kind = choice.kind;
                 let current = choice
                     .current
@@ -1210,13 +1201,146 @@ impl Component for DefaultAppsPage {
                         })
                         .context_menu(menu),
                 )
-            }))
-        };
+            })))
+        });
+        let empty = (kinds.is_none() && other.is_none()).then(|| {
+            Element::from(
+                Group::new(None).row(status(Status::Empty("No file type matches.".to_string()))),
+            )
+        });
 
         page_column()
             .child(search_field(query, |_| {}).fill_width())
-            .child(list)
+            .maybe_child(kinds)
+            .maybe_child(other)
+            .maybe_child(empty)
     }
+}
+
+/// A content type that no kind covers, with its default and the applications
+/// registered for it.
+#[derive(Clone, PartialEq)]
+struct FileType {
+    mime: String,
+    current: Option<String>,
+    candidates: Vec<String>,
+}
+
+/// Content types that applications declare but no kind covers, sorted. Scheme
+/// handlers belong to the kinds that show them.
+fn other_types(apps: &[AppEntry]) -> Vec<String> {
+    let covered: HashSet<&str> = KINDS
+        .iter()
+        .flat_map(|kind| kind.mimes.iter().copied())
+        .collect();
+    let mut types: Vec<String> = apps
+        .iter()
+        .flat_map(|app| app.mime_types.iter())
+        .filter(|mime| !covered.contains(mime.as_str()) && !mime.starts_with("x-scheme-handler/"))
+        .cloned()
+        .collect::<HashSet<String>>()
+        .into_iter()
+        .collect();
+    types.sort();
+    types
+}
+
+/// The default and registered applications for each other content type, from `gio mime`.
+fn load_file_types(types: &[String]) -> Result<Vec<FileType>, CommandError> {
+    types
+        .iter()
+        .map(|mime| -> Result<FileType, CommandError> {
+            let text = system::run("gio", &["mime", mime], TIMEOUT)?;
+            let (current, candidates) = parse_mime(&text);
+            Ok(FileType {
+                mime: mime.clone(),
+                current,
+                candidates,
+            })
+        })
+        .collect()
+}
+
+/// Make `app` the default for content type `mime`, with `gio mime`.
+fn write_file_type(mime: &str, app: &str) -> Result<(), String> {
+    let file = format!("{app}.desktop");
+    system::run("gio", &["mime", mime, &file], TIMEOUT)
+        .map(|_| ())
+        .map_err(|error| error.0)
+}
+
+/// Make `app` the default for content type `mime`. The row shows the choice at
+/// once and the write runs in the background. A failed write puts the previous
+/// choice back and shows the reason. A reload then confirms the result.
+fn set_file_type(model: ModelState, overlays: Overlays, mime: String, app: String) {
+    let previous = model.read().clone();
+    let Some(mut value) = previous.clone() else {
+        return;
+    };
+    if let Some(Ok(types)) = &mut value.file_types {
+        if let Some(file) = types.iter_mut().find(|file| file.mime == mime) {
+            file.current = Some(app.clone());
+        }
+    }
+    optimistic_then(
+        model,
+        Some(overlays),
+        previous,
+        Some(value),
+        move || write_file_type(&mime, &app),
+        move || start_load(model),
+    );
+}
+
+/// One other content type: its default, and a dropdown of the applications
+/// registered for it.
+fn file_type_row(model: ModelState, overlays: Overlays, apps: &[AppEntry], file: &FileType) -> Row {
+    let mut options: Vec<(String, String)> = Vec::new();
+    if file.current.is_none() {
+        options.push((String::new(), "Not set".to_string()));
+    }
+    for id in &file.candidates {
+        options.push((id.clone(), app_name(apps, id)));
+    }
+    if let Some(id) = &file.current {
+        if !file.candidates.contains(id) {
+            options.push((id.clone(), app_name(apps, id)));
+        }
+    }
+    let mime = file.mime.clone();
+    row(file.mime.clone()).trailing(
+        dropdown(
+            options,
+            file.current.clone().unwrap_or_default(),
+            move |app: String| {
+                if !app.is_empty() {
+                    set_file_type(model, overlays, mime.clone(), app);
+                }
+            },
+        )
+        .min_width(Dim::Field),
+    )
+}
+
+/// The other content types, one row each, paged by `limit`.
+fn file_type_group(
+    model: ModelState,
+    overlays: Overlays,
+    apps: &[AppEntry],
+    shown: &[&FileType],
+    limit: State<usize>,
+) -> Group {
+    let visible = shown.len().min(*limit.read());
+    let mut group = Group::titled("Other file types");
+    for file in &shown[..visible] {
+        group = group.row(file_type_row(model, overlays, apps, file));
+    }
+    if shown.len() > visible {
+        group = group.row(row(format!("{} more", shown.len() - visible)).trailing(
+            action_button("Show more", move |_| set_limit(limit, visible + PAGE)).compact(),
+        ));
+    }
+    group
 }
 
 /// The applications that can open one kind of file or link. Choosing one makes
@@ -1231,7 +1355,6 @@ impl Component for DefaultKindPage {
         let model = use_apps();
         let query = use_state(String::new);
         let overlays = use_overlays();
-        let navigator = use_navigator();
         let kind = self.kind;
 
         let data = match model.read().clone() {
@@ -1263,26 +1386,21 @@ impl Component for DefaultKindPage {
             .filter(|app| needle.is_empty() || app.name.to_lowercase().contains(&needle))
             .collect();
         let list = if listed.is_empty() {
-            Group::new(None).row(status(Status::Empty("No application matches.".to_string())))
+            radio_rows(None::<String>, Vec::new())
+                .row(status(Status::Empty("No applications match.".to_string())))
         } else {
-            Group::new(None).rows(listed.iter().map(|app| {
-                let is_default = current.as_deref() == Some(app.id.as_str());
-                let menu = default_menu(app, kind, is_default, model, overlays, navigator);
-                let chosen = app.id.clone();
-                let base = row(app.name.clone())
-                    .on_press(move |_| set_default(model, kind, chosen.clone(), overlays));
-                let base = if is_default {
-                    base.value("Default")
-                } else {
-                    base
-                };
-                let base = if data.icons {
-                    base.leading_app(app.icon.clone())
-                } else {
-                    base
-                };
-                Element::from(base.context_menu(menu))
-            }))
+            // One radio per application: the selected one is the current default.
+            let selected = current.clone().unwrap_or_default();
+            let rows: Vec<Row> = listed
+                .iter()
+                .map(|app| {
+                    let chosen = app.id.clone();
+                    radio_row(app.name.clone(), app.id == selected, move |_: ()| {
+                        set_default(model, kind, chosen.clone(), overlays)
+                    })
+                })
+                .collect();
+            radio_rows(None::<String>, rows)
         };
 
         page_column()

@@ -9,7 +9,8 @@ use std::sync::{Condvar, Mutex, PoisonError};
 
 use crate::pages::gnoblin;
 
-const UNSUPPORTED: &str = "The input sources in the configuration file use a form this page cannot change. Edit them in the file.";
+const UNSUPPORTED: &str =
+    "This page cannot change the input sources in the configuration file. Edit the file directly.";
 const UNREADABLE: &str = "The configuration file could not be read.";
 const UNWRITABLE: &str = "The configuration file could not be saved.";
 const XKB_EVDEV: &str = "/usr/share/X11/xkb/rules/evdev.xml";

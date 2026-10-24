@@ -71,6 +71,8 @@ pub struct ScrollView {
     show_scrollbar: bool,
     auto_hide_scrollbars: bool,
     scroll_with_arrows: bool,
+    /// Room kept clear at the bottom of the vertical scrollbar (Bingux patch).
+    scrollbar_inset_bottom: f32,
     scroll_controller: Option<ScrollController>,
     invert_scroll_wheel: bool,
     drag_scrolling: bool,
@@ -104,6 +106,7 @@ impl Default for ScrollView {
             show_scrollbar: true,
             auto_hide_scrollbars: true,
             scroll_with_arrows: true,
+            scrollbar_inset_bottom: 0.,
             scroll_controller: None,
             invert_scroll_wheel: false,
             drag_scrolling: true,
@@ -156,6 +159,13 @@ impl ScrollView {
     /// Toggles whether the arrow keys scroll the view while it is focused.
     pub fn scroll_with_arrows(mut self, scroll_with_arrows: impl Into<bool>) -> Self {
         self.scroll_with_arrows = scroll_with_arrows.into();
+        self
+    }
+
+    /// Keeps `px` clear at the bottom of a vertical scrollbar, so the bar stops
+    /// short of a rounded window edge (Bingux patch; see the vendor README).
+    pub fn scrollbar_inset_bottom(mut self, px: f32) -> Self {
+        self.scrollbar_inset_bottom = px;
         self
     }
 
@@ -264,11 +274,14 @@ impl Component for ScrollView {
             size.read().inner_sizes.width,
             size.read().area.width(),
             rendered_position.x,
+            0.,
         );
         let (scrollbar_y, scrollbar_height) = get_scrollbar_pos_and_size(
             size.read().inner_sizes.height,
             size.read().area.height(),
             rendered_position.y,
+            // Bingux patch: the vertical thumb stops short of the bottom inset.
+            self.scrollbar_inset_bottom,
         );
 
         let (container_width, content_width) = get_container_sizes(layout.width.clone());
@@ -276,6 +289,8 @@ impl Component for ScrollView {
 
         let scroll_with_arrows = self.scroll_with_arrows;
         let invert_scroll_wheel = self.invert_scroll_wheel;
+        // Bingux patch: captured for the pointer handler, which runs later.
+        let scrollbar_inset_bottom = self.scrollbar_inset_bottom;
 
         let on_capture_global_pointer_up = move |e: Event<PointerEventData>| {
             if clicking_scrollbar.read().is_some() {
@@ -426,6 +441,7 @@ impl Component for ScrollView {
                     cursor_y as f32,
                     size.read().inner_sizes.height,
                     size.read().area.height(),
+                    scrollbar_inset_bottom,
                 );
 
                 scroll_controller.scroll_to_y(scroll_position);
@@ -437,6 +453,7 @@ impl Component for ScrollView {
                     cursor_x as f32,
                     size.read().inner_sizes.width,
                     size.read().area.width(),
+                    0.0,
                 );
 
                 scroll_controller.scroll_to_x(scroll_position);
@@ -560,6 +577,8 @@ impl Component for ScrollView {
                             thumb_offset: scrollbar_y,
                             track_size: Size::px(size.read().area.height()),
                             thumb_length: scrollbar_height,
+                            // Bingux patch: keep the bar clear of a rounded window bottom.
+                            end_inset: self.scrollbar_inset_bottom,
                         }))
                     })),
             )
@@ -577,6 +596,8 @@ impl Component for ScrollView {
                     thumb_offset: scrollbar_x,
                     track_size: Size::px(size.read().area.width()),
                     thumb_length: scrollbar_width,
+                    // Bingux patch: the horizontal bar has no bottom inset.
+                    end_inset: 0.,
                 }))
             }))
     }

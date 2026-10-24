@@ -17,6 +17,7 @@ use super::palette;
 use super::path::{self, Pt};
 use super::scale::{Domain, Linear, lone, nice, time};
 use super::svg::{self, Svg, clip_rect, num, stroke_line};
+use crate::motion::focus_ring;
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
@@ -457,8 +458,7 @@ impl Component for Chart {
             .tip
             .as_ref()
             .map(|tip| tooltip(&tokens, tip, width, height));
-        let outline = (interactive && focus() == Focus::Keyboard)
-            .then(|| focus_outline(&tokens, width, height));
+        let outline = interactive.then(|| focus_outline(focus(), width, height));
 
         let chart = drawing(scene, &tokens, width, height)
             .width(Size::fill())
@@ -629,16 +629,13 @@ fn drawing(scene: Scene, tokens: &Tokens, width: f32, height: f32) -> Rect {
     area
 }
 
-fn focus_outline(tokens: &Tokens, width: f32, height: f32) -> Rect {
+fn focus_outline(focus: Focus, width: f32, height: f32) -> Rect {
     rect()
         .position(Position::new_absolute().top(0.0).left(0.0))
         .layer(Layer::Relative(TIP_LAYER))
         .width(Size::px(width))
         .height(Size::px(height))
-        .tw(
-            tokens,
-            &[rounded(Radius::Card), focus_ring(Focus::Keyboard)],
-        )
+        .child(focus_ring(focus, Radius::Card))
 }
 
 /// The popover card that follows the hovered stop.

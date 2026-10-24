@@ -4,6 +4,7 @@
 use freya::animation::*;
 use freya::prelude::*;
 
+use crate::motion::focus_ring;
 use crate::style::*;
 use crate::surface::{use_enabled, use_tokens};
 use crate::typography::{CAPTION, Ink};
@@ -119,7 +120,6 @@ impl Component for Slider {
         let thumb_size = Dim::SliderThumb.px();
         let hit = Dim::Control.px();
         let centre = hit / 2.0;
-        let focus_ring_size = thumb_size + 2.0;
         let tokens = use_tokens();
         let mut pressing = use_state(|| false);
         let mut dragging = use_state(|| false);
@@ -305,16 +305,16 @@ impl Component for Slider {
                     .height(Size::px(tick_height))
                     .tw(&tokens, &[rounded(Radius::Pill), bg(Paint::Text)])
             }))
-            .maybe_child((enabled && focus() == Focus::Keyboard).then(|| {
+            .maybe_child(enabled.then(|| {
                 rect()
                     .position(
                         Position::new_absolute()
-                            .top(centre - focus_ring_size / 2.0)
-                            .left(centre_x - focus_ring_size / 2.0),
+                            .top(centre - thumb_size / 2.0)
+                            .left(centre_x - thumb_size / 2.0),
                     )
-                    .width(Size::px(focus_ring_size))
-                    .height(Size::px(focus_ring_size))
-                    .tw(&tokens, &[rounded(Radius::Pill), focus_ring(focus())])
+                    .width(Size::px(thumb_size))
+                    .height(Size::px(thumb_size))
+                    .child(focus_ring(focus(), Radius::Pill))
             }))
             .child(
                 rect()

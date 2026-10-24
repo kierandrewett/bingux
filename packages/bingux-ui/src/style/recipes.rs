@@ -175,7 +175,7 @@ pub const TOOLTIP: Recipe = &[
     px(S2),
     py(S1),
     rounded(Radius::Control),
-    bg(Paint::Tooltip),
+    bg(Paint::Floating),
     border(Line::Hairline),
 ];
 

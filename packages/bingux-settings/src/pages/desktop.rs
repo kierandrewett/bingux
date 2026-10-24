@@ -508,9 +508,7 @@ impl Component for DesktopPage {
         page.child(dock)
             .child(
                 Group::titled("Dock mouse actions")
-                    .description(
-                        "What happens when you click or scroll on an app icon in the dock.",
-                    )
+                    .description("Click and scroll actions for app icons in the dock.")
                     .row(menu_row(
                         "Click",
                         vec![
@@ -561,7 +559,7 @@ impl Component for DesktopPage {
                         switch_row("Show system usage", m.metrics, move |on: bool| {
                             write(ctx, Change::Set("desktop.metrics", on.to_string()))
                         })
-                        .subtitle("Shows how busy the processor, memory and network are."),
+                        .subtitle("Processor, memory and network load."),
                     )
                     .row(switch_row(
                         "Show seconds in the clock",

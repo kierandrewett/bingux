@@ -26,7 +26,7 @@ const FILTER_SANS: &str = "sans";
 const FILTER_SERIF: &str = "serif";
 const FILTER_MONOSPACED: &str = "monospaced";
 const FILTER_OTHER: &str = "other";
-const SAMPLE: &str = "The quick brown fox";
+const SAMPLE: &str = "The quick brown fox jumps over the lazy dog";
 
 /// The search text the page starts with. Snapshots set
 /// `BINGUX_SETTINGS_SNAPSHOT_FONT_SEARCH` so the search can be captured
@@ -56,10 +56,6 @@ fn initial_filter() -> String {
         FILTER_ALL.to_string()
     }
 }
-
-/// How many fonts the list draws before "Show more". Every family at once
-/// would make the page slow to build, so the rest are one press away.
-const CHUNK: usize = 60;
 
 /// Serif families whose names do not say so. A word must match exactly, so
 /// "lora" does not match "Flora".
@@ -253,10 +249,52 @@ fn font_row(
     row(name)
         .font(name)
         .subtitle(SAMPLE)
+        .subtitle_one_line()
         .selected(is_chosen)
         .on_press(move |_| pick.call(picked.clone()))
         .context_menu(vec![use_font, copy])
         .into()
+}
+
+/// How far above and below the viewport a font row is mounted, so that it is
+/// ready when it scrolls into view.
+const FONT_MARGIN: f32 = 240.0;
+
+/// One font row of the list, laid out at its full height whether or not it is
+/// mounted. The row itself is built only while it is in view or within
+/// `FONT_MARGIN` of it: the list keeps its height and the scrollbar stays true,
+/// and a long list does not build every row in its own face.
+#[derive(PartialEq)]
+struct FontSlot {
+    name: String,
+    chosen: String,
+    on_pick: EventHandler<String>,
+    overlays: Overlays,
+}
+
+impl Component for FontSlot {
+    fn render(&self) -> impl IntoElement {
+        let mut near = use_state(|| false);
+        let height = Dim::RowSubtitle.px();
+        let probe_height = height + FONT_MARGIN * 2.0;
+        // An empty box, taller than the row by the margin above and below it,
+        // reports when the row comes near the viewport. It is out of flow, so
+        // it takes no room.
+        let probe = rect()
+            .position(Position::new_absolute().top(-FONT_MARGIN).left(0.0))
+            .width(Size::fill())
+            .height(Size::px(probe_height))
+            .on_visible(move |_| near.set_if_modified(true))
+            .on_hidden(move |_| near.set_if_modified(false));
+        let shown = *near.read();
+        rect()
+            .width(Size::fill())
+            .height(Size::px(height))
+            .child(probe)
+            .maybe_child(
+                shown.then(|| font_row(&self.name, &self.chosen, &self.on_pick, self.overlays)),
+            )
+    }
 }
 
 #[derive(PartialEq)]
@@ -271,7 +309,6 @@ impl Component for FontPage {
         let fonts = use_state::<Option<Result<Catalogue, CommandError>>>(|| None);
         let filter = use_state(initial_filter);
         let query = use_state(initial_query);
-        let limit = use_state(|| CHUNK);
         use_hook(move || background(fonts, installed_fonts));
 
         // The font in the settings file, or None while that is loading. `shown`
@@ -327,7 +364,6 @@ impl Component for FontPage {
             names.insert(0, name);
         }
 
-        let limit_now = *limit.read();
         let mut rows: Vec<Element> = Vec::new();
         if !searching && filter_key == FILTER_ALL {
             let pick = on_pick.clone();
@@ -338,24 +374,14 @@ impl Component for FontPage {
                     .into(),
             );
         }
-        rows.extend(
-            names
-                .iter()
-                .take(limit_now)
-                .map(|name| font_row(name, &chosen, &on_pick, overlays)),
-        );
-        let hidden = names.len().saturating_sub(limit_now);
-        if hidden > 0 {
-            let more = hidden.min(CHUNK);
-            rows.push(
-                row(format!("Show {more} more"))
-                    .on_press(move |_| {
-                        let mut limit = limit;
-                        limit.set(limit_now + CHUNK);
-                    })
-                    .into(),
-            );
-        }
+        rows.extend(names.iter().map(|name| {
+            Element::from(FontSlot {
+                name: name.clone(),
+                chosen: chosen.clone(),
+                on_pick: on_pick.clone(),
+                overlays,
+            })
+        }));
         let mut list = Group::new(None::<String>)
             .description(format!("{total} fonts"))
             .rows(rows);
@@ -383,19 +409,14 @@ impl Component for FontPage {
             )
             .child(
                 rect().tw(&tokens, &[flex_row(), w_flex()]).child(
-                    search_field(query, move |_: String| {
-                        let mut limit = limit;
-                        limit.set(CHUNK);
-                    })
-                    .placeholder("Search for a font")
-                    .fill_width(),
+                    search_field(query, |_: String| {})
+                        .placeholder("Search for a font")
+                        .fill_width(),
                 ),
             )
             .child(dropdown(filter_options, filter_key, move |key: String| {
                 let mut filter = filter;
-                let mut limit = limit;
                 filter.set(key);
-                limit.set(CHUNK);
             }));
 
         page_column().child(toolbar).child(list)

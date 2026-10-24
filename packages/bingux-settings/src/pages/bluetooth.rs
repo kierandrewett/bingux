@@ -785,18 +785,17 @@ fn device_row(
             ))
             .child(caption(format!("{level}%")));
     }
-    let subtitle =
+    let status =
         busy_label.or_else(|| (!device.connected).then(|| device_word(device).to_string()));
-    let mut item = row(device_name(device))
+    if let Some(status) = status {
+        glyphs = glyphs.child(caption(status));
+    }
+    row(device_name(device))
         .leading(device_icon(&device.icon))
         .trailing(Element::from(glyphs))
         .navigates()
         .on_press(move |_| navigator.push(route.clone()))
-        .context_menu(device_menu(ctx, device));
-    if let Some(subtitle) = subtitle {
-        item = item.subtitle(subtitle);
-    }
-    item
+        .context_menu(device_menu(ctx, device))
 }
 
 /// Read Bluetooth now, then again while the page is open: every 2.5 seconds
@@ -861,6 +860,7 @@ impl Component for BluetoothPage {
         let mut header = PageHeader {
             subtitle: header_subtitle(&model.read()),
             action: None,
+            ..Default::default()
         };
         if let Some(on) = master {
             let ctx = Ctx {
@@ -895,7 +895,7 @@ impl Component for BluetoothPage {
         if let Some(block) = data.blocked {
             let reason = match block {
                 Block::Hardware => {
-                    "A switch on this computer has turned Bluetooth off. Turn the switch on to use Bluetooth."
+                    "A hardware switch has turned Bluetooth off. Turn it on to use Bluetooth."
                 }
                 Block::Software => {
                     "A system setting has blocked Bluetooth. Turn off \"Airplane mode\" or unblock Bluetooth to use it."
@@ -982,6 +982,7 @@ impl Component for BluetoothDevicePage {
         let busy_state = use_state::<Option<Busy>>(|| None);
         use_polling(model, None);
         use_page_busy(busy_state.read().is_some());
+        use_page_header(PageHeader::default().hero_title());
 
         // Go back to the list once BlueZ no longer knows the device.
         let mac = self.mac.clone();

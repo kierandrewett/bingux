@@ -167,6 +167,12 @@ fn snapshot_pages(dir: &str, only: &[String]) {
             },
             size,
         );
+        // BINGUX_SETTINGS_SNAPSHOT_FRAMES=DIR records every frame of the run,
+        // from the first load on, to DIR/<page>/ as NNNNNN.png plus
+        // frames.jsonl. Used by scripts/frame-walk.py to find layout shifts.
+        if let Some(frames) = std::env::var_os("BINGUX_SETTINGS_SNAPSHOT_FRAMES") {
+            shot.record_frames(std::path::Path::new(&frames).join(snapshot_name(&address)));
+        }
         // BINGUX_SETTINGS_SNAPSHOT_SETTLE_MS shortens the wait to capture a page
         // before its data has arrived (the skeleton).
         let settle_ms = std::env::var("BINGUX_SETTINGS_SNAPSHOT_SETTLE_MS")
@@ -230,6 +236,22 @@ fn snapshot_pages(dir: &str, only: &[String]) {
         if let Some([x1, y1, x2, y2]) = snapshot_numbers::<4>("BINGUX_SETTINGS_SNAPSHOT_DRAG") {
             shot.drag((x1, y1), (x2, y2))
                 .settle(std::time::Duration::from_millis(500));
+        }
+        // BINGUX_SETTINGS_SNAPSHOT_SCRIPT runs a walk of commands after the
+        // knobs above, e.g. "click-text Wi-Fi; wait 400; key escape; address
+        // wifi". It is either the commands or "@path" to a file of them. See
+        // `Snapshot::run_script` for the commands.
+        if let Ok(script) = std::env::var("BINGUX_SETTINGS_SNAPSHOT_SCRIPT") {
+            let script = match script.strip_prefix('@') {
+                Some(file) => std::fs::read_to_string(file).unwrap_or_else(|error| {
+                    eprintln!("[snapshot] cannot read {file}: {error}");
+                    String::new()
+                }),
+                None => script,
+            };
+            if let Err(error) = shot.run_script(&script, routes::SCHEME) {
+                eprintln!("[snapshot] script stopped: {error}");
+            }
         }
         shot.save(&path);
         println!("[snapshot] wrote {path}");

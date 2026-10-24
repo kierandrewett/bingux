@@ -8,7 +8,7 @@ pub mod sections;
 pub mod status_page;
 pub mod window;
 
-pub use menu::{MenuButton, MenuItem, menu_button, menu_item, menu_separator};
+pub use menu::{MenuButton, MenuItem, menu_button, menu_item, menu_separator, submenu};
 pub use navigation::{
     NavItem, NavigationSplitView, PageAction, PageHeader, Profile, SearchField, Subpage,
     use_page_busy, use_page_header,

@@ -28,10 +28,6 @@ impl NavItem for PageId {
     fn keywords(self) -> &'static str {
         PageId::keywords(self)
     }
-
-    fn lead(self) -> &'static str {
-        PageId::lead(self)
-    }
 }
 
 /// Window root. The page or subpage shown is the window's address, provided

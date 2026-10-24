@@ -12,6 +12,7 @@ use freya::prelude::*;
 
 use crate::controls::button::icon_button;
 use crate::icons::{self, Icon};
+use crate::motion::focus_ring;
 use crate::shell::menu::{MenuItem, menu_item, menu_separator};
 use crate::shell::overlays::Overlays;
 use crate::style::*;
@@ -185,6 +186,7 @@ impl Component for TextField {
         let invalid = self.invalid.is_some();
         let own_id = use_a11y();
         let input_id = self.a11y_id.unwrap_or(own_id);
+        let focus = use_focus(input_id);
         let mut revealed = use_state(|| false);
         let mut command = use_state::<Option<InputCommand>>(|| None);
         let overlays: Option<Overlays> = try_consume_context::<Overlays>();
@@ -197,10 +199,20 @@ impl Component for TextField {
         } else {
             Paint::Control
         };
+        // While the field's own menu is open, focus sits on the menu, so the
+        // edge keeps the focus colour rather than flickering unfocused.
+        let menu_open = overlays.is_some_and(|overlays| overlays.menu_owned_by(input_id));
+        let edge = if invalid {
+            Paint::Danger
+        } else {
+            Paint::Accent
+        };
         let colors = InputColorsThemePartial {
             background: Some(paint(fill)),
             focus_background: Some(paint(fill)),
-            border_fill: Some(paint(if invalid {
+            border_fill: Some(paint(if menu_open {
+                edge
+            } else if invalid {
                 Paint::Danger
             } else {
                 Paint::Transparent
@@ -208,7 +220,7 @@ impl Component for TextField {
             focus_border_fill: Some(paint(if invalid {
                 Paint::Danger
             } else {
-                Paint::Accent
+                Paint::Transparent
             })),
             color: Some(paint(Paint::Text)),
             placeholder_color: Some(paint(Paint::Muted)),
@@ -379,11 +391,23 @@ impl Component for TextField {
                 }
                 event.stop_propagation();
                 if let Some(overlays) = overlays {
+                    // The field takes focus so the edit commands act on it,
+                    // and the menu hands focus back when it closes.
+                    input_id.request_focus();
                     let at = event.global_location();
-                    overlays.show_menu((at.x as f32, at.y as f32), items.clone());
+                    overlays.show_menu_from(
+                        Some(input_id),
+                        (at.x as f32, at.y as f32),
+                        items.clone(),
+                        false,
+                    );
                 }
             })
-            .child(input);
+            .child(input)
+            .child(focus_ring(
+                if menu_open { Focus::Keyboard } else { focus() },
+                Radius::Control,
+            ));
 
         rect()
             .tw(&tokens, &[flex_col(), gap(S1), font(BODY)])

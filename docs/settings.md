@@ -21,7 +21,7 @@ with a page name starts on that page.
 
 Panels: `network`, `bluetooth`, `background` (Appearance), `desktop`,
 `search`, `display`, `sound`, `power`, `keyboard`, `mouse`, `datetime`,
-`users`, `applications`, `about`. An unknown or omitted panel opens the
+`users`, `applications`, `accessibility`, `about`. An unknown or omitted panel opens the
 first page. An address names a page or a subpage. The scheme and the
 `bingux-settings://` prefix may be left off on the command line:
 
@@ -73,7 +73,7 @@ desktop entry.
 ## Applications and subpages
 
 Applications lists every installed application with its full-colour icon and, under its name, its first category in plain words (for example Media or Office).
-Search filters the list by name. Pressing a row opens that application's
+Search, opened from the search button in the Installed header, filters the list by name. A Sort menu orders it by name or by size. Pressing a row opens that application's
 page, with its icon and name, an Open button, a volume slider for each of its
 audio streams while it plays or records, and a row for each kind of file it
 can open, showing Default when it is the current choice. Pressing that row
@@ -83,12 +83,12 @@ Default applications, at the top of the page, is one row that shows the
 default web browser. It opens the list of nine kinds: web links, mail,
 calendar, files, text, documents, photos, music and video. Each kind shows
 its current default, and has a search box. Pressing a kind opens the
-applications that can open it, with a search box. Choosing one makes it the
+applications that can open it, one radio button each; the selected one is the default. Choosing one makes it the
 default for every type in that kind. The choice shows at once and is written
 with `gio mime` in the background, so GTK applications and `xdg-open` see it.
 If the write fails, the previous default comes back and a message says why.
-Each application in a kind's list has a right-click menu with Make default,
-Open and Show details.
+Each kind's list shows each application once, even when the system lists it under several desktop files.
+Default applications also has an Other file types group: one row for each content type that no kind covers, with a dropdown of the applications that can open it. A Show more row pages the group.
 
 ### Start at login
 
@@ -104,7 +104,7 @@ An application's page also has a File types group, read-only, listing the MIME t
 
 An application's page also has a Notifications group, with the application's GNOME notification switches: Show notifications, Show on the lock screen and Play notification sounds. The group appears only for applications the shell keeps settings for. Each switch changes at once and writes the setting in the background, and reverts with a message if the write fails.
 
-The Sound page starts with the output device, a dropdown of the devices that can play sound with each one's full name (such as "Headphones - Fosi Audio K5 Pro"), and a Volume slider with its percentage and a mute button. Balance sits under the volume, with Left and Right labels beneath the slider. The "Output" heading carries a short level meter and a "Test..." button that plays a tone through each speaker. Allow volume above 100% lets the slider boost quiet audio past 100%, which can distort. The input device follows the same layout, with its meter on the "Input" heading, then Applications lists one row for each application that plays or records sound, with its icon, name and percentage, a Playing or Recording state, the device it uses, a full-width volume slider and a mute button. Each application's icon comes from the icon the stream names when the icon theme has it, otherwise from the application's desktop entry.
+The Sound page starts with the output device, a dropdown of the devices that can play sound with each one's full name (such as "Headphones - Fosi Audio K5 Pro"), and a Volume slider with its percentage and a mute button. Balance sits under the volume. The "Output" heading carries a short level meter and a "Test..." button that plays a tone through each speaker. Allow volume above 100% lets the slider boost quiet audio past 100%, which can distort. The input device follows the same layout, with its meter on the "Input" heading, then Applications lists one row for each application that plays or records sound, with its icon, name and percentage, a Playing or Recording state, the device it uses, a full-width volume slider and a mute button. Each application's icon comes from the icon the stream names when the icon theme has it, otherwise from the application's desktop entry.
 
 Bluetooth uses subpages too. The list has two groups: My devices (paired or
 remembered) and Nearby devices, which fill in while a scan runs. A scan runs in
@@ -152,6 +152,7 @@ way round.
 | Page            | Backend                                                                                                                                                                                   | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Appearance      | `bingux-config desktop.wallpaper`, `appearance.font_family`, GSettings `org.gnome.desktop.interface`                                                                                      | The font is picked from the installed families on a subpage. Accent colour and colour scheme are the keys GTK apps and the portal read, and are hidden without gsettings.                                                                                                                                                                                                                                                                                                                                                                                |
+| Accessibility   | `org.gnome.desktop.a11y.*`, `org.gnome.desktop.interface` (GSettings)                                                                                                                     | Screen reader, large text, high contrast, reduced animations, cursor size, overlay scrollbars and the keyboard and pointer aids. See [Accessibility](#accessibility).                                                                                                                                                                                                                                                                                                                                                                                    |
 | Desktop, Search | `bingux-config` (`~/.config/bingux/bingux.toml`)                                                                                                                                          | Same validation as `bingux-config set`. See [configuration](configuration.md).                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Displays        | `org.gnome.Mutter.DisplayConfig` over D-Bus, GSettings night light                                                                                                                        | Drag a display to place it; right-click it for Make main, Rotate, Disable or Settings. Apply appears under the arrangement, and on a display's own page, only once the layout has changed. It tries the layout for 15 seconds and reverts unless kept; Keep writes a persistent layout (`~/.config/monitors.xml`). Each display is a row that opens its own page. With several displays, Identify sits on the Displays header and numbers each one. Night light can follow a schedule.                                                                   |
 | Sound           | `wpctl` (WirePlumber)                                                                                                                                                                     | Default devices (inline list, or a subpage with three or more), device kind icons from device properties, volumes, mute, and a row for each application.                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -220,18 +221,20 @@ Until the first reading of the sound system arrives, the page shows its groups
 dimmed with blank values, so nothing moves when the real values land.
 
 When the output has left and right channels, Balance appears under the
-volume. Its track has a centre mark, and the labels "Left" and "Right" sit at
-its ends on one line. When it has front and rear channels, Fade appears too,
+volume. Its track has a centre mark. When it has front and rear channels, Fade appears too,
 and a Subwoofer slider appears when it has a low-frequency channel. Setting a
 slider back to its centre snaps it onto the mark.
 
 If "Allow volume above 100%" is on, the volume slider runs to 150% with a
 tick at 100%, the point where the sound starts to clip.
 
-"Test..." on the "Output" heading opens a popup with one button for each speaker
-of the output. Each button plays a short tone through that speaker only, so a
-wrong wire or a silent channel shows at once. The output device's right-click
-menu offers the same test.
+"Test..." on the "Output" heading opens a speaker room: a large circle with one
+round button per speaker of the output, each placed where that speaker sits (front
+left and right at the top, centre at the top middle, sides level with the middle,
+rear speakers at the bottom, subwoofer near the bottom). Pressing a button plays that
+channel's freedesktop voice sample ("Front left", "Rear right" and so on) through that
+channel only, and rings the button while it plays. The centre label names the channel
+while it plays. The output device's right-click menu offers the same test.
 
 Each application that plays or records sound is a row with its own volume
 slider and meter. Right-clicking the row offers Mute and Reset to 100%.
@@ -279,7 +282,7 @@ A write that fails puts the previous value back and a toast says why.
 
 The Appearance page starts with a preview of the wallpaper on the desktop. Right-click the preview for Choose picture and Use system wallpaper.
 
-Wallpaper is one group. The first row shows the file name, with a small thumbnail, and Choose picture opens a file picker. If no picture is chosen, the row says the system wallpaper is in use. The second row, System wallpaper, goes back to the picture that came with the system. The picture is decoded in the background.
+Wallpaper is a picker, a titled group with a search field and a source menu (All, Yours or System). The first tile is Add picture, which opens a file picker. The second is System background, which goes back to the picture that came with the system. The other tiles are the pictures, shown as thumbnails in four columns (two on a touch screen). The chosen picture has a check mark. Search filters by file name, and a source with no matches says so. Thumbnails are decoded in the background, and the choice is written to `desktop.wallpaper` in `bingux-config`.
 
 Font is one summary row that shows the current font on the right. Pressing it opens the Font subpage, which has the full list and search (see Font below). The font is not also shown inline.
 
@@ -287,7 +290,13 @@ Accent colour is a row of swatches. Colour scheme is three cards: Default, Light
 
 Accent colour and colour scheme show at once and are written with GSettings in the background. If the write fails, the previous choice comes back. The page shows the data it loaded last time at once, and a skeleton on first open.
 
-The Themes group chooses the icon theme, the cursor theme and the cursor size, and each list shows only the themes installed on this system. Text size, in the Font group, scales the text in applications that follow the system. Accessibility holds Large text, which makes the text 25 % larger, High contrast, and Reduce animations, which stops windows and menus from moving. Each control shows its new value at once and writes GSettings in the background; if the write fails the old value comes back with a message.
+The Themes group chooses the icon theme and the cursor theme, and each list shows only the themes installed on this system. Text size, in the Font group, scales the text in applications that follow the system. Accessibility is a page of its own, described below. Each control shows its new value at once and writes GSettings in the background; if the write fails the old value comes back with a message.
+
+## Accessibility
+
+The Accessibility page has three groups. Seeing holds Screen reader, Large text, High contrast, Reduce animations, Cursor size and Overlay scrollbars. Typing holds On-screen keyboard, Sticky keys, Slow keys and Bounce keys. Pointing holds Mouse keys and Locate pointer. Each switch shows its new value at once and writes its GNOME key in the background; a failed write puts the old value back and shows the error as a toast. Large text sets the text scaling factor to 1.25, and off sets it back to 1.00. Reduce animations turns off `enable-animations`. Cursor size is a choice of 24, 32, 48, 64 and 96 px; a size the system already uses stays in the choice even when it is not one of those. A row whose key cannot be read is hidden, and a group with no rows is hidden too.
+
+Open it with `bingux-settings accessibility`, or from the sidebar.
 
 ## Font
 
@@ -298,9 +307,12 @@ Sans is not installed. GNOME's font setting is not read.
 The Font page has one toolbar row and one group of rows. The search field fills
 the width; the category dropdown at its right filters the list (All, Sans
 serif, Serif, Monospace, Other). The group's description is the font count.
-Each row shows the family name in its own face, with a muted "The quick brown
-fox" sample beneath it in the same face. The chosen font has a tick. Right-click
-a row to use it or copy its name. The list fills in chunks, and `fc-list` runs
+Each row shows the family name in its own face, with a muted sample ("The quick
+brown fox jumps over the lazy dog") beneath it in the same face. Every row is
+63 px tall, so the list scrolls at a steady pitch. Rows are built only when they
+are near the view, but each keeps its height, so the scrollbar stays true. The
+chosen font has a tick. Right-click a row to use it or copy its name.
+Every match is listed, and `fc-list` runs
 in the background, so the page never blocks while it loads. Choosing a font
 applies it at once; if the write fails the page reverts and a toast says so.
 
@@ -380,3 +392,26 @@ get` then shows. Set `BINGUX_SETTINGS_SNAPSHOT_SIZE="WxH"` to capture at
 another window size, for example `390x780` for the phone layout (set
 `BINGUX_SETTINGS_SNAPSHOT_LIST=1` to start on the list of pages) or
 `1000x1500` to see a whole long page.
+
+To find layout shifts, record every frame of a run instead of only the last
+capture. `BINGUX_SETTINGS_SNAPSHOT_FRAMES=DIR` writes each frame of the
+16 ms animation clock to `DIR/<page>/NNNNNN.png` with a `frames.jsonl`
+manifest, from the first load on. `BINGUX_SETTINGS_SNAPSHOT_SCRIPT` then runs
+a walk of `;`-separated commands: `click x,y`, `right_click x,y`,
+`hover x,y`, `scroll x,y,dy`, `drag x1,y1,x2,y2`, `key escape|return|tab`,
+`click-text LABEL`, `address PAGE[/SUBPAGE]`, `wait MS`, `mark TEXT` (a
+marker in the manifest) and `save NAME`. Pass `@path` instead to read the
+commands from a file. `scripts/frame-walk.py` drives the whole sidebar this
+way: each page's first subpage and back, one popup, and a scroll down and
+back. It then compares consecutive idle frames with PIL and numpy and writes
+`/tmp/FrameWalk/report.md`, with a before and after crop for each shift:
+
+```sh
+python3 scripts/frame-walk.py                  # every page
+python3 scripts/frame-walk.py --pages wifi,sound --timeout 300
+python3 scripts/frame-walk.py --skip-run       # re-analyse frames already kept
+```
+
+Frames before the walk's first `idle start` marker are the load phase and are
+reported as load shifts. Live clocks and spinners can also show up, so check
+the crop before filing one.
