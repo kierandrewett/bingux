@@ -11,8 +11,9 @@ use crate::system::{self, CommandResult};
 use crate::theme::Tokens;
 use crate::ui::typography::{CAPTION, EMPHASIS, Ink, TITLE, VALUE};
 use crate::ui::{
-    Group, Icon, Overlays, Status, action_button, icon, menu_item, page_column, property_row,
-    section_label, sheet, status, text_field, usage_meter, use_overlays, use_page_busy, use_tokens,
+    Group, Icon, Overlays, Status, action_button, caption, form_row, icon, menu_item, page_column,
+    property_row, section_label, sheet, sheet_column, status, text_field, usage_meter,
+    use_overlays, use_page_busy, use_tokens,
 };
 
 /// How long `hostnamectl` may take to write the new name.
@@ -509,13 +510,14 @@ struct RenameBody {
 
 impl Component for RenameBody {
     fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
         let sheet = self.sheet;
-        let field =
-            text_field(sheet.draft, move |_: String| sheet.submit()).placeholder("Device name");
+        let field = text_field(sheet.draft, move |_: String| sheet.submit());
         let error = sheet.error.read().clone();
-        page_column()
-            .child(rect().tw(&tokens, &[w_full()]).child(field))
+        sheet_column()
+            .child(Group::new(None::<String>).row(form_row("Device name", field)))
+            .child(caption(
+                "Other devices on your network use this name. Letters, numbers and hyphens, up to 63 characters.",
+            ))
             .maybe_child(error.map(|text| Element::from(status(Status::Error(text)))))
     }
 }

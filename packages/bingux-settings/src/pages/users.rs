@@ -16,8 +16,8 @@ use crate::system::{
 };
 use crate::theme::Tokens;
 use crate::ui::{
-    Group, Overlays, Status, action_button, avatar, caption, heading, menu_item, page_column, row,
-    sheet, skeleton, status, text_field, use_overlays, use_tokens,
+    Group, Overlays, Status, action_button, avatar, caption, form_row, heading, menu_item,
+    page_column, row, sheet, sheet_column, skeleton, status, text_field, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
 
@@ -333,6 +333,8 @@ struct PasswordSheet {
     confirm: State<String>,
     /// The problem shown inside the sheet: a check failure or `passwd`'s message.
     error: State<Option<String>>,
+    /// True while `passwd` runs. The sheet stays open and submit is ignored.
+    busy: State<bool>,
     overlays: Overlays,
 }
 
@@ -343,6 +345,7 @@ fn use_password() -> PasswordSheet {
         new: use_state(String::new),
         confirm: use_state(String::new),
         error: use_state(|| None::<String>),
+        busy: use_state(|| false),
         overlays: use_overlays(),
     }
 }
@@ -379,7 +382,7 @@ impl PasswordSheet {
     fn show(self) {
         self.overlays.show_sheet(
             sheet("Change password", PasswordBody { sheet: self })
-                .primary("Save", move |_| self.submit()),
+                .primary("Change", move |_| self.submit()),
         );
     }
 
@@ -394,9 +397,14 @@ impl PasswordSheet {
         error.set(None);
     }
 
-    /// Checks the fields, then changes the password in the background. A
-    /// failure reopens the sheet with the fields kept and `passwd`'s message.
+    /// Checks the fields, then changes the password in the background. The
+    /// sheet stays open with a busy line until `passwd` answers; a failure
+    /// keeps the fields and shows `passwd`'s message.
     fn submit(self) {
+        let mut busy = self.busy;
+        if *busy.read() {
+            return;
+        }
         let current = self.current.read().clone();
         let new = self.new.read().clone();
         let confirm = self.confirm.read().clone();
@@ -405,19 +413,23 @@ impl PasswordSheet {
             error.set(Some(problem.to_string()));
             return;
         }
-        self.overlays.close_sheet();
         error.set(None);
+        busy.set(true);
         background_then(
             move || passwd::change(&current, &new),
-            move |result: Result<(), String>| match result {
-                Ok(()) => {
-                    self.clear();
-                    self.overlays.toast("Password changed.".to_string());
-                }
-                Err(message) => {
-                    let mut error = self.error;
-                    error.set(Some(message));
-                    self.show();
+            move |result: Result<(), String>| {
+                let mut busy = self.busy;
+                busy.set(false);
+                match result {
+                    Ok(()) => {
+                        self.clear();
+                        self.overlays.close_sheet();
+                        self.overlays.toast("Password changed.".to_string());
+                    }
+                    Err(message) => {
+                        let mut error = self.error;
+                        error.set(Some(message));
+                    }
                 }
             },
         );
@@ -446,24 +458,33 @@ struct PasswordBody {
 impl Component for PasswordBody {
     fn render(&self) -> impl IntoElement {
         let sheet = self.sheet;
-        let current = text_field(sheet.current, move |_: String| sheet.submit())
-            .placeholder("Current password")
-            .password();
-        let new = text_field(sheet.new, move |_: String| sheet.submit())
-            .placeholder("New password")
-            .password();
-        let confirm = text_field(sheet.confirm, move |_: String| sheet.submit())
-            .placeholder("Retype the new password")
-            .password();
+        let current = text_field(sheet.current, move |_: String| sheet.submit()).password();
+        let new = text_field(sheet.new, move |_: String| sheet.submit()).password();
+        let confirm = text_field(sheet.confirm, move |_: String| sheet.submit()).password();
         let error = sheet.error.read().clone();
-        page_column()
+        let busy = *sheet.busy.read();
+        let mismatch = {
+            let new_text = sheet.new.read();
+            let confirm_text = sheet.confirm.read();
+            !confirm_text.is_empty() && *confirm_text != *new_text
+        };
+        sheet_column()
+            .child(caption(
+                "Enter your current password, then the new one twice.",
+            ))
             .child(
                 Group::new(None::<String>)
-                    .row(row("Current").trailing(current))
-                    .row(row("New").trailing(new))
-                    .row(row("Retype").trailing(confirm)),
+                    .row(form_row("Current", current))
+                    .row(form_row("New", new))
+                    .row(form_row("Retype", confirm)),
             )
+            .maybe_child(mismatch.then(|| caption("The new passwords do not match yet.")))
             .maybe_child(error.map(|text| Element::from(status(Status::Error(text)))))
+            .maybe_child(busy.then(|| {
+                Element::from(status(Status::Loading(
+                    "Changing your password...".to_string(),
+                )))
+            }))
     }
 }
 
@@ -513,7 +534,7 @@ impl NameSheet {
                     path: path.clone(),
                 },
             )
-            .primary("Save", move |_| self.submit(path.clone())),
+            .primary("Change", move |_| self.submit(path.clone())),
         );
     }
 
@@ -552,7 +573,7 @@ impl Component for NameBody {
         let sheet = self.sheet;
         let path = self.path.clone();
         let field = text_field(sheet.field, move |_: String| sheet.submit(path.clone()));
-        page_column().child(Group::new(None::<String>).row(row("Full name").trailing(field)))
+        sheet_column().child(Group::new(None::<String>).row(form_row("Full name", field)))
     }
 }
 

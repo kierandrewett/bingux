@@ -9,7 +9,6 @@ mod timezone_map;
 
 use std::time::Duration;
 
-use bingux_ui::layout::vstack;
 use bingux_ui::runtime::optimistic_then;
 use bingux_ui::shell::MenuItem;
 use bingux_ui::style::*;
@@ -21,8 +20,8 @@ use crate::routes::{Route, use_navigator};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
     Group, Overlays, Status, caption, choice_row, dropdown, form_row, menu_item, page_column, row,
-    search_field, sheet, skeleton, status, stepper, styled_label, switch_row, typography,
-    use_overlays, use_page_busy,
+    search_field, sheet, sheet_column, skeleton, status, stepper, styled_label, switch_row,
+    typography, use_overlays, use_page_busy,
 };
 
 const INTERFACE: &str = "org.gnome.desktop.interface";
@@ -394,14 +393,14 @@ impl Component for DateBody {
             mut minute,
             ..
         } = self.form;
+        let setting = self.form.setting;
         let last_day = days_in_month(year(), month());
         let month_options = MONTHS
             .iter()
             .enumerate()
             .map(|(index, name)| ((index + 1).to_string(), name.to_string()))
             .collect();
-        vstack(S2)
-            .tw_layout(&[w_full()])
+        sheet_column()
             .child(
                 Group::titled("Date")
                     .row(form_row(
@@ -431,6 +430,9 @@ impl Component for DateBody {
                         stepper(minute(), move |next| minute.set(next)).range(0, 59),
                     )),
             )
+            .maybe_child(setting().then(|| {
+                Element::from(status(Status::Loading("Setting the clock...".to_string())))
+            }))
     }
 }
 
