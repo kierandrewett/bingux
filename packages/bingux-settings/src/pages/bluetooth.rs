@@ -15,9 +15,9 @@ use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
     Group, Overlays, PageHeader, ResponseKind, Row, SpinnerSize, Status, Tokens, action_strip,
-    caption, centered_caption, dialog, heading, page_column, row, skeleton, spinner, status,
-    status_page, strip_action, switch_row, use_overlays, use_page_busy, use_page_header,
-    use_tokens,
+    caption, centered_caption, dialog, entry_row, heading, page_column, row, skeleton_shape,
+    spinner, status, status_page, strip_action, switch_row, use_overlays, use_page_busy,
+    use_page_header, use_tokens,
 };
 use bingux_ui::layout::{hstack, vstack};
 use bingux_ui::shell::{MenuItem, menu_item};
@@ -86,11 +86,22 @@ struct Ctx {
 
 #[derive(Clone)]
 struct Step {
+    /// The program to run: `bluetoothctl`, or `busctl` for a property BlueZ
+    /// has no `bluetoothctl` command for.
+    program: &'static str,
     args: Vec<String>,
     timeout: Duration,
 }
 
-/// A user action: one or more `bluetoothctl` commands, run in order.
+fn step(args: &[&str], timeout: Duration) -> Step {
+    Step {
+        program: "bluetoothctl",
+        args: args.iter().map(|part| part.to_string()).collect(),
+        timeout,
+    }
+}
+
+/// A user action: one or more commands, run in order.
 #[derive(Clone)]
 struct Job {
     mac: String,
@@ -102,15 +113,14 @@ struct Job {
     failed: String,
 }
 
-fn step(args: &[&str], timeout: Duration) -> Step {
-    Step {
-        args: args.iter().map(|part| part.to_string()).collect(),
-        timeout,
-    }
+/// Run a `bluetoothctl` command.
+fn bluetoothctl(args: &[&str], timeout: Duration) -> Result<String, CommandError> {
+    run_tool("bluetoothctl", args, timeout)
 }
 
-fn bluetoothctl(args: &[&str], timeout: Duration) -> Result<String, CommandError> {
-    system::run("bluetoothctl", args, timeout).map_err(|error| {
+/// Run a Bluetooth-related program and map its errors to user text.
+fn run_tool(program: &str, args: &[&str], timeout: Duration) -> Result<String, CommandError> {
+    system::run(program, args, timeout).map_err(|error| {
         // Without bluetoothd, bluetoothctl aborts on a D-Bus assertion and
         // prints a build-flag complaint that means nothing to a user.
         if error.0.contains("D-Bus") || error.0.contains("rdynamic") {
@@ -308,7 +318,7 @@ fn plain_reason(text: &str) -> String {
 fn run_steps(steps: &[Step]) -> Result<(), String> {
     for step in steps {
         let args: Vec<&str> = step.args.iter().map(String::as_str).collect();
-        match bluetoothctl(&args, step.timeout) {
+        match run_tool(step.program, &args, step.timeout) {
             Ok(text) => verdict(&text, false)?,
             Err(error) => verdict(&error.0, true)?,
         }
@@ -397,6 +407,40 @@ fn visibility_job(on: bool) -> Job {
         steps: vec![step(&["discoverable", word], TIMEOUT)],
         done: String::new(),
         failed: "Could not change visibility.".to_string(),
+    }
+}
+
+/// Set the device's Alias over D-Bus; `bluetoothctl` has no rename command.
+/// An empty alias makes BlueZ show the device's own name again.
+fn rename_job(device: &Device, alias: &str) -> Job {
+    let path = format!("/org/bluez/hci0/dev_{}", device.mac.replace(':', "_"));
+    let done = if alias.is_empty() {
+        format!("{} uses its own name again.", device.name)
+    } else {
+        format!("Renamed to {alias}.")
+    };
+    Job {
+        mac: device.mac.clone(),
+        busy: "Renaming…".to_string(),
+        steps: vec![Step {
+            program: "busctl",
+            args: [
+                "--system",
+                "set-property",
+                "org.bluez",
+                path.as_str(),
+                "org.bluez.Device1",
+                "Alias",
+                "s",
+                alias,
+            ]
+            .iter()
+            .map(|part| part.to_string())
+            .collect(),
+            timeout: TIMEOUT,
+        }],
+        done,
+        failed: format!("Could not rename {}.", device.name),
     }
 }
 
@@ -832,7 +876,7 @@ impl Component for BluetoothPage {
         use_page_header(header);
 
         let Some(loaded) = model.read().clone() else {
-            return page_column().child(skeleton());
+            return page_column().child(skeleton_shape(&[1, 3, 1]));
         };
         let data = match loaded {
             Ok(data) => data,
@@ -950,7 +994,7 @@ impl Component for BluetoothDevicePage {
         });
 
         let Some(Ok(data)) = model.read().clone() else {
-            return page_column().child(skeleton());
+            return page_column().child(skeleton_shape(&[5]));
         };
         let Some(device) = data.devices.iter().find(|device| device.mac == self.mac) else {
             return page_column();
@@ -986,6 +1030,12 @@ impl Component for BluetoothDevicePage {
             .row(row("Type").value(device_kind(&device.icon)))
             .row(row("Address").value(device.mac.clone()))
             .row(row("Paired").value(yes_no(device.paired)));
+        let rename_device = device.clone();
+        details = details.row(entry_row(
+            "Name",
+            device.name.clone(),
+            move |name: String| run_job(ctx, rename_job(&rename_device, name.trim())),
+        ));
         let trust_device = device.clone();
         details = details.row(switch_row(
             "Connects automatically",

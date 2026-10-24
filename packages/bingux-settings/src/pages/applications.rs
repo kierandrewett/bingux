@@ -6,6 +6,8 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+#[cfg(feature = "snapshot")]
+use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::time::Duration;
@@ -13,7 +15,7 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use bingux_ui::prelude::*;
-use bingux_ui::runtime::optimistic_then;
+use bingux_ui::runtime::{optimistic, optimistic_then};
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 
 use crate::apps::{self, AppEntry, Details, Removal, Source};
@@ -624,7 +626,7 @@ impl Component for ApplicationsPage {
             .unwrap_or_default();
         let loaded = model.read().clone();
         let (filters, list) = match loaded {
-            None => (None, Group::titled("Installed").row(skeleton())),
+            None => (None, Group::titled("Installed").row(skeleton_row())),
             Some(data) => {
                 let needle = query.read().trim().to_lowercase();
                 let wanted = *source.read();
@@ -751,6 +753,8 @@ impl Component for AppPage {
         let busy = use_state(|| false);
         let overlays = use_overlays();
         let navigator = use_navigator();
+        let autostart = use_state(|| autostart_enabled(&self.id));
+        let notifications = use_state(|| read_notifications(&self.id));
         use_page_busy(*busy.read());
         // Snapshot only: BINGUX_SETTINGS_SNAPSHOT_OPEN=uninstall asks to
         // uninstall this application once the page has loaded, so the dialog
@@ -775,7 +779,7 @@ impl Component for AppPage {
         }
 
         let data = match model.read().clone() {
-            None => return page_column().child(skeleton()),
+            None => return page_column().child(skeleton_shape(&[1, 1])),
             Some(data) => data,
         };
         let Some(app) = data.apps.iter().find(|app| app.id == self.id).cloned() else {
@@ -789,7 +793,7 @@ impl Component for AppPage {
         // choice is made, so no control is repeated here. The group is a
         // skeleton until `gio mime` has answered, and says so if it fails.
         let defaults = match &data.choices {
-            None => Some(Group::titled("Open by default").row(skeleton())),
+            None => Some(Group::titled("Open by default").row(skeleton_row())),
             Some(Err(failure)) => {
                 Some(Group::titled("Open by default").row(status(Status::Error(failure.0.clone()))))
             }
@@ -868,6 +872,40 @@ impl Component for AppPage {
             Group::titled("Details").rows(rows.into_iter().map(Element::from))
         });
 
+        // Whether the application starts at login. Writing the switch copies
+        // the entry into the user's autostart directory, or hides it there.
+        let startup = {
+            let (id, source) = (app.id.clone(), app.desktop_file.clone());
+            let on = *autostart.read();
+            Group::titled("Startup").row(switch_row("Start at login", on, move |next: bool| {
+                let (id, source) = (id.clone(), source.clone());
+                optimistic(autostart, Some(overlays), !next, next, move || {
+                    write_autostart(&id, &source, next).map_err(|error| error.to_string())
+                });
+            }))
+        };
+
+        // GNOME's per-application notification switches. The group appears only
+        // for applications the shell keeps settings for. The first read is
+        // synchronous so the group is on the first frame.
+        let notifications_group = (*notifications.read()).map(|current| {
+            let switches = [
+                ("Show notifications", NotifyKey::Enable, current.enable),
+                (
+                    "Show on the lock screen",
+                    NotifyKey::LockScreen,
+                    current.lock_screen,
+                ),
+                ("Play notification sounds", NotifyKey::Sound, current.sound),
+            ];
+            Group::titled("Notifications").rows(switches.into_iter().map(|(title, key, on)| {
+                let id = app.id.clone();
+                Element::from(switch_row(title, on, move |next: bool| {
+                    set_notification(notifications, overlays, id.clone(), current, key, next);
+                }))
+            }))
+        });
+
         let uninstall = app.details.as_ref().map(|details| {
             let (reason, removable) = match &details.removal {
                 Removal::Command(_) => (
@@ -893,6 +931,13 @@ impl Component for AppPage {
             )
         });
 
+        // The file types the desktop entry says the application opens. Read
+        // from the entry only; changing them means editing the entry itself.
+        let file_types = (!app.mime_types.is_empty()).then(|| {
+            Group::titled("File types")
+                .row(row("Supported file types").subtitle(app.mime_types.join(", ")))
+        });
+
         page_column()
             .child(identity)
             .child(AppSound {
@@ -900,8 +945,188 @@ impl Component for AppPage {
             })
             .maybe_child(details)
             .maybe_child(defaults)
+            .child(startup)
+            .maybe_child(notifications_group)
+            .maybe_child(file_types)
             .maybe_child(uninstall)
     }
+}
+
+#[cfg(not(feature = "snapshot"))]
+/// The file the user's autostart entry for `id` lives in.
+fn autostart_file(id: &str) -> PathBuf {
+    let config = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
+        .unwrap_or_default();
+    config.join("autostart").join(format!("{id}.desktop"))
+}
+
+/// Whether the application starts at login. Only the user's autostart
+/// directory is read, so an entry shipped system-wide is not reported.
+#[cfg(not(feature = "snapshot"))]
+fn autostart_enabled(id: &str) -> bool {
+    std::fs::read_to_string(autostart_file(id)).is_ok_and(|text| {
+        !text.lines().any(|line| {
+            let line = line.trim();
+            line == "Hidden=true" || line == "X-GNOME-Autostart-enabled=false"
+        })
+    })
+}
+
+/// Snapshot builds keep the switch in memory and never touch the user's files.
+#[cfg(feature = "snapshot")]
+static AUTOSTART_FAKE: AtomicBool = AtomicBool::new(false);
+
+#[cfg(feature = "snapshot")]
+fn autostart_enabled(_id: &str) -> bool {
+    AUTOSTART_FAKE.load(Ordering::SeqCst)
+}
+
+/// Makes the user's autostart entry for `id` start (`on`) or not. The entry is
+/// the user's copy if there is one, otherwise the application's own desktop file.
+#[cfg(not(feature = "snapshot"))]
+fn write_autostart(id: &str, source: &std::path::Path, on: bool) -> std::io::Result<()> {
+    let path = autostart_file(id);
+    let base = if path.exists() {
+        path.clone()
+    } else {
+        source.to_path_buf()
+    };
+    let text = std::fs::read_to_string(&base)?;
+    let mut kept: Vec<&str> = text
+        .lines()
+        .filter(|line| {
+            let key = line.trim();
+            !key.starts_with("Hidden=") && !key.starts_with("X-GNOME-Autostart-enabled=")
+        })
+        .collect();
+    // GNOME's own switch: the key is `false` while disabled and absent when enabled.
+    if !on {
+        kept.push("X-GNOME-Autostart-enabled=false");
+    }
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    std::fs::write(&path, format!("{}\n", kept.join("\n")))
+}
+
+#[cfg(feature = "snapshot")]
+fn write_autostart(_id: &str, _source: &std::path::Path, on: bool) -> std::io::Result<()> {
+    AUTOSTART_FAKE.store(on, Ordering::SeqCst);
+    Ok(())
+}
+
+/// GNOME's per-application notification settings. The shell keeps one
+/// relocatable schema per application, keyed by its desktop id in lower case
+/// with dots as hyphens. Only applications listed in `application-children`
+/// have one.
+const NOTIFICATIONS: &str = "org.gnome.desktop.notifications";
+const NOTIFICATION_APP: &str = "org.gnome.desktop.notifications.application";
+
+/// The per-application keys the page shows.
+#[derive(Clone, Copy, PartialEq)]
+struct Notifications {
+    enable: bool,
+    lock_screen: bool,
+    sound: bool,
+}
+
+/// Which key of [`Notifications`] a switch changes.
+#[derive(Clone, Copy)]
+enum NotifyKey {
+    Enable,
+    LockScreen,
+    Sound,
+}
+
+impl NotifyKey {
+    #[cfg(not(feature = "snapshot"))]
+    fn key(self) -> &'static str {
+        match self {
+            NotifyKey::Enable => "enable",
+            NotifyKey::LockScreen => "show-in-lock-screen",
+            NotifyKey::Sound => "enable-sound-alerts",
+        }
+    }
+}
+
+impl Notifications {
+    fn set(&mut self, key: NotifyKey, on: bool) {
+        match key {
+            NotifyKey::Enable => self.enable = on,
+            NotifyKey::LockScreen => self.lock_screen = on,
+            NotifyKey::Sound => self.sound = on,
+        }
+    }
+}
+
+fn notification_child(app_id: &str) -> String {
+    app_id.to_lowercase().replace('.', "-")
+}
+
+fn notification_schema(child: &str) -> String {
+    format!("{NOTIFICATION_APP}:/org/gnome/desktop/notifications/application/{child}/")
+}
+
+/// The application's notification settings, or `None` when the shell keeps
+/// none for it. Reads only.
+fn read_notifications(app_id: &str) -> Option<Notifications> {
+    let child = notification_child(app_id);
+    let listed = system::gsettings_get(NOTIFICATIONS, "application-children").ok()?;
+    if !listed.contains(&format!("'{child}'")) {
+        return None;
+    }
+    let schema = notification_schema(&child);
+    let flag = |key: &str| {
+        system::gsettings_get(&schema, key)
+            .ok()
+            .map(|text| text.trim() == "true")
+    };
+    Some(Notifications {
+        enable: flag("enable")?,
+        lock_screen: flag("show-in-lock-screen")?,
+        sound: flag("enable-sound-alerts")?,
+    })
+}
+
+/// Writes one key. Snapshot builds never touch the user's settings.
+#[cfg(not(feature = "snapshot"))]
+fn write_notification(app_id: &str, key: NotifyKey, on: bool) -> Result<(), String> {
+    let value = if on { "true" } else { "false" };
+    system::gsettings_set(
+        &notification_schema(&notification_child(app_id)),
+        key.key(),
+        value,
+    )
+    .map(|_| ())
+    .map_err(|error| error.0)
+}
+
+#[cfg(feature = "snapshot")]
+fn write_notification(_app_id: &str, _key: NotifyKey, _on: bool) -> Result<(), String> {
+    Ok(())
+}
+
+/// Shows the switch at once, writes the key in the background, and reverts
+/// with a toast if the write fails.
+fn set_notification(
+    shown: State<Option<Notifications>>,
+    overlays: Overlays,
+    app_id: String,
+    previous: Notifications,
+    key: NotifyKey,
+    on: bool,
+) {
+    let mut next = previous;
+    next.set(key, on);
+    optimistic(
+        shown,
+        Some(overlays),
+        Some(previous),
+        Some(next),
+        move || write_notification(&app_id, key, on),
+    );
 }
 
 /// The default application for each kind of file and link. Each row shows the
@@ -909,6 +1134,16 @@ impl Component for AppPage {
 /// choice is made.
 #[derive(PartialEq)]
 pub struct DefaultAppsPage;
+
+/// The file-type rows at their final height, before `gio mime` has answered.
+/// One row per kind, with blank values and no navigation.
+fn kind_placeholder() -> Group {
+    Group::new(None).rows(
+        KINDS
+            .iter()
+            .map(|kind| Element::from(row(kind.title).leading(kind.icon).value("").enabled(false))),
+    )
+}
 
 impl Component for DefaultAppsPage {
     fn render(&self) -> impl IntoElement {
@@ -918,10 +1153,16 @@ impl Component for DefaultAppsPage {
         let navigator = use_navigator();
 
         let Some(data) = model.read().clone() else {
-            return page_column().child(skeleton());
+            return page_column()
+                .child(search_field(query, |_| {}).fill_width())
+                .child(kind_placeholder());
         };
         let choices = match &data.choices {
-            None => return page_column().child(skeleton()),
+            None => {
+                return page_column()
+                    .child(search_field(query, |_| {}).fill_width())
+                    .child(kind_placeholder());
+            }
             Some(Err(failure)) => {
                 return page_column().child(
                     status(Status::Error(failure.0.clone()))

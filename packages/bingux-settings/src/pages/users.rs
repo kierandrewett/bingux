@@ -17,7 +17,7 @@ use crate::system::{
 use crate::theme::Tokens;
 use crate::ui::{
     Group, Overlays, PopupAction, PopupActions, Status, Window, action_button, avatar, caption,
-    form_row, heading, menu_item, page_column, popup, popup_column, row, skeleton, status,
+    form_row, heading, menu_item, page_column, popup, popup_column, row, skeleton_shape, status,
     text_field, use_overlays, use_popup_actions, use_tokens, use_window,
 };
 use bingux_ui::style::*;
@@ -39,6 +39,8 @@ struct Account {
     administrator: bool,
     locked: bool,
     automatic_login: bool,
+    /// The account's locale, such as `en_GB.UTF-8`. Empty when not set.
+    language: String,
     /// The signed-in user. Only their own password can be changed here.
     current: bool,
 }
@@ -87,6 +89,7 @@ fn read_account(path: &str, signed_in: &str) -> Result<Account, CommandError> {
         administrator: number_property(path, "AccountType")? == ACCOUNT_TYPE_ADMINISTRATOR,
         locked: bool_property(path, "Locked")?,
         automatic_login: bool_property(path, "AutomaticLogin")?,
+        language: text_property(path, "Language")?,
     })
 }
 
@@ -185,7 +188,7 @@ impl Component for UsersPage {
         let password = use_password();
 
         let Some(loaded) = model.read().clone() else {
-            return page_column().child(skeleton());
+            return page_column().child(skeleton_shape(&[1]));
         };
         let accounts = match loaded {
             Ok(accounts) => accounts,
@@ -225,7 +228,7 @@ impl Component for AccountPage {
             system::use_cached("users", load);
         let loaded = model.read().clone();
         let accounts = match loaded {
-            None => return Element::from(page_column().child(skeleton())),
+            None => return Element::from(page_column().child(skeleton_shape(&[6, 1]))),
             Some(Err(e)) => {
                 return Element::from(
                     page_column().child(
@@ -318,6 +321,11 @@ impl Component for AccountDetails {
                         "Enabled"
                     } else {
                         "Disabled"
+                    }))
+                    .row(row("Language").value(if account.language.is_empty() {
+                        "Not set".to_string()
+                    } else {
+                        account.language.clone()
                     }))
                     .row(row("Account locked").value(if account.locked { "Yes" } else { "No" })),
             )
