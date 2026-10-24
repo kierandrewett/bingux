@@ -35,8 +35,6 @@ const ARRANGEMENT_SNAP: i32 = 12;
 const SERVICE: &str = "org.gnome.Mutter.DisplayConfig";
 const OBJECT: &str = "/org/gnome/Mutter/DisplayConfig";
 
-/// How long a display takes to ease into its settled place after a drag.
-const DRAG_SETTLE_MS: u64 = 120;
 const INTERFACE: &str = "org.gnome.Mutter.DisplayConfig";
 /// `ApplyMonitorsConfig(serial, method, logical monitors, properties)`.
 const APPLY_SIGNATURE: &str = "uua(iiduba(ssa{sv}))a{sv}";
@@ -1610,17 +1608,15 @@ impl Component for Arrangement {
         let selected = self.selected;
         let tokens = self.tokens;
         let mut size = use_state(Area::default);
+        // Until the canvas is measured its width is unknown, so no box is
+        // placed. The first frame that shows a box already has it in place.
         let measured = size.read().width();
-        let width = if measured > 0.0 {
-            measured
-        } else {
-            Dim::ArrangementWidth.px()
-        };
+        let laid_out = measured > 0.0;
         let active = *ctx.drag.read();
         let Some(current) = frame_of(
             monitors,
             (
-                width,
+                measured.max(0.0),
                 Dim::ArrangementHeight.px() - arrangement_footer_height(),
             ),
         ) else {
@@ -1629,12 +1625,10 @@ impl Component for Arrangement {
         let frame = active.map_or(current, |drag| drag.frame);
 
         let mut canvas = rect()
-            .tw(
-                &tokens,
-                // The canvas fills its card; the card draws the edge and
-                // rounds the corners.
-                &[w_full(), h(Dim::ArrangementHeight), bg(Paint::Control)],
-            )
+            // The box recipe gives the canvas the same fill, hairline and
+            // radius as the groups below it.
+            .tw(&tokens, BOX)
+            .tw(&tokens, &[h(Dim::ArrangementHeight)])
             .on_sized(move |event: Event<SizedEventData>| size.set(event.area))
             .on_capture_global_pointer_move(move |event: Event<PointerEventData>| {
                 let Some(drag) = *ctx.drag.peek() else {
@@ -1673,10 +1667,7 @@ impl Component for Arrangement {
                 });
             });
 
-        let dragging = active.map(|drag| drag.index);
-        // Boxes wait for the first measure. Until then the width is a guess,
-        // and a box placed by the guess would slide into its place.
-        if measured > 0.0 {
+        if laid_out || active.is_some() {
             for (index, monitor) in monitors
                 .iter()
                 .enumerate()
@@ -1688,7 +1679,6 @@ impl Component for Arrangement {
                     monitor: monitor.clone(),
                     frame,
                     selected: index == selected,
-                    dragging: dragging == Some(index),
                     tokens,
                 });
             }
@@ -1699,8 +1689,8 @@ impl Component for Arrangement {
     }
 }
 
-/// One enabled display in the arrangement. It is its own component so that
-/// its position can ease into the settled place.
+/// One enabled display in the arrangement. It sits in the frame at once: an
+/// animated move would slide every box in whenever the layout is measured.
 #[derive(Clone, PartialEq)]
 struct Tile {
     ctx: Ctx,
@@ -1708,7 +1698,6 @@ struct Tile {
     monitor: Monitor,
     frame: Frame,
     selected: bool,
-    dragging: bool,
     tokens: Tokens,
 }
 
@@ -1727,43 +1716,38 @@ impl Component for Tile {
             frame.origin.1 + (f64::from(monitor.y - frame.top) * frame.fit) as f32 + inset;
         let box_width = ((f64::from(width) * frame.fit) as f32 - gap).max(0.0);
         let box_height = ((f64::from(height) * frame.fit) as f32 - gap).max(0.0);
-        let time = if self.dragging {
-            0
-        } else {
-            tokens.motion(DRAG_SETTLE_MS)
-        };
-        let left = use_animation_transition(target_left, move |from, to| {
-            AnimNum::new(from, to)
-                .time(time)
-                .function(Function::Expo)
-                .ease(Ease::Out)
-        });
-        let top = use_animation_transition(target_top, move |from, to| {
-            AnimNum::new(from, to)
-                .time(time)
-                .function(Function::Expo)
-                .ease(Ease::Out)
-        });
 
         // The main display is filled with the accent; the selected one is
         // ringed in the colour that stands out against its fill.
         let (fill, ink, glyph) = if monitor.primary {
             (Paint::Accent, typography::Ink::OnAccent, Paint::OnAccent)
         } else {
-            (Paint::Card, typography::Ink::Text, Paint::Text)
+            (Paint::Control, typography::Ink::Text, Paint::Text)
         };
         let ring = if monitor.primary {
             Paint::Text
         } else {
             Paint::Accent
         };
+        // A child's `fill` spans the whole padding box and ignores the tile's
+        // padding, so the title row gets the content width explicitly: the box
+        // less its 2 px ring on each side (selected only) and the padding. The
+        // label takes what the star leaves, so the star stays inside the box.
+        let ring_px = if self.selected { 4.0 } else { 0.0 };
+        let content_width = (box_width - ring_px - 2.0 * S2.px()).max(0.0);
+        let star_px = if monitor.primary {
+            IconSize::Mark.px()
+        } else {
+            0.0
+        };
         let mut title = rect()
-            .tw(&tokens, &[w_full(), flex_row(), items(Align::Center)])
+            .width(Size::px(content_width))
+            .tw(&tokens, &[flex_row(), items(Align::Center)])
             .child(
                 typography::EMPHASIS
                     .in_ink(ink)
                     .label(&tokens, monitor_label(self.index, monitor))
-                    .width(Size::fill())
+                    .width(Size::px((content_width - star_px).max(0.0)))
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
             );
@@ -1809,11 +1793,7 @@ impl Component for Tile {
         };
 
         rect()
-            .position(
-                Position::new_absolute()
-                    .left(left.get().value())
-                    .top(top.get().value()),
-            )
+            .position(Position::new_absolute().left(target_left).top(target_top))
             .width(Size::px(box_width))
             .height(Size::px(box_height))
             .tw(
