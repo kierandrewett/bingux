@@ -23,11 +23,12 @@ use crate::typography::{Ink, SECTION};
 const SHEET_DROP: f32 = S3.px();
 /// The height of the sheet header: padding, a compact control and the divider.
 fn sheet_header_height() -> f32 {
-    S3.px() * 2.0 + Dim::Control.px() + 1.0
+    S4.px() * 2.0 + Dim::Control.px() + 1.0
 }
-/// The height of the tab bar slot under the header, when a sheet has tabs.
+/// The height of the tab rail under the header, when a sheet has tabs: the
+/// rail, and the space between it and the divider.
 fn sheet_tabs_height() -> f32 {
-    Dim::Button.px() + S2.px()
+    Dim::Control.px() + S4.px()
 }
 /// The tallest a sheet grows before its body scrolls, as a share of the window.
 const SHEET_MAX_HEIGHT_PERCENT: f32 = 80.0;
@@ -110,7 +111,9 @@ impl Component for SheetLayer {
         let progress = use_presence(0, self.closing, tokens.motion(140), move |_| {
             overlays.finish_sheet()
         });
-        let cancel = action_button("Cancel", move |_: ()| overlays.close_sheet()).compact();
+        let cancel = action_button("Cancel", move |_: ()| overlays.close_sheet())
+            .flat()
+            .compact();
         let primary = self.sheet.primary.clone();
         let primary_press = primary.clone();
         let primary_element = primary.map(|action| {
@@ -130,7 +133,7 @@ impl Component for SheetLayer {
                     flex_row(),
                     grow_children(),
                     items(Align::Center),
-                    p(S3),
+                    p(S4),
                 ],
             )
             // Cancel and the primary action take equal room on each side, so
@@ -173,9 +176,12 @@ impl Component for SheetLayer {
                     flex_col(),
                     w(Dim::Sheet),
                     rounded(Radius::Overlay),
-                    bg(Paint::Popover),
+                    // The sheet is a window of its own: the page colour,
+                    // with the groups raised on it as cards.
+                    bg(Paint::Bg),
                     border(Line::Hairline),
                     shadow(Elevation::Floating),
+                    clip(),
                 ],
             )
             .max_height(Size::window_percent(SHEET_MAX_HEIGHT_PERCENT))
@@ -194,13 +200,13 @@ impl Component for SheetLayer {
                 }
             })
             .child(header)
-            .child(divider(&tokens))
             .maybe_child(self.sheet.tabs.clone().map(|tabs| {
                 rect()
-                    .tw(&tokens, &[w_full(), px(S4), pt(S2)])
+                    .tw(&tokens, &[w_full(), px(S5), pb(S4)])
                     .height(Size::px(sheet_tabs_height()))
                     .child(tabs)
             }))
+            .child(divider(&tokens))
             .child(
                 ScrollView::new()
                     .drag_scrolling(false)
@@ -211,7 +217,7 @@ impl Component for SheetLayer {
                     }))
                     .child(
                         rect()
-                            .tw(&tokens, &[w_full(), p(S4)])
+                            .tw(&tokens, &[w_full(), p(S5)])
                             .child(self.sheet.body.clone()),
                     ),
             );

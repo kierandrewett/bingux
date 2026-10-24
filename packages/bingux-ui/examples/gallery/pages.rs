@@ -834,39 +834,40 @@ pub struct FormDemoBody {
 
 impl Component for FormDemoBody {
     fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
         let tab = self.tab;
         let mut security = self.security;
         let mut auto_connect = self.auto_connect;
         if tab.read().as_str() == "security" {
-            rect()
-                .tw(&tokens, &[flex_col(), gap(S3)])
-                .child(form_row(
-                    "Security",
-                    dropdown(
-                        vec![
-                            ("personal".to_string(), "Personal password".to_string()),
-                            ("open".to_string(), "Open, no password".to_string()),
-                        ],
-                        security.read().clone(),
-                        move |key: String| security.set(key),
-                    ),
-                ))
-                .child(form_row(
-                    "Password",
-                    text_field(self.password, |_| {}).password(),
-                ))
+            sheet_column().child(
+                Group::new(None::<String>)
+                    .row(form_row(
+                        "Security",
+                        dropdown(
+                            vec![
+                                ("personal".to_string(), "Personal password".to_string()),
+                                ("open".to_string(), "Open, no password".to_string()),
+                            ],
+                            security.read().clone(),
+                            move |key: String| security.set(key),
+                        ),
+                    ))
+                    .row(form_row(
+                        "Password",
+                        text_field(self.password, |_| {}).password(),
+                    )),
+            )
         } else {
-            rect()
-                .tw(&tokens, &[flex_col(), gap(S3)])
-                .child(form_row(
-                    "Network name",
-                    text_field(self.name, |_| {}).placeholder("Network name"),
-                ))
-                .child(form_row(
-                    "Connect automatically",
-                    checkbox(auto_connect(), move |next: bool| auto_connect.set(next)),
-                ))
+            sheet_column().child(
+                Group::new(None::<String>)
+                    .row(form_row(
+                        "Network name",
+                        text_field(self.name, |_| {}).placeholder("Network name"),
+                    ))
+                    .row(form_row(
+                        "Connect automatically",
+                        checkbox(auto_connect(), move |next: bool| auto_connect.set(next)),
+                    )),
+            )
         }
     }
 }

@@ -42,6 +42,12 @@ pub fn clamp(max: Dim, child: impl Into<Element>) -> Rect {
     )
 }
 
+/// The root of a sheet's body: groups 24 px apart, closer than on a page so a
+/// form stays in one view.
+pub fn sheet_column() -> Rect {
+    rect().tw_layout(&[flex_col(), w_full(), gap(S6)])
+}
+
 /// The root of a settings page: groups 40 px apart. Groups and status
 /// blocks carry no outer margin of their own.
 pub fn page_column() -> Rect {

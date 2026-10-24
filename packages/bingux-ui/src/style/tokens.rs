@@ -156,7 +156,7 @@ pub enum Dim {
     Menu,
     /// A dialog card: 400 px.
     Dialog,
-    /// A sheet card: 480 px.
+    /// A sheet card: 520 px.
     Sheet,
     /// A dropdown's option list: 240 px, never narrower than its button.
     DropdownMenu,
@@ -222,8 +222,6 @@ pub enum Dim {
     CaptionLine,
     /// An action strip cell: icon, a small gap and one line of label.
     StripCell,
-    /// The underline under the selected tab: 2 px.
-    Underline,
     /// A box the size of a row icon, for a drawn glyph: 18 px.
     IconBox,
     /// One Wi-Fi signal bar: 3 px wide.
@@ -270,7 +268,7 @@ impl Dim {
             Dim::FieldApps => pick(260.0, FIELD_TOUCH),
             Dim::Menu => 220.0,
             Dim::Dialog => 400.0,
-            Dim::Sheet => 480.0,
+            Dim::Sheet => 520.0,
             Dim::DropdownMenu => 240.0,
             Dim::DropdownMax => 360.0,
             Dim::MenuList => 320.0,
@@ -308,7 +306,6 @@ impl Dim {
             Dim::SkeletonLine => TEXT_SM,
             Dim::CaptionLine => (TEXT_SM * 1.45).ceil(),
             Dim::StripCell => 76.0,
-            Dim::Underline => 2.0,
             Dim::IconBox => 18.0,
             Dim::SignalBar => 3.0,
             Dim::Ring => 2.0,

@@ -1,5 +1,7 @@
-//! Tabs: a row of equal tabs with an accent underline under the selected one,
-//! as GNOME's view switcher. The row uses a roving tab stop: only the selected
+//! Tabs: a row of equal tabs on a quiet rail where the selected tab is raised,
+//! as the segmented control and GNOME's view switcher. Unlike the segmented
+//! control it fills its width and stays a rail on a phone, so a sheet can
+//! use it to switch between pages of one form. The row uses a roving tab stop: only the selected
 //! tab takes focus from Tab and Shift+Tab. Left and Right arrows move the
 //! selection and focus to the neighbouring tab, and Home and End go to the
 //! first and last tab.
@@ -12,7 +14,7 @@ use freya::prelude::*;
 
 use crate::style::*;
 use crate::surface::use_tokens;
-use crate::typography::{BODY, EMPHASIS, Ink};
+use crate::typography::{BODY, Ink};
 
 /// A row of tabs. `options` holds `(key, label)` pairs.
 #[derive(PartialEq)]
@@ -42,7 +44,6 @@ impl Component for Tabs {
         let options = self.options.clone();
         let selected = self.selected.clone();
         let on_select = self.on_select.clone();
-        let share = 100.0 / self.options.len().max(1) as f32;
         // One accessibility id per tab key, kept for the life of the row, so
         // the arrow keys can move focus to a neighbour that is not in the tab
         // order.
@@ -59,7 +60,20 @@ impl Component for Tabs {
         };
         let key_ids = ids.clone();
         rect()
-            .tw(&tokens, &[w_full(), h(Dim::Button), flex_row()])
+            .tw(
+                &tokens,
+                &[
+                    w_full(),
+                    h(Dim::Control),
+                    flex_row(),
+                    grow_children(),
+                    items(Align::Center),
+                    p(S1),
+                    gap(S1),
+                    rounded(Radius::Control),
+                    bg(Paint::Control),
+                ],
+            )
             .on_key_down(move |event: Event<KeyboardEventData>| {
                 let Some(index) = options.iter().position(|(key, _)| *key == selected) else {
                     return;
@@ -87,7 +101,6 @@ impl Component for Tabs {
                         text: text.clone(),
                         selected: *key == self.selected,
                         on_select: self.on_select.clone(),
-                        share,
                         a11y_id: ids[index],
                     }),
             )
@@ -100,7 +113,6 @@ struct Tab {
     text: String,
     selected: bool,
     on_select: EventHandler<String>,
-    share: f32,
     a11y_id: AccessibilityId,
 }
 
@@ -113,29 +125,35 @@ impl Component for Tab {
         let focus = use_focus(a11y_id);
         let key = self.key.clone();
         let on_select = self.on_select.clone();
-        let underline = if self.selected {
-            Paint::Accent
-        } else {
-            Paint::Transparent
-        };
         rect()
             .a11y_id(a11y_id)
             .a11y_focusable(self.selected)
             .a11y_enabled(true)
             .a11y_role(AccessibilityRole::Tab)
             .a11y_builder(|builder| builder.set_selected(self.selected))
-            .width(Size::percent(self.share))
             .tw(
                 &tokens,
                 &[
+                    w_flex(),
                     h_full(),
-                    flex_col(),
                     center(),
-                    rounded(Radius::Control),
-                    surface(Paint::Transparent, hovering(), pressing(), false),
+                    rounded(Radius::Inner),
+                    surface(
+                        if self.selected {
+                            Paint::Card
+                        } else {
+                            Paint::Transparent
+                        },
+                        hovering(),
+                        pressing(),
+                        false,
+                    ),
                     focus_ring(focus()),
                 ],
             )
+            .maybe(self.selected, |element| {
+                element.tw(&tokens, &[shadow(Elevation::Knob)])
+            })
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| {
                 hovering.set(false);
@@ -152,23 +170,9 @@ impl Component for Tab {
                 a11y_id.request_focus();
             })
             .child(
-                if self.selected {
-                    EMPHASIS.in_ink(Ink::Text)
-                } else {
-                    BODY.in_ink(Ink::Muted)
-                }
-                .label(&tokens, self.text.clone())
-                .max_lines(1),
+                BODY.in_ink(if self.selected { Ink::Text } else { Ink::Muted })
+                    .label(&tokens, self.text.clone())
+                    .max_lines(1),
             )
-            .child(rect().tw(
-                &tokens,
-                &[
-                    w_full(),
-                    h(Dim::Underline),
-                    mt(S1),
-                    rounded(Radius::Mark),
-                    bg(underline),
-                ],
-            ))
     }
 }
