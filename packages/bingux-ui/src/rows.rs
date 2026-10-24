@@ -22,9 +22,6 @@ use crate::style::*;
 use crate::surface::{provide_enabled, use_tokens};
 use crate::typography::{BADGE, BODY, CAPTION, Ink, VALUE};
 
-/// The widest a read-only value gets before it is cut with an ellipsis.
-const VALUE_MAX_WIDTH: f32 = 340.0;
-
 /// Whether the row around a value takes presses. Set by `Row`, read by
 /// `ValueText`.
 #[derive(Clone, Copy, PartialEq)]
@@ -53,6 +50,9 @@ pub struct Row {
     context_menu: Vec<MenuItem>,
     nested: Option<(bool, Vec<Element>)>,
     font: Option<String>,
+    /// Whether the trailing content is a read-only value. The title and the
+    /// value then share the row evenly, and a long value is cut to its half.
+    value_trailing: bool,
 }
 
 pub fn row(title: impl Into<String>) -> Row {
@@ -75,6 +75,7 @@ pub fn row(title: impl Into<String>) -> Row {
         context_menu: Vec::new(),
         nested: None,
         font: None,
+        value_trailing: false,
     }
 }
 
@@ -187,15 +188,13 @@ impl Row {
     }
 
     /// A muted value on the right, for read-only rows.
-    pub fn value(self, value: impl Into<String>) -> Self {
+    pub fn value(mut self, value: impl Into<String>) -> Self {
         let value = value.into();
         if value.is_empty() {
             return self;
         }
-        self.trailing(ValueText {
-            text: value,
-            field: false,
-        })
+        self.value_trailing = true;
+        self.trailing(ValueText { text: value })
     }
 
     /// Right click opens `items` as a context menu at the pointer. Use it for
@@ -234,14 +233,12 @@ fn open_row_menu(
 }
 
 /// A read-only value on the right of a row. It is selectable: Ctrl+C copies
-/// it, and a right click offers Copy. It stays on one line, and a long value
-/// is cut with an ellipsis. `field` sets the value in the controls' column
-/// (a property row); otherwise it shares the row with the title, up to a
-/// limit.
+/// it, and a right click offers Copy. It stays on one line. It fills the
+/// half of the row that `Row` gives a value, aligned to its end, and a long
+/// value is cut there with an ellipsis.
 #[derive(PartialEq)]
 struct ValueText {
     text: String,
-    field: bool,
 }
 
 impl Component for ValueText {
@@ -271,25 +268,18 @@ impl Component for ValueText {
                 .into()
         };
         let text = self.text.clone();
-        let wrapper = rect().on_pointer_down(move |event: Event<PointerEventData>| {
-            let text = text.clone();
-            let items = vec![menu_item("Copy", move |_| {
-                if let Some(overlays) = overlays {
-                    copy_text(overlays, text.clone());
-                }
-            })];
-            open_row_menu(overlays, &items, &event);
-        });
-        // A value shares the row with the title and is capped at its width, so
-        // a narrow window shrinks it and the title keeps its room.
-        let wrapper = if self.field {
-            wrapper.tw(&tokens, &[w(Dim::Field)])
-        } else {
-            wrapper
-                .width(Size::flex(1.0))
-                .max_width(Size::px(VALUE_MAX_WIDTH))
-        };
-        wrapper.child(value)
+        rect()
+            .tw(&tokens, &[w_flex()])
+            .on_pointer_down(move |event: Event<PointerEventData>| {
+                let text = text.clone();
+                let items = vec![menu_item("Copy", move |_| {
+                    if let Some(overlays) = overlays {
+                        copy_text(overlays, text.clone());
+                    }
+                })];
+                open_row_menu(overlays, &items, &event);
+            })
+            .child(value)
     }
 }
 
@@ -421,9 +411,14 @@ impl Component for Row {
         let trailing = (self.trailing.is_some() || self.selected || self.navigates).then(|| {
             rect()
                 .tw(&tokens, ROW_TRAILING)
-                // Half the row at most, so a long value shrinks inside it and
-                // the title and chevron keep their room.
-                .max_width(Size::percent(50.0))
+                // A value takes the same share of the row as the title and
+                // fills it, so a long value is cut before the chevron. Any
+                // other trailing control keeps its own width. Freya's layout
+                // cannot shrink an overflowing child, so a cap on this area
+                // would push a chevron or a dropdown past the box edge.
+                .maybe(self.value_trailing, |element| {
+                    element.tw(&tokens, &[w_flex(), grow_children(), justify(Align::End)])
+                })
                 .maybe_child(self.trailing.clone())
                 .maybe_child((self.selected && !self.navigates).then(|| {
                     icons::icon(Icon::Check, IconSize::Mark, Paint::Accent.color(&tokens))
@@ -812,10 +807,9 @@ pub fn text_row(
 /// pages. The value stays on one line; a long one is cut with an ellipsis,
 /// and it can be selected and copied.
 pub fn property_row(title: impl Into<String>, value: impl Into<String>) -> Row {
-    row(title).trailing(ValueText {
-        text: value.into(),
-        field: true,
-    })
+    let mut row = row(title);
+    row.value_trailing = true;
+    row.trailing(ValueText { text: value.into() })
 }
 
 /// A row whose trailing text is editable in place: click to edit, Enter
