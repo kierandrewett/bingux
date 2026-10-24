@@ -81,8 +81,9 @@ and its battery level. Forget asks first and returns to the list when the
 device is gone. A device with no name shows as Unnamed device.
 
 Users lists the accounts that AccountsService knows, with the signed-in person first. Each account is a row with its avatar, its full name, and its user name and type underneath (the type alone when the account has no full name). Pressing a row opens that account's page, titled with the account's name. The list and the account page show the data loaded last time at once, and a skeleton on first open.
-The account page opens with a large initials tile, the full name and the account type. Account is one group: Full name, User name, Account type, Automatic login and Account locked. Full name is one row with the name on the right. Pressing it opens a sheet titled Change full name, with the name in a field and a Save button. A new name shows at once and is written in the background. If the write fails, the old name comes back and a toast says why.
-Password appears only on the signed-in account. It is one row, Your password, with a Change password button. The button opens a sheet titled Change password, with Current, New and Retype fields and a Save button. A failed change keeps the fields and shows the reason in the sheet.
+The account page opens with a large initials tile, the full name and the account type. Account is one group: Full name, User name, Account type, Automatic login and Account locked. Full name is one row with the name on the right. Pressing it opens a sheet titled Change full name, with a Full name row and a Change button. A new name shows at once and is written in the background. If the write fails, the old name comes back and a toast says why.
+
+Password appears only on the signed-in account. It is one row, Your password, with a Change password button. The button opens a sheet titled Change password, with a caption, Current, New and Retype rows and a Change button. While the change runs the sheet stays open with a "Changing your password..." line, and a second press is ignored. If the new passwords differ a caption says so as you type. A failed change keeps the fields and shows the reason in the sheet; success closes the sheet and a toast confirms it.
 Each account row has a right-click menu with Open, and Change password for the signed-in account. If the list cannot load, the page shows the error with a Try again action.
 
 Wi-Fi opens Network details from the settings button on a saved or connected
@@ -95,8 +96,7 @@ strength in words, the frequency band, the security and the speed.
 Date and Time opens the time zone as a searchable list of cities. The
 zone list shows each UTC offset only for
 the selected zone. Set date and time opens a sheet with Date (day, month and
-year) and Time (hour and minute) rows and a Set button that stays disabled
-until the values change.
+year) and Time (hour and minute) rows and a Set button.
 The switches on the Date and time page and the clock format row also have a
 right-click menu with the same change.
 

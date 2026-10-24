@@ -21,8 +21,8 @@ use crate::apps;
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
     Group, Icon, LevelRow, Overlays, Status, action_button, app_icon, caption, dropdown, hstack,
-    icon, icon_button, level_row, menu_item, page_column, row, sheet, skeleton, status, switch_row,
-    use_overlays, use_tokens, vstack,
+    icon, icon_button, level_row, menu_item, page_column, row, sheet, sheet_column, skeleton,
+    status, switch_row, use_overlays, use_tokens,
 };
 
 use self::meter::{LevelMeter, Source};
@@ -1203,14 +1203,17 @@ fn play_test(overlays: Overlays, mix: &Mix, lit: usize) {
 /// The test sheet: one button per speaker of the default output.
 fn open_test(ctx: Ctx, mix: Mix) {
     let overlays = ctx.overlays;
-    let mut body = vstack(S3).child(caption("Each button plays a tone through one speaker."));
+    let mut group =
+        Group::new(None::<String>).description("Each button plays a tone through one speaker.");
     for (lit, (name, _)) in mix.channels.iter().enumerate() {
         let mix = mix.clone();
-        body = body.child(action_button(channel_label(name), move |_| {
-            play_test(overlays, &mix, lit)
-        }));
+        group = group.row(
+            row(channel_label(name)).trailing(action_button("Play", move |_| {
+                play_test(overlays, &mix, lit)
+            })),
+        );
     }
-    overlays.show_sheet(sheet("Test speakers", body));
+    overlays.show_sheet(sheet("Test speakers", sheet_column().child(group)));
 }
 
 /// Optimistic default device: the new default shows at once and the next poll

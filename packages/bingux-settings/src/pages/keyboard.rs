@@ -16,8 +16,8 @@ use crate::system::{
     self, CommandError, CommandResult, background, background_then, optimistic_then,
 };
 use crate::ui::{
-    Group, Overlays, Status, choice_row, page_column, row, row_button, search_field, sheet,
-    skeleton, slider_row, status, switch_row, text_field, use_overlays,
+    Group, Overlays, Status, caption, choice_row, page_column, row, row_button, search_field,
+    sheet, sheet_column, skeleton, slider_row, status, switch_row, text_field, use_overlays,
 };
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 
@@ -315,6 +315,10 @@ fn open_add_sheet(edits: SourceEdits) {
         .show_sheet(sheet("Add an input source", AddBody { edits }));
 }
 
+/// The most catalogue rows the add sheet lists at once. The rest are one
+/// search away, so the sheet opens without building hundreds of rows.
+const SOURCE_LIST_CAP: usize = 40;
+
 /// The add sheet: the catalogue minus the sources already in the list, with a
 /// search box. Picking one adds it and closes the sheet.
 #[derive(Clone, PartialEq)]
@@ -328,15 +332,19 @@ impl Component for AddBody {
         let query = use_state(String::new);
         let config = match edits.state.read().clone() {
             Some(Ok(config)) => config,
-            Some(Err(message)) => return Element::from(status(Status::Error(message))),
-            None => return skeleton(),
+            Some(Err(message)) => {
+                return Element::from(sheet_column().child(status(Status::Error(message))));
+            }
+            None => return Element::from(sheet_column().child(skeleton())),
         };
-        let Some(catalog) = edits.catalog.read().clone() else {
-            return skeleton();
+        // Borrowed, not cloned: the catalogue has hundreds of entries.
+        let catalog_guard = edits.catalog.read();
+        let Some(catalog) = &*catalog_guard else {
+            return Element::from(sheet_column().child(skeleton()));
         };
         let needle = query.read().trim().to_lowercase();
-        let available: Vec<(Source, String)> = catalog
-            .into_iter()
+        let matches: Vec<&(Source, String)> = catalog
+            .iter()
             .filter(|(source, _)| !config.sources.contains(source))
             .filter(|(source, name)| {
                 needle.is_empty()
@@ -344,30 +352,37 @@ impl Component for AddBody {
                     || source.id.to_lowercase().contains(&needle)
             })
             .collect();
-        let mut page = page_column().child(search_field(query, |_| {}));
-        if available.is_empty() {
+        let total = matches.len();
+        let mut column = sheet_column().child(search_field(query, |_| {}).fill_width());
+        if total == 0 {
             let message = if needle.is_empty() {
                 "Every input source is already in the list."
             } else {
                 "No input sources match."
             };
-            page = page.child(status(Status::Empty(message.into())));
+            column = column.child(status(Status::Empty(message.into())));
+        } else {
+            let rows = matches
+                .into_iter()
+                .take(SOURCE_LIST_CAP)
+                .map(|(source, name)| {
+                    let add = source.clone();
+                    row(name.clone())
+                        .leading(Icon::Keyboard)
+                        .subtitle(kind_label(&source.kind))
+                        .on_press(move |_| {
+                            edits.run(Edit::Add(add.clone()));
+                            edits.overlays.close_sheet();
+                        })
+                        .into()
+                });
+            column = column.child(Group::titled("Available").rows(rows));
+            if total > SOURCE_LIST_CAP {
+                let more = total - SOURCE_LIST_CAP;
+                column = column.child(caption(format!("Type to narrow {more} more.")));
+            }
         }
-        if !available.is_empty() {
-            let rows = available.into_iter().map(|(source, name)| {
-                let add = source.clone();
-                row(name)
-                    .leading(Icon::Keyboard)
-                    .subtitle(kind_label(&source.kind))
-                    .on_press(move |_| {
-                        edits.run(Edit::Add(add.clone()));
-                        edits.overlays.close_sheet();
-                    })
-                    .into()
-            });
-            page = page.child(Group::titled("Available").rows(rows));
-        }
-        Element::from(page)
+        Element::from(column)
     }
 }
 
@@ -529,6 +544,22 @@ impl Component for KeyboardPage {
         let overlays = use_overlays();
         let navigator = use_navigator();
         let try_text = use_state(String::new);
+        // Snapshot only: BINGUX_SETTINGS_SNAPSHOT_OPEN=add-input opens the
+        // add sheet once the page has loaded, so it can be captured.
+        #[cfg(feature = "snapshot")]
+        use_hook(move || {
+            if std::env::var("BINGUX_SETTINGS_SNAPSHOT_OPEN").is_ok_and(|v| v == "add-input") {
+                spawn(async move {
+                    timer(std::time::Duration::from_millis(2500)).await;
+                    open_add_sheet(SourceEdits {
+                        state: sources_state,
+                        catalog: catalog_state,
+                        overlays,
+                        busy: sources_busy,
+                    });
+                });
+            }
+        });
 
         let Some(result) = loaded.read().clone() else {
             return page_column().child(skeleton());

@@ -752,6 +752,27 @@ impl Component for AppPage {
         let overlays = use_overlays();
         let navigator = use_navigator();
         use_page_busy(*busy.read());
+        // Snapshot only: BINGUX_SETTINGS_SNAPSHOT_OPEN=uninstall asks to
+        // uninstall this application once the page has loaded, so the dialog
+        // can be captured.
+        #[cfg(feature = "snapshot")]
+        {
+            let id = self.id.clone();
+            use_hook(move || {
+                if std::env::var("BINGUX_SETTINGS_SNAPSHOT_OPEN").is_ok_and(|v| v == "uninstall") {
+                    spawn(async move {
+                        timer(Duration::from_millis(2500)).await;
+                        let found = model
+                            .read()
+                            .as_ref()
+                            .and_then(|data| data.apps.iter().find(|app| app.id == id).cloned());
+                        if let Some(app) = found {
+                            ask_uninstall(app, model, busy, overlays, Some(navigator));
+                        }
+                    });
+                }
+            });
+        }
 
         let data = match model.read().clone() {
             None => return page_column().child(skeleton()),

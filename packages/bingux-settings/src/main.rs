@@ -152,6 +152,12 @@ fn snapshot_pages(dir: &str, only: &[String]) {
             .and_then(|value| value.parse().ok())
             .unwrap_or(4000);
         shot.settle(std::time::Duration::from_millis(settle_ms));
+        // BINGUX_SETTINGS_SNAPSHOT_PRESCROLL="x,y,dy" scrolls before the clicks,
+        // to bring a control that sits below the fold within reach.
+        if let Some([x, y, dy]) = snapshot_numbers::<3>("BINGUX_SETTINGS_SNAPSHOT_PRESCROLL") {
+            shot.scroll(x, y, dy)
+                .settle(std::time::Duration::from_millis(500));
+        }
         for (x, y) in &clicks {
             shot.click(*x, *y)
                 .settle(std::time::Duration::from_millis(1000));

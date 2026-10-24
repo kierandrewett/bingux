@@ -12,9 +12,9 @@ use crate::icons::Icon;
 use crate::pages::bingux_config;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Overlays, ResponseKind, Row, Status, choice_row, dialog, icon_button, page_column,
-    primary_button, row, sheet, skeleton, slider_row, status, switch, switch_row, text_field,
-    use_overlays,
+    Group, Overlays, ResponseKind, Row, Status, caption, choice_row, dialog, form_row, icon_button,
+    page_column, primary_button, row, sheet, sheet_column, skeleton, slider_row, status, switch,
+    switch_row, text_field, use_overlays, use_tokens,
 };
 use bingux_ui::shell::menu_item;
 use bingux_ui::style::*;
@@ -546,6 +546,36 @@ impl Component for SearchPage {
 
         use_hook(move || reload(ctx));
 
+        // Snapshot only: BINGUX_SETTINGS_SNAPSHOT_OPEN=remove-engine or
+        // remove-folder asks that question once the page has loaded, so the
+        // dialog can be captured.
+        #[cfg(feature = "snapshot")]
+        use_hook(move || {
+            let which = std::env::var("BINGUX_SETTINGS_SNAPSHOT_OPEN").unwrap_or_default();
+            if which == "remove-engine" || which == "remove-folder" {
+                spawn(async move {
+                    timer(std::time::Duration::from_millis(2500)).await;
+                    let Some(Ok(data)) = model.read().clone() else {
+                        return;
+                    };
+                    if which == "remove-engine" {
+                        if let Some(engine) = data.engines.first() {
+                            let without = &data.engines[1..];
+                            confirm_remove(ctx, &engine.name, &data.default_engine, without);
+                        }
+                    } else {
+                        // With no folders listed, ask about a sample one.
+                        let roots = data.file_roots.clone().unwrap_or_default();
+                        let folder = roots
+                            .first()
+                            .cloned()
+                            .unwrap_or_else(|| "/home/kieran/Documents".to_string());
+                        confirm_remove_folder(ctx, folder, roots.iter().skip(1).cloned().collect());
+                    }
+                });
+            }
+        });
+
         let Some(loaded) = model.read().clone() else {
             return page_column().child(skeleton()).into_element();
         };
@@ -724,6 +754,20 @@ impl Component for AddEngine {
             ctx: self.ctx,
         };
         let engines = self.engines.clone();
+        // Snapshot only: BINGUX_SETTINGS_SNAPSHOT_OPEN=add-engine opens the
+        // add sheet once the page has loaded, so it can be captured.
+        #[cfg(feature = "snapshot")]
+        {
+            let engines = self.engines.clone();
+            use_hook(move || {
+                if std::env::var("BINGUX_SETTINGS_SNAPSHOT_OPEN").is_ok_and(|v| v == "add-engine") {
+                    spawn(async move {
+                        timer(std::time::Duration::from_millis(2500)).await;
+                        open_engine_sheet(form, engines);
+                    });
+                }
+            });
+        }
         let open = move |_| {
             let (mut name, mut shortcut, mut url) = (form.name, form.shortcut, form.url);
             name.set(String::new());
@@ -846,35 +890,46 @@ struct EngineBody {
 
 impl Component for EngineBody {
     fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
         let form = self.form;
         let engines = self.engines.clone();
         let edited = move |_: String| open_engine_sheet(form, engines.clone());
         let (_, shortcut, url) = engine_fields(form);
         let problems = engine_problems(&shortcut, &url, &self.engines);
-        Group::new(None::<String>)
-            .description(
-                "Type the shortcut in search to use this engine. Put {query} in the address where the search words go.",
-            )
-            .row(row("Name").trailing(
-                text_field(form.name, |_: String| {})
-                    .on_change(edited.clone())
-                    .width(Dim::FieldWide)
-                    .placeholder("Example Search"),
+        let fields = Group::new(None::<String>)
+            .row(form_row(
+                "Name",
+                rect().tw(&tokens, &[w(Dim::Field)]).child(
+                    text_field(form.name, |_: String| {})
+                        .on_change(edited.clone())
+                        .width(Dim::Field)
+                        .placeholder("Example Search"),
+                ),
             ))
-            .row(row("Shortcut").trailing(
-                text_field(form.shortcut, |_: String| {})
-                    .on_change(edited.clone())
-                    .invalid(problems.shortcut.map(str::to_string))
-                    .width(Dim::FieldWide)
-                    .placeholder("ex"),
+            .row(form_row(
+                "Shortcut",
+                rect().tw(&tokens, &[w(Dim::Field)]).child(
+                    text_field(form.shortcut, |_: String| {})
+                        .on_change(edited.clone())
+                        .width(Dim::Field)
+                        .placeholder("ex"),
+                ),
             ))
-            .row(row("Web address").trailing(
-                text_field(form.url, |_: String| {})
-                    .on_change(edited)
-                    .invalid(problems.url.map(str::to_string))
-                    .width(Dim::FieldWide)
-                    .placeholder("https://example.com/?q={query}"),
-            ))
+            .row(form_row(
+                "Web address",
+                rect().tw(&tokens, &[w(Dim::Field)]).child(
+                    text_field(form.url, |_: String| {})
+                        .on_change(edited)
+                        .width(Dim::Field)
+                        .placeholder("https://example.com/?q={query}"),
+                ),
+            ));
+        // The problem replaces the hint under the fields, so a field never
+        // reserves a line of its own and stays level with its label.
+        let hint = problems.shortcut.or(problems.url).unwrap_or(
+            "Type the shortcut in search to use this engine. Put {query} in the address where the search words go.",
+        );
+        sheet_column().child(fields).child(caption(hint))
     }
 }
 
