@@ -44,7 +44,7 @@ PAGE_TITLES = [
     "Bingux is installed",
 ]
 SWITCH_WIDTH = 36  # ControlSwitch implicitWidth (shell/bingux/ControlSwitch.qml)
-CARD_FILL = 44  # flat grey of the installer card (shell/bingux/KioskCard.qml), RGB all equal
+CARD_FILL = (42, 43, 46)  # installer card fill, Theme.popupSurface over the wallpaper (shell/bingux/KioskCard.qml); varies by about 1
 FIELD_DROP = 26  # caption glyph bottom to the middle of the 36 px field below it
 FIELD_INSET = 60  # from a caption's left edge into the field
 
@@ -297,7 +297,7 @@ def switch_x(frame: np.ndarray, y: float) -> float:
     the rightmost card-coloured pixel is the card's edge; the switch track is the first non-card run left of
     it, and its right end sits SWITCH_WIDTH / 2 from its centre."""
     row = frame[int(round(y))].astype(int)
-    card = np.all(row == CARD_FILL, axis=1)
+    card = np.all(np.abs(row.astype(int) - CARD_FILL) <= 3, axis=1)
     x = int(np.flatnonzero(card).max())
     while x > 0 and card[x]:
         x -= 1
