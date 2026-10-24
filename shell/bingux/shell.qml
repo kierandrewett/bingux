@@ -360,6 +360,23 @@ ShellRoot {
         rightInset: terminalSidebar.rightInset
     }
 
+    // Display Settings asks for numbered overlays so a list row can be matched to a panel.
+    property var identifyNumbers: ({})
+    Timer {
+        id: identifyTimer
+        interval: 3000
+        onTriggered: root.identifyNumbers = ({})
+    }
+    Variants {
+        model: Quickshell.screens
+
+        IdentifyOverlay {
+            required property var modelData
+            screen: modelData
+            number: root.identifyNumbers[modelData.name] ?? 0
+        }
+    }
+
     // Without seconds the clock wakes once a minute. Redrawing the bar every
     // second keeps the compositor re-rendering a blurred surface around the clock.
     Timer {
@@ -394,6 +411,15 @@ ShellRoot {
 
     IpcHandler {
         target: "shell"
+        function identify(names: string): void {
+            const numbers = {};
+            names.split(",").forEach((name, index) => {
+                if (name)
+                    numbers[name] = index + 1;
+            });
+            root.identifyNumbers = numbers;
+            identifyTimer.restart();
+        }
         function windowMenu(payload: string): void {
             root.closePanelsExcept(windowMenuPopup);
             windowMenuPopup.showRequest(payload);

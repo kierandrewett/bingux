@@ -49,6 +49,14 @@ JSON. Failures print a diagnostic to stderr and return nonzero. Only an explicit
 "not ready" response is retried during reload; an uncertain timeout is never
 repeated because the command may already have executed.
 
+`shell identify CONNECTORS` shows a number on each named display for three
+seconds. Pass the connector names, such as `DP-2`, comma separated. Numbers
+follow the order given. Display settings uses it for its Identify button:
+
+```sh
+binguxctl ipc shell identify DP-2,HDMI-A-1
+```
+
 The native package installs the command and uses `capture toggle` for the
 capture shortcut. It selects the configured Quickshell package and configuration
 name. For a development instance:
