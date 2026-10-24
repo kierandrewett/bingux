@@ -43,8 +43,10 @@ PAGE_TITLES = [
     "Installing Bingux",
     "Bingux is installed",
 ]
-SWITCH_WIDTH = 36  # ControlSwitch implicitWidth (shell/bingux/ControlSwitch.qml)
-CARD_FILL = (42, 43, 46)  # installer card fill, Theme.popupSurface over the wallpaper (shell/bingux/KioskCard.qml); varies by about 1
+SWITCH_WIDTH = 36  # ControlSwitch track width (shell/bingux/ControlSwitch.qml)
+THUMB_WIDTH = 16  # ControlSwitch thumb; it sits THUMB_INSET from the track end
+THUMB_INSET = 2
+THUMB_BRIGHT = 200  # the thumb is near white in both states; nothing right of a switch is that bright
 FIELD_DROP = 26  # caption glyph bottom to the middle of the 36 px field below it
 FIELD_INSET = 60  # from a caption's left edge into the field
 
@@ -293,15 +295,22 @@ def zone_on_label(frame: np.ndarray, zone_names: list[str]) -> str | None:
 
 
 def switch_x(frame: np.ndarray, y: float) -> float:
-    """x of the switch centre on row `y`. The card fill is flat and the wallpaper beyond the card is not, so
-    the rightmost card-coloured pixel is the card's edge; the switch track is the first non-card run left of
-    it, and its right end sits SWITCH_WIDTH / 2 from its centre."""
-    row = frame[int(round(y))].astype(int)
-    card = np.all(np.abs(row.astype(int) - CARD_FILL) <= 3, axis=1)
-    x = int(np.flatnonzero(card).max())
-    while x > 0 and card[x]:
-        x -= 1
-    return x - SWITCH_WIDTH / 2
+    """x of the switch centre on row `y`, found from its thumb. The track's colour is not used: an off track is
+    nearly the card fill, and the card fill shifts with the wallpaper. The thumb is the rightmost near-white
+    column in the row band. Off, the thumb is at the track's left end, so the track centre is
+    SWITCH_WIDTH / 2 - (THUMB_INSET + THUMB_WIDTH / 2) to its right; on, it is the same distance to its left.
+    A blue track left of the thumb means on."""
+    row = int(round(y))
+    band = frame[max(0, row - 4): row + 5].astype(int)
+    columns = np.flatnonzero(np.any(band.min(axis=2) >= THUMB_BRIGHT, axis=0))
+    if columns.size == 0:
+        raise RuntimeError(f"no switch thumb on row {row}")
+    right = int(columns.max())
+    thumb = right - (THUMB_WIDTH - 1) / 2
+    pixel = frame[row, right - 25].astype(int)
+    on = int(pixel.max() - pixel.min()) > 25
+    offset = SWITCH_WIDTH / 2 - (THUMB_INSET + THUMB_WIDTH / 2)
+    return thumb - offset if on else thumb + offset
 
 
 MAP_OCEAN = (30, 31, 34)  # the rendered sea of the time zone map: black at 30% over the card (shell/bingux InstallerTimezonePage.qml)
