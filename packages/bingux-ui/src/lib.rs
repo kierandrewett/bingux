@@ -17,6 +17,7 @@ pub mod controls;
 pub mod group;
 pub mod icons;
 pub mod layout;
+pub mod motion;
 pub mod rows;
 pub mod runtime;
 pub mod search_highlight;
@@ -46,6 +47,10 @@ pub mod prelude {
     pub use crate::icons::{Icon, icon};
     pub use crate::layout::{
         boxed, clamp, divider, hstack, page_column, popup_column, spacer, vstack,
+    };
+    pub use crate::motion::{
+        AnimatedNumber, Crossfade, Presence, Reveal, animated_number, crossfade, presence,
+        reveal, use_presence, use_tween,
     };
     pub use crate::rows::{
         ChoiceList, EntryRow, ExpanderRow, LevelRow, Row, choice_list, choice_row, entry_row,

@@ -16,10 +16,11 @@ pub enum Page {
     Charts,
     Typography,
     Icons,
+    Motion,
 }
 
 impl Page {
-    pub const ALL: [Page; 7] = [
+    pub const ALL: [Page; 8] = [
         Page::Controls,
         Page::Buttons,
         Page::Rows,
@@ -27,6 +28,7 @@ impl Page {
         Page::Charts,
         Page::Typography,
         Page::Icons,
+        Page::Motion,
     ];
 }
 
@@ -40,6 +42,7 @@ impl NavItem for Page {
             Page::Charts => "Charts",
             Page::Typography => "Typography",
             Page::Icons => "Icons",
+            Page::Motion => "Motion",
         }
     }
 
@@ -52,6 +55,7 @@ impl NavItem for Page {
             Page::Charts => Icon::Computer,
             Page::Typography => Icon::About,
             Page::Icons => Icon::Appearance,
+            Page::Motion => Icon::GoNext,
         }
     }
 }
@@ -81,6 +85,7 @@ impl Component for Gallery {
             Page::Charts => ChartsPage.into(),
             Page::Typography => TypographyPage.into(),
             Page::Icons => IconsPage.into(),
+            Page::Motion => MotionPage.into(),
         };
         rect()
             .expanded()
@@ -877,5 +882,65 @@ impl Component for FormDemoBody {
                     )),
             )
         }
+    }
+}
+
+#[derive(PartialEq)]
+struct MotionPage;
+
+impl Component for MotionPage {
+    fn render(&self) -> impl IntoElement {
+        let mut expanded = use_state(|| false);
+        let mut badge = use_state(|| false);
+        let mut long = use_state(|| false);
+        let mut count = use_state(|| 0_u32);
+        page_column()
+            .child(
+                Group::new("Reveal".to_string())
+                    .description("The content below moves as the box grows; siblings never jump.")
+                    .row(switch_row("Show more", expanded(), move |next| {
+                        expanded.set(next)
+                    })),
+            )
+            .child(reveal(
+                expanded(),
+                styled_label(typography::BODY, "Revealed text. Its height animates."),
+            ))
+            .child(
+                Group::new("Presence".to_string())
+                    .description(
+                        "Fades and scales in place. The space is released when it has gone.",
+                    )
+                    .row(switch_row("Show badge", badge(), move |next| {
+                        badge.set(next)
+                    })),
+            )
+            .child(presence(
+                badge(),
+                styled_label(typography::BODY, "Badge appears in place."),
+            ))
+            .child(
+                Group::new("Crossfade".to_string())
+                    .description("The container keeps the larger size while the text swaps.")
+                    .row(switch_row("Longer label", long(), move |next| {
+                        long.set(next)
+                    })),
+            )
+            .child(crossfade(styled_label(
+                typography::BODY,
+                if long() {
+                    "A longer label that takes more room"
+                } else {
+                    "Short"
+                },
+            )))
+            .child(
+                Group::new("Animated number".to_string())
+                    .row(row("Count").trailing(animated_number(count() as f32)))
+                    .row(
+                        row("Increment")
+                            .trailing(action_button("Add", move |_| count.set(count() + 1))),
+                    ),
+            )
     }
 }
