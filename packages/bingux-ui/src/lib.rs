@@ -41,7 +41,7 @@ pub mod prelude {
     pub use crate::controls::*;
     pub use crate::group::{
         Group, Status, StatusBlock, action_row, caption, centered_caption, form_row, heading,
-        section_label, skeleton, status,
+        section_label, skeleton, skeleton_row, skeleton_shape, status,
     };
     pub use crate::icons::{Icon, icon};
     pub use crate::layout::{

@@ -459,30 +459,32 @@ impl Component for StatusBlock {
 /// bars where the titles and rows will be. It carries no text, so nothing
 /// reads as "loading", and the real page replaces it in place.
 pub fn skeleton() -> Element {
-    Skeleton.into()
+    skeleton_shape(&[SKELETON_ROWS, SKELETON_ROWS])
+}
+
+/// The same quiet bars as [`skeleton`], one section per entry of `sections`
+/// with that many rows. A page whose loaded shape is known uses it, so the
+/// rows it will show are already in place when its data arrives.
+pub fn skeleton_shape(sections: &[usize]) -> Element {
+    Skeleton {
+        sections: sections.to_vec(),
+    }
+    .into()
 }
 
 const SKELETON_ROWS: usize = 3;
 
 #[derive(PartialEq)]
-struct Skeleton;
+struct Skeleton {
+    sections: Vec<usize>,
+}
 
 impl Component for Skeleton {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let bar = |width: Dim| {
-            rect().tw(
-                &tokens,
-                &[
-                    w(width),
-                    h(Dim::SkeletonLine),
-                    rounded(Radius::Mark),
-                    bg(Paint::Control),
-                ],
-            )
-        };
-        let section = || {
-            let rows = (0..SKELETON_ROWS).map(|_| {
+        let bar = |width: Dim| skeleton_bar(&tokens, width);
+        let section = |rows: usize| {
+            let rows = (0..rows).map(|_| {
                 Element::from(
                     rect()
                         .tw(&tokens, ROW)
@@ -503,8 +505,48 @@ impl Component for Skeleton {
                         .children(plain_rows(&tokens, rows.collect())),
                 )
         };
-        page_column().child(section()).child(section())
+        let sections: Vec<Element> = self
+            .sections
+            .iter()
+            .map(|&rows| Element::from(section(rows)))
+            .collect();
+        page_column().children(sections)
     }
+}
+
+/// One row-sized placeholder for a group whose rows are not known yet, so the
+/// group keeps its place while its data loads.
+pub fn skeleton_row() -> Element {
+    SkeletonRow.into()
+}
+
+#[derive(PartialEq)]
+struct SkeletonRow;
+
+impl Component for SkeletonRow {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        rect()
+            .tw(&tokens, ROW)
+            .child(
+                rect()
+                    .tw(&tokens, &[w_flex()])
+                    .child(skeleton_bar(&tokens, Dim::SkeletonLabel)),
+            )
+            .child(skeleton_bar(&tokens, Dim::SkeletonValue))
+    }
+}
+
+fn skeleton_bar(tokens: &Tokens, width: Dim) -> impl IntoElement {
+    rect().tw(
+        tokens,
+        &[
+            w(width),
+            h(Dim::SkeletonLine),
+            rounded(Radius::Mark),
+            bg(Paint::Control),
+        ],
+    )
 }
 
 /// A title for in-page headers such as a details view.

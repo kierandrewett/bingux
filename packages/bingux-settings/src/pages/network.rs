@@ -12,8 +12,8 @@ use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError};
 use crate::ui::{
     Group, Overlays, PageHeader, ResponseKind, Status, Tokens, action_strip, centered_caption,
-    dialog, heading, page_column, row, skeleton, status, strip_action, use_overlays,
-    use_page_header, use_tokens,
+    dialog, heading, page_column, row, skeleton, skeleton_shape, status, strip_action,
+    use_overlays, use_page_header, use_tokens,
 };
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 use bingux_ui::style::*;
@@ -578,6 +578,21 @@ impl Component for NetworkPage {
         let vpns = system::use_cached("vpn", load_vpns);
         let model = system::use_cached("network", load);
         let overlays = use_overlays();
+        // Snapshot only: BINGUX_SETTINGS_SNAPSHOT_EDITOR=<connection> opens that
+        // connection's editor once the page has loaded (see Editor::snapshot_open).
+        #[cfg(feature = "snapshot")]
+        {
+            let editor = use_editor();
+            use_hook(move || {
+                if let Ok(name) = std::env::var("BINGUX_SETTINGS_SNAPSHOT_EDITOR") {
+                    editor.snapshot_open(Target {
+                        name,
+                        wireless: false,
+                        facts: Vec::new(),
+                    });
+                }
+            });
+        }
         let subtitle = model
             .read()
             .as_ref()
@@ -587,8 +602,11 @@ impl Component for NetworkPage {
             subtitle,
             action: None,
         });
-        let Some(loaded) = model.read().clone() else {
-            return page_column().child(skeleton());
+        // Wired and VPN are both drawn on the first frame, so no group
+        // appears in a second pass once its data arrives.
+        let vpn_loaded = vpns.read().clone();
+        let (Some(loaded), Some(vpn_loaded)) = (model.read().clone(), vpn_loaded) else {
+            return page_column().child(skeleton_shape(&[1, 1]));
         };
         let wired = match loaded {
             Ok(wired) => wired,
@@ -626,31 +644,37 @@ impl Component for NetworkPage {
                     .collect::<Vec<_>>(),
             )
         };
-        let mut page = page_column().child(wired_group);
-        if let Some(Ok(list)) = vpns.read().clone()
-            && !list.is_empty()
-        {
-            let rows = list
-                .into_iter()
-                .map(|vpn| {
-                    let up = pending_for(&vpn_key(&vpn.name)).unwrap_or(vpn.active);
-                    let route = Route::Vpn {
-                        name: vpn.name.clone(),
-                    };
-                    let menu = vpn_menu(navigator, vpns, overlays, &vpn.name, up);
-                    Element::from(
-                        row(vpn.name)
-                            .leading(Icon::NetworkVpn)
-                            .value(vpn_label(up))
-                            .navigates()
-                            .on_press(move |_| navigator.push(route.clone()))
-                            .context_menu(menu),
-                    )
-                })
-                .collect::<Vec<_>>();
-            page = page.child(Group::titled("VPN").rows(rows));
-        }
-        page
+        let vpn_group = match vpn_loaded {
+            Ok(list) if list.is_empty() => {
+                Group::titled("VPN").row(status(Status::Empty("No VPN connections.".into())))
+            }
+            Ok(list) => {
+                let rows = list
+                    .into_iter()
+                    .map(|vpn| {
+                        let up = pending_for(&vpn_key(&vpn.name)).unwrap_or(vpn.active);
+                        let route = Route::Vpn {
+                            name: vpn.name.clone(),
+                        };
+                        let menu = vpn_menu(navigator, vpns, overlays, &vpn.name, up);
+                        Element::from(
+                            row(vpn.name)
+                                .leading(Icon::NetworkVpn)
+                                .value(vpn_label(up))
+                                .navigates()
+                                .on_press(move |_| navigator.push(route.clone()))
+                                .context_menu(menu),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                Group::titled("VPN").rows(rows)
+            }
+            Err(failure) => Group::titled("VPN").row(
+                status(Status::Error(failure.0))
+                    .action("Try again", move |_| system::background(vpns, load_vpns)),
+            ),
+        };
+        page_column().child(wired_group).child(vpn_group)
     }
 }
 
