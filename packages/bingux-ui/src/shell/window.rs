@@ -255,7 +255,9 @@ impl Component for WindowControl {
 fn run_window_action(action: Action) {
     match action {
         Action::Minimize => with_window(|window| window.set_minimized(true)),
-        Action::ToggleMaximize => with_window(|window| window.set_maximized(!window.is_maximized())),
+        Action::ToggleMaximize => {
+            with_window(|window| window.set_maximized(!window.is_maximized()))
+        }
         Action::Close => Platform::get().close_window(Platform::window_id()),
     }
 }

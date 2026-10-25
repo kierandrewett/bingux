@@ -399,6 +399,8 @@ pub enum Paint {
     Popover,
     /// The dimmed layer behind a dialog or popup: black at 40 %.
     Scrim,
+    /// The opaque black behind the whole window, when a popup insets it.
+    Backdrop,
     /// The clear layer behind a menu or dropdown list. It paints nothing,
     /// but Freya lets presses, the wheel and hover reach a box below only
     /// through a box whose fill is exactly `Color::TRANSPARENT`; this one is
@@ -481,6 +483,7 @@ impl Paint {
         match self {
             Paint::Transparent => Color::TRANSPARENT,
             Paint::Shield => Color::from_argb(0, 0, 0, 1),
+            Paint::Backdrop => Color::BLACK,
             Paint::Bg => tokens.bg,
             Paint::Surface => tokens.surface,
             Paint::Frosted => tokens.bg.with_af32(0.82),

@@ -5,6 +5,7 @@
 use std::time::Duration;
 
 use bingux_ui::style::*;
+use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 use freya::prelude::*;
 
 use crate::system::{self, CommandResult};
@@ -324,7 +325,7 @@ impl RenameSheet {
     }
 
     fn show(self, window: Window) {
-        window.open(popup("Device name", RenameBody { sheet: self }));
+        window.open(popup("Device name", RenameBody { sheet: self }).flags(PopupFlags::FORM));
     }
 
     /// Checks the name, then writes it in the background. The hero shows the

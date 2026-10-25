@@ -21,6 +21,7 @@ use crate::ui::{
 };
 use bingux_ui::shell::menu_item;
 use bingux_ui::style::*;
+use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const PROVIDERS: [(&str, &str, Icon); 7] = [
@@ -895,7 +896,7 @@ fn engine_ready(name: &str, shortcut: &str, url: &str, engines: &[Engine]) -> bo
 
 /// Opens the add-engine popup. Its body reads the form, so the Add button follows the fields.
 fn open_engine_sheet(window: Window, form: EngineForm, engines: Vec<Engine>) {
-    window.open(popup("Add a search engine", EngineBody { form, engines }));
+    window.open(popup("Add a search engine", EngineBody { form, engines }).flags(PopupFlags::FORM));
 }
 
 /// Writes the engines with the new one appended. The popup closes only once the write succeeds.

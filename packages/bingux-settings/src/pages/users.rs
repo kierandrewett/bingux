@@ -20,6 +20,7 @@ use crate::ui::{
     status, text_field, use_overlays, use_popup_actions, use_tokens, use_window,
 };
 use bingux_ui::style::*;
+use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 
 const ACCOUNTS: &str = "org.freedesktop.Accounts";
 const ACCOUNTS_PATH: &str = "/org/freedesktop/Accounts";
@@ -430,7 +431,7 @@ impl PasswordSheet {
     /// Shows the sheet with whatever is in the fields.
     fn show(self) {
         self.window
-            .open(popup("Change password", PasswordBody { sheet: self }));
+            .open(popup("Change password", PasswordBody { sheet: self }).flags(PopupFlags::FORM));
     }
 
     fn clear(self) {
@@ -583,8 +584,9 @@ impl NameSheet {
     }
 
     fn show(self, path: String) {
-        self.window
-            .open(popup("Change full name", NameBody { sheet: self, path }));
+        self.window.open(
+            popup("Change full name", NameBody { sheet: self, path }).flags(PopupFlags::FORM),
+        );
     }
 
     /// Shows the new name at once and writes it in the background. A failure

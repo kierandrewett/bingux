@@ -22,6 +22,7 @@ use crate::ui::{
 use bingux_ui::layout::hstack;
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 use bingux_ui::style::*;
+use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(5);
 
@@ -678,7 +679,7 @@ impl Ui {
     /// The join popup. Connect waits for a password.
     fn show_join(self, ssid: String) {
         self.window
-            .open(popup(ssid.clone(), JoinBody { ui: self, ssid }));
+            .open(popup(ssid.clone(), JoinBody { ui: self, ssid }).flags(PopupFlags::FORM));
     }
 
     fn join_now(self, ssid: String, window: Window) {
@@ -709,7 +710,7 @@ impl Ui {
     /// The hidden network popup. Connect waits for a network name.
     fn show_hidden(self) {
         self.window
-            .open(popup("Hidden network", HiddenBody { ui: self }));
+            .open(popup("Hidden network", HiddenBody { ui: self }).flags(PopupFlags::FORM));
     }
 
     fn connect_hidden(self, window: Window) {
@@ -742,7 +743,7 @@ impl Ui {
     /// The hotspot popup. Turn on waits for a name and a password of the minimum length.
     fn show_hotspot(self) {
         self.window
-            .open(popup("Wi-Fi hotspot", HotspotBody { ui: self }));
+            .open(popup("Wi-Fi hotspot", HotspotBody { ui: self }).flags(PopupFlags::FORM));
     }
 
     fn start_hotspot(self, window: Window) {

@@ -15,6 +15,7 @@ use bingux_ui::prelude::{
 use bingux_ui::runtime::optimistic_then;
 use bingux_ui::shell::MenuItem;
 use bingux_ui::style::*;
+use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 use freya::prelude::*;
 use timezone_map::TimeZoneMap;
 
@@ -399,7 +400,7 @@ fn open_date_sheet(window: Window, form: DateForm, now: State<Option<Result<Now,
         hour.set(reading.hour);
         minute.set(reading.minute);
     }
-    window.open(popup("Set date and time", DateBody { form }));
+    window.open(popup("Set date and time", DateBody { form }).flags(PopupFlags::FORM));
 }
 
 /// Sets the clock to the sheet's fields. The sheet closes once the write

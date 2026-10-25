@@ -1,30 +1,38 @@
-//! Popup content: a modal panel over the window with a header (Cancel, title,
-//! primary action), an optional tab rail, and a scrolling body.
+//! Popup content and its presentation.
 //!
-//! Open one with [`Window::open`](super::Window::open). The panel has a fixed
-//! size that [`Window::resize_to`](super::Window::resize_to) can animate, and
-//! it stays inside the window with a margin. Cancel and Escape close it. Enter
-//! runs the primary action when it is enabled. The primary action does not close
-//! the popup on its own: the caller closes it once the work succeeds.
+//! A popup is a modal over its parent window. On a wide window it is a panel
+//! in the middle, with the header's Cancel and primary text buttons, and its
+//! edges and corners resize. On a narrow window (a phone) it is a sheet that
+//! rises from the bottom edge, with a close icon and a check icon in the
+//! header, and a grabber that drags it down to dismiss.
 //!
-//! The body component declares its primary action with [`use_popup_actions`],
-//! so the header follows the body's own state.
+//! What the popup shows and how it is dismissed comes from [`PopupFlags`], set
+//! with [`Popup::flags`]. Escape always closes a popup. An outside press closes
+//! it unless [`PopupFlags::NO_DISMISS_OUTSIDE`] is set.
+//!
+//! The header's primary action is set by the body with [`use_popup_actions`],
+//! so it follows the body's own state. The primary action does not close the
+//! popup on its own: the caller closes it once the work succeeds.
+
+use std::ops::{BitOr, BitOrAssign};
 
 use freya::animation::*;
 use freya::prelude::*;
 
-use super::{Window, WindowManager};
+use super::{PopupWindow, Window, WindowLike, WindowManager};
 use crate::address::Address;
-use crate::controls::button::{action_button, primary_button};
+use crate::controls::button::{action_button, icon_button, primary_button};
+use crate::icons::Icon;
 use crate::layout::divider;
 use crate::motion::use_presence;
 use crate::shell::overlays::{OverlayLayers, OverlayStack, Overlays};
 use crate::shell::window::HeaderBar;
 use crate::style::*;
 use crate::surface::use_tokens;
+use crate::theme::Tokens;
 
 /// How long the popup takes to fade and scale in or out, and the resize takes.
-const MOTION_MS: u64 = 150;
+pub(super) const MOTION_MS: u64 = 150;
 /// The scale the panel starts from when it opens.
 const OPEN_SCALE: f32 = 0.94;
 /// The widest a popup gets, as a share of the window width, so it keeps a
@@ -45,6 +53,16 @@ const RESIZE_INSIDE: f32 = 2.0;
 /// larger than an edge band, so a corner is easy to find without reaching
 /// into the header buttons.
 const RESIZE_CORNER: f32 = 12.0;
+
+/// The tallest a phone sheet grows, as a share of the window height.
+const SHEET_MAX_HEIGHT_PERCENT: f32 = 92.0;
+/// How far a sheet is dragged down before it dismisses on release.
+const SHEET_DISMISS_DISTANCE: f32 = 96.0;
+/// The grabber's row, and the pill drawn in it.
+const GRABBER_ROW: f32 = 20.0;
+const GRABBER_WIDTH: f32 = 36.0;
+const GRABBER_HEIGHT: f32 = 4.0;
+
 /// The space between a header button and the header's top or bottom edge: the
 /// header is `Dim::Header` tall and its buttons `Dim::Control`, centred.
 fn header_gap() -> f32 {
@@ -56,6 +74,56 @@ fn header_gap() -> f32 {
 /// Cancel, the rail and the divider sit at an even rhythm.
 fn tabs_height() -> f32 {
     Dim::Control.px() + header_gap()
+}
+
+/// How far a sheet extends past the bottom edge, so its bottom corners sit
+/// off screen and only its top corners show.
+fn sheet_overhang() -> f32 {
+    Radius::Overlay.px()
+}
+
+/// What a popup shows and how it is dismissed. Combine flags with `|`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PopupFlags(u8);
+
+impl PopupFlags {
+    /// No extra controls: a titled panel that closes on Escape or an outside
+    /// press.
+    pub const NONE: Self = Self(0);
+    /// A phone sheet shows a grabber that drags down to dismiss.
+    pub const GRABBER: Self = Self(1 << 0);
+    /// Show the body's primary action in the header.
+    pub const OK: Self = Self(1 << 1);
+    /// Show a Cancel button (a text button on desktop, a close icon on a
+    /// phone).
+    pub const CANCEL: Self = Self(1 << 2);
+    /// A press outside the popup does not close it.
+    pub const NO_DISMISS_OUTSIDE: Self = Self(1 << 3);
+    /// Shrink the window's content into a rounded card behind the popup, for a
+    /// popup that is a whole task and not a small form.
+    pub const INSET_VIEWPORT: Self = Self(1 << 4);
+    /// The usual form: Cancel, OK and, on a phone, the grabber. Use it for a
+    /// popup whose body declares a primary action.
+    pub const FORM: Self = Self(Self::CANCEL.0 | Self::OK.0 | Self::GRABBER.0);
+
+    /// Whether every flag in `other` is set here.
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+}
+
+impl BitOr for PopupFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for PopupFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
 }
 
 /// The primary action in a popup header.
@@ -73,7 +141,7 @@ pub struct PopupActions {
     pub primary: Option<PopupAction>,
 }
 
-/// A popup: a title, the content and its optional tab rail.
+/// A popup: a title, the content, its optional tab rail and its flags.
 #[derive(Clone, PartialEq)]
 pub struct Popup {
     title: String,
@@ -81,10 +149,12 @@ pub struct Popup {
     tabs: Option<Element>,
     dimensions: (f32, f32),
     address: Option<Address>,
+    flags: PopupFlags,
 }
 
 /// A popup titled `title` that shows `content`. It is 520 px wide and 600 px
-/// tall until [`Popup::size`] changes that. It is centred in the window.
+/// tall until [`Popup::size`] changes that. It is centred in the window, or a
+/// bottom sheet on a phone.
 pub fn popup(title: impl Into<String>, content: impl Into<Element>) -> Popup {
     Popup {
         title: title.into(),
@@ -92,6 +162,7 @@ pub fn popup(title: impl Into<String>, content: impl Into<Element>) -> Popup {
         tabs: None,
         dimensions: (Dim::PopupWidth.px(), Dim::PopupHeight.px()),
         address: None,
+        flags: PopupFlags::NONE,
     }
 }
 
@@ -103,7 +174,7 @@ impl Popup {
         self
     }
 
-    /// Tie the popup to the address it shows, so [`Window::address`] can
+    /// Tie the popup to the address it shows, so [`WindowLike::address`] can
     /// answer.
     pub fn address(mut self, address: Address) -> Self {
         self.address = Some(address);
@@ -116,13 +187,21 @@ impl Popup {
         self.tabs = Some(tabs.into());
         self
     }
+
+    /// Set what the popup shows and how it dismisses. See [`PopupFlags`].
+    pub fn flags(mut self, flags: PopupFlags) -> Self {
+        self.flags = flags;
+        self
+    }
 }
 
 /// Set the header's primary action for the popup this component is part of.
 /// Call it from the body with the action for its current state. The header
 /// updates when the actions change. Outside a popup it does nothing.
 pub fn use_popup_actions(actions: PopupActions) {
-    let window = super::use_window();
+    let Window::Popup(window) = super::use_window() else {
+        return;
+    };
     let Some(entry) = window.entry() else {
         return;
     };
@@ -147,6 +226,7 @@ pub(crate) struct PopupEntry {
     pub address: Option<Address>,
     pub content: Element,
     pub tabs: Option<Element>,
+    pub flags: PopupFlags,
     pub overlays: Overlays,
 }
 
@@ -164,6 +244,7 @@ impl PopupEntry {
             address: popup.address,
             content: popup.content,
             tabs: popup.tabs,
+            flags: popup.flags,
             overlays: Overlays::in_scope(scope),
         }
     }
@@ -306,12 +387,37 @@ fn resize_handles(
     ]
 }
 
+/// The grabber row at the top of a sheet: a short pill. A press starts a
+/// drag, which the panel follows and which dismisses the sheet when released
+/// far enough down.
+fn grabber(tokens: &Tokens, mut grab: State<Option<f32>>) -> Rect {
+    rect()
+        .width(Size::fill())
+        .height(Size::px(GRABBER_ROW))
+        .tw(
+            tokens,
+            &[flex_col(), items(Align::Center), justify(Align::Center)],
+        )
+        .on_pointer_down(move |event: Event<PointerEventData>| {
+            event.stop_propagation();
+            grab.set(Some(event.global_location().y as f32));
+        })
+        .child(
+            rect()
+                .width(Size::px(GRABBER_WIDTH))
+                .height(Size::px(GRABBER_HEIGHT))
+                .tw(tokens, &[rounded(Radius::Pill), bg(Paint::Control)]),
+        )
+}
+
 /// Draws one popup: its scrim, its panel, and the `Window` it provides to its
 /// content. Rendered by [`WindowHost`](super::WindowHost).
 #[derive(PartialEq)]
 pub(crate) struct PopupFrame {
     pub manager: WindowManager,
     pub entry: PopupEntry,
+    /// The window is narrow, so the popup is a sheet from the bottom edge.
+    pub sheet: bool,
 }
 
 impl Component for PopupFrame {
@@ -323,13 +429,12 @@ impl Component for PopupFrame {
         let tokens = use_tokens();
         let manager = self.manager;
         let entry = self.entry.clone();
+        let flags = entry.flags;
+        let sheet = self.sheet;
         let overlays = entry.overlays;
         let id = entry.id;
-        let window = Window {
-            manager,
-            id: Some(id),
-        };
-        use_provide_context(move || window);
+        let window = PopupWindow { manager, id };
+        use_provide_context(move || Window::Popup(window));
         use_provide_context(move || overlays);
         let a11y_id = use_a11y();
 
@@ -342,6 +447,9 @@ impl Component for PopupFrame {
         // A drag on an edge follows the pointer, so it does not animate; the
         // code-driven resizes still ease to their new size.
         let mut resize = use_state(|| None::<ResizeDrag>);
+        // A sheet's grabber: where its drag began, and how far it is pulled.
+        let mut grab = use_state(|| None::<f32>);
+        let mut pulled = use_state(|| 0.0_f32);
         let motion = tokens.motion(MOTION_MS);
         let target = *entry.size.read();
         let animated = use_animation_transition(target, move |from: (f32, f32), to: (f32, f32)| {
@@ -368,33 +476,62 @@ impl Component for PopupFrame {
         let title = entry.title.read().clone();
         let actions = entry.actions.read().clone();
         let primary_keys = actions.primary.clone();
-        let primary_element = actions.primary.map(|action| {
-            let on_press = action.on_press.clone();
-            Element::from(
-                primary_button(action.label, move |_: ()| on_press.call(()))
-                    .compact()
-                    .enabled(action.enabled),
-            )
+        // A sheet's header has no room for a disabled button, so a disabled
+        // check is left out there. Enter still runs the action when enabled.
+        let primary_element = actions
+            .primary
+            .filter(|_| flags.contains(PopupFlags::OK))
+            .and_then(|action| {
+                if sheet {
+                    action.enabled.then(|| {
+                        Element::from(
+                            icon_button(Icon::Check, action.on_press.clone())
+                                .tooltip(&action.label),
+                        )
+                    })
+                } else {
+                    let on_press = action.on_press.clone();
+                    Some(Element::from(
+                        primary_button(action.label, move |_: ()| on_press.call(()))
+                            .compact()
+                            .enabled(action.enabled),
+                    ))
+                }
+            });
+        let cancel = flags.contains(PopupFlags::CANCEL).then(|| {
+            if sheet {
+                Element::from(
+                    icon_button(Icon::WindowClose, move |_: ()| window.close()).tooltip("Close"),
+                )
+            } else {
+                Element::from(action_button("Cancel", move |_: ()| window.close()).compact())
+            }
         });
-        let cancel = action_button("Cancel", move |_: ()| window.close()).compact();
 
         // The same header bar a window has: its height, inset and centred
         // title, so a popup reads as a small window and not a custom panel.
-        let header = HeaderBar::new(title.clone())
-            .fill(Paint::Bg)
-            .leading(cancel);
-        let header = match primary_element {
-            Some(primary) => header.trailing(primary),
-            None => header,
-        };
+        let mut header = HeaderBar::new(title.clone()).fill(Paint::Bg);
+        if let Some(cancel) = cancel {
+            header = header.leading(cancel);
+        }
+        if let Some(primary) = primary_element {
+            header = header.trailing(primary);
+        }
 
         // A drag sets the size from where the pointer began. Each dragged side
         // moves by the drag, so the popup grows by twice it and stays centred.
-        let on_drag = move |event: Event<PointerEventData>| {
+        // On a sheet, the grabber's drag pulls the sheet down instead.
+        let on_move = move |event: Event<PointerEventData>| {
+            let at = event.global_location();
+            if sheet {
+                if let Some(start) = *grab.peek() {
+                    pulled.set_if_modified((at.y as f32 - start).max(0.0));
+                }
+                return;
+            }
             let Some(drag) = *resize.peek() else {
                 return;
             };
-            let at = event.global_location();
             let dx = at.x as f32 - drag.start.0;
             let dy = at.y as f32 - drag.start.1;
             window.resize_to(
@@ -402,7 +539,26 @@ impl Component for PopupFrame {
                 drag.size.1 + 2.0 * drag.edges.1 * dy,
             );
         };
+        // Releasing a sheet past the dismiss distance closes it. Otherwise it
+        // springs back, as a sheet that is not pulled far enough should.
+        let on_release = move |_| {
+            resize.set_if_modified(None);
+            let grabbing = grab.peek().is_some();
+            if grabbing {
+                grab.set(None);
+                if *pulled.peek() > SHEET_DISMISS_DISTANCE {
+                    window.close();
+                } else {
+                    pulled.set_if_modified(0.0);
+                }
+            }
+        };
 
+        let (max_width, max_height) = if sheet {
+            (100.0, SHEET_MAX_HEIGHT_PERCENT)
+        } else {
+            (POPUP_MAX_WIDTH_PERCENT, POPUP_MAX_HEIGHT_PERCENT)
+        };
         // The panel takes focus when the popup opens. A text field marked
         // `autofocus` is created after it, and freya keeps the last request.
         let panel = rect()
@@ -423,10 +579,18 @@ impl Component for PopupFrame {
                     clip(),
                 ],
             )
-            .width(Size::px(width))
-            .height(Size::px(height))
-            .max_width(Size::window_percent(POPUP_MAX_WIDTH_PERCENT))
-            .max_height(Size::window_percent(POPUP_MAX_HEIGHT_PERCENT))
+            .width(if sheet {
+                Size::fill()
+            } else {
+                Size::px(width)
+            })
+            .height(Size::px(if sheet {
+                height + sheet_overhang()
+            } else {
+                height
+            }))
+            .max_width(Size::window_percent(max_width))
+            .max_height(Size::window_percent(max_height))
             .on_press(|event: Event<PressEventData>| event.stop_propagation())
             .on_key_down(move |event: Event<KeyboardEventData>| {
                 if event.key == Key::Named(NamedKey::Escape) {
@@ -440,8 +604,11 @@ impl Component for PopupFrame {
                     action.on_press.call(());
                 }
             })
-            .on_capture_global_pointer_move(on_drag)
-            .on_global_pointer_up(move |_| resize.set_if_modified(None))
+            .on_capture_global_pointer_move(on_move)
+            .on_global_pointer_up(on_release)
+            .maybe_child(
+                (sheet && flags.contains(PopupFlags::GRABBER)).then(|| grabber(&tokens, grab)),
+            )
             .child(header)
             .maybe_child(entry.tabs.clone().map(|tabs| {
                 rect()
@@ -466,6 +633,42 @@ impl Component for PopupFrame {
                     ),
             );
 
+        // A sheet rests with its overhang below the edge and slides up from
+        // under it; a pulled sheet follows the pointer down.
+        let slide = if sheet {
+            sheet_overhang() + (1.0 - progress) * (height + sheet_overhang()) + *pulled.read()
+        } else {
+            0.0
+        };
+        let dismiss_outside = !flags.contains(PopupFlags::NO_DISMISS_OUTSIDE);
+
+        let body = if sheet {
+            rect()
+                .tw(&tokens, &[w_screen()])
+                .offset_y(slide)
+                .child(panel)
+        } else {
+            rect()
+                // The panel scales up from a little smaller, about its centre.
+                .scale(OPEN_SCALE + (1.0 - OPEN_SCALE) * progress)
+                .child(panel)
+                // The window's edge, drawn over everything the panel holds
+                // (the header bar paints over a border drawn under it), so
+                // the hairline runs round the whole popup. It has no fill,
+                // so presses reach the panel through it.
+                .child(
+                    rect()
+                        .position(Position::new_absolute().top(0.0).left(0.0))
+                        .layer(Layer::Relative(1))
+                        .width(Size::px(width))
+                        .height(Size::px(height))
+                        .tw(&tokens, &[rounded(Radius::Overlay), border(Line::Hairline)]),
+                )
+                // The handles sit beside the panel, above the scrim, so
+                // they reach outside the panel's clipped edge.
+                .children(resize_handles(resize, entry.size, (width, height)))
+        };
+
         rect()
             .position(Position::new_absolute().top(0.0).left(0.0))
             .layer(Layer::OverlayLevel(10))
@@ -474,34 +677,19 @@ impl Component for PopupFrame {
                 &[
                     w_screen(),
                     h_screen(),
-                    justify(Align::Center),
+                    justify(if sheet { Align::End } else { Align::Center }),
                     items(Align::Center),
                     bg(Paint::Scrim),
                 ],
             )
-            // The scrim fades in with the panel, which also scales up from a
-            // little smaller, about the panel's centre.
+            // The scrim fades in with the popup.
             .opacity(progress)
-            .child(
-                rect()
-                    .scale(OPEN_SCALE + (1.0 - OPEN_SCALE) * progress)
-                    .child(panel)
-                    // The window's edge, drawn over everything the panel holds
-                    // (the header bar paints over a border drawn under it), so
-                    // the hairline runs round the whole popup. It has no fill,
-                    // so presses reach the panel through it.
-                    .child(
-                        rect()
-                            .position(Position::new_absolute().top(0.0).left(0.0))
-                            .layer(Layer::Relative(1))
-                            .width(Size::px(width))
-                            .height(Size::px(height))
-                            .tw(&tokens, &[rounded(Radius::Overlay), border(Line::Hairline)]),
-                    )
-                    // The handles sit beside the panel, above the scrim, so
-                    // they reach outside the panel's clipped edge.
-                    .children(resize_handles(resize, entry.size, (width, height))),
-            )
+            .on_press(move |_: Event<PressEventData>| {
+                if dismiss_outside {
+                    window.close();
+                }
+            })
+            .child(body)
             .child(OverlayLayers {
                 overlays,
                 stack: OverlayStack::Popup,

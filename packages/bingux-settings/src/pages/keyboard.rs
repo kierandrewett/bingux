@@ -22,6 +22,7 @@ use crate::ui::{
 };
 use bingux_ui::prelude::{Window, popup, use_window};
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
+use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 
 mod input_source;
 pub mod sources;
@@ -340,7 +341,7 @@ impl SourceEdits {
 fn open_add_sheet(edits: SourceEdits) {
     edits
         .window
-        .open(popup("Add an input source", AddBody { edits }));
+        .open(popup("Add an input source", AddBody { edits }).flags(PopupFlags::FORM));
 }
 
 /// The most catalogue rows the add sheet lists at once. The rest are one

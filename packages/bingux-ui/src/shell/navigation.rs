@@ -624,9 +624,11 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let header = if show_list {
             HeaderBar::new(self.app_title.clone()).fill(Paint::Bg)
         } else {
-            let header = HeaderBar::new(String::new())
-                .busy(busy)
-                .fill(if overlay { Paint::Frosted } else { Paint::Bg });
+            let header = HeaderBar::new(String::new()).busy(busy).fill(if overlay {
+                Paint::Frosted
+            } else {
+                Paint::Bg
+            });
             match &back {
                 Some(on_back) => header.leading(crossfade(PageBack {
                     page: page_key.clone(),

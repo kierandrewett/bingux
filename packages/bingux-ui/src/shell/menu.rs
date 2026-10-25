@@ -813,7 +813,13 @@ impl Component for MenuButton {
             .maybe(self.icon.is_none(), |button| {
                 button.tw(
                     &tokens,
-                    &[h(Dim::Control), min_w(Dim::Box9), px(S3), gap(S2), flex_row()],
+                    &[
+                        h(Dim::Control),
+                        min_w(Dim::Box9),
+                        px(S3),
+                        gap(S2),
+                        flex_row(),
+                    ],
                 )
             })
             .maybe(self.icon.is_some(), |button| {
@@ -876,13 +882,11 @@ impl Component for MenuButton {
                 self.icon
                     .map(|icon| icons::icon(icon, IconSize::Control, Ink::Text.color(&tokens))),
             )
-            .maybe_child(self.icon.is_none().then(|| {
-                icons::icon(
-                    Icon::PanDown,
-                    IconSize::Mark,
-                    Paint::Muted.color(&tokens),
-                )
-            }))
+            .maybe_child(
+                self.icon.is_none().then(|| {
+                    icons::icon(Icon::PanDown, IconSize::Mark, Paint::Muted.color(&tokens))
+                }),
+            )
             .focusable(focus(), Radius::Control)
             .into_element()
     }

@@ -49,8 +49,8 @@ pub mod prelude {
         boxed, clamp, divider, hstack, page_column, popup_column, spacer, vstack,
     };
     pub use crate::motion::{
-        AnimatedNumber, Crossfade, Presence, Reveal, animated_number, crossfade, presence,
-        reveal, use_presence, use_tween,
+        AnimatedNumber, Crossfade, Presence, Reveal, animated_number, crossfade, presence, reveal,
+        use_presence, use_tween,
     };
     pub use crate::rows::{
         ChoiceList, EntryRow, ExpanderRow, LevelRow, Row, choice_list, choice_row, entry_row,
@@ -68,7 +68,7 @@ pub mod prelude {
     pub use crate::theme::{Scheme, SharedTokens, Tokens, provide_tokens};
     pub use crate::typography::{self, Ink, TextStyle, styled_label, styled_paragraph};
     pub use crate::window::{
-        Popup, PopupAction, PopupActions, Window, WindowHost, popup, use_main_window,
-        use_popup_actions, use_window,
+        Popup, PopupAction, PopupActions, PopupFlags, Window, WindowHost, WindowLike, WindowParent,
+        popup, use_main_window, use_popup_actions, use_window,
     };
 }

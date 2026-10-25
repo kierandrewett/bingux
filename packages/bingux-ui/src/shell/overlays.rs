@@ -212,8 +212,11 @@ impl Overlays {
             return;
         }
         let owner = self.menu_nav.peek().owner;
-        let panel_focused =
-            *Platform::get().current_window().focused_accessibility_id.peek() == self.menu_panel;
+        let panel_focused = *Platform::get()
+            .current_window()
+            .focused_accessibility_id
+            .peek()
+            == self.menu_panel;
         self.menu.set(None);
         self.menu_nav.set(MenuNav::default());
         self.menu_closing.set(false);

@@ -4,6 +4,7 @@
 
 use std::time::Duration;
 
+use bingux_ui::window::{PopupFlags, PopupWindow, WindowLike, WindowParent};
 use freya::prelude::*;
 
 use super::connection_editor::{
@@ -337,7 +338,7 @@ impl Editor {
     }
 
     /// Open the popup for `target` and start loading its profile. Returns the popup's window.
-    fn open_popup(self, target: Target) -> Window {
+    fn open_popup(self, target: Target) -> PopupWindow {
         let name = target.name.clone();
         let wireless = target.wireless;
         put(self.target, Some(target));
@@ -353,7 +354,11 @@ impl Editor {
             editor: self,
             wireless,
         };
-        let window = self.window.open(popup(name.clone(), body).tabs(strip));
+        let window = self.window.open(
+            popup(name.clone(), body)
+                .tabs(strip)
+                .flags(PopupFlags::FORM),
+        );
         background_then(
             move || load_profile(&name),
             move |result| match result {
@@ -385,7 +390,7 @@ impl Editor {
             }
             if apply {
                 timer(Duration::from_millis(500)).await;
-                self.apply(window);
+                self.apply(Window::Popup(window));
             }
         });
     }

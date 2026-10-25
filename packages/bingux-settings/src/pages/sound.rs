@@ -18,6 +18,7 @@ use bingux_ui::prelude::{PageHead, Window, popup, use_window};
 use bingux_ui::style::*;
 use bingux_ui::theme::Tokens;
 use bingux_ui::typography::CAPTION;
+use bingux_ui::window::{PopupFlags, WindowParent};
 
 use crate::apps;
 use crate::system::{self, CommandError, background_then};
@@ -1423,7 +1424,8 @@ fn open_test(ctx: Ctx, mix: Mix) {
     let overlays = ctx.overlays;
     ctx.window.open(
         popup("Test speakers", SpeakerTest { mix, overlays })
-            .size(Dim::SpeakerPopupWidth.px(), Dim::SpeakerPopupHeight.px()),
+            .size(Dim::SpeakerPopupWidth.px(), Dim::SpeakerPopupHeight.px())
+            .flags(PopupFlags::CANCEL | PopupFlags::GRABBER),
     );
 }
 

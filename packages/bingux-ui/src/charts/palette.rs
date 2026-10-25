@@ -6,8 +6,8 @@ use freya::prelude::*;
 
 use super::data::SeriesColour;
 use super::geometry::SWATCH;
-use crate::theme::Tokens;
 use crate::style::{Dim, Radius};
+use crate::theme::Tokens;
 
 /// Golden-angle hue steps, in degrees, so the categorical colours spread
 /// evenly round the wheel.

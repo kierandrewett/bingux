@@ -103,6 +103,9 @@ pub enum Util {
     Rounded(Radius),
     /// `Radius` plus a run-time number of pixels.
     RoundedBy(Radius, f32),
+    /// `Radius` times a run-time amount from 0 to 1, for a box whose corners
+    /// animate in and out.
+    RoundedScaled(Radius, f32),
     Bg(Paint),
     /// The text colour children inherit.
     Ink(Paint),
@@ -192,6 +195,11 @@ pub const fn rounded(radius: Radius) -> Util {
 /// outside a control, such as a focus ring. `extra` may change at run time.
 pub fn rounded_by(radius: Radius, extra: f32) -> Util {
     Util::RoundedBy(radius, extra)
+}
+/// `radius` scaled by `amount` (0 to 1), for a box that animates its corners
+/// in and out. `amount` may change at run time.
+pub fn rounded_scaled(radius: Radius, amount: f32) -> Util {
+    Util::RoundedScaled(radius, amount)
 }
 pub const fn bg(paint: Paint) -> Util {
     Util::Bg(paint)
@@ -434,6 +442,7 @@ fn apply_layout(rect: Rect, util: Util) -> Rect {
         Util::Gap(space) => rect.spacing(space.px()),
         Util::Rounded(radius) => rect.corner_radius(radius.px()),
         Util::RoundedBy(radius, extra) => rect.corner_radius(radius.px() + extra),
+        Util::RoundedScaled(radius, amount) => rect.corner_radius(radius.px() * amount),
         Util::Bg(_) | Util::Ink(_) | Util::Font(_) | Util::Surface { .. } | Util::Border(_) => rect,
         Util::Shadow(elevation) => {
             let (y, blur, opacity) = elevation.params();
