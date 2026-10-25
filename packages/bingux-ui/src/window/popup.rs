@@ -689,6 +689,7 @@ impl Component for PopupFrame {
             .child(OverlayLayers {
                 overlays,
                 stack: OverlayStack::Popup,
+                page: None,
             })
     }
 }

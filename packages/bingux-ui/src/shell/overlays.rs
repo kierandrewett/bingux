@@ -9,6 +9,8 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
+use crate::address::Address;
+use crate::app::current_address;
 use crate::controls::button::{ActionButton, action_button, primary_button};
 use crate::controls::press::use_press;
 use crate::motion::{PRESENCE_SCALE, use_presence};
@@ -120,6 +122,9 @@ pub struct Overlays {
     /// still holds it.
     pub(crate) menu_panel: AccessibilityId,
     pub(crate) menu_nav: State<MenuNav>,
+    /// The window address the open menu was opened on. A menu belongs to that
+    /// page, so the window stops drawing it once the address moves on.
+    menu_page: State<Option<Address>>,
     toasts: State<Vec<(u64, Toast)>>,
     toast_closing: State<Option<u64>>,
     next_toast: State<u64>,
@@ -136,6 +141,7 @@ impl Overlays {
             menu_closing: State::create_in_scope(false, scope),
             menu_panel: AccessibilityId::new_unique(),
             menu_nav: State::create_in_scope(MenuNav::default(), scope),
+            menu_page: State::create_in_scope(None, scope),
             toasts: State::create_in_scope(Vec::new(), scope),
             toast_closing: State::create_in_scope(None, scope),
             next_toast: State::create_in_scope(0, scope),
@@ -179,6 +185,7 @@ impl Overlays {
         keyboard: bool,
     ) {
         self.menu_closing.set(false);
+        self.menu_page.set(current_address());
         self.menu_nav.set(MenuNav::new(owner, &items, keyboard));
         self.menu.set(Some(Menu {
             x: at.0,
@@ -224,6 +231,17 @@ impl Overlays {
         if let (Some(owner), true) = (owner, panel_focused) {
             owner.request_focus();
         }
+    }
+
+    /// Drop the open menu at once, with no exit animation. The window's address
+    /// moved on, so the page the menu opened on is gone.
+    fn forget_menu(mut self) {
+        if self.menu.peek().is_none() {
+            return;
+        }
+        self.menu.set(None);
+        self.menu_nav.set(MenuNav::default());
+        self.menu_closing.set(false);
     }
 
     /// Queue a toast that dismisses itself after four seconds.
@@ -316,6 +334,10 @@ impl Component for OverlayHost {
         let scope = current_scope_id();
         let overlays = use_hook(move || Overlays::in_scope(scope));
         use_provide_context(|| overlays);
+        // The menu belongs to the window's page. Without a window address (a
+        // gallery or the inspector) both sides are None and the menu stays.
+        let page = use_try_consume::<State<Address>>().map(|address| (*address.read()).clone());
+        use_side_effect_with_deps(&page, move |_| overlays.forget_menu());
 
         rect()
             .expanded()
@@ -323,6 +345,7 @@ impl Component for OverlayHost {
             .child(OverlayLayers {
                 overlays,
                 stack: OverlayStack::Window,
+                page,
             })
     }
 }
@@ -366,6 +389,9 @@ impl OverlayStack {
 pub(crate) struct OverlayLayers {
     pub(crate) overlays: Overlays,
     pub(crate) stack: OverlayStack,
+    /// The window address the window's menu must still be on. A popup has no
+    /// window address, so its menu is never filtered by it.
+    pub(crate) page: Option<Address>,
 }
 
 impl Component for OverlayLayers {
@@ -377,7 +403,10 @@ impl Component for OverlayLayers {
         let dialog_closing = *overlays.dialog_closing.read();
         let toast = overlays.toasts.read().first().cloned();
         let toast_closing = *overlays.toast_closing.read();
-        let menu = overlays.menu.read().clone();
+        let menu = overlays.menu.read().clone().filter(|_| match stack {
+            OverlayStack::Window => *overlays.menu_page.read() == self.page,
+            OverlayStack::Popup => true,
+        });
         let menu_closing = *overlays.menu_closing.read();
 
         rect()

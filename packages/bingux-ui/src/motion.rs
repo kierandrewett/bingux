@@ -53,7 +53,9 @@ pub fn use_tween(target: f32, ms: u64) -> f32 {
 pub fn use_presence(open: bool, motion: u64, on_exit: impl Fn() + Clone + 'static) -> f32 {
     let generation = use_state(|| 0_u64);
     let appear = use_animation(move |conf| {
-        conf.on_creation(OnCreation::Run);
+        if open {
+            conf.on_creation(OnCreation::Run);
+        }
         AnimNum::new(0.0, 1.0)
             .time(motion)
             .function(Function::Quad)
@@ -67,11 +69,28 @@ pub fn use_presence(open: bool, motion: u64, on_exit: impl Fn() + Clone + 'stati
         // element.
         let current = generation.peek().wrapping_add(1);
         generation.set(current);
-        if open {
+        // A run restarts from the animation's origin, so the motion is rebuilt
+        // from the value on screen. Reversing part-way through then eases back
+        // from there instead of jumping to full progress.
+        let mut retarget = move |target: f32| {
+            let mut state = *appear;
+            let from = state.peek().value();
+            *state.write() = AnimNum::new(from, target)
+                .time(motion)
+                .function(Function::Quad)
+                .ease(Ease::Out);
             appear.start();
+        };
+        if open {
+            retarget(1.0);
             return;
         }
-        appear.reverse();
+        // An element that mounted closed has never opened, so it has nothing to
+        // exit. Reversing it would start from full progress and flash it.
+        if !*appear.has_run_yet().peek() {
+            return;
+        }
+        retarget(0.0);
         let on_exit = on_exit.clone();
         spawn(async move {
             timer(Duration::from_millis(motion)).await;
