@@ -5,6 +5,7 @@
 
 use freya::prelude::*;
 
+use crate::focus::{press_focus, use_focus_core};
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
 use crate::style::*;
@@ -86,6 +87,7 @@ impl Component for StripCell {
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
         let a11y_id = use_a11y();
+        let core = use_focus_core();
         let focus = use_focus(a11y_id);
         let action = &self.0;
         let enabled = action.enabled;
@@ -127,7 +129,7 @@ impl Component for StripCell {
                     .on_global_pointer_up(move |_| pressing.set_if_modified(false))
                     .on_press(move |_: Event<PressEventData>| {
                         on_press.call(());
-                        a11y_id.request_focus();
+                        press_focus(&core, a11y_id);
                     })
                     .on_key_down(move |event: Event<KeyboardEventData>| {
                         if is_activation_key(&event.key) {

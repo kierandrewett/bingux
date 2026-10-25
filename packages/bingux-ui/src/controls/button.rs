@@ -5,6 +5,7 @@ use super::press::use_press;
 use freya::prelude::*;
 
 use crate::controls::progress::{SpinnerSize, spinner};
+use crate::focus::{press_focus, use_focus_core};
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
 use crate::style::*;
@@ -98,6 +99,7 @@ impl Component for ActionButton {
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
         let a11y_id = use_a11y();
+        let core = use_focus_core();
         let focus = use_focus(a11y_id);
         let on_press = self.on_press.clone();
         let on_key = on_press.clone();
@@ -181,7 +183,7 @@ impl Component for ActionButton {
                             return;
                         }
                         on_press.call(());
-                        a11y_id.request_focus();
+                        press_focus(&core, a11y_id);
                     })
                     .on_key_down(move |event: Event<KeyboardEventData>| {
                         if is_activation_key(&event.key) {
@@ -251,6 +253,7 @@ impl Component for RowButton {
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
         let a11y_id = use_a11y();
+        let core = use_focus_core();
         let focus = use_focus(a11y_id);
         let enabled = use_enabled(true);
         let on_press = self.on_press.clone();
@@ -302,7 +305,7 @@ impl Component for RowButton {
                             return;
                         }
                         on_press.call(());
-                        a11y_id.request_focus();
+                        press_focus(&core, a11y_id);
                     })
                     .on_key_down(move |event: Event<KeyboardEventData>| {
                         if is_activation_key(&event.key) {
@@ -392,6 +395,7 @@ impl Component for IconButton {
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
         let a11y_id = use_a11y();
+        let core = use_focus_core();
         let focus = use_focus(a11y_id);
         let usable = use_enabled(self.enabled);
         let on_press = self.on_press.clone();
@@ -452,7 +456,7 @@ impl Component for IconButton {
                             return;
                         }
                         on_press.call(());
-                        a11y_id.request_focus();
+                        press_focus(&core, a11y_id);
                     })
                     .on_key_down(move |event: Event<KeyboardEventData>| {
                         if is_activation_key(&event.key) {

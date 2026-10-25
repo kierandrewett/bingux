@@ -74,6 +74,11 @@ struct Core {
     claimed: bool,
     open_traps: usize,
     starts: Vec<(RegionKind, AccessibilityId)>,
+    /// The control pressed last, for a popup it opens to return focus to.
+    pressed: Option<AccessibilityId>,
+    /// A region start was parked by a pointer press; the first keyboard
+    /// arrival on it must not bounce again, or Tab skips the first control.
+    parked: bool,
 }
 
 /// The window's focus state, shared by every region and trap. [`WindowHost`]
@@ -184,6 +189,9 @@ impl FocusCore {
         let Some(target) = target else {
             return;
         };
+        if !keyboard {
+            self.0.borrow_mut().parked = true;
+        }
         if keyboard {
             {
                 let mut core = self.0.borrow_mut();
@@ -229,6 +237,18 @@ impl FocusCore {
 
     /// Keyboard focus landed on a sentinel: move on from it.
     fn keyboard_on(&self, edge: Edge) {
+        // The first keyboard arrival on a pointer-parked start: the Tab that
+        // caused it already reached the first control; do not bounce past it.
+        if matches!(edge, Edge::Region(_)) && std::mem::take(&mut self.0.borrow_mut().parked) {
+            // The Tab that reached this start came from a pointer-parked
+            // region: step from the start into its first control.
+            if self.0.borrow().dir == Dir::Forward && self.spend() {
+                send(AccessibilityFocusStrategy::Forward(
+                    AccessibilityFocusMovement::InsideGroup,
+                ));
+            }
+            return;
+        }
         let dir = self.0.borrow().dir;
         let step = match (edge, dir) {
             (Edge::Region(_), dir) => Step::Bounce(dir),
@@ -290,6 +310,14 @@ impl Region {
 /// region's handler runs.
 pub fn claim_press(core: &FocusCore) {
     core.claim_press();
+}
+
+/// A press that opens something on `id`: records `id` as the pressed control
+/// and requests its focus. A popup opened by the press returns focus to `id`
+/// when it closes. Call from a control's press handler, after its action.
+pub fn press_focus(core: &FocusCore, id: AccessibilityId) {
+    core.0.borrow_mut().pressed = Some(id);
+    id.request_focus();
 }
 
 /// A zero-size, always-focusable accessibility node at an edge of a region or a
@@ -356,11 +384,19 @@ impl Component for Trap {
         let end = use_a11y();
         let core = use_focus_core();
         let opened = use_state(|| false);
-        let opener = use_hook(|| {
-            *Platform::get()
-                .current_window()
-                .focused_accessibility_id
-                .peek()
+        let window = use_hook(|| Platform::get().current_window());
+        // The control that opened the popup took its press just before the
+        // popup mounted, and freya's panel focus takes over after that.
+        let opener = use_hook({
+            let core = core.clone();
+            let window = window.clone();
+            move || {
+                core.0
+                    .borrow_mut()
+                    .pressed
+                    .take()
+                    .unwrap_or_else(|| *window.focused_accessibility_id.peek())
+            }
         });
 
         let drop_core = core.clone();
@@ -368,9 +404,20 @@ impl Component for Trap {
             let core = core.clone();
             move || core.0.borrow_mut().open_traps += 1
         });
-        use_drop(move || {
-            drop_core.0.borrow_mut().open_traps -= 1;
-            opener.request_focus();
+        use_drop({
+            let window = window.clone();
+            move || {
+                drop_core.0.borrow_mut().open_traps -= 1;
+                // The window may already be gone at shutdown; then there is
+                // nothing to restore into.
+                if Platform::get().try_window(window.id).is_some() {
+                    let mut mode = window.navigation_mode;
+                    mode.set(NavigationMode::Keyboard);
+                    window.send(UserEvent::FocusAccessibilityNode(
+                        AccessibilityFocusStrategy::Node(opener),
+                    ));
+                }
+            }
         });
 
         // Opening: focus the start, so the first Tab enters the popup. The
