@@ -585,8 +585,8 @@ impl Panel {
         let solid = Paint::Popover.color(tokens);
         let gradient = LinearGradient::new()
             .angle(180.0)
-            .stop(GradientStop::new(solid.with_a(0), 0.0))
-            .stop(GradientStop::new(solid.with_a(255), 100.0));
+            .stop(GradientStop::new(solid.with_a(255), 0.0))
+            .stop(GradientStop::new(solid.with_a(0), 100.0));
         gradient_fill(
             rect()
                 .position(Position::new_absolute().bottom(0.0).left(0.0))
