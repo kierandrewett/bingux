@@ -7,8 +7,10 @@ with a large title and one sentence that says what the page is for, then
 boxed groups of rows. Below 740 px of
 width the window is laid out as a phone. The page list is a screen of its own.
 Choosing a page opens it, and the Back button in the header returns to the
-list. A subpage's Back button returns to its page. The window buttons are
-hidden, and rows, controls and buttons are bigger for a finger. Opening
+list. A subpage's Back button returns to its page. Rows, controls and buttons
+are bigger for a finger. The window buttons stay while you use a mouse, so a
+narrow desktop window can still be closed; they are hidden once a finger
+touches the window. Opening
 Settings with no page name starts on the list; opening it
 with a page name starts on that page.
 

@@ -144,7 +144,7 @@ impl Component for StripCell {
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
             )
-            .focusable(focus(), Radius::Card)
+            .focusable_inside(focus(), Radius::Card)
             .tw(&tokens, &[w_flex(), h_full()])
     }
 }

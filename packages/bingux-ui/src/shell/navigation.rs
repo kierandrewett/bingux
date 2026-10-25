@@ -671,8 +671,10 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 None => header,
             }
         };
-        // A phone has no window buttons.
-        let header = if narrow {
+        // A phone has no window buttons. A desktop window dragged narrow keeps
+        // them, so a mouse user can still close it: the buttons go only while
+        // a finger drives a narrow window.
+        let header = if narrow && pointer_kind() == PointerKind::Touch {
             header
         } else {
             header.trailing(WindowControls)
