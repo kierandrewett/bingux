@@ -4,7 +4,6 @@
 //! ask for authentication). The signed-in user changes their password in a
 //! sheet; `passwd` runs on a pseudo-terminal, so no terminal window opens.
 
-use std::process::Command;
 use std::time::Duration;
 
 use freya::prelude::*;
@@ -150,32 +149,60 @@ fn set_real_name(path: &str, name: &str) -> CommandResult {
 }
 
 /// The signed-in person for the sidebar: the full name from the passwd entry
-/// (the user name when it has none) and the user name. Runs `getent` on a
-/// background thread; render reads it through `use_signed_in`.
+/// (the user name when it has none) and the user name. It asks the C library
+/// for this process's own uid with `getpwuid_r`, in-process, so it follows the
+/// same name service as `getent` without starting a program.
 fn signed_in() -> Option<(String, String)> {
-    let user = std::env::var("USER").ok().filter(|user| !user.is_empty())?;
-    let output = Command::new("getent")
-        .args(["passwd", &user])
-        .output()
-        .ok()?;
-    let entry = String::from_utf8_lossy(&output.stdout);
-    let full_name = entry
-        .trim()
-        .split(':')
-        .nth(4)
-        .and_then(|gecos| gecos.split(',').next())
+    let mut entry: libc::passwd = unsafe { std::mem::zeroed() };
+    let mut found: *mut libc::passwd = std::ptr::null_mut();
+    let mut buffer = vec![0 as libc::c_char; PASSWD_BUFFER];
+    // SAFETY: every pointer refers to storage that outlives the call, and the
+    // buffer length passed is the buffer's own length.
+    let status = unsafe {
+        libc::getpwuid_r(
+            libc::getuid(),
+            &mut entry,
+            buffer.as_mut_ptr(),
+            buffer.len(),
+            &mut found,
+        )
+    };
+    if status != 0 || found.is_null() {
+        return None;
+    }
+    // SAFETY: on success the name fields point into `buffer`, which is alive.
+    let text = |field: *const libc::c_char| -> String {
+        if field.is_null() {
+            return String::new();
+        }
+        unsafe { std::ffi::CStr::from_ptr(field) }
+            .to_string_lossy()
+            .into_owned()
+    };
+    let user = text(entry.pw_name);
+    if user.is_empty() {
+        return None;
+    }
+    let gecos = text(entry.pw_gecos);
+    let full_name = gecos
+        .split(',')
+        .next()
         .map(str::trim)
-        .filter(|name| !name.is_empty());
-    Some((full_name.unwrap_or(&user).to_string(), user.clone()))
+        .filter(|name| !name.is_empty())
+        .unwrap_or(&user)
+        .to_string();
+    Some((full_name, user))
 }
 
-/// The signed-in person for the sidebar, or `None` until the lookup has run.
-/// The lookup runs in the background so the first frame never waits on
-/// `getent`; the sidebar profile appears once it is known.
+/// Room for one passwd record's strings; 16 KB is glibc's suggested ceiling.
+const PASSWD_BUFFER: usize = 16 * 1024;
+
+/// The signed-in person for the sidebar. It is read once, on the first render,
+/// so the profile row is mounted in the first frame and never shifts the
+/// sidebar when it arrives. The read is an in-process library call, not a
+/// program, so it does not hold up the first frame.
 pub fn use_signed_in() -> Option<(String, String)> {
-    let model = system::use_cached("signed-in", signed_in);
-    let loaded = model.read().clone();
-    loaded.flatten()
+    use_hook(signed_in)
 }
 
 #[derive(PartialEq)]
@@ -299,11 +326,10 @@ impl Component for AccountDetails {
             .child(caption(role));
         let password_group = account.current.then(|| {
             Element::from(
-                Group::titled("Password")
-                    .row(
-                        row("Your password")
-                            .trailing(action_button("Change password", move |_| password.open())),
-                    ),
+                Group::titled("Password").row(
+                    row("Your password")
+                        .trailing(action_button("Change password", move |_| password.open())),
+                ),
             )
         });
         page_column()

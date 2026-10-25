@@ -1,6 +1,11 @@
-//! The shell's segmented control (`SegmentedControl.qml`). Only the selected
-//! segment is in the tab order. Left and Right arrows move the selection and
-//! focus to the neighbouring segment, and Home and End go to the first and last.
+//! The shell's segmented control (`SegmentedControl.qml`), also used as the
+//! tab rail of a popup. Only the selected segment is in the tab order. Left
+//! and Right arrows move the selection and focus to the neighbouring segment,
+//! and Home and End go to the first and last.
+//!
+//! Only the selected segment is raised. An unselected segment has no fill of
+//! its own, even on hover: its text brightens instead, so a hovered segment
+//! never looks like a second selection.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -20,6 +25,7 @@ pub struct Segmented {
     options: Vec<(String, String)>,
     selected: String,
     on_select: EventHandler<String>,
+    fill: bool,
 }
 
 pub fn segmented(
@@ -31,6 +37,17 @@ pub fn segmented(
         options,
         selected: selected.to_string(),
         on_select: on_select.into(),
+        fill: false,
+    }
+}
+
+impl Segmented {
+    /// Span the full width with equal segments, as a popup's tab rail does.
+    /// A filled control stays a rail on a phone instead of turning into a
+    /// dropdown, because it switches pages rather than picking a value.
+    pub fn fill(mut self) -> Self {
+        self.fill = true;
+        self
     }
 }
 
@@ -40,7 +57,7 @@ impl Component for Segmented {
         // title, so the same choice is a value picker, as the dropdown is.
         // The density only changes with a remount, so the hooks below keep
         // their order for the life of the control.
-        if touch() {
+        if touch() && !self.fill {
             return crate::controls::dropdown::dropdown(
                 self.options.clone(),
                 self.selected.clone(),
@@ -81,7 +98,10 @@ impl Component for Segmented {
                         bg(Paint::Control),
                     ],
                 )
-                .maybe(!enabled, |element| element.opacity(0.45))
+                .maybe(self.fill, |element| {
+                    element.tw(&tokens, &[w_full(), grow_children()])
+                })
+                .maybe(!enabled, |element| element.opacity(DISABLED_OPACITY))
                 .on_key_down(move |event: Event<KeyboardEventData>| {
                     if !enabled {
                         return;
@@ -108,6 +128,7 @@ impl Component for Segmented {
                         key: key.clone(),
                         text: text.clone(),
                         selected: *key == self.selected,
+                        fill: self.fill,
                         on_select: self.on_select.clone(),
                         a11y_id: ids[index],
                     })
@@ -121,6 +142,8 @@ struct Segment {
     key: String,
     text: String,
     selected: bool,
+    /// Share the rail's width equally with the other segments.
+    fill: bool,
     on_select: EventHandler<String>,
     a11y_id: AccessibilityId,
 }
@@ -129,7 +152,6 @@ impl Component for Segment {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
-        let mut pressing = use_state(|| false);
         let a11y_id = self.a11y_id;
         let focus = use_focus(a11y_id);
         let enabled = use_enabled(true);
@@ -148,18 +170,14 @@ impl Component for Segment {
                     px(S2),
                     center(),
                     rounded(Radius::Inner),
-                    surface(
-                        if self.selected {
-                            Paint::Card
-                        } else {
-                            Paint::Transparent
-                        },
-                        hovering(),
-                        pressing(),
-                        false,
-                    ),
+                    bg(if self.selected {
+                        Paint::Raised
+                    } else {
+                        Paint::Transparent
+                    }),
                 ],
             )
+            .maybe(self.fill, |element| element.tw(&tokens, &[w_flex()]))
             .child(focus_ring(focus(), Radius::Inner))
             .maybe(self.selected, |element| {
                 element.tw(&tokens, &[shadow(Elevation::Knob)])
@@ -167,15 +185,8 @@ impl Component for Segment {
             .maybe(enabled, |element| {
                 element
                     .on_pointer_enter(move |_| hovering.set(true))
-                    .on_pointer_leave(move |_| {
-                        hovering.set(false);
-                        pressing.set_if_modified(false);
-                    })
-                    .on_pointer_down(move |event: Event<PointerEventData>| {
-                        event.stop_propagation();
-                        pressing.set(true);
-                    })
-                    .on_global_pointer_up(move |_| pressing.set_if_modified(false))
+                    .on_pointer_leave(move |_| hovering.set(false))
+                    .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
                     .on_press(move |event: Event<PressEventData>| {
                         event.stop_propagation();
                         on_select.call(key.clone());
@@ -183,9 +194,15 @@ impl Component for Segment {
                     })
             })
             .child(
-                BODY.in_ink(if self.selected { Ink::Text } else { Ink::Muted })
-                    .label(&tokens, self.text.clone())
-                    .max_lines(1),
+                // The selected segment is raised; a hovered one only brightens
+                // its text, so it never reads as a second selection.
+                BODY.in_ink(if self.selected || hovering() {
+                    Ink::Text
+                } else {
+                    Ink::Muted
+                })
+                .label(&tokens, self.text.clone())
+                .max_lines(1),
             )
     }
 }

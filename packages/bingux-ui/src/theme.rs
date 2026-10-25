@@ -120,6 +120,9 @@ pub struct Tokens {
     /// lighter than `elevated`, so a control stays visible on a card.
     /// Hover and press are the state layers over it.
     pub control: Color,
+    /// The selected segment of a segmented control: one step lighter than
+    /// `control` in both schemes, so the choice reads as raised off its track.
+    pub raised: Color,
     /// Hairline between rows and between panes.
     pub separator: Color,
     /// Group surface for lists on the page.
@@ -167,6 +170,7 @@ impl Tokens {
             sidebar: p.sidebar,
             elevated: p.card,
             control: p.control,
+            raised: p.raised,
             separator: p.separator,
             card: p.card,
             hover: p.hover,
@@ -203,6 +207,7 @@ struct Palette {
     card: Color,
     /// Buttons, fields and dropdowns sitting on a card.
     control: Color,
+    raised: Color,
     /// Dialogs, popovers and menus: the topmost opaque layer, the
     /// `Tokens::popover` surface.
     popup: Color,
@@ -226,6 +231,7 @@ impl Palette {
             sidebar: hex(0x2e2e32),
             card: hex(0x343438),
             control: hex(0x424246),
+            raised: hex(0x5a5a5f),
             popup: hex(0x3a3a3e),
             separator: rgba(1.0, 1.0, 1.0, 0.08),
             hover: rgba(1.0, 1.0, 1.0, 0.06),
@@ -247,6 +253,7 @@ impl Palette {
             sidebar: hex(0xebebed),
             card: hex(0xffffff),
             control: hex(0xf1f1f3),
+            raised: hex(0xffffff),
             popup: hex(0xffffff),
             separator: rgba(0.0, 0.0, 0.0, 0.10),
             hover: rgba(0.0, 0.0, 0.0, 0.05),

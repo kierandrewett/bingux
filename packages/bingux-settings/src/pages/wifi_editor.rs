@@ -15,7 +15,7 @@ use super::connection_editor::{
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
     Group, Overlays, PopupAction, PopupActions, ResponseKind, Status, Window, caption, choice_row,
-    dialog, form_row, popup, popup_column, row, skeleton, status, stepper, switch_row, tabs,
+    dialog, form_row, popup, popup_column, row, segmented, skeleton, status, stepper, switch_row,
     text_field, use_overlays, use_popup_actions, use_window,
 };
 
@@ -598,7 +598,7 @@ impl Component for EditorTabs {
         let editor = self.editor;
         let offered = tab_options(self.wireless);
         let selected = selected_tab(&editor.tab.read(), &offered);
-        tabs(offered, &selected, move |key: String| put(editor.tab, key))
+        segmented(offered, &selected, move |key: String| put(editor.tab, key)).fill()
     }
 }
 

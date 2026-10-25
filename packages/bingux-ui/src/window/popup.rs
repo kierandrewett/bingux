@@ -35,9 +35,13 @@ const POPUP_MAX_HEIGHT_PERCENT: f32 = 80.0;
 /// when that is smaller.
 const POPUP_MIN_WIDTH: f32 = 320.0;
 const POPUP_MIN_HEIGHT: f32 = 240.0;
-/// The width of the band along each edge and in each corner that resizes the
-/// popup when dragged.
-const RESIZE_BAND: f32 = 8.0;
+/// How far an edge's resize band reaches outside the panel, and how far
+/// inside it. Most of the band is outside, so the scrollbar and controls at
+/// the panel's edge stay usable.
+const RESIZE_OUTSIDE: f32 = 8.0;
+const RESIZE_INSIDE: f32 = 2.0;
+/// The side of the square resize handle centred on each corner.
+const RESIZE_CORNER: f32 = 24.0;
 /// The height of the tab rail under the header, when a popup has tabs.
 fn tabs_height() -> f32 {
     Dim::Control.px() + S3.px()
@@ -204,88 +208,88 @@ fn resize_handle(
         })
 }
 
-/// The eight handles on the panel's edges and corners. Each is one band wide
-/// and sits inside the edge, so the panel's clip does not cut it off.
+/// The eight handles around the panel. They are drawn beside the panel, not
+/// in it, so its clip does not cut them off: each edge band straddles the
+/// edge, mostly outside it, and each corner has a larger square centred on
+/// the corner, so the corners are easy to grab.
 fn resize_handles(
     resize: State<Option<ResizeDrag>>,
     size: State<(f32, f32)>,
     (width, height): (f32, f32),
 ) -> Vec<Rect> {
-    let band = RESIZE_BAND;
-    let inner_width = (width - 2.0 * band).max(0.0);
-    let inner_height = (height - 2.0 * band).max(0.0);
+    let band = RESIZE_OUTSIDE + RESIZE_INSIDE;
+    let half = RESIZE_CORNER / 2.0;
+    let inner_width = (width - RESIZE_CORNER).max(0.0);
+    let inner_height = (height - RESIZE_CORNER).max(0.0);
     let at = |top: f32, left: f32| Position::new_absolute().top(top).left(left);
+    let handle = |edges, position, w, h, cursor| {
+        resize_handle(
+            resize,
+            size,
+            edges,
+            position,
+            Size::px(w),
+            Size::px(h),
+            cursor,
+        )
+    };
     vec![
-        resize_handle(
-            resize,
-            size,
+        // Edges, between the corner squares.
+        handle(
             (0.0, -1.0),
-            at(0.0, band),
-            Size::px(inner_width),
-            Size::px(band),
+            at(-RESIZE_OUTSIDE, half),
+            inner_width,
+            band,
             CursorIcon::NsResize,
         ),
-        resize_handle(
-            resize,
-            size,
+        handle(
             (0.0, 1.0),
-            at(height - band, band),
-            Size::px(inner_width),
-            Size::px(band),
+            at(height - RESIZE_INSIDE, half),
+            inner_width,
+            band,
             CursorIcon::NsResize,
         ),
-        resize_handle(
-            resize,
-            size,
+        handle(
             (-1.0, 0.0),
-            at(band, 0.0),
-            Size::px(band),
-            Size::px(inner_height),
+            at(half, -RESIZE_OUTSIDE),
+            band,
+            inner_height,
             CursorIcon::EwResize,
         ),
-        resize_handle(
-            resize,
-            size,
+        handle(
             (1.0, 0.0),
-            at(band, width - band),
-            Size::px(band),
-            Size::px(inner_height),
+            at(half, width - RESIZE_INSIDE),
+            band,
+            inner_height,
             CursorIcon::EwResize,
         ),
-        resize_handle(
-            resize,
-            size,
+        // Corners, centred on each corner of the panel.
+        handle(
             (-1.0, -1.0),
-            at(0.0, 0.0),
-            Size::px(band),
-            Size::px(band),
+            at(-half, -half),
+            RESIZE_CORNER,
+            RESIZE_CORNER,
             CursorIcon::NwseResize,
         ),
-        resize_handle(
-            resize,
-            size,
+        handle(
             (1.0, -1.0),
-            at(0.0, width - band),
-            Size::px(band),
-            Size::px(band),
+            at(-half, width - half),
+            RESIZE_CORNER,
+            RESIZE_CORNER,
             CursorIcon::NeswResize,
         ),
-        resize_handle(
-            resize,
-            size,
+        handle(
             (-1.0, 1.0),
-            at(height - band, 0.0),
-            Size::px(band),
-            Size::px(band),
+            at(height - half, -half),
+            RESIZE_CORNER,
+            RESIZE_CORNER,
             CursorIcon::NeswResize,
         ),
-        resize_handle(
-            resize,
-            size,
+        handle(
             (1.0, 1.0),
-            at(height - band, width - band),
-            Size::px(band),
-            Size::px(band),
+            at(height - half, width - half),
+            RESIZE_CORNER,
+            RESIZE_CORNER,
             CursorIcon::NwseResize,
         ),
     ]
@@ -446,9 +450,7 @@ impl Component for PopupFrame {
                             .tw(&tokens, &[w_full(), p(S4)])
                             .child(entry.content.clone()),
                     ),
-            )
-            // The handles come last so they sit above the content.
-            .children(resize_handles(resize, entry.size, (width, height)));
+            );
 
         rect()
             .position(Position::new_absolute().top(0.0).left(0.0))
@@ -469,7 +471,10 @@ impl Component for PopupFrame {
             .child(
                 rect()
                     .scale(OPEN_SCALE + (1.0 - OPEN_SCALE) * progress)
-                    .child(panel),
+                    .child(panel)
+                    // The handles sit beside the panel, above the scrim, so
+                    // they reach outside the panel's clipped edge.
+                    .children(resize_handles(resize, entry.size, (width, height))),
             )
             .child(OverlayLayers {
                 overlays,

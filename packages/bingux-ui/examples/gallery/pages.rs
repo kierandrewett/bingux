@@ -828,7 +828,7 @@ pub struct FormDemoTabs {
 impl Component for FormDemoTabs {
     fn render(&self) -> impl IntoElement {
         let mut tab = self.tab;
-        tabs(
+        segmented(
             vec![
                 ("details".to_string(), "Details".to_string()),
                 ("security".to_string(), "Security".to_string()),
@@ -836,6 +836,7 @@ impl Component for FormDemoTabs {
             tab.read().as_str(),
             move |key: String| tab.set(key),
         )
+        .fill()
     }
 }
 

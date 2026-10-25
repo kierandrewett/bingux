@@ -374,6 +374,8 @@ pub enum Paint {
     Card,
     /// Buttons, fields, dropdowns and segmented tracks.
     Control,
+    /// The selected segment, raised off its `Control` track.
+    Raised,
     /// Menus, popovers and dialogs.
     Popover,
     /// The dimmed layer behind a dialog or popup: black at 40 %.
@@ -466,6 +468,7 @@ impl Paint {
             Paint::Sidebar => tokens.sidebar,
             Paint::Card => tokens.card,
             Paint::Control => tokens.control,
+            Paint::Raised => tokens.raised,
             Paint::Popover => tokens.popover,
             Paint::Scrim => Color::BLACK.with_af32(0.4),
             Paint::Accent => tokens.accent,
