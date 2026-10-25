@@ -252,7 +252,9 @@ impl ComponentOwned for ScrollBar {
                 Size::px(20.),
                 Size::Inner,
                 0.,
-                thumb_offset + SCROLLBAR_MARGIN,
+                // Bingux patch: the thumb is positioned on its own, so it needs
+                // the top inset as well as the track's margin.
+                thumb_offset + SCROLLBAR_MARGIN + start_inset,
             ),
         };
 
