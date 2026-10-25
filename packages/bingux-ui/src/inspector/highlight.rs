@@ -340,15 +340,17 @@ fn card(canvas: &Canvas, tokens: &crate::theme::Tokens, border: Rect, node: &Nod
     let above = border.top - ARROW_H - 1.0 - height;
     let fits_below = below + height <= bounds.bottom - EDGE;
     let fits_above = above >= bounds.top + EDGE;
-    let top = if fits_below {
-        below
+    // The arrow is a notch on the card's edge facing the element. When the
+    // card has to sit over the element (one that fills the window), there is
+    // no edge facing it, so there is no arrow.
+    let (top, arrow_up) = if fits_below {
+        (below, Some(true))
     } else if fits_above {
-        above
+        (above, Some(false))
     } else {
-        (bounds.bottom - EDGE - height).max(bounds.top + EDGE)
+        ((bounds.bottom - EDGE - height).max(bounds.top + EDGE), None)
     };
     let card = rect(left, top, left + width, top + height);
-    let arrow_up = top > border.bottom;
 
     let mut shadow = ink(style::Paint::InspectShadow.color(tokens));
     if let Some(filter) = MaskFilter::blur(BlurStyle::Normal, 4.0, None) {
@@ -369,22 +371,24 @@ fn card(canvas: &Canvas, tokens: &crate::theme::Tokens, border: Rect, node: &Nod
         &stroke(style::Paint::FloatingOutline.color(tokens), 1.0),
     );
 
-    let arrow_x = center_x.clamp(
-        card.left + RADIUS + ARROW_W / 2.0,
-        card.right - RADIUS - ARROW_W / 2.0,
-    );
-    let (base, tip) = if arrow_up {
-        (card.top, border.bottom + 1.0)
-    } else {
-        (card.bottom, border.top - 1.0)
-    };
-    let mut arrow = PathBuilder::new();
-    arrow.move_to((arrow_x - ARROW_W / 2.0, base));
-    arrow.line_to((arrow_x + ARROW_W / 2.0, base));
-    arrow.line_to((arrow_x, tip));
-    arrow.close();
-    let arrow = arrow.detach();
-    canvas.draw_path(&arrow, &ink(style::Paint::Floating.color(tokens)));
+    if let Some(up) = arrow_up {
+        let arrow_x = center_x.clamp(
+            card.left + RADIUS + ARROW_W / 2.0,
+            card.right - RADIUS - ARROW_W / 2.0,
+        );
+        let (base, tip) = if up {
+            (card.top, card.top - ARROW_H)
+        } else {
+            (card.bottom, card.bottom + ARROW_H)
+        };
+        let mut arrow = PathBuilder::new();
+        arrow.move_to((arrow_x - ARROW_W / 2.0, base));
+        arrow.line_to((arrow_x + ARROW_W / 2.0, base));
+        arrow.line_to((arrow_x, tip));
+        arrow.close();
+        let arrow = arrow.detach();
+        canvas.draw_path(&arrow, &ink(style::Paint::Floating.color(tokens)));
+    }
 
     let mut y = card.top + PAD;
     for line in &lines {

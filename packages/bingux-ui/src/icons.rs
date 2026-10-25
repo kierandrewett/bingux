@@ -304,7 +304,8 @@ impl Icon {
             Self::Gamepad => include_bytes!("../icons/input-gaming-symbolic.svg"),
             Self::Phone => include_bytes!("../icons/phone-symbolic.svg"),
             Self::Pause => include_bytes!("../icons/media-playback-pause-symbolic.svg"),
-            Self::Inspect => include_bytes!("../icons/pointer-inspect-symbolic.svg"),
+            // Adwaita's object picker icon, as GTK's own inspector uses.
+            Self::Inspect => include_bytes!("../icons/find-location-symbolic.svg"),
             Self::NetworkWirelessSignalNone => {
                 include_bytes!("../icons/network-wireless-signal-none-symbolic.svg")
             }

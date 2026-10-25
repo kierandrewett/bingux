@@ -20,6 +20,23 @@
 - Use representative product screenshots. Do not use terminal output to
   narrate a screenshot or present smoke-test evidence as product documentation.
 
+## bingux-ui first
+
+- Before building any widget in a Bingux app (Settings, the inspector, any
+  new app), check what bingux-ui already has: `packages/bingux-ui/src/controls/`,
+  `rows.rs`, `group.rs`, `layout.rs`, `shell/`, `window/`, `motion.rs`, the
+  tokens in `style/`, and the component list in `docs/bingux-ui.md`. Use the
+  existing primitive, or extend it, before writing a new one.
+- When an app needs something bingux-ui cannot do, extend bingux-ui's stable
+  API instead of building a private component in the app. The extension must
+  be general: another app, or a third-party developer, must plausibly need it.
+  Name that second use when you add it.
+- Do not add one-off edge cases or radical API changes to serve a single
+  component. If no general form exists, keep the code local to the app and say
+  why.
+- Apps contain pages and backends only; look, layout, controls and behaviour
+  come from bingux-ui and its tokens.
+
 ## Shared worktrees
 
 - Preserve unrelated local changes. Inspect the worktree before editing,
