@@ -49,7 +49,7 @@ impl Component for InspectorBody {
         let tokens = use_tokens();
         let nav = use_nav();
         let expanded = use_state::<HashSet<u64>>(HashSet::new);
-        let head_seen = use_state(|| false);
+        let head_seen = use_state::<Option<u64>>(|| None);
         let wrappers = use_state(|| false);
         let ratio = use_state(|| 0.58f32);
         let mut version = use_state(|| 0u64);
@@ -86,20 +86,20 @@ impl Component for InspectorBody {
                                 nav.selected.set(roots.first().copied());
                             }
                         }
-                        // Open the way to the first page heading, so the page is in view
-                        // without digging through the window chrome.
-                        if !*head_seen.peek() {
-                            if let Some(snap) = next.as_ref() {
-                                let head = snap
-                                    .nodes
-                                    .iter()
-                                    .find(|node| node.a11y.component.as_deref() == Some("PageHead"))
-                                    .map(|node| node.id);
-                                if let Some(head) = head {
-                                    head_seen.set(true);
-                                    let mut open = expanded.write();
-                                    open.extend(ancestors(snap, head).into_iter().filter(|&id| id != head));
-                                }
+                        // Open the way to the page heading, so the page is in view without
+                        // digging through the window chrome. The first snapshot can be
+                        // transient and a page rebuild gives its heading a new id, so this
+                        // follows the heading's id rather than running once.
+                        if let Some(snap) = next.as_ref() {
+                            let head = snap
+                                .nodes
+                                .iter()
+                                .find(|node| node.a11y.component.as_deref() == Some("PageHead"))
+                                .map(|node| node.id);
+                            if let Some(head) = head.filter(|&id| *head_seen.peek() != Some(id)) {
+                                head_seen.set(Some(head));
+                                let mut open = expanded.write();
+                                open.extend(ancestors(snap, head).into_iter().filter(|&id| id != head));
                             }
                         }
                         snapshot.set(next);

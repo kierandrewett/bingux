@@ -179,15 +179,6 @@ impl Snapshot {
         let mut hidden = vec![false; count];
         for index in (0..count).rev() {
             let node = &self.nodes[index];
-            // An empty box with no size, text or identity draws nothing.
-            if node.children.iter().all(|child| self.index.get(child).is_some_and(|&c| hidden[c]))
-                && node.text.is_none()
-                && !has_identity(node)
-                && node.area.is_some_and(|area| area.width() == 0.0 || area.height() == 0.0)
-            {
-                hidden[index] = true;
-                continue;
-            }
             let Some(props) = &node.props else {
                 continue;
             };
