@@ -36,7 +36,7 @@ use crate::system::{
 use crate::theme::{Scheme, SharedTokens, Tokens, accent_names, read_gsettings};
 use crate::ui::typography::{BODY, EMPHASIS};
 use crate::ui::{
-    Group, Icon, Overlays, Status, icon, menu_item, menu_separator, page_column, row,
+    Group, Icon, Overlays, PageHead, Status, icon, menu_item, menu_separator, page_column, row,
     skeleton_shape, status, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
@@ -46,7 +46,7 @@ const INTERFACE: &str = "org.gnome.desktop.interface";
 const WALLPAPER_KEY: &str = "desktop.wallpaper";
 const FONT_KEY: &str = "appearance.font_family";
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Model {
     /// Absolute path of the wallpaper, or empty for the GNOME background.
     wallpaper: String,
@@ -99,9 +99,14 @@ fn set_font(family: &str) -> Result<Option<Model>, CommandError> {
     load().map(Some)
 }
 
+/// Loads the page again and saves the result for the next start.
+fn refresh() -> Loaded {
+    system::load_persistent("appearance", load)
+}
+
 fn reload(mut model: State<Option<Loaded>>) {
     model.set(None);
-    background(model, load);
+    background(model, refresh);
 }
 
 /// Stores the wallpaper: a picture's path, or `None` for the GNOME background.
@@ -124,7 +129,7 @@ fn set_wallpaper(mut model: State<Option<Loaded>>, overlays: Overlays, path: Opt
         previous,
         Some(Ok(value)),
         move || work().map(|_| ()),
-        move || background_then(load, move |loaded| model.set(Some(loaded))),
+        move || background_then(refresh, move |loaded| model.set(Some(loaded))),
     );
 }
 
@@ -188,7 +193,7 @@ fn change(mut model: State<Option<Loaded>>, overlays: Overlays, setting: Setting
         previous,
         Some(Ok(value)),
         move || setting.write(),
-        move || background_then(load, move |loaded| model.set(Some(loaded))),
+        move || background_then(refresh, move |loaded| model.set(Some(loaded))),
     );
 }
 
@@ -336,7 +341,7 @@ pub struct AppearancePage;
 
 impl Component for AppearancePage {
     fn render(&self) -> impl IntoElement {
-        let model = system::use_cached("appearance", load);
+        let model = system::use_cached_persistent("appearance", load);
         let overlays = use_overlays();
         let shared = use_consume::<SharedTokens>().0;
         let tokens = use_tokens();
@@ -346,7 +351,7 @@ impl Component for AppearancePage {
         let Some(loaded) = model.read().clone() else {
             // The picture comes first, then the groups, so the hero keeps its
             // place while the data loads.
-            return page_column()
+            return page_column().child(PageHead::new())
                 .child(framed(
                     &tokens,
                     Element::from(rect().tw(
@@ -359,7 +364,7 @@ impl Component for AppearancePage {
         let model_value = match loaded {
             Ok(value) => value,
             Err(failure) => {
-                return page_column().child(
+                return page_column().child(PageHead::new()).child(
                     status(Status::Error(failure.0)).action("Try again", move |_| reload(model)),
                 );
             }
@@ -414,7 +419,7 @@ impl Component for AppearancePage {
                 ),
             ));
 
-        page_column()
+        page_column().child(PageHead::new())
             .child(picture)
             .child(WallpaperPicker {
                 current: model_value.wallpaper.clone(),
@@ -527,5 +532,5 @@ impl Component for AppearancePage {
 
 /// Start loading this page's data before it is opened.
 pub fn prefetch() {
-    system::prefetch("appearance", load);
+    system::prefetch_persistent("appearance", load);
 }

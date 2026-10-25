@@ -15,7 +15,7 @@ use crate::system::{self, CommandError, CommandResult, background, optimistic_th
 use crate::theme::Tokens;
 use crate::ui::typography::{BODY, EMPHASIS};
 use crate::ui::{
-    Group, Overlays, Row, Status, caption, choice_row, level_row, page_column, row, status,
+    Group, Overlays, PageHead, Row, Status, caption, choice_row, level_row, page_column, row, status,
     switch_row, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
@@ -30,7 +30,7 @@ const INTERFACE: &str = "org.gnome.desktop.interface";
 const DOUBLE_CLICK_MIN: u32 = 100;
 const DOUBLE_CLICK_MAX: u32 = 1000;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Mouse {
     natural_scroll: bool,
     speed: f64,
@@ -40,7 +40,7 @@ struct Mouse {
     primary_paste: bool,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Touchpad {
     tap_to_click: bool,
     natural_scroll: bool,
@@ -54,7 +54,7 @@ struct Touchpad {
     left_handed: String,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Model {
     mouse: Mouse,
     touchpad: Option<Touchpad>,
@@ -172,6 +172,11 @@ fn placeholder() -> Model {
     }
 }
 
+/// Loads the page again and saves the result for the next start.
+fn refresh() -> Result<Model, CommandError> {
+    system::load_persistent("mouse", load)
+}
+
 /// Shows `change` on the model at once, writes it in the background and
 /// reloads the model once the write has landed. A failed write puts the
 /// previous model back with a toast.
@@ -193,7 +198,7 @@ fn commit(
         previous,
         Some(Ok(value)),
         move || work().map(|_| ()),
-        move || background(loaded, load),
+        move || background(loaded, refresh),
     );
 }
 
@@ -663,7 +668,7 @@ pub struct MousePage;
 
 impl Component for MousePage {
     fn render(&self) -> impl IntoElement {
-        let loaded = system::use_cached("mouse", load);
+        let loaded = system::use_cached_persistent("mouse", load);
         let overlays = use_overlays();
         let tokens = use_tokens();
 
@@ -672,9 +677,9 @@ impl Component for MousePage {
         let model = match result.unwrap_or_else(|| Ok(placeholder())) {
             Ok(model) => model,
             Err(e) => {
-                return page_column().child(
+                return page_column().child(PageHead::new()).child(
                     status(Status::Error(e.0))
-                        .action("Try again", move |_| background(loaded, load)),
+                        .action("Try again", move |_| background(loaded, refresh)),
                 );
             }
         };
@@ -842,7 +847,7 @@ impl Component for MousePage {
             .row(ClickTest { within_ms: mouse.double_click }.into_element())
             .row(ScrollTest.into_element());
 
-        let page = page_column()
+        let page = page_column().child(PageHead::new())
             .child(mouse_group)
             .maybe_child(touchpad_group)
             .child(test_group);
@@ -852,5 +857,5 @@ impl Component for MousePage {
 
 /// Start loading this page's data before it is opened.
 pub fn prefetch() {
-    system::prefetch("mouse", load);
+    system::prefetch_persistent("mouse", load);
 }

@@ -6,7 +6,7 @@
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
-use crate::motion::focus_ring;
+use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::{is_activation_key, use_tokens};
 use crate::typography::{BODY, Ink};
@@ -140,6 +140,6 @@ impl Component for StripCell {
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
             )
-            .child(focus_ring(focus(), Radius::Card))
+            .focusable(focus(), Radius::Card)
     }
 }

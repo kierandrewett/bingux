@@ -210,7 +210,7 @@ The Mouse page has a Mouse group with Natural scrolling, Pointer speed, Left-han
 Sound lists the output and input devices as two dropdowns. Each device has a
 headphone, headset or speaker icon before its name, so a device is easy to
 find among similar names. Choosing a device makes it the default at once; if
-the change is refused, the dropdown goes back and a toast says why.
+the change is refused, the dropdown goes back and a toast says why. Once the change is written, the page reloads the device list, so the dropdown shows what the system reports.
 
 Under the output's device, a slider sets its volume. A short level meter on the
 "Output" heading shows what the output plays, and one on the "Input" heading

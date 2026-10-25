@@ -4,20 +4,18 @@
 //! a capped menu with a scrollbar and opens the current choice in view; the
 //! menu opens upward when there is no room below the button.
 
-use freya::animation::*;
 use freya::prelude::*;
 
 use crate::app_icon::app_icon;
 use crate::icons::{self, Icon};
-use crate::motion::focus_ring;
+use crate::motion::{Focusable, PRESENCE_SCALE, use_presence};
 use crate::shell::overlays::input_shield;
 use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
 use crate::typography::{BODY, Ink};
 
-/// Space between the button and the menu, and how far the menu slides in.
+/// Space between the button and the menu.
 const MENU_GAP: f32 = 4.0;
-const MENU_SLIDE: f32 = 3.0;
 /// A generous average glyph width at body size. Freya cannot size a button
 /// to an ellipsised label, so the button is sized from its longest option
 /// and does not change width when the choice changes.
@@ -130,14 +128,7 @@ impl Component for Dropdown {
             .map(|index| options[index].1.clone())
             .unwrap_or_else(|| self.selected.clone());
 
-        let motion = tokens.motion(90);
-        let reveal = use_animation_transition(if open() { 1.0 } else { 0.0 }, move |from, to| {
-            AnimNum::new(from, to)
-                .time(motion)
-                .function(Function::Quad)
-                .ease(Ease::Out)
-        });
-        let progress = reveal.get().value();
+        let progress = use_presence(open(), tokens.motion(90), || {});
         let visible = open() || progress > 0.0;
 
         let choose = {
@@ -336,7 +327,6 @@ impl Component for Dropdown {
                     ),
                 ],
             )
-            .child(focus_ring(focus(), Radius::Control))
             // On a phone the value sits at the row's end with no box; on a
             // desktop it is a filled control with the chevron at its end.
             .tw(&tokens, if touch { PHONE_VALUE } else { DESKTOP_VALUE })
@@ -400,7 +390,8 @@ impl Component for Dropdown {
                         IconSize::Control,
                         Paint::Muted.color(&tokens),
                     )),
-            );
+            )
+            .focusable(focus(), Radius::Control);
 
         // The list is at least Dim::DropdownMenu and never narrower than the button.
         let menu_width = button_width().max(Dim::DropdownMenu.px());
@@ -410,11 +401,19 @@ impl Component for Dropdown {
         let below = window_height - button_area.read().max_y() - MENU_GAP;
         let above = button_area.read().min_y() - MENU_GAP;
         let open_up = menu_height > below && above > below;
-        let slide = MENU_SLIDE * (1.0 - progress);
         let menu_offset = if open_up {
-            -(Dim::Control.px() + menu_height + MENU_GAP) + slide
+            -(Dim::Control.px() + menu_height + MENU_GAP)
         } else {
-            MENU_GAP - slide
+            MENU_GAP
+        };
+        // The scale grows from the edge the menu opens from: the bottom when
+        // it opens upward, and the button's side it is aligned to.
+        let right_aligned = menu_width > button_width();
+        let menu_origin = match (open_up, right_aligned) {
+            (true, true) => TransformOrigin::bottom_right(),
+            (true, false) => TransformOrigin::bottom_left(),
+            (false, true) => TransformOrigin::top_right(),
+            (false, false) => TransformOrigin::top_left(),
         };
         // `offset_x`/`offset_y` move an element's children, so the card sits
         // inside a zero-sized anchor that carries the offsets.
@@ -438,6 +437,8 @@ impl Component for Dropdown {
                     rect()
                         .layer(Layer::Overlay)
                         .opacity(progress)
+                        .scale(PRESENCE_SCALE + (1.0 - PRESENCE_SCALE) * progress)
+                        .transform_origin(menu_origin)
                         .width(Size::px(menu_width))
                         .tw(&tokens, MENU)
                         // A wheel turn at the end of the list stops here

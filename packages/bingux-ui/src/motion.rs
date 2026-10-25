@@ -49,8 +49,6 @@ pub fn use_tween(target: f32, ms: u64) -> f32 {
 /// Progress from 0 to 1 while `open`, and back to 0 when it closes. `on_exit`
 /// runs once the closing motion has finished, unless the element was reopened
 /// first.
-///
-/// `shell/overlays.rs` keeps a private copy of this timing for its layers.
 pub fn use_presence(open: bool, motion: u64, on_exit: impl Fn() + Clone + 'static) -> f32 {
     let generation = use_state(|| 0_u64);
     let appear = use_animation(move |conf| {
@@ -322,24 +320,41 @@ pub const FOCUS_IN_MS: u64 = 160;
 /// lingers after the control has lost focus.
 pub const FOCUS_OUT_MS: u64 = 120;
 
-/// The keyboard focus ring of a control. Place it as the last child of the
-/// control's root box, with the control's own corner radius, so it sits around
-/// the control without changing its layout.
+/// Wraps a control so that its keyboard focus ring hugs the control's own
+/// outer box. The ring is measured from the wrapper, which has no padding or
+/// border, so its absolute offsets start at exactly the control's top-left
+/// corner and its size is exactly the control's size.
 ///
 /// Only keyboard focus draws the ring. On arrival it grows in from outside and
-/// fades in; on departure it grows back out and fades away. It is absolutely
-/// positioned, so the ring never moves its neighbours. Reduced motion makes
-/// both changes instant.
-#[derive(Clone, PartialEq)]
-pub struct FocusRing {
-    focus: Focus,
-    radius: Radius,
+/// fades in; on departure it grows back out and fades away. The ring ignores
+/// pointer events, so the control keeps every click. Reduced motion makes both
+/// changes instant.
+pub trait Focusable: Sized {
+    /// Wraps this control, drawing its focus ring for corner radius `radius`
+    /// while `focus` is keyboard focus. Return the wrapper from `render`.
+    ///
+    /// The wrapper is a row that takes its content's size. A control that
+    /// grows to fill its row also grows the wrapper, with `w_flex()` on the
+    /// returned box.
+    fn focusable(self, focus: Focus, radius: Radius) -> Rect;
 }
 
-/// The focus ring of a control with corner radius `radius`, drawn while
-/// `focus` is keyboard focus.
-pub fn focus_ring(focus: Focus, radius: Radius) -> FocusRing {
-    FocusRing { focus, radius }
+impl Focusable for Rect {
+    fn focusable(self, focus: Focus, radius: Radius) -> Rect {
+        let tokens = use_tokens();
+        rect()
+            .tw(&tokens, &[flex_row()])
+            .child(self)
+            .child(FocusRing { focus, radius })
+    }
+}
+
+/// The ring itself, drawn as the last child of a [`Focusable::focusable`]
+/// wrapper.
+#[derive(Clone, PartialEq)]
+struct FocusRing {
+    focus: Focus,
+    radius: Radius,
 }
 
 impl Component for FocusRing {
@@ -365,9 +380,10 @@ impl Component for FocusRing {
         // The ring's outer edge sits this far outside the control, so the
         // ring's corner radius is the control's plus this distance.
         let outset = FOCUS_GAP + FOCUS_TRAVEL * (1.0 - progress) + Dim::Ring.px();
-        // Freya does not size an absolute box from opposite edges, so the
-        // ring sits at its top-left corner and takes its size from the parent.
+        // The wrapper has no padding, so the ring's top-left corner is the
+        // control's top-left corner and its size is the control's size.
         rect()
+            .interactive(false)
             .position(Position::new_absolute().top(-outset).left(-outset))
             .width(Size::func(move |ctx| Some(ctx.parent + outset + outset)))
             .height(Size::func(move |ctx| Some(ctx.parent + outset + outset)))

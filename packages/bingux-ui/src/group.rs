@@ -92,6 +92,14 @@ struct CaptionText {
 impl Component for CaptionText {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        // In a row that takes presses the caption is plain text, so the row's
+        // press and pointer stay those of a button, not a text field.
+        if crate::rows::use_in_pressable_row() {
+            return match search_highlight::marked(CAPTION, &tokens, &self.text) {
+                Some(marked) => marked.into(),
+                None => CAPTION.paragraph(&tokens, self.text.clone()).into(),
+            };
+        }
         search_highlight::paragraph(CAPTION, &tokens, &self.text)
     }
 }

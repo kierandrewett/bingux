@@ -17,7 +17,7 @@ use crate::system::{
     self, CommandError, CommandResult, background, background_then, optimistic_then,
 };
 use crate::ui::{
-    Group, Overlays, Status, caption, choice_row, page_column, popup_column, row, row_button,
+    Group, Overlays, PageHead, Status, caption, choice_row, page_column, popup_column, row, row_button,
     search_field, skeleton, slider_row, status, switch_row, text_field, use_overlays,
 };
 use bingux_ui::prelude::{Window, popup, use_window};
@@ -63,7 +63,7 @@ const ALTERNATE_KEY: [(&str, &str); 5] = [
     ("lv3:rwin_switch", "Right Super"),
 ];
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Model {
     repeat: bool,
     delay_ms: f64,
@@ -77,7 +77,7 @@ struct Model {
 }
 
 /// One built-in shortcut action, as Gnoblin lists it.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Shortcut {
     group: String,
     title: String,
@@ -93,7 +93,7 @@ impl Shortcut {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct ShortcutList {
     shortcuts: Vec<Shortcut>,
     config_path: Option<String>,
@@ -215,6 +215,11 @@ fn placeholder() -> Model {
     }
 }
 
+/// Loads the page again and saves the result for the next start.
+fn refresh() -> Result<Model, CommandError> {
+    system::load_persistent("keyboard", load)
+}
+
 /// Shows `change` on the model at once, writes it in the background and
 /// reloads the model once the write has landed. A failed write puts the
 /// previous model back with a toast.
@@ -236,7 +241,7 @@ fn commit(
         previous,
         Some(Ok(value)),
         move || work().map(|_| ()),
-        move || background(loaded, load),
+        move || background(loaded, refresh),
     );
 }
 
@@ -318,7 +323,7 @@ impl SourceEdits {
         background_then(
             move || {
                 sources::apply(turn, edit)?;
-                sources::read()
+                system::load_persistent("keyboard-sources", sources::read)
             },
             move |result| {
                 busy.set(false);
@@ -561,9 +566,9 @@ pub struct KeyboardPage;
 
 impl Component for KeyboardPage {
     fn render(&self) -> impl IntoElement {
-        let loaded = system::use_cached("keyboard", load);
-        let sources_state = system::use_cached("keyboard-sources", sources::read);
-        let catalog_state = system::use_cached("keyboard-catalog", sources::catalog);
+        let loaded = system::use_cached_persistent("keyboard", load);
+        let sources_state = system::use_cached_persistent("keyboard-sources", sources::read);
+        let catalog_state = system::use_cached_saved("keyboard-catalog", sources::catalog);
         let sources_busy = use_state(|| false);
         let overlays = use_overlays();
         let window = use_window();
@@ -592,9 +597,9 @@ impl Component for KeyboardPage {
         let model = match result.unwrap_or_else(|| Ok(placeholder())) {
             Ok(model) => model,
             Err(e) => {
-                return page_column().child(
+                return page_column().child(PageHead::new()).child(
                     status(Status::Error(e.0))
-                        .action("Try again", move |_| background(loaded, load)),
+                        .action("Try again", move |_| background(loaded, refresh)),
                 );
             }
         };
@@ -919,7 +924,7 @@ impl Component for KeyboardPage {
         }
         let shortcuts = Group::titled("Shortcuts").row(shortcuts_row);
 
-        let page = page_column()
+        let page = page_column().child(PageHead::new())
             .child(repeat_group)
             .child(typing_group)
             .child(special_group)
@@ -936,22 +941,26 @@ pub struct ShortcutsPage;
 
 impl Component for ShortcutsPage {
     fn render(&self) -> impl IntoElement {
-        let loaded = system::use_cached(SHORTCUTS, load_shortcuts);
+        let loaded = system::use_cached_persistent(SHORTCUTS, load_shortcuts);
         let overlays = use_overlays();
         let query = use_state(String::new);
 
         let Some(result) = loaded.read().clone() else {
-            return page_column().child(skeleton());
+            return page_column().child(PageHead::new()).child(skeleton());
         };
         let list = match result {
             Ok(list) => list,
             Err(e) if e.0 == gnoblin::NOT_RUNNING => {
-                return page_column().child(status(Status::Empty(e.0)));
+                return page_column().child(PageHead::new()).child(status(Status::Empty(e.0)));
             }
             Err(e) => {
-                return page_column().child(
+                return page_column().child(PageHead::new()).child(
                     status(Status::Error(e.0))
-                        .action("Try again", move |_| background(loaded, load_shortcuts)),
+                        .action("Try again", move |_| {
+                            background(loaded, move || {
+                                system::load_persistent(SHORTCUTS, load_shortcuts)
+                            })
+                        }),
                 );
             }
         };
@@ -968,7 +977,7 @@ impl Component for ShortcutsPage {
             }
         }
 
-        let mut page = page_column().child(search_field(query, |_| {}));
+        let mut page = page_column().child(PageHead::new()).child(search_field(query, |_| {}));
         if groups.is_empty() {
             page = page.child(status(Status::Empty("No shortcuts match.".into())));
         }
@@ -996,8 +1005,8 @@ impl Component for ShortcutsPage {
 
 /// Start loading this page's data before it is opened.
 pub fn prefetch() {
-    system::prefetch("keyboard", load);
-    system::prefetch("keyboard-sources", sources::read);
-    system::prefetch("keyboard-catalog", sources::catalog);
-    system::prefetch(SHORTCUTS, load_shortcuts);
+    system::prefetch_persistent("keyboard", load);
+    system::prefetch_persistent("keyboard-sources", sources::read);
+    system::prefetch_saved("keyboard-catalog", sources::catalog);
+    system::prefetch_persistent(SHORTCUTS, load_shortcuts);
 }

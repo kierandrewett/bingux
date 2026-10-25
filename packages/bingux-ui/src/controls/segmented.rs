@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use freya::prelude::*;
 
-use crate::motion::focus_ring;
+use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::{use_enabled, use_tokens};
 use crate::typography::{BODY, Ink};
@@ -178,7 +178,6 @@ impl Component for Segment {
                 ],
             )
             .maybe(self.fill, |element| element.tw(&tokens, &[w_flex()]))
-            .child(focus_ring(focus(), Radius::Inner))
             .maybe(self.selected, |element| {
                 element.tw(&tokens, &[shadow(Elevation::Knob)])
             })
@@ -204,5 +203,8 @@ impl Component for Segment {
                 .label(&tokens, self.text.clone())
                 .max_lines(1),
             )
+            .focusable(focus(), Radius::Inner)
+            .maybe(self.fill, |wrapper| wrapper.tw(&tokens, &[w_flex()]))
+            .tw(&tokens, &[h_full()])
     }
 }

@@ -14,10 +14,10 @@ use crate::icons::{self, Icon};
 use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
-    Group, Overlays, PageHeader, ResponseKind, Row, SpinnerSize, Status, Tokens, action_strip,
+    Group, Overlays, PageHead, ResponseKind, Row, SpinnerSize, Status, Tokens, action_strip,
     caption, centered_caption, dialog, entry_row, heading, page_column, row, skeleton_shape,
     spinner, status, status_page, strip_action, switch_row, use_overlays, use_page_busy,
-    use_page_header, use_tokens,
+    use_tokens,
 };
 use bingux_ui::layout::{hstack, vstack};
 use bingux_ui::shell::{MenuItem, menu_item};
@@ -32,13 +32,13 @@ const SCAN_SECONDS: &str = "25";
 const POLL_SCANNING: Duration = Duration::from_millis(2500);
 const POLL_IDLE: Duration = Duration::from_secs(8);
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 enum Block {
     Software,
     Hardware,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Adapter {
     powered: bool,
     discoverable: bool,
@@ -46,7 +46,7 @@ struct Adapter {
     alias: String,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Device {
     mac: String,
     name: String,
@@ -58,7 +58,7 @@ struct Device {
     icon: String,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Model {
     /// `None` when BlueZ has no controller.
     adapter: Option<Adapter>,
@@ -245,7 +245,7 @@ fn refresh(model: State<Loaded>) {
         return;
     }
     background(model, || {
-        let result = load();
+        let result = system::load_persistent("bluetooth", load);
         READING.store(false, Ordering::SeqCst);
         result
     });
@@ -380,7 +380,7 @@ fn set_switch_job(ctx: Ctx, pending: State<Option<bool>>, job: Job, on: bool) {
         Some(on),
         move || run_steps(&steps).map_err(|reason| format!("{failed} {reason}")),
         move || {
-            background_then(load, move |loaded| {
+            background_then(|| system::load_persistent("bluetooth", load), move |loaded| {
                 model.set(Some(loaded));
                 pending.set(None);
             });
@@ -824,7 +824,7 @@ impl Component for BluetoothPage {
         let tokens = use_tokens();
         let overlays = use_overlays();
         let navigator = use_navigator();
-        let model = system::cached("bluetooth");
+        let model = system::use_cached_persistent("bluetooth", load);
         let busy_state = use_state::<Option<Busy>>(|| None);
         let power_pending = use_state::<Option<bool>>(|| None);
         let visible_pending = use_state::<Option<bool>>(|| None);
@@ -852,15 +852,14 @@ impl Component for BluetoothPage {
                 .as_ref()
                 .is_some_and(|busy| busy.mac.is_empty()),
         );
-        // The master switch lives in the header bar, as in GNOME.
+        // The master switch sits at the right of the page title, as in GNOME.
         let master = match &*model.read() {
             Some(Ok(data)) if data.blocked.is_none() => data.adapter.as_ref().map(|a| a.powered),
             _ => None,
         };
-        let mut header = PageHeader {
+        let mut head = PageHead {
             subtitle: header_subtitle(&model.read()),
-            action: None,
-            ..Default::default()
+            ..PageHead::new()
         };
         if let Some(on) = master {
             let ctx = Ctx {
@@ -869,25 +868,24 @@ impl Component for BluetoothPage {
                 overlays,
             };
             let shown = (*power_pending.read()).unwrap_or(on);
-            header = header.switch("Bluetooth", shown, move |next: bool| {
+            head = head.switch("Bluetooth", shown, move |next: bool| {
                 set_switch_job(ctx, power_pending, power_job(next), next)
             });
         }
-        use_page_header(header);
 
         let Some(loaded) = model.read().clone() else {
-            return page_column().child(skeleton_shape(&[1, 3, 1]));
+            return page_column().child(head.clone()).child(skeleton_shape(&[1, 3, 1]));
         };
         let data = match loaded {
             Ok(data) => data,
             Err(e) => {
-                return page_column().child(
+                return page_column().child(head.clone()).child(
                     status(Status::Error(e.0)).action("Try again", move |_| refresh(model)),
                 );
             }
         };
         let Some(adapter) = data.adapter.clone() else {
-            return page_column().child(
+            return page_column().child(head.clone()).child(
                 status_page(Icon::Bluetooth, "No Bluetooth adapter found")
                     .description("This computer has no Bluetooth adapter that Settings can use."),
             );
@@ -901,7 +899,7 @@ impl Component for BluetoothPage {
                     "A system setting has blocked Bluetooth. Turn off \"Airplane mode\" or unblock Bluetooth to use it."
                 }
             };
-            return page_column()
+            return page_column().child(head.clone())
                 .child(status_page(Icon::Bluetooth, "Bluetooth is blocked").description(reason));
         }
 
@@ -912,7 +910,7 @@ impl Component for BluetoothPage {
             overlays,
         };
 
-        let mut page = page_column();
+        let mut page = page_column().child(head);
         if adapter.powered {
             page = page.child(Group::new(None::<String>).row(switch_row(
                 "Make this computer visible to other devices",
@@ -978,11 +976,10 @@ impl Component for BluetoothDevicePage {
         let overlays = use_overlays();
         let navigator = use_navigator();
         let tokens = use_tokens();
-        let model = system::cached("bluetooth");
+        let model = system::use_cached_persistent("bluetooth", load);
         let busy_state = use_state::<Option<Busy>>(|| None);
         use_polling(model, None);
         use_page_busy(busy_state.read().is_some());
-        use_page_header(PageHeader::default().hero_title());
 
         // Go back to the list once BlueZ no longer knows the device.
         let mac = self.mac.clone();
@@ -1068,5 +1065,5 @@ fn confirm_forget(ctx: Ctx, device: &Device) {
 
 /// Start loading this page's data before it is opened.
 pub fn prefetch() {
-    system::prefetch("bluetooth", load);
+    system::prefetch_persistent("bluetooth", load);
 }

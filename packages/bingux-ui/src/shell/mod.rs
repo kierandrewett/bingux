@@ -10,8 +10,8 @@ pub mod window;
 
 pub use menu::{MenuButton, MenuItem, menu_button, menu_item, menu_separator, submenu};
 pub use navigation::{
-    NavItem, NavigationSplitView, PageAction, PageHeader, Profile, SearchField, Subpage,
-    use_page_busy, use_page_header,
+    NavItem, NavigationSplitView, PageAction, PageHead, Profile, SearchField, Subpage,
+    use_page_busy,
 };
 pub use overlays::{
     Dialog, DialogResponse, OverlayHost, Overlays, ResponseKind, Toast, dialog, use_overlays,

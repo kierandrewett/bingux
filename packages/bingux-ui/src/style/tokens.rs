@@ -272,6 +272,19 @@ pub enum Dim {
     IconRow,
     /// The slot of a 16 px control glyph, such as a status tick.
     IconControl,
+    /// A dense one-line row for tools and inspectors: 28 px. Property
+    /// editors, table rows and flame graph legends use it.
+    Dense,
+    /// A control inside a dense row: 24 px.
+    DenseControl,
+    /// The name column of a dense property row: 120 px.
+    PropLabel,
+    /// One bar of a flame graph: 20 px.
+    FlameRow,
+    /// A frame timeline strip: 72 px.
+    Timeline,
+    /// The widest a dense inline editor (number, colour, choice) gets: 140 px.
+    DenseField,
 }
 
 impl Dim {
@@ -324,6 +337,12 @@ impl Dim {
             Dim::PreviewLine => 40.0,
             Dim::IconRow => 18.0,
             Dim::IconControl => 16.0,
+            Dim::Dense => 28.0,
+            Dim::DenseControl => 24.0,
+            Dim::PropLabel => 120.0,
+            Dim::FlameRow => 20.0,
+            Dim::Timeline => 72.0,
+            Dim::DenseField => 140.0,
             Dim::PreviewBar => 4.0,
             Dim::PreviewTitleBar => 16.0,
             Dim::Chart => 120.0,
@@ -532,6 +551,9 @@ pub enum Elevation {
     Raised,
     /// Dialogs and popups: 16 px down, 48 px blur.
     Floating,
+    /// A page sliding over the one under it: no offset, 24 px blur. The
+    /// caller scales its opacity along the slide.
+    Sheet,
     /// A slider knob: 1 px down, 3 px blur.
     Knob,
 }
@@ -542,6 +564,7 @@ impl Elevation {
         match self {
             Elevation::Raised => (8.0, 24.0, 0.35),
             Elevation::Floating => (16.0, 48.0, 0.45),
+            Elevation::Sheet => (0.0, 24.0, 0.22),
             Elevation::Knob => (1.0, 3.0, 0.4),
         }
     }

@@ -59,9 +59,9 @@ pub mod prelude {
     };
     pub use crate::shell::{
         Banner, BannerKind, Dialog, HeaderBar, MenuButton, MenuItem, NavItem, NavigationSplitView,
-        OverlayHost, Overlays, PageAction, PageHeader, Profile, ResponseKind, SearchField,
+        OverlayHost, Overlays, PageAction, PageHead, Profile, ResponseKind, SearchField,
         StatusPage, WindowControls, banner, dialog, menu_button, menu_item, menu_separator,
-        status_page, submenu, use_overlays, use_page_busy, use_page_header,
+        status_page, submenu, use_overlays, use_page_busy,
     };
     pub use crate::style::*;
     pub use crate::surface::use_tokens;

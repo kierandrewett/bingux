@@ -17,7 +17,7 @@ use freya::prelude::*;
 
 use crate::controls::{action_button, icon_button, search_field};
 use crate::icons::{self, Icon};
-use crate::motion::{crossfade, focus_ring};
+use crate::motion::{Focusable, crossfade};
 use crate::shell::sections::{self, SearchHit};
 use crate::shell::window::{HeaderBar, WindowControls};
 use crate::style::*;
@@ -151,7 +151,8 @@ impl Component for SidebarRow {
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
             )
-            .child(focus_ring(focus(), Radius::Control))
+            .focusable(focus(), Radius::Control)
+            .tw(&tokens, &[w_full()])
     }
 }
 
@@ -234,29 +235,25 @@ pub struct PageAction {
     pub switch: Option<bool>,
 }
 
-/// What a page adds to its title row: a status line that replaces the
-/// sentence under the title, such as "Connected to Home", and an action at
-/// the right of the title, a button or a master switch. Set it with
-/// [`use_page_header`].
+/// The title block at the top of a page: the page's name large, the status
+/// line under it when the page sets one, and an action at the right. A page
+/// puts it first in its own content, so it draws and scrolls with the page and
+/// always shows that page's own status. The name comes from the page frame the
+/// split view draws around each page.
 #[derive(Clone, Default, PartialEq)]
-pub struct PageHeader {
+pub struct PageHead {
     pub subtitle: Option<String>,
     pub action: Option<PageAction>,
-    /// Set by [`PageHeader::hero_title`]: the page's hero already names it, so
-    /// the large title row is left out.
-    pub hero: bool,
 }
 
-impl PageHeader {
-    pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
-        self.subtitle = Some(subtitle.into());
-        self
+impl PageHead {
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    /// Leaves out the large page title, for a page whose hero already names
-    /// it. The header bar shows the title from the start instead.
-    pub fn hero_title(mut self) -> Self {
-        self.hero = true;
+    /// The sentence under the title, such as "Connected to Home".
+    pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
+        self.subtitle = Some(subtitle.into());
         self
     }
 
@@ -273,7 +270,7 @@ impl PageHeader {
         self
     }
 
-    /// A master switch at the right of the header, as GNOME puts Wi-Fi and
+    /// A master switch at the right of the title, as GNOME puts Wi-Fi and
     /// Bluetooth. `label` names it for assistive tools; `on_toggle` receives
     /// the new state.
     pub fn switch(
@@ -292,46 +289,46 @@ impl PageHeader {
     }
 }
 
-/// The headers that pages have set, each with the page it belongs to.
-#[derive(Clone, Copy, PartialEq)]
-struct PageHeaders(State<Vec<(u64, PageKey, PageHeader)>>);
+impl Component for PageHead {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let title = try_consume_context::<CurrentPage>().map(|page| page.title);
+        let action: Option<Element> = self.action.clone().map(|action| match action {
+            PageAction {
+                on_press,
+                switch: Some(on),
+                ..
+            } => crate::controls::switch(on, move |_: bool| on_press.call(())).into(),
+            action => action_button(action.label, action.on_press).into(),
+        });
+        let status = self.subtitle.clone().unwrap_or_default();
+        title_row(&tokens, title, status, action)
+    }
+}
 
-/// The page on screen, provided to its descendants on every render so a page
-/// header can say which page it belongs to.
+/// The page's name, provided by the frame the split view draws around the
+/// page. A [`PageHead`] reads it, so its name is the page it is drawn in.
 #[derive(Clone, PartialEq)]
-struct PageRoute(PageKey);
+struct CurrentPage {
+    title: String,
+}
 
-/// Shows `header` in the header bar while the calling page is open. Call it
-/// on every render with the header the page wants; a changed header replaces
-/// the one shown. A header belongs to the page it was set on, so a subpage
-/// never shows the header of the page it was opened from.
-pub fn use_page_header(header: PageHeader) {
-    static NEXT_ID: AtomicU64 = AtomicU64::new(1);
-    let id = use_hook(|| NEXT_ID.fetch_add(1, Ordering::Relaxed));
-    let headers = use_try_consume::<PageHeaders>().map(|found| found.0);
-    // Read on every render, not once: the page can change without remounting.
-    let route = try_consume_context::<PageRoute>().map(|route| route.0);
-    use_side_effect_with_deps(&(route.clone(), header.clone()), move |(route, header)| {
-        let (Some(mut headers), Some(route)) = (headers, route.clone()) else {
-            return;
-        };
-        let shown = headers
-            .peek()
-            .iter()
-            .find(|(other, _, _)| *other == id)
-            .map(|(_, page, set)| (page.clone(), set.clone()));
-        if shown == Some((route.clone(), header.clone())) {
-            return;
-        }
-        let mut list = headers.write();
-        list.retain(|(other, _, _)| *other != id);
-        list.push((id, route, header.clone()));
-    });
-    use_drop(move || {
-        if let Some(mut headers) = headers {
-            headers.write().retain(|(other, _, _)| *other != id);
-        }
-    });
+/// The page as the split view draws it: its name is provided to the page
+/// content. The split view keeps the frame of a page that is sliding out, so
+/// that page keeps its own name while it moves.
+#[derive(Clone, PartialEq)]
+struct PageFrame {
+    title: String,
+    content: Element,
+}
+
+impl Component for PageFrame {
+    fn render(&self) -> impl IntoElement {
+        provide_context(CurrentPage {
+            title: self.title.clone(),
+        });
+        self.content.clone()
+    }
 }
 
 /// Where a page sits: its index in the sidebar and the title of its open subpage.
@@ -365,6 +362,53 @@ fn page_motion(previous: &PageKey, next: &PageKey) -> Option<PageMotion> {
     }
 }
 
+/// A slide in progress: the page that moved away, and where the moving page
+/// and the dim of the page under it start from. The values run from the last
+/// frame drawn, so a move that starts mid-slide continues from there.
+#[derive(Clone)]
+struct Slide {
+    motion: PageMotion,
+    outgoing: Element,
+    start_x: f32,
+    start_dim: f32,
+}
+
+impl Slide {
+    /// A slide from what is on screen: `shown` is the last frame's slide, when
+    /// one was running, so a move that interrupts it continues from there.
+    fn start(motion: PageMotion, outgoing: Element, shown: Option<(PageMotion, f32, f32)>) -> Self {
+        let (start_x, start_dim) = match (motion, shown) {
+            (PageMotion::Push, Some((PageMotion::Pop, x, dim))) => (x, dim),
+            (PageMotion::Push, _) => (1.0, 0.0),
+            (PageMotion::Pop, Some((PageMotion::Push, x, dim))) => (x, dim),
+            (PageMotion::Pop, _) => (0.0, 1.0),
+            (PageMotion::Fade, _) => (0.0, 0.0),
+        };
+        Self {
+            motion,
+            outgoing,
+            start_x,
+            start_dim,
+        }
+    }
+
+    /// The moving page's offset, as a fraction of the width, and the dim of
+    /// the page under it, at `progress`.
+    fn at(&self, progress: f32) -> (f32, f32) {
+        match self.motion {
+            PageMotion::Push => (
+                self.start_x * (1.0 - progress),
+                self.start_dim + (1.0 - self.start_dim) * progress,
+            ),
+            PageMotion::Pop => (
+                self.start_x + (1.0 - self.start_x) * progress,
+                self.start_dim * (1.0 - progress),
+            ),
+            PageMotion::Fade => (0.0, 0.0),
+        }
+    }
+}
+
 /// What the split view remembers between renders to run page motion.
 #[derive(Default)]
 struct PageMemory {
@@ -374,7 +418,10 @@ struct PageMemory {
     element: Option<Element>,
     pending: bool,
     duration: u64,
-    active: Option<(PageMotion, Element)>,
+    active: Option<Slide>,
+    /// The moving page's offset and the under page's dim in the last frame
+    /// drawn, when that frame was a slide.
+    shown: Option<(PageMotion, f32, f32)>,
 }
 
 /// The page column: centred, at most `page_width` wide, with the page margins.
@@ -392,8 +439,8 @@ fn page_column(content: Element, side: Space, page_width: Dim, inset: bool) -> i
 }
 
 /// The title row at the top of a page on a desktop window: the page name
-/// large unless the page's hero already names it, the page's status line
-/// under it when it sets one, and the page's action at the right.
+/// large, the page's status line under it when it sets one, and the page's
+/// action at the right.
 fn title_row(
     tokens: &Tokens,
     title: Option<String>,
@@ -505,7 +552,6 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let search_id = use_a11y();
         let search_focus = use_focus(search_id);
         let busy_pages = use_provide_context(|| BusyPages(State::create(Vec::new())));
-        let page_headers = use_provide_context(|| PageHeaders(State::create(Vec::new())));
         let section_registry = sections::provide();
         let busy = !busy_pages.0.read().is_empty();
         // On a narrow window this is true while the list of pages is the screen.
@@ -517,15 +563,14 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let mut sidebar_open = use_state(move || narrow && start_on_list);
         let side = if narrow { S4 } else { S8 };
         let selected = self.selected;
-        // The page on screen. Headers are kept per page, so a subpage never
-        // shows the header of the page it was opened from.
+        // The page on screen. Its key tells a subpage from the page it was
+        // opened from.
         let index = self
             .items
             .iter()
             .position(|item| *item == selected())
             .unwrap_or(0);
         let page_key: PageKey = (index, self.subpage.as_ref().map(|s| s.title.clone()));
-        provide_context(PageRoute(page_key.clone()));
         let scroll = use_scroll_controller(ScrollConfig::default);
         // The pages with results, when the split view searches.
         let search_hits = self
@@ -551,17 +596,8 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let submit = results.as_ref().map(|(_, on_submit)| on_submit.clone());
         let show_list = narrow && sidebar_open() && !searching;
         // The header is the drag region. It carries Back, the spinner while a
-        // page is busy and the window buttons. On a phone it also carries the
-        // page title and the page's action; on a desktop window those are the
-        // title row at the top of the page.
-        let page_header = page_headers
-            .0
-            .read()
-            .iter()
-            .rev()
-            .find(|(_, page, _)| *page == page_key)
-            .map(|(_, _, header)| header.clone())
-            .unwrap_or_default();
+        // page is busy and the window buttons. The page title shows here once
+        // the title in the page scrolls under the header.
         // On a narrow window a page goes back to the list of pages.
         let to_list: EventHandler<()> = (move |_: ()| {
             let mut sidebar_open = sidebar_open;
@@ -583,33 +619,14 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             None if searching => "Search results".to_string(),
             None => selected().title().to_string(),
         };
-        let page_header = if show_list || searching {
-            PageHeader::default()
-        } else {
-            page_header
-        };
-        let status = page_header.subtitle.clone().unwrap_or_default();
-        let hero = page_header.hero;
-        let action: Option<Element> = page_header.action.map(|action| match action {
-            PageAction {
-                on_press,
-                switch: Some(on),
-                ..
-            } => crate::controls::switch(on, move |_: bool| on_press.call(())).into(),
-            action => action_button(action.label, action.on_press).into(),
-        });
         // A desktop header floats over the page and blurs what scrolls under it.
         let overlay = !narrow && !show_list;
         let header = if show_list {
             HeaderBar::new(self.app_title.clone()).fill(Paint::Bg)
         } else {
-            let header = HeaderBar::new(if narrow || hero {
-                title.clone()
-            } else {
-                String::new()
-            })
-            .busy(busy)
-            .fill(if overlay { Paint::Frosted } else { Paint::Bg });
+            let header = HeaderBar::new(String::new())
+                .busy(busy)
+                .fill(if overlay { Paint::Frosted } else { Paint::Bg });
             match &back {
                 Some(on_back) => header.leading(crossfade(PageBack {
                     page: page_key.clone(),
@@ -620,33 +637,27 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         };
         // A phone has no window buttons.
         let header = if narrow {
-            match action.clone() {
-                Some(action) => header.trailing(action),
-                None => header,
-            }
+            header
         } else {
             header.trailing(WindowControls)
         };
-        let head: Option<Element> = if show_list {
-            None
-        } else if narrow {
-            (!status.is_empty()).then(|| status_line(&tokens, &status))
-        } else if hero && status.is_empty() && action.is_none() {
-            None
-        } else {
-            let title = (!hero).then(|| title.clone());
-            Some(title_row(&tokens, title, status, action))
-        };
-        // Results replace the page content while the search has text.
+        // Results replace the page content while the search has text. Results
+        // carry their own page head, as a page does.
         let shown: Element = match results {
-            Some((results, _)) if searching => results,
+            Some((results, _)) if searching => rect()
+                .tw(&tokens, PAGE_BODY)
+                .child(PageHead::new())
+                .child(results)
+                .into(),
             _ => self.content.clone(),
         };
-        let body: Element = rect()
-            .tw(&tokens, PAGE_BODY)
-            .maybe_child(head)
-            .child(shown)
-            .into();
+        // The page as the split view draws it, framed with its name. The page
+        // head reads that name, and a page sliding out keeps its own frame.
+        let body: Element = PageFrame {
+            title: title.clone(),
+            content: shown,
+        }
+        .into();
         // Alt+Left and the mouse Back button go back one step.
         let back_key = back;
         let back_pointer = back_key.clone();
@@ -688,11 +699,12 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 changed = true;
                 let motion = page_motion(&previous, &page_key)
                     .filter(|motion| tokens.motion(motion.ms()) > 0);
+                let shown = memory.shown.take();
                 memory.active = match (motion, memory.element.clone()) {
                     (Some(motion), Some(outgoing)) => {
                         memory.duration = tokens.motion(motion.ms());
                         memory.pending = true;
-                        Some((motion, outgoing))
+                        Some(Slide::start(motion, outgoing, shown))
                     }
                     _ => None,
                 };
@@ -709,36 +721,63 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             let mut memory = memory.borrow_mut();
             if !changed && progress >= 1.0 {
                 memory.active = None;
+                memory.shown = None;
             }
             memory.active.clone()
         };
-        // The incoming page: offset and opacity, and whether it draws over the
-        // outgoing page.
-        let travel = width;
-        let (in_offset, in_opacity, in_layer, outgoing) = match active {
-            None => (0.0, 1.0, 0, None),
-            Some((motion, element)) => match motion {
-                PageMotion::Push => (
-                    (1.0 - progress) * travel,
-                    1.0,
-                    1,
-                    Some((0.0, 1.0 - 0.12 * progress, 0, element)),
-                ),
-                PageMotion::Pop => (
-                    0.0,
-                    0.88 + 0.12 * progress,
-                    0,
-                    Some((progress * travel, 1.0, 1, element)),
-                ),
-                PageMotion::Fade => (0.0, progress, 0, Some((0.0, 1.0 - progress, 1, element))),
-            },
+        let motion = active.as_ref().map(|slide| slide.motion);
+        // Push: the new page moves in over the old, which dims. Pop: the top
+        // page moves out over the one it revealed, which undims. Each frame is
+        // recorded so an interrupting move starts from where the page is.
+        let (page_offset, page_opacity, page_layer, outgoing, sliver) = match active {
+            None => (0.0, 1.0, 0, None, None),
+            Some(slide) => {
+                let (x, dim) = slide.at(progress);
+                let moved = x * width;
+                let under = 1.0 - 0.12 * dim;
+                // Zero-width sliver on the moving page's leading edge, lit
+                // most mid-slide and gone at rest.
+                let sliver = Some((moved, (4.0 * x * (1.0 - x)).clamp(0.0, 1.0)));
+                match slide.motion {
+                    PageMotion::Fade => (
+                        0.0,
+                        progress,
+                        0,
+                        Some((0.0, 1.0 - progress, 1, slide.outgoing, false)),
+                        None,
+                    ),
+                    PageMotion::Push => {
+                        memory.borrow_mut().shown = Some((slide.motion, x, dim));
+                        (
+                            moved,
+                            1.0,
+                            1,
+                            Some((0.0, under, 0, slide.outgoing, false)),
+                            sliver,
+                        )
+                    }
+                    PageMotion::Pop => {
+                        memory.borrow_mut().shown = Some((slide.motion, x, dim));
+                        (
+                            0.0,
+                            under,
+                            0,
+                            Some((moved, 1.0, 1, slide.outgoing, true)),
+                            sliver,
+                        )
+                    }
+                }
+            }
         };
         let page = rect()
             .width(Size::fill())
             .height(Size::flex(1.0))
-            .offset_x(in_offset)
-            .opacity(in_opacity)
-            .layer(Layer::Relative(in_layer))
+            .offset_x(page_offset)
+            .opacity(page_opacity)
+            .layer(Layer::Relative(page_layer))
+            .maybe(motion == Some(PageMotion::Push), |page| {
+                page.tw(&tokens, &[bg(Paint::Bg)])
+            })
             .child(
                 // Bingux patch: keep the bar clear of the rounded window corner.
                 ScrollView::new_controlled(scroll)
@@ -751,7 +790,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                             .child(page_column(body, side, self.page_width, overlay)),
                     ),
             );
-        let outgoing = outgoing.map(|(offset, opacity, layer, element)| {
+        let outgoing = outgoing.map(|(offset, opacity, layer, element, moving)| {
             rect()
                 .position(Position::new_absolute().top(0.0).left(0.0))
                 .width(Size::fill())
@@ -759,6 +798,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 .offset_x(offset)
                 .opacity(opacity)
                 .layer(Layer::Relative(layer))
+                .maybe(moving, |sheet| sheet.tw(&tokens, &[bg(Paint::Bg)]))
                 .child(ScrollView::new().drag_scrolling(false).child(page_column(
                     element,
                     side,
@@ -766,17 +806,27 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                     overlay,
                 )))
         });
+        let sliver = sliver.map(|(offset, opacity)| {
+            rect()
+                .position(Position::new_absolute().top(0.0).left(0.0))
+                .width(Size::px(0.0))
+                .height(Size::fill())
+                .offset_x(offset)
+                .opacity(opacity)
+                .tw(&tokens, &[shadow(Elevation::Sheet)])
+        });
         let edge_top = if overlay { Dim::Header.px() } else { 0.0 };
         let content_area = rect()
             .width(Size::fill())
             .height(Size::flex(1.0))
             .child(page)
             .maybe_child(outgoing)
+            .maybe_child(sliver)
             .child(ScrollEdge {
                 scroll,
                 top: edge_top,
             });
-        let header = if narrow || show_list || hero {
+        let header = if show_list {
             header
         } else {
             header.title_slot(crossfade(PageTitle {

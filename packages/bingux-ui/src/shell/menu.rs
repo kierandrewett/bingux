@@ -14,12 +14,12 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
-use crate::motion::focus_ring;
+use crate::motion::{Focusable, PRESENCE_SCALE, use_presence};
 use crate::style::*;
 use crate::surface::{is_activation_key, use_tokens};
 use crate::typography::{BODY, Ink};
 
-use super::overlays::{Overlays, input_shield, use_overlays, use_presence};
+use super::overlays::{Overlays, input_shield, use_overlays};
 
 /// How long a pointer must rest on a row with a submenu before it opens.
 const SUBMENU_OPEN_DELAY_MS: u64 = 150;
@@ -590,7 +590,7 @@ impl Component for MenuLayer {
         let tokens = use_tokens();
         let overlays = self.overlays;
         let a11y_id = overlays.menu_panel;
-        let progress = use_presence(0, self.closing, tokens.motion(90), move |_| {
+        let progress = use_presence(!self.closing, tokens.motion(90), move || {
             overlays.finish_menu()
         });
         use_side_effect(move || a11y_id.request_focus());
@@ -629,7 +629,7 @@ impl Component for MenuLayer {
                 .position(Position::new_absolute().top(panel.y).left(panel.x))
                 .layer(Layer::Overlay)
                 .opacity(progress)
-                .scale(0.96 + 0.04 * progress)
+                .scale(PRESENCE_SCALE + (1.0 - PRESENCE_SCALE) * progress)
                 .transform_origin(TransformOrigin::top_left())
                 .tw(&tokens, MENU)
                 .tw(&tokens, &[w(Dim::Menu)])
@@ -773,6 +773,7 @@ impl Component for MenuRow {
 #[derive(Clone, PartialEq)]
 pub struct MenuButton {
     label: String,
+    icon: Option<Icon>,
     items: Vec<MenuItem>,
 }
 
@@ -780,7 +781,17 @@ pub struct MenuButton {
 pub fn menu_button(label: impl Into<String>, items: Vec<MenuItem>) -> MenuButton {
     MenuButton {
         label: label.into(),
+        icon: None,
         items,
+    }
+}
+
+impl MenuButton {
+    /// Show `icon` alone in a square button, as an icon button. The label
+    /// stays the accessible name.
+    pub fn icon(mut self, icon: Icon) -> Self {
+        self.icon = Some(icon);
+        self
     }
 }
 
@@ -799,16 +810,26 @@ impl Component for MenuButton {
             .a11y_id(a11y_id)
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Button)
+            .maybe(self.icon.is_none(), |button| {
+                button.tw(
+                    &tokens,
+                    &[h(Dim::Control), min_w(Dim::Box9), px(S3), gap(S2), flex_row()],
+                )
+            })
+            .maybe(self.icon.is_some(), |button| {
+                button
+                    .tw(&tokens, &[w(Dim::Button), h(Dim::Button)])
+                    .a11y_alt(self.label.clone())
+            })
             .tw(
                 &tokens,
                 &[
-                    h(Dim::Control),
-                    min_w(Dim::Box9),
-                    px(S3),
-                    gap(S2),
-                    flex_row(),
                     center(),
-                    rounded(Radius::Control),
+                    rounded(if self.icon.is_some() {
+                        Radius::Pill
+                    } else {
+                        Radius::Control
+                    }),
                     surface(Paint::Control, hovering() || open, pressing(), false),
                 ],
             )
@@ -845,17 +866,24 @@ impl Component for MenuButton {
                     true,
                 );
             })
-            .child(
+            .maybe_child(self.icon.is_none().then(|| {
                 BODY.in_ink(Ink::Text)
                     .label(&tokens, self.label.clone())
-                    .max_lines(1),
+                    .max_lines(1)
+                    .into_element()
+            }))
+            .maybe_child(
+                self.icon
+                    .map(|icon| icons::icon(icon, IconSize::Control, Ink::Text.color(&tokens))),
             )
-            .child(icons::icon(
-                Icon::PanDown,
-                IconSize::Mark,
-                Paint::Muted.color(&tokens),
-            ))
-            .child(focus_ring(focus(), Radius::Control))
+            .maybe_child(self.icon.is_none().then(|| {
+                icons::icon(
+                    Icon::PanDown,
+                    IconSize::Mark,
+                    Paint::Muted.color(&tokens),
+                )
+            }))
+            .focusable(focus(), Radius::Control)
             .into_element()
     }
 }

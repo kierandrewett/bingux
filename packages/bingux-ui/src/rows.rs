@@ -8,7 +8,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use accesskit::Toggled;
-use freya::animation::*;
 use freya::prelude::*;
 
 use crate::app_icon::app_icon;
@@ -20,7 +19,7 @@ use crate::controls::switch::switch;
 use crate::controls::text_field::text_field;
 use crate::group::{SlotFilter, card_rows, use_row_lit, use_row_match};
 use crate::icons::{self, Icon};
-use crate::motion::focus_ring;
+use crate::motion::{Focusable, MOVE_MS, use_tween};
 use crate::search_highlight::{self, MatchSink};
 use crate::shell::menu::{MenuItem, menu_item};
 use crate::shell::overlays::Overlays;
@@ -29,9 +28,16 @@ use crate::surface::{provide_enabled, use_tokens};
 use crate::typography::{BADGE, BODY, CAPTION, Ink, VALUE};
 
 /// Whether the row around a value takes presses. Set by `Row`, read by
-/// `ValueText`.
+/// `ValueText` and by any selectable text through [`use_in_pressable_row`].
 #[derive(Clone, Copy, PartialEq)]
 struct RowPressable(State<bool>);
+
+/// Whether this component sits inside a row that takes presses. Text there is
+/// plain, never selectable: a press anywhere on the row opens it, and a text
+/// cursor over it would promise a selection that cannot happen.
+pub(crate) fn use_in_pressable_row() -> bool {
+    use_try_consume::<RowPressable>().is_some_and(|flag| (flag.0)())
+}
 
 /// One row: optional leading icon, title, optional subtitle, and trailing
 /// content. The whole row is the target when `on_press` is set.
@@ -266,7 +272,7 @@ impl Component for ValueText {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let overlays = try_consume_context::<Overlays>();
-        let pressable = use_try_consume::<RowPressable>().is_some_and(|flag| (flag.0)());
+        let pressable = use_in_pressable_row();
         // A selection would take the press that opens a pressable row, so
         // there the value is plain text; elsewhere it can be selected.
         let value: Element = if pressable {
@@ -345,7 +351,7 @@ impl Component for Row {
         let nested_shown = self.nested.as_ref().is_some_and(|(shown, _)| *shown);
         let nested_lit = use_state(Vec::<usize>::new);
         let nested_matched = use_state(Vec::<usize>::new);
-        let reveal = use_reveal(nested_shown);
+        let reveal = use_tween(if nested_shown { 1.0 } else { 0.0 }, tokens.motion(MOVE_MS));
         let nested_hit = !nested_matched.read().is_empty();
         use_row_match(row_hit || nested_hit);
         let single_line = self.subtitle.is_none();
@@ -552,7 +558,8 @@ impl Component for Row {
             )
             .child(text_column)
             .maybe_child(trailing)
-            .child(focus_ring(focus(), Radius::Control));
+            .focusable(focus(), Radius::Control)
+            .tw(&tokens, &[w_full()]);
         let face = match radio.and_then(|choice| choice.nav.clone()) {
             Some(nav) => {
                 face.on_key_down(move |event: Event<KeyboardEventData>| radio_arrow(&nav, event))
@@ -580,21 +587,6 @@ impl Component for Row {
             }))
             .into_element()
     }
-}
-
-/// Eases from 0 to 1 as `open` turns on, over the motion time. Drives the
-/// reveal of children under a row, the same as an expander's.
-fn use_reveal(open: bool) -> f32 {
-    let tokens = use_tokens();
-    let motion = tokens.motion(160);
-    use_animation_transition(if open { 1.0 } else { 0.0 }, move |from, to| {
-        AnimNum::new(from, to)
-            .time(motion)
-            .function(Function::Cubic)
-            .ease(Ease::Out)
-    })
-    .get()
-    .value()
 }
 
 /// The rows under a row, set in by one gutter. They take the same hairlines,
@@ -1190,7 +1182,7 @@ impl Component for ExpanderRow {
         let tokens = use_tokens();
         let initial = self.expanded.unwrap_or(false);
         let mut open = use_state(move || initial);
-        let progress = use_reveal(open());
+        let progress = use_tween(if open() { 1.0 } else { 0.0 }, tokens.motion(MOVE_MS));
         let chevron = rect().rotate(progress * 90.0).child(icons::icon(
             Icon::GoNext,
             IconSize::Mark,

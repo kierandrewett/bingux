@@ -4,7 +4,7 @@
 use freya::animation::*;
 use freya::prelude::*;
 
-use crate::motion::focus_ring;
+use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::{use_enabled, use_tokens};
 use crate::typography::{CAPTION, Ink};
@@ -312,9 +312,12 @@ impl Component for Slider {
                             .top(centre - thumb_size / 2.0)
                             .left(centre_x - thumb_size / 2.0),
                     )
-                    .width(Size::px(thumb_size))
-                    .height(Size::px(thumb_size))
-                    .child(focus_ring(focus(), Radius::Pill))
+                    .child(
+                        rect()
+                            .width(Size::px(thumb_size))
+                            .height(Size::px(thumb_size))
+                            .focusable(focus(), Radius::Pill),
+                    )
             }))
             .child(
                 rect()

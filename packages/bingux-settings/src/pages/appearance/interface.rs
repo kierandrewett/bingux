@@ -20,7 +20,7 @@ const INTERFACE: &str = "org.gnome.desktop.interface";
 /// among them, so a value set elsewhere still shows.
 const TEXT_SIZES: [u32; 8] = [80, 90, 100, 110, 125, 150, 175, 200];
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Theme {
     /// The directory name, which is what the key stores.
     id: String,
@@ -28,7 +28,7 @@ pub struct Theme {
     name: String,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Interface {
     text_scale: f64,
     cursor_theme: String,

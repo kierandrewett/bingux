@@ -17,14 +17,14 @@ const XKB_EVDEV: &str = "/usr/share/X11/xkb/rules/evdev.xml";
 const MAX_ID: usize = 64;
 
 /// A keyboard layout or input method, as the configuration names it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Source {
     pub kind: String,
     pub id: String,
 }
 
 /// The whole `input_sources` table.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SourcesConfig {
     pub sources: Vec<Source>,
     pub per_window: bool,

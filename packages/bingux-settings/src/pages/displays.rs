@@ -16,7 +16,7 @@ use crate::pages::gnoblin;
 use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Icon, Overlays, ResponseKind, Status, Tokens, action_row, caption, choice_row, dialog,
+    Group, Icon, Overlays, PageHead, ResponseKind, Status, Tokens, action_row, caption, choice_row, dialog,
     icon, menu_item, menu_separator, page_column, primary_button, row, row_button, skeleton,
     status, switch_row, typography, use_overlays, use_tokens,
 };
@@ -2369,7 +2369,7 @@ impl Component for DisplaysPage {
         let navigator = use_navigator();
         let tokens = use_tokens();
 
-        let mut page = page_column();
+        let mut page = page_column().child(PageHead::new());
         let Some(loaded) = model.read().clone() else {
             return page.child(skeleton());
         };
@@ -2437,7 +2437,7 @@ impl Component for DisplayPage {
         let model = system::use_cached_saved("displays", load);
         let ctx = use_page_ctx(model);
 
-        let page = page_column();
+        let page = page_column().child(PageHead::new());
         let Some(loaded) = model.read().clone() else {
             return page.child(skeleton());
         };

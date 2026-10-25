@@ -16,7 +16,7 @@ use std::collections::HashSet;
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
-use crate::motion::focus_ring;
+use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::{is_activation_key, use_tokens};
 use crate::typography::{BADGE, BODY, CAPTION, Ink};
@@ -277,7 +277,8 @@ impl Component for TreeView {
                     .height(Size::fill())
                     .children(children),
             )
-            .child(focus_ring(focus(), Radius::Card))
+            .focusable(focus(), Radius::Card)
+            .tw(&tokens, &[w_full(), h_full()])
     }
 }
 

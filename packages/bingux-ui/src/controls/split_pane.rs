@@ -9,7 +9,7 @@
 
 use freya::prelude::*;
 
-use crate::motion::focus_ring;
+use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::use_tokens;
 
@@ -113,7 +113,7 @@ impl Component for SplitPane {
             event.stop_propagation();
             dragging.set(true);
         })
-        .child(focus_ring(focus(), Radius::Pill));
+        .focusable(focus(), Radius::Pill);
 
         // The first pane is a run-time share of the length, so a raw percent;
         // the second takes what the divider leaves.

@@ -9,12 +9,15 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
+use crate::motion::{PRESENCE_SCALE, use_presence};
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::typography::{CAPTION, Ink};
 
 /// How long the pointer rests on the glyph before the tooltip shows.
 const TOOLTIP_DELAY: Duration = Duration::from_millis(500);
+/// How long the tooltip takes to fade and scale in or out.
+const TOOLTIP_MOTION_MS: u64 = 120;
 
 /// The approximate width of one character of the tooltip label, as a
 /// fraction of its font size. Used only to decide the tooltip's side.
@@ -70,7 +73,8 @@ impl Component for TooltipIcon {
             })
             .child(icons::icon(self.icon, self.size, self.paint.color(&tokens)));
 
-        if !visible() {
+        let progress = use_presence(visible(), tokens.motion(TOOLTIP_MOTION_MS), || {});
+        if !visible() && progress <= 0.0 {
             return glyph.into_element();
         }
 
@@ -90,6 +94,8 @@ impl Component for TooltipIcon {
         );
         let bubble = rect()
             .layer(Layer::Overlay)
+            .opacity(progress)
+            .scale(PRESENCE_SCALE + (1.0 - PRESENCE_SCALE) * progress)
             .tw(&tokens, TOOLTIP)
             .tw(
                 &tokens,

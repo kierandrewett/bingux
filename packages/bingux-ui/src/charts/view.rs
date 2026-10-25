@@ -17,7 +17,7 @@ use super::palette;
 use super::path::{self, Pt};
 use super::scale::{Domain, Linear, lone, nice, time};
 use super::svg::{self, Svg, clip_rect, num, stroke_line};
-use crate::motion::focus_ring;
+use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
@@ -631,11 +631,11 @@ fn drawing(scene: Scene, tokens: &Tokens, width: f32, height: f32) -> Rect {
 
 fn focus_outline(focus: Focus, width: f32, height: f32) -> Rect {
     rect()
-        .position(Position::new_absolute().top(0.0).left(0.0))
-        .layer(Layer::Relative(TIP_LAYER))
         .width(Size::px(width))
         .height(Size::px(height))
-        .child(focus_ring(focus, Radius::Card))
+        .focusable(focus, Radius::Card)
+        .position(Position::new_absolute().top(0.0).left(0.0))
+        .layer(Layer::Relative(TIP_LAYER))
 }
 
 /// The popover card that follows the hovered stop.

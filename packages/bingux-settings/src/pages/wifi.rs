@@ -14,10 +14,10 @@ use crate::icons::{self, Icon};
 use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
-    Group, Overlays, PageHeader, PopupAction, PopupActions, ResponseKind, SpinnerSize, Status,
+    Group, Overlays, PageHead, PopupAction, PopupActions, ResponseKind, SpinnerSize, Status,
     Tokens, Window, action_strip, caption, centered_caption, dialog, heading, icon_button,
     page_column, popup, popup_column, row, spinner, status, strip_action, switch_row,
-    text_field, use_overlays, use_page_busy, use_page_header, use_popup_actions, use_tokens,
+    text_field, use_overlays, use_page_busy, use_popup_actions, use_tokens,
     use_window,
 };
 use bingux_ui::layout::hstack;
@@ -768,8 +768,8 @@ impl Ui {
     }
 }
 
-fn page(children: Vec<Element>) -> Rect {
-    page_column().children(children)
+fn page(head: Option<PageHead>, children: Vec<Element>) -> Rect {
+    page_column().maybe_child(head).children(children)
 }
 
 /// The text of a value, or a dash when the network does not report one.
@@ -1134,26 +1134,21 @@ impl Component for WifiPage {
         // under the veil can never write a guess to the system.
         let shown = loaded.map(|loaded| loaded.map(|model| ui.shown(model)));
         let loading = shown.is_none();
-        // The master switch lives in the header bar, as in GNOME.
+        // The master switch sits at the right of the page title, as in GNOME.
         let master = match shown.as_ref() {
             Some(Ok(model)) if wifi_usable(&model.wifi_hw) => Some(model.wifi_on),
             _ => None,
         };
-        let mut header = PageHeader {
-            subtitle: Some(wifi_subtitle(shown.as_ref())),
-            action: None,
-            ..Default::default()
-        };
+        let mut head = PageHead::new().subtitle(wifi_subtitle(shown.as_ref()));
         if let Some(on) = master {
-            header = header.switch("Wi-Fi", on, move |next: bool| ui.set_wifi(next));
+            head = head.switch("Wi-Fi", on, move |next: bool| ui.set_wifi(next));
         }
-        use_page_header(header);
 
         let model = match shown {
             None => placeholder(),
             Some(Ok(model)) => model,
             Some(Err(error)) => {
-                return page(vec![Element::from(
+                return page(Some(head.clone()), vec![Element::from(
                     status(Status::Error(error.0)).action("Try again", move |_| ui.reload()),
                 )]);
             }
@@ -1195,7 +1190,7 @@ impl Component for WifiPage {
 
         blocks.push(visible_section(ui, &model, tokens, loading));
 
-        veiled(page(blocks), loading)
+        veiled(page(Some(head), blocks), loading)
     }
 }
 
@@ -1214,14 +1209,14 @@ impl Component for SavedNetworksPage {
             None => (placeholder(), true),
             Some(Ok(model)) => (model, false),
             Some(Err(error)) => {
-                return page(vec![Element::from(
+                return page(Some(PageHead::new()), vec![Element::from(
                     status(Status::Error(error.0)).action("Try again", move |_| ui.reload()),
                 )]);
             }
         };
 
         if model.saved_names.is_empty() {
-            return page(vec![Element::from(status(Status::Empty(
+            return page(Some(PageHead::new()), vec![Element::from(status(Status::Empty(
                 "No saved networks.".into(),
             )))]);
         }
@@ -1246,7 +1241,7 @@ impl Component for SavedNetworksPage {
             )
         });
         veiled(
-            page(vec![Element::from(
+            page(Some(PageHead::new()), vec![Element::from(
                 Group::new(None::<String>).rows(rows.collect::<Vec<_>>()),
             )]),
             loading,
@@ -1266,7 +1261,6 @@ impl Component for NetworkPage {
         let tokens = use_tokens();
         use_polling(ui);
         use_page_busy(ui.busy.read().is_some());
-        use_page_header(PageHeader::default().hero_title());
 
         // Go back to the list once the network is neither in range nor saved.
         let gone = self.ssid.clone();
@@ -1286,7 +1280,7 @@ impl Component for NetworkPage {
             None => (placeholder(), true),
             Some(Ok(model)) => (model, false),
             Some(Err(error)) => {
-                return page(vec![Element::from(
+                return page(None, vec![Element::from(
                     status(Status::Error(error.0)).action("Try again", move |_| ui.reload()),
                 )]);
             }
@@ -1386,7 +1380,7 @@ impl Component for NetworkPage {
                 .row(row("Security").value(security))
                 .row(row("Speed").value(speed)),
         ));
-        veiled(page(blocks), loading)
+        veiled(page(None, blocks), loading)
     }
 }
 

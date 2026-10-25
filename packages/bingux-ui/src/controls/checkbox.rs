@@ -6,7 +6,7 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
-use crate::motion::focus_ring;
+use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
 use crate::typography::BODY;
@@ -161,7 +161,6 @@ impl Component for Checkbox {
                             edge,
                         ],
                     )
-                    .child(focus_ring(focus(), Radius::Mark))
                     .child(
                         rect()
                             .expanded()
@@ -171,7 +170,8 @@ impl Component for Checkbox {
                             )
                             .opacity(fill)
                             .maybe_child(glyph),
-                    ),
+                    )
+                    .focusable(focus(), Radius::Mark),
             )
             .maybe_child(
                 self.text

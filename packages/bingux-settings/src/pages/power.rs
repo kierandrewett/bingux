@@ -14,8 +14,8 @@ use crate::icons::Icon;
 use crate::system::{self, CommandError, CommandResult, background};
 use crate::ui::typography::{CAPTION, EMPHASIS};
 use crate::ui::{
-    Curve, Group, Overlays, PageHeader, Series, Status, Unit, choice_row, icon, line_chart,
-    page_column, ring, row, status, switch_row, use_overlays, use_page_header, use_tokens, vstack,
+    Curve, Group, Overlays, PageHead, Series, Status, Unit, choice_row, icon, line_chart,
+    page_column, ring, row, status, switch_row, use_overlays, use_tokens, vstack,
 };
 
 const SESSION: &str = "org.gnome.desktop.session";
@@ -26,7 +26,7 @@ const POWER_PLUGIN: &str = "org.gnome.settings-daemon.plugins.power";
 /// Delays offered for automatic suspend, in seconds.
 const SUSPEND_DELAYS: &[u32] = &[900, 1200, 1800, 2700, 3600, 5400, 7200];
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Battery {
     /// Charge as a fraction in `0..=1`, when UPower reports a percentage.
     fraction: Option<f64>,
@@ -43,7 +43,7 @@ struct Battery {
     health: Option<String>,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Profiles {
     choices: Vec<(String, String)>,
     active: String,
@@ -51,13 +51,13 @@ struct Profiles {
 
 /// Automatic suspend for one power source: whether it is on and the delay in
 /// seconds before it happens.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Suspend {
     enabled: bool,
     delay: u32,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Model {
     battery: Result<Option<Battery>, CommandError>,
     profiles: Result<Profiles, CommandError>,
@@ -416,6 +416,11 @@ fn picked(picks: Picks, key: &str, loaded: &str) -> String {
         .unwrap_or_else(|| loaded.to_string())
 }
 
+/// Loads the page again and saves the result for the next start.
+fn refresh() -> Model {
+    system::load_saved("power", load)
+}
+
 /// Show a choice at once and run its command in the background. A failure
 /// reverts the choice and shows the error as a toast; success reloads the
 /// model.
@@ -436,7 +441,7 @@ fn choose(
         previous,
         next,
         move || work().map(|_| ()),
-        move || background(loaded, load),
+        move || background(loaded, refresh),
     );
 }
 
@@ -664,7 +669,7 @@ pub struct PowerPage;
 
 impl Component for PowerPage {
     fn render(&self) -> impl IntoElement {
-        let loaded = system::use_cached("power", load);
+        let loaded = system::use_cached_saved("power", load);
         let overlays = use_overlays();
         let pending: Pending = use_state(BTreeMap::new);
         let picks: Picks = use_state(BTreeMap::new);
@@ -672,17 +677,17 @@ impl Component for PowerPage {
             .read()
             .as_ref()
             .and_then(|model| header_subtitle(&model.battery));
-        use_page_header(PageHeader {
+        let head = PageHead {
             subtitle,
-            ..PageHeader::default()
-        });
+            ..PageHead::new()
+        };
 
         let (model, loading) = match loaded.read().clone() {
             Some(model) => (model, false),
             None => (placeholder(), true),
         };
 
-        let mut page = page_column();
+        let mut page = page_column().child(head);
 
         // Battery: no group on a machine without one.
         page = match model.battery.clone() {
@@ -867,5 +872,5 @@ impl Component for PowerPage {
 
 /// Start loading this page's data before it is opened.
 pub fn prefetch() {
-    system::prefetch("power", load);
+    system::prefetch_saved("power", load);
 }

@@ -17,7 +17,8 @@ use super::{Window, WindowManager};
 use crate::address::Address;
 use crate::controls::button::{action_button, primary_button};
 use crate::layout::divider;
-use crate::shell::overlays::{OverlayLayers, OverlayStack, Overlays, use_presence};
+use crate::motion::use_presence;
+use crate::shell::overlays::{OverlayLayers, OverlayStack, Overlays};
 use crate::shell::window::HeaderBar;
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -38,13 +39,23 @@ const POPUP_MIN_HEIGHT: f32 = 240.0;
 /// How far an edge's resize band reaches outside the panel, and how far
 /// inside it. Most of the band is outside, so the scrollbar and controls at
 /// the panel's edge stay usable.
-const RESIZE_OUTSIDE: f32 = 8.0;
+const RESIZE_OUTSIDE: f32 = 4.0;
 const RESIZE_INSIDE: f32 = 2.0;
-/// The side of the square resize handle centred on each corner.
-const RESIZE_CORNER: f32 = 24.0;
-/// The height of the tab rail under the header, when a popup has tabs.
+/// The side of the square resize handle centred on each corner: a little
+/// larger than an edge band, so a corner is easy to find without reaching
+/// into the header buttons.
+const RESIZE_CORNER: f32 = 12.0;
+/// The space between a header button and the header's top or bottom edge: the
+/// header is `Dim::Header` tall and its buttons `Dim::Control`, centred.
+fn header_gap() -> f32 {
+    (Dim::Header.px() - Dim::Control.px()) / 2.0
+}
+
+/// The height of the tab rail under the header, when a popup has tabs: one
+/// control, and below it the same gap the header keeps under its buttons, so
+/// Cancel, the rail and the divider sit at an even rhythm.
 fn tabs_height() -> f32 {
-    Dim::Control.px() + S3.px()
+    Dim::Control.px() + header_gap()
 }
 
 /// The primary action in a popup header.
@@ -324,7 +335,7 @@ impl Component for PopupFrame {
 
         // The frame removes itself from the manager once its exit has played.
         let closing = *entry.closing.read();
-        let progress = use_presence(id, closing, tokens.motion(MOTION_MS), move |_| {
+        let progress = use_presence(!closing, tokens.motion(MOTION_MS), move || {
             manager.remove(id)
         });
 
@@ -408,7 +419,6 @@ impl Component for PopupFrame {
                     // The popup is a window of its own: the page colour,
                     // with the groups raised on it as cards.
                     bg(Paint::Bg),
-                    border(Line::Hairline),
                     shadow(Elevation::Floating),
                     clip(),
                 ],
@@ -435,7 +445,11 @@ impl Component for PopupFrame {
             .child(header)
             .maybe_child(entry.tabs.clone().map(|tabs| {
                 rect()
-                    .tw(&tokens, &[w_full(), px(S4), pb(S3)])
+                    // The rail's ends line up with the header buttons' outer
+                    // edges, which the header insets by `S2`. The rail is one
+                    // control tall at the top; the rest of the height is the
+                    // gap below it.
+                    .tw(&tokens, &[w_full(), px(S2)])
                     .height(Size::px(tabs_height()))
                     .child(tabs)
             }))
@@ -472,6 +486,18 @@ impl Component for PopupFrame {
                 rect()
                     .scale(OPEN_SCALE + (1.0 - OPEN_SCALE) * progress)
                     .child(panel)
+                    // The window's edge, drawn over everything the panel holds
+                    // (the header bar paints over a border drawn under it), so
+                    // the hairline runs round the whole popup. It has no fill,
+                    // so presses reach the panel through it.
+                    .child(
+                        rect()
+                            .position(Position::new_absolute().top(0.0).left(0.0))
+                            .layer(Layer::Relative(1))
+                            .width(Size::px(width))
+                            .height(Size::px(height))
+                            .tw(&tokens, &[rounded(Radius::Overlay), border(Line::Hairline)]),
+                    )
                     // The handles sit beside the panel, above the scrim, so
                     // they reach outside the panel's clipped edge.
                     .children(resize_handles(resize, entry.size, (width, height))),

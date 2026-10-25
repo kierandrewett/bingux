@@ -8,7 +8,7 @@ use super::{SourceEdits, kind_label};
 use crate::icons::Icon;
 use crate::system;
 use crate::ui::{
-    Group, Status, page_column, property_row, row, skeleton, status, use_overlays, use_window,
+    Group, PageHead, Status, page_column, property_row, row, skeleton, status, use_overlays, use_window,
 };
 
 /// The page for `source`. It reads the list the keyboard page reads, so it
@@ -20,8 +20,8 @@ pub struct InputSourcePage {
 
 impl Component for InputSourcePage {
     fn render(&self) -> impl IntoElement {
-        let sources_state = system::use_cached("keyboard-sources", sources::read);
-        let catalog_state = system::use_cached("keyboard-catalog", sources::catalog);
+        let sources_state = system::use_cached_persistent("keyboard-sources", sources::read);
+        let catalog_state = system::use_cached_saved("keyboard-catalog", sources::catalog);
         let overlays = use_overlays();
         let window = use_window();
         let busy = use_state(|| false);
@@ -34,12 +34,12 @@ impl Component for InputSourcePage {
         };
 
         let config = match sources_state.read().clone() {
-            None => return page_column().child(skeleton()),
-            Some(Err(message)) => return page_column().child(status(Status::Error(message))),
+            None => return page_column().child(PageHead::new()).child(skeleton()),
+            Some(Err(message)) => return page_column().child(PageHead::new()).child(status(Status::Error(message))),
             Some(Ok(config)) => config,
         };
         let Some(index) = config.sources.iter().position(|s| *s == self.source) else {
-            return page_column().child(status(Status::Empty(
+            return page_column().child(PageHead::new()).child(status(Status::Empty(
                 "This input source is no longer set up.".into(),
             )));
         };
@@ -75,6 +75,6 @@ impl Component for InputSourcePage {
                     .on_press(move |_| edits.run(Edit::Remove(index))),
             );
 
-        page_column().child(details).child(actions)
+        page_column().child(PageHead::new()).child(details).child(actions)
     }
 }

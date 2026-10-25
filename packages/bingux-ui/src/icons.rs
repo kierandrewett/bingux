@@ -22,6 +22,7 @@ pub enum Icon {
     Appearance,
     Desktop,
     Search,
+    Filter,
     Network,
     Bluetooth,
     Sound,
@@ -125,7 +126,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 113] = [
+    pub const ALL: [Icon; 114] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -140,6 +141,7 @@ impl Icon {
         Self::Appearance,
         Self::Desktop,
         Self::Search,
+        Self::Filter,
         Self::Network,
         Self::Bluetooth,
         Self::Sound,
@@ -260,6 +262,7 @@ impl Icon {
                 include_bytes!("../icons/preferences-desktop-wallpaper-symbolic.svg")
             }
             Self::Search => include_bytes!("../icons/system-search-symbolic.svg"),
+            Self::Filter => include_bytes!("../icons/view-filter-symbolic.svg"),
             Self::Network => include_bytes!("../icons/network-wireless-symbolic.svg"),
             Self::Bluetooth => include_bytes!("../icons/bluetooth-active-symbolic.svg"),
             Self::Sound => include_bytes!("../icons/audio-volume-high-symbolic.svg"),

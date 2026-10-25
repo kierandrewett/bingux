@@ -15,9 +15,9 @@ use crate::system::{
 };
 use crate::theme::Tokens;
 use crate::ui::{
-    Group, Overlays, PageHeader, PopupAction, PopupActions, Status, Window, action_button, avatar,
+    Group, Overlays, PageHead, PopupAction, PopupActions, Status, Window, action_button, avatar,
     caption, form_row, heading, menu_item, page_column, popup, popup_column, row, skeleton_shape,
-    status, text_field, use_overlays, use_page_header, use_popup_actions, use_tokens, use_window,
+    status, text_field, use_overlays, use_popup_actions, use_tokens, use_window,
 };
 use bingux_ui::style::*;
 
@@ -30,7 +30,7 @@ const READ_TIMEOUT: Duration = Duration::from_secs(5);
 /// Writes can wait for a polkit authentication dialog.
 const WRITE_TIMEOUT: Duration = Duration::from_secs(60);
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Account {
     path: String,
     user_name: String,
@@ -53,6 +53,11 @@ impl Account {
             &self.real_name
         }
     }
+}
+
+/// Loads the accounts again and saves the result for the next start.
+fn refresh() -> Result<Vec<Account>, CommandError> {
+    system::load_persistent("users", load)
 }
 
 /// Every cached account, the current user first. Runs on a background thread.
@@ -210,19 +215,19 @@ pub struct UsersPage;
 
 impl Component for UsersPage {
     fn render(&self) -> impl IntoElement {
-        let model = system::use_cached("users", load);
+        let model = system::use_cached_persistent("users", load);
         let navigator = use_navigator();
         let password = use_password();
 
         let Some(loaded) = model.read().clone() else {
-            return page_column().child(skeleton_shape(&[1]));
+            return page_column().child(PageHead::new()).child(skeleton_shape(&[1]));
         };
         let accounts = match loaded {
             Ok(accounts) => accounts,
             Err(e) => {
-                return page_column().child(
+                return page_column().child(PageHead::new()).child(
                     status(Status::Error(e.0))
-                        .action("Try again", move |_| background(model, load)),
+                        .action("Try again", move |_| background(model, refresh)),
                 );
             }
         };
@@ -239,7 +244,7 @@ impl Component for UsersPage {
                 account_row(account, route, navigator, password)
             }))
         };
-        page_column().child(group)
+        page_column().child(PageHead::new()).child(group)
     }
 }
 
@@ -252,15 +257,19 @@ pub struct AccountPage {
 impl Component for AccountPage {
     fn render(&self) -> impl IntoElement {
         let model: State<Option<Result<Vec<Account>, CommandError>>> =
-            system::use_cached("users", load);
+            system::use_cached_persistent("users", load);
         let loaded = model.read().clone();
         let accounts = match loaded {
-            None => return Element::from(page_column().child(skeleton_shape(&[6, 1]))),
+            None => {
+                return Element::from(
+                    page_column().child(PageHead::new()).child(skeleton_shape(&[6, 1])),
+                );
+            }
             Some(Err(e)) => {
                 return Element::from(
-                    page_column().child(
+                    page_column().child(PageHead::new()).child(
                         status(Status::Error(e.0))
-                            .action("Try again", move |_| background(model, load)),
+                            .action("Try again", move |_| background(model, refresh)),
                     ),
                 );
             }
@@ -270,7 +279,7 @@ impl Component for AccountPage {
             .into_iter()
             .find(|account| account.path == self.path)
         else {
-            return Element::from(page_column().child(status(Status::Empty(
+            return Element::from(page_column().child(PageHead::new()).child(status(Status::Empty(
                 "This account no longer exists.".to_string(),
             ))));
         };
@@ -300,7 +309,6 @@ impl Component for AccountDetails {
         let tokens: Tokens = use_tokens();
         let password = use_password();
         let name = use_name(account, model);
-        use_page_header(PageHeader::default().hero_title());
         let path = account.path.clone();
         let name_row = row("Full name")
             .value(name.shown.read().clone())
@@ -592,7 +600,7 @@ impl NameSheet {
             move || set_real_name(&path, &name).map(|_| ()),
             move || {
                 saved.set(accepted);
-                background(model, load);
+                background(model, refresh);
             },
         );
     }
@@ -863,5 +871,5 @@ impl Parser<'_> {
 
 /// Start loading this page's data before it is opened.
 pub fn prefetch() {
-    system::prefetch("users", load);
+    system::prefetch_persistent("users", load);
 }

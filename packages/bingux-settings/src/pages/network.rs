@@ -12,9 +12,9 @@ use crate::icons::{self, Icon};
 use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError};
 use crate::ui::{
-    Group, Overlays, PageHeader, ResponseKind, Status, Tokens, action_strip, centered_caption,
+    Group, Overlays, PageHead, ResponseKind, Status, Tokens, action_strip, centered_caption,
     dialog, heading, page_column, row, status, strip_action,
-    use_overlays, use_page_header, use_tokens,
+    use_overlays, use_tokens,
 };
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 use bingux_ui::style::*;
@@ -439,7 +439,6 @@ impl Component for WiredPage {
         let overlays = use_overlays();
         let editor = use_editor();
         let model = system::use_cached_persistent("network", load);
-        use_page_header(PageHeader::default().hero_title());
 
         // Go back to the list once the device is gone.
         let gone = self.device.clone();
@@ -529,7 +528,6 @@ impl Component for VpnPage {
         let navigator = use_navigator();
         let overlays = use_overlays();
         let model = system::use_cached_persistent("vpn", load_vpns);
-        use_page_header(PageHeader::default().hero_title());
 
         // Go back to the list once the profile is gone.
         let gone = self.name.clone();
@@ -625,11 +623,6 @@ impl Component for NetworkPage {
             Some(Ok(wired)) => Some(wired_subtitle(wired)),
             Some(Err(_)) => None,
         };
-        use_page_header(PageHeader {
-            subtitle,
-            action: None,
-            ..Default::default()
-        });
         // Wired and VPN are both drawn on the first frame, from placeholder
         // rows under the veil until their first loads land, so no group
         // appears in a second pass once its data arrives.
@@ -640,7 +633,7 @@ impl Component for NetworkPage {
             None => placeholder_wired("—"),
             Some(Ok(wired)) => wired,
             Some(Err(failure)) => {
-                return page_column().child(
+                return page_column().child(PageHead::new()).child(
                     status(Status::Error(failure.0))
                         .action("Try again", move |_| system::background(model, load)),
                 );
@@ -707,7 +700,11 @@ impl Component for NetworkPage {
                 }
             }
         };
-        veiled(page_column().child(wired_group).child(vpn_group), loading)
+        let page = page_column()
+            .child(PageHead { subtitle, ..PageHead::new() })
+            .child(wired_group)
+            .child(vpn_group);
+        veiled(page, loading)
     }
 }
 

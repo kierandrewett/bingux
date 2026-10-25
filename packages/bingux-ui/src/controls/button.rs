@@ -5,7 +5,7 @@ use freya::prelude::*;
 
 use crate::controls::progress::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
-use crate::motion::focus_ring;
+use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
 use crate::typography::{BODY, EMPHASIS, Ink};
@@ -195,7 +195,7 @@ impl Component for ActionButton {
                     .label(&tokens, self.text.clone())
                     .max_lines(1),
             )
-            .child(focus_ring(focus(), Radius::Control))
+            .focusable(focus(), Radius::Control)
     }
 }
 
@@ -294,7 +294,7 @@ impl Component for RowButton {
                     .label(&tokens, self.text.clone())
                     .max_lines(1),
             )
-            .child(focus_ring(focus(), Radius::Control))
+            .focusable(focus(), Radius::Control)
     }
 }
 
@@ -412,12 +412,12 @@ impl Component for IconButton {
                     on_key.call(());
                 }
             })
-            .child(focus_ring(focus(), Radius::Pill))
             .child(icons::icon(
                 self.icon,
                 IconSize::Control,
                 Ink::Text.color(&tokens),
-            ));
+            ))
+            .focusable(focus(), Radius::Pill);
         match &self.tooltip {
             Some(text) => TooltipContainer::new(Tooltip::new_text(text.clone()))
                 .child(button)

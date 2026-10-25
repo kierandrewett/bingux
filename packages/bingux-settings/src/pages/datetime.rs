@@ -9,7 +9,7 @@ mod timezone_map;
 
 use std::time::Duration;
 
-use bingux_ui::prelude::{PopupAction, PopupActions, Window, popup, use_popup_actions, use_window};
+use bingux_ui::prelude::{PageHead, PopupAction, PopupActions, Window, popup, use_popup_actions, use_window};
 use bingux_ui::runtime::optimistic_then;
 use bingux_ui::shell::MenuItem;
 use bingux_ui::style::*;
@@ -541,7 +541,7 @@ impl Component for DateTimePage {
             None => placeholder(),
             Some(Ok(data)) => data,
             Some(Err(e)) => {
-                return page_column()
+                return page_column().child(PageHead::new())
                     .child(status(Status::Error(e.0)).action("Try again", move |_| reload(ctx)));
             }
         };
@@ -606,7 +606,7 @@ impl Component for DateTimePage {
             move |_| set_clock_format(ctx, other_format.clone()),
         )]);
 
-        let page = page_column()
+        let page = page_column().child(PageHead::new())
             .child(
                 Group::titled("Clock")
                     .row(clock_face)
@@ -754,7 +754,7 @@ impl Component for TimeZonePage {
             }
         }
 
-        let mut page = page_column()
+        let mut page = page_column().child(PageHead::new())
             .child(TimeZoneMap::new(current.clone(), ctx))
             .child(
                 search_field(query, |_| {})

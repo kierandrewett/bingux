@@ -14,7 +14,7 @@ use std::time::Duration;
 use freya::prelude::*;
 use serde_json::Value;
 
-use bingux_ui::prelude::{Window, popup, use_window};
+use bingux_ui::prelude::{PageHead, Window, popup, use_window};
 use bingux_ui::style::*;
 use bingux_ui::theme::Tokens;
 use bingux_ui::typography::CAPTION;
@@ -897,16 +897,38 @@ fn identify(stream: &mut Stream, apps: &[apps::AppEntry]) {
 }
 
 /// The sound state, loaded in the background. Each load takes a new epoch and
-/// only the newest load may write its result, so a slow read that started
-/// before a write cannot overwrite the state the write just produced.
+/// only the newest load may write its result. A load is also dropped if a
+/// `wpctl` write was pending when it started, or began or ended after it
+/// started, so a slow read cannot put back a device the user just chose.
 static EPOCH: AtomicU64 = AtomicU64::new(0);
+/// Writes begun or finished, and writes still running.
+static WRITES: AtomicU64 = AtomicU64::new(0);
+static PENDING: AtomicU64 = AtomicU64::new(0);
+
+fn begin_write() {
+    PENDING.fetch_add(1, Ordering::SeqCst);
+    WRITES.fetch_add(1, Ordering::SeqCst);
+}
+
+/// Call on the background thread once the `wpctl` write has returned.
+fn end_write() {
+    WRITES.fetch_add(1, Ordering::SeqCst);
+    PENDING.fetch_sub(1, Ordering::SeqCst);
+}
 
 fn reload(model: ModelState) {
     let epoch = EPOCH.fetch_add(1, Ordering::SeqCst) + 1;
+    // Read the write count before the pending count, so a write that begins
+    // between the two reads is caught by the check below.
+    let writes = WRITES.load(Ordering::SeqCst);
+    let settled = PENDING.load(Ordering::SeqCst) == 0;
     background_then(
         move || system::load_persistent("sound", load),
         move |result| {
-            if EPOCH.load(Ordering::SeqCst) == epoch {
+            let current = settled
+                && WRITES.load(Ordering::SeqCst) == writes
+                && EPOCH.load(Ordering::SeqCst) == epoch;
+            if current {
                 let mut model = model;
                 model.set(Some(result));
             }
@@ -917,10 +939,13 @@ fn reload(model: ModelState) {
 /// Run a `wpctl` write on a background thread, then toast a failure and
 /// reload the model so the page shows what the backend now reports.
 fn apply(args: Vec<String>, model: ModelState, overlays: Overlays) {
+    begin_write();
     background_then(
         move || {
             let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-            system::run("wpctl", &refs, TIMEOUT)
+            let result = system::run("wpctl", &refs, TIMEOUT);
+            end_write();
+            result
         },
         move |result| {
             if let Err(e) = result {
@@ -1402,8 +1427,9 @@ fn open_test(ctx: Ctx, mix: Mix) {
     );
 }
 
-/// Optimistic default device: the new default shows at once and the next poll
-/// confirms it. A failure puts the old list back and toasts the error.
+/// Optimistic default device: the new default shows at once, and a reload
+/// after the write confirms it. A failure puts the old list back and toasts
+/// the error.
 fn set_default(ctx: Ctx, kind: Kind, id: u32) {
     let previous = ctx.model.read().clone();
     let Some(Ok(loaded)) = previous.clone() else {
@@ -1434,12 +1460,19 @@ fn set_default(ctx: Ctx, kind: Kind, id: u32) {
     if let Some(level) = level.as_mut() {
         level.id = id;
     }
-    system::optimistic(
+    let model = ctx.model;
+    begin_write();
+    system::optimistic_then(
         ctx.model,
         Some(ctx.overlays),
         previous,
         Some(Ok(next)),
-        move || system::run("wpctl", &["set-default", &id.to_string()], TIMEOUT).map(|_| ()),
+        move || {
+            let result = system::run("wpctl", &["set-default", &id.to_string()], TIMEOUT);
+            end_write();
+            result.map(|_| ())
+        },
+        move || reload(model),
     );
 }
 
@@ -1814,7 +1847,7 @@ impl Component for SoundPage {
             Some(Ok(data)) => (data, false),
             Some(Err(e)) => {
                 return veiled(
-                    page_column().child(
+                    page_column().child(PageHead::new()).child(
                         status(Status::Error(e.0)).action("Try again", move |_| reload(ctx.model)),
                     ),
                     false,
@@ -1822,7 +1855,7 @@ impl Component for SoundPage {
             }
         };
 
-        let mut page = page_column();
+        let mut page = page_column().child(PageHead::new());
 
         page = page
             .child(channel_group(

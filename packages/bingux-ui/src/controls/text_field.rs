@@ -12,7 +12,7 @@ use freya::prelude::*;
 
 use crate::controls::button::icon_button;
 use crate::icons::{self, Icon};
-use crate::motion::focus_ring;
+use crate::motion::Focusable;
 use crate::shell::menu::{MenuItem, menu_item, menu_separator};
 use crate::shell::overlays::Overlays;
 use crate::style::*;
@@ -30,6 +30,7 @@ pub struct TextField {
     width: Dim,
     fill: bool,
     well: bool,
+    dense: bool,
     password: bool,
     multiline: bool,
     enabled: bool,
@@ -53,6 +54,7 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         width: Dim::Field,
         fill: false,
         well: false,
+        dense: false,
         password: false,
         multiline: false,
         enabled: true,
@@ -95,6 +97,13 @@ impl TextField {
     /// card, dialog or popover keeps the lighter `control` fill.
     pub fn well(mut self) -> Self {
         self.well = true;
+        self
+    }
+
+    /// A compact row for property editors and inspectors: the field is
+    /// `Dim::DenseControl` tall and its inset is S0_5 by S2.
+    pub fn dense(mut self) -> Self {
+        self.dense = true;
         self
     }
 
@@ -230,14 +239,23 @@ impl Component for TextField {
             color: Some(paint(Paint::Text)),
             placeholder_color: Some(paint(Paint::Muted)),
         };
+        // The inset: S2 above and below and S3 across, or S0_5 and S2 when dense.
+        let (pad_vertical, pad_horizontal) = if self.dense { (S0_5, S2) } else { (S2, S3) };
         let layout = InputLayoutThemePartial {
             corner_radius: Some(Preference::Specific(CornerRadius::new_all(
                 Radius::Control.px(),
             ))),
-            padding: Some(Preference::Specific(Gaps::new_symmetric(S2.px(), S3.px()))),
+            padding: Some(Preference::Specific(Gaps::new_symmetric(
+                pad_vertical.px(),
+                pad_horizontal.px(),
+            ))),
         };
         let width = self.width.px();
-        let control_height = Dim::Control.px();
+        let control_height = if self.dense {
+            Dim::DenseControl.px()
+        } else {
+            Dim::Control.px()
+        };
 
         let has_text = !value.read().is_empty();
         let masked = self.password && !revealed();
@@ -409,10 +427,8 @@ impl Component for TextField {
                 }
             })
             .child(input)
-            .child(focus_ring(
-                if menu_open { Focus::Keyboard } else { focus() },
-                Radius::Control,
-            ));
+            .focusable(focus(), Radius::Control)
+            .maybe(self.fill, |wrapper| wrapper.tw(&tokens, &[w_flex()]));
 
         rect()
             .tw(&tokens, &[flex_col(), gap(S1), font(BODY)])

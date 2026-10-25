@@ -6,7 +6,7 @@
 use std::time::Duration;
 
 use crate::ui::{
-    Group, Icon, Overlays, Row, Status, dropdown, level_row, page_column, row, segmented,
+    Group, Icon, Overlays, PageHead, Row, Status, dropdown, level_row, page_column, row, segmented,
     skeleton_shape, status, switch_row, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
@@ -34,7 +34,7 @@ const UNREADABLE: &str = "Could not read the desktop settings.";
 const DOCK_SIZE_MIN: f64 = 32.0;
 const DOCK_SIZE_RANGE: f64 = 48.0;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Model {
     dock: bool,
     sidebar: bool,
@@ -194,7 +194,7 @@ impl Model {
 const MEDIA: &str = "org.gnome.desktop.media-handling";
 const PRIVACY: &str = "org.gnome.desktop.privacy";
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Gnome {
     automount: bool,
     automount_open: bool,
@@ -350,6 +350,11 @@ pub(crate) struct Ctx {
     pending: State<Option<f64>>,
 }
 
+/// Loads the page again and saves the result for the next start.
+fn refresh() -> Result<Model, CommandError> {
+    system::load_persistent("desktop", load)
+}
+
 /// Shows `change` at once, writes it in the background and reloads the model
 /// from the shell once the write has landed. A failed write puts the previous
 /// model back with a toast.
@@ -369,7 +374,7 @@ fn write(ctx: Ctx, change: Change) {
         previous,
         Some(Ok(value)),
         move || apply(&change),
-        move || background_then(load, move |loaded| model.set(Some(loaded))),
+        move || background_then(refresh, move |loaded| model.set(Some(loaded))),
     );
 }
 
@@ -430,7 +435,7 @@ pub struct DesktopPage;
 
 impl Component for DesktopPage {
     fn render(&self) -> impl IntoElement {
-        let model = system::use_cached("desktop", load);
+        let model = system::use_cached_persistent("desktop", load);
         let overlays = use_overlays();
         let pending = use_state::<Option<f64>>(|| None);
         let ctx = Ctx {
@@ -442,7 +447,7 @@ impl Component for DesktopPage {
         let searching = bingux_ui::search_highlight::current().is_some();
 
         let Some(loaded) = model.read().clone() else {
-            return page_column()
+            return page_column().child(PageHead::new())
                 .child(framed(
                     &tokens,
                     Element::from(rect().tw(
@@ -455,9 +460,9 @@ impl Component for DesktopPage {
         let m = match loaded {
             Ok(model_value) => model_value,
             Err(failure) => {
-                return page_column().child(
+                return page_column().child(PageHead::new()).child(
                     status(Status::Error(failure.0))
-                        .action("Try again", move |_| background(model, load)),
+                        .action("Try again", move |_| background(model, refresh)),
                 );
             }
         };
@@ -501,7 +506,7 @@ impl Component for DesktopPage {
                 },
             ));
         }
-        let mut page = page_column();
+        let mut page = page_column().child(PageHead::new());
         if !searching {
             page = page.child(desktop_preview(&tokens, ctx, &m));
         }
@@ -809,5 +814,5 @@ impl Parser<'_> {
 
 /// Start loading this page's data before it is opened.
 pub fn prefetch() {
-    system::prefetch("desktop", load);
+    system::prefetch_persistent("desktop", load);
 }

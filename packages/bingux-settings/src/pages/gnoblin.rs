@@ -15,7 +15,7 @@ pub const NOT_RUNNING: &str = "The desktop is not running, so this cannot be rea
 pub const MANAGED: &str = "Managed by your desktop configuration";
 
 /// A parsed JSON document. Objects keep their member order.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Json {
     Null,
     Bool(bool),

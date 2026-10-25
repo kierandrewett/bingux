@@ -14,7 +14,7 @@ use crate::system::{
     self, CommandError, CommandResult, background, background_then, optimistic_then,
 };
 use crate::ui::{
-    Group, Overlays, PopupAction, PopupActions, ResponseKind, Row, Status, Window, caption,
+    Group, Overlays, PageHead, PopupAction, PopupActions, ResponseKind, Row, Status, Window, caption,
     choice_row, dialog, form_row, icon_button, page_column, popup, popup_column, primary_button,
     row, skeleton_shape, slider_row, status, switch, switch_row, text_field, use_overlays,
     use_popup_actions, use_tokens, use_window,
@@ -35,7 +35,7 @@ const PROVIDERS: [(&str, &str, Icon); 7] = [
 const MIN_MEGABYTES: i64 = 1;
 const MAX_MEGABYTES: i64 = 20;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Engine {
     id: String,
     name: String,
@@ -44,14 +44,14 @@ struct Engine {
     enabled: bool,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Ai {
     harness: String,
     model: String,
     executable: Option<String>,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Model {
     disabled_providers: Vec<String>,
     default_engine: String,
@@ -371,6 +371,11 @@ fn parse_dump(text: &str) -> Result<Model, CommandError> {
     })
 }
 
+/// Loads the search settings again and saves the result for the next start.
+fn refresh() -> Result<Model, CommandError> {
+    system::load_persistent("search", load)
+}
+
 fn load() -> Result<Model, CommandError> {
     let dump = system::run(&bingux_config(), &["dump"], TIMEOUT)?;
     let mut model = parse_dump(&dump)?;
@@ -493,7 +498,7 @@ fn run_config(args: Vec<String>) -> CommandResult {
 }
 
 fn reload(ctx: Ctx) {
-    background(ctx.model, load);
+    background(ctx.model, refresh);
 }
 
 /// Runs one write in the background and reports whether it succeeded. A
@@ -586,7 +591,7 @@ pub struct SearchPage;
 
 impl Component for SearchPage {
     fn render(&self) -> impl IntoElement {
-        let model = system::use_cached("search", load);
+        let model = system::use_cached_persistent("search", load);
         let overlays = use_overlays();
         let ctx = Ctx { model, overlays };
 
@@ -621,7 +626,7 @@ impl Component for SearchPage {
         });
 
         let Some(loaded) = model.read().clone() else {
-            return page_column()
+            return page_column().child(PageHead::new())
                 .child(skeleton_shape(&[7, 3, 3, 3, 1]))
                 .into_element();
         };
@@ -629,13 +634,13 @@ impl Component for SearchPage {
         let data = match loaded {
             Ok(data) => data,
             Err(e) => {
-                return page_column()
+                return page_column().child(PageHead::new())
                     .child(status(Status::Error(e.0)).action("Try again", move |_| reload(ctx)))
                     .into_element();
             }
         };
 
-        let mut page = page_column();
+        let mut page = page_column().child(PageHead::new());
         page = page
             .child(providers_group(&data, ctx))
             .child(web_group(&data, ctx))
@@ -1265,5 +1270,5 @@ impl Component for AssistantModel {
 
 /// Start loading this page's data before it is opened.
 pub fn prefetch() {
-    system::prefetch("search", load);
+    system::prefetch_persistent("search", load);
 }

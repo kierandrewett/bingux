@@ -5,7 +5,7 @@ use freya::prelude::*;
 
 use crate::controls::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
-use crate::motion::focus_ring;
+use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::{is_activation_key, use_tokens};
 use crate::typography::EMPHASIS;
@@ -248,7 +248,7 @@ impl Component for WindowControl {
                 IconSize::Control,
                 Paint::Text.color(&tokens),
             ))
-            .child(focus_ring(focus(), Radius::Pill))
+            .focusable(focus(), Radius::Pill)
     }
 }
 

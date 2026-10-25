@@ -151,7 +151,7 @@ Each layer stays on screen until its exit finishes.
 - Dialog: fades in and scales from 96% to 100% in 120 ms. The scrim fades with it.
 - Menu: fades in and scales from 96% to 100% in 90 ms, pivoting on its top-left corner (the anchor).
 - Toast: slides up 8 px and fades in over 140 ms. Dismissing it slides it back down and fades it out.
-- Dropdown reveal: 90 ms, the same easing as the menu.
+- Dropdown: fades and scales in over 90 ms, the same easing as the menu.
 
 ## Charts
 
@@ -259,7 +259,7 @@ system is in `src/style/`:
   `px(S4)`, `gap(S2)`, `rounded(Radius::Card)`, `bg(Paint::Card)`,
   `border(Line::Hairline)`, `h(Dim::Row)`, `flex_row()`, `grow_children()`,
   `items(Align::Center)`, `surface(base, hover, press, selected)`,
-  `focus_ring(focus)`, `shadow(Elevation::Raised)`, `ink(Paint::Text)` (the
+  `shadow(Elevation::Raised)`, `ink(Paint::Text)` (the
   text colour children inherit) and `font(BODY)` (for a component that draws
   its own text).
 - `recipes.rs` holds the recipes: named lists of utilities such as `ROW`,
@@ -440,9 +440,12 @@ load)` loads a `Resource<T>` in the background: it is `Loading`, then
   true the header shows a small spinner beside the title, with a "Working"
   tooltip. Never show a loading block in the page: it pushes the content down.
 - **Page motion** runs in the split view's content column, not per page. A
-  subpage slides in from the right over 250 ms, ease-out, and the page behind it
-  fades; a pop slides out to the right. A sidebar switch cross-fades over 120 ms.
-  Motion is off under reduced motion (`tokens.motion(ms)` returns 0).
+  subpage slides in from the right over 250 ms, ease-out, over the page it was
+  opened from. That page stays in place and dims slightly, and the new page has
+  a soft shadow on its leading edge. A pop slides the top page out to the right,
+  revealing the page below, which undims. A second navigation during a slide
+  starts from where the page is, with no snap. A sidebar switch cross-fades over
+  120 ms. Motion is off under reduced motion (`tokens.motion(ms)` returns 0).
 - Icons are Adwaita symbolic SVGs under `packages/bingux-ui/icons/` with
   the hard-coded fill removed so they recolour. Add one by copying it from
   `/usr/share/icons/Adwaita/symbolic/` and adding a variant to `Icon`.
@@ -468,17 +471,20 @@ animation so motion never shifts the layout around it. Each keeps layout stable:
   move.
 
 Durations go through `tokens.motion(MOVE_MS)`, so reduced motion makes every
-motion an instant change. `use_presence` is the hook under `presence`; overlays
-keep a private copy with the same timing.
+motion an instant change. `use_presence` is the hook under `presence`; overlays,
+menus and dropdowns use it directly.
 
 ### Keyboard focus
 
-Controls draw their focus ring with `focus_ring(focus(), radius)` from
-`motion.rs`. The ring is a 2 px accent border set outside the control, and it
-grows out from the control and fades in when keyboard focus arrives (`FOCUS_IN_MS`),
-then fades out when focus leaves (`FOCUS_OUT_MS`). Pointer focus draws no ring.
-The ring takes the control's corner radius plus its outset, so it follows the
-shape of the control.
+Controls draw their focus ring by ending `render` with
+`.focusable(focus(), radius)`, from the `Focusable` trait in `motion.rs`. It
+wraps the control in a row that takes the control's size and adds the ring as
+its last child. Give the wrapper any grow or fill style the control had (for
+example `w_full()` or `w_flex()`). The ring is a 2 px accent border set outside
+the control. It grows out from the control and fades in when keyboard focus
+arrives (`FOCUS_IN_MS`), then fades out when focus leaves (`FOCUS_OUT_MS`).
+Pointer focus draws no ring. The ring takes the control's corner radius plus
+its outset, so it follows the shape of the control.
 
 ## Gallery and snapshots
 

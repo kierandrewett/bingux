@@ -12,8 +12,7 @@ use freya::prelude::*;
 use super::loading::veiled;
 use crate::system::{self, CommandResult, background};
 use crate::ui::{
-    Group, Overlays, PageHeader, page_column, row, segmented, switch_row, use_overlays,
-    use_page_header,
+    Group, Overlays, PageHead, page_column, row, segmented, switch_row, use_overlays,
 };
 
 const APPLICATIONS: &str = "org.gnome.desktop.a11y.applications";
@@ -214,7 +213,6 @@ impl Component for AccessibilityPage {
         let overlays = use_overlays();
         let pending: Pending = use_state(BTreeMap::new);
         let picks: Picks = use_state(BTreeMap::new);
-        use_page_header(PageHeader::default());
 
         let (model, loading) = match loaded.read().clone() {
             Some(model) => (model, false),
@@ -360,6 +358,7 @@ impl Component for AccessibilityPage {
         );
 
         let page = page_column()
+            .child(PageHead::new())
             .maybe_child(seeing)
             .maybe_child(typing)
             .maybe_child(pointing);

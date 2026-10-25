@@ -16,8 +16,7 @@ use crate::system::{self, background};
 use crate::theme::Tokens;
 use crate::ui::typography::BODY;
 use crate::ui::{
-    Group, Icon, Overlays, Status, dropdown, icon, search_field, skeleton, status, use_overlays,
-    use_tokens,
+    Group, Icon, Overlays, Status, dropdown, icon, search_field, status, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
 
@@ -40,6 +39,8 @@ const THUMB_HEIGHT: f32 = 112.0;
 const CAPTION_HEIGHT: f32 = 28.0;
 /// The whole tile. Fixed, so the grid holds still while pictures decode.
 const TILE_HEIGHT: f32 = THUMB_HEIGHT + CAPTION_HEIGHT;
+/// Tiles shown while the pictures load, after the Add tile and the system tile.
+const PLACEHOLDER_TILES: usize = 7;
 /// Decode size: twice the frame, so a thumbnail stays sharp on a HiDPI screen.
 const DECODE_WIDTH: f32 = 360.0;
 const DECODE_HEIGHT: f32 = 224.0;
@@ -243,8 +244,17 @@ impl Component for WallpaperPicker {
 
         let mut rows: Vec<Element> = vec![rect().tw(&tokens, ROW).child(toolbar).into()];
         let Some(loaded) = pictures.read().clone() else {
-            rows.push(skeleton());
-            return Element::from(Group::titled("Wallpaper").rows(rows));
+            let mut tiles: Vec<Element> = vec![add_tile(&tokens, model, overlays)];
+            if !searching && source_key != SOURCE_YOURS {
+                tiles.push(placeholder_tile(&tokens));
+            }
+            tiles.extend((0..PLACEHOLDER_TILES).map(|_| placeholder_tile(&tokens)));
+            rows.extend(grid(&tokens, tiles, if touch() { 2 } else { 4 }));
+            return Element::from(
+                Group::titled("Wallpaper")
+                    .description("Loading pictures")
+                    .rows(rows),
+            );
         };
         let all = with_current(loaded, &current);
         let shown = matching(&all, &source_key, &query_text);
@@ -301,6 +311,26 @@ fn grid(tokens: &Tokens, tiles: Vec<Element>, columns: usize) -> Vec<Element> {
         rows.push(line.into());
     }
     rows
+}
+
+/// A tile whose picture is still loading: the same frame and caption height as
+/// a real tile, so the grid keeps its shape until the pictures arrive.
+fn placeholder_tile(tokens: &Tokens) -> Element {
+    rect()
+        .tw(tokens, &[flex_col(), w_full()])
+        .child(thumb(
+            tokens,
+            false,
+            rect()
+                .tw(tokens, &[w_full(), h_full(), bg(Paint::Control)])
+                .into(),
+        ))
+        .child(
+            rect()
+                .tw(tokens, &[w_full()])
+                .height(Size::px(CAPTION_HEIGHT)),
+        )
+        .into()
 }
 
 fn add_tile(tokens: &Tokens, model: State<Option<Loaded>>, overlays: Overlays) -> Element {

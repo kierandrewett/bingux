@@ -7,10 +7,10 @@
 
 use std::time::Duration;
 
-use freya::animation::*;
 use freya::prelude::*;
 
 use crate::controls::button::{ActionButton, action_button, primary_button};
+use crate::motion::{PRESENCE_SCALE, use_presence};
 use crate::shell::menu::{Menu, MenuItem, MenuLayer, MenuNav};
 use crate::style::*;
 use crate::surface::{is_activation_key, use_tokens};
@@ -293,39 +293,6 @@ pub fn use_overlays() -> Overlays {
     use_consume::<Overlays>()
 }
 
-/// The enter and exit progress of one overlay layer, from 0 (hidden) to 1
-/// (shown), on the shared popup motion. When `closing` turns on, the progress
-/// runs back to 0 and `finish(key)` runs once it has, so the layer stays
-/// mounted through its exit. A new `key` plays the enter again.
-pub(crate) fn use_presence(
-    key: u64,
-    closing: bool,
-    motion: u64,
-    finish: impl Fn(u64) + Clone + 'static,
-) -> f32 {
-    let appear = use_animation(move |conf| {
-        conf.on_creation(OnCreation::Run);
-        AnimNum::new(0.0, 1.0)
-            .time(motion)
-            .function(Function::Quad)
-            .ease(Ease::Out)
-    });
-    use_side_effect_with_deps(&(key, closing), move |&(key, closing): &(u64, bool)| {
-        let mut appear = appear;
-        if closing {
-            appear.reverse();
-            let finish = finish.clone();
-            spawn(async move {
-                timer(Duration::from_millis(motion)).await;
-                finish(key);
-            });
-        } else {
-            appear.start();
-        }
-    });
-    appear.get().value()
-}
-
 /// Provides [`Overlays`] for the main window and draws its layers over `child`.
 #[derive(PartialEq)]
 pub struct OverlayHost {
@@ -451,7 +418,7 @@ impl Component for DialogLayer {
         let tokens = use_tokens();
         let overlays = self.overlays;
         let a11y_id = use_a11y();
-        let progress = use_presence(0, self.closing, tokens.motion(120), move |_| {
+        let progress = use_presence(!self.closing, tokens.motion(120), move || {
             overlays.finish_dialog()
         });
         use_side_effect(move || a11y_id.request_focus());
@@ -491,7 +458,7 @@ impl Component for DialogLayer {
                     .tw(&tokens, DIALOG)
                     .tw(&tokens, &[w(Dim::Dialog)])
                     .max_width(Size::window_percent(DIALOG_MAX_WIDTH_PERCENT))
-                    .scale(0.96 + 0.04 * progress)
+                    .scale(PRESENCE_SCALE + (1.0 - PRESENCE_SCALE) * progress)
                     .on_press(|event: Event<PressEventData>| event.stop_propagation())
                     .on_key_down(move |event: Event<KeyboardEventData>| {
                         if event.key == Key::Named(NamedKey::Escape) {
@@ -535,12 +502,16 @@ struct ToastLayer {
 }
 
 impl Component for ToastLayer {
+    fn render_key(&self) -> DiffKey {
+        DiffKey::U64(self.id)
+    }
+
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let overlays = self.overlays;
         let id = self.id;
         let timeout = self.toast.timeout;
-        let progress = use_presence(id, self.closing, tokens.motion(140), move |id| {
+        let progress = use_presence(!self.closing, tokens.motion(140), move || {
             overlays.finish_toast(id)
         });
         // Each toast that takes over the layer gets its own timer.

@@ -18,7 +18,7 @@ use bingux_ui::prelude::*;
 use bingux_ui::runtime::{optimistic, optimistic_then};
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 
-use crate::apps::{self, AppEntry, Details, Removal};
+use crate::apps::{self, AppEntry, Details, Removal, Source};
 use crate::pages::sound::AppSound;
 use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background_then};
@@ -515,11 +515,12 @@ fn app_row(app: &AppEntry, navigator: Navigator, icons: bool) -> Row {
         .subtitle(subtitle)
         .navigates()
         .on_press(move |_| navigator.push(route.clone()));
-    // Until the row icons are cached, drawing one would block the UI thread.
+    // The icon column is reserved while the row icons are still loading, so the
+    // text does not move when they arrive.
     if icons {
         base.leading_app(app.icon.clone())
     } else {
-        base
+        base.leading_space()
     }
 }
 
@@ -591,14 +592,34 @@ fn set_sort(mut sort: State<Sort>, limit: State<usize>, order: Sort) {
     set_limit(limit, PAGE);
 }
 
-/// The search toggle and the sort menu, in the Installed group's header.
-/// Closing the search also clears its text, so no hidden filter stays on.
+/// The source kinds the filter offers, in menu order. "All" is no filter.
+const SOURCE_CHOICES: [Source; 7] = [
+    Source::Rpm,
+    Source::Flatpak,
+    Source::AppImage,
+    Source::Snap,
+    Source::Nix,
+    Source::Local,
+    Source::System,
+];
+
+/// Sets the source filter and shows the first page again.
+fn set_source(mut source: State<Option<Source>>, limit: State<usize>, kind: Option<Source>) {
+    source.set(kind);
+    set_limit(limit, PAGE);
+}
+
+/// The Installed group's header: a filter menu for source and sort order,
+/// then the search toggle. Closing the search also clears its text, so no
+/// hidden filter stays on.
 fn installed_tools(
     searching: State<bool>,
     query: State<String>,
     sort: State<Sort>,
+    source: State<Option<Source>>,
     limit: State<usize>,
     order: Sort,
+    filter: Option<Source>,
 ) -> Element {
     let search = icon_button(Icon::Search, move |_| {
         let mut searching = searching;
@@ -611,16 +632,22 @@ fn installed_tools(
         searching.set(!open);
     })
     .tooltip("Search");
-    let sort_menu = menu_button(
-        "Sort",
-        vec![
-            menu_item("Name", move |_| set_sort(sort, limit, Sort::Name))
-                .checked(order == Sort::Name),
-            menu_item("Size", move |_| set_sort(sort, limit, Sort::Size))
-                .checked(order == Sort::Size),
-        ],
-    );
-    hstack(S2).child(search).child(sort_menu).into()
+    let mut sources =
+        vec![menu_item("All", move |_| set_source(source, limit, None)).checked(filter.is_none())];
+    sources.extend(SOURCE_CHOICES.into_iter().map(|kind| {
+        menu_item(kind.label(), move |_| set_source(source, limit, Some(kind)))
+            .checked(filter == Some(kind))
+    }));
+    let sort_items = vec![
+        menu_item("Name", move |_| set_sort(sort, limit, Sort::Name)).checked(order == Sort::Name),
+        menu_item("Size", move |_| set_sort(sort, limit, Sort::Size)).checked(order == Sort::Size),
+    ];
+    let filter_menu = menu_button(
+        "Filter and sort",
+        vec![submenu("Source", sources), submenu("Sort by", sort_items)],
+    )
+    .icon(Icon::Filter);
+    hstack(S2).child(filter_menu).child(search).into()
 }
 
 #[derive(PartialEq)]
@@ -632,6 +659,7 @@ impl Component for ApplicationsPage {
         let query = use_state(String::new);
         let searching = use_state(|| false);
         let sort = use_state(|| Sort::Name);
+        let source = use_state(|| None::<Source>);
         let limit = use_state(|| PAGE);
         let busy = use_state(|| false);
         let overlays = use_overlays();
@@ -646,15 +674,31 @@ impl Component for ApplicationsPage {
         let loaded = model.read().clone();
         let list = match loaded {
             None => Group::titled("Installed")
-                .trailing(installed_tools(searching, query, sort, limit, *sort.read()))
+                .trailing(installed_tools(
+                    searching,
+                    query,
+                    sort,
+                    source,
+                    limit,
+                    *sort.read(),
+                    *source.read(),
+                ))
                 .rows((0..PLACEHOLDER_ROWS).map(|_| skeleton_row())),
             Some(data) => {
                 let needle = query.read().trim().to_lowercase();
                 let order = *sort.read();
+                let filter = *source.read();
                 let mut shown: Vec<&AppEntry> = data
                     .apps
                     .iter()
                     .filter(|app| needle.is_empty() || app.name.to_lowercase().contains(&needle))
+                    .filter(|app| {
+                        filter.is_none_or(|kind| {
+                            app.details
+                                .as_ref()
+                                .is_some_and(|details| details.source == kind)
+                        })
+                    })
                     .collect();
                 match order {
                     Sort::Name => shown.sort_by_key(|app| app.name.to_lowercase()),
@@ -682,8 +726,9 @@ impl Component for ApplicationsPage {
                         ),
                     ));
                 }
-                let group = Group::titled("Installed")
-                    .trailing(installed_tools(searching, query, sort, limit, order));
+                let group = Group::titled("Installed").trailing(installed_tools(
+                    searching, query, sort, source, limit, order, filter,
+                ));
                 if rows.is_empty() {
                     group.row(status(Status::Empty("No applications match.".to_string())))
                 } else {
