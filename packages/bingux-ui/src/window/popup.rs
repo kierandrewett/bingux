@@ -532,6 +532,15 @@ impl Component for PopupFrame {
         } else {
             (POPUP_MAX_WIDTH_PERCENT, POPUP_MAX_HEIGHT_PERCENT)
         };
+        // The size the panel is actually drawn at: its own size, clamped to
+        // the window by the same caps as the panel. The edge hairline and the
+        // resize handles use it, so they stay on the panel's edge when the
+        // window is too small for the popup's own size.
+        let root = *Platform::get().current_window().root_size.read();
+        let shown_size = (
+            width.min(root.width * max_width / 100.0),
+            height.min(root.height * max_height / 100.0),
+        );
         // The panel takes focus when the popup opens. A text field marked
         // `autofocus` is created after it, and freya keeps the last request.
         let panel = rect()
@@ -635,13 +644,13 @@ impl Component for PopupFrame {
                     rect()
                         .position(Position::new_absolute().top(0.0).left(0.0))
                         .layer(Layer::Relative(1))
-                        .width(Size::px(width))
-                        .height(Size::px(height))
+                        .width(Size::px(shown_size.0))
+                        .height(Size::px(shown_size.1))
                         .tw(&tokens, &[rounded(Radius::Overlay), border(Line::Hairline)]),
                 )
                 // The handles sit beside the panel, above the scrim, so
                 // they reach outside the panel's clipped edge.
-                .children(resize_handles(resize, entry.size, (width, height)))
+                .children(resize_handles(resize, entry.size, shown_size))
         };
 
         rect()

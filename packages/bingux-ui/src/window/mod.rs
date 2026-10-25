@@ -460,11 +460,13 @@ impl Component for WindowHost {
         // A popup that asks for the whole viewport shrinks the content into a
         // rounded card on black, and the card springs back when it closes. A
         // sheet's pull eases the inset out with it: full when the sheet rests,
-        // gone at the dismiss distance.
+        // gone at the dismiss distance. Only a sheet insets: on a wide window
+        // the popup is a centred panel and the content stays full size.
         let motion = tokens.motion(MOTION_MS);
-        let inset = popups.iter().any(|entry| {
-            entry.flags.contains(PopupFlags::INSET_VIEWPORT) && !*entry.closing.read()
-        });
+        let inset = narrow
+            && popups.iter().any(|entry| {
+                entry.flags.contains(PopupFlags::INSET_VIEWPORT) && !*entry.closing.read()
+            });
         let open = use_animation_transition(
             if inset { 1.0_f32 } else { 0.0 },
             move |from: f32, to: f32| {
