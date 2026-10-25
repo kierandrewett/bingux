@@ -207,25 +207,42 @@ impl Snapshot {
     pub fn drag(&mut self, from: (f32, f32), to: (f32, f32)) -> &mut Self {
         const STEPS: u32 = 10;
         self.input(format!("drag {},{},{},{}", from.0, from.1, to.0, to.1));
-        let start = CursorPoint::new(from.0 as f64, from.1 as f64);
-        self.runner.move_cursor((from.0 as f64, from.1 as f64));
+        self.press(from);
+        for step in 1..=STEPS {
+            let t = step as f32 / STEPS as f32;
+            self.move_to((from.0 + (to.0 - from.0) * t, from.1 + (to.1 - from.1) * t));
+        }
+        self.release(to);
+        self
+    }
+
+    /// Press the left button at a logical point and keep it held.
+    pub fn press(&mut self, at: (f32, f32)) -> &mut Self {
+        self.runner.move_cursor((at.0 as f64, at.1 as f64));
         self.runner.sync_and_update();
         self.runner.send_event(PlatformEvent::Mouse {
             name: MouseEventName::MouseDown,
-            cursor: start,
+            cursor: CursorPoint::new(at.0 as f64, at.1 as f64),
             button: Some(MouseButton::Left),
         });
         self.runner.sync_and_update();
-        for step in 1..=STEPS {
-            let t = step as f32 / STEPS as f32;
-            let x = from.0 + (to.0 - from.0) * t;
-            let y = from.1 + (to.1 - from.1) * t;
-            self.runner.move_cursor((x as f64, y as f64));
-            self.runner.sync_and_update();
-        }
+        self.capture_frame();
+        self
+    }
+
+    /// Move a held pointer to a logical point.
+    pub fn move_to(&mut self, at: (f32, f32)) -> &mut Self {
+        self.runner.move_cursor((at.0 as f64, at.1 as f64));
+        self.runner.sync_and_update();
+        self.capture_frame();
+        self
+    }
+
+    /// Release the left button at a logical point.
+    pub fn release(&mut self, at: (f32, f32)) -> &mut Self {
         self.runner.send_event(PlatformEvent::Mouse {
             name: MouseEventName::MouseUp,
-            cursor: CursorPoint::new(to.0 as f64, to.1 as f64),
+            cursor: CursorPoint::new(at.0 as f64, at.1 as f64),
             button: Some(MouseButton::Left),
         });
         self.runner.sync_and_update();
@@ -297,7 +314,7 @@ impl Snapshot {
     ///
     /// - `click x,y`, `right_click x,y`, `hover x,y`
     /// - `touch x,y`, `long_press x,y`: one finger, tapped or rested past the threshold
-    /// - `scroll x,y,dy`, `drag x1,y1,x2,y2`
+    /// - `scroll x,y,dy`, `drag x1,y1,x2,y2`, `down x,y`/`move x,y`/`up x,y`
     /// - `key escape|return|tab`
     /// - `click-text TEXT`: click the label with that text
     /// - `address ADDRESS`: navigate, e.g. `address wifi/saved`
@@ -344,6 +361,18 @@ impl Snapshot {
                 "drag" => {
                     let [x1, y1, x2, y2] = numbers::<4>(rest)?;
                     self.drag((x1, y1), (x2, y2));
+                }
+                "down" => {
+                    let [x, y] = numbers::<2>(rest)?;
+                    self.press((x, y));
+                }
+                "move" => {
+                    let [x, y] = numbers::<2>(rest)?;
+                    self.move_to((x, y));
+                }
+                "up" => {
+                    let [x, y] = numbers::<2>(rest)?;
+                    self.release((x, y));
                 }
                 "key" => {
                     let (modifiers, key) = match rest.strip_prefix("shift+") {

@@ -57,7 +57,7 @@ const RESIZE_CORNER: f32 = 12.0;
 /// The tallest a phone sheet grows, as a share of the window height.
 const SHEET_MAX_HEIGHT_PERCENT: f32 = 92.0;
 /// How far a sheet is dragged down before it dismisses on release.
-const SHEET_DISMISS_DISTANCE: f32 = 96.0;
+pub(super) const SHEET_DISMISS_DISTANCE: f32 = 96.0;
 /// The grabber's row, and the pill drawn in it.
 const GRABBER_ROW: f32 = 20.0;
 const GRABBER_WIDTH: f32 = 36.0;
@@ -390,7 +390,12 @@ fn resize_handles(
 /// The grabber row at the top of a sheet: a short pill. A press starts a
 /// drag, which the panel follows and which dismisses the sheet when released
 /// far enough down.
-fn grabber(tokens: &Tokens, mut grab: State<Option<f32>>) -> Rect {
+fn grabber(
+    tokens: &Tokens,
+    mut grab: State<Option<f32>>,
+    mut pulling: State<Option<u64>>,
+    id: u64,
+) -> Rect {
     rect()
         .width(Size::fill())
         .height(Size::px(GRABBER_ROW))
@@ -401,6 +406,7 @@ fn grabber(tokens: &Tokens, mut grab: State<Option<f32>>) -> Rect {
         .on_pointer_down(move |event: Event<PointerEventData>| {
             event.stop_propagation();
             grab.set(Some(event.global_location().y as f32));
+            pulling.set(Some(id));
         })
         .child(
             rect()
@@ -408,6 +414,21 @@ fn grabber(tokens: &Tokens, mut grab: State<Option<f32>>) -> Rect {
                 .height(Size::px(GRABBER_HEIGHT))
                 .tw(tokens, &[rounded(Radius::Pill), bg(Paint::Control)]),
         )
+}
+
+/// The sheet's pull, eased. It follows the pointer while the sheet is dragged
+/// and springs back to rest on release; a dismiss keeps it where it was.
+pub(crate) fn use_sheet_pull(pull: State<f32>, motion: u64) -> f32 {
+    use_animation_transition(*pull.read(), move |from: f32, to: f32| {
+        // Only the spring back eases: a drag follows the pointer exactly.
+        let time = if to <= 0.0 { motion } else { 0 };
+        AnimNum::new(from, to)
+            .time(time)
+            .function(Function::Quad)
+            .ease(Ease::Out)
+    })
+    .get()
+    .value()
 }
 
 /// Draws one popup: its scrim, its panel, and the `Window` it provides to its
@@ -447,10 +468,18 @@ impl Component for PopupFrame {
         // A drag on an edge follows the pointer, so it does not animate; the
         // code-driven resizes still ease to their new size.
         let mut resize = use_state(|| None::<ResizeDrag>);
-        // A sheet's grabber: where its drag began, and how far it is pulled.
+        // A sheet's grabber: where its drag began. How far a sheet is pulled
+        // lives on the manager, so the window can inset with it.
         let mut grab = use_state(|| None::<f32>);
-        let mut pulled = use_state(|| 0.0_f32);
+        let mut pull = manager.sheet_pull;
+        let pulling = manager.sheet_pulling;
         let motion = tokens.motion(MOTION_MS);
+        let eased = use_sheet_pull(pull, motion);
+        let pulled = if *pulling.read() == Some(id) {
+            eased
+        } else {
+            0.0
+        };
         let target = *entry.size.read();
         let animated = use_animation_transition(target, move |from: (f32, f32), to: (f32, f32)| {
             let time = if resize.peek().is_some() { 0 } else { motion };
@@ -525,7 +554,7 @@ impl Component for PopupFrame {
             let at = event.global_location();
             if sheet {
                 if let Some(start) = *grab.peek() {
-                    pulled.set_if_modified((at.y as f32 - start).max(0.0));
+                    pull.set_if_modified((at.y as f32 - start).max(0.0));
                 }
                 return;
             }
@@ -546,10 +575,10 @@ impl Component for PopupFrame {
             let grabbing = grab.peek().is_some();
             if grabbing {
                 grab.set(None);
-                if *pulled.peek() > SHEET_DISMISS_DISTANCE {
+                if *pull.peek() > SHEET_DISMISS_DISTANCE {
                     window.close();
                 } else {
-                    pulled.set_if_modified(0.0);
+                    pull.set_if_modified(0.0);
                 }
             }
         };
@@ -603,7 +632,8 @@ impl Component for PopupFrame {
             .on_capture_global_pointer_move(on_move)
             .on_global_pointer_up(on_release)
             .maybe_child(
-                (sheet && flags.contains(PopupFlags::GRABBER)).then(|| grabber(&tokens, grab)),
+                (sheet && flags.contains(PopupFlags::GRABBER))
+                    .then(|| grabber(&tokens, grab, pulling, id)),
             )
             .child(header)
             .maybe_child(entry.tabs.clone().map(|tabs| {
@@ -632,7 +662,7 @@ impl Component for PopupFrame {
         // A sheet rests with its overhang below the edge and slides up from
         // under it; a pulled sheet follows the pointer down.
         let slide = if sheet {
-            sheet_overhang() + (1.0 - progress) * (height + sheet_overhang()) + *pulled.read()
+            sheet_overhang() + (1.0 - progress) * (height + sheet_overhang()) + pulled
         } else {
             0.0
         };

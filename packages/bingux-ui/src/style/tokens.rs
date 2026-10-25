@@ -71,6 +71,10 @@ pub const GUTTER: Space = S4;
 /// How far a disabled control or menu item fades: clearly unavailable, still
 /// readable.
 pub const DISABLED_OPACITY: f32 = 0.45;
+/// How far a window's content shrinks behind a popup that insets it (a phone
+/// sheet): the share of the window it keeps. The card it becomes keeps the
+/// `Card` radius.
+pub const INSET_SCALE: f32 = 0.96;
 
 /// Corner radius, by what it rounds.
 #[derive(Clone, Copy, Debug, PartialEq)]

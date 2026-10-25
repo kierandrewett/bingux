@@ -160,6 +160,9 @@ Each layer stays on screen until its exit finishes.
 - Menu: fades in and scales from 96% to 100% in 90 ms, pivoting on its top-left corner (the anchor).
 - Toast: slides up 8 px and fades in over 140 ms. Dismissing it slides it back down and fades it out.
 - Dropdown: fades and scales in over 90 ms, the same easing as the menu.
+- Sheet (a popup on a narrow window): slides up from the bottom. With `PopupFlags::GRABBER` it can be dragged down by its grabber; released past `SHEET_DISMISS_DISTANCE` (96 px) it dismisses, otherwise it springs back.
+
+A popup with `PopupFlags::INSET_VIEWPORT` shrinks the window behind it into a rounded card on black: the window scales to `INSET_SCALE` (0.96) and its corners take the `Card` radius, both in step with the popup's open and close. On a sheet the inset also follows the pull: full at rest, it eases down in proportion to the drag and reaches zero at the dismiss distance, then springs back with the sheet on release. Desktop popups do not inset.
 
 ## Charts
 

@@ -39,18 +39,14 @@ use crate::address::Address;
 use crate::focus::provide_focus_core;
 use crate::shell::with_window;
 use crate::style::{
-    Paint, PointerKind, Radius, SizeClass, Tw, WindowDensity, bg, center, clip, mirror_density,
-    rounded_scaled, window_density,
+    INSET_SCALE, Paint, PointerKind, Radius, SizeClass, Tw, WindowDensity, bg, center, clip,
+    mirror_density, rounded_scaled, window_density,
 };
 use crate::surface::use_tokens;
 use crate::theme::{NARROW_BELOW, PHONE_PREVIEW_SIZE};
 
-use popup::{MOTION_MS, PopupEntry, PopupFrame};
+use popup::{MOTION_MS, PopupEntry, PopupFrame, SHEET_DISMISS_DISTANCE, use_sheet_pull};
 pub use popup::{Popup, PopupAction, PopupActions, PopupFlags, popup, use_popup_actions};
-
-/// How far the content shrinks for a popup with [`PopupFlags::INSET_VIEWPORT`]:
-/// the share of the window it keeps. The card it becomes has the `Card` radius.
-const INSET_SCALE: f32 = 0.92;
 
 /// The open popups and the counter that names them. Copy, so a window handle
 /// can carry it into closures.
@@ -61,6 +57,10 @@ pub(crate) struct WindowManager {
     /// The scope that owns the per-popup state, so it outlives the
     /// component that opened the popup.
     scope: ScopeId,
+    /// How far the sheet is pulled down by its grabber, and which popup is
+    /// being pulled. Both outlive the drag, so the inset can ease back out.
+    sheet_pull: State<f32>,
+    sheet_pulling: State<Option<u64>>,
 }
 
 impl WindowManager {
@@ -418,6 +418,8 @@ impl Component for WindowHost {
         let manager = use_hook(move || WindowManager {
             popups: State::create(Vec::new()),
             next: State::create(0),
+            sheet_pull: State::create(0.0),
+            sheet_pulling: State::create(None),
             scope,
         });
         use_provide_context(move || manager);
@@ -454,12 +456,14 @@ impl Component for WindowHost {
         let popups = manager.popups.read().clone();
 
         // A popup that asks for the whole viewport shrinks the content into a
-        // rounded card on black, and the card springs back when it closes.
+        // rounded card on black, and the card springs back when it closes. A
+        // sheet's pull eases the inset out with it: full when the sheet rests,
+        // gone at the dismiss distance.
+        let motion = tokens.motion(MOTION_MS);
         let inset = popups.iter().any(|entry| {
             entry.flags.contains(PopupFlags::INSET_VIEWPORT) && !*entry.closing.read()
         });
-        let motion = tokens.motion(MOTION_MS);
-        let shown = use_animation_transition(
+        let open = use_animation_transition(
             if inset { 1.0_f32 } else { 0.0 },
             move |from: f32, to: f32| {
                 AnimNum::new(from, to)
@@ -470,6 +474,19 @@ impl Component for WindowHost {
         )
         .get()
         .value();
+        let eased_pull = use_sheet_pull(manager.sheet_pull, motion);
+        // The pulled popup keeps its pull while it closes, so the inset stays
+        // at zero as it leaves and does not flash back.
+        let pulling = *manager.sheet_pulling.read();
+        let pulled_inset = popups.iter().any(|entry| {
+            Some(entry.id) == pulling && entry.flags.contains(PopupFlags::INSET_VIEWPORT)
+        });
+        let drag = if pulled_inset {
+            (eased_pull / SHEET_DISMISS_DISTANCE).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let shown = open * (1.0 - drag);
 
         // The card is the same element whether or not a popup insets it, so
         // the content keeps its state when the popup opens and closes.
