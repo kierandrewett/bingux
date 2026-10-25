@@ -28,6 +28,7 @@ mod clipboard;
 pub mod config;
 mod drivers;
 pub mod extensions;
+pub mod modifiers;
 pub mod integration;
 pub mod plugins;
 pub mod renderer;

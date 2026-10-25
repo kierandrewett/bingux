@@ -123,7 +123,10 @@ impl FreyaPlugin for InspectorPlugin {
             PluginEvent::FinishedMeasuringLayout { window, tree } => {
                 poll_pending();
                 if is_open() && !is_inspector(window.id()) && !paused() {
-                    let snapshot = Snapshot::capture(tree);
+                    let mut snapshot = Snapshot::capture(tree);
+                    if let Some(focus) = Platform::get().try_window(u64::from(window.id())) {
+                        snapshot.mark_focused(*focus.focused_accessibility_id.peek());
+                    }
                     STORE.with(|store| {
                         let mut store = store.borrow_mut();
                         store.history.observe(&snapshot, std::time::Instant::now());

@@ -15,6 +15,7 @@ use std::collections::HashSet;
 
 use freya::prelude::*;
 
+use crate::component::ComponentName;
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
 use crate::style::*;
@@ -265,6 +266,7 @@ impl Component for TreeView {
         });
 
         rect()
+            .component("TreeView")
             .a11y_id(a11y_id)
             .a11y_focusable(true)
             .a11y_enabled(true)

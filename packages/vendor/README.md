@@ -29,6 +29,23 @@ The only changes are scroll feel for a desktop:
   `ScrollView::scrollbar_inset_top(px)` does the same at the top
   (`start_inset`), so the bar starts below a header that floats over the
   content.
+- `freya-components/src/input.rs`: the text field reports its caret and
+  selection to the app. `Input::probe(State<InputProbe>)` writes the focus,
+  the field's window area, the caret rectangle and the selection ends on each
+  change. `Input::request(State<Option<InputRequest>>)` takes `SelectWordAt`
+  (select the word at a window point) and `DragSelectionEnd` (drag a selection
+  handle). Both are inert unless the app sets them, so upstream behaviour is
+  unchanged.
+- `freya-winit/src/modifiers.rs` and `renderer.rs`: `freya_winit::modifiers::live()`
+  returns the keyboard modifiers held right now. The renderer stores each
+  `ModifiersChanged` there. Pointer events carry no modifiers, so a press
+  handler reads this at press time to tell Alt-click apart. Tracking Alt from
+  key events goes stale when focus leaves the window.
+- `freya-components/src/input.rs`: a touch press on the field (the focus press
+  on the input and on its paragraph, and the pointer press) does not call
+  `stop_propagation()`. Freya cancels the global pointer down and up for a
+  touch once a press is stopped, so the text field's global handlers could
+  not hear a tap, long press or drag. Mouse presses still stop as upstream.
 
 Both crates are MIT licensed by the Freya authors. Tests and examples are not
 copied. Drop this directory and the patch entries when upstream exposes these

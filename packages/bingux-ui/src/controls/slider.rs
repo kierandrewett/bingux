@@ -4,6 +4,7 @@
 use freya::animation::*;
 use freya::prelude::*;
 
+use crate::component::ComponentName;
 use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::{use_enabled, use_tokens};
@@ -40,6 +41,8 @@ pub struct Slider {
     fluid: bool,
     step: Option<f64>,
     show_value: bool,
+    /// Colour stops across the track, in percent and RGB. Replaces the accent fill.
+    gradient: Option<Vec<(f64, (u8, u8, u8))>>,
 }
 
 pub fn slider(value: f64, on_moved: impl Into<EventHandler<f64>>) -> Slider {
@@ -54,6 +57,7 @@ pub fn slider(value: f64, on_moved: impl Into<EventHandler<f64>>) -> Slider {
         fluid: false,
         step: None,
         show_value: false,
+        gradient: None,
     }
 }
 
@@ -89,6 +93,14 @@ impl Slider {
         self
     }
 
+    /// Paints the track as a colour gradient instead of the accent fill. Each
+    /// stop is a percent of the track and an RGB colour: a colour temperature
+    /// strip, a hue bar or a brightness ramp. The knob and keys work as before.
+    pub fn gradient(mut self, stops: Vec<(f64, (u8, u8, u8))>) -> Self {
+        self.gradient = Some(stops);
+        self
+    }
+
     /// The top of the travel, in percent. Values past 100 are for an
     /// amplified output; the track and the keyboard respect this top.
     pub fn max(mut self, max: f64) -> Self {
@@ -109,6 +121,23 @@ impl Slider {
         self.danger_from = Some(percent);
         self
     }
+}
+
+/// The SVG for a gradient track: one rounded rectangle filled with a linear
+/// gradient through the stops, left to right.
+fn gradient_svg(stops: &[(f64, (u8, u8, u8))], width: f32, height: f32) -> String {
+    use std::fmt::Write as _;
+    let mut body = String::new();
+    for (at, (red, green, blue)) in stops {
+        let _ = write!(
+            body,
+            r##"<stop offset="{at}%" stop-color="#{red:02x}{green:02x}{blue:02x}"/>"##
+        );
+    }
+    let radius = height / 2.0;
+    format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}"><defs><linearGradient id="track" x1="0" y1="0" x2="1" y2="0">{body}</linearGradient></defs><rect width="{width}" height="{height}" rx="{radius}" fill="url(#track)"/></svg>"#
+    )
 }
 
 impl Component for Slider {
@@ -211,7 +240,7 @@ impl Component for Slider {
             }
         };
 
-        let track_height = if interacting {
+        let track_height = if interacting || self.gradient.is_some() {
             Dim::SliderTrackActive.px()
         } else {
             Dim::SliderTrack.px()
@@ -222,6 +251,10 @@ impl Component for Slider {
         let thumb_x = (travel * ((value / max) as f32)).round();
         let centre_x = thumb_size / 2.0 + thumb_x;
         let fill_width = centre_x;
+        let gradient = self
+            .gradient
+            .as_ref()
+            .map(|stops| gradient_svg(stops, width, track_height));
 
         let row = rect()
             .a11y_id(a11y_id)
@@ -245,8 +278,21 @@ impl Component for Slider {
                     .on_global_pointer_up(on_release)
                     .on_key_down(on_key_down)
             })
-            .child(
-                rect()
+            .child(match &gradient {
+                Some(svg) => rect()
+                    .position(
+                        Position::new_absolute()
+                            .top(centre - track_height / 2.0)
+                            .left(0.0),
+                    )
+                    .width(Size::px(width))
+                    .height(Size::px(track_height))
+                    .child(
+                        SvgViewer::new((svg.clone(), Bytes::from(svg.clone())))
+                            .width(Size::px(width))
+                            .height(Size::px(track_height)),
+                    ),
+                None => rect()
                     .position(
                         Position::new_absolute()
                             .top(centre - track_height / 2.0)
@@ -255,8 +301,8 @@ impl Component for Slider {
                     .width(Size::px(width))
                     .height(Size::px(track_height))
                     .tw(&tokens, &[rounded(Radius::Pill), bg(Paint::Outline)]),
-            )
-            .child(
+            })
+            .maybe_child(gradient.is_none().then(|| {
                 rect()
                     .layer(Layer::Relative(1))
                     .position(
@@ -266,8 +312,8 @@ impl Component for Slider {
                     )
                     .width(Size::px(fill_width))
                     .height(Size::px(track_height))
-                    .tw(&tokens, &[rounded(Radius::Pill), bg(fill_paint)]),
-            )
+                    .tw(&tokens, &[rounded(Radius::Pill), bg(fill_paint)])
+            }))
             // The part of the fill past `danger_from`, drawn over the accent fill.
             .maybe_child(
                 danger_from
@@ -342,6 +388,7 @@ impl Component for Slider {
             return Element::from(row);
         }
         rect()
+            .component("Slider")
             .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
             .child(row)
             .child(

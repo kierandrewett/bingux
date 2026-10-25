@@ -4,6 +4,7 @@
 
 use freya::prelude::*;
 
+use crate::component::ComponentName;
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::typography::{CAPTION, HERO, Ink};
@@ -38,6 +39,7 @@ impl Component for UsageMeter {
         let tokens = use_tokens();
         let fraction = self.fraction;
         rect()
+            .component("Meter")
             .width(Size::fill())
             .tw(&tokens, &[flex_col(), px(GUTTER), py(S2), gap(S2)])
             .a11y_role(AccessibilityRole::ProgressIndicator)

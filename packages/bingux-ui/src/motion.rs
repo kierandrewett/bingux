@@ -23,9 +23,10 @@ use std::time::Duration;
 use freya::animation::*;
 use freya::prelude::*;
 
-use crate::focus::{claim_press, use_focus_core};
+use crate::focus::{FocusCore, claim_press, use_focus_core};
 use crate::style::*;
 use crate::surface::use_tokens;
+use crate::theme::Tokens;
 use crate::typography::{NUMERIC, TextStyle, styled_label};
 
 /// The default duration of a motion, in milliseconds, before reduced motion.
@@ -273,6 +274,10 @@ impl Component for Crossfade {
             })
             .child(self.child.clone());
         let mut container = rect()
+            .tw(
+                &tokens,
+                &[flex_col(), justify(Align::Center), items(Align::Center)],
+            )
             .min_width(Size::px(hold_width))
             .min_height(Size::px(hold_height))
             .child(incoming);
@@ -281,6 +286,10 @@ impl Component for Crossfade {
                 rect()
                     .position(Position::new_absolute().top(0.0).left(0.0))
                     .expanded()
+                    .tw(
+                        &tokens,
+                        &[flex_col(), justify(Align::Center), items(Align::Center)],
+                    )
                     .opacity(1.0 - progress)
                     .child(previous),
             );
@@ -378,27 +387,33 @@ impl Focusable for Rect {
 fn wrap_focusable(control: Rect, focus: Focus, radius: Radius, inside: bool) -> Rect {
     let tokens = use_tokens();
     let core = use_focus_core();
+    wrap_focusable_with(&tokens, core, control, focus, radius, inside)
+}
+
+/// [`wrap_focusable`] with its hooks already taken. A caller whose focus
+/// wrapper is conditional takes the hooks every render and calls this, so
+/// the hook count never changes.
+pub(crate) fn wrap_focusable_with(
+    tokens: &Tokens,
+    core: FocusCore,
+    control: Rect,
+    focus: Focus,
+    radius: Radius,
+    inside: bool,
+) -> Rect {
     let ring = FocusRing {
         focus,
         radius,
         inside,
     };
-    if inside {
-        // The ring is a child of the control, so it sizes to the control's
-        // own box and a clipped container edge cannot cut it off. The wrapper
-        // only claims presses.
-        return rect()
-            .tw(&tokens, &[flex_row()])
-            .on_press(move |_: Event<PressEventData>| claim_press(&core))
-            .child(control.child(ring));
-    }
-    // A press on a control claims it, so its region does not take the
-    // press as empty space and move focus.
+    // The ring is a child of the control, so it sizes to the control's own
+    // box. A wrapper of unknown height (a row in a scrolled or stretched
+    // column) would hand the ring its available space instead, so the ring
+    // ran down to the container's edge. The wrapper only claims presses.
     rect()
-        .tw(&tokens, &[flex_row()])
+        .tw(tokens, &[flex_row()])
         .on_press(move |_: Event<PressEventData>| claim_press(&core))
-        .child(control)
-        .child(ring)
+        .child(control.child(ring))
 }
 
 /// The ring itself, drawn as the last child of a [`Focusable::focusable`]

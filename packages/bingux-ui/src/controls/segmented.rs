@@ -14,6 +14,7 @@ use std::rc::Rc;
 
 use freya::prelude::*;
 
+use crate::component::ComponentName;
 use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::{use_enabled, use_tokens};
@@ -182,6 +183,7 @@ impl Component for Segment {
         let on_select = self.on_select.clone();
         let press = use_press();
         rect()
+            .component("Segment")
             .a11y_id(a11y_id)
             .a11y_focusable(enabled && self.selected)
             .a11y_enabled(enabled)

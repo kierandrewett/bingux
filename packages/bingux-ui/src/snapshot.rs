@@ -388,6 +388,11 @@ impl Snapshot {
                     };
                     self.key_with(key, modifiers);
                 }
+                "type" => {
+                    for character in rest.chars() {
+                        self.key(Key::Character(character.to_string()));
+                    }
+                }
                 "click-text" => {
                     if !self.click_text(rest) {
                         eprintln!("[snapshot] click-text found no label: {rest}");

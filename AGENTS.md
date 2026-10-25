@@ -22,6 +22,12 @@
 
 ## bingux-ui first
 
+- bingux-ui is the Bingux app SDK. App developers must never re-engineer the
+  basics: menus and context menus, text editing (selection, touch handles,
+  the edit bar, clipboard), inputs, keyboard focus and navigation, popups,
+  sheets and panels, scrolling, tooltips, page navigation and the adaptive
+  desktop and phone layouts all live in bingux-ui. They work with no setup
+  and behave the same in every app, on desktop and phone.
 - Before building any widget in a Bingux app (Settings, the inspector, any
   new app), check what bingux-ui already has: `packages/bingux-ui/src/controls/`,
   `rows.rs`, `group.rs`, `layout.rs`, `shell/`, `window/`, `motion.rs`, the

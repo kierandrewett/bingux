@@ -235,7 +235,11 @@ impl Component for SelectableText {
             .max_lines(self.max_lines)
             .line_height(self.line_height)
             .a11y_id(a11y_id)
-            .a11y_focusable(true)
+            // Focusable unless the caller says otherwise (`Unknown` is the default).
+            .a11y_focusable(match self.accessibility.a11y_focusable {
+                Focusable::Unknown => Focusable::Enabled,
+                ref other => other.clone(),
+            })
             .holder(holder.read().clone())
             .cursor(CursorIcon::Text)
             .cursor_color(Color::BLACK)

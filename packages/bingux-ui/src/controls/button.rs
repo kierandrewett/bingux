@@ -5,6 +5,7 @@ use super::press::use_press;
 use super::tooltip::hover_tip;
 use freya::prelude::*;
 
+use crate::component::ComponentName;
 use crate::controls::progress::{SpinnerSize, spinner};
 use crate::focus::{press_focus, use_focus_core};
 use crate::icons::{self, Icon};
@@ -136,6 +137,7 @@ impl Component for ActionButton {
             Paint::Text
         };
         rect()
+            .component("ActionButton")
             .a11y_id(a11y_id)
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)
@@ -267,6 +269,7 @@ impl Component for RowButton {
         };
         let style = if self.prominent { EMPHASIS } else { BODY };
         rect()
+            .component("RowButton")
             .a11y_id(a11y_id)
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)
@@ -423,6 +426,7 @@ impl Component for IconButton {
             Paint::Transparent
         };
         let button = rect()
+            .component("IconButton")
             .a11y_id(a11y_id)
             .a11y_focusable(usable)
             .a11y_enabled(usable)

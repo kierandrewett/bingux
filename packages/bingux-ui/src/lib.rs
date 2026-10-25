@@ -18,6 +18,7 @@ pub mod focus;
 pub mod group;
 pub mod icons;
 pub mod inspector;
+pub mod component;
 pub mod layout;
 pub mod motion;
 pub mod rows;

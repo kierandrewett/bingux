@@ -1,8 +1,10 @@
 //! The Elements tree: every element of the application's snapshot as one
-//! line of markup, indented by depth. Each line shows the element's tag, its
-//! non-default layout values and its text, coloured as markup is. The arrow
-//! keys move the selection, Ctrl+F opens a find bar, a breadcrumb trail shows
-//! the selected element's ancestors, and a right click opens a menu.
+//! outline line, indented by depth. A line gives the element's name (the
+//! component that built it, else its accessibility role, else its layout
+//! role), its text in quotes, and muted chips for its size, layout and state.
+//! A closed branch shows its child count. The arrow keys move the selection,
+//! Ctrl+F opens a find bar, a breadcrumb trail shows the selected element's
+//! ancestors, and a right click opens a menu.
 //!
 //! The selection and the open branches live in the window's state, so a
 //! reveal from the picker opens the element's ancestors and scrolls to it.
@@ -13,8 +15,8 @@ use std::rc::Rc;
 use crate::motion::Focusable;
 use freya::prelude::*;
 
-use super::snapshot::{Node, Snapshot};
-use crate::controls::{icon_button, text_field};
+use super::snapshot::{Node, Props, Snapshot};
+use crate::controls::{breadcrumb, icon_button, text_field};
 use crate::icons::{self, Icon};
 use crate::shell::menu::{MenuItem, menu_item, menu_separator};
 use crate::shell::overlays::Overlays;
@@ -23,7 +25,7 @@ use crate::surface::{Interaction, is_activation_key, use_tokens};
 use crate::theme::Tokens;
 use crate::typography::{CAPTION, CODE, Ink};
 
-/// The longest run of element text shown on a markup line.
+/// The longest run of element text shown on an outline line.
 const TEXT_LIMIT: usize = 60;
 
 /// A snapshot compared by identity. A new snapshot is a new value, so the
@@ -44,6 +46,7 @@ pub struct DomTree {
     pub snap: Shot,
     pub selected: State<Option<u64>>,
     pub expanded: State<HashSet<u64>>,
+    pub wrappers: State<bool>,
 }
 
 /// Whether a row has children and whether they are shown.
@@ -79,7 +82,6 @@ impl Component for DomTree {
         let mut viewport = use_state(Area::default);
         let mut query = use_state(String::new);
         let mut find_open = use_state(|| false);
-        let mut alt = use_state(|| false);
         let mut hit = use_state(|| 0usize);
         let mut revealed = use_state(|| None::<u64>);
         let mut expanded = self.expanded;
@@ -108,7 +110,8 @@ impl Component for DomTree {
         let snap = self.snap.0.clone();
         let open = self.expanded.read().clone();
         let mut rows = Vec::new();
-        flatten(&snap, &snap.roots, 0, &open, &mut rows);
+        let show_wrappers = *self.wrappers.read();
+        flatten(&snap, &snap.roots, 0, &open, show_wrappers, &mut rows);
         let selected_id = *selected.read();
         let selected_index = selected_id.and_then(|id| rows.iter().position(|row| row.id == id));
 
@@ -147,7 +150,7 @@ impl Component for DomTree {
         } else {
             String::new()
         };
-        let matches = find_matches(&snap, &needle);
+        let matches = find_matches(&snap, &needle, show_wrappers);
         let matched: HashSet<u64> = matches.iter().copied().collect();
         let hit_index = (*hit.read()).min(matches.len().saturating_sub(1));
         let current = matches.get(hit_index).copied();
@@ -205,8 +208,25 @@ impl Component for DomTree {
             }
         };
 
-        let breadcrumb = match selected_id {
-            Some(id) if snap.node(id).is_some() => breadcrumb(&tokens, &snap, id, selected),
+        let breadcrumb: Element = match selected_id {
+            Some(id) if snap.node(id).is_some() => {
+                let crumbs = ancestors(&snap, id)
+                    .into_iter()
+                    .filter_map(|ancestor| {
+                        let node = snap.node(ancestor)?;
+                        if !show_wrappers && snap.is_wrapper(ancestor) {
+                            return None;
+                        }
+                        Some((ancestor, node.title().to_string()))
+                    })
+                    .collect();
+                breadcrumb(crumbs, move |picked: u64| {
+                    let mut select = selected;
+                    select.set(Some(picked));
+                })
+                .code()
+                .into_element()
+            }
             _ => rect().into(),
         };
 
@@ -220,6 +240,7 @@ impl Component for DomTree {
                 &snap,
                 matches.clone(),
                 hit_index,
+                show_wrappers,
             )
         });
 
@@ -238,7 +259,6 @@ impl Component for DomTree {
                 needle: needle.clone(),
                 selection: selected,
                 expanded: self.expanded,
-                alt,
                 focus_id: a11y_id,
             })
         });
@@ -273,10 +293,6 @@ impl Component for DomTree {
         let mut root = rect()
             .tw(&tokens, &[w_full(), h_full(), flex_col(), grow_children()])
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
-                alt.set(
-                    event.modifiers.contains(Modifiers::ALT)
-                        || event.key == Key::Named(NamedKey::Alt),
-                );
                 let control_f = event.modifiers == Modifiers::CONTROL
                     && matches!(&event.key, Key::Character(c) if c.eq_ignore_ascii_case("f"));
                 if control_f {
@@ -286,17 +302,24 @@ impl Component for DomTree {
                     query.set(String::new());
                     hit.set(0);
                 }
-            })
-            .on_global_key_up(move |event: Event<KeyboardEventData>| {
-                alt.set(
-                    event.modifiers.contains(Modifiers::ALT)
-                        && event.key != Key::Named(NamedKey::Alt),
-                );
             });
-        if let Some(bar) = find_bar {
-            root = root.child(bar);
-        }
-        root.child(body).child(breadcrumb)
+        // Freya keys hook state by position, so the find bar always holds its
+        // slot; an empty slot keeps the body's scopes in place while it is shut.
+        root = root.child(find_bar.unwrap_or_else(|| rect().into()));
+        let mut wrappers = self.wrappers;
+        let toggle = icon_button(Icon::Filter, move |_| wrappers.set(!show_wrappers))
+            .size(Dim::Box7)
+            .radius(Radius::Mark)
+            .tooltip("Show wrappers")
+            .active(show_wrappers);
+        let crumbs = rect()
+            .tw(
+                &tokens,
+                &[w_full(), flex_row(), items(Align::Center), gap(S1)],
+            )
+            .child(rect().tw(&tokens, &[w_flex(), clip()]).child(breadcrumb))
+            .child(toggle.into_element());
+        root.child(body).child(crumbs)
     }
 }
 
@@ -308,11 +331,24 @@ fn toggle(open: &mut HashSet<u64>, id: u64) {
 }
 
 /// The visible rows, depth first, skipping the children of closed branches.
-fn flatten(snap: &Snapshot, ids: &[u64], depth: usize, open: &HashSet<u64>, out: &mut Vec<Flat>) {
+/// Wrapper boxes are left out, and their children take their depth, unless
+/// `wrappers` asks for them.
+fn flatten(
+    snap: &Snapshot,
+    ids: &[u64],
+    depth: usize,
+    open: &HashSet<u64>,
+    wrappers: bool,
+    out: &mut Vec<Flat>,
+) {
     for &id in ids {
         let Some(node) = snap.node(id) else {
             continue;
         };
+        if !wrappers && snap.is_wrapper(id) {
+            flatten(snap, &node.children, depth, open, wrappers, out);
+            continue;
+        }
         let branch = match (node.children.is_empty(), open.contains(&id)) {
             (true, _) => Branch::Leaf,
             (false, true) => Branch::Open,
@@ -320,7 +356,7 @@ fn flatten(snap: &Snapshot, ids: &[u64], depth: usize, open: &HashSet<u64>, out:
         };
         out.push(Flat { id, depth, branch });
         if branch == Branch::Open {
-            flatten(snap, &node.children, depth + 1, open, out);
+            flatten(snap, &node.children, depth + 1, open, wrappers, out);
         }
     }
 }
@@ -355,7 +391,7 @@ fn next_index(key: &NamedKey, from: Option<usize>, count: usize) -> Option<usize
 }
 
 /// The element and its ancestors, root first.
-fn ancestors(snap: &Snapshot, id: u64) -> Vec<u64> {
+pub fn ancestors(snap: &Snapshot, id: u64) -> Vec<u64> {
     let mut chain = vec![id];
     let mut current = id;
     while let Some(parent) = snap.node(current).and_then(|node| node.parent) {
@@ -366,9 +402,9 @@ fn ancestors(snap: &Snapshot, id: u64) -> Vec<u64> {
     chain
 }
 
-/// Every element, in document order, that matches `text`. A match is a tag
-/// name, text, an accessible name or an attribute value containing it.
-fn find_matches(snap: &Snapshot, text: &str) -> Vec<u64> {
+/// Every element, in document order, that matches `text`. A match is in the
+/// name, the text, the accessible label or a chip.
+fn find_matches(snap: &Snapshot, text: &str, wrappers: bool) -> Vec<u64> {
     let needle = text.trim().to_lowercase();
     if needle.is_empty() {
         return Vec::new();
@@ -379,7 +415,7 @@ fn find_matches(snap: &Snapshot, text: &str) -> Vec<u64> {
         let Some(node) = snap.node(id) else {
             continue;
         };
-        if matches_node(node, &needle) {
+        if matches_node(node, &needle) && (wrappers || !snap.is_wrapper(id)) {
             found.push(id);
         }
         stack.extend(node.children.iter().rev().copied());
@@ -388,104 +424,153 @@ fn find_matches(snap: &Snapshot, text: &str) -> Vec<u64> {
 }
 
 fn matches_node(node: &Node, needle: &str) -> bool {
+    let line = line_of(node);
     node.kind.name().contains(needle)
-        || node
-            .text
-            .as_deref()
-            .is_some_and(|text| text.to_lowercase().contains(needle))
+        || node.title().to_lowercase().contains(needle)
         || node
             .a11y
             .name
             .as_deref()
             .is_some_and(|name| name.to_lowercase().contains(needle))
-        || attributes(node)
+        || node
+            .text
+            .as_deref()
+            .is_some_and(|text| text.to_lowercase().contains(needle))
+        || line
+            .chips
             .iter()
-            .any(|(_, value)| value.to_lowercase().contains(needle))
+            .any(|chip| chip.to_lowercase().contains(needle))
 }
 
-/// The layout values that differ from the defaults, as markup attributes.
-fn attributes(node: &Node) -> Vec<(&'static str, String)> {
-    let mut out = Vec::new();
+/// One outline line: the name, the element's text and the chips that say its
+/// size, layout and state.
+struct OutlineLine {
+    name: String,
+    text: Option<String>,
+    chips: Vec<String>,
+}
+
+/// The line an element shows: its name, then its text in quotes. The chips
+/// carry its size, layout and state.
+fn line_of(node: &Node) -> OutlineLine {
+    let mut chips = Vec::new();
+    match node.area {
+        Some(area) => chips.push(format!(
+            "{}×{}",
+            area.width().round(),
+            area.height().round()
+        )),
+        None => chips.push("hidden".to_string()),
+    }
+    if node.a11y.selected == Some(true) {
+        chips.push("selected".to_string());
+    }
+    if node.a11y.focused {
+        chips.push("focused".to_string());
+    }
     if let Some(props) = &node.props {
-        let sizes = [
-            ("width", &props.width),
-            ("height", &props.height),
-            ("min_width", &props.min_width),
-            ("min_height", &props.min_height),
-            ("max_width", &props.max_width),
-            ("max_height", &props.max_height),
-        ];
-        for (name, value) in sizes {
-            if value != "auto" {
-                out.push((name, value.clone()));
-            }
-        }
-        if props.padding.iter().any(|edge| *edge != 0.0) {
-            out.push(("padding", four(props.padding)));
-        }
-        if props.margin.iter().any(|edge| *edge != 0.0) {
-            out.push(("margin", four(props.margin)));
-        }
-        if props.gap != 0.0 {
-            out.push(("gap", props.gap.to_string()));
-        }
-        if props.direction != "vertical" {
-            out.push(("direction", props.direction.to_string()));
-        }
-        if props.main_align != "start" {
-            out.push(("main_align", props.main_align.to_string()));
-        }
-        if props.cross_align != "start" {
-            out.push(("cross_align", props.cross_align.to_string()));
-        }
-        if let Some(colour) = props.background {
-            out.push(("background", colour_to_hex(colour)));
-        }
-        if props.corner_radius != 0.0 {
-            out.push(("corner_radius", props.corner_radius.to_string()));
-        }
-        if let Some(size) = props.font_size {
-            out.push(("font_size", size.to_string()));
-        }
-        if let Some(colour) = props.text_color {
-            out.push(("text_color", colour_to_hex(colour)));
+        sizing_chips(props, node.repeats_fill, &mut chips);
+    }
+    if let Some(name) = node
+        .a11y
+        .name
+        .as_deref()
+        .filter(|name| Some(*name) != node.text.as_deref())
+    {
+        chips.push(format!("label \"{name}\""));
+    }
+    let text = node.text.as_deref().map(|text| {
+        text.chars()
+            .map(|c| if c == '\n' { ' ' } else { c })
+            .take(TEXT_LIMIT)
+            .collect()
+    });
+    OutlineLine {
+        name: node.title().to_string(),
+        text,
+        chips,
+    }
+}
+
+/// The layout and style values that differ from the defaults, as short chips.
+fn sizing_chips(props: &Props, repeats_fill: bool, chips: &mut Vec<String>) {
+    let sizes = [
+        ("w", &props.width),
+        ("h", &props.height),
+        ("min-w", &props.min_width),
+        ("min-h", &props.min_height),
+        ("max-w", &props.max_width),
+        ("max-h", &props.max_height),
+    ];
+    for (label, value) in sizes {
+        if value != "auto" {
+            chips.push(format!("{label} {value}"));
         }
     }
-    if let Some(name) = &node.a11y.name {
-        out.push(("name", name.clone()));
+    if props.gap != 0.0 {
+        chips.push(format!("gap {}", props.gap));
+    }
+    if props.padding.iter().any(|edge| *edge != 0.0) {
+        chips.push(format!("pad {}", edge_values(props.padding)));
+    }
+    if props.margin.iter().any(|edge| *edge != 0.0) {
+        chips.push(format!("margin {}", edge_values(props.margin)));
+    }
+    if props.main_align != "start" {
+        chips.push(format!("main {}", props.main_align));
+    }
+    if props.cross_align != "start" {
+        chips.push(format!("cross {}", props.cross_align));
+    }
+    if let Some(colour) = props
+        .background
+        .filter(|colour| colour.a() > 0 && !repeats_fill)
+    {
+        chips.push(format!("bg {}", colour_to_hex(colour)));
+    }
+    if props.corner_radius != 0.0 {
+        chips.push(format!("radius {}", props.corner_radius));
+    }
+    if let Some(size) = props.font_size {
+        chips.push(format!("font {size}"));
+    }
+    if let Some(colour) = props.text_color {
+        chips.push(format!("ink {}", colour_to_hex(colour)));
+    }
+}
+
+/// Four edges as one value when they match, otherwise top, right, bottom, left.
+fn edge_values(values: [f32; 4]) -> String {
+    if values.iter().all(|edge| *edge == values[0]) {
+        return values[0].to_string();
+    }
+    format!("{} {} {} {}", values[0], values[1], values[2], values[3])
+}
+
+/// The line as plain text: the name, the quoted text, then the chips.
+fn plain_line(line: &OutlineLine) -> String {
+    let mut out = line.name.clone();
+    if let Some(text) = &line.text {
+        out.push_str(&format!("  \"{text}\""));
+    }
+    if !line.chips.is_empty() {
+        out.push_str("  ");
+        out.push_str(&line.chips.join(" · "));
     }
     out
 }
 
-fn four(edges: [f32; 4]) -> String {
-    format!("{} {} {} {}", edges[0], edges[1], edges[2], edges[3])
-}
-
-/// The element as indented markup, for the clipboard.
+/// The tree as outline lines, indented two spaces a level, for the clipboard.
 fn serialise(snap: &Snapshot, id: u64, depth: usize, out: &mut String) {
     let Some(node) = snap.node(id) else {
         return;
     };
-    let indent = "  ".repeat(depth);
-    let name = node.kind.name();
-    let mut open = format!("{indent}<{name}");
-    for (attribute, value) in attributes(node) {
-        open.push_str(&format!(" {attribute}=\"{value}\""));
-    }
-    open.push('>');
-    out.push_str(&open);
-    if let Some(text) = &node.text {
-        out.push_str(text);
-    }
-    if node.children.is_empty() {
-        out.push_str(&format!("</{name}>\n"));
-        return;
-    }
+    out.push_str(&"  ".repeat(depth));
+    out.push_str(&plain_line(&line_of(node)));
     out.push('\n');
     for &child in &node.children {
         serialise(snap, child, depth + 1, out);
     }
-    out.push_str(&format!("{indent}</{name}>\n"));
 }
 
 /// Opens `id` and every element below it that has children.
@@ -558,15 +643,15 @@ fn row_menu(
     items.push({
         let snap = snap.clone();
         menu_item("Copy element", move |_| {
-            let mut markup = String::new();
-            serialise(&snap, id, 0, &mut markup);
-            copy_text(overlays, markup);
+            let mut copied = String::new();
+            serialise(&snap, id, 0, &mut copied);
+            copy_text(overlays, copied);
         })
     });
     items
 }
 
-/// One line of the tree: indent, the chevron, then the element's markup.
+/// One line of the tree: indent, the chevron, then the element's outline line.
 #[derive(Clone)]
 struct DomRow {
     snap: Rc<Snapshot>,
@@ -578,7 +663,6 @@ struct DomRow {
     needle: String,
     selection: State<Option<u64>>,
     expanded: State<HashSet<u64>>,
-    alt: State<bool>,
     focus_id: AccessibilityId,
 }
 
@@ -632,7 +716,6 @@ impl Component for DomRow {
         );
         if let Some(icon) = chevron {
             let mut expanded = expanded;
-            let alt = self.alt;
             let snap = self.snap.clone();
             toggle_slot = toggle_slot
                 .child(icons::icon(icon, IconSize::Text, Ink::Muted.color(&tokens)))
@@ -640,7 +723,7 @@ impl Component for DomRow {
                 .on_press(move |event: Event<PressEventData>| {
                     event.stop_propagation();
                     let mut open = expanded.write();
-                    if *alt.peek() {
+                    if freya_winit::modifiers::live().contains(Modifiers::ALT) {
                         // Alt-click opens or shuts the whole subtree, as Chrome does.
                         if open.contains(&id) {
                             collapse_below(&snap, id, &mut open);
@@ -654,20 +737,25 @@ impl Component for DomRow {
                 });
         }
 
-        let segments = markup(node, branch);
+        let outline_line = line_of(node);
+        let segments = outline(&outline_line);
         let plain: String = segments.iter().map(|(text, _)| text.as_str()).collect();
         let highlight = match self.mark {
             Mark::Current => Paint::SearchCurrent,
             Mark::Hit | Mark::None => Paint::SearchHit,
         };
-        let mut markup_text = paragraph()
+        let mut line_text = paragraph()
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis)
             .highlights(match_ranges(&plain, &self.needle))
             .highlight_color(highlight.color(&tokens));
         for (text, paint) in segments {
-            markup_text = markup_text.span(CODE.span_in_paint(&tokens, text, paint));
+            line_text = line_text.span(CODE.span_in_paint(&tokens, text, paint));
         }
+        let chips = outline_line
+            .chips
+            .iter()
+            .map(|chip| chip_element(&tokens, chip, &self.needle, highlight));
 
         let line = rect()
             .tw(
@@ -683,7 +771,16 @@ impl Component for DomRow {
             )
             .children(indent)
             .child(toggle_slot)
-            .child(rect().tw(&tokens, &[w_flex(), clip()]).child(markup_text));
+            .child(
+                rect()
+                    .tw(
+                        &tokens,
+                        &[flex_row(), items(Align::Center), gap(S1), w_flex(), clip()],
+                    )
+                    .child(rect().tw(&tokens, &[clip()]).child(line_text))
+                    .children(chips)
+                    .children(count_badge(&tokens, node.children.len(), branch)),
+            );
 
         let snap = self.snap.clone();
         let mut selection_state = selection;
@@ -748,40 +845,53 @@ impl Component for DomRow {
     }
 }
 
-/// The markup of one element as coloured segments: `<tag attr="value">`, then
-/// its text and its closing tag, or an ellipsis while its children are shut.
-fn markup(node: &Node, branch: Branch) -> Vec<(String, Paint)> {
-    let name = node.kind.name();
-    let mut out = vec![
-        ("<".to_string(), Paint::Muted),
-        (name.to_string(), Paint::SyntaxTag),
-    ];
-    for (attribute, value) in attributes(node) {
-        out.push((" ".to_string(), Paint::Muted));
-        out.push((attribute.to_string(), Paint::SyntaxAttr));
-        out.push(("=\"".to_string(), Paint::Muted));
-        out.push((value, Paint::SyntaxValue));
-        out.push(("\"".to_string(), Paint::Muted));
+/// The name and the quoted text of an element as coloured segments. Its chips
+/// are drawn as separate elements beside them.
+fn outline(line: &OutlineLine) -> Vec<(String, Paint)> {
+    let mut out = vec![(line.name.clone(), Paint::SyntaxTag)];
+    if let Some(text) = &line.text {
+        out.push((format!("  \"{text}\""), Paint::SyntaxText));
     }
-    out.push((">".to_string(), Paint::Muted));
-    if branch == Branch::Open {
-        return out;
-    }
-    if let Some(text) = &node.text {
-        let shown: String = text
-            .chars()
-            .map(|c| if c == '\n' { ' ' } else { c })
-            .take(TEXT_LIMIT)
-            .collect();
-        out.push((format!("\"{shown}\""), Paint::SyntaxText));
-    }
-    if branch == Branch::Closed {
-        out.push(("…".to_string(), Paint::Muted));
-    }
-    out.push(("</".to_string(), Paint::Muted));
-    out.push((name.to_string(), Paint::SyntaxTag));
-    out.push((">".to_string(), Paint::Muted));
     out
+}
+
+/// The chip for one attribute or state value: muted type on a rounded control
+/// fill, with the find bar's matches highlighted inside it.
+fn chip_element(tokens: &Tokens, chip: &str, needle: &str, highlight: Paint) -> Element {
+    rect()
+        .tw(
+            tokens,
+            &[px(S1), rounded(Radius::Mark), center(), bg(Paint::Control)],
+        )
+        .child(
+            paragraph()
+                .max_lines(1)
+                .highlights(match_ranges(chip, needle))
+                .highlight_color(highlight.color(tokens))
+                .span(CAPTION.span_in_paint(tokens, chip, Paint::Muted)),
+        )
+        .into()
+}
+
+/// The child count a closed branch shows at the end of its line.
+fn count_badge(tokens: &Tokens, count: usize, branch: Branch) -> Vec<Element> {
+    if branch != Branch::Closed {
+        return Vec::new();
+    }
+    vec![
+        rect()
+            .tw(
+                tokens,
+                &[
+                    px(S1),
+                    rounded(Radius::Mark),
+                    center(),
+                    bg(Paint::MutedFaint),
+                ],
+            )
+            .child(CODE.label(tokens, &count.to_string()))
+            .into(),
+    ]
 }
 
 /// The character ranges of `plain` where the find needle matches, ignoring case.
@@ -820,6 +930,7 @@ fn find_bar(
     snap: &Rc<Snapshot>,
     matches: Vec<u64>,
     hit_index: usize,
+    show_wrappers: bool,
 ) -> Element {
     let count = matches.len();
     let summary = if query.read().trim().is_empty() {
@@ -855,16 +966,16 @@ fn find_bar(
             text_field(query, move |_: String| {
                 step_match(hit, selected, &submit_matches, hit_index, 1);
             })
-                .flat()
-                .placeholder("Find in tree")
-                .leading(Icon::Search)
-                .autofocus()
-                .on_change(move |text: String| {
-                    hit_state.set(0);
-                    if let Some(&first) = find_matches(&typed_snap, &text).first() {
-                        selected_state.set(Some(first));
-                    }
-                }),
+            .flat()
+            .placeholder("Find in tree")
+            .leading(Icon::Search)
+            .autofocus()
+            .on_change(move |text: String| {
+                hit_state.set(0);
+                if let Some(&first) = find_matches(&typed_snap, &text, show_wrappers).first() {
+                    selected_state.set(Some(first));
+                }
+            }),
         )
         .child(CAPTION.in_ink(Ink::Muted).label(tokens, summary))
         .child(
@@ -912,74 +1023,20 @@ fn step_match(
     selected.set(Some(matches[next]));
 }
 
-/// The selected element's ancestors as a row of crumbs. A click on a crumb
-/// selects that element.
-fn breadcrumb(tokens: &Tokens, snap: &Snapshot, id: u64, selected: State<Option<u64>>) -> Element {
-    let mut crumbs: Vec<Element> = Vec::new();
-    for (index, ancestor) in ancestors(snap, id).into_iter().enumerate() {
-        let Some(node) = snap.node(ancestor) else {
-            continue;
-        };
-        let mut select = selected;
-        if index > 0 {
-            crumbs.push(icons::icon(Icon::GoNext, IconSize::Text, Ink::Muted.color(tokens)).into());
-        }
-        crumbs.push(
-            rect()
-                .tw(
-                    tokens,
-                    &[
-                        flex_row(),
-                        items(Align::Center),
-                        px(S1),
-                        rounded(Radius::Mark),
-                    ],
-                )
-                .child(
-                    CODE.in_ink(Ink::Muted)
-                        .label(tokens, node.kind.name().to_string()),
-                )
-                .on_press(move |_| select.set(Some(ancestor)))
-                .into(),
-        );
-    }
-    rect()
-        .tw(
-            tokens,
-            &[
-                w_full(),
-                h(Dim::CodeRow),
-                flex_row(),
-                items(Align::Center),
-                px(S2),
-                clip(),
-                bg(Paint::Surface),
-            ],
-        )
-        .height(Size::px(22.))
-        .child(
-            scroll_x()
-                .width(Size::fill())
-                .height(Size::fill())
-                .children(crumbs),
-        )
-        .into()
-}
-
 #[cfg(test)]
 mod tests {
     use super::match_ranges;
 
     #[test]
     fn finds_every_case_insensitive_substring() {
-        assert_eq!(match_ranges("<div class=\"Box\">", "box"), vec![(12, 15)]);
+        assert_eq!(match_ranges("row  \"Box\"", "box"), vec![(6, 9)]);
         assert_eq!(match_ranges("aaaa", "aa"), vec![(0, 2), (2, 4)]);
     }
 
     #[test]
     fn empty_or_absent_needle_matches_nothing() {
-        assert!(match_ranges("<rect>", "").is_empty());
-        assert!(match_ranges("<rect>", "   ").is_empty());
-        assert!(match_ranges("<rect>", "circle").is_empty());
+        assert!(match_ranges("row", "").is_empty());
+        assert!(match_ranges("row", "   ").is_empty());
+        assert!(match_ranges("row", "circle").is_empty());
     }
 }

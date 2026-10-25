@@ -2,32 +2,38 @@
 
 pub mod action_strip;
 pub mod avatar;
+pub mod breadcrumb;
 pub mod button;
 pub mod checkbox;
 pub mod colour_picker;
 pub mod dropdown;
+pub mod focus_stop;
 pub mod meter;
+pub(crate) mod press;
 pub mod progress;
 pub mod radio;
 pub mod scrub;
 pub mod segmented;
 pub mod signal;
-pub(crate) mod press;
 pub mod slider;
 pub mod split_pane;
 pub mod stepper;
 pub mod switch;
+pub mod tab_strip;
+pub mod text_edit;
 pub mod text_field;
 pub mod tooltip;
 pub mod tree_view;
 
 pub use action_strip::{ActionStrip, StripAction, action_strip, strip_action};
 pub use avatar::{Avatar, avatar};
+pub use breadcrumb::{Breadcrumb, breadcrumb};
 pub use button::{
     ActionButton, IconButton, RowButton, action_button, icon_button, primary_button, row_button,
 };
 pub use checkbox::{CheckState, Checkbox, checkbox};
 pub use dropdown::{Dropdown, dropdown};
+pub use focus_stop::focus_stop;
 pub use meter::{UsageMeter, usage_meter};
 pub use progress::{ProgressBar, Spinner, SpinnerSize, progress_bar, spinner};
 pub use segmented::{Segmented, segmented};
@@ -36,6 +42,7 @@ pub use slider::{Slider, slider};
 pub use split_pane::{SplitPane, split_pane};
 pub use stepper::{Stepper, stepper};
 pub use switch::{Switch, switch};
+pub use tab_strip::{TabStrip, tab_strip};
 pub use text_field::{TextField, search_field, text_field};
 pub use tooltip::{hover_tip, tooltip_icon};
 pub use tree_view::{TreeNode, TreeView, tree_view};

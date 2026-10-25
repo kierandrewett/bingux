@@ -3,6 +3,7 @@
 
 use freya::prelude::*;
 
+use crate::component::ComponentName;
 use crate::controls::{SpinnerSize, hover_tip, spinner};
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
@@ -131,6 +132,7 @@ impl Component for HeaderBar {
             })
             .children(self.trailing.clone());
         rect()
+            .component("HeaderBar")
             .tw(&tokens, HEADER)
             .tw(
                 &tokens,
@@ -160,6 +162,7 @@ impl Component for WindowControls {
     fn render(&self) -> impl IntoElement {
         let maximized = freya::borderless::use_maximized();
         rect()
+            .component("WindowControls")
             .tw_layout(&[flex_row(), items(Align::Center), gap(S1)])
             .child(WindowControl {
                 icon: Icon::WindowMinimize,
@@ -214,6 +217,7 @@ impl Component for WindowControl {
             (true, false) => Paint::Hover,
         };
         rect()
+            .component("WindowControl")
             .tw(
                 &tokens,
                 &[

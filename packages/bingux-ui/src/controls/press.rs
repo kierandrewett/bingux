@@ -118,6 +118,16 @@ impl Press {
         }
     }
 
+    /// The pointer went up anywhere, for an element that heard the touch from
+    /// its global down. Ends the timer and returns whether the touch stayed a
+    /// tap on this element.
+    pub(crate) fn lift(self) -> bool {
+        let mut origin = self.origin;
+        let tapped = origin.write().take().is_some();
+        self.cancel_timer();
+        tapped
+    }
+
     fn cancel_timer(self) {
         let mut timer_state = self.timer;
         if let Some(handle) = timer_state.write().take() {

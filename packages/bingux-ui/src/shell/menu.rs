@@ -13,14 +13,16 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
+use crate::component::ComponentName;
 use crate::controls::press::{is_touch, point_of, use_press};
 use crate::icons::{self, Icon};
-use crate::motion::{Focusable, PRESENCE_SCALE, use_presence};
+use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::{is_activation_key, use_tokens};
 use crate::typography::{BODY, Ink};
 
-use super::overlays::{Overlays, input_shield, use_overlays};
+use super::overlays::{Overlays, use_overlays};
+use super::panel::{Panel, PanelKind, PanelRect, PanelTrigger, menu_rect};
 
 /// How long a pointer must rest on a row with a submenu before it opens.
 const SUBMENU_OPEN_DELAY_MS: u64 = 150;
@@ -28,12 +30,6 @@ const SUBMENU_OPEN_DELAY_MS: u64 = 150;
 /// How long a pointer may rest inside the safe triangle before the triangle
 /// is dropped, so the pointer can then pick another row of the parent menu.
 const CONE_REST_MS: u64 = 300;
-
-/// Space between a menu and its submenu.
-const SUBMENU_GAP: f32 = S1.fixed_px();
-
-/// Space kept between a menu and the window edges.
-const MENU_EDGE: f32 = S2.fixed_px();
 
 /// One action in a menu. Build with [`menu_item`] or [`submenu`].
 #[derive(Clone, PartialEq)]
@@ -109,27 +105,8 @@ pub fn menu_separator() -> MenuItem {
 /// The open menu: where it sits on the window, and its items.
 #[derive(Clone, PartialEq)]
 pub(crate) struct Menu {
-    pub(crate) x: f32,
-    pub(crate) y: f32,
+    pub(crate) trigger: PanelTrigger,
     pub(crate) items: Vec<MenuItem>,
-}
-
-/// A menu panel on the window: its top-left corner and its size.
-#[derive(Clone, Copy, PartialEq)]
-struct Panel {
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-}
-
-impl Panel {
-    fn contains(self, point: (f32, f32)) -> bool {
-        point.0 >= self.x
-            && point.0 <= self.x + self.width
-            && point.1 >= self.y
-            && point.1 <= self.y + self.height
-    }
 }
 
 /// The safe triangle of an open row. A pointer that leaves the row toward its
@@ -140,7 +117,7 @@ struct Cone {
     /// The panel holding the open row.
     level: usize,
     origin: (f32, f32),
-    sub: Panel,
+    sub: PanelRect,
     /// Counts the pointer moves inside the triangle, so a rest check can tell
     /// whether the pointer has stopped since it was started.
     moves: u64,
@@ -250,45 +227,14 @@ fn row_height(item: &MenuItem) -> f32 {
     }
 }
 
-/// The height of a menu of `items`: its rows, separators and padding.
+/// The height of a menu's rows, separators included, before its padding.
+fn rows_height(items: &[MenuItem]) -> f32 {
+    items.iter().map(row_height).sum()
+}
+
+/// The height of a menu of `items`: its rows and its top and bottom padding.
 fn menu_height(items: &[MenuItem]) -> f32 {
-    items.iter().map(row_height).sum::<f32>() + S2.px() + S2.px()
-}
-
-/// Where a menu of `size` opened at `at` sits on a window of `window`. It
-/// opens down and to the right of the pointer, flips up or left when there is
-/// no room, and is then held inside the window on all four edges. With no
-/// window size yet, it stays where it was opened.
-fn place_menu(at: (f32, f32), size: (f32, f32), window: (f32, f32)) -> (f32, f32) {
-    let (x, y) = at;
-    let (width, height) = size;
-    let (window_width, window_height) = window;
-    if window_width <= 0.0 || window_height <= 0.0 {
-        return at;
-    }
-    let x = if x + width + MENU_EDGE > window_width {
-        x - width
-    } else {
-        x
-    };
-    let y = if y + height + MENU_EDGE > window_height {
-        y - height
-    } else {
-        y
-    };
-    let x = x.min(window_width - width - MENU_EDGE).max(MENU_EDGE);
-    let y = y.min(window_height - height - MENU_EDGE).max(MENU_EDGE);
-    (x, y)
-}
-
-/// Holds `value` for a panel of `size` inside a window edge at `limit`. With
-/// no window size yet, it is left alone.
-fn fit(value: f32, size: f32, limit: f32) -> f32 {
-    if limit <= 0.0 {
-        value
-    } else {
-        value.min(limit - size - MENU_EDGE).max(MENU_EDGE)
-    }
+    rows_height(items) + 2.0 * S2.px()
 }
 
 /// The items shown in panel `level`: the root items, then each open submenu.
@@ -303,38 +249,38 @@ fn panel_items<'a>(root: &'a [MenuItem], open: &[usize], level: usize) -> &'a [M
     items
 }
 
-/// Where every open panel sits: the root menu at `at`, then each submenu
-/// beside the row that opened it, aligned to that row's top.
-fn layout(root: &[MenuItem], open: &[usize], at: (f32, f32), window: (f32, f32)) -> Vec<Panel> {
+/// Where every open panel sits, each with its trigger: the root menu against
+/// its own trigger, then each submenu beside the row that opened it, aligned
+/// to that row's top. A [`Panel`] places itself from the same trigger.
+fn layout(
+    root: &[MenuItem],
+    open: &[usize],
+    trigger: PanelTrigger,
+    window: (f32, f32),
+) -> Vec<(PanelTrigger, PanelRect)> {
     let width = Dim::Menu.px();
     let height = menu_height(root);
-    let (x, y) = place_menu(at, (width, height), window);
-    let mut panels = vec![Panel {
-        x,
-        y,
-        width,
-        height,
-    }];
+    let mut panels = vec![(trigger, menu_rect(trigger, (width, height), window))];
     for (level, &index) in open.iter().enumerate() {
-        let parent = panels[level];
+        let parent = panels[level].1;
         let items = panel_items(root, open, level);
-        let Some(sub) = items.get(index).and_then(|item| item.submenu.as_deref()) else {
+        let Some(item) = items.get(index) else {
+            break;
+        };
+        let Some(sub) = item.submenu.as_deref() else {
             break;
         };
         let row_top = parent.y + S2.px() + items.iter().take(index).map(row_height).sum::<f32>();
-        let height = menu_height(sub);
-        let right = parent.x + parent.width + SUBMENU_GAP;
-        let x = if window.0 <= 0.0 || right + width + MENU_EDGE <= window.0 {
-            right
-        } else {
-            parent.x - SUBMENU_GAP - width
-        };
-        panels.push(Panel {
-            x: fit(x, width, window.0),
-            y: fit(row_top - S2.px(), height, window.1),
-            width,
-            height,
+        // The row's top is lifted by the menu's top padding, so the submenu's
+        // padding sits over the row's top edge.
+        let row = PanelTrigger::Row(PanelRect {
+            x: parent.x,
+            y: row_top - S2.px(),
+            width: parent.width,
+            height: row_height(item),
         });
+        let rect = menu_rect(row, (width, menu_height(sub)), window);
+        panels.push((row, rect));
     }
     panels
 }
@@ -434,7 +380,7 @@ fn open_if_hovered(overlays: Overlays, level: usize, index: usize) {
 
 /// A pointer left row `index` of panel `level`. When that row has an open
 /// submenu, the pointer is now crossing toward it, so the safe triangle starts.
-fn leave_row(overlays: Overlays, level: usize, point: (f32, f32), sub: Option<Panel>) {
+fn leave_row(overlays: Overlays, level: usize, point: (f32, f32), sub: Option<PanelRect>) {
     if let Some(sub) = sub {
         update_nav(overlays, |nav| {
             nav.cone = Some(Cone {
@@ -588,38 +534,27 @@ pub(crate) struct MenuLayer {
 
 impl Component for MenuLayer {
     fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
         let overlays = self.overlays;
         let a11y_id = overlays.menu_panel;
-        let progress = use_presence(!self.closing, tokens.motion(90), move || {
-            overlays.finish_menu()
-        });
         use_side_effect(move || a11y_id.request_focus());
 
         let nav = read_nav(overlays);
         let window = *Platform::get().current_window().root_size.read();
-        let compact = is_compact();
-        let panels = if compact {
-            Vec::new()
-        } else {
-            layout(
-                &self.menu.items,
-                &nav.open,
-                (self.menu.x, self.menu.y),
-                (window.width, window.height),
-            )
-        };
-        let root_items = self.menu.items.clone();
-
-        let mut elements = Vec::with_capacity(panels.len());
-        for (level, panel) in panels.iter().copied().enumerate() {
-            let items = panel_items(&self.menu.items, &nav.open, level);
-            let rows: Vec<Element> = items
+        let panels = layout(
+            &self.menu.items,
+            &nav.open,
+            self.menu.trigger,
+            (window.width, window.height),
+        );
+        let open = !self.closing;
+        let items_at = |level: usize| panel_items(&self.menu.items, &nav.open, level);
+        let rows = |level: usize| -> Vec<Element> {
+            items_at(level)
                 .iter()
                 .enumerate()
                 .map(|(index, item)| {
                     let sub = (nav.open.get(level) == Some(&index))
-                        .then(|| panels.get(level + 1).copied())
+                        .then(|| panels.get(level + 1).map(|(_, rect)| *rect))
                         .flatten();
                     Element::from(MenuRow {
                         item: item.clone(),
@@ -630,107 +565,41 @@ impl Component for MenuLayer {
                         sub,
                     })
                 })
-                .collect();
-            let mut body = rect()
-                .position(Position::new_absolute().top(panel.y).left(panel.x))
-                .layer(Layer::Overlay)
-                .opacity(progress)
-                .scale(PRESENCE_SCALE + (1.0 - PRESENCE_SCALE) * progress)
-                .transform_origin(TransformOrigin::top_left())
-                .tw(&tokens, MENU)
-                .tw(&tokens, &[w(Dim::Menu)])
-                // Clicks inside a panel never reach the shield behind it.
-                .on_press(|event: Event<PressEventData>| event.stop_propagation())
-                .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
-                .children(rows);
-            if level == 0 {
-                // The root panel takes the keyboard. Keys reach the active
-                // panel through the menu state, so submenus need no focus.
-                let keys = root_items.clone();
-                body = body
-                    .a11y_id(a11y_id)
-                    .a11y_focusable(true)
-                    .on_global_pointer_move(move |event: Event<PointerEventData>| {
-                        pointer_moved(overlays, global_point(&event));
-                    })
-                    .on_key_down(move |event: Event<KeyboardEventData>| {
-                        handle_key(overlays, &keys, event);
-                    });
-            }
-            elements.push(body.into_element());
-        }
-        if compact {
-            // A phone shows the open level of the menu as an action sheet at
-            // the bottom edge. Back steps out of a submenu.
-            let level = nav.open.len();
-            let mut rows: Vec<Element> = Vec::new();
-            if level > 0 {
-                rows.push(
-                    rect()
-                        .a11y_role(AccessibilityRole::MenuItem)
-                        .tw(&tokens, MENU_ITEM)
-                        .on_press(move |event: Event<PressEventData>| {
-                            event.stop_propagation();
-                            update_nav(overlays, |state| state.close_deepest());
-                        })
-                        .child(icons::icon(
-                            Icon::GoPrevious,
-                            IconSize::Control,
-                            Ink::Text.color(&tokens),
-                        ))
-                        .child(BODY.in_ink(Ink::Text).label(&tokens, "Back".to_string()))
-                        .into_element(),
-                );
-            }
-            rows.extend(
-                panel_items(&self.menu.items, &nav.open, level)
-                    .iter()
-                    .enumerate()
-                    .map(|(index, item)| {
-                        Element::from(MenuRow {
-                            item: item.clone(),
-                            overlays,
-                            level,
-                            index,
-                            highlighted: nav.highlight.get(level).copied().flatten()
-                                == Some(index),
-                            sub: None,
-                        })
-                    }),
-            );
-            let keys = self.menu.items.clone();
-            let overhang = Radius::Overlay.px();
-            elements.push(
-                rect()
-                    .a11y_id(a11y_id)
-                    .a11y_focusable(true)
-                    .position(Position::new_absolute().bottom(-overhang).left(0.0))
-                    .layer(Layer::Overlay)
-                    .opacity(progress)
-                    .tw(&tokens, &[w_full(), bg(Paint::Popover), rounded(Radius::Overlay), clip()])
-                    .on_press(|event: Event<PressEventData>| event.stop_propagation())
-                    .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
-                    .on_global_pointer_move(move |event: Event<PointerEventData>| {
-                        pointer_moved(overlays, global_point(&event));
-                    })
-                    .on_key_down(move |event: Event<KeyboardEventData>| {
-                        handle_key(overlays, &keys, event);
-                    })
-                    .child(
-                        rect()
-                            .tw(&tokens, &[w_full(), flex_col(), p(S2)])
-                            .children(rows),
-                    )
-                    .child(rect().height(Size::px(overhang)))
-                    .into_element(),
-            );
-        }
+                .collect()
+        };
 
-        // The shield closes the menu on a press outside it and keeps the
-        // window behind from reacting while the menu is open.
-        input_shield(&tokens, move || overlays.close_menu())
+        // Each open submenu is a nested panel, drawn over the root's shield.
+        let submenus: Vec<Element> = panels
+            .iter()
+            .enumerate()
+            .skip(1)
+            .map(|(level, (trigger, _))| {
+                Element::from(
+                    Panel::new(PanelKind::Menu, open, *trigger, rows(level))
+                        .size(Dim::Menu.px(), rows_height(items_at(level)))
+                        .nested(),
+                )
+            })
+            .collect();
+
+        // The root panel takes the keyboard and the pointer's moves. Keys
+        // reach the active panel through the menu state, so submenus need no
+        // focus. Its shield closes the menu on a press outside it.
+        let keys = self.menu.items.clone();
+        let root = Panel::new(PanelKind::Menu, open, self.menu.trigger, rows(0))
+            .size(Dim::Menu.px(), rows_height(items_at(0)))
             .layer(self.layer)
-            .children(elements)
+            .on_dismiss(EventHandler::new(move |_: ()| overlays.close_menu()))
+            .on_closed(EventHandler::new(move |_: ()| overlays.finish_menu()))
+            .navigation(
+                a11y_id,
+                EventHandler::new(move |event: Event<KeyboardEventData>| {
+                    handle_key(overlays, &keys, event);
+                }),
+                EventHandler::new(move |point: (f32, f32)| pointer_moved(overlays, point)),
+            )
+            .overlaid(submenus);
+        Element::from(root)
     }
 }
 
@@ -742,7 +611,7 @@ struct MenuRow {
     index: usize,
     highlighted: bool,
     /// The panel of this row's submenu, when that submenu is open.
-    sub: Option<Panel>,
+    sub: Option<PanelRect>,
 }
 
 impl Component for MenuRow {
@@ -785,6 +654,7 @@ impl Component for MenuRow {
         });
         let trailing = has_sub.then(|| icons::icon(Icon::PanEnd, IconSize::Control, text_color));
         rect()
+            .component("MenuRow")
             .a11y_role(AccessibilityRole::MenuItem)
             .a11y_enabled(enabled)
             .tw(&tokens, MENU_ITEM)
@@ -942,7 +812,12 @@ impl Component for MenuButton {
                         return;
                     }
                     let at = global_point(&event);
-                    overlays.show_menu_from(Some(a11y_id), at, items.clone(), false);
+                    overlays.show_menu_from(
+                        Some(a11y_id),
+                        PanelTrigger::Pointer(at),
+                        items.clone(),
+                        false,
+                    );
                 }
             })
             .on_global_pointer_up(move |_| pressing.set_if_modified(false))
@@ -953,7 +828,12 @@ impl Component for MenuButton {
                     if !matches!(event.data(), PressEventData::Touch(_)) || !press.tap(&event) {
                         return;
                     }
-                    overlays.show_menu_from(Some(a11y_id), touch_at(), items.clone(), false);
+                    overlays.show_menu_from(
+                        Some(a11y_id),
+                        PanelTrigger::Pointer(touch_at()),
+                        items.clone(),
+                        false,
+                    );
                 }
             })
             .on_key_down(move |event: Event<KeyboardEventData>| {
@@ -964,12 +844,13 @@ impl Component for MenuButton {
                 }
                 event.stop_propagation();
                 let below = area.read().clone();
-                overlays.show_menu_from(
-                    Some(a11y_id),
-                    (below.min_x(), below.max_y()),
-                    items.clone(),
-                    true,
-                );
+                let trigger = PanelTrigger::Control(PanelRect {
+                    x: below.min_x(),
+                    y: below.min_y(),
+                    width: below.width(),
+                    height: below.height(),
+                });
+                overlays.show_menu_from(Some(a11y_id), trigger, items.clone(), true);
             })
             .maybe_child(self.icon.is_none().then(|| {
                 BODY.in_ink(Ink::Text)

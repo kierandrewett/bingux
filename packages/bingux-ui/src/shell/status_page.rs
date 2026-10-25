@@ -5,6 +5,7 @@
 use freya::animation::*;
 use freya::prelude::*;
 
+use crate::component::ComponentName;
 use crate::controls::button::{action_button, row_button};
 use crate::icons::{self, Icon};
 use crate::style::*;
@@ -62,6 +63,7 @@ impl Component for StatusPage {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         rect()
+            .component("StatusPage")
             .expanded()
             .tw(&tokens, &[flex_col(), center(), p(S8), gap(S3)])
             .child(
@@ -191,6 +193,7 @@ impl Component for Banner {
         let on_dismiss = self.on_dismiss.clone();
         Element::from(
             rect()
+                .component("Banner")
                 .tw(&tokens, &[flex_col(), w_full()])
                 .opacity(progress)
                 .child(

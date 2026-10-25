@@ -6,6 +6,7 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use super::press::use_press;
+use crate::component::ComponentName;
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
 use crate::style::*;
@@ -112,6 +113,7 @@ impl Component for Checkbox {
         };
 
         rect()
+            .component("Checkbox")
             .a11y_id(a11y_id)
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)

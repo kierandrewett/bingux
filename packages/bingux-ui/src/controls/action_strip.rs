@@ -5,6 +5,7 @@
 
 use freya::prelude::*;
 
+use crate::component::ComponentName;
 use crate::focus::{press_focus, use_focus_core};
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
@@ -56,7 +57,7 @@ impl Component for ActionStrip {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         // The divider is as tall as the cell less a gutter at each end.
-        let mut bar = rect().tw(&tokens, BOX).tw(
+        let mut bar = rect().component("ActionStrip").tw(&tokens, BOX).tw(
             &tokens,
             &[
                 h(Dim::StripCell),

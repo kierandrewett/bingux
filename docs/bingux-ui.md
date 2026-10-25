@@ -109,7 +109,8 @@ with `navigate(address)`. `current_address()` reads it without subscribing.
 
 | Family           | Components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Controls         | `switch`, `checkbox` (tri-state), `slider` (`step`, `show_value`, `fill`), `segmented` (`fill` for equal segments; only the selected segment is raised, a hovered one brightens its text), `dropdown` (`app_icons`, `width`), `stepper`, `usage_meter` (a figure, its total and a thin bar), `action_strip` of `strip_action` (two to four icon-over-label actions in one rounded bar), `text_field` (`password`, `invalid`, `clearable`), `search_field`, `progress_bar`, `spinner`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Controls         | `switch`, `checkbox` (tri-state), `slider` (`step`, `show_value`, `fill`, `gradient(stops)`: the track is a colour ramp instead of the accent fill; the night light's colour temperature uses it, and a hue or brightness ramp is the same call), `segmented` (`fill` for equal segments; only the selected segment is raised, a hovered one brightens its text), `dropdown` (`app_icons`, `width`), `stepper`, `usage_meter` (a figure, its total and a thin bar), `action_strip` of `strip_action` (two to four icon-over-label actions in one rounded bar), `text_field` (`password`, `invalid`, `clearable`), `search_field`, `progress_bar`, `spinner` |
+| Navigation       | `tab_strip(options, selected, on_select)` (flat labels, the selected one underlined; Left, Right, Home and End move the selection; `scroll` for a narrow container; an app's view tabs use it too), `breadcrumb(crumbs, on_select)` (crumbs separated by chevrons, each a Tab stop, the last in normal ink; `code` for a code-face trail; a file manager path uses it too) |
 | Buttons          | `action_button` (`suggested`, `destructive`, `flat`, `loading`, `icon`), `primary_button`, `row_button`, `icon_button` (`tooltip`, `danger`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Rows             | `row` (`subtitle`, `value` (selectable, one line), `badge`, `leading`, `leading_space` (a blank icon column so text lines up), `leading_app`, `navigates`, `selected`, `destructive`, `context_menu`, `on_press` (makes the row activatable)), `radio_row(title, selected, on_select)` (a radio on the leading edge; the whole row selects; `subtitle`, `value`, `leading_app` as for `row`), `radio_rows(title, rows)` (a group of radio rows: Up and Down move the selection, and only the selected row is in the Tab order), `switch_row` (`nested` for sub-rows shown while on), `slider_row` (a `level_row` for a setting), `level_row` (title on the left and a slider filling the rest of the line; `control` such as a mute button sits between them, `footer` under the track, `mark` and `mark_label` for a tick such as 100%, `danger_from`, `value_text`, `max`, `leading`, `context_menu`), `choice_row`, `text_row`, `entry_row`, `expander_row`, `property_row` |
 | Icons            | `icon` (bundled symbolic glyphs), `app_icon` (full-colour application icons from the icon theme)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -136,9 +137,17 @@ roving: only the selected item is in the tab order, and the arrows move the
 selection and focus together (Up and Down also work in a vertical radio group,
 wrapping at the ends). Text fields: Enter submits, and Escape reverts an edited
 value and then leaves the field. A password field has a reveal button, and a right
-click opens Cut, Copy, Paste and Select all. In a popup, the panel takes focus on
-open unless a field is marked `autofocus()`, and Enter in a single-line field runs
-the primary action. Each control has an accessibility role and a focus ring.
+click opens Cut, Copy, Paste and Select all. On touch, a tap places the caret,
+a second tap on the same spot, or a tap in an empty field, shows a compact edit
+bar (Paste, Select, Select all; Cut, Copy and Paste once there is a selection),
+and a double tap or a long press selects the word under the finger. Two caret
+handles mark a selection and drag to resize it; the bar follows it. The bar's
+chevron opens the full menu as a floating panel anchored to the bar. Typing,
+Escape, a tap elsewhere or a scroll hides the bar. Apps can append items to the
+menu with `text_field(..).edit_menu_extra(items)`. In a popup, the panel takes
+focus on open unless a field is marked `autofocus()`, and Enter in a
+single-line field runs the primary action. Each control has an accessibility
+role and a focus ring.
 Animations are short (80 to 200 ms) and stop when `BINGUX_REDUCED_MOTION=1` is set.
 
 Menus take the keyboard too. Enter, Space or Down on a menu button opens its
@@ -159,10 +168,21 @@ Each layer stays on screen until its exit finishes.
 - Dialog: fades in and scales from 96% to 100% in 120 ms. The scrim fades with it.
 - Menu: fades in and scales from 96% to 100% in 90 ms, pivoting on its top-left corner (the anchor).
 - Toast: slides up 8 px and fades in over 140 ms. Dismissing it slides it back down and fades it out.
-- Dropdown: fades and scales in over 90 ms, the same easing as the menu.
+- Dropdown: on a phone a sheet (see Panel); on a desktop it fades and scales in over 90 ms, the same easing as the menu, anchored to its button.
+- Subpage: a push slides the new page in from the right over 320 ms on an expo ease-out, and the page beneath stays still; a pop slides it back out to the right. The moving page is a card while it moves: its leading corners take `Radius::Window`, and a soft shadow (`sheet_edge_shadow`: 24 px offset, 32 px blur, black at 0.5 alpha at full amount) falls on the page beneath. Both scale to nothing over its last 15 %. The window's own buttons stay at the window's top right while it moves. A sidebar switch cross-fades over 120 ms. A move that starts mid-slide continues from where the slide is.
 - Sheet (a popup on a narrow window): slides up from the bottom. With `PopupFlags::GRABBER` it can be dragged down by its grabber; released past `SHEET_DISMISS_DISTANCE` (96 px) it dismisses, otherwise it springs back.
 
 A popup with `PopupFlags::INSET_VIEWPORT` shrinks the window behind it into a rounded card on black: the window scales to `INSET_SCALE` (0.96) and its corners take the `Card` radius, both in step with the popup's open and close. On a sheet the inset also follows the pull: full at rest, it eases down in proportion to the drag and reaches zero at the dismiss distance, then springs back with the sheet on release. Desktop popups do not inset.
+
+### Panel
+
+`shell/panel.rs` is the one floating-surface primitive: context menus, dropdown lists, popovers, sheets, popups and the text edit bar are all `Panel`s. A variant is configuration, not a new component. A panel owns its backdrop (a shield that takes presses, wheel and hover outside it), presence, placement (flip and clamp inside the window), dismissal (Escape, an outside press, an address change), focus trap and restore, and roving keys.
+
+A panel knows its trigger: `PanelTrigger::Pointer`, `Control`, `Row`, `Text` or `Keyboard`. Placement is measured from that trigger.
+
+Phone rule: a panel is a sheet only for choosing a value from a set (a dropdown such as Resolution or Refresh rate) or a long titled list. A sheet slides up with a fading backdrop, has a drag handle, a height cap (a token, about 60 to 70 percent), a header with the control's label, and a scroll affordance. It opens with the selected item visible. A floating panel is for actions (row long-press and context menus, overflow menus): anchored to its trigger, no dim, and an outside tap dismisses it. A text trigger uses the text edit bar. On a desktop everything floats, and popups are centred.
+
+The shield is the only input shield; there is no second copy of the shield or grabber code.
 
 ## Charts
 
@@ -458,6 +478,7 @@ load)` loads a `Resource<T>` in the background: it is `Loading`, then
   white knob on a soft shadow. Buttons are filled with
   `control` and have no idle outline; no control has one. A disabled row
   (`row(..).enabled(false)`) dims and disables every control in it.
+  A slider with `gradient(stops)` draws its track in those colours (8 px tall) in place of the accent fill; the knob is unchanged.
 - **Segmented controls** sit on a `Control` rail with `Radius::Inner` segments.
   The selected segment is a `Card` chip with a `Knob` shadow. A usage meter's
   fill is `Accent`, not text.
@@ -510,9 +531,10 @@ load)` loads a `Resource<T>` in the background: it is `Loading`, then
   true the header shows a small spinner beside the title, with a "Working"
   tooltip. Never show a loading block in the page: it pushes the content down.
 - **Page motion** runs in the split view's content column, not per page. A
-  subpage slides in from the right over 250 ms, ease-out, over the page it was
-  opened from. That page stays in place and dims slightly, and the new page has
-  a soft shadow on its leading edge. A pop slides the top page out to the right,
+  subpage slides in from the right over 320 ms, ease-out, over the page it was
+  opened from. That page stays in place and dims slightly, and the new page is
+  a card with a soft shadow on its leading edge, while the window's buttons
+  stay at its top right. A pop slides the top page out to the right,
   revealing the page below, which undims. A second navigation during a slide
   starts from where the page is, with no snap. A sidebar switch cross-fades over
   120 ms. Motion is off under reduced motion (`tokens.motion(ms)` returns 0).
@@ -546,6 +568,20 @@ menus and dropdowns use it directly.
 
 ### Keyboard focus
 
+Every interactive control is a keyboard stop by default, and apps never opt in.
+Buttons, icon buttons, switches, checkboxes, segments, dropdowns, sliders, text
+fields, press rows, sidebar items, tabs, menu items, links and tree rows all take
+focus themselves. A box an app builds from scratch (a swatch or a card) becomes a
+stop through `focus_stop(content, label, role, enabled, radius, on_activate)` in
+`controls/focus_stop.rs`, which gives it the same stop, ring, press and Enter/Space.
+Non-interactive boxes are never stops.
+
+Each control is exactly one Tab stop. Tab moves forward one stop and Shift+Tab
+back one, in visual order, wrapping at the ends of the window. The window's header buttons are stops too, after the last page row and before the first, so Tab reaches them before it wraps. A composite control
+(segmented, tab strip, radio group, tree, list) is one stop, and the arrow keys move
+inside it (roving). A pointer click focuses without a ring, and the next Tab
+continues from the clicked control.
+
 Controls draw their focus ring by ending `render` with
 `.focusable(focus(), radius)`, from the `Focusable` trait in `motion.rs`. It
 wraps the control in a row that takes the control's size, and the ring is a
@@ -560,13 +596,14 @@ Pointer focus draws no ring. The ring takes the control's corner radius plus
 its outset, so it follows the shape of the control.
 
 Window focus lives in `focus.rs`. `WindowHost` provides one `FocusCore` for the
-window; Tab and F6 move between focus regions (the sidebar, the content, the
-header). A region draws its ring around the whole area, not around one control.
-Clicking a control claims the press, so a pointer press never starts a ring.
-`trap()` wraps a popup so Tab stays inside it while it is open. Use
-`use_focus_core()` to reach the core: with no host (the gallery, the snapshot
-runner, an inspector window) it returns a detached core, so focus moves do
-nothing and controls still work.
+window. F6 moves between focus regions (the sidebar, the content, the header), and
+a region draws its ring around the whole area, not around one control. Region
+sentinels are never Tab stops: Tab skips them without spending a press. Clicking a
+control claims the press, so a pointer press never starts a ring. `trap()` wraps a
+popup so Tab stays inside it while it is open, and closing it restores focus.
+Use `use_focus_core()` to reach the core: with no host (the gallery, the snapshot
+runner, an inspector window) it returns a detached core, so focus moves do nothing
+and controls still work.
 
 ## Gallery and snapshots
 
@@ -609,17 +646,23 @@ Ctrl+] step between them), then pause, refresh (F5) and close.
 - **Phone preview** forces the app window to the compact size class and touch
   pointer, so it shows the phone layout on a desktop; the inspector itself
   keeps its desktop density.
-- **Elements** shows the live element tree as markup with syntax colours,
-  closing tags and indent guides. Click a triangle to open a branch, and use
-  Expand recursively in the right-click menu to open everything inside it.
-  Up and Down move the
-  selection, Right opens or enters a branch, Left closes it or goes to the
-  parent, Home and End jump to the ends. Ctrl+F searches tags, attribute
-  values and text, with the hit count and Enter for the next hit. A right
-  click offers Expand recursively, Collapse children, Copy text and Copy
-  element. The breadcrumb under the tree shows the selected element's
-  ancestors; click one to select it. Hovering a row highlights its element in
-  the app.
+- **Elements** shows the live element tree as an outline, one line per element,
+  indented by depth. A line is the element's name, then its text in quotes, then
+  muted chips: size as `W×H`, layout and style values that differ from the
+  defaults, `hidden` or `selected`, a `label` when the accessible name differs
+  from the text, the accessibility role, and the element kind. The name is the
+  bingux-ui component that built the element (`Row`, `Switch`, `PageHead`), else
+  its accessibility role, else its layout role. A closed branch shows its child
+  count. Click a triangle to open a branch, and Alt-click a triangle to open or
+  shut the whole subtree under it. The right-click menu's Expand recursively
+  does the same. Up and Down move the selection, Right opens or enters a
+  branch, Left closes it or goes to the
+  parent, Home and End jump to the ends. Ctrl+F searches names, text, labels and
+  chips, with the hit count and Enter for the next hit. A right click offers
+  Expand recursively, Collapse children, Copy text and Copy element; Copy element
+  copies the outline format. The breadcrumb under the tree shows the selected
+  element's ancestors by name; click one to select it. Hovering a row highlights
+  its element in the app.
 - **Styles**, beside the tree, shows the selected element's values as rule
   blocks: `element.style` for your live edits, then the element's declared
   values. Click a value to edit it; Enter applies it to the running app and

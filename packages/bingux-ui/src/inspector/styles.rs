@@ -9,13 +9,12 @@ use freya::winit::window::WindowId;
 
 use super::box_model;
 use super::editor::{self, Declared, Input};
-use super::nav::{StripTab, tab_strip};
 use super::snapshot::{Node, Snapshot};
 use crate::controls::colour_picker::{self, colour_picker};
 use crate::controls::scrub::scrub;
-use crate::controls::{CheckState, checkbox, search_field};
+use crate::controls::{CheckState, checkbox, search_field, tab_strip};
 use crate::layout::vstack;
-use crate::shell::overlays::input_shield;
+use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
@@ -29,8 +28,8 @@ enum StylesTab {
     Accessibility,
 }
 
-impl StripTab for StylesTab {
-    const ITEMS: &'static [StylesTab] = &[
+impl StylesTab {
+    const ALL: [StylesTab; 4] = [
         StylesTab::Styles,
         StylesTab::Computed,
         StylesTab::Layout,
@@ -83,15 +82,18 @@ impl Component for StylesPane {
                 .into(),
         };
         // Scrolls sideways rather than clipping when the pane is narrow.
-        let bar = rect().tw(&tokens, &[w_full(), h(Dim::Box7)]).child(
-            scroll_x()
-                .width(Size::fill())
-                .height(Size::fill())
-                .child(tab_strip(selected, move |next: StylesTab| {
-                    let mut tab = tab;
-                    tab.set(next);
-                })),
-        );
+        let bar = tab_strip(
+            StylesTab::ALL
+                .iter()
+                .map(|tab| (*tab, tab.title().to_string()))
+                .collect(),
+            selected,
+            move |next: StylesTab| {
+                let mut tab = tab;
+                tab.set(next);
+            },
+        )
+        .scroll();
         rect()
             .tw(&tokens, &[w_full(), h_full(), flex_col(), p(S2), gap(S2)])
             .child(bar)
@@ -140,7 +142,7 @@ fn styles_tab(
         };
         own.push(
             rect()
-                .key(format!("override:{name}"))
+                .key(format!("override:{id}:{name}"))
                 .child(OverrideRow {
                     window,
                     node: id,
@@ -162,7 +164,7 @@ fn styles_tab(
         if overridden.contains(&decl.name) || is_default(&decl.value) {
             continue;
         }
-        rule.push(prop_row(window, id, decl, picker));
+        rule.push(prop_row(tokens, window, id, decl, picker));
     }
 
     let mut body = rect().tw(tokens, &[w_full(), flex_col(), gap(S2)]);
@@ -170,7 +172,7 @@ fn styles_tab(
         body = body.child(code_block(tokens, "element.style", own));
     }
     if !rule.is_empty() {
-        body = body.child(code_block(tokens, node.kind.name(), rule));
+        body = body.child(code_block(tokens, node.title(), rule));
     }
     ScrollView::new()
         .drag_scrolling(false)
@@ -215,17 +217,19 @@ fn code_text(tokens: &Tokens, text: &str, paint: Paint) -> Element {
         .into_element()
 }
 
-/// One declared property, keyed by its name so a commit keeps the row's state.
+/// One declared property, keyed by node and name so a commit keeps the row's
+/// state and a selection change does not reuse another node's row state.
 pub(super) fn prop_row(
+    tokens: &Tokens,
     window: WindowId,
     node: u64,
     decl: Declared,
     picker: State<Option<&'static str>>,
 ) -> Element {
-    let tokens = use_tokens();
+    let tokens = *tokens;
     // The gutter matches an override's checkbox slot, so both columns line up.
     rect()
-        .key(decl.name.to_string())
+        .key(format!("{node}:{}", decl.name))
         .tw(&tokens, &[pl(GUTTER)])
         .child(PropRow {
             window,
@@ -263,6 +267,7 @@ impl Component for PropRow {
         let text = use_state(|| self.decl.value.clone());
         let draft = use_state(String::new);
         let editing = use_state(|| false);
+        let swatch_area = use_state(Area::default);
         let picker = self.picker;
         let (window, node) = (self.window, self.node);
         let name = self.decl.name;
@@ -301,64 +306,42 @@ impl Component for PropRow {
                     .height(Size::px(CODE_LINE)),
             );
 
-        // The shield is emitted before the line, so the card (inside the line's
-        // anchor) paints above it; both sit on the overlay layer.
-        let shield = (input == Input::Colour && open).then(|| {
-            let mut close = picker;
-            input_shield(&tokens, move || close.set(None)).layer(Layer::Overlay)
-        });
         if input == Input::Colour {
             let colour =
                 colour_from_hex(&current).unwrap_or_else(|| Paint::Transparent.color(&tokens));
             let mut picker_set = picker;
             let mut close = picker;
             let on_original = original.clone();
-            // A zero-sized anchor after the swatch carries the offsets, so the
-            // card's right edge meets the swatch's right edge just below the
-            // line and nothing in the rule reflows.
-            let anchor = open.then(|| {
-                let picked =
-                    colour_from_hex(&current).unwrap_or_else(|| Paint::Backdrop.color(&tokens));
-                rect()
-                    .width(Size::px(0.0))
-                    .height(Size::px(CODE_LINE))
-                    .layer(Layer::Overlay)
-                    .offset_x(SWATCH_SIZE - colour_picker::WIDTH)
-                    .offset_y(CODE_LINE + MENU_GAP)
-                    .child(
-                        rect()
-                            .tw(&tokens, MENU)
-                            .on_global_key_down(move |event: Event<KeyboardEventData>| {
-                                if matches!(event.key, Key::Named(NamedKey::Escape)) {
-                                    close.set(None);
-                                }
-                            })
-                            .on_wheel(|event: Event<WheelEventData>| event.stop_propagation())
-                            .on_pointer_down(|event: Event<PointerEventData>| {
-                                event.stop_propagation()
-                            })
-                            .child(colour_picker(picked, move |next: Color| {
-                                editor::commit(
-                                    window,
-                                    node,
-                                    name,
-                                    &colour_to_hex(next),
-                                    &on_original,
-                                );
-                            })),
-                    )
-            });
+            let picked =
+                colour_from_hex(&current).unwrap_or_else(|| Paint::Backdrop.color(&tokens));
+            // A menu anchored to the swatch: its right edge meets the swatch's
+            // and it opens just below the line. Its root has no size, so the
+            // line does not reflow when it opens.
+            let picker_panel = Panel::new(
+                PanelKind::Menu,
+                open,
+                PanelTrigger::Control(PanelRect::from_area(&swatch_area.read())),
+                vec![Element::from(colour_picker(picked, move |next: Color| {
+                    editor::commit(window, node, name, &colour_to_hex(next), &on_original);
+                }))],
+            )
+            .size(colour_picker::WIDTH + 2.0 * S2.px(), colour_picker::height())
+            .on_dismiss(EventHandler::new(move |_: ()| close.set(None)));
+            let mut area_set = swatch_area;
             line = line
                 .child(
                     rect()
                         .tw(&tokens, &[fill(colour)])
                         .width(Size::px(SWATCH_SIZE))
                         .height(Size::px(SWATCH_SIZE))
+                        .on_sized(move |event: Event<SizedEventData>| {
+                            area_set.set_if_modified(event.area);
+                        })
                         .on_pointer_down(move |_: Event<PointerEventData>| {
                             picker_set.set(if open { None } else { Some(name) });
                         }),
                 )
-                .maybe_child(anchor)
+                .child(picker_panel)
                 .child(code_text(&tokens, " ", Paint::Text));
         }
 
@@ -459,7 +442,6 @@ impl Component for PropRow {
 
         rect()
             .tw(&tokens, &[w_full(), flex_col()])
-            .maybe_child(shield)
             .child(line)
     }
 }
@@ -532,7 +514,7 @@ impl Component for OverrideRow {
 /// declared value as the application resolved it.
 fn computed_tab(tokens: &Tokens, node: &Node, filter: State<String>) -> Element {
     let mut rows: Vec<(&'static str, String)> = vec![
-        ("Element", node.kind.name().to_string()),
+        ("Element", node.title().to_string()),
         ("Node id", node.id.to_string()),
         (
             "Parent",

@@ -8,16 +8,15 @@ use freya::prelude::*;
 
 use super::press::use_press;
 use crate::app_icon::app_icon;
+use crate::component::ComponentName;
 use crate::icons::{self, Icon};
-use crate::motion::{Focusable, PRESENCE_SCALE, use_presence};
-use crate::shell::menu::menu_item;
-use crate::shell::overlays::{input_shield, use_overlays};
+use crate::motion::Focusable;
+use crate::rows::RowTitle;
+use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
 use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
 use crate::typography::{BODY, Ink};
 
-/// Space between the button and the menu.
-const MENU_GAP: f32 = 4.0;
 /// A generous average glyph width at body size. Freya cannot size a button
 /// to an ellipsised label, so the button is sized from its longest option
 /// and does not change width when the choice changes.
@@ -55,6 +54,8 @@ pub struct Dropdown {
     dense: bool,
     min_width: Option<Dim>,
     fixed_width: Option<Dim>,
+    /// The sheet's header on a phone: the control's label.
+    title: Option<String>,
     on_select: EventHandler<String>,
 }
 
@@ -70,6 +71,7 @@ pub fn dropdown(
         dense: false,
         enabled: true,
         min_width: None,
+        title: None,
         fixed_width: None,
         on_select: on_select.into(),
     }
@@ -116,6 +118,12 @@ impl Dropdown {
         self.dense = true;
         self
     }
+
+    /// The sheet's header on a phone: the control's label.
+    pub fn title(mut self, title: impl Into<String>) -> Self {
+        self.title = Some(title.into());
+        self
+    }
 }
 
 impl Component for Dropdown {
@@ -146,9 +154,6 @@ impl Component for Dropdown {
             .map(|index| options[index].1.clone())
             .unwrap_or_else(|| self.selected.clone());
 
-        let progress = use_presence(open(), tokens.motion(90), || {});
-        let visible = open() || progress > 0.0;
-
         let choose = {
             let on_select = on_select.clone();
             let options = options.clone();
@@ -159,23 +164,6 @@ impl Component for Dropdown {
                 open.set(false);
                 highlighted.set(None);
             })
-        };
-        let overlays = use_overlays();
-        // The options as action-sheet rows on a phone; the selected one is ticked.
-        let sheet_items = {
-            let choose = choose.clone();
-            let labels = options.clone();
-            move || {
-                labels
-                    .iter()
-                    .enumerate()
-                    .map(|(index, (_, text))| {
-                        let choose = choose.clone();
-                        menu_item(text.clone(), move |_| choose.call(index))
-                            .checked(Some(index) == selected_index)
-                    })
-                    .collect::<Vec<_>>()
-            }
         };
         let count = options.len();
         let longest = options
@@ -214,7 +202,6 @@ impl Component for Dropdown {
         let viewport_height = list_height.min(Dim::MenuList.px());
         // Rows that one Page Up or Page Down press moves through.
         let page_rows = ((viewport_height / item_height) as usize).max(1);
-        let menu_height = viewport_height + 2.0 * S2.px();
         // Scroll offset that puts row `index` in the middle of the menu, or
         // keeps it in view when `centre` is false.
         let offset_for = move |index: usize, current: i32, centre: bool| -> i32 {
@@ -393,16 +380,6 @@ impl Component for Dropdown {
                             return;
                         }
                         a11y_id.request_focus();
-                        if is_compact() {
-                            // A phone lists the options as an action sheet at the
-                            // bottom edge; the sheet's own rows choose.
-                            let origin = {
-                                let area = button_area.read();
-                                (area.min_x(), area.min_y())
-                            };
-                            overlays.show_menu_from(Some(a11y_id), origin, sheet_items(), false);
-                            return;
-                        }
                         let next = !open();
                         if next && let Some(index) = selected_index {
                             scroll.scroll_to_y(offset_for(index, 0, true));
@@ -414,6 +391,7 @@ impl Component for Dropdown {
             })
             .child(
                 rect()
+                    .width(Size::fill())
                     .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
                     .maybe_child(current_icon.map(|icon| {
                         option_icon(
@@ -424,7 +402,7 @@ impl Component for Dropdown {
                     .child(
                         BODY.in_ink(if touch { Ink::Muted } else { Ink::Text })
                             .label(&tokens, current)
-                            .width(Size::px(width - button_chrome() - icon_space))
+                            .width(Size::fill())
                             .max_lines(1)
                             .text_overflow(TextOverflow::Ellipsis)
                             .text_align(if touch {
@@ -445,95 +423,51 @@ impl Component for Dropdown {
             )
             .focusable(focus(), Radius::Control);
 
-        // The list is at least Dim::DropdownMenu and never narrower than the button.
         let menu_width = button_width().max(Dim::DropdownMenu.px());
-        // Open upward when the window has no room below the button and more
-        // room above it.
-        let window_height = Platform::get().current_window().root_size.read().height;
-        let below = window_height - button_area.read().max_y() - MENU_GAP;
-        let above = button_area.read().min_y() - MENU_GAP;
-        let open_up = menu_height > below && above > below;
-        let menu_offset = if open_up {
-            -(button_dim.px() + menu_height + MENU_GAP)
-        } else {
-            MENU_GAP
-        };
-        // The scale grows from the edge the menu opens from: the bottom when
-        // it opens upward, and the button's side it is aligned to.
-        let right_aligned = menu_width > button_width();
-        let menu_origin = match (open_up, right_aligned) {
-            (true, true) => TransformOrigin::bottom_right(),
-            (true, false) => TransformOrigin::bottom_left(),
-            (false, true) => TransformOrigin::top_right(),
-            (false, false) => TransformOrigin::top_left(),
-        };
-        // `offset_x`/`offset_y` move an element's children, so the card sits
-        // inside a zero-sized anchor that carries the offsets.
-        // The list sits two overlay jumps up and the shield one, so the list
-        // is above the shield; boxes on one layer have no defined order.
-        let shield = open().then(|| {
-            input_shield(&tokens, move || {
-                open.set(false);
-                highlighted.set(None);
+        let rows = options
+            .iter()
+            .enumerate()
+            .map(|(index, (_, text))| {
+                let choose = choose.clone();
+                Element::from(DropdownItem {
+                    icon: option_icons.get(index).cloned(),
+                    text: text.clone(),
+                    selected: Some(index) == selected_index,
+                    highlighted: hovered_item().is_none() && Some(index) == highlighted(),
+                    on_press: EventHandler::new(move |_: ()| choose.call(index)),
+                    on_hover: EventHandler::new(move |inside: bool| {
+                        hovered_item.set(if inside { Some(index) } else { None })
+                    }),
+                })
             })
-            .layer(Layer::Overlay)
+            .collect::<Vec<_>>();
+        let dismiss = EventHandler::new(move |_: ()| {
+            open.set(false);
+            highlighted.set(None);
         });
-        let menu = visible.then(|| {
-            rect()
-                .layer(Layer::Overlay)
-                .width(Size::px(0.0))
-                .height(Size::px(0.0))
-                .offset_x((button_width() - menu_width).min(0.0))
-                .offset_y(menu_offset)
-                .child(
-                    rect()
-                        .layer(Layer::Overlay)
-                        .opacity(progress)
-                        .scale(PRESENCE_SCALE + (1.0 - PRESENCE_SCALE) * progress)
-                        .transform_origin(menu_origin)
-                        .width(Size::px(menu_width))
-                        .tw(&tokens, MENU)
-                        // A wheel turn at the end of the list stops here
-                        // instead of scrolling the page behind it.
-                        .on_wheel(|event: Event<WheelEventData>| event.stop_propagation())
-                        .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
-                        .child(
-                            rect()
-                                .width(Size::fill())
-                                .height(Size::px(viewport_height))
-                                .child(
-                                    ScrollView::new_controlled(scroll)
-                                        .drag_scrolling(false)
-                                        .children(options.iter().enumerate().map(
-                                            |(index, (_, text))| {
-                                                let choose = choose.clone();
-                                                Element::from(DropdownItem {
-                                                    icon: option_icons.get(index).cloned(),
-                                                    text: text.clone(),
-                                                    selected: Some(index) == selected_index,
-                                                    highlighted: hovered_item().is_none()
-                                                        && Some(index) == highlighted(),
-                                                    on_press: EventHandler::new(move |_: ()| {
-                                                        choose.call(index)
-                                                    }),
-                                                    on_hover: EventHandler::new(
-                                                        move |inside: bool| {
-                                                            hovered_item.set(if inside {
-                                                                Some(index)
-                                                            } else {
-                                                                None
-                                                            })
-                                                        },
-                                                    ),
-                                                })
-                                            },
-                                        )),
-                                ),
-                        ),
-                )
-        });
+        let row_title = try_consume_context::<RowTitle>();
+        let mut panel = Panel::new(
+            PanelKind::Choice,
+            open(),
+            PanelTrigger::Control(PanelRect::from_area(&button_area.read())),
+            rows,
+        )
+        .size(menu_width, list_height)
+        .scroll(scroll)
+        .on_dismiss(dismiss);
+        // An explicit title wins; otherwise the sheet header is the row's title.
+        if let Some(title) = self
+            .title
+            .clone()
+            .or_else(|| row_title.map(|row| row.0.read().clone()))
+        {
+            panel = panel.title(title);
+        }
 
-        rect().child(button).maybe_child(shield).maybe_child(menu)
+        rect()
+            .component("Dropdown")
+            .child(button)
+            .child(Element::from(panel))
     }
 }
 
@@ -557,6 +491,7 @@ impl Component for DropdownItem {
         let on_hover = self.on_hover.clone();
         let on_leave = on_hover.clone();
         rect()
+            .component("DropdownItem")
             .a11y_role(AccessibilityRole::MenuItem)
             .tw(&tokens, MENU_ITEM)
             // The selected option keeps the fill it has when highlighted, so

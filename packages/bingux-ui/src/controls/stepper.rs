@@ -4,6 +4,7 @@
 
 use freya::prelude::*;
 
+use crate::component::ComponentName;
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
 use crate::style::*;
@@ -118,6 +119,7 @@ impl Component for Stepper {
         };
 
         rect()
+            .component("Stepper")
             .a11y_id(a11y_id)
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)

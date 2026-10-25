@@ -15,6 +15,7 @@ use crate::motion::{PRESENCE_SCALE, use_presence};
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::typography::{CAPTION, Ink};
+use crate::shell::panel::{EdgeAlign, PANEL_GAP, PanelRect, Side, place_aligned};
 
 /// How long the pointer rests on the element before the tooltip shows.
 const TOOLTIP_DELAY: Duration = Duration::from_millis(500);
@@ -119,7 +120,14 @@ impl Component for HoverTip {
         let (offset_x, offset_y, measured) = match (anchor(), bubble()) {
             (Some(area), Some(size)) => {
                 let window = *Platform::get().current_window().root_size.read();
-                let (left, top) = place(area, size, (window.width, window.height));
+                let (left, top) = place_aligned(
+                    PanelRect::from_area(&area),
+                    size,
+                    (window.width, window.height),
+                    Side::Below,
+                    PANEL_GAP,
+                    EdgeAlign::Centre,
+                );
                 (left - area.min_x(), top - area.min_y(), true)
             }
             _ => (0.0, 0.0, false),
@@ -147,34 +155,4 @@ impl Component for HoverTip {
 
         rect().child(wrapper).child(label).into_element()
     }
-}
-
-/// Where the bubble's top-left corner goes, in window coordinates. It tries
-/// below, above, right and left of the anchor and takes the first side where
-/// the bubble fits inside the window margin. If no side fits, it sits below
-/// the anchor and is clamped into the window margin.
-fn place(anchor: Area, bubble: (f32, f32), window: (f32, f32)) -> (f32, f32) {
-    let (width, height) = bubble;
-    let (window_width, window_height) = window;
-    let margin = S2.px();
-    let gap = S1.px();
-    let centred_x = anchor.min_x() + anchor.width() / 2.0 - width / 2.0;
-    let centred_y = anchor.min_y() + anchor.height() / 2.0 - height / 2.0;
-    let sides = [
-        (centred_x, anchor.max_y() + gap),
-        (centred_x, anchor.min_y() - gap - height),
-        (anchor.max_x() + gap, centred_y),
-        (anchor.min_x() - gap - width, centred_y),
-    ];
-    let fits = |(left, top): (f32, f32)| {
-        left >= margin
-            && top >= margin
-            && left + width <= window_width - margin
-            && top + height <= window_height - margin
-    };
-    let (left, top) = sides.into_iter().find(|&side| fits(side)).unwrap_or(sides[0]);
-    (
-        left.min(window_width - margin - width).max(margin),
-        top.min(window_height - margin - height).max(margin),
-    )
 }

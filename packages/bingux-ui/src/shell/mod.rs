@@ -3,6 +3,7 @@
 
 pub mod menu;
 pub mod navigation;
+pub(crate) mod panel;
 pub mod overlays;
 pub mod sections;
 pub mod status_page;

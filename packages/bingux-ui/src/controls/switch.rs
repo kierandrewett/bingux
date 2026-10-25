@@ -6,6 +6,7 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use super::press::use_press;
+use crate::component::ComponentName;
 use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
@@ -79,6 +80,7 @@ impl Component for Switch {
         });
 
         rect()
+            .component("Switch")
             .a11y_id(a11y_id)
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)

@@ -11,6 +11,7 @@
 
 use freya::prelude::*;
 
+use crate::component::ComponentName;
 use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -168,6 +169,7 @@ impl Component for SplitPane {
             .child(self.second.clone());
 
         rect()
+            .component("SplitPane")
             .tw(
                 &tokens,
                 &[

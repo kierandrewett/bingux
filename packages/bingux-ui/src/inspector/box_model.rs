@@ -42,6 +42,7 @@ pub fn view(
         .tw(tokens, &[w_full(), h_full(), flex_col(), gap(S2)])
         .child(margin_box)
         .child(prop_row(
+            tokens,
             window,
             id,
             Declared {
@@ -52,6 +53,7 @@ pub fn view(
             picker,
         ))
         .child(prop_row(
+            tokens,
             window,
             id,
             Declared {
@@ -67,7 +69,10 @@ pub fn view(
 /// One layer of the box: its name and values in caption type, the layer inside.
 fn layer(tokens: &Tokens, name: &str, value: &str, inner: Element) -> Element {
     rect()
-        .tw(tokens, &[w_full(), flex_col(), p(S0_5), border(Line::Outline)])
+        .tw(
+            tokens,
+            &[w_full(), flex_col(), p(S0_5), border(Line::Outline)],
+        )
         .child(styled_label(CAPTION, format!("{name}  {value}")))
         .child(inner)
         .into()

@@ -4,6 +4,7 @@
 use freya::animation::*;
 use freya::prelude::*;
 
+use crate::component::ComponentName;
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::typography::CAPTION;
@@ -79,6 +80,7 @@ impl Component for ProgressBar {
         };
 
         rect()
+            .component("ProgressBar")
             .width(self.width.clone())
             .tw(&tokens, &[flex_col(), gap(S1)])
             .a11y_role(AccessibilityRole::ProgressIndicator)

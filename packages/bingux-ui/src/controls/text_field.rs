@@ -4,23 +4,33 @@
 //! A text field sits on `control` at the control radius and is one control
 //! row tall. Like every control, it has no idle outline; focus draws the
 //! accent ring, an invalid value the danger one. A password field has a
-//! reveal button, and a right
-//! click opens Cut, Copy, Paste and Select all. Enter submits; Escape
-//! restores the last committed text and leaves the field.
+//! reveal button, and a right click opens Cut, Copy, Paste and Select all.
+//! A touch gets the edit bar instead, over the caret or selection (see
+//! `text_edit`). Enter submits; Escape restores the last committed text and
+//! leaves the field.
+
+use std::time::Instant;
 
 use freya::prelude::*;
 
+use crate::component::ComponentName;
 use crate::controls::button::icon_button;
+use crate::controls::press::{is_touch, point_of, use_press};
+use crate::controls::text_edit::{self, DOUBLE_TAP};
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
 use crate::shell::menu::{MenuItem, menu_item, menu_separator};
 use crate::shell::overlays::Overlays;
+use crate::shell::panel::PanelTrigger;
 use crate::style::*;
 use crate::surface::{use_enabled, use_tokens};
 use crate::typography::{BODY, CAPTION, Ink};
 
 /// A multiline field is this many controls high.
 const MULTILINE_ROWS: f32 = 3.0;
+
+/// A tap this close to the previous one is on the same spot: a second tap there shows the edit bar.
+const SAME_SPOT: f32 = 16.0;
 
 /// A single-line (or multi-line) text field bound to a `State<String>`.
 #[derive(PartialEq)]
@@ -47,6 +57,8 @@ pub struct TextField {
     on_arrow: Option<EventHandler<f64>>,
     a11y_id: Option<AccessibilityId>,
     autofocus: bool,
+    /// Apps' own entries, appended to the full edit menu after the general ones.
+    edit_extra: Vec<MenuItem>,
 }
 
 /// `value` is the live draft; `on_submit` fires on Enter with the text.
@@ -73,6 +85,7 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         on_arrow: None,
         a11y_id: None,
         autofocus: false,
+        edit_extra: Vec::new(),
     }
 }
 
@@ -195,6 +208,13 @@ impl TextField {
         self.autofocus = true;
         self
     }
+
+    /// Append app-specific entries to the full edit menu, after Cut, Copy,
+    /// Paste and Select all. The touch bar's chevron opens that menu.
+    pub fn edit_menu_extra(mut self, items: Vec<MenuItem>) -> Self {
+        self.edit_extra = items;
+        self
+    }
 }
 
 /// One context-menu entry; greyed out when `enabled` is false.
@@ -218,6 +238,17 @@ impl Component for TextField {
         let focus = use_focus(input_id);
         let mut revealed = use_state(|| false);
         let mut command = use_state::<Option<InputCommand>>(|| None);
+        let touch = use_press();
+        let probe = use_state(InputProbe::default);
+        let mut request = use_state::<Option<InputRequest>>(|| None);
+        let mut bar_open = use_state(|| false);
+        let bar_size = use_state::<Option<(f32, f32)>>(|| None);
+        let mut field_origin = use_state(|| (0.0_f32, 0.0_f32));
+        // The field's window rect, for touches: the input swallows the pointer
+        // press, so the field hears a touch by its global down instead.
+        let mut field_area = use_state::<Option<(f32, f32, f32, f32)>>(|| None);
+        let mut pressed_at = use_state(|| (0.0_f32, 0.0_f32));
+        let mut last_tap = use_state::<Option<(Instant, (f32, f32))>>(|| None);
         let overlays: Option<Overlays> = try_consume_context::<Overlays>();
         // Freya's Input takes its look as theme values, not a box style, so
         // the tokens are resolved here: the CONTROL recipe's radius and
@@ -305,6 +336,8 @@ impl Component for TextField {
             .theme_layout(layout)
             .mode(mode)
             .command(command)
+            .probe(probe)
+            .request(request)
             .a11y_id(input_id)
             .on_submit(move |text: String| on_submit.call(text))
             .auto_focus(self.autofocus)
@@ -315,6 +348,7 @@ impl Component for TextField {
                             value.set(text);
                         }
                         event.stop_propagation();
+                        bar_open.set(false);
                         input_id.request_unfocus();
                         false
                     }
@@ -427,12 +461,14 @@ impl Component for TextField {
             }
             input = input.trailing(trailing);
         }
-        if let Some(on_change) = on_change {
-            input = input.on_validate(move |validator: InputValidator| {
+        // Any edit hides the touch bar. The app's on_change sees every edit.
+        input = input.on_validate(move |validator: InputValidator| {
+            bar_open.set(false);
+            if let Some(on_change) = &on_change {
                 on_change.call(validator.text().clone());
-                validator.set_valid(true);
-            });
-        }
+            }
+            validator.set_valid(true);
+        });
 
         // Right click: the edit commands, greyed out when they do not apply.
         // A password is never copied out, so Cut and Copy stay off for it.
@@ -452,11 +488,78 @@ impl Component for TextField {
                 command.set(Some(InputCommand::SelectAll));
             }),
         ];
+        // Touch: the bar's entries follow the selection, and its chevron opens the
+        // full menu. Mouse keeps the right-click menu on the field.
+        let seen = *probe.read();
+        let show_bar = bar_open() && seen.focused;
+        let window = *Platform::get().current_window().root_size.read();
+        let bar_window = text_edit::anchor(&seen).and_then(|anchor| {
+            text_edit::bar_rect(anchor, *bar_size.read(), (window.width, window.height))
+        });
+        let origin = *field_origin.read();
+        let (handle_start, handle_end) = match seen.selection {
+            Some((start, end)) if show_bar => (Some(start), Some(end)),
+            _ => (None, None),
+        };
+        let cut = edit_item("Cut", copyable, move |_| {
+            command.set(Some(InputCommand::Cut));
+            bar_open.set(false);
+        });
+        let copy = edit_item("Copy", copyable, move |_| {
+            command.set(Some(InputCommand::Copy));
+            bar_open.set(false);
+        });
+        let paste = edit_item("Paste", true, move |_| {
+            command.set(Some(InputCommand::Paste));
+            bar_open.set(false);
+        });
+        let select = edit_item("Select", seen.caret.is_some(), move |_| {
+            if let Some(at) = probe.read().caret {
+                request.set(Some(InputRequest::SelectWordAt {
+                    x: at.x,
+                    y: (at.top + at.bottom) / 2.0,
+                }));
+            }
+        });
+        let select_all = edit_item("Select all", has_text, move |_| {
+            command.set(Some(InputCommand::SelectAll));
+        });
+        let bar_entries = if seen.selection.is_some() {
+            vec![cut, copy, paste]
+        } else {
+            vec![paste, select, select_all]
+        };
+        let mut full_menu = items.clone();
+        full_menu.extend(self.edit_extra.clone());
+        let on_more = EventHandler::new(move |_: ()| {
+            bar_open.set(false);
+            if let (Some(overlays), Some(anchor)) = (overlays, bar_window) {
+                input_id.request_focus();
+                overlays.show_menu_from(
+                    Some(input_id),
+                    PanelTrigger::Control(anchor),
+                    full_menu.clone(),
+                    false,
+                );
+            }
+        });
+        let bar_offset = bar_window.map(|rect| (rect.x - origin.0, rect.y - origin.1));
         let field = rect()
             .width(if self.fill {
                 Size::fill()
             } else {
                 Size::px(width)
+            })
+            .on_sized(move |event: Event<SizedEventData>| {
+                let area = event.area;
+                field_area.set(Some((area.min_x(), area.min_y(), area.max_x(), area.max_y())));
+                let next = (event.area.min_x(), event.area.min_y());
+                let moved = *field_origin.read() != next;
+                if moved {
+                    field_origin.set(next);
+                    // Scrolling or a relayout moves the caret away from the bar.
+                    bar_open.set(false);
+                }
             })
             .on_pointer_down(move |event: Event<PointerEventData>| {
                 let right = matches!(event.data(), PointerEventData::Mouse(mouse) if mouse.button == Some(MouseButton::Right));
@@ -471,17 +574,63 @@ impl Component for TextField {
                     let at = event.global_location();
                     overlays.show_menu_from(
                         Some(input_id),
-                        (at.x as f32, at.y as f32),
+                        PanelTrigger::Pointer((at.x as f32, at.y as f32)),
                         items.clone(),
                         false,
                     );
                 }
             })
+            .on_global_pointer_move(move |event: Event<PointerEventData>| touch.moved(&event))
+            .on_global_pointer_down(move |event: Event<PointerEventData>| {
+                // The input swallows a press that lands on it, so a touch is heard
+                // here, by its global down, when it lands inside the field.
+                let at = point_of(&event);
+                let inside = (*field_area.read()).is_some_and(|(x0, y0, x1, y1)| {
+                    at.0 >= x0 && at.0 <= x1 && at.1 >= y0 && at.1 <= y1
+                });
+                if is_touch(&event) && inside {
+                    pressed_at.set(at);
+                    touch.begin(
+                        &event,
+                        Some(EventHandler::new(move |at: (f32, f32)| {
+                            request.set(Some(InputRequest::SelectWordAt { x: at.0, y: at.1 }));
+                            bar_open.set(true);
+                        })),
+                    );
+                }
+            })
+            .on_global_pointer_up(move |_: Event<PointerEventData>| {
+                // A touch tap. A double tap selects the word and shows the bar; a
+                // second tap on the same spot shows it; a tap on an empty field too.
+                if !touch.lift() {
+                    return;
+                }
+                let at = *pressed_at.read();
+                let now = Instant::now();
+                let previous = *last_tap.read();
+                last_tap.set(Some((now, at)));
+                let near = previous
+                    .is_some_and(|(_, spot)| (spot.0 - at.0).hypot(spot.1 - at.1) <= SAME_SPOT);
+                let double = near
+                    && previous.is_some_and(|(then, _)| now.duration_since(then) <= DOUBLE_TAP);
+                if double {
+                    request.set(Some(InputRequest::SelectWordAt { x: at.0, y: at.1 }));
+                    bar_open.set(true);
+                } else if near || !has_text {
+                    bar_open.set(true);
+                } else {
+                    bar_open.set(false);
+                }
+            })
             .child(input)
+            .maybe_child(handle_start.map(|at| text_edit::handle(&tokens, at, origin, true, request)))
+            .maybe_child(handle_end.map(|at| text_edit::handle(&tokens, at, origin, false, request)))
+            .maybe_child(show_bar.then(|| text_edit::bar(&tokens, bar_entries, on_more, bar_size, bar_offset)))
             .focusable(focus(), Radius::Control)
             .maybe(self.fill, |wrapper| wrapper.tw(&tokens, &[w_flex()]));
 
         rect()
+            .component("TextField")
             .tw(&tokens, &[flex_col(), gap(S1), font(BODY)])
             .child(field)
             .maybe(self.validates, |column| {

@@ -15,8 +15,8 @@ use crate::system::{self, CommandError, CommandResult, background, optimistic_th
 use crate::theme::Tokens;
 use crate::ui::typography::{BODY, EMPHASIS};
 use crate::ui::{
-    Group, Overlays, PageHead, Row, Status, caption, choice_row, level_row, page_column, row,
-    status, switch_row, use_overlays, use_tokens,
+    Group, Overlays, PageHead, Row, Status, caption, choice_row, focus_stop, level_row,
+    page_column, row, status, switch_row, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
 
@@ -443,7 +443,7 @@ impl Setting<'_> {
 fn method_card(
     tokens: &Tokens,
     card: MethodCard,
-    on_press: impl FnMut(Event<PressEventData>) + 'static,
+    on_press: impl Into<EventHandler<()>>,
 ) -> Element {
     let ring = if card.selected {
         Paint::Accent
@@ -475,10 +475,7 @@ fn method_card(
         )
         .child(pad);
     let label_style = if card.selected { EMPHASIS } else { BODY };
-    rect()
-        .a11y_role(AccessibilityRole::Button)
-        .a11y_alt(card.label.to_string())
-        .a11y_focusable(true)
+    let card_box = rect()
         .tw(
             tokens,
             &[
@@ -488,10 +485,17 @@ fn method_card(
                 items(Align::Center),
             ],
         )
-        .on_press(on_press)
         .child(frame)
-        .child(label_style.label(tokens, card.label))
-        .into()
+        .child(label_style.label(tokens, card.label));
+    focus_stop(
+        card_box,
+        card.label.to_string(),
+        AccessibilityRole::Button,
+        true,
+        Radius::Card,
+        on_press,
+    )
+    .into()
 }
 
 /// A small dot standing for a finger touch.
@@ -598,7 +602,7 @@ impl Component for ClickTest {
         let mut last = use_state::<Option<Instant>>(|| None);
         let mut hit = use_state::<bool>(|| false);
         let window = Duration::from_millis(u64::from(self.within_ms));
-        let on_press = move |_: Event<PressEventData>| {
+        let on_press = move |()| {
             let now = Instant::now();
             let previous = *last.read();
             let double = previous.is_some_and(|at| now.duration_since(at) <= window);
@@ -616,23 +620,26 @@ impl Component for ClickTest {
         } else {
             ("Double-click this box", Paint::Control)
         };
-        rect()
-            .a11y_role(AccessibilityRole::Button)
-            .a11y_alt(text.to_string())
-            .a11y_focusable(true)
-            .tw(
-                &tokens,
-                &[
-                    w_full(),
-                    h(Dim::RowTall),
-                    center(),
-                    rounded(Radius::Card),
-                    bg(fill),
-                    border(Line::Hairline),
-                ],
-            )
-            .on_press(on_press)
-            .child(EMPHASIS.label(&tokens, text))
+        focus_stop(
+            rect()
+                .tw(
+                    &tokens,
+                    &[
+                        w_full(),
+                        h(Dim::RowTall),
+                        center(),
+                        rounded(Radius::Card),
+                        bg(fill),
+                        border(Line::Hairline),
+                    ],
+                )
+                .child(EMPHASIS.label(&tokens, text)),
+            text.to_string(),
+            AccessibilityRole::Button,
+            true,
+            Radius::Card,
+            on_press,
+        )
     }
 }
 

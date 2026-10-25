@@ -76,9 +76,11 @@ struct Core {
     starts: Vec<(RegionKind, AccessibilityId)>,
     /// The control pressed last, for a popup it opens to return focus to.
     pressed: Option<AccessibilityId>,
-    /// A region start was parked by a pointer press; the first keyboard
-    /// arrival on it must not bounce again, or Tab skips the first control.
-    parked: bool,
+    /// The start a pointer press parked focus on. Freya switches to keyboard
+    /// mode on Tab, so the parked start can get a keyboard state while the Tab
+    /// that moves focus off it is still in flight; that arrival must not
+    /// bounce a second time.
+    parked: Option<AccessibilityId>,
 }
 
 /// The window's focus state, shared by every region and trap. [`WindowHost`]
@@ -133,6 +135,7 @@ impl FocusCore {
             core.dir = dir;
             core.budget = BOUNCE_BUDGET;
         }
+        set_keyboard_mode();
         send_dir(dir);
     }
 
@@ -171,6 +174,7 @@ impl FocusCore {
             core.dir = Dir::Forward;
             core.budget = BOUNCE_BUDGET;
         }
+        self.0.borrow_mut().parked = None;
         set_keyboard_mode();
         send(AccessibilityFocusStrategy::Node(target));
     }
@@ -189,9 +193,7 @@ impl FocusCore {
         let Some(target) = target else {
             return;
         };
-        if !keyboard {
-            self.0.borrow_mut().parked = true;
-        }
+        self.0.borrow_mut().parked = (!keyboard).then_some(target);
         if keyboard {
             {
                 let mut core = self.0.borrow_mut();
@@ -235,18 +237,19 @@ impl FocusCore {
         true
     }
 
+    /// Forgets a park on `id` once focus has left it.
+    fn forget_park(&self, id: AccessibilityId) {
+        let mut core = self.0.borrow_mut();
+        if core.parked == Some(id) {
+            core.parked = None;
+        }
+    }
+
     /// Keyboard focus landed on a sentinel: move on from it.
-    fn keyboard_on(&self, edge: Edge) {
-        // The first keyboard arrival on a pointer-parked start: the Tab that
-        // caused it already reached the first control; do not bounce past it.
-        if matches!(edge, Edge::Region(_)) && std::mem::take(&mut self.0.borrow_mut().parked) {
-            // The Tab that reached this start came from a pointer-parked
-            // region: step from the start into its first control.
-            if self.0.borrow().dir == Dir::Forward && self.spend() {
-                send(AccessibilityFocusStrategy::Forward(
-                    AccessibilityFocusMovement::InsideGroup,
-                ));
-            }
+    fn keyboard_on(&self, id: AccessibilityId, edge: Edge) {
+        // A pointer-parked start that gets keyboard focus is the Tab that is
+        // moving focus off it, not a landing: that Tab already steps on.
+        if matches!(edge, Edge::Region(_)) && self.0.borrow().parked == Some(id) {
             return;
         }
         let dir = self.0.borrow().dir;
@@ -296,7 +299,10 @@ impl Region {
     /// The region's press handler. A press on a control the control claimed
     /// (see [`Focusable`]) does nothing more. A press on empty space focuses
     /// the region's start in pointer mode.
-    pub fn press(&self) {
+    pub fn press(&self, event: &Event<PressEventData>) {
+        // The region takes the press as the outermost handler: an enclosing
+        // region must not park focus again on top of it.
+        event.stop_propagation();
         self.core.set_current(self.kind);
         if self.core.take_claim() {
             return;
@@ -349,8 +355,11 @@ impl Component for Sentinel {
             {
                 core.set_current(kind);
             }
+            if !state.is_focused() {
+                core.forget_park(id);
+            }
             if state == Focus::Keyboard {
-                core.keyboard_on(edge);
+                core.keyboard_on(id, edge);
             }
         });
 

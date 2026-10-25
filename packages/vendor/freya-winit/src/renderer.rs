@@ -821,6 +821,7 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                 }
                 WindowEvent::ModifiersChanged(modifiers) => {
                     app.modifiers_state = modifiers.state();
+                    crate::modifiers::set_live(winit_mappings::map_winit_modifiers(app.modifiers_state));
                 }
                 WindowEvent::Focused(is_focused) => {
                     app.platform.is_app_focused.set_if_modified(is_focused);

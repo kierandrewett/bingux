@@ -5,8 +5,8 @@
 
 use freya::prelude::*;
 
-use super::nav::{Tab, tab_strip};
-use crate::controls::icon_button;
+use super::nav::Tab;
+use crate::controls::{icon_button, tab_strip};
 use crate::icons::Icon;
 use crate::style::*;
 use crate::theme::Tokens;
@@ -22,7 +22,12 @@ fn tool(icon: Icon, on_press: impl Into<EventHandler<()>>) -> crate::controls::I
 fn divider(tokens: &Tokens) -> Rect {
     rect().tw(
         tokens,
-        &[w(Dim::Hairline), h(Dim::IconControl), mx(S2), bg(Paint::Separator)],
+        &[
+            w(Dim::Hairline),
+            h(Dim::IconControl),
+            mx(S2),
+            bg(Paint::Separator),
+        ],
     )
 }
 
@@ -61,10 +66,17 @@ pub(super) fn toolbar(
                         .active(phone),
                 )
                 .child(divider(tokens))
-                .child(tab_strip(tab, move |picked: Tab| {
-                    let mut tab_state = tab_state;
-                    tab_state.set(picked);
-                }))
+                .child(tab_strip(
+                    Tab::ALL
+                        .iter()
+                        .map(|tab| (*tab, tab.title().to_string()))
+                        .collect(),
+                    tab,
+                    move |picked: Tab| {
+                        let mut tab_state = tab_state;
+                        tab_state.set(picked);
+                    },
+                ))
                 .child(rect().tw(tokens, &[w_flex()]))
                 .child(
                     tool(Icon::Pause, move |_| super::set_paused(!paused))

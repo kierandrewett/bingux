@@ -5,6 +5,7 @@
 use freya::prelude::*;
 
 use super::text_field::text_field;
+use crate::component::ComponentName;
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
@@ -19,6 +20,13 @@ const SQUARE_H: f32 = 132.0;
 const STRIP_H: f32 = 14.0;
 /// Edge length of one checker cell behind the alpha strip.
 const CHECK: f32 = 7.0;
+
+/// The picker's full height, for placement only: its padding, the square, two
+/// strips, a swatch row and a control-height hex field, with a gap between
+/// each of the five parts. The card itself sizes to its children.
+pub fn height() -> f32 {
+    6.0 * S2.px() + SQUARE_H + 2.0 * STRIP_H + Dim::Swatch.px() + Dim::Control.px()
+}
 
 /// Theme colours offered as one-click swatches, as hex text.
 pub const SWATCHES: &[&str] = &[
@@ -58,6 +66,7 @@ impl Component for ColourPicker {
         });
 
         rect()
+            .component("ColourPicker")
             .key(colour_to_hex(self.value))
             .width(Size::px(WIDTH))
             .tw(&tokens, &[flex_col(), gap(S2), p(S2)])

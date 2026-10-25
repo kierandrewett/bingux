@@ -94,6 +94,12 @@ pub enum Sides {
     Left,
 }
 
+/// The page sheet's leading-edge shadow (`Util::SheetEdgeShadow`): offset in
+/// px, blur in px and black opacity at full amount.
+const SHEET_EDGE_OFFSET: f32 = 24.0;
+const SHEET_EDGE_BLUR: f32 = 32.0;
+const SHEET_EDGE_OPACITY: f32 = 0.5;
+
 /// One utility: a single fact about a box.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Util {
@@ -124,6 +130,14 @@ pub enum Util {
     },
     Border(Line),
     Shadow(Elevation),
+    /// A soft shadow cast to the left by a page sheet that slides across
+    /// another page, scaled by a run-time amount from 0 to 1 so it vanishes
+    /// at rest. Stronger and tighter than `Elevation::Floating`, so the
+    /// edge reads while the sheet moves.
+    SheetEdgeShadow(f32),
+    /// `Radius` times a run-time amount on the left corners only, for a card
+    /// that slides in from the right.
+    RoundedLeftScaled(Radius, f32),
     W(Extent),
     H(Extent),
     MinW(Dim),
@@ -231,6 +245,14 @@ pub const fn border(line: Line) -> Util {
 }
 pub const fn shadow(elevation: Elevation) -> Util {
     Util::Shadow(elevation)
+}
+pub fn sheet_edge_shadow(amount: f32) -> Util {
+    Util::SheetEdgeShadow(amount)
+}
+/// `radius` scaled by `amount` (0 to 1) on the left corners only; see
+/// `Util::RoundedLeftScaled`.
+pub fn rounded_left_scaled(radius: Radius, amount: f32) -> Util {
+    Util::RoundedLeftScaled(radius, amount)
 }
 pub const fn surface(base: Paint, hover: bool, press: bool, selected: bool) -> Util {
     Util::Surface {
@@ -405,7 +427,12 @@ fn line_border(tokens: &Tokens, line: Line) -> Border {
 fn apply(rect: Rect, tokens: Option<&Tokens>, util: Util) -> Rect {
     let painted = matches!(
         util,
-        Util::Bg(_) | Util::Fill(_) | Util::Ink(_) | Util::Font(_) | Util::Surface { .. } | Util::Border(_)
+        Util::Bg(_)
+            | Util::Fill(_)
+            | Util::Ink(_)
+            | Util::Font(_)
+            | Util::Surface { .. }
+            | Util::Border(_)
     );
     let tokens = match tokens {
         Some(tokens) => tokens,
@@ -463,7 +490,16 @@ fn apply_layout(rect: Rect, util: Util) -> Rect {
         Util::Rounded(radius) => rect.corner_radius(radius.px()),
         Util::RoundedBy(radius, extra) => rect.corner_radius(radius.px() + extra),
         Util::RoundedScaled(radius, amount) => rect.corner_radius(radius.px() * amount),
-        Util::Bg(_) | Util::Fill(_) | Util::Ink(_) | Util::Font(_) | Util::Surface { .. } | Util::Border(_) => rect,
+        Util::RoundedLeftScaled(radius, amount) => {
+            let r = radius.px() * amount;
+            rect.corner_radius((r, 0.0, 0.0, r))
+        }
+        Util::Bg(_)
+        | Util::Fill(_)
+        | Util::Ink(_)
+        | Util::Font(_)
+        | Util::Surface { .. }
+        | Util::Border(_) => rect,
         Util::Shadow(elevation) => {
             let (y, blur, opacity) = elevation.params();
             rect.shadow(
@@ -474,6 +510,14 @@ fn apply_layout(rect: Rect, util: Util) -> Rect {
                     .color(Color::BLACK.with_af32(opacity)),
             )
         }
+        Util::SheetEdgeShadow(amount) => rect.shadow(
+            Shadow::new()
+                .position(ShadowPosition::Normal)
+                .x(-SHEET_EDGE_OFFSET)
+                .y(0.0)
+                .blur(SHEET_EDGE_BLUR)
+                .color(Color::BLACK.with_af32(SHEET_EDGE_OPACITY * amount)),
+        ),
         Util::W(extent) => rect.width(extent.size()),
         Util::H(extent) => rect.height(extent.size()),
         Util::MinW(dim) => rect.min_width(Size::px(dim.px())),

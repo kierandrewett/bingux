@@ -36,6 +36,7 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use crate::address::Address;
+use crate::component::ComponentName;
 use crate::focus::provide_focus_core;
 use crate::shell::with_window;
 use crate::style::{
@@ -45,7 +46,8 @@ use crate::style::{
 use crate::surface::use_tokens;
 use crate::theme::{NARROW_BELOW, PHONE_PREVIEW_SIZE};
 
-use popup::{MOTION_MS, PopupEntry, PopupFrame, SHEET_DISMISS_DISTANCE, use_sheet_pull};
+use crate::shell::panel::{MOTION_MS, SHEET_DISMISS_DISTANCE, use_sheet_pull};
+use popup::{PopupEntry, PopupFrame};
 pub use popup::{Popup, PopupAction, PopupActions, PopupFlags, popup, use_popup_actions};
 
 /// The open popups and the counter that names them. Copy, so a window handle
@@ -491,6 +493,7 @@ impl Component for WindowHost {
         // The card is the same element whether or not a popup insets it, so
         // the content keeps its state when the popup opens and closes.
         rect()
+            .component("Window")
             .expanded()
             .tw(&tokens, &[bg(Paint::Backdrop)])
             .on_global_key_down(keys)
@@ -498,6 +501,7 @@ impl Component for WindowHost {
             .on_global_pointer_move(move |event| latch_pointer(density, event))
             .child(
                 rect()
+                    .component("Content")
                     .expanded()
                     .scale(1.0 - (1.0 - INSET_SCALE) * shown)
                     .tw(&tokens, &[rounded_scaled(Radius::Card, shown), clip()])

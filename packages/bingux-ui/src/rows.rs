@@ -11,6 +11,7 @@ use accesskit::Toggled;
 use freya::prelude::*;
 
 use crate::app_icon::app_icon;
+use crate::component::ComponentName;
 use crate::controls::dropdown::dropdown;
 use crate::controls::press::{Press, use_press};
 use crate::controls::radio::{RadioMark, next_enabled};
@@ -32,6 +33,10 @@ use crate::typography::{BADGE, BODY, CAPTION, Ink, VALUE};
 /// `ValueText` and by any selectable text through [`use_in_pressable_row`].
 #[derive(Clone, Copy, PartialEq)]
 struct RowPressable(State<bool>);
+/// The title of the [`Row`] being rendered, for its descendants. A dropdown
+/// with no explicit `.title()` uses it as its phone sheet header.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) struct RowTitle(pub(crate) State<String>);
 
 /// Whether this component sits inside a row that takes presses. Text there is
 /// plain, never selectable: a press anywhere on the row opens it, and a text
@@ -308,6 +313,8 @@ impl Component for ValueText {
                 .width(Size::fill())
                 .into()
         } else {
+            // Read-only text is not a control: it can be selected and copied
+            // with the pointer, but it is not a Tab stop.
             SelectableText::new()
                 .span(VALUE.span(&tokens, self.text.clone()))
                 .max_lines(1)
@@ -315,10 +322,12 @@ impl Component for ValueText {
                 .text_align(TextAlign::End)
                 .text_overflow(TextOverflow::Ellipsis)
                 .width(Size::fill())
+                .a11y_focusable(false)
                 .into()
         };
         let text = self.text.clone();
         rect()
+            .component("ValueText")
             .tw(&tokens, &[w_flex()])
             .on_pointer_down(move |event: Event<PointerEventData>| {
                 let text = text.clone();
@@ -361,6 +370,8 @@ impl Component for Row {
         let focusable = interactive && radio.is_none_or(|choice| choice.tab_stop);
         let mut pressable = use_provide_context(|| RowPressable(State::create(interactive)));
         pressable.0.set_if_modified(interactive);
+        let mut row_title = use_provide_context(|| RowTitle(State::create(self.title.clone())));
+        row_title.0.set_if_modified(self.title.clone());
         // Only a row that opens something, such as one with a chevron, lights
         // on hover and press. A switch, slider or value row does not.
         let activatable = interactive && self.activatable;
@@ -448,14 +459,8 @@ impl Component for Row {
                         .text_overflow(TextOverflow::Ellipsis)
                         .width(Size::fill())
                         .into(),
-                    // A selectable text takes the pointer-down that a press
-                    // starts from, so a pressable row keeps its text plain.
-                    None if !interactive => CAPTION
-                        .selectable(&tokens, subtitle.clone())
-                        .max_lines(subtitle_lines)
-                        .text_overflow(TextOverflow::Ellipsis)
-                        .width(Size::fill())
-                        .into(),
+                    // Plain text, not selectable: Freya makes selectable text a
+                    // Tab stop, and a subtitle is not a control.
                     None => CAPTION
                         .paragraph(&tokens, subtitle.clone())
                         .max_lines(subtitle_lines)
@@ -579,7 +584,7 @@ impl Component for Row {
             })
             .maybe_child(
                 self.leading_signal
-                    .map(|(level, secured)| crate::controls::signal_bars(level, secured)),
+                    .map(|(level, secured)| crate::controls::signal_bars(level, secured, &tokens)),
             )
             .maybe_child(
                 self.leading_avatar
@@ -610,6 +615,7 @@ impl Component for Row {
             searching: query.is_some(),
         };
         rect()
+            .component("Row")
             .tw(&tokens, &[flex_col(), w_full()])
             .child(face)
             .maybe_child((reveal > 0.0).then(|| {
@@ -642,6 +648,7 @@ impl Component for NestedRows {
         let count = use_state(|| 0usize);
         use_provide_context(move || MatchSink(count));
         rect()
+            .component("NestedRows")
             .tw(&tokens, &[flex_col(), w_full(), pl(GUTTER)])
             .opacity(self.opacity)
             .children(card_rows(self.rows.clone(), self.lit, self.filter))
@@ -823,9 +830,9 @@ impl Component for LevelRow {
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis)
                     .into(),
-                // A level row has no press, so its subtitle can be selected.
+                // Subtitles are plain text, not focus stops.
                 None => CAPTION
-                    .selectable(&tokens, subtitle.clone())
+                    .paragraph(&tokens, subtitle.clone())
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis)
                     .into(),
@@ -901,6 +908,7 @@ impl Component for LevelRow {
             .maybe_child(self.footer.clone());
 
         let outer = rect()
+            .component("LevelRow")
             .tw(&tokens, &[w_full(), px(GUTTER), py(S3)])
             .on_pointer_down(move |event: Event<PointerEventData>| {
                 open_row_menu(overlays, &menu, &event);
@@ -1239,6 +1247,7 @@ impl Component for ExpanderRow {
             children.push(child.clone());
         }
         rect()
+            .component("ExpanderRow")
             .tw(&tokens, &[flex_col(), w_full()])
             .child(header)
             .maybe_child((progress > 0.0).then(|| {

@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use freya::prelude::*;
 
+use crate::component::ComponentName;
 use crate::icons::{self, Icon};
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -53,7 +54,7 @@ pub struct Avatar {
 impl Component for Avatar {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let frame = rect().tw(
+        let frame = rect().component("Avatar").tw(
             &tokens,
             &[
                 w(self.size),

@@ -36,8 +36,8 @@ use crate::system::{
 use crate::theme::{Scheme, SharedTokens, Tokens, accent_names, read_gsettings};
 use crate::ui::typography::{BODY, EMPHASIS};
 use crate::ui::{
-    Group, Icon, Overlays, PageHead, Status, icon, menu_item, menu_separator, page_column, row,
-    skeleton_shape, status, use_overlays, use_tokens,
+    Group, Icon, Overlays, PageHead, Status, focus_stop, icon, menu_item, menu_separator,
+    page_column, row, skeleton_shape, status, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
 use interface::{Interface, Setting, text_size_row, theme_group};
@@ -204,7 +204,7 @@ fn swatch(
     tokens: &Tokens,
     name: &'static str,
     selected: bool,
-    on_press: impl FnMut(Event<PressEventData>) + 'static,
+    on_press: impl Into<EventHandler<()>>,
 ) -> Element {
     let mark = selected.then(|| {
         Element::from(icon(
@@ -213,32 +213,35 @@ fn swatch(
             Paint::OnAccent.color(tokens),
         ))
     });
-    let button = rect()
-        .a11y_role(AccessibilityRole::Button)
-        .a11y_alt(format!("Accent colour {name}"))
-        .a11y_focusable(true)
-        .tw(
-            tokens,
-            &[w(Dim::Box9), h(Dim::Box9), center(), rounded(Radius::Pill)],
-        )
-        .maybe(selected, |ring| {
-            ring.tw(tokens, &[border(Line::Ring(Paint::Text))])
-        })
-        .on_press(on_press)
-        .child(
-            rect()
-                .tw(
-                    tokens,
-                    &[
-                        w(Dim::Box7),
-                        h(Dim::Box7),
-                        rounded(Radius::Pill),
-                        bg(Paint::Swatch(name)),
-                        center(),
-                    ],
-                )
-                .maybe_child(mark),
-        );
+    let button = focus_stop(
+        rect()
+            .tw(
+                tokens,
+                &[w(Dim::Box9), h(Dim::Box9), center(), rounded(Radius::Pill)],
+            )
+            .maybe(selected, |ring| {
+                ring.tw(tokens, &[border(Line::Ring(Paint::Text))])
+            })
+            .child(
+                rect()
+                    .tw(
+                        tokens,
+                        &[
+                            w(Dim::Box7),
+                            h(Dim::Box7),
+                            rounded(Radius::Pill),
+                            bg(Paint::Swatch(name)),
+                            center(),
+                        ],
+                    )
+                    .maybe_child(mark),
+            ),
+        format!("Accent colour {name}"),
+        AccessibilityRole::Button,
+        true,
+        Radius::Pill,
+        on_press,
+    );
     let title = format!("{}{}", name[..1].to_uppercase(), &name[1..]);
     Element::from(TooltipContainer::new(Tooltip::new_text(title)).child(button))
 }
@@ -286,7 +289,7 @@ fn scheme_card(
     scheme: Scheme,
     tokens: Tokens,
     desktop: Option<&desktop::Model>,
-    on_press: impl FnMut(Event<PressEventData>) + 'static,
+    on_press: impl Into<EventHandler<()>>,
 ) -> Element {
     let selected = tokens.scheme == scheme;
     let picture = match scheme {
@@ -316,19 +319,21 @@ fn scheme_card(
         )
         .child(picture);
     let caption = if selected { EMPHASIS } else { BODY };
-    Element::from(
-        rect()
-            .a11y_role(AccessibilityRole::Button)
-            .a11y_alt(format!("{title} colour scheme"))
-            .a11y_focusable(true)
-            .tw(
-                &tokens,
-                &[flex_col(), w_flex(), gap(S2), items(Align::Center)],
-            )
-            .on_press(on_press)
-            .child(frame)
-            .child(caption.label(&tokens, title)),
-    )
+    let card = rect()
+        .tw(
+            &tokens,
+            &[flex_col(), w_flex(), gap(S2), items(Align::Center)],
+        )
+        .child(frame)
+        .child(caption.label(&tokens, title));
+    Element::from(focus_stop(
+        card,
+        format!("{title} colour scheme"),
+        AccessibilityRole::Button,
+        true,
+        Radius::Card,
+        on_press,
+    ))
 }
 
 /// Whether a pointer press is a right click, which opens the picture menu.

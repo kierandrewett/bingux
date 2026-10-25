@@ -198,7 +198,6 @@ fn interactive(
             panel
                 .a11y_role(AccessibilityRole::Button)
                 .a11y_alt(label)
-                .a11y_focusable(true)
                 .on_pointer_down(on_right_click(ctx, build)),
         ),
         None => Element::from(panel.a11y_alt(label)),

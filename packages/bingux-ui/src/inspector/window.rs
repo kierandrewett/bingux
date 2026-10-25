@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
-use super::dom_tree::{DomTree, Shot};
+use super::dom_tree::{DomTree, Shot, ancestors};
 use super::nav::{Tab, provide_nav, use_nav};
 use super::snapshot::Snapshot;
 use super::styles::StylesPane;
@@ -49,6 +49,8 @@ impl Component for InspectorBody {
         let tokens = use_tokens();
         let nav = use_nav();
         let expanded = use_state::<HashSet<u64>>(HashSet::new);
+        let head_seen = use_state(|| false);
+        let wrappers = use_state(|| false);
         let ratio = use_state(|| 0.58f32);
         let mut version = use_state(|| 0u64);
         let mut snapshot = use_state::<Option<Rc<Snapshot>>>(|| None);
@@ -60,6 +62,7 @@ impl Component for InspectorBody {
             spawn(async move {
                 let mut nav = nav;
                 let mut expanded = expanded;
+                let mut head_seen = head_seen;
                 loop {
                     timer(Duration::from_millis(200)).await;
                     if let Some(node) = super::take_pick() {
@@ -81,6 +84,22 @@ impl Component for InspectorBody {
                                     }
                                 }
                                 nav.selected.set(roots.first().copied());
+                            }
+                        }
+                        // Open the way to the first page heading, so the page is in view
+                        // without digging through the window chrome.
+                        if !*head_seen.peek() {
+                            if let Some(snap) = next.as_ref() {
+                                let head = snap
+                                    .nodes
+                                    .iter()
+                                    .find(|node| node.a11y.component.as_deref() == Some("PageHead"))
+                                    .map(|node| node.id);
+                                if let Some(head) = head {
+                                    head_seen.set(true);
+                                    let mut open = expanded.write();
+                                    open.extend(ancestors(snap, head).into_iter().filter(|&id| id != head));
+                                }
                             }
                         }
                         snapshot.set(next);
@@ -110,6 +129,7 @@ impl Component for InspectorBody {
                 &tokens,
                 nav.selected,
                 expanded,
+                wrappers,
                 ratio,
                 snapshot.read().clone(),
             ),
@@ -154,6 +174,7 @@ fn elements(
     tokens: &Tokens,
     selected: State<Option<u64>>,
     expanded: State<HashSet<u64>>,
+    wrappers: State<bool>,
     ratio: State<f32>,
     snap: Option<Rc<Snapshot>>,
 ) -> Element {
@@ -166,6 +187,7 @@ fn elements(
             snap: Shot(snap.clone()),
             selected,
             expanded,
+            wrappers,
         });
     let chosen = *selected.read();
     let details: Element = match (chosen, super::app_window()) {

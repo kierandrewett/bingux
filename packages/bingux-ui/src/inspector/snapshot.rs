@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use freya::prelude::*;
 use freya::torin::prelude::{Alignment, Direction, Gaps, Size};
+use freya_core::accessibility::id::AccessibilityId;
 use freya_core::accessibility::focusable::Focusable;
 use freya_core::elements::label::LabelElement;
 use freya_core::elements::paragraph::ParagraphElement;
@@ -65,6 +66,15 @@ pub struct A11y {
     pub role: String,
     pub name: Option<String>,
     pub focusable: Option<bool>,
+    /// The component that built the element, from [`ComponentName`].
+    ///
+    /// [`ComponentName`]: crate::component::ComponentName
+    pub component: Option<String>,
+    pub selected: Option<bool>,
+    /// The accessibility id the element was built with, if it has one.
+    pub id: Option<AccessibilityId>,
+    /// Whether the window's keyboard focus is on this element.
+    pub focused: bool,
 }
 
 /// One element of the tree.
@@ -81,6 +91,41 @@ pub struct Node {
     /// The editable values; `None` for kinds the inspector cannot edit.
     pub props: Option<Props>,
     pub a11y: A11y,
+    /// Whether this box's fill repeats the one its ancestor or the window
+    /// already paints, so the chips leave it out.
+    pub repeats_fill: bool,
+}
+
+impl Node {
+    /// The name the tree shows: the component that built the element, else
+    /// its accessibility role, else its layout role.
+    pub fn title(&self) -> &str {
+        if let Some(component) = self.a11y.component.as_deref() {
+            return component;
+        }
+        self.meaningful_role().unwrap_or_else(|| self.layout_role())
+    }
+
+    /// The accessibility role, unless it says nothing about the element.
+    pub fn meaningful_role(&self) -> Option<&str> {
+        match self.a11y.role.as_str() {
+            "" | "Unknown" | "GenericContainer" => None,
+            role => Some(role),
+        }
+    }
+
+    /// The role the layout gives the element: `row` or `column` for a box by
+    /// its direction, `text` for a label or paragraph, `element` otherwise.
+    pub fn layout_role(&self) -> &'static str {
+        match self.kind {
+            Kind::Label | Kind::Paragraph => "text",
+            Kind::Rect => match self.props.as_ref().map(|props| props.direction) {
+                Some("horizontal") => "row",
+                _ => "column",
+            },
+            Kind::Other => "element",
+        }
+    }
 }
 
 /// The whole tree in preorder, with an index by node id.
@@ -89,6 +134,9 @@ pub struct Snapshot {
     pub roots: Vec<u64>,
     pub nodes: Vec<Node>,
     index: HashMap<u64, usize>,
+    /// Per node: whether the Elements tree leaves it out unless its wrapper
+    /// toggle is on. Set by [`Snapshot::settle`].
+    hidden: Vec<bool>,
 }
 
 impl Snapshot {
@@ -98,7 +146,83 @@ impl Snapshot {
         if let Some(root) = visit(tree, NodeId::ROOT, None, &mut snapshot) {
             snapshot.roots.push(root);
         }
+        snapshot.settle();
         snapshot
+    }
+
+    /// Whether the Elements tree leaves `id` out unless its wrapper toggle is
+    /// on.
+    pub fn is_wrapper(&self, id: u64) -> bool {
+        self.index.get(&id).is_some_and(|&index| self.hidden[index])
+    }
+
+    /// Works out, once per capture, which boxes only forward their children
+    /// (no name, role, text, fill, spacing or corner of their own), and which
+    /// fills repeat what an ancestor or the window already paints.
+    fn settle(&mut self) {
+        let count = self.nodes.len();
+        let window_fill = self.nodes.iter().find_map(fill_of);
+        // Preorder: a parent precedes its children, so its fill is known first.
+        let mut from_above: Vec<Option<Color>> = vec![None; count];
+        let mut parent_fill: Vec<Option<Color>> = vec![None; count];
+        for index in 0..count {
+            let parent = self.nodes[index]
+                .parent
+                .and_then(|id| self.index.get(&id).copied());
+            let above = parent.and_then(|parent| from_above[parent]);
+            let own = fill_of(&self.nodes[index]);
+            parent_fill[index] = above;
+            from_above[index] = own.or(above);
+            self.nodes[index].repeats_fill =
+                own.is_some_and(|colour| Some(colour) == above || Some(colour) == window_fill);
+        }
+        let mut hidden = vec![false; count];
+        for index in (0..count).rev() {
+            let node = &self.nodes[index];
+            // An empty box with no size, text or identity draws nothing.
+            if node.children.iter().all(|child| self.index.get(child).is_some_and(|&c| hidden[c]))
+                && node.text.is_none()
+                && !has_identity(node)
+                && node.area.is_some_and(|area| area.width() == 0.0 || area.height() == 0.0)
+            {
+                hidden[index] = true;
+                continue;
+            }
+            let Some(props) = &node.props else {
+                continue;
+            };
+            if node.kind != Kind::Rect || has_identity(node) {
+                continue;
+            }
+            let spaced = props
+                .padding
+                .iter()
+                .chain(&props.margin)
+                .any(|edge| *edge != 0.0)
+                || props.gap != 0.0;
+            let painted = fill_of(node).is_some_and(|colour| Some(colour) != parent_fill[index])
+                || props.corner_radius != 0.0
+                || spaced;
+            if painted {
+                continue;
+            }
+            hidden[index] = match node.children.as_slice() {
+                [_] => true,
+                children => children
+                    .iter()
+                    .all(|child| self.index.get(child).is_some_and(|&c| hidden[c])),
+            };
+        }
+        self.hidden = hidden;
+    }
+
+    /// Marks the nodes built with accessibility id `focus` as focused.
+    pub fn mark_focused(&mut self, focus: AccessibilityId) {
+        for node in &mut self.nodes {
+            if node.a11y.id == Some(focus) {
+                node.a11y.focused = true;
+            }
+        }
     }
 
     pub fn node(&self, id: u64) -> Option<&Node> {
@@ -134,6 +258,7 @@ fn visit(tree: &Tree, id: NodeId, parent: Option<u64>, out: &mut Snapshot) -> Op
         children: Vec::new(),
         props: None,
         a11y: A11y::default(),
+        repeats_fill: false,
     };
     if let Some(element) = tree.elements.get(&id) {
         let element = element.as_ref();
@@ -164,6 +289,20 @@ fn visit(tree: &Tree, id: NodeId, parent: Option<u64>, out: &mut Snapshot) -> Op
     Some(key)
 }
 
+/// The solid fill a node paints, if any.
+fn fill_of(node: &Node) -> Option<Color> {
+    node.props.as_ref().and_then(|props| props.background).filter(|colour| colour.a() != 0)
+}
+
+/// Whether a node says what it is: a name, a component, a meaningful role or
+/// a focus stop.
+fn has_identity(node: &Node) -> bool {
+    node.a11y.name.is_some()
+        || node.a11y.component.is_some()
+        || node.meaningful_role().is_some()
+        || node.a11y.focusable == Some(true)
+}
+
 fn a11y_of(data: &freya_core::data::AccessibilityData) -> A11y {
     A11y {
         role: format!("{:?}", data.builder.role()),
@@ -173,6 +312,10 @@ fn a11y_of(data: &freya_core::data::AccessibilityData) -> A11y {
             Focusable::Disabled => Some(false),
             Focusable::Enabled => Some(true),
         },
+        component: data.builder.class_name().map(str::to_owned),
+        selected: data.builder.is_selected(),
+        id: data.a11y_id,
+        focused: false,
     }
 }
 
@@ -241,7 +384,9 @@ pub fn size_text(size: &Size) -> String {
         Size::Inner => "auto".into(),
         Size::Fill => "fill".into(),
         Size::Pixels(px) => format!("{}", px.get()),
-        Size::Percentage(percent) => format!("{}%", percent.get()),
+        Size::Percentage(percent) | Size::RootPercentage(percent) => format!("{}%", percent.get()),
+        Size::FillMinimum => "fill-min".into(),
+        Size::Flex(flex) => format!("flex {}", flex.get()),
         other => format!("{other:?}"),
     }
 }

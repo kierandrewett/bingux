@@ -140,8 +140,12 @@ year) and Time (hour and minute) rows and a Set button.
 The switches on the Date and time page and the clock format row also have a
 right-click menu with the same change.
 
-A subpage replaces the page. The header shows a Back button and the subpage
-title is the large title at the top of the page. Back, Alt+Left and the mouse
+A subpage slides in from the right over the page, which stays still beneath it,
+and a Back button slides it back out. On a desktop window the window's own buttons stay at the top right while the sheet moves, and the header's own Back appears once the slide
+settles, so only one chevron shows at a time. The header shows a Back button and the subpage
+title is the large title at the top of the page. As the page scrolls, the title
+fades into the centre of the header bar. On a phone the large title also fades
+out as the page scrolls, and the header title rises into its place. Back, Alt+Left and the mouse
 Back button return to the page below; choosing another page in the sidebar
 closes the subpage.
 

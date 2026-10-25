@@ -17,7 +17,8 @@ use super::palette;
 use super::path::{self, Pt};
 use super::scale::{Domain, Linear, lone, nice, time};
 use super::svg::{self, Svg, clip_rect, num, stroke_line};
-use crate::motion::Focusable;
+use crate::focus::{FocusCore, use_focus_core};
+use crate::motion::wrap_focusable_with;
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
@@ -386,6 +387,7 @@ impl Component for Chart {
         let mut active = use_state(|| None::<usize>);
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
+        let focus_core = use_focus_core();
         let draw = use_animation(|conf| {
             conf.on_creation(OnCreation::Run);
             AnimNum::new(0.0, 1.0)
@@ -458,7 +460,7 @@ impl Component for Chart {
             .tip
             .as_ref()
             .map(|tip| tooltip(&tokens, tip, width, height));
-        let outline = interactive.then(|| focus_outline(focus(), width, height));
+        let outline = interactive.then(|| focus_outline(&tokens, focus_core, focus(), width, height));
 
         let chart = drawing(scene, &tokens, width, height)
             .width(Size::fill())
@@ -629,13 +631,17 @@ fn drawing(scene: Scene, tokens: &Tokens, width: f32, height: f32) -> Rect {
     area
 }
 
-fn focus_outline(focus: Focus, width: f32, height: f32) -> Rect {
-    rect()
-        .width(Size::px(width))
-        .height(Size::px(height))
-        .focusable(focus, Radius::Card)
-        .position(Position::new_absolute().top(0.0).left(0.0))
-        .layer(Layer::Relative(TIP_LAYER))
+fn focus_outline(tokens: &Tokens, core: FocusCore, focus: Focus, width: f32, height: f32) -> Rect {
+    wrap_focusable_with(
+        tokens,
+        core,
+        rect().width(Size::px(width)).height(Size::px(height)),
+        focus,
+        Radius::Card,
+        false,
+    )
+    .position(Position::new_absolute().top(0.0).left(0.0))
+    .layer(Layer::Relative(TIP_LAYER))
 }
 
 /// The popover card that follows the hovered stop.

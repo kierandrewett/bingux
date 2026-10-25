@@ -6,6 +6,7 @@
 
 use freya::prelude::*;
 
+use crate::component::ComponentName;
 use crate::controls::button::action_button;
 use crate::controls::progress::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
@@ -47,6 +48,7 @@ impl Component for FormRow {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         rect()
+            .component("FormRow")
             .tw(&tokens, ROW)
             .child(
                 rect()
@@ -78,7 +80,7 @@ impl Component for CenteredCaption {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         CAPTION
-            .selectable(&tokens, self.text.clone())
+            .paragraph(&tokens, self.text.clone())
             .width(Size::fill())
             .text_align(TextAlign::Center)
     }
@@ -209,6 +211,7 @@ impl Component for Group {
             &tokens,
             shown,
             rect()
+                .component("Group")
                 .tw(&tokens, GROUP)
                 .maybe_child(heading)
                 .child(rect().tw(&tokens, BOX).children(children)),
@@ -393,7 +396,9 @@ struct SectionLabel {
 impl Component for SectionLabel {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        search_highlight::label(SECTION, &tokens, &self.text)
+        rect()
+            .component("Section")
+            .child(search_highlight::label(SECTION, &tokens, &self.text))
     }
 }
 
@@ -450,6 +455,7 @@ impl Component for StatusBlock {
         // case needs the fixed row height).
         let short = text.chars().count() <= 70;
         rect()
+            .component("StatusBlock")
             .tw(&tokens, BOX)
             .tw(&tokens, if short { ROW } else { ROW_TALL })
             .tw(&tokens, &[bg(paint)])
@@ -459,7 +465,7 @@ impl Component for StatusBlock {
             .maybe_child(glyph.map(|glyph| icons::icon(glyph, IconSize::Row, color)))
             .child(
                 BODY.in_ink(ink)
-                    .selectable(&tokens, text)
+                    .paragraph(&tokens, text)
                     .width(Size::flex(1.0)),
             )
             .maybe_child(self.action.as_ref().map(|(label, on_press)| {

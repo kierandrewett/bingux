@@ -15,6 +15,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use freya::animation::*;
 use freya::prelude::*;
 
+use crate::component::ComponentName;
 use crate::controls::{action_button, icon_button, search_field};
 use crate::focus::{RegionKind, claim_press, use_focus_core, use_region};
 use crate::icons::{self, Icon};
@@ -118,6 +119,7 @@ impl Component for SidebarRow {
             }
         };
         rect()
+            .component("SidebarRow")
             .tw(&tokens, NAV_ITEM)
             .tw(
                 &tokens,
@@ -194,6 +196,7 @@ impl<T: NavItem> Component for ProfileCard<T> {
             on_key: None,
         };
         rect()
+            .component("ProfileCard")
             .tw(&tokens, &[w_full(), px(S2), pt(S1), pb(S2)])
             .child(Element::from(row))
     }
@@ -311,7 +314,12 @@ impl Component for PageHead {
             action => action_button(action.label, action.on_press).into(),
         });
         let status = self.subtitle.clone().unwrap_or_default();
-        title_row(&tokens, title, status, action)
+        // A compact page shrinks and fades its large title as it scrolls. A
+        // desktop page keeps its title still.
+        let large = try_consume_context::<PageScroll>()
+            .filter(|page| page.compact)
+            .map(|page| large_title_progress(page.scroll));
+        title_row(&tokens, title, status, action, large)
     }
 }
 
@@ -322,13 +330,16 @@ struct CurrentPage {
     title: String,
 }
 
-/// The page as the split view draws it: its name is provided to the page
-/// content. The split view keeps the frame of a page that is sliding out, so
-/// that page keeps its own name while it moves.
+/// The page as the split view draws it: its name, its scroll, and whether a
+/// phone draws it, provided to the page content. The split view keeps the
+/// frame of a page that is sliding out, so that page keeps its own name while
+/// it moves.
 #[derive(Clone, PartialEq)]
 struct PageFrame {
     title: String,
     content: Element,
+    scroll: ScrollController,
+    compact: bool,
 }
 
 impl Component for PageFrame {
@@ -336,8 +347,20 @@ impl Component for PageFrame {
         provide_context(CurrentPage {
             title: self.title.clone(),
         });
+        provide_context(PageScroll {
+            scroll: self.scroll,
+            compact: self.compact,
+        });
         self.content.clone()
     }
+}
+
+/// The page's scroll and size class, provided by the frame. A compact
+/// [`PageHead`] reads the scroll to shrink and fade its large title.
+#[derive(Clone, Copy, PartialEq)]
+struct PageScroll {
+    scroll: ScrollController,
+    compact: bool,
 }
 
 /// Where a page sits: its index in the sidebar, the title of its open subpage,
@@ -356,7 +379,7 @@ impl PageMotion {
     fn ms(self) -> u64 {
         match self {
             PageMotion::Fade => 120,
-            PageMotion::Push | PageMotion::Pop => 250,
+            PageMotion::Push | PageMotion::Pop => 320,
         }
     }
 }
@@ -377,51 +400,153 @@ fn page_motion(previous: &PageKey, next: &PageKey) -> Option<PageMotion> {
     }
 }
 
-/// A slide in progress: the page that moved away, and where the moving page
-/// and the dim of the page under it start from. The values run from the last
+/// Layers for the slide. Freya gives each node the layer of its parent plus
+/// one, so the rows of a deep page sit several layers up and paint over a
+/// shallow sheet. The moving sheet sits above the window header, which it
+/// covers as it moves; its own header strip sits above the sheet's rows.
+const SLIDE_SHEET_LAYER: i16 = 1600;
+const SLIDE_HEADER_LAYER: i16 = 500;
+/// The layer of the window buttons lifted over a moving sheet, above the
+/// sheet's own header strip.
+const SLIDE_CONTROLS_LAYER: i16 = 2600;
+
+/// A slide in progress: the page that moved away, its header strip when it was
+/// a sheet, and where the moving page starts from. The value runs from the last
 /// frame drawn, so a move that starts mid-slide continues from there.
 #[derive(Clone)]
 struct Slide {
     motion: PageMotion,
     outgoing: Element,
+    outgoing_header: Option<Element>,
     start_x: f32,
-    start_dim: f32,
 }
 
 impl Slide {
     /// A slide from what is on screen: `shown` is the last frame's slide, when
     /// one was running, so a move that interrupts it continues from there.
-    fn start(motion: PageMotion, outgoing: Element, shown: Option<(PageMotion, f32, f32)>) -> Self {
-        let (start_x, start_dim) = match (motion, shown) {
-            (PageMotion::Push, Some((PageMotion::Pop, x, dim))) => (x, dim),
-            (PageMotion::Push, _) => (1.0, 0.0),
-            (PageMotion::Pop, Some((PageMotion::Push, x, dim))) => (x, dim),
-            (PageMotion::Pop, _) => (0.0, 1.0),
-            (PageMotion::Fade, _) => (0.0, 0.0),
+    fn start(
+        motion: PageMotion,
+        outgoing: Element,
+        outgoing_header: Option<Element>,
+        shown: Option<(PageMotion, f32)>,
+    ) -> Self {
+        let start_x = match (motion, shown) {
+            (PageMotion::Push, Some((PageMotion::Pop, x))) => x,
+            (PageMotion::Push, _) => 1.0,
+            (PageMotion::Pop, Some((PageMotion::Push, x))) => x,
+            (PageMotion::Pop, _) => 0.0,
+            (PageMotion::Fade, _) => 0.0,
         };
         Self {
             motion,
             outgoing,
+            outgoing_header,
             start_x,
-            start_dim,
         }
     }
 
-    /// The moving page's offset, as a fraction of the width, and the dim of
-    /// the page under it, at `progress`.
-    fn at(&self, progress: f32) -> (f32, f32) {
+    /// The moving page's offset, as a fraction of the width, at `progress`.
+    fn at(&self, progress: f32) -> f32 {
         match self.motion {
-            PageMotion::Push => (
-                self.start_x * (1.0 - progress),
-                self.start_dim + (1.0 - self.start_dim) * progress,
-            ),
-            PageMotion::Pop => (
-                self.start_x + (1.0 - self.start_x) * progress,
-                self.start_dim * (1.0 - progress),
-            ),
-            PageMotion::Fade => (0.0, 0.0),
+            PageMotion::Push => self.start_x * (1.0 - progress),
+            PageMotion::Pop => self.start_x + (1.0 - self.start_x) * progress,
+            PageMotion::Fade => 0.0,
         }
     }
+}
+
+/// How far a moving page is in its card look at `progress`. A push is a card
+/// while it slides in and flat over its last 15 %; a pop is flat, then a card
+/// over its first 15 %.
+fn card_amount(motion: PageMotion, progress: f32) -> f32 {
+    const EDGE: f32 = 0.15;
+    match motion {
+        PageMotion::Push => ((1.0 - progress) / EDGE).clamp(0.0, 1.0),
+        PageMotion::Pop => (progress / EDGE).clamp(0.0, 1.0),
+        PageMotion::Fade => 0.0,
+    }
+}
+
+/// Makes a moving sheet a card: rounded on its leading edge and casting a
+/// shadow to the left, both scaled by `amount` so they vanish at rest. The
+/// sheet always takes the slide layer, so the rows of the page under it never
+/// paint over it, even while it is still flat.
+fn card_look(page: Rect, tokens: &Tokens, amount: f32) -> Rect {
+    // The shadow is cast by this outer node, which must not clip: a clip on
+    // the same node would cut off the shadow falling past its own edge. The
+    // page is clipped by the inner node, to the same rounded corners.
+    let sheet = rect()
+        .width(Size::fill())
+        .height(Size::fill())
+        .layer(Layer::Relative(SLIDE_SHEET_LAYER))
+        .tw(
+            tokens,
+            &[
+                bg(Paint::Bg),
+                rounded_left_scaled(Radius::Window, amount),
+                sheet_edge_shadow(amount),
+            ],
+        );
+    sheet.child(
+        rect()
+            .width(Size::fill())
+            .height(Size::fill())
+            .tw(
+                tokens,
+                &[clip(), rounded_left_scaled(Radius::Window, amount)],
+            )
+            .child(page),
+    )
+}
+
+/// Places a page in a slide. The offset lives on a frame around the page, not
+/// on the sheet: torin applies an offset to a node's children only, so a sheet
+/// that carried it would keep its background, layer and shadow where they were
+/// and leave the page beneath exposed.
+fn slide_frame(offset: f32, opacity: f32, sheet: Option<f32>, tokens: &Tokens, page: Rect) -> Rect {
+    let page = match sheet {
+        Some(amount) => card_look(page, tokens, amount),
+        None => page,
+    };
+    rect()
+        .position(Position::new_absolute().top(0.0).left(0.0))
+        .width(Size::fill())
+        .height(Size::fill())
+        .offset_x(offset)
+        .opacity(opacity)
+        .child(page)
+}
+
+/// The window buttons, drawn over a moving sheet. The sheet covers the window
+/// header as it moves, but the buttons belong to the window, so they stay at
+/// the top right above the sheet until the slide settles.
+fn lifted_controls(tokens: &Tokens) -> Rect {
+    rect()
+        .position(Position::new_absolute().top(0.0).right(0.0))
+        .layer(Layer::Relative(SLIDE_CONTROLS_LAYER))
+        .tw(
+            tokens,
+            &[flex_row(), items(Align::Center), h(Dim::Header), px(S2)],
+        )
+        .child(WindowControls)
+}
+
+/// The header strip a sheet carries while it moves on a desktop window: its
+/// Back button. The window buttons are not on it; they are lifted above the
+/// sheet instead (see `lifted_controls`).
+fn sheet_header(page: PageKey, back: Option<EventHandler<()>>) -> Element {
+    let header = HeaderBar::new(String::new()).fill(Paint::Bg);
+    let header = match back {
+        Some(on_back) => header.leading(PageBack { page, on_back }),
+        None => header,
+    };
+    Element::from(
+        rect()
+            .position(Position::new_absolute().top(0.0).left(0.0))
+            .width(Size::fill())
+            .layer(Layer::Relative(SLIDE_HEADER_LAYER))
+            .child(header),
+    )
 }
 
 /// What the split view remembers between renders to run page motion.
@@ -433,51 +558,71 @@ struct PageMemory {
     element: Option<Element>,
     pending: bool,
     duration: u64,
+    /// The animation run count when the queued slide was set up.
+    start_runs: Option<usize>,
     active: Option<Slide>,
-    /// The moving page's offset and the under page's dim in the last frame
-    /// drawn, when that frame was a slide.
-    shown: Option<(PageMotion, f32, f32)>,
+    /// The moving page's offset in the last frame drawn, when that frame was a slide.
+    shown: Option<(PageMotion, f32)>,
+    /// The header strip the page on screen carries, when it is a sheet.
+    element_header: Option<Element>,
 }
 
 /// The page column: centred, at most `page_width` wide, with the page margins.
 fn page_column(content: Element, side: Space, page_width: Dim, inset: bool) -> impl IntoElement {
     rect()
+        .component("Page")
         .tw_layout(&[w_full(), items(Align::Center), pt(S4), pb(S8), px(side)])
         // Under a floating header bar the page starts below it at rest.
         .maybe_child(inset.then(|| rect().tw_layout(&[h(Dim::Header)])))
         .child(
             rect()
+                .component("PageColumn")
                 .tw_layout(&[w(page_width)])
                 .max_width(Size::fill())
                 .child(content),
         )
 }
 
-/// The title row at the top of a page on a desktop window: the page name
-/// large, the page's status line under it when it sets one, and the page's
-/// action at the right.
+/// The title row at the top of a page: the page name large, the page's status
+/// line under it when it sets one, and the page's action at the right. On a
+/// compact page `large` is the scroll progress from 0 to 1: the row starts
+/// lower, and the name fades as the page scrolls into the header bar.
 fn title_row(
     tokens: &Tokens,
     title: Option<String>,
     status: String,
     action: Option<Element>,
+    large: Option<f32>,
 ) -> Element {
-    rect()
-        .tw(tokens, PAGE_HEAD)
-        .child(
-            rect()
-                .tw(tokens, PAGE_HEAD_TEXT)
-                .maybe_child(title.map(|title| -> Element {
-                    PAGE_TITLE
-                        .label(tokens, title)
-                        .max_lines(1)
-                        .text_overflow(TextOverflow::Ellipsis)
-                        .into()
-                }))
-                .maybe_child((!status.is_empty()).then(|| status_line(tokens, &status))),
-        )
-        .maybe_child(action)
-        .into()
+    let name = |title: String| -> Element {
+        let label = PAGE_TITLE
+            .label(tokens, title)
+            .max_lines(1)
+            .text_overflow(TextOverflow::Ellipsis);
+        match large {
+            None => label.into(),
+            Some(progress) => rect()
+                .width(Size::fill())
+                .opacity(1.0 - progress)
+                .child(label)
+                .into(),
+        }
+    };
+    let head = rect().component("PageHead").tw(tokens, PAGE_HEAD);
+    // A compact page gives its large title more room above it.
+    let head = if large.is_some() {
+        head.tw_layout(&[pt(S8)])
+    } else {
+        head
+    };
+    head.child(
+        rect()
+            .tw(tokens, PAGE_HEAD_TEXT)
+            .maybe_child(title.map(name))
+            .maybe_child((!status.is_empty()).then(|| status_line(tokens, &status))),
+    )
+    .maybe_child(action)
+    .into()
 }
 
 /// The status line under a page title, when the page sets one.
@@ -648,36 +793,12 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             None if searching => narrow.then(|| clear_search.clone()),
             None => (narrow && !show_list).then(|| to_list.clone()),
         };
+        // A desktop header floats over the page and blurs what scrolls under it.
+        let overlay = !narrow && !show_list;
         let title = match &self.subpage {
             Some(subpage) => subpage.title.clone(),
             None if searching => "Search results".to_string(),
             None => selected.title().to_string(),
-        };
-        // A desktop header floats over the page and blurs what scrolls under it.
-        let overlay = !narrow && !show_list;
-        let header = if show_list {
-            HeaderBar::new(self.app_title.clone()).fill(Paint::Bg)
-        } else {
-            let header = HeaderBar::new(String::new()).busy(busy).fill(if overlay {
-                Paint::Frosted
-            } else {
-                Paint::Bg
-            });
-            match &back {
-                Some(on_back) => header.leading(crossfade(PageBack {
-                    page: page_key.clone(),
-                    on_back: on_back.clone(),
-                })),
-                None => header,
-            }
-        };
-        // A phone has no window buttons. A desktop window dragged narrow keeps
-        // them, so a mouse user can still close it: the buttons go only while
-        // a finger drives a narrow window.
-        let header = if narrow && pointer_kind() == PointerKind::Touch {
-            header
-        } else {
-            header.trailing(WindowControls)
         };
         // Results replace the page content while the search has text. Results
         // carry their own page head, as a page does.
@@ -694,10 +815,12 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let body: Element = PageFrame {
             title: title.clone(),
             content: shown,
+            scroll,
+            compact: narrow,
         }
         .into();
         // Alt+Left and the mouse Back button go back one step.
-        let back_key = back;
+        let back_key = back.clone();
         let request_list = on_show_list.clone();
         let back_pointer = back_key.clone();
         // Page changes move the content. A subpage slides in from the right, a
@@ -739,23 +862,42 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 let motion = page_motion(&previous, &page_key)
                     .filter(|motion| tokens.motion(motion.ms()) > 0);
                 let shown = memory.shown.take();
+                let runs = *anim.runs().peek();
                 memory.active = match (motion, memory.element.clone()) {
                     (Some(motion), Some(outgoing)) => {
                         memory.duration = tokens.motion(motion.ms());
                         memory.pending = true;
-                        Some(Slide::start(motion, outgoing, shown))
+                        memory.start_runs = Some(runs);
+                        Some(Slide::start(
+                            motion,
+                            outgoing,
+                            memory.element_header.clone(),
+                            shown,
+                        ))
                     }
-                    _ => None,
+                    _ => {
+                        memory.start_runs = None;
+                        None
+                    }
                 };
             }
             memory.key = Some(page_key.clone());
             memory.element = Some(body.clone());
+            memory.element_header =
+                overlay.then(|| sheet_header(page_key.clone(), back_key.clone()));
         }
-        let progress = if changed {
-            0.0
-        } else {
-            anim.get().value().clamp(0.0, 1.0)
-        };
+        // The animation restarts after this render, so until its run count
+        // moves the last run's value is stale and the slide holds at its start.
+        let waiting = !changed
+            && memory
+                .borrow()
+                .start_runs
+                .is_some_and(|start| *anim.runs().peek() <= start);
+        // Read the value on every render, even when it is not used this frame:
+        // the read is what subscribes this component to the animation's ticks.
+        // Without it a slide that restarts while waiting never re-renders.
+        let value = anim.get().value().clamp(0.0, 1.0);
+        let progress = if changed || waiting { 0.0 } else { value };
         let active = {
             let mut memory = memory.borrow_mut();
             if !changed && progress >= 1.0 {
@@ -764,59 +906,57 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             }
             memory.active.clone()
         };
-        let motion = active.as_ref().map(|slide| slide.motion);
-        // Push: the new page moves in over the old, which dims. Pop: the top
-        // page moves out over the one it revealed, which undims. Each frame is
-        // recorded so an interrupting move starts from where the page is.
-        let (page_offset, page_opacity, page_layer, outgoing, sliver) = match active {
-            None => (0.0, 1.0, 0, None, None),
+        // The moving page is a sheet while it slides. The sheet takes the slide
+        // layer, above the window header, so it covers the header as it moves.
+        // Each frame is recorded so an interrupting move starts from there.
+        let (page_offset, page_opacity, page_sheet, page_header, outgoing) = match active.clone() {
+            None => (0.0, 1.0, None, None, None),
             Some(slide) => {
-                let (x, dim) = slide.at(progress);
+                let x = slide.at(progress);
                 let moved = x * width;
-                let under = 1.0 - 0.12 * dim;
-                // Zero-width sliver on the moving page's leading edge, lit
-                // most mid-slide and gone at rest.
-                let sliver = Some((moved, (4.0 * x * (1.0 - x)).clamp(0.0, 1.0)));
+                // The sheet is rounded and shadowed while it moves, and flat at rest.
+                let card = card_amount(slide.motion, progress);
                 match slide.motion {
                     PageMotion::Fade => (
                         0.0,
                         progress,
-                        0,
-                        Some((0.0, 1.0 - progress, 1, slide.outgoing, false)),
                         None,
+                        None,
+                        Some((0.0, 1.0 - progress, slide.outgoing, None, None)),
                     ),
                     PageMotion::Push => {
-                        memory.borrow_mut().shown = Some((slide.motion, x, dim));
+                        memory.borrow_mut().shown = Some((slide.motion, x));
                         (
                             moved,
                             1.0,
-                            1,
-                            Some((0.0, under, 0, slide.outgoing, false)),
-                            sliver,
+                            Some(card),
+                            overlay.then(|| sheet_header(page_key.clone(), back_key.clone())),
+                            Some((0.0, 1.0, slide.outgoing, None, None)),
                         )
                     }
                     PageMotion::Pop => {
-                        memory.borrow_mut().shown = Some((slide.motion, x, dim));
+                        memory.borrow_mut().shown = Some((slide.motion, x));
                         (
                             0.0,
-                            under,
-                            0,
-                            Some((moved, 1.0, 1, slide.outgoing, true)),
-                            sliver,
+                            1.0,
+                            None,
+                            None,
+                            Some((
+                                moved,
+                                1.0,
+                                slide.outgoing,
+                                Some(card),
+                                slide.outgoing_header,
+                            )),
                         )
                     }
                 }
             }
         };
         let page = rect()
+            .position(Position::new_absolute().top(0.0).left(0.0))
             .width(Size::fill())
-            .height(Size::flex(1.0))
-            .offset_x(page_offset)
-            .opacity(page_opacity)
-            .layer(Layer::Relative(page_layer))
-            .maybe(motion == Some(PageMotion::Push), |page| {
-                page.tw(&tokens, &[bg(Paint::Bg)])
-            })
+            .height(Size::fill())
             .child(
                 // Bingux patch: keep the bar clear of the floating header and of
                 // the rounded window corner.
@@ -830,49 +970,82 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                             .on_sized(sections::origin_handler(section_registry))
                             .child(page_column(body, side, self.page_width, overlay)),
                     ),
-            );
-        let outgoing = outgoing.map(|(offset, opacity, layer, element, moving)| {
-            rect()
+            )
+            .maybe_child(page_header);
+        let page = slide_frame(page_offset, page_opacity, page_sheet, &tokens, page);
+        let outgoing = outgoing.map(|(offset, opacity, element, sheet, header)| {
+            let outgoing_page = rect()
                 .position(Position::new_absolute().top(0.0).left(0.0))
                 .width(Size::fill())
                 .height(Size::fill())
-                .offset_x(offset)
-                .opacity(opacity)
-                .layer(Layer::Relative(layer))
-                .maybe(moving, |sheet| sheet.tw(&tokens, &[bg(Paint::Bg)]))
-                .child(ScrollView::new().drag_scrolling(false).child(page_column(
-                    element,
-                    side,
-                    self.page_width,
-                    overlay,
-                )))
-        });
-        let sliver = sliver.map(|(offset, opacity)| {
-            rect()
-                .position(Position::new_absolute().top(0.0).left(0.0))
-                .width(Size::px(0.0))
-                .height(Size::fill())
-                .offset_x(offset)
-                .opacity(opacity)
-                .tw(&tokens, &[shadow(Elevation::Sheet)])
+                .child(
+                    ScrollView::new()
+                        .scrollbar_inset_top(if overlay { Dim::Header.px() } else { 0.0 })
+                        .scrollbar_inset_bottom(Radius::Window.px() + 3.0)
+                        .drag_scrolling(false)
+                        .child(rect().width(Size::fill()).child(page_column(
+                            element,
+                            side,
+                            self.page_width,
+                            overlay,
+                        ))),
+                )
+                .maybe_child(header);
+            slide_frame(offset, opacity, sheet, &tokens, outgoing_page)
         });
         let edge_top = if overlay { Dim::Header.px() } else { 0.0 };
         let content_region = use_region(RegionKind::Content);
-        let content_area = rect()
+        let content = rect()
             .width(Size::fill())
             .height(Size::flex(1.0))
             .on_press({
                 let press = content_region.clone();
-                move |_: Event<PressEventData>| press.press()
-            })
+                move |event: Event<PressEventData>| press.press(&event)
+            });
+        let content = content
             .child(content_region.sentinel())
             .child(page)
-            .maybe_child(outgoing)
-            .maybe_child(sliver)
-            .child(ScrollEdge {
-                scroll,
-                top: edge_top,
+            .maybe_child(outgoing);
+        let content_area = content.child(ScrollEdge {
+            scroll,
+            top: edge_top,
+        });
+        // A page that slides in over a desktop header brings its own Back on the
+        // sheet. The header's Back waits until the slide settles, so one chevron
+        // shows at a time and it does not appear before the page arrives.
+        let pushing = overlay
+            && matches!(active.as_ref(), Some(slide) if matches!(slide.motion, PageMotion::Push));
+        let back = back.filter(|_| !pushing);
+        let header = if show_list {
+            HeaderBar::new(self.app_title.clone()).fill(Paint::Bg)
+        } else {
+            let header = HeaderBar::new(String::new()).busy(busy).fill(if overlay {
+                Paint::Frosted
+            } else {
+                Paint::Bg
             });
+            match &back {
+                Some(on_back) => header.leading(PageBack {
+                    page: page_key.clone(),
+                    on_back: on_back.clone(),
+                }),
+                None => header,
+            }
+        };
+        // A phone has no window buttons. A desktop window dragged narrow keeps
+        // them, so a mouse user can still close it: the buttons go only while
+        // a finger drives a narrow window.
+        let show_controls = !(narrow && pointer_kind() == PointerKind::Touch);
+        // While a sheet moves over the header, the window buttons are lifted
+        // above it, so the header keeps none and the buttons stay put.
+        let lifted = overlay
+            && show_controls
+            && matches!(active.as_ref(), Some(slide) if !matches!(slide.motion, PageMotion::Fade));
+        let header = if show_controls && !lifted {
+            header.trailing(WindowControls)
+        } else {
+            header
+        };
         let header = if show_list {
             header
         } else {
@@ -883,6 +1056,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             }))
         };
         rect()
+            .component("NavigationSplitView")
             .expanded()
             .tw(
                 &tokens,
@@ -937,7 +1111,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                     .tw(&tokens, &[w_flex(), h_full(), bg(Paint::Bg)])
                     .on_press({
                         let press = header_region.clone();
-                        move |_: Event<PressEventData>| press.press()
+                        move |event: Event<PressEventData>| press.press(&event)
                     })
                     .child(header_region.sentinel())
                     .child(if overlay {
@@ -952,6 +1126,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                     } else {
                         Element::from(header)
                     })
+                    .maybe_child(lifted.then(|| lifted_controls(&tokens)))
                     .child(if show_list {
                         Element::from(sidebar(true))
                     } else {
@@ -970,15 +1145,25 @@ const HEADER_LAYER: i16 = 1500;
 /// The scroll distance, in pixels, where the header title starts to appear.
 /// Above it the title row at the top of the page is still fully visible.
 const TITLE_FADE_FROM: f32 = 24.0;
-/// The scroll distance where the header title is fully shown. The title row
-/// has scrolled out of view by then, so the two never show together.
+/// The scroll distance where the header title is fully shown, and where the
+/// large title has fully faded. The two never show together.
 const TITLE_FADE_TO: f32 = 56.0;
-/// How far below its resting place the header title starts, in pixels.
-const TITLE_SLIDE_PX: f32 = 8.0;
+
+/// The page's scroll distance in pixels, zero at the top and above.
+fn scrolled_px(scroll: ScrollController) -> f32 {
+    (-<(i32, i32)>::from(scroll).1).max(0) as f32
+}
+
+/// How far a compact page's large title has scrolled away, from 0 at the top
+/// to 1 once it has fully faded.
+fn large_title_progress(scroll: ScrollController) -> f32 {
+    (scrolled_px(scroll) / TITLE_FADE_TO).clamp(0.0, 1.0)
+}
 
 /// The page title in the header bar, centred. It is a pure function of the
-/// page's scroll offset: it fades and rises in step with the scroll, so
-/// dragging the page back up reverses it exactly, with no timed animation.
+/// page's scroll offset: it fades in while it rises from half a line below
+/// its place, as if half out of the bar, and is clipped to its line. Dragging
+/// the page back up reverses it exactly, with no timed animation.
 #[derive(PartialEq)]
 struct ScrolledTitle {
     scroll: ScrollController,
@@ -988,21 +1173,27 @@ struct ScrolledTitle {
 impl Component for ScrolledTitle {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let scrolled = (-<(i32, i32)>::from(self.scroll).1).max(0) as f32;
-        let progress =
-            ((scrolled - TITLE_FADE_FROM) / (TITLE_FADE_TO - TITLE_FADE_FROM)).clamp(0.0, 1.0);
+        let progress = ((scrolled_px(self.scroll) - TITLE_FADE_FROM)
+            / (TITLE_FADE_TO - TITLE_FADE_FROM))
+            .clamp(0.0, 1.0);
+        let line = EMPHASIS.size.px() * EMPHASIS.leading;
         let title = EMPHASIS
             .label(&tokens, self.title.clone())
             .width(Size::fill())
             .text_align(TextAlign::Center)
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis);
+        // The line is reserved even before the title shows, so the bar does
+        // not change height when the title starts to rise.
         rect()
             .tw_layout(&[w_full()])
+            .tw(&tokens, &[clip()])
+            .height(Size::px(line))
             .maybe_child((progress > 0.0).then(|| {
                 rect()
                     .width(Size::fill())
-                    .offset_y((1.0 - progress) * TITLE_SLIDE_PX)
+                    .height(Size::px(line))
+                    .offset_y((1.0 - progress) * line / 2.0)
                     .opacity(progress)
                     .child(title)
             }))
@@ -1027,8 +1218,8 @@ impl Component for PageTitle {
     }
 }
 
-/// The header's Back button. Crossfade compares it by page only, so it fades
-/// when the page changes and not on every render.
+/// The header's Back button. It stays in place when the page changes, so the
+/// chevron does not jump while a page slides; only its action moves.
 #[derive(Clone)]
 struct PageBack {
     page: PageKey,
@@ -1166,11 +1357,12 @@ impl<T: NavItem> Component for Sidebar<T> {
 
         let shell = if full_page {
             rect()
+                .component("Sidebar")
                 .width(Size::fill())
                 .height(Size::flex(1.0))
                 .tw(&tokens, &[flex_col(), bg(Paint::Bg)])
         } else {
-            rect().tw(&tokens, SIDEBAR)
+            rect().tw(&tokens, SIDEBAR).component("Sidebar")
         };
         let card = self.profile.clone().filter(|_| !typing).map(|profile| {
             Element::from(ProfileCard {
@@ -1184,7 +1376,7 @@ impl<T: NavItem> Component for Sidebar<T> {
         shell
             .on_press({
                 let press = region.clone();
-                move |_: Event<PressEventData>| press.press()
+                move |event: Event<PressEventData>| press.press(&event)
             })
             .child(search_band(query, self.search_id))
             .child(region.sentinel())

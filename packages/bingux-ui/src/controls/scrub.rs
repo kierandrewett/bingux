@@ -5,6 +5,7 @@
 
 use freya::prelude::*;
 
+use crate::component::ComponentName;
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::typography::{CAPTION, TextStyle, styled_label};
@@ -110,6 +111,7 @@ impl Component for Scrub {
         let width = if self.fit { Size::auto() } else { Size::fill() };
         if !self.enabled {
             return rect()
+                .component("Scrub")
                 .tw(&tokens, &[flex_row()])
                 .width(width)
                 .child(label)
@@ -125,6 +127,7 @@ impl Component for Scrub {
         let on_step_wheel = self.on_step.clone();
 
         rect()
+            .component("Scrub")
             .tw(&tokens, &[flex_row()])
             .width(width)
             .on_global_key_down(move |event: Event<KeyboardEventData>| {

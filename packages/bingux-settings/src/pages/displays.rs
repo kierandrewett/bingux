@@ -7,9 +7,6 @@
 
 use std::time::Duration;
 
-use bytes::Bytes;
-
-use freya::animation::*;
 use freya::prelude::*;
 
 use crate::pages::gnoblin;
@@ -20,6 +17,7 @@ use crate::ui::{
     dialog, icon, menu_item, menu_separator, page_column, primary_button, row, row_button,
     skeleton, status, switch_row, typography, use_overlays, use_tokens,
 };
+use bingux_ui::controls::slider;
 use bingux_ui::runtime::optimistic;
 use bingux_ui::shell::MenuItem;
 use bingux_ui::style::*;
@@ -2028,195 +2026,21 @@ fn kelvin_rgb(kelvin: u32) -> (u8, u8, u8) {
     (channel(red), channel(green), channel(blue))
 }
 
-/// The night light control: a strip of colours from the warmest to the coolest
-/// temperature. The strip is the control itself, and a white pill marks the
-/// chosen temperature (see `KelvinStrip`).
+/// The night light control: the shared slider, its track the colour gradient
+/// from the warmest to the coolest temperature.
 fn temperature_control(kelvin: u32, on_moved: impl Into<EventHandler<f64>>) -> Element {
-    use std::fmt::Write as _;
     const STOPS: u32 = 24;
-    let mut stops = String::new();
-    for step in 0..STOPS {
-        let fraction = f64::from(step) / f64::from(STOPS - 1);
-        let at = TEMP_MIN + (f64::from(TEMP_MAX - TEMP_MIN) * fraction).round() as u32;
-        let (red, green, blue) = kelvin_rgb(at);
-        let _ = write!(
-            stops,
-            r##"<stop offset="{}%" stop-color="#{red:02x}{green:02x}{blue:02x}"/>"##,
-            fraction * 100.0
-        );
-    }
-    let (width, height, radius) = (Dim::Field.px(), STRIP_HEIGHT, STRIP_HEIGHT / 2.0);
-    let svg = format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}"><defs><linearGradient id="kelvin" x1="0" y1="0" x2="1" y2="0">{stops}</linearGradient></defs><rect width="{width}" height="{height}" rx="{radius}" fill="url(#kelvin)"/></svg>"#
-    );
-    KelvinStrip {
-        kelvin,
-        svg,
-        on_moved: on_moved.into(),
-    }
-    .into()
-}
-
-/// The strip's geometry: an 8 px gradient bar in a 24 px tall control, with
-/// a thumb 8 by 24 that grows a little while pressed.
-const STRIP_HEIGHT: f32 = GAP_2;
-const STRIP_CONTROL: f32 = S6.fixed_px();
-const SCALE_PRESSED: f32 = 1.1;
-const SCALE_MS: u64 = 120;
-const LEVEL_MAX: f64 = 100.0;
-/// Arrow keys move the strip this many percent, Page Up and Page Down by ten.
-const KELVIN_STEP: f64 = 5.0;
-const KELVIN_PAGE_STEP: f64 = 10.0;
-
-/// The night light strip. It is the control itself: press or drag anywhere on
-/// it, or use the arrow, Home, End, Page Up and Page Down keys. The white pill
-/// is the thumb, S2 wide and S6 tall.
-#[derive(Clone, PartialEq)]
-struct KelvinStrip {
-    kelvin: u32,
-    svg: String,
-    on_moved: EventHandler<f64>,
-}
-
-impl Component for KelvinStrip {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let mut pressing = use_state(|| false);
-        let mut size = use_state(Area::default);
-        let a11y_id = use_a11y();
-        let focus = use_focus(a11y_id);
-        let on_moved = self.on_moved.clone();
-        let kelvin = self.kelvin;
-        let level = kelvin_level(kelvin);
-        let svg = self.svg.clone();
-
-        let scale_target = if pressing() { SCALE_PRESSED } else { 1.0 };
-        let motion = tokens.motion(SCALE_MS);
-        let scale = use_animation_transition(scale_target, move |from, to| {
-            AnimNum::new(from, to)
-                .time(motion)
-                .function(Function::Expo)
-                .ease(Ease::Out)
-        });
-        let strip_width = Dim::Field.px();
-        let thumb_width = STRIP_HEIGHT * scale.get().value();
-        let thumb_height = STRIP_CONTROL * scale.get().value();
-        let travel = (strip_width - STRIP_HEIGHT).max(1.0);
-        let centre_x = STRIP_HEIGHT / 2.0 + travel * (level / LEVEL_MAX) as f32;
-        let percent_at = move |x: f64| -> f64 {
-            let half = f64::from(STRIP_HEIGHT / 2.0);
-            ((x - half) / f64::from(travel) * LEVEL_MAX).clamp(0.0, LEVEL_MAX)
-        };
-        let on_pointer_down = {
-            let on_moved = on_moved.clone();
-            move |event: Event<PointerEventData>| {
-                if !event.data().is_primary() {
-                    return;
-                }
-                event.stop_propagation();
-                a11y_id.request_focus();
-                pressing.set(true);
-                on_moved.call(percent_at(event.element_location().x));
-            }
-        };
-        let on_move = {
-            let on_moved = on_moved.clone();
-            move |event: Event<PointerEventData>| {
-                if *pressing.peek() {
-                    event.prevent_default();
-                    let x = event.global_location().x - size.read().min_x() as f64;
-                    on_moved.call(percent_at(x));
-                }
-            }
-        };
-        let on_release = move |_| {
-            pressing.set_if_modified(false);
-        };
-        let on_key_down = {
-            let on_moved = on_moved.clone();
-            move |event: Event<KeyboardEventData>| {
-                let delta = match event.key {
-                    Key::Named(NamedKey::ArrowLeft) | Key::Named(NamedKey::ArrowDown) => {
-                        -KELVIN_STEP
-                    }
-                    Key::Named(NamedKey::ArrowRight) | Key::Named(NamedKey::ArrowUp) => KELVIN_STEP,
-                    Key::Named(NamedKey::Home) => -level,
-                    Key::Named(NamedKey::End) => LEVEL_MAX - level,
-                    Key::Named(NamedKey::PageUp) => KELVIN_PAGE_STEP,
-                    Key::Named(NamedKey::PageDown) => -KELVIN_PAGE_STEP,
-                    _ => return,
-                };
-                on_moved.call((level + delta).clamp(0.0, LEVEL_MAX));
-            }
-        };
-
-        let ring = STRIP_HEIGHT + Dim::Ring.px() * 2.0;
-        rect()
-            .a11y_id(a11y_id)
-            .a11y_focusable(true)
-            .a11y_role(AccessibilityRole::Slider)
-            .a11y_builder(move |builder| {
-                builder.set_numeric_value(f64::from(kelvin));
-                builder.set_min_numeric_value(f64::from(TEMP_MIN));
-                builder.set_max_numeric_value(f64::from(TEMP_MAX));
-            })
-            .tw(&tokens, &[w(Dim::Field)])
-            .height(Size::px(STRIP_CONTROL))
-            .on_sized(move |event: Event<SizedEventData>| size.set(event.area))
-            .on_pointer_down(on_pointer_down)
-            .on_capture_global_pointer_move(on_move)
-            .on_global_pointer_up(on_release)
-            .on_key_down(on_key_down)
-            .child(
-                rect()
-                    .position(
-                        Position::new_absolute()
-                            .top((STRIP_CONTROL - STRIP_HEIGHT) / 2.0)
-                            .left(0.0),
-                    )
-                    .width(Size::px(strip_width))
-                    .height(Size::px(STRIP_HEIGHT))
-                    .child(
-                        SvgViewer::new((svg.clone(), Bytes::from(svg)))
-                            .width(Size::px(strip_width))
-                            .height(Size::px(STRIP_HEIGHT)),
-                    ),
-            )
-            .maybe_child((focus() == Focus::Keyboard).then(|| {
-                rect()
-                    .position(
-                        Position::new_absolute()
-                            .top((STRIP_CONTROL - ring) / 2.0)
-                            .left(centre_x - ring / 2.0),
-                    )
-                    .width(Size::px(ring))
-                    .height(Size::px(ring))
-                    .tw(
-                        &tokens,
-                        &[rounded(Radius::Pill), border(Line::Edge(Paint::Accent))],
-                    )
-            }))
-            .child(
-                rect()
-                    .layer(Layer::Relative(3))
-                    .position(
-                        Position::new_absolute()
-                            .top((STRIP_CONTROL - thumb_height) / 2.0)
-                            .left(centre_x - thumb_width / 2.0),
-                    )
-                    .width(Size::px(thumb_width))
-                    .height(Size::px(thumb_height))
-                    .tw(
-                        &tokens,
-                        &[
-                            rounded(Radius::Pill),
-                            bg(Paint::Text),
-                            border(Line::Edge(Paint::Outline)),
-                        ],
-                    ),
-            )
-            .into_element()
-    }
+    let stops: Vec<(f64, (u8, u8, u8))> = (0..STOPS)
+        .map(|step| {
+            let fraction = f64::from(step) / f64::from(STOPS - 1);
+            let at = TEMP_MIN + (f64::from(TEMP_MAX - TEMP_MIN) * fraction).round() as u32;
+            (fraction * 100.0, kelvin_rgb(at))
+        })
+        .collect();
+    slider(kelvin_level(kelvin), on_moved)
+        .width(Dim::Field)
+        .gradient(stops)
+        .into()
 }
 
 fn night_group(ctx: Ctx, night: &Night) -> Group {

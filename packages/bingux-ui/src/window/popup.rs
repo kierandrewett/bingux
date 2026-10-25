@@ -29,10 +29,7 @@ use crate::shell::overlays::{OverlayLayers, OverlayStack, Overlays};
 use crate::shell::window::HeaderBar;
 use crate::style::*;
 use crate::surface::use_tokens;
-use crate::theme::Tokens;
 
-/// How long the popup takes to fade and scale in or out, and the resize takes.
-pub(super) const MOTION_MS: u64 = 150;
 /// The scale the panel starts from when it opens.
 const OPEN_SCALE: f32 = 0.94;
 /// The widest a popup gets, as a share of the window width, so it keeps a
@@ -54,14 +51,10 @@ const RESIZE_INSIDE: f32 = 2.0;
 /// into the header buttons.
 const RESIZE_CORNER: f32 = 12.0;
 
-/// The tallest a phone sheet grows, as a share of the window height.
-const SHEET_MAX_HEIGHT_PERCENT: f32 = 92.0;
-/// How far a sheet is dragged down before it dismisses on release.
-pub(super) const SHEET_DISMISS_DISTANCE: f32 = 96.0;
-/// The grabber's row, and the pill drawn in it.
-const GRABBER_ROW: f32 = 20.0;
-const GRABBER_WIDTH: f32 = 36.0;
-const GRABBER_HEIGHT: f32 = 4.0;
+use crate::shell::panel::{
+    MOTION_MS, SHEET_DISMISS_DISTANCE, SHEET_MAX_HEIGHT_PERCENT, grabber, sheet_overhang,
+    use_sheet_pull,
+};
 
 /// The space between a header button and the header's top or bottom edge: the
 /// header is `Dim::Header` tall and its buttons `Dim::Control`, centred.
@@ -74,12 +67,6 @@ fn header_gap() -> f32 {
 /// Cancel, the rail and the divider sit at an even rhythm.
 fn tabs_height() -> f32 {
     Dim::Control.px() + header_gap()
-}
-
-/// How far a sheet extends past the bottom edge, so its bottom corners sit
-/// off screen and only its top corners show.
-fn sheet_overhang() -> f32 {
-    Radius::Overlay.px()
 }
 
 /// What a popup shows and how it is dismissed. Combine flags with `|`.
@@ -387,49 +374,6 @@ fn resize_handles(
     ]
 }
 
-/// The grabber row at the top of a sheet: a short pill. A press starts a
-/// drag, which the panel follows and which dismisses the sheet when released
-/// far enough down.
-fn grabber(
-    tokens: &Tokens,
-    mut grab: State<Option<f32>>,
-    mut pulling: State<Option<u64>>,
-    id: u64,
-) -> Rect {
-    rect()
-        .width(Size::fill())
-        .height(Size::px(GRABBER_ROW))
-        .tw(
-            tokens,
-            &[flex_col(), items(Align::Center), justify(Align::Center)],
-        )
-        .on_pointer_down(move |event: Event<PointerEventData>| {
-            event.stop_propagation();
-            grab.set(Some(event.global_location().y as f32));
-            pulling.set(Some(id));
-        })
-        .child(
-            rect()
-                .width(Size::px(GRABBER_WIDTH))
-                .height(Size::px(GRABBER_HEIGHT))
-                .tw(tokens, &[rounded(Radius::Pill), bg(Paint::Control)]),
-        )
-}
-
-/// The sheet's pull, eased. It follows the pointer while the sheet is dragged
-/// and springs back to rest on release; a dismiss keeps it where it was.
-pub(crate) fn use_sheet_pull(pull: State<f32>, motion: u64) -> f32 {
-    use_animation_transition(*pull.read(), move |from: f32, to: f32| {
-        // Only the spring back eases: a drag follows the pointer exactly.
-        let time = if to <= 0.0 { motion } else { 0 };
-        AnimNum::new(from, to)
-            .time(time)
-            .function(Function::Quad)
-            .ease(Ease::Out)
-    })
-    .get()
-    .value()
-}
 
 /// Draws one popup: its scrim, its panel, and the `Window` it provides to its
 /// content. Rendered by [`WindowHost`](super::WindowHost).
@@ -472,7 +416,7 @@ impl Component for PopupFrame {
         // lives on the manager, so the window can inset with it.
         let mut grab = use_state(|| None::<f32>);
         let mut pull = manager.sheet_pull;
-        let pulling = manager.sheet_pulling;
+        let mut pulling = manager.sheet_pulling;
         let motion = tokens.motion(MOTION_MS);
         let eased = use_sheet_pull(pull, motion);
         let pulled = if *pulling.read() == Some(id) {
@@ -633,7 +577,12 @@ impl Component for PopupFrame {
             .on_global_pointer_up(on_release)
             .maybe_child(
                 (sheet && flags.contains(PopupFlags::GRABBER))
-                    .then(|| grabber(&tokens, grab, pulling, id)),
+                    .then(|| {
+                        grabber(&tokens, move |y| {
+                            grab.set(Some(y));
+                            pulling.set(Some(id));
+                        })
+                    }),
             )
             .child(header)
             .maybe_child(entry.tabs.clone().map(|tabs| {

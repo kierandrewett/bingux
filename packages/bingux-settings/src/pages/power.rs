@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use bingux_ui::runtime::{optimistic, optimistic_then};
 use bingux_ui::style::*;
+use bingux_ui::theme::Tokens;
 use freya::prelude::*;
 
 use super::loading::{has_battery_hint, veiled};
@@ -14,8 +15,8 @@ use crate::icons::Icon;
 use crate::system::{self, CommandError, CommandResult, background};
 use crate::ui::typography::{CAPTION, EMPHASIS};
 use crate::ui::{
-    Curve, Group, Overlays, PageHead, Series, Status, Unit, choice_row, icon, line_chart,
-    page_column, ring, row, status, switch_row, use_overlays, use_tokens, vstack,
+    Curve, Group, Overlays, PageHead, Series, Status, Unit, choice_row, focus_stop, icon,
+    line_chart, page_column, ring, row, status, switch_row, use_overlays, use_tokens, vstack,
 };
 
 const SESSION: &str = "org.gnome.desktop.session";
@@ -452,8 +453,8 @@ fn mode_group(
     picks: Picks,
     overlays: Overlays,
     profiles: &Profiles,
+    tokens: &Tokens,
 ) -> Group {
-    let tokens = use_tokens();
     let mut cards = rect().tw(&tokens, &[flex_row(), w_full(), gap(S2)]);
     let chosen = picked(picks, "profile", &profiles.active);
     for name in ["power-saver", "balanced", "performance"] {
@@ -468,9 +469,6 @@ fn mode_group(
             ""
         };
         let mut card = rect()
-            .a11y_role(AccessibilityRole::Button)
-            .a11y_alt(profile_label(name))
-            .a11y_focusable(offered)
             .tw(
                 &tokens,
                 &[
@@ -498,14 +496,21 @@ fn mode_group(
         if !state.is_empty() {
             card = card.child(CAPTION.label(&tokens, state));
         }
-        if offered && !active {
-            card = card.on_press(move |_| {
-                let key = key.clone();
-                choose(picks, loaded, overlays, "profile", key.clone(), move || {
-                    system::run("powerprofilesctl", &["set", &key], Duration::from_secs(5))
-                });
-            });
-        }
+        let card = focus_stop(
+            card,
+            profile_label(name),
+            AccessibilityRole::Button,
+            offered,
+            Radius::Card,
+            move |()| {
+                if offered && !active {
+                    let key = key.clone();
+                    choose(picks, loaded, overlays, "profile", key.clone(), move || {
+                        system::run("powerprofilesctl", &["set", &key], Duration::from_secs(5))
+                    });
+                }
+            },
+        );
         cards = cards.child(card);
     }
     Group::titled("Power mode").row(cards)
@@ -671,6 +676,7 @@ impl Component for PowerPage {
     fn render(&self) -> impl IntoElement {
         let loaded = system::use_cached_saved("power", load);
         let overlays = use_overlays();
+        let tokens = use_tokens();
         let pending: Pending = use_state(BTreeMap::new);
         let picks: Picks = use_state(BTreeMap::new);
         let subtitle = loaded
@@ -718,7 +724,7 @@ impl Component for PowerPage {
 
         // Power mode
         page = match model.profiles.clone() {
-            Ok(profiles) => page.child(mode_group(loaded, picks, overlays, &profiles)),
+            Ok(profiles) => page.child(mode_group(loaded, picks, overlays, &profiles, &tokens)),
             Err(_) if !model.profiles_tool => page.child(Group::titled("Power mode").row(status(
                 Status::Info("Power modes are not available on this computer.".into()),
             ))),

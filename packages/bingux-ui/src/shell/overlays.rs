@@ -13,11 +13,11 @@ use crate::address::Address;
 use crate::app::current_address;
 use crate::controls::button::{ActionButton, action_button, primary_button};
 use crate::controls::press::use_press;
-use crate::motion::{PRESENCE_SCALE, use_presence};
+use crate::motion::use_presence;
 use crate::shell::menu::{Menu, MenuItem, MenuLayer, MenuNav};
+use crate::shell::panel::{Panel, PanelTrigger};
 use crate::style::*;
 use crate::surface::{is_activation_key, use_tokens};
-use crate::theme::Tokens;
 use crate::typography::{BODY, EMPHASIS, Ink, SECTION};
 
 /// The toast pill: 44 px tall, text then action and dismiss, on the same dark
@@ -171,27 +171,23 @@ impl Overlays {
     /// Open a menu of `items` at `at`, a point in window coordinates. The
     /// menu closes when an item is picked, on Escape, or on a press outside it.
     pub fn show_menu(self, at: (f32, f32), items: Vec<MenuItem>) {
-        self.show_menu_from(None, at, items, false);
+        self.show_menu_from(None, PanelTrigger::Pointer(at), items, false);
     }
 
-    /// Open a menu of `items` at `at`, owned by the control `owner`. A menu
-    /// opened from the keyboard highlights its first item. When the menu
+    /// Open a menu of `items` against `trigger`, owned by the control `owner`.
+    /// A menu opened from the keyboard highlights its first item. When the menu
     /// closes, focus returns to `owner` if the menu still holds it.
     pub(crate) fn show_menu_from(
         mut self,
         owner: Option<AccessibilityId>,
-        at: (f32, f32),
+        trigger: PanelTrigger,
         items: Vec<MenuItem>,
         keyboard: bool,
     ) {
         self.menu_closing.set(false);
         self.menu_page.set(current_address());
         self.menu_nav.set(MenuNav::new(owner, &items, keyboard));
-        self.menu.set(Some(Menu {
-            x: at.0,
-            y: at.1,
-            items,
-        }));
+        self.menu.set(Some(Menu { trigger, items }));
     }
 
     /// Whether the open menu was opened by the control `owner`.
@@ -293,23 +289,6 @@ impl Overlays {
     }
 }
 
-/// A clear layer over the whole window, under an open menu or list. It
-/// takes every press, wheel turn and hover outside the popup, so nothing
-/// behind it reacts, and a press of any button on it calls `on_dismiss`.
-/// Give the popup a higher layer than the shield.
-pub(crate) fn input_shield(tokens: &Tokens, mut on_dismiss: impl FnMut() + 'static) -> Rect {
-    rect()
-        .position(Position::new_global().top(0.0).left(0.0))
-        .tw(tokens, &[w_screen(), h_screen(), bg(Paint::Shield)])
-        .on_pointer_down(move |event: Event<PointerEventData>| {
-            event.stop_propagation();
-            event.prevent_default();
-            on_dismiss();
-        })
-        .on_press(|event: Event<PressEventData>| event.stop_propagation())
-        .on_wheel(|event: Event<WheelEventData>| event.stop_propagation())
-}
-
 /// The handle provided by the nearest [`OverlayHost`].
 pub fn use_overlays() -> Overlays {
     use_consume::<Overlays>()
@@ -404,7 +383,7 @@ impl Component for OverlayLayers {
         let toast = overlays.toasts.read().first().cloned();
         let toast_closing = *overlays.toast_closing.read();
         let menu = overlays.menu.read().clone().filter(|_| match stack {
-            OverlayStack::Window => *overlays.menu_page.read() == self.page,
+            OverlayStack::Window => self.page.is_none() || *overlays.menu_page.read() == self.page,
             OverlayStack::Popup => true,
         });
         let menu_closing = *overlays.menu_closing.read();
@@ -451,9 +430,6 @@ impl Component for DialogLayer {
         let tokens = use_tokens();
         let overlays = self.overlays;
         let a11y_id = use_a11y();
-        let progress = use_presence(!self.closing, tokens.motion(120), move || {
-            overlays.finish_dialog()
-        });
         use_side_effect(move || a11y_id.request_focus());
 
         let responses = self.dialog.responses.clone();
@@ -473,51 +449,40 @@ impl Component for DialogLayer {
             Element::from(button.grow())
         });
 
-        rect()
-            .position(Position::new_absolute().top(0.0).left(0.0))
-            .layer(self.layer)
-            .tw(
-                &tokens,
-                &[w_screen(), h_screen(), center(), bg(Paint::Scrim)],
+        let card = rect()
+            .a11y_id(a11y_id)
+            .a11y_focusable(true)
+            .a11y_role(AccessibilityRole::AlertDialog)
+            .a11y_alt(self.dialog.title.clone())
+            .tw(&tokens, DIALOG)
+            .tw(&tokens, &[w(Dim::Dialog)])
+            .max_width(Size::window_percent(DIALOG_MAX_WIDTH_PERCENT))
+            // A press on the card never reaches the panel's scrim.
+            .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
+            .child(
+                SECTION
+                    .label(&tokens, self.dialog.title.clone())
+                    .text_align(TextAlign::Center)
+                    .width(Size::fill()),
             )
-            .opacity(progress)
-            .on_press(move |_: Event<PressEventData>| overlays.dismiss_dialog())
+            .maybe_child((!self.dialog.body.is_empty()).then(|| {
+                BODY.in_ink(Ink::Muted)
+                    .paragraph(&tokens, self.dialog.body.clone())
+                    .width(Size::fill())
+                    .text_align(TextAlign::Center)
+            }))
+            .maybe_child(self.dialog.content.clone())
             .child(
                 rect()
-                    .a11y_id(a11y_id)
-                    .a11y_focusable(true)
-                    .a11y_role(AccessibilityRole::AlertDialog)
-                    .a11y_alt(self.dialog.title.clone())
-                    .tw(&tokens, DIALOG)
-                    .tw(&tokens, &[w(Dim::Dialog)])
-                    .max_width(Size::window_percent(DIALOG_MAX_WIDTH_PERCENT))
-                    .scale(PRESENCE_SCALE + (1.0 - PRESENCE_SCALE) * progress)
-                    .on_press(|event: Event<PressEventData>| event.stop_propagation())
-                    .on_key_down(move |event: Event<KeyboardEventData>| {
-                        if event.key == Key::Named(NamedKey::Escape) {
-                            event.stop_propagation();
-                            overlays.dismiss_dialog();
-                        }
-                    })
-                    .child(
-                        SECTION
-                            .label(&tokens, self.dialog.title.clone())
-                            .text_align(TextAlign::Center)
-                            .width(Size::fill()),
-                    )
-                    .maybe_child((!self.dialog.body.is_empty()).then(|| {
-                        BODY.in_ink(Ink::Muted)
-                            .paragraph(&tokens, self.dialog.body.clone())
-                            .width(Size::fill())
-                            .text_align(TextAlign::Center)
-                    }))
-                    .maybe_child(self.dialog.content.clone())
-                    .child(
-                        rect()
-                            .tw(&tokens, &[w_full(), flex_row(), grow_children(), gap(S2)])
-                            .children(buttons),
-                    ),
-            )
+                    .tw(&tokens, &[w_full(), flex_row(), grow_children(), gap(S2)])
+                    .children(buttons),
+            );
+
+        Element::from(
+            Panel::dialog(!self.closing, self.layer, vec![card.into_element()])
+                .on_dismiss(EventHandler::new(move |_: ()| overlays.dismiss_dialog()))
+                .on_closed(EventHandler::new(move |_: ()| overlays.finish_dialog())),
+        )
     }
 }
 

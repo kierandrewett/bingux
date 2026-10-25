@@ -11,7 +11,7 @@ use freya_core::{
 use freya_edit::*;
 use torin::{
     gaps::Gaps,
-    prelude::{Alignment, Area, Content, Direction, Point2D, Vector2D},
+    prelude::{Alignment, Area, Content, CursorPoint, Direction, Point2D, Vector2D},
     size::Size,
 };
 use tracing::warn;
@@ -164,6 +164,8 @@ pub struct Input {
     trailing: Option<Element>,
     on_pre_key_down: Option<Callback<Event<KeyboardEventData>, bool>>,
     command: Option<State<Option<InputCommand>>>,
+    probe: Option<State<InputProbe>>,
+    request: Option<State<Option<InputRequest>>>,
 }
 
 /// An edit that runs on the text as if its keyboard shortcut was pressed.
@@ -174,6 +176,36 @@ pub enum InputCommand {
     Copy,
     Cut,
     Paste,
+}
+
+/// A caret or selection end in window coordinates, used to place edit UI beside the text.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct InputCaret {
+    pub x: f32,
+    pub top: f32,
+    pub bottom: f32,
+}
+
+/// What an [`Input`] reports about its layout through [`Input::probe`].
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct InputProbe {
+    /// Whether the input currently has keyboard focus.
+    pub focused: bool,
+    /// The text area in window coordinates.
+    pub area: Area,
+    /// The caret, when focused and not showing a placeholder.
+    pub caret: Option<InputCaret>,
+    /// The selected range as (start, end) carets in reading order, when a range is selected.
+    pub selection: Option<(InputCaret, InputCaret)>,
+}
+
+/// An edit the surrounding UI asks of an [`Input`] through [`Input::request`]. The input clears it after running it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum InputRequest {
+    /// Select the word under this window point.
+    SelectWordAt { x: f32, y: f32 },
+    /// Drag the start or end of the selection with the pointer. The opposite end stays fixed until the pointer is released.
+    DragSelectionEnd { start: bool },
 }
 
 /// Runs one key edit on `editable` and writes the text to `value`, unless
@@ -247,6 +279,8 @@ impl Input {
             trailing: None,
             on_pre_key_down: None,
             command: None,
+            probe: None,
+            request: None,
         }
     }
 
@@ -268,6 +302,18 @@ impl Input {
     /// Run `command` on the text when the state is set to it, then clear the state.
     pub fn command(mut self, command: State<Option<InputCommand>>) -> Self {
         self.command = Some(command);
+        self
+    }
+
+    /// Report focus, caret and selection geometry through `probe`. It is updated as they change.
+    pub fn probe(mut self, probe: State<InputProbe>) -> Self {
+        self.probe = Some(probe);
+        self
+    }
+
+    /// Run `request` when the state is set to it, then clear the state.
+    pub fn request(mut self, request: State<Option<InputRequest>>) -> Self {
+        self.request = Some(request);
         self
     }
 
@@ -516,6 +562,53 @@ impl Component for Input {
             }
         };
 
+        let probe_state = self.probe;
+        let publish_probe = move || {
+            let Some(mut probe_state) = probe_state else {
+                return;
+            };
+            let editor = editable.editor().peek();
+            let holder = holder.peek();
+            let holder = holder.0.borrow();
+            let Some(ParagraphHolderInner {
+                paragraph,
+                scale_factor,
+                ..
+            }) = holder.as_ref()
+            else {
+                return;
+            };
+            let area_now = *area.peek();
+            let focused = a11y_id.is_focused();
+            let shows_caret = focused && !display_placeholder;
+            let text = match mode {
+                InputMode::Hidden(character) => {
+                    character.to_string().repeat(editor.rope().len_chars())
+                }
+                InputMode::Shown => editor.rope().to_string(),
+            };
+            let scale = *scale_factor as f32;
+            let caret_at = |index: usize| {
+                let rect = paragraph.cursor_rect(&text, index, text_align);
+                InputCaret {
+                    x: area_now.min_x() + rect.left / scale,
+                    top: area_now.min_y() + rect.top / scale,
+                    bottom: area_now.min_y() + rect.bottom / scale,
+                }
+            };
+            let next = InputProbe {
+                focused,
+                area: area_now,
+                caret: shows_caret.then(|| caret_at(editor.cursor_pos())),
+                selection: editor
+                    .get_selection_range()
+                    .filter(|_| shows_caret)
+                    .map(|(start, end)| (caret_at(start), caret_at(end))),
+            };
+            probe_state.set_if_modified(next);
+        };
+        publish_probe();
+
         let on_ime_preedit = move |e: Event<ImePreeditEventData>| {
             let mut editor = editable.editor_mut().write();
             if e.data().text.is_empty() {
@@ -612,14 +705,64 @@ impl Component for Input {
             }
         });
 
+        // Runs a request set by the surrounding UI, such as selecting the word under a touch.
+        let request_state = self.request;
+        let pending_request = match self.request {
+            Some(request) => *request.read(),
+            None => None,
+        };
+        use_side_effect_with_deps(&pending_request, move |pending| {
+            let Some(request) = *pending else {
+                return;
+            };
+            if let Some(mut state) = request_state {
+                state.set(None);
+            }
+            let mut editable = editable;
+            match request {
+                InputRequest::SelectWordAt { x, y } => {
+                    if !display_placeholder {
+                        let text_area = area.peek().to_f64();
+                        let global_location = CursorPoint::new(x as f64, y as f64)
+                            .clamp(text_area.min(), text_area.max());
+                        let location = (global_location - text_area.min()).to_point();
+                        editable.process_event(EditableEvent::Down {
+                            location,
+                            editor_line: EditorLine::SingleParagraph,
+                            holder: &holder.peek(),
+                        });
+                        let pos = editable.editor().peek().cursor_pos();
+                        let (start, end) = editable.editor().peek().find_word_boundaries(pos);
+                        editable.editor_mut().write().set_selection((start, end));
+                        follow_cursor();
+                    }
+                    a11y_id.request_focus();
+                }
+                InputRequest::DragSelectionEnd { start } => {
+                    let range = editable.editor().peek().get_selection_range();
+                    if let Some((from, to)) = range {
+                        // The end that is not dragged stays the anchor; the dragged end becomes the cursor.
+                        let selection = if start { (to, from) } else { (from, to) };
+                        editable.editor_mut().write().set_selection(selection);
+                    }
+                    is_dragging.set(true);
+                    a11y_id.request_focus();
+                }
+            }
+        });
+
         let on_key_up = move |e: Event<KeyboardEventData>| {
             e.stop_propagation();
             editable.process_event(EditableEvent::KeyUp { key: &e.key });
         };
 
         let on_input_focus_press = move |e: Event<FocusPressEventData>| {
-            e.stop_propagation();
-            e.prevent_default();
+            // A touch stays unstopped and unprevented so the field's global pointer handlers hear it;
+            // Freya cancels global pointer events once a press is stopped or prevented.
+            if !matches!(e.data(), FocusPressEventData::Touch(_)) {
+                e.stop_propagation();
+                e.prevent_default();
+            }
             if cfg!(target_os = "android") {
                 if a11y_id.is_focused() {
                     // Require a second press to enabling dragging on Android
@@ -643,8 +786,10 @@ impl Component for Input {
         };
 
         let on_focus_press = move |e: Event<FocusPressEventData>| {
-            e.stop_propagation();
-            e.prevent_default();
+            if !matches!(e.data(), FocusPressEventData::Touch(_)) {
+                e.stop_propagation();
+                e.prevent_default();
+            }
             if cfg!(target_os = "android") {
                 if a11y_id.is_focused() {
                     // Require a second press to enabling dragging on Android
@@ -710,8 +855,10 @@ impl Component for Input {
         };
 
         let on_pointer_press = move |e: Event<PointerEventData>| {
-            e.stop_propagation();
-            e.prevent_default();
+            if !matches!(e.data(), PointerEventData::Touch(_)) {
+                e.stop_propagation();
+                e.prevent_default();
+            }
             match *status.read() {
                 InputStatus::Idle if a11y_id.is_focused() => {
                     editable.process_event(EditableEvent::Release);
@@ -738,6 +885,7 @@ impl Component for Input {
             if text_size_changed {
                 follow_cursor();
             }
+            publish_probe();
         };
 
         let (background, cursor_index, text_selection) = if enabled() && focus() != Focus::Not {
