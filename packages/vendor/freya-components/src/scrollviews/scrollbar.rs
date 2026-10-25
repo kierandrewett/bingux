@@ -68,6 +68,8 @@ pub struct ScrollBarContext {
     pub thumb_offset: f32,
     pub track_size: Size,
     pub thumb_length: f32,
+    /// Bingux patch: room kept clear at the near end of the track (top for Y).
+    pub start_inset: f32,
     /// Bingux patch: room kept clear at the far end of the track (bottom for Y).
     pub end_inset: f32,
 }
@@ -154,6 +156,7 @@ impl ComponentOwned for ScrollBar {
             thumb_offset,
             track_size,
             thumb_length,
+            start_inset,
             end_inset,
             ..
         } = context;
@@ -238,9 +241,10 @@ impl ComponentOwned for ScrollBar {
                 0.,
                 Size::px(cross_size),
                 Size::fill(),
-                // Bingux patch: `end_inset` keeps the bottom of the bar clear of a rounded window edge.
+                // Bingux patch: `start_inset` keeps the top of the bar clear of a
+                // floating header, `end_inset` the bottom clear of a rounded edge.
                 Gaps::new(
-                    SCROLLBAR_MARGIN,
+                    SCROLLBAR_MARGIN + start_inset,
                     cross_gap,
                     SCROLLBAR_MARGIN + end_inset,
                     0.,

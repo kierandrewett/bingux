@@ -73,6 +73,8 @@ pub struct ScrollView {
     scroll_with_arrows: bool,
     /// Room kept clear at the bottom of the vertical scrollbar (Bingux patch).
     scrollbar_inset_bottom: f32,
+    /// Room kept clear at the top of the vertical scrollbar (Bingux patch).
+    scrollbar_inset_top: f32,
     scroll_controller: Option<ScrollController>,
     invert_scroll_wheel: bool,
     drag_scrolling: bool,
@@ -107,6 +109,7 @@ impl Default for ScrollView {
             auto_hide_scrollbars: true,
             scroll_with_arrows: true,
             scrollbar_inset_bottom: 0.,
+            scrollbar_inset_top: 0.,
             scroll_controller: None,
             invert_scroll_wheel: false,
             drag_scrolling: true,
@@ -166,6 +169,13 @@ impl ScrollView {
     /// short of a rounded window edge (Bingux patch; see the vendor README).
     pub fn scrollbar_inset_bottom(mut self, px: f32) -> Self {
         self.scrollbar_inset_bottom = px;
+        self
+    }
+
+    /// Keeps `px` clear at the top of a vertical scrollbar, so the bar starts
+    /// below a header that floats over the content (Bingux patch).
+    pub fn scrollbar_inset_top(mut self, px: f32) -> Self {
+        self.scrollbar_inset_top = px;
         self
     }
 
@@ -280,8 +290,8 @@ impl Component for ScrollView {
             size.read().inner_sizes.height,
             size.read().area.height(),
             rendered_position.y,
-            // Bingux patch: the vertical thumb stops short of the bottom inset.
-            self.scrollbar_inset_bottom,
+            // Bingux patch: the vertical thumb travels between the two insets.
+            self.scrollbar_inset_top + self.scrollbar_inset_bottom,
         );
 
         let (container_width, content_width) = get_container_sizes(layout.width.clone());
@@ -291,6 +301,7 @@ impl Component for ScrollView {
         let invert_scroll_wheel = self.invert_scroll_wheel;
         // Bingux patch: captured for the pointer handler, which runs later.
         let scrollbar_inset_bottom = self.scrollbar_inset_bottom;
+        let scrollbar_inset_top = self.scrollbar_inset_top;
 
         let on_capture_global_pointer_up = move |e: Event<PointerEventData>| {
             if clicking_scrollbar.read().is_some() {
@@ -435,13 +446,14 @@ impl Component for ScrollView {
 
             if let Some((Axis::Y, y)) = *clicking_scrollbar {
                 let coordinates = e.element_location();
-                let cursor_y = coordinates.y - y - size.read().area.min_y() as f64;
+                let cursor_y =
+                    coordinates.y - y - size.read().area.min_y() as f64 - scrollbar_inset_top as f64;
 
                 let scroll_position = get_scroll_position_from_cursor(
                     cursor_y as f32,
                     size.read().inner_sizes.height,
                     size.read().area.height(),
-                    scrollbar_inset_bottom,
+                    scrollbar_inset_top + scrollbar_inset_bottom,
                 );
 
                 scroll_controller.scroll_to_y(scroll_position);
@@ -577,7 +589,9 @@ impl Component for ScrollView {
                             thumb_offset: scrollbar_y,
                             track_size: Size::px(size.read().area.height()),
                             thumb_length: scrollbar_height,
-                            // Bingux patch: keep the bar clear of a rounded window bottom.
+                            // Bingux patch: keep the bar clear of a floating header
+                            // and of a rounded window bottom.
+                            start_inset: self.scrollbar_inset_top,
                             end_inset: self.scrollbar_inset_bottom,
                         }))
                     })),
@@ -596,7 +610,8 @@ impl Component for ScrollView {
                     thumb_offset: scrollbar_x,
                     track_size: Size::px(size.read().area.width()),
                     thumb_length: scrollbar_width,
-                    // Bingux patch: the horizontal bar has no bottom inset.
+                    // Bingux patch: the horizontal bar has no insets.
+                    start_inset: 0.,
                     end_inset: 0.,
                 }))
             }))

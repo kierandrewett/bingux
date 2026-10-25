@@ -853,6 +853,7 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
                             track_size: Size::px(size.read().area.height()),
                             thumb_length: scrollbar_height,
                             // Bingux patch: the virtual list has no bottom inset.
+                            start_inset: 0.,
                             end_inset: 0.,
                         }))
                     })),
@@ -872,6 +873,7 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
                     track_size: Size::px(size.read().area.width()),
                     thumb_length: scrollbar_width,
                     // Bingux patch: the virtual list has no bottom inset.
+                    start_inset: 0.,
                     end_inset: 0.,
                 }))
             }))

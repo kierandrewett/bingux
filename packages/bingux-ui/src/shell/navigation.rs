@@ -818,8 +818,10 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 page.tw(&tokens, &[bg(Paint::Bg)])
             })
             .child(
-                // Bingux patch: keep the bar clear of the rounded window corner.
+                // Bingux patch: keep the bar clear of the floating header and of
+                // the rounded window corner.
                 ScrollView::new_controlled(scroll)
+                    .scrollbar_inset_top(if overlay { Dim::Header.px() } else { 0.0 })
                     .scrollbar_inset_bottom(Radius::Window.px() + 3.0)
                     .drag_scrolling(false)
                     .child(

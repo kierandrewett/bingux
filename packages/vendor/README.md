@@ -26,6 +26,9 @@ The only changes are scroll feel for a desktop:
   a vertical bar `px` clear of the bottom edge, so a page that touches a
   rounded window corner does not sit on it. The track, thumb and cursor maths
   subtract the inset (`end_inset`); the default is 0 (upstream).
+  `ScrollView::scrollbar_inset_top(px)` does the same at the top
+  (`start_inset`), so the bar starts below a header that floats over the
+  content.
 
 Both crates are MIT licensed by the Freya authors. Tests and examples are not
 copied. Drop this directory and the patch entries when upstream exposes these
