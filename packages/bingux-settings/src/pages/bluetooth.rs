@@ -380,10 +380,13 @@ fn set_switch_job(ctx: Ctx, pending: State<Option<bool>>, job: Job, on: bool) {
         Some(on),
         move || run_steps(&steps).map_err(|reason| format!("{failed} {reason}")),
         move || {
-            background_then(|| system::load_persistent("bluetooth", load), move |loaded| {
-                model.set(Some(loaded));
-                pending.set(None);
-            });
+            background_then(
+                || system::load_persistent("bluetooth", load),
+                move |loaded| {
+                    model.set(Some(loaded));
+                    pending.set(None);
+                },
+            );
         },
     );
 }
@@ -874,7 +877,9 @@ impl Component for BluetoothPage {
         }
 
         let Some(loaded) = model.read().clone() else {
-            return page_column().child(head.clone()).child(skeleton_shape(&[1, 3, 1]));
+            return page_column()
+                .child(head.clone())
+                .child(skeleton_shape(&[1, 3, 1]));
         };
         let data = match loaded {
             Ok(data) => data,
@@ -899,7 +904,8 @@ impl Component for BluetoothPage {
                     "A system setting has blocked Bluetooth. Turn off \"Airplane mode\" or unblock Bluetooth to use it."
                 }
             };
-            return page_column().child(head.clone())
+            return page_column()
+                .child(head.clone())
                 .child(status_page(Icon::Bluetooth, "Bluetooth is blocked").description(reason));
         }
 

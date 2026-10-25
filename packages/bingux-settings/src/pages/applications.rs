@@ -738,6 +738,7 @@ impl Component for ApplicationsPage {
         };
 
         page_column()
+            .child(PageHead::new())
             .child(
                 Group::new(None).row(
                     row("Default applications")
@@ -1186,6 +1187,7 @@ impl Component for DefaultAppsPage {
 
         let Some(data) = model.read().clone() else {
             return page_column()
+                .child(PageHead::new())
                 .child(search_field(query, |_| {}).fill_width())
                 .child(kind_placeholder());
         };
@@ -1193,11 +1195,12 @@ impl Component for DefaultAppsPage {
         let choices = match &data.choices {
             None => {
                 return page_column()
+                    .child(PageHead::new())
                     .child(search_field(query, |_| {}).fill_width())
                     .child(kind_placeholder());
             }
             Some(Err(failure)) => {
-                return page_column().child(
+                return page_column().child(PageHead::new()).child(
                     status(Status::Error(failure.0.clone()))
                         .action("Try again", move |_| start_load(model)),
                 );
@@ -1275,6 +1278,7 @@ impl Component for DefaultAppsPage {
         });
 
         page_column()
+            .child(PageHead::new())
             .child(search_field(query, |_| {}).fill_width())
             .maybe_child(kinds)
             .maybe_child(other)
@@ -1423,13 +1427,13 @@ impl Component for DefaultKindPage {
         let kind = self.kind;
 
         let data = match model.read().clone() {
-            None => return page_column().child(skeleton()),
+            None => return page_column().child(PageHead::new()).child(skeleton()),
             Some(data) => data,
         };
         let choices = match &data.choices {
-            None => return page_column().child(skeleton()),
+            None => return page_column().child(PageHead::new()).child(skeleton()),
             Some(Err(failure)) => {
-                return page_column().child(
+                return page_column().child(PageHead::new()).child(
                     status(Status::Error(failure.0.clone()))
                         .action("Try again", move |_| start_load(model)),
                 );
@@ -1437,9 +1441,11 @@ impl Component for DefaultKindPage {
             Some(Ok(choices)) => choices,
         };
         let Some(choice) = choices.iter().find(|choice| choice.kind == kind) else {
-            return page_column().child(status(Status::Empty(
-                "This file type is not known.".to_string(),
-            )));
+            return page_column()
+                .child(PageHead::new())
+                .child(status(Status::Empty(
+                    "This file type is not known.".to_string(),
+                )));
         };
 
         let needle = query.read().trim().to_lowercase();
@@ -1475,6 +1481,7 @@ impl Component for DefaultKindPage {
         };
 
         page_column()
+            .child(PageHead::new())
             .child(search_field(query, |_| {}).fill_width())
             .child(list)
     }

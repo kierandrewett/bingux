@@ -9,7 +9,9 @@ mod timezone_map;
 
 use std::time::Duration;
 
-use bingux_ui::prelude::{PageHead, PopupAction, PopupActions, Window, popup, use_popup_actions, use_window};
+use bingux_ui::prelude::{
+    PageHead, PopupAction, PopupActions, Window, popup, use_popup_actions, use_window,
+};
 use bingux_ui::runtime::optimistic_then;
 use bingux_ui::shell::MenuItem;
 use bingux_ui::style::*;
@@ -22,8 +24,8 @@ use crate::routes::{Route, use_navigator};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
     Group, Overlays, Status, caption, choice_row, dropdown, form_row, menu_item, page_column,
-    popup_column, row, search_field, skeleton_row, status, stepper, styled_label,
-    switch_row, typography, use_overlays, use_page_busy,
+    popup_column, row, search_field, skeleton_row, status, stepper, styled_label, switch_row,
+    typography, use_overlays, use_page_busy,
 };
 
 const INTERFACE: &str = "org.gnome.desktop.interface";
@@ -541,7 +543,8 @@ impl Component for DateTimePage {
             None => placeholder(),
             Some(Ok(data)) => data,
             Some(Err(e)) => {
-                return page_column().child(PageHead::new())
+                return page_column()
+                    .child(PageHead::new())
                     .child(status(Status::Error(e.0)).action("Try again", move |_| reload(ctx)));
             }
         };
@@ -606,7 +609,8 @@ impl Component for DateTimePage {
             move |_| set_clock_format(ctx, other_format.clone()),
         )]);
 
-        let page = page_column().child(PageHead::new())
+        let page = page_column()
+            .child(PageHead::new())
             .child(
                 Group::titled("Clock")
                     .row(clock_face)
@@ -754,7 +758,8 @@ impl Component for TimeZonePage {
             }
         }
 
-        let mut page = page_column().child(PageHead::new())
+        let mut page = page_column()
+            .child(PageHead::new())
             .child(TimeZoneMap::new(current.clone(), ctx))
             .child(
                 search_field(query, |_| {})

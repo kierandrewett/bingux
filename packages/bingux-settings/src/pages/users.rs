@@ -220,7 +220,9 @@ impl Component for UsersPage {
         let password = use_password();
 
         let Some(loaded) = model.read().clone() else {
-            return page_column().child(PageHead::new()).child(skeleton_shape(&[1]));
+            return page_column()
+                .child(PageHead::new())
+                .child(skeleton_shape(&[1]));
         };
         let accounts = match loaded {
             Ok(accounts) => accounts,
@@ -262,7 +264,9 @@ impl Component for AccountPage {
         let accounts = match loaded {
             None => {
                 return Element::from(
-                    page_column().child(PageHead::new()).child(skeleton_shape(&[6, 1])),
+                    page_column()
+                        .child(PageHead::new())
+                        .child(skeleton_shape(&[6, 1])),
                 );
             }
             Some(Err(e)) => {
@@ -279,9 +283,9 @@ impl Component for AccountPage {
             .into_iter()
             .find(|account| account.path == self.path)
         else {
-            return Element::from(page_column().child(PageHead::new()).child(status(Status::Empty(
-                "This account no longer exists.".to_string(),
-            ))));
+            return Element::from(page_column().child(PageHead::new()).child(status(
+                Status::Empty("This account no longer exists.".to_string()),
+            )));
         };
         Element::from(AccountDetails { model, account })
     }

@@ -15,8 +15,8 @@ use crate::system::{self, CommandError, CommandResult, background, optimistic_th
 use crate::theme::Tokens;
 use crate::ui::typography::{BODY, EMPHASIS};
 use crate::ui::{
-    Group, Overlays, PageHead, Row, Status, caption, choice_row, level_row, page_column, row, status,
-    switch_row, use_overlays, use_tokens,
+    Group, Overlays, PageHead, Row, Status, caption, choice_row, level_row, page_column, row,
+    status, switch_row, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
 
@@ -847,7 +847,8 @@ impl Component for MousePage {
             .row(ClickTest { within_ms: mouse.double_click }.into_element())
             .row(ScrollTest.into_element());
 
-        let page = page_column().child(PageHead::new())
+        let page = page_column()
+            .child(PageHead::new())
             .child(mouse_group)
             .maybe_child(touchpad_group)
             .child(test_group);

@@ -16,8 +16,8 @@ use super::{Loaded, reload, set_font};
 use crate::routes::use_navigator;
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
-    Group, Overlays, PageHead, Status, dropdown, menu_item, page_column, row, search_field, skeleton_row,
-    status, use_overlays, use_tokens,
+    Group, Overlays, PageHead, Status, dropdown, menu_item, page_column, row, search_field,
+    skeleton_row, status, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
 
@@ -328,7 +328,9 @@ impl Component for FontPage {
         let catalogue: Option<Catalogue> = match fonts.read().clone() {
             Some(Ok(catalogue)) => Some(catalogue),
             Some(Err(failure)) => {
-                return page_column().child(PageHead::new()).child(status(Status::Error(failure.0)));
+                return page_column()
+                    .child(PageHead::new())
+                    .child(status(Status::Error(failure.0)));
             }
             None => None,
         };
@@ -432,6 +434,9 @@ impl Component for FontPage {
                 filter.set(key);
             }));
 
-        page_column().child(PageHead::new()).child(toolbar).child(list)
+        page_column()
+            .child(PageHead::new())
+            .child(toolbar)
+            .child(list)
     }
 }

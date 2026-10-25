@@ -351,7 +351,8 @@ impl Component for AppearancePage {
         let Some(loaded) = model.read().clone() else {
             // The picture comes first, then the groups, so the hero keeps its
             // place while the data loads.
-            return page_column().child(PageHead::new())
+            return page_column()
+                .child(PageHead::new())
                 .child(framed(
                     &tokens,
                     Element::from(rect().tw(
@@ -419,7 +420,8 @@ impl Component for AppearancePage {
                 ),
             ));
 
-        page_column().child(PageHead::new())
+        page_column()
+            .child(PageHead::new())
             .child(picture)
             .child(WallpaperPicker {
                 current: model_value.wallpaper.clone(),

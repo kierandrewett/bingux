@@ -13,8 +13,7 @@ use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError};
 use crate::ui::{
     Group, Overlays, PageHead, ResponseKind, Status, Tokens, action_strip, centered_caption,
-    dialog, heading, page_column, row, status, strip_action,
-    use_overlays, use_tokens,
+    dialog, heading, page_column, row, status, strip_action, use_overlays, use_tokens,
 };
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 use bingux_ui::style::*;
@@ -701,7 +700,10 @@ impl Component for NetworkPage {
             }
         };
         let page = page_column()
-            .child(PageHead { subtitle, ..PageHead::new() })
+            .child(PageHead {
+                subtitle,
+                ..PageHead::new()
+            })
             .child(wired_group)
             .child(vpn_group);
         veiled(page, loading)

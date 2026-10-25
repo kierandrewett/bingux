@@ -49,6 +49,8 @@ pub struct Dropdown {
     /// The icon before each option's label, one per option, in order.
     icons: Vec<OptionIcon>,
     enabled: bool,
+    /// The button is `Dim::DenseControl` tall rather than `Dim::Control`.
+    dense: bool,
     min_width: Option<Dim>,
     fixed_width: Option<Dim>,
     on_select: EventHandler<String>,
@@ -63,6 +65,7 @@ pub fn dropdown(
         options,
         selected: selected.into(),
         icons: Vec::new(),
+        dense: false,
         enabled: true,
         min_width: None,
         fixed_width: None,
@@ -104,11 +107,23 @@ impl Dropdown {
         self.fixed_width = Some(width);
         self
     }
+
+    /// A compact button, `Dim::DenseControl` tall, for property editors and
+    /// inspectors. The menu is unchanged.
+    pub fn dense(mut self) -> Self {
+        self.dense = true;
+        self
+    }
 }
 
 impl Component for Dropdown {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let button_dim = if self.dense {
+            Dim::DenseControl
+        } else {
+            Dim::Control
+        };
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
         let mut open = use_state(|| false);
@@ -308,7 +323,7 @@ impl Component for Dropdown {
             .tw(
                 &tokens,
                 &[
-                    h(Dim::Control),
+                    h(button_dim),
                     flex_row(),
                     items(Align::Center),
                     gap(S2),
@@ -402,7 +417,7 @@ impl Component for Dropdown {
         let above = button_area.read().min_y() - MENU_GAP;
         let open_up = menu_height > below && above > below;
         let menu_offset = if open_up {
-            -(Dim::Control.px() + menu_height + MENU_GAP)
+            -(button_dim.px() + menu_height + MENU_GAP)
         } else {
             MENU_GAP
         };

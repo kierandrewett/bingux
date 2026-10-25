@@ -14,10 +14,10 @@ use crate::system::{
     self, CommandError, CommandResult, background, background_then, optimistic_then,
 };
 use crate::ui::{
-    Group, Overlays, PageHead, PopupAction, PopupActions, ResponseKind, Row, Status, Window, caption,
-    choice_row, dialog, form_row, icon_button, page_column, popup, popup_column, primary_button,
-    row, skeleton_shape, slider_row, status, switch, switch_row, text_field, use_overlays,
-    use_popup_actions, use_tokens, use_window,
+    Group, Overlays, PageHead, PopupAction, PopupActions, ResponseKind, Row, Status, Window,
+    caption, choice_row, dialog, form_row, icon_button, page_column, popup, popup_column,
+    primary_button, row, skeleton_shape, slider_row, status, switch, switch_row, text_field,
+    use_overlays, use_popup_actions, use_tokens, use_window,
 };
 use bingux_ui::shell::menu_item;
 use bingux_ui::style::*;
@@ -626,7 +626,8 @@ impl Component for SearchPage {
         });
 
         let Some(loaded) = model.read().clone() else {
-            return page_column().child(PageHead::new())
+            return page_column()
+                .child(PageHead::new())
                 .child(skeleton_shape(&[7, 3, 3, 3, 1]))
                 .into_element();
         };
@@ -634,7 +635,8 @@ impl Component for SearchPage {
         let data = match loaded {
             Ok(data) => data,
             Err(e) => {
-                return page_column().child(PageHead::new())
+                return page_column()
+                    .child(PageHead::new())
                     .child(status(Status::Error(e.0)).action("Try again", move |_| reload(ctx)))
                     .into_element();
             }

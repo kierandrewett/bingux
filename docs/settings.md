@@ -353,6 +353,15 @@ says so in one line.
 GSettings needs a persistent backend (`dconf`) for values to survive logout.
 The Bingux package requires it.
 
+## Cached data
+
+Pages save the values they last read, one JSON file per page under the
+app's cache directory. When a page opens it shows those saved values at once,
+then reads the system again in the background and saves the new result, so
+values do not fill in while the page loads. A page with no saved file yet
+shows its loading state until the first read finishes. A failed read saves
+nothing, so the last good values stay on disk.
+
 ## Development
 
 ```sh

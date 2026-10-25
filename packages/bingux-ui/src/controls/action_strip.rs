@@ -100,7 +100,9 @@ impl Component for StripCell {
             .tw(
                 &tokens,
                 &[
-                    w_flex(),
+                    // The cell fills its focus wrapper; the wrapper takes the
+                    // cell's share of the strip.
+                    w_full(),
                     h_full(),
                     center(),
                     gap(S1),
@@ -141,5 +143,6 @@ impl Component for StripCell {
                     .text_overflow(TextOverflow::Ellipsis),
             )
             .focusable(focus(), Radius::Card)
+            .tw(&tokens, &[w_flex(), h_full()])
     }
 }

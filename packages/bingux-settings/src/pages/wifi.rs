@@ -8,17 +8,16 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
-use super::wifi_editor::{Editor, Target, use_editor};
 use super::loading::veiled;
+use super::wifi_editor::{Editor, Target, use_editor};
 use crate::icons::{self, Icon};
 use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
     Group, Overlays, PageHead, PopupAction, PopupActions, ResponseKind, SpinnerSize, Status,
     Tokens, Window, action_strip, caption, centered_caption, dialog, heading, icon_button,
-    page_column, popup, popup_column, row, spinner, status, strip_action, switch_row,
-    text_field, use_overlays, use_page_busy, use_popup_actions, use_tokens,
-    use_window,
+    page_column, popup, popup_column, row, spinner, status, strip_action, switch_row, text_field,
+    use_overlays, use_page_busy, use_popup_actions, use_tokens, use_window,
 };
 use bingux_ui::layout::hstack;
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
@@ -517,16 +516,19 @@ impl Ui {
         // ran, so the optimistic values are cleared on such a read alone.
         let started = SWITCHES_STARTED.load(Ordering::SeqCst);
         let quiet = started == SWITCHES_FINISHED.load(Ordering::SeqCst);
-        background_then(move || system::load_persistent("wifi", load), move |loaded| {
-            if quiet && SWITCHES_STARTED.load(Ordering::SeqCst) == started {
-                let mut wifi = self.wifi_pending;
-                wifi.set(None);
-                let mut airplane = self.airplane_pending;
-                airplane.set(None);
-            }
-            let mut model = self.model;
-            model.set(Some(loaded));
-        });
+        background_then(
+            move || system::load_persistent("wifi", load),
+            move |loaded| {
+                if quiet && SWITCHES_STARTED.load(Ordering::SeqCst) == started {
+                    let mut wifi = self.wifi_pending;
+                    wifi.set(None);
+                    let mut airplane = self.airplane_pending;
+                    airplane.set(None);
+                }
+                let mut model = self.model;
+                model.set(Some(loaded));
+            },
+        );
     }
 
     /// Run one nmcli action in the background with a busy line, then reload
@@ -1148,9 +1150,12 @@ impl Component for WifiPage {
             None => placeholder(),
             Some(Ok(model)) => model,
             Some(Err(error)) => {
-                return page(Some(head.clone()), vec![Element::from(
-                    status(Status::Error(error.0)).action("Try again", move |_| ui.reload()),
-                )]);
+                return page(
+                    Some(head.clone()),
+                    vec![Element::from(
+                        status(Status::Error(error.0)).action("Try again", move |_| ui.reload()),
+                    )],
+                );
             }
         };
 
@@ -1209,16 +1214,22 @@ impl Component for SavedNetworksPage {
             None => (placeholder(), true),
             Some(Ok(model)) => (model, false),
             Some(Err(error)) => {
-                return page(Some(PageHead::new()), vec![Element::from(
-                    status(Status::Error(error.0)).action("Try again", move |_| ui.reload()),
-                )]);
+                return page(
+                    Some(PageHead::new()),
+                    vec![Element::from(
+                        status(Status::Error(error.0)).action("Try again", move |_| ui.reload()),
+                    )],
+                );
             }
         };
 
         if model.saved_names.is_empty() {
-            return page(Some(PageHead::new()), vec![Element::from(status(Status::Empty(
-                "No saved networks.".into(),
-            )))]);
+            return page(
+                Some(PageHead::new()),
+                vec![Element::from(status(Status::Empty(
+                    "No saved networks.".into(),
+                )))],
+            );
         }
         let rows = model.saved_names.iter().map(|name| {
             let target = name.clone();
@@ -1241,9 +1252,12 @@ impl Component for SavedNetworksPage {
             )
         });
         veiled(
-            page(Some(PageHead::new()), vec![Element::from(
-                Group::new(None::<String>).rows(rows.collect::<Vec<_>>()),
-            )]),
+            page(
+                Some(PageHead::new()),
+                vec![Element::from(
+                    Group::new(None::<String>).rows(rows.collect::<Vec<_>>()),
+                )],
+            ),
             loading,
         )
     }
@@ -1280,9 +1294,12 @@ impl Component for NetworkPage {
             None => (placeholder(), true),
             Some(Ok(model)) => (model, false),
             Some(Err(error)) => {
-                return page(None, vec![Element::from(
-                    status(Status::Error(error.0)).action("Try again", move |_| ui.reload()),
-                )]);
+                return page(
+                    None,
+                    vec![Element::from(
+                        status(Status::Error(error.0)).action("Try again", move |_| ui.reload()),
+                    )],
+                );
             }
         };
 
@@ -1363,7 +1380,12 @@ impl Component for NetworkPage {
             Some(network) => (
                 signal_detail(network.signal),
                 or_dash(&network.band),
-                (if network.secured { "Password protected" } else { "Open" }).to_string(),
+                (if network.secured {
+                    "Password protected"
+                } else {
+                    "Open"
+                })
+                .to_string(),
                 or_dash(&network.rate),
             ),
             None => (

@@ -17,8 +17,8 @@ use crate::system::{
     self, CommandError, CommandResult, background, background_then, optimistic_then,
 };
 use crate::ui::{
-    Group, Overlays, PageHead, Status, caption, choice_row, page_column, popup_column, row, row_button,
-    search_field, skeleton, slider_row, status, switch_row, text_field, use_overlays,
+    Group, Overlays, PageHead, Status, caption, choice_row, page_column, popup_column, row,
+    row_button, search_field, skeleton, slider_row, status, switch_row, text_field, use_overlays,
 };
 use bingux_ui::prelude::{Window, popup, use_window};
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
@@ -924,7 +924,8 @@ impl Component for KeyboardPage {
         }
         let shortcuts = Group::titled("Shortcuts").row(shortcuts_row);
 
-        let page = page_column().child(PageHead::new())
+        let page = page_column()
+            .child(PageHead::new())
             .child(repeat_group)
             .child(typing_group)
             .child(special_group)
@@ -951,16 +952,17 @@ impl Component for ShortcutsPage {
         let list = match result {
             Ok(list) => list,
             Err(e) if e.0 == gnoblin::NOT_RUNNING => {
-                return page_column().child(PageHead::new()).child(status(Status::Empty(e.0)));
+                return page_column()
+                    .child(PageHead::new())
+                    .child(status(Status::Empty(e.0)));
             }
             Err(e) => {
                 return page_column().child(PageHead::new()).child(
-                    status(Status::Error(e.0))
-                        .action("Try again", move |_| {
-                            background(loaded, move || {
-                                system::load_persistent(SHORTCUTS, load_shortcuts)
-                            })
-                        }),
+                    status(Status::Error(e.0)).action("Try again", move |_| {
+                        background(loaded, move || {
+                            system::load_persistent(SHORTCUTS, load_shortcuts)
+                        })
+                    }),
                 );
             }
         };
@@ -977,7 +979,9 @@ impl Component for ShortcutsPage {
             }
         }
 
-        let mut page = page_column().child(PageHead::new()).child(search_field(query, |_| {}));
+        let mut page = page_column()
+            .child(PageHead::new())
+            .child(search_field(query, |_| {}));
         if groups.is_empty() {
             page = page.child(status(Status::Empty("No shortcuts match.".into())));
         }

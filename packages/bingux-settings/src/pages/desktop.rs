@@ -447,7 +447,8 @@ impl Component for DesktopPage {
         let searching = bingux_ui::search_highlight::current().is_some();
 
         let Some(loaded) = model.read().clone() else {
-            return page_column().child(PageHead::new())
+            return page_column()
+                .child(PageHead::new())
                 .child(framed(
                     &tokens,
                     Element::from(rect().tw(

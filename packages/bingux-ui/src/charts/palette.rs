@@ -7,6 +7,7 @@ use freya::prelude::*;
 use super::data::SeriesColour;
 use super::geometry::SWATCH;
 use crate::theme::Tokens;
+use crate::style::{Dim, Radius};
 
 /// Golden-angle hue steps, in degrees, so the categorical colours spread
 /// evenly round the wheel.
@@ -28,6 +29,17 @@ pub(crate) fn swatch(colour: Color) -> Rect {
         .width(Size::px(SWATCH))
         .height(Size::px(SWATCH))
         .corner_radius(SWATCH / 2.0)
+        .background(colour)
+}
+
+/// A square colour well for a colour editor: the colour at the control
+/// radius, `size` on each side. The colour is data, not a token, so it
+/// cannot be a Paint role.
+pub(crate) fn colour_well(colour: Color, size: Dim) -> Rect {
+    rect()
+        .width(Size::px(size.px()))
+        .height(Size::px(size.px()))
+        .corner_radius(Radius::Control.px())
         .background(colour)
 }
 

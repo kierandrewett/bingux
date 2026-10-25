@@ -11,9 +11,7 @@ use freya::prelude::*;
 
 use super::loading::veiled;
 use crate::system::{self, CommandResult, background};
-use crate::ui::{
-    Group, Overlays, PageHead, page_column, row, segmented, switch_row, use_overlays,
-};
+use crate::ui::{Group, Overlays, PageHead, page_column, row, segmented, switch_row, use_overlays};
 
 const APPLICATIONS: &str = "org.gnome.desktop.a11y.applications";
 const KEYBOARD: &str = "org.gnome.desktop.a11y.keyboard";

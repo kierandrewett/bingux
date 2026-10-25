@@ -8,7 +8,8 @@ use super::{SourceEdits, kind_label};
 use crate::icons::Icon;
 use crate::system;
 use crate::ui::{
-    Group, PageHead, Status, page_column, property_row, row, skeleton, status, use_overlays, use_window,
+    Group, PageHead, Status, page_column, property_row, row, skeleton, status, use_overlays,
+    use_window,
 };
 
 /// The page for `source`. It reads the list the keyboard page reads, so it
@@ -35,13 +36,19 @@ impl Component for InputSourcePage {
 
         let config = match sources_state.read().clone() {
             None => return page_column().child(PageHead::new()).child(skeleton()),
-            Some(Err(message)) => return page_column().child(PageHead::new()).child(status(Status::Error(message))),
+            Some(Err(message)) => {
+                return page_column()
+                    .child(PageHead::new())
+                    .child(status(Status::Error(message)));
+            }
             Some(Ok(config)) => config,
         };
         let Some(index) = config.sources.iter().position(|s| *s == self.source) else {
-            return page_column().child(PageHead::new()).child(status(Status::Empty(
-                "This input source is no longer set up.".into(),
-            )));
+            return page_column()
+                .child(PageHead::new())
+                .child(status(Status::Empty(
+                    "This input source is no longer set up.".into(),
+                )));
         };
         let count = config.sources.len();
 
@@ -75,6 +82,9 @@ impl Component for InputSourcePage {
                     .on_press(move |_| edits.run(Edit::Remove(index))),
             );
 
-        page_column().child(PageHead::new()).child(details).child(actions)
+        page_column()
+            .child(PageHead::new())
+            .child(details)
+            .child(actions)
     }
 }
