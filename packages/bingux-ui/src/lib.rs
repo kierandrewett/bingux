@@ -14,6 +14,7 @@ pub mod app;
 pub mod app_icon;
 pub mod charts;
 pub mod controls;
+pub mod focus;
 pub mod group;
 pub mod icons;
 pub mod layout;

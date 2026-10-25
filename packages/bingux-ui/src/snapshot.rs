@@ -19,7 +19,7 @@ use freya::prelude::*;
 use freya::torin::prelude::Size2D;
 use freya_components::integration::integration;
 use freya_testing::TestingRunner;
-use freya_testing::prelude::{MouseEventName, PlatformEvent};
+use freya_testing::prelude::{KeyboardEventName, MouseEventName, PlatformEvent, TouchEventName, TouchPhase};
 
 use crate::address::Address;
 use crate::theme::font_family;
@@ -165,6 +165,43 @@ impl Snapshot {
         self
     }
 
+    /// Tap a logical point with one finger: touch down, then up.
+    pub fn touch(&mut self, x: f32, y: f32) -> &mut Self {
+        self.input(format!("touch {x},{y}"));
+        self.send_touch(TouchEventName::TouchStart, x, y);
+        self.send_touch(TouchEventName::TouchEnd, x, y);
+        self.capture_frame();
+        self
+    }
+
+    /// Rest one finger on a logical point past the long-press threshold,
+    /// then lift it. Runs the long-press action in place of a right click.
+    pub fn long_press(&mut self, x: f32, y: f32) -> &mut Self {
+        self.input(format!("long_press {x},{y}"));
+        self.send_touch(TouchEventName::TouchStart, x, y);
+        self.settle(Duration::from_millis(600));
+        self.send_touch(TouchEventName::TouchEnd, x, y);
+        self.capture_frame();
+        self
+    }
+
+    fn send_touch(&mut self, name: TouchEventName, x: f32, y: f32) {
+        let phase = match name {
+            TouchEventName::TouchStart => TouchPhase::Started,
+            TouchEventName::TouchEnd => TouchPhase::Ended,
+            TouchEventName::TouchMove => TouchPhase::Moved,
+            TouchEventName::TouchCancel => TouchPhase::Cancelled,
+        };
+        self.runner.send_event(PlatformEvent::Touch {
+            name,
+            location: CursorPoint::new(x as f64, y as f64),
+            finger_id: 0,
+            phase,
+            force: None,
+        });
+        self.runner.sync_and_update();
+    }
+
     /// Press the left button at `from`, drag to `to` in steps, and release.
     /// The steps let a selection grow as it does under a real pointer.
     pub fn drag(&mut self, from: (f32, f32), to: (f32, f32)) -> &mut Self {
@@ -218,14 +255,24 @@ impl Snapshot {
     /// Press and release a key on the focused element. Keys mark the window as
     /// keyboard-navigated, as the windowed app does, so focus rings show.
     pub fn key(&mut self, key: Key) -> &mut Self {
-        self.input(format!("key {key:?}"));
+        self.key_with(key, Modifiers::default())
+    }
+
+    /// [`Snapshot::key`] with modifiers held, such as Shift for Shift+Tab.
+    pub fn key_with(&mut self, key: Key, modifiers: Modifiers) -> &mut Self {
+        self.input(format!("key {modifiers:?} {key:?}"));
         self.runner.run_in(|| {
             Platform::get()
                 .current_window()
                 .navigation_mode
                 .set(NavigationMode::Keyboard);
         });
-        self.runner.press_key(key);
+        self.runner.send_event(PlatformEvent::Keyboard {
+            name: KeyboardEventName::KeyDown,
+            key,
+            code: Code::Unidentified,
+            modifiers,
+        });
         // Focus moves on the frame after the key lands, and the ring's
         // transition starts once focus is known, so run a few frames.
         for _ in 0..3 {
@@ -249,6 +296,7 @@ impl Snapshot {
     /// address scheme that `address` commands are read in. Commands:
     ///
     /// - `click x,y`, `right_click x,y`, `hover x,y`
+    /// - `touch x,y`, `long_press x,y`: one finger, tapped or rested past the threshold
     /// - `scroll x,y,dy`, `drag x1,y1,x2,y2`
     /// - `key escape|return|tab`
     /// - `click-text TEXT`: click the label with that text
@@ -269,6 +317,14 @@ impl Snapshot {
                 .split_once(char::is_whitespace)
                 .map_or((command, ""), |(verb, rest)| (verb, rest.trim()));
             match verb {
+                "touch" => {
+                    let [x, y] = numbers::<2>(rest)?;
+                    self.touch(x, y);
+                }
+                "long_press" => {
+                    let [x, y] = numbers::<2>(rest)?;
+                    self.long_press(x, y);
+                }
                 "click" => {
                     let [x, y] = numbers::<2>(rest)?;
                     self.click(x, y);
@@ -290,13 +346,18 @@ impl Snapshot {
                     self.drag((x1, y1), (x2, y2));
                 }
                 "key" => {
-                    let key = match rest {
+                    let (modifiers, key) = match rest.strip_prefix("shift+") {
+                        Some(key) => (Modifiers::SHIFT, key),
+                        None => (Modifiers::default(), rest),
+                    };
+                    let key = match key {
                         "escape" => Key::Named(NamedKey::Escape),
                         "return" => Key::Named(NamedKey::Enter),
                         "tab" => Key::Named(NamedKey::Tab),
+                        "f6" => Key::Named(NamedKey::F6),
                         other => return Err(format!("unknown key: {other}")),
                     };
-                    self.key(key);
+                    self.key_with(key, modifiers);
                 }
                 "click-text" => {
                     if !self.click_text(rest) {

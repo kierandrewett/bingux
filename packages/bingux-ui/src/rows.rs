@@ -12,6 +12,7 @@ use freya::prelude::*;
 
 use crate::app_icon::app_icon;
 use crate::controls::dropdown::dropdown;
+use crate::controls::press::{Press, use_press};
 use crate::controls::radio::{RadioMark, next_enabled};
 use crate::controls::segmented::segmented;
 use crate::controls::slider::slider;
@@ -259,6 +260,27 @@ fn open_row_menu(
     }
 }
 
+/// Starts a touch on a row that has a menu. A touch that rests for a long
+/// press opens the menu where it began, which is how a touch does what a
+/// right click does with a mouse.
+fn begin_row_touch(
+    press: Press,
+    overlays: Option<Overlays>,
+    items: &[MenuItem],
+    event: &Event<PointerEventData>,
+) {
+    let long = match overlays {
+        Some(overlays) if !items.is_empty() => {
+            let items = items.to_vec();
+            Some(EventHandler::new(move |at: (f32, f32)| {
+                overlays.show_menu(at, items.clone());
+            }))
+        }
+        _ => None,
+    };
+    press.begin(event, long);
+}
+
 /// A read-only value on the right of a row. It is selectable: Ctrl+C copies
 /// it, and a right click offers Copy. It stays on one line. It fills the
 /// half of the row that `Row` gives a value, aligned to its end, and a long
@@ -272,6 +294,7 @@ impl Component for ValueText {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let overlays = try_consume_context::<Overlays>();
+        let press = use_press();
         let pressable = use_in_pressable_row();
         // A selection would take the press that opens a pressable row, so
         // there the value is plain text; elsewhere it can be selected.
@@ -305,7 +328,10 @@ impl Component for ValueText {
                     }
                 })];
                 open_row_menu(overlays, &items, &event);
+                begin_row_touch(press, overlays, &items, &event);
             })
+            .on_global_pointer_up(move |_| press.release())
+            .on_global_pointer_move(move |event: Event<PointerEventData>| press.moved(&event))
             .child(value)
     }
 }
@@ -323,6 +349,7 @@ impl Component for Row {
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
+        let press = use_press();
         let generated_id = use_a11y();
         let radio = self.radio.as_ref();
         let a11y_id = radio
@@ -380,7 +407,7 @@ impl Component for Row {
         };
         // On a phone a long title wraps onto a second line rather than
         // being cut, as a narrow row has little room beside its control.
-        let wrapped = touch() && self.badge.is_none() && self.font.is_none();
+        let wrapped = is_compact() && self.badge.is_none() && self.font.is_none();
         let title_line: Element = match &self.badge {
             None if wrapped => search_highlight::marked(BODY.in_ink(ink), &tokens, &self.title)
                 .unwrap_or_else(|| BODY.in_ink(ink).paragraph(&tokens, self.title.clone()))
@@ -490,10 +517,16 @@ impl Component for Row {
                 if open_row_menu(overlays, &menu, &event) {
                     return;
                 }
+                begin_row_touch(press, overlays, &menu, &event);
                 if activatable {
                     pressing.set(true);
                 }
             })
+            .on_global_pointer_up(move |_| {
+                pressing.set_if_modified(false);
+                press.release();
+            })
+            .on_global_pointer_move(move |event: Event<PointerEventData>| press.moved(&event))
             .maybe(interactive, |element| {
                 element
                     .on_pointer_enter(move |_| hovering.set(true))
@@ -501,8 +534,10 @@ impl Component for Row {
                         hovering.set(false);
                         pressing.set_if_modified(false);
                     })
-                    .on_global_pointer_up(move |_| pressing.set_if_modified(false))
-                    .on_press(move |_: Event<PressEventData>| {
+                    .on_press(move |event: Event<PressEventData>| {
+                        if !press.tap(&event) {
+                            return;
+                        }
                         if let Some(on_press) = &on_press {
                             on_press.call(());
                         }
@@ -558,7 +593,7 @@ impl Component for Row {
             )
             .child(text_column)
             .maybe_child(trailing)
-            .focusable(focus(), Radius::Control)
+            .focusable_inside(focus(), Radius::Control)
             .tw(&tokens, &[w_full()]);
         let face = match radio.and_then(|choice| choice.nav.clone()) {
             Some(nav) => {
@@ -764,6 +799,7 @@ impl Component for LevelRow {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let overlays = try_consume_context::<Overlays>();
+        let press = use_press();
         let menu = self.context_menu.clone();
         let value = self.value.clamp(0.0, self.max);
         provide_enabled(self.enabled);
@@ -776,7 +812,7 @@ impl Component for LevelRow {
         });
         use_row_match(row_hit);
         let ink = if self.enabled { Ink::Text } else { Ink::Muted };
-        let compact = touch();
+        let compact = is_compact();
         // The track's measured width places the boost label under its tick.
         let mut track_width = use_state(|| 0.0_f32);
 
@@ -868,7 +904,10 @@ impl Component for LevelRow {
             .tw(&tokens, &[w_full(), px(GUTTER), py(S3)])
             .on_pointer_down(move |event: Event<PointerEventData>| {
                 open_row_menu(overlays, &menu, &event);
-            });
+                begin_row_touch(press, overlays, &menu, &event);
+            })
+            .on_global_pointer_up(move |_| press.release())
+            .on_global_pointer_move(move |event: Event<PointerEventData>| press.moved(&event));
         if compact {
             let title_line = rect()
                 .tw(

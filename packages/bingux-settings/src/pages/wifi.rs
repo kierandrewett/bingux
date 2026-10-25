@@ -678,8 +678,10 @@ impl Ui {
 
     /// The join popup. Connect waits for a password.
     fn show_join(self, ssid: String) {
-        self.window
-            .open(popup(ssid.clone(), JoinBody { ui: self, ssid }).flags(PopupFlags::FORM));
+        self.window.open(
+            popup(ssid.clone(), JoinBody { ui: self, ssid })
+                .flags(PopupFlags::FORM | PopupFlags::NO_DISMISS_OUTSIDE),
+        );
     }
 
     fn join_now(self, ssid: String, window: Window) {

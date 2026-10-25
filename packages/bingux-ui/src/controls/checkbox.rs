@@ -5,6 +5,7 @@ use accesskit::Toggled;
 use freya::animation::*;
 use freya::prelude::*;
 
+use super::press::use_press;
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
 use crate::style::*;
@@ -90,6 +91,7 @@ impl Component for Checkbox {
         } else {
             border(Line::Outline)
         };
+        let press = use_press();
         let toggle = move || on_toggle.call(state == CheckState::Off);
         let glyph = match state {
             CheckState::Off => None,
@@ -134,10 +136,20 @@ impl Component for Checkbox {
                     .on_pointer_down(move |event: Event<PointerEventData>| {
                         event.stop_propagation();
                         pressing.set(true);
+                        press.begin(&event, None);
                     })
-                    .on_global_pointer_up(move |_| pressing.set_if_modified(false))
+                    .on_global_pointer_move(move |event: Event<PointerEventData>| {
+                        press.moved(&event);
+                    })
+                    .on_global_pointer_up(move |_| {
+                        press.release();
+                        pressing.set_if_modified(false);
+                    })
                     .on_press(move |event: Event<PressEventData>| {
                         event.stop_propagation();
+                        if !press.tap(&event) {
+                            return;
+                        }
                         toggle_press();
                         a11y_id.request_focus();
                     })

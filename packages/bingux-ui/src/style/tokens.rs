@@ -6,39 +6,55 @@
 //! only for geometry (a chart, a drag offset), never to style a box: boxes
 //! are styled with [`super::Tw::tw`].
 //!
-//! On a phone-width window ([`set_touch`]) the row, control, button and
-//! sidebar sizes grow to fingertip size. [`Dim`] resolves them when it is
-//! applied, so a style written once is right at both sizes.
+//! Sizes come in two classes, [`SizeClass`]: `Regular` is the mouse density of a
+//! desktop window, `Compact` the fingertip density, used on a phone-width window
+//! or once a finger has touched the window. Every size token resolves against the
+//! current class when it is applied, from the one table for its kind, so a style
+//! written once is right at both sizes. The class is reactive: a component that
+//! reads a size re-renders in place when the class changes.
 
-use std::sync::atomic::{AtomicBool, Ordering};
-
-use freya::prelude::Color;
+use freya::prelude::{Color, State, WritableUtils};
 
 use crate::theme::Tokens;
 
-/// A space on the 4 px grid, named as Tailwind names it: `S4` is 16 px, as
-/// `p-4` is. `S0_5` is the half step between a title and its subtitle.
+/// A space on the 4 px grid, named as Tailwind names it: `S4` is 16 px at
+/// regular density, as `p-4` is. `S0_5` is the half step between a title and
+/// its subtitle. Each step has a compact value too, see [`SizeClass`].
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Space(f32);
+pub struct Space {
+    regular: f32,
+    compact: f32,
+}
 
 impl Space {
-    pub const fn px(self) -> f32 {
-        self.0
+    const fn new(regular: f32, compact: f32) -> Self {
+        Self { regular, compact }
+    }
+
+    /// The space in logical pixels at the current size class.
+    pub fn px(self) -> f32 {
+        resolve(self.regular, self.compact)
+    }
+
+    /// The regular value whatever the size class, for geometry that must not
+    /// move with the density: a chart's plot margins, a menu's edge.
+    pub const fn fixed_px(self) -> f32 {
+        self.regular
     }
 }
 
-pub const S0: Space = Space(0.0);
-pub const S0_5: Space = Space(2.0);
-pub const S1: Space = Space(4.0);
-pub const S2: Space = Space(8.0);
-pub const S3: Space = Space(12.0);
-pub const S4: Space = Space(16.0);
-pub const S5: Space = Space(20.0);
-pub const S6: Space = Space(24.0);
-pub const S7: Space = Space(28.0);
-pub const S8: Space = Space(32.0);
-pub const S10: Space = Space(40.0);
-pub const S12: Space = Space(48.0);
+pub const S0: Space = Space::new(0.0, 0.0);
+pub const S0_5: Space = Space::new(2.0, 2.0);
+pub const S1: Space = Space::new(4.0, 4.0);
+pub const S2: Space = Space::new(8.0, 8.0);
+pub const S3: Space = Space::new(12.0, 14.0);
+pub const S4: Space = Space::new(16.0, 18.0);
+pub const S5: Space = Space::new(20.0, 22.0);
+pub const S6: Space = Space::new(24.0, 26.0);
+pub const S7: Space = Space::new(28.0, 32.0);
+pub const S8: Space = Space::new(32.0, 36.0);
+pub const S10: Space = Space::new(40.0, 44.0);
+pub const S12: Space = Space::new(48.0, 54.0);
 
 /// The one horizontal inset inside a card, a header bar and the page edge
 /// on a phone: row text, hairlines and controls start this far in.
@@ -85,15 +101,47 @@ impl Radius {
     }
 }
 
-/// Text sizes. Only `typography.rs` reads them: text is set with a
+/// Text sizes, by role. Only `typography.rs` reads them: text is set with a
 /// [`crate::typography::TextStyle`], never a size.
-pub(crate) const TEXT_XS: f32 = 11.0;
-pub(crate) const TEXT_SM: f32 = 13.0;
-pub(crate) const TEXT_MD: f32 = 14.0;
-pub(crate) const TEXT_LG: f32 = 16.0;
-pub(crate) const TEXT_HEADING: f32 = 18.0;
-pub(crate) const TEXT_DISPLAY: f32 = 28.0;
-pub(crate) const TEXT_HERO: f32 = 36.0;
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TextSize {
+    /// Badges and overlines.
+    Xs,
+    /// Captions and helper text.
+    Sm,
+    /// Row titles and body text.
+    Md,
+    /// Group titles.
+    Lg,
+    /// Dialog and subpage headings.
+    Heading,
+    /// Page titles.
+    Display,
+    /// A single large value, such as a clock.
+    Hero,
+}
+
+impl TextSize {
+    /// The size in logical pixels at the current size class.
+    pub fn px(self) -> f32 {
+        let (regular, compact) = self.sizes();
+        resolve(regular, compact)
+    }
+
+    /// The (regular, compact) sizes. Compact text is a step larger, so body
+    /// text reads at arm's length on a phone.
+    const fn sizes(self) -> (f32, f32) {
+        match self {
+            TextSize::Xs => (11.0, 12.0),
+            TextSize::Sm => (13.0, 14.0),
+            TextSize::Md => (14.0, 15.0),
+            TextSize::Lg => (16.0, 17.0),
+            TextSize::Heading => (18.0, 19.0),
+            TextSize::Display => (28.0, 30.0),
+            TextSize::Hero => (36.0, 38.0),
+        }
+    }
+}
 
 /// Icon sizes.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -118,22 +166,30 @@ pub enum IconSize {
 }
 
 impl IconSize {
-    pub const fn px(self) -> f32 {
+    /// The size in logical pixels at the current size class.
+    pub fn px(self) -> f32 {
+        let (regular, compact) = self.sizes();
+        resolve(regular, compact)
+    }
+
+    /// The (regular, compact) sizes. Icons grow about one seventh in the
+    /// compact class, so they stay in step with the text beside them.
+    const fn sizes(self) -> (f32, f32) {
         match self {
-            IconSize::Mark => 12.0,
-            IconSize::Text => 14.0,
-            IconSize::Control => 16.0,
-            IconSize::Row => 18.0,
-            IconSize::Hero => 48.0,
-            IconSize::AppSmall => 20.0,
-            IconSize::App => 32.0,
-            IconSize::AppLarge => 64.0,
+            IconSize::Mark => (12.0, 14.0),
+            IconSize::Text => (14.0, 16.0),
+            IconSize::Control => (16.0, 18.0),
+            IconSize::Row => (18.0, 20.0),
+            IconSize::Hero => (48.0, 56.0),
+            IconSize::AppSmall => (20.0, 24.0),
+            IconSize::App => (32.0, 36.0),
+            IconSize::AppLarge => (64.0, 74.0),
         }
     }
 }
 
-/// A width or height, by what it sizes. The interactive sizes follow
-/// [`touch`].
+/// A width or height, by what it sizes. The interactive sizes grow in the
+/// compact class; their values are in the `sizes` table below.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Dim {
     /// A one-line row: 56 px, 60 px for a finger.
@@ -288,93 +344,113 @@ pub enum Dim {
 }
 
 impl Dim {
-    /// The size in logical pixels at the current density.
+    /// The size in logical pixels at the current size class.
     pub fn px(self) -> f32 {
-        let touch = touch();
-        let pick = |mouse: f32, finger: f32| if touch { finger } else { mouse };
+        let (regular, compact) = self.sizes();
+        resolve(regular, compact)
+    }
+
+    /// Every box size as (regular, compact) in logical pixels. This is the one
+    /// table for boxes: a size that does not change with density is written
+    /// with [`same`].
+    fn sizes(self) -> (f32, f32) {
         match self {
-            Dim::Row => pick(56.0, 60.0),
-            Dim::RowTall => 72.0,
-            Dim::RowSubtitle => 63.0,
-            Dim::Control => pick(36.0, 44.0),
-            Dim::Button => pick(40.0, 48.0),
-            Dim::MenuItem => 36.0,
-            Dim::MenuSeparator => 8.0,
-            Dim::NavItem => pick(40.0, 56.0),
-            Dim::NavIcon => 24.0,
-            Dim::Header => 48.0,
-            Dim::WindowControl => 24.0,
-            Dim::WindowControlTarget => 32.0,
-            Dim::Field => pick(240.0, FIELD_TOUCH),
-            Dim::FieldWide => pick(440.0, FIELD_TOUCH),
-            Dim::FieldApps => pick(260.0, FIELD_TOUCH),
-            Dim::Menu => 220.0,
-            Dim::Dialog => 400.0,
-            Dim::PopupWidth => 520.0,
-            Dim::PopupHeight => 600.0,
-            Dim::DropdownMenu => 240.0,
-            Dim::DropdownMax => 360.0,
-            Dim::MenuList => 320.0,
-            Dim::SwitchWidth => pick(36.0, 48.0),
-            Dim::SwitchHeight => pick(20.0, 28.0),
-            Dim::SwitchThumb => pick(16.0, 22.0),
-            Dim::SwitchThumbPressed => pick(18.0, 24.0),
-            Dim::SliderTrack => 6.0,
-            Dim::SliderTrackActive => 8.0,
-            Dim::SliderThumb => pick(16.0, 22.0),
-            Dim::StepperHalf => 28.0,
-            Dim::Sidebar => 280.0,
-            Dim::Page => 720.0,
-            Dim::Box5 => 20.0,
-            Dim::Box7 => 28.0,
-            Dim::Box9 => 36.0,
-            Dim::Box11 => 44.0,
-            Dim::Box24 => 96.0,
-            Dim::PreviewWidth => 144.0,
-            Dim::PreviewHeight => 96.0,
-            Dim::PreviewRow => 464.0,
-            Dim::PreviewSidebar => 40.0,
-            Dim::PreviewLine => 40.0,
-            Dim::IconRow => 18.0,
-            Dim::IconControl => 16.0,
-            Dim::Dense => 28.0,
-            Dim::DenseControl => 24.0,
-            Dim::PropLabel => 120.0,
-            Dim::FlameRow => 20.0,
-            Dim::Timeline => 72.0,
-            Dim::DenseField => 140.0,
-            Dim::PreviewBar => 4.0,
-            Dim::PreviewTitleBar => 16.0,
-            Dim::Chart => 120.0,
-            Dim::SpeakerRoom => 360.0,
-            Dim::SpeakerButton => 56.0,
-            Dim::SpeakerPopupWidth => 480.0,
-            Dim::SpeakerPopupHeight => 480.0,
-            Dim::ArrangementWidth => 360.0,
-            Dim::ArrangementHeight => 240.0,
-            Dim::ArrangementHint => 260.0,
-            Dim::SkeletonTitle => 120.0,
-            Dim::SkeletonLabel => 180.0,
-            Dim::SkeletonValue => 96.0,
-            Dim::SkeletonLine => TEXT_SM,
-            Dim::CaptionLine => (TEXT_SM * 1.45).ceil(),
-            Dim::StripCell => 76.0,
-            Dim::IconBox => 18.0,
-            Dim::SignalBar => 3.0,
-            Dim::Ring => 2.0,
-            Dim::Hairline => 1.0,
-            Dim::Check => 18.0,
-            Dim::Track => 6.0,
-            Dim::SpinnerMedium => 3.0,
-            Dim::Dot => 8.0,
-            Dim::DashHeight => 2.0,
+            Dim::Row => (56.0, 60.0),
+            Dim::RowTall => (72.0, 80.0),
+            Dim::RowSubtitle => (63.0, 68.0),
+            Dim::Control => (36.0, 44.0),
+            Dim::Button => (40.0, 48.0),
+            Dim::MenuItem => (36.0, 52.0),
+            Dim::MenuSeparator => same(8.0),
+            Dim::NavItem => (40.0, 56.0),
+            Dim::NavIcon => same(24.0),
+            Dim::Header => (48.0, 56.0),
+            Dim::WindowControl => same(24.0),
+            Dim::WindowControlTarget => same(32.0),
+            Dim::Field => (240.0, 168.0),
+            Dim::FieldWide => (440.0, 168.0),
+            Dim::FieldApps => (260.0, 168.0),
+            Dim::Menu => same(220.0),
+            Dim::Dialog => same(400.0),
+            Dim::PopupWidth => same(520.0),
+            Dim::PopupHeight => same(600.0),
+            Dim::DropdownMenu => same(240.0),
+            Dim::DropdownMax => same(360.0),
+            Dim::MenuList => same(320.0),
+            Dim::SwitchWidth => (36.0, 48.0),
+            Dim::SwitchHeight => (20.0, 28.0),
+            Dim::SwitchThumb => (16.0, 22.0),
+            Dim::SwitchThumbPressed => (18.0, 24.0),
+            Dim::SliderTrack => same(6.0),
+            Dim::SliderTrackActive => same(8.0),
+            Dim::SliderThumb => (16.0, 22.0),
+            Dim::StepperHalf => (28.0, 36.0),
+            Dim::Sidebar => same(280.0),
+            Dim::Page => same(720.0),
+            Dim::Box5 => same(20.0),
+            Dim::Box7 => same(28.0),
+            Dim::Box9 => same(36.0),
+            Dim::Box11 => same(44.0),
+            Dim::Box24 => same(96.0),
+            Dim::PreviewWidth => same(144.0),
+            Dim::PreviewHeight => same(96.0),
+            Dim::PreviewRow => same(464.0),
+            Dim::PreviewSidebar => same(40.0),
+            Dim::PreviewLine => same(40.0),
+            Dim::PreviewBar => same(4.0),
+            Dim::PreviewTitleBar => same(16.0),
+            Dim::Chart => same(120.0),
+            Dim::SpeakerRoom => same(360.0),
+            Dim::SpeakerButton => same(56.0),
+            Dim::SpeakerPopupWidth => same(480.0),
+            Dim::SpeakerPopupHeight => same(480.0),
+            Dim::ArrangementWidth => same(360.0),
+            Dim::ArrangementHeight => same(240.0),
+            Dim::ArrangementHint => same(260.0),
+            Dim::SkeletonTitle => same(120.0),
+            Dim::SkeletonLabel => same(180.0),
+            Dim::SkeletonValue => same(96.0),
+            Dim::SkeletonLine => TextSize::Sm.sizes(),
+            Dim::CaptionLine => {
+                let (regular, compact) = TextSize::Sm.sizes();
+                ((regular * 1.45).ceil(), (compact * 1.45).ceil())
+            }
+            Dim::StripCell => same(76.0),
+            Dim::IconBox => IconSize::Row.sizes(),
+            Dim::SignalBar => same(3.0),
+            Dim::Ring => same(2.0),
+            Dim::Hairline => same(1.0),
+            Dim::Check => same(18.0),
+            Dim::Track => same(6.0),
+            Dim::SpinnerMedium => same(3.0),
+            Dim::Dot => same(8.0),
+            Dim::DashHeight => same(2.0),
+            Dim::IconRow => IconSize::Row.sizes(),
+            Dim::IconControl => IconSize::Control.sizes(),
+            Dim::Dense => same(28.0),
+            Dim::DenseControl => same(24.0),
+            Dim::PropLabel => same(120.0),
+            Dim::FlameRow => same(20.0),
+            Dim::Timeline => same(72.0),
+            Dim::DenseField => same(140.0),
         }
     }
 }
 
-/// The widest a field, dropdown or slider in a row gets on a phone, so the
-/// row's text keeps room.
-const FIELD_TOUCH: f32 = 168.0;
+/// A size that does not change with density.
+const fn same(px: f32) -> (f32, f32) {
+    (px, px)
+}
+
+/// The value for the current size class. A pair with equal values does not
+/// read the class, so a fixed size does not subscribe its component to it.
+fn resolve(regular: f32, compact: f32) -> f32 {
+    if regular == compact {
+        regular
+    } else {
+        size_class().pick(regular, compact)
+    }
+}
 
 /// A fill colour, by what it fills. Resolved against the live [`Tokens`].
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -573,15 +649,82 @@ impl Elevation {
     }
 }
 
-static TOUCH: AtomicBool = AtomicBool::new(false);
-
-/// Switch the sizes between mouse and fingertip. The split view sets it from
-/// the window width and remounts its content when it changes.
-pub fn set_touch(touch: bool) {
-    TOUCH.store(touch, Ordering::Relaxed);
+/// The density of the window. `Regular` is the mouse density of a desktop
+/// window; `Compact` is the fingertip density. Every size token resolves
+/// against the current class when it is applied (see the `sizes` tables).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SizeClass {
+    Regular,
+    Compact,
 }
 
-/// Whether the sizes are the fingertip sizes.
-pub fn touch() -> bool {
-    TOUCH.load(Ordering::Relaxed)
+impl SizeClass {
+    pub fn is_compact(self) -> bool {
+        self == SizeClass::Compact
+    }
+
+    /// `regular` at regular density, `compact` at compact density.
+    pub fn pick<T>(self, regular: T, compact: T) -> T {
+        match self {
+            SizeClass::Regular => regular,
+            SizeClass::Compact => compact,
+        }
+    }
+}
+
+/// What the latest pointer event came from. A finger latches `Touch`; a real
+/// mouse press or move latches `Mouse` again.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PointerKind {
+    Mouse,
+    Touch,
+}
+
+thread_local! {
+    // Created once per thread and never dropped, so the handles stay valid for
+    // the life of the UI. A component that reads them while it renders is
+    // subscribed, and re-renders when the value changes.
+    static CLASS: State<SizeClass> = State::create_global(SizeClass::Regular);
+    static POINTER: State<PointerKind> = State::create_global(PointerKind::Mouse);
+}
+
+/// The current size class. Reading it while a component renders subscribes
+/// that component, so it re-renders in place when the class changes.
+pub fn size_class() -> SizeClass {
+    CLASS.with(|class| *class.read())
+}
+
+/// Whether the current size class is compact.
+pub fn is_compact() -> bool {
+    size_class().is_compact()
+}
+
+/// `regular` at regular density, `compact` at compact density, read now.
+pub fn pick<T>(regular: T, compact: T) -> T {
+    size_class().pick(regular, compact)
+}
+
+/// The kind of the latest pointer event.
+pub fn pointer_kind() -> PointerKind {
+    POINTER.with(|pointer| *pointer.read())
+}
+
+/// Set the size class. Only the window root calls this, from the window width
+/// and the pointer kind. The state is written at once, so everything that
+/// renders after it in the same pass sees the new class, and subscribers that
+/// already rendered are marked for a re-render.
+pub(crate) fn set_size_class(class: SizeClass) {
+    CLASS.with(|state| {
+        let mut state = *state;
+        state.set_if_modified(class);
+    });
+}
+
+/// Record the kind of the latest pointer event. Only the window root calls
+/// this, from its global pointer listeners.
+pub(crate) fn set_pointer_kind(kind: PointerKind) {
+    POINTER.with(|state| {
+        let mut state = *state;
+        state.set_if_modified(kind);
+    });
 }

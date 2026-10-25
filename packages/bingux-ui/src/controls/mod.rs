@@ -10,6 +10,7 @@ pub mod progress;
 pub mod radio;
 pub mod segmented;
 pub mod signal;
+pub(crate) mod press;
 pub mod slider;
 pub mod split_pane;
 pub mod stepper;

@@ -751,7 +751,7 @@ fn empty(tokens: &Tokens, width: f32, height: f32) -> Scene {
         EMPTY_TEXT,
         centre,
         middle,
-        text_width(EMPTY_TEXT, TEXT_SM) + LABEL_PAD,
+        text_width(EMPTY_TEXT, TextSize::Sm.px()) + LABEL_PAD,
         Align::Centre,
         width,
     )];
@@ -775,7 +775,7 @@ fn gutter_for(domain: &Domain, unit: Unit) -> f32 {
     let widest = domain
         .ticks
         .iter()
-        .map(|&tick| text_width(&format_tick(tick, unit, domain.step), TEXT_SM))
+        .map(|&tick| text_width(&format_tick(tick, unit, domain.step), TextSize::Sm.px()))
         .fold(0.0, f32::max);
     (widest + GUTTER_GAP).max(GUTTER_MIN)
 }
@@ -839,7 +839,7 @@ fn baseline(svg: &mut Svg, tokens: &Tokens, plot: Plot, y: &Linear, domain: &Dom
 fn x_labels(texts: &mut Vec<Text>, plot: Plot, width: f32, labels: Vec<(f32, String)>) {
     let mut last: Option<(f32, f32)> = None;
     for (px, name) in labels {
-        let box_width = text_width(&name, TEXT_SM) + LABEL_PAD;
+        let box_width = text_width(&name, TextSize::Sm.px()) + LABEL_PAD;
         if let Some((last_px, last_width)) = last
             && px - last_px < (last_width + box_width) / 2.0 + LABEL_GAP
         {
@@ -1336,7 +1336,7 @@ fn bars_scene(
                 label.clone(),
                 x_centre(index),
                 (top - LABEL_GAP - LABEL_HEIGHT).max(0.0),
-                text_width(&label, TEXT_SM) + LABEL_PAD,
+                text_width(&label, TextSize::Sm.px()) + LABEL_PAD,
                 Align::Centre,
                 width,
             ));

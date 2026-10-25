@@ -7,6 +7,7 @@
 //! its own, even on hover: its text brightens instead, so a hovered segment
 //! never looks like a second selection.
 
+use super::press::use_press;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -55,9 +56,8 @@ impl Component for Segmented {
     fn render(&self) -> impl IntoElement {
         // On a phone a row has no room for a track of segments beside its
         // title, so the same choice is a value picker, as the dropdown is.
-        // The density only changes with a remount, so the hooks below keep
-        // their order for the life of the control.
-        if touch() && !self.fill {
+        // The density is read here, so a change swaps the child below.
+        if is_compact() && !self.fill {
             return crate::controls::dropdown::dropdown(
                 self.options.clone(),
                 self.selected.clone(),
@@ -65,6 +65,18 @@ impl Component for Segmented {
             )
             .into_element();
         }
+        SegmentRail {
+            options: self.options.clone(),
+            selected: self.selected.clone(),
+            on_select: self.on_select.clone(),
+            fill: self.fill,
+        }
+        .into_element()
+    }
+}
+
+impl Component for SegmentRail {
+    fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let enabled = use_enabled(true);
         let options = self.options.clone();
@@ -137,6 +149,17 @@ impl Component for Segmented {
     }
 }
 
+/// The segment rail. [`Segmented`] chooses between it and the dropdown, so a
+/// density change swaps one child for the other and no component changes its
+/// hooks while it is mounted.
+#[derive(PartialEq)]
+struct SegmentRail {
+    options: Vec<(String, String)>,
+    selected: String,
+    on_select: EventHandler<String>,
+    fill: bool,
+}
+
 #[derive(PartialEq)]
 struct Segment {
     key: String,
@@ -157,6 +180,7 @@ impl Component for Segment {
         let enabled = use_enabled(true);
         let key = self.key.clone();
         let on_select = self.on_select.clone();
+        let press = use_press();
         rect()
             .a11y_id(a11y_id)
             .a11y_focusable(enabled && self.selected)
@@ -185,9 +209,18 @@ impl Component for Segment {
                 element
                     .on_pointer_enter(move |_| hovering.set(true))
                     .on_pointer_leave(move |_| hovering.set(false))
-                    .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
+                    .on_pointer_down(move |event: Event<PointerEventData>| {
+                        event.stop_propagation();
+                        press.begin(&event, None);
+                    })
+                    .on_global_pointer_move(move |event: Event<PointerEventData>| {
+                        press.moved(&event);
+                    })
                     .on_press(move |event: Event<PressEventData>| {
                         event.stop_propagation();
+                        if !press.tap(&event) {
+                            return;
+                        }
                         on_select.call(key.clone());
                         a11y_id.request_focus();
                     })

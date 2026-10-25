@@ -20,8 +20,8 @@ pub mod datetime;
 pub mod desktop;
 pub mod displays;
 pub mod gnoblin;
-pub mod loading;
 pub mod keyboard;
+pub mod loading;
 pub mod mouse;
 pub mod network;
 pub mod power;
@@ -154,7 +154,9 @@ impl PageId {
             Self::Network => "ethernet wired cable vpn proxy internet",
             Self::Bluetooth => "headphones devices pair",
             Self::Appearance => "wallpaper background accent colour color theme dark light",
-            Self::Accessibility => "accessibility screen reader keyboard sticky slow bounce mouse keys pointer contrast large text cursor animations scrollbars",
+            Self::Accessibility => {
+                "accessibility screen reader keyboard sticky slow bounce mouse keys pointer contrast large text cursor animations scrollbars"
+            }
             Self::Desktop => "dock sidebar bar clock control centre layout",
             Self::Search => "providers engines files previews assistant",
             Self::Displays => "monitor screen resolution scale night light",

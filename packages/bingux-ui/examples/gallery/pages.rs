@@ -87,15 +87,24 @@ impl Component for Gallery {
             Page::Icons => IconsPage.into(),
             Page::Motion => MotionPage.into(),
         };
+        let mut select_page = page;
+        let select: EventHandler<Page> =
+            EventHandler::new(move |chosen: Page| select_page.set(chosen));
         rect()
             .expanded()
             .tw(&tokens, &[ink(Paint::Text)])
             .font_family(bingux_ui::theme::font_family())
             .child(OverlayHost::new(if subpage() && page() == Page::Rows {
-                NavigationSplitView::new("Gallery", Page::ALL.to_vec(), page, SubpageSample)
-                    .subpage("Subpage", move |_| subpage.set(false))
+                NavigationSplitView::new(
+                    "Gallery",
+                    Page::ALL.to_vec(),
+                    page(),
+                    select,
+                    SubpageSample,
+                )
+                .subpage("Subpage", move |_| subpage.set(false))
             } else {
-                NavigationSplitView::new("Gallery", Page::ALL.to_vec(), page, content)
+                NavigationSplitView::new("Gallery", Page::ALL.to_vec(), page(), select, content)
             }))
     }
 }

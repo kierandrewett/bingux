@@ -23,6 +23,7 @@ use std::time::Duration;
 use freya::animation::*;
 use freya::prelude::*;
 
+use crate::focus::{claim_press, use_focus_core};
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::typography::{NUMERIC, TextStyle, styled_label};
@@ -337,16 +338,38 @@ pub trait Focusable: Sized {
     /// grows to fill its row also grows the wrapper, with `w_flex()` on the
     /// returned box.
     fn focusable(self, focus: Focus, radius: Radius) -> Rect;
+
+    /// Wraps a row whose edges may sit on a clipped container edge, such as a
+    /// card's. The ring is drawn just inside the wrapper, so the clip cannot
+    /// cut it off. Return the wrapper from `render`.
+    fn focusable_inside(self, focus: Focus, radius: Radius) -> Rect;
 }
 
 impl Focusable for Rect {
     fn focusable(self, focus: Focus, radius: Radius) -> Rect {
-        let tokens = use_tokens();
-        rect()
-            .tw(&tokens, &[flex_row()])
-            .child(self)
-            .child(FocusRing { focus, radius })
+        wrap_focusable(self, focus, radius, false)
     }
+
+    fn focusable_inside(self, focus: Focus, radius: Radius) -> Rect {
+        wrap_focusable(self, focus, radius, true)
+    }
+}
+
+/// Builds the wrapper for [`Focusable`]: the press claim and the ring.
+fn wrap_focusable(control: Rect, focus: Focus, radius: Radius, inside: bool) -> Rect {
+    let tokens = use_tokens();
+    let core = use_focus_core();
+    // A press on a control claims it, so its region does not take the
+    // press as empty space and move focus.
+    rect()
+        .tw(&tokens, &[flex_row()])
+        .on_press(move |_: Event<PressEventData>| claim_press(&core))
+        .child(control)
+        .child(FocusRing {
+            focus,
+            radius,
+            inside,
+        })
 }
 
 /// The ring itself, drawn as the last child of a [`Focusable::focusable`]
@@ -355,6 +378,7 @@ impl Focusable for Rect {
 struct FocusRing {
     focus: Focus,
     radius: Radius,
+    inside: bool,
 }
 
 impl Component for FocusRing {
@@ -379,7 +403,26 @@ impl Component for FocusRing {
         .value();
         // The ring's outer edge sits this far outside the control, so the
         // ring's corner radius is the control's plus this distance.
-        let outset = FOCUS_GAP + FOCUS_TRAVEL * (1.0 - progress) + Dim::Ring.px();
+        let travel = FOCUS_TRAVEL * (1.0 - progress);
+        if self.inside {
+            // The ring's outer edge sits this far inside the wrapper's edge.
+            let inset = FOCUS_GAP + travel;
+            let inner = move |parent: f32| parent - inset - inset;
+            return rect()
+                .interactive(false)
+                .position(Position::new_absolute().top(inset).left(inset))
+                .width(Size::func(move |ctx| Some(inner(ctx.parent))))
+                .height(Size::func(move |ctx| Some(inner(ctx.parent))))
+                .opacity(progress)
+                .tw(
+                    &tokens,
+                    &[
+                        rounded_by(self.radius, -inset),
+                        border(Line::Ring(Paint::Accent)),
+                    ],
+                );
+        }
+        let outset = FOCUS_GAP + travel + Dim::Ring.px();
         // The wrapper has no padding, so the ring's top-left corner is the
         // control's top-left corner and its size is the control's size.
         rect()

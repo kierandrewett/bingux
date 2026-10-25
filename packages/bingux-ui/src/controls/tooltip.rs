@@ -6,6 +6,7 @@
 
 use std::time::Duration;
 
+use super::press::{is_touch, use_press};
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
@@ -48,12 +49,17 @@ impl Component for TooltipIcon {
         let mut visible = use_state(|| false);
         let mut anchor = use_state(|| (0.0_f32, 0.0_f32));
         let mut pending = use_state::<Option<TaskHandle>>(|| None);
+        let press = use_press();
 
         let glyph = rect()
             .a11y_role(AccessibilityRole::Image)
             .a11y_alt(self.text.clone())
             .tw(&tokens, &[w(Dim::IconBox), h(Dim::IconBox), center()])
             .on_pointer_enter(move |event: Event<PointerEventData>| {
+                // A touch has no hover. It shows the tooltip by a long press.
+                if is_touch(&event) {
+                    return;
+                }
                 let at = event.global_location();
                 anchor.set((at.x as f32, at.y as f32));
                 if let Some(handle) = pending.write().take() {
@@ -65,12 +71,22 @@ impl Component for TooltipIcon {
                 });
                 pending.set(Some(task));
             })
-            .on_pointer_leave(move |_| {
+            .on_pointer_leave(move |event: Event<PointerEventData>| {
+                if is_touch(&event) {
+                    return;
+                }
                 if let Some(handle) = pending.write().take() {
                     handle.cancel();
                 }
                 visible.set_if_modified(false);
             })
+            .on_pointer_down(move |event: Event<PointerEventData>| {
+                // Tooltips are hover help. A touch never shows one, so the
+                // press only tracks the pointer for the release.
+                press.begin(&event, None);
+            })
+            .on_global_pointer_move(move |event: Event<PointerEventData>| press.moved(&event))
+            .on_global_pointer_up(move |_| press.release())
             .child(icons::icon(self.icon, self.size, self.paint.color(&tokens)));
 
         let progress = use_presence(visible(), tokens.motion(TOOLTIP_MOTION_MS), || {});
@@ -80,7 +96,7 @@ impl Component for TooltipIcon {
 
         // The bubble's size, estimated from the TOOLTIP recipe's padding and
         // hairline, to pick a side that fits.
-        let label_size = CAPTION.size;
+        let label_size = CAPTION.size.px();
         let edges = 2.0 * Dim::Hairline.px();
         let bubble_width =
             self.text.chars().count() as f32 * label_size * CHAR_WIDTH + 2.0 * S2.px() + edges;

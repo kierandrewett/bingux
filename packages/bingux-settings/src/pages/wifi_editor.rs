@@ -357,7 +357,7 @@ impl Editor {
         let window = self.window.open(
             popup(name.clone(), body)
                 .tabs(strip)
-                .flags(PopupFlags::FORM),
+                .flags(PopupFlags::FORM | PopupFlags::INSET_VIEWPORT),
         );
         background_then(
             move || load_profile(&name),

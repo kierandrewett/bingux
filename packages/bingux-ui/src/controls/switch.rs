@@ -5,6 +5,7 @@ use accesskit::Toggled;
 use freya::animation::*;
 use freya::prelude::*;
 
+use super::press::use_press;
 use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
@@ -48,6 +49,7 @@ impl Component for Switch {
         let on = self.on;
         let on_toggle = self.on_toggle.clone();
         let enabled = use_enabled(self.enabled);
+        let press = use_press();
 
         let track = if on { Paint::Accent } else { Paint::Control };
         let thumb = if on { Paint::OnAccent } else { Paint::Text };
@@ -103,12 +105,22 @@ impl Component for Switch {
                     .on_pointer_down(move |event: Event<PointerEventData>| {
                         event.stop_propagation();
                         pressing.set(true);
+                        press.begin(&event, None);
                     })
-                    .on_global_pointer_up(move |_| pressing.set_if_modified(false))
+                    .on_global_pointer_move(move |event: Event<PointerEventData>| {
+                        press.moved(&event);
+                    })
+                    .on_global_pointer_up(move |_| {
+                        press.release();
+                        pressing.set_if_modified(false);
+                    })
                     .on_press({
                         let on_toggle = on_toggle.clone();
                         move |event: Event<PressEventData>| {
                             event.stop_propagation();
+                            if !press.tap(&event) {
+                                return;
+                            }
                             on_toggle.call(!on);
                             a11y_id.request_focus();
                         }

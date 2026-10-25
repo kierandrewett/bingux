@@ -476,26 +476,26 @@ impl Component for PopupFrame {
         let title = entry.title.read().clone();
         let actions = entry.actions.read().clone();
         let primary_keys = actions.primary.clone();
-        // A sheet's header has no room for a disabled button, so a disabled
-        // check is left out there. Enter still runs the action when enabled.
+        // A sheet's check is an icon button, so it stays on the bar even when
+        // the action is not ready: it dims, as the desktop's text button does.
         let primary_element = actions
             .primary
             .filter(|_| flags.contains(PopupFlags::OK))
-            .and_then(|action| {
+            .map(|action| {
                 if sheet {
-                    action.enabled.then(|| {
-                        Element::from(
-                            icon_button(Icon::Check, action.on_press.clone())
-                                .tooltip(&action.label),
-                        )
-                    })
+                    let on_press = action.on_press.clone();
+                    Element::from(
+                        icon_button(Icon::Check, move |_: ()| on_press.call(()))
+                            .tooltip(&action.label)
+                            .enabled(action.enabled),
+                    )
                 } else {
                     let on_press = action.on_press.clone();
-                    Some(Element::from(
+                    Element::from(
                         primary_button(action.label, move |_: ()| on_press.call(()))
                             .compact()
                             .enabled(action.enabled),
-                    ))
+                    )
                 }
             });
         let cancel = flags.contains(PopupFlags::CANCEL).then(|| {
@@ -579,11 +579,7 @@ impl Component for PopupFrame {
                     clip(),
                 ],
             )
-            .width(if sheet {
-                Size::fill()
-            } else {
-                Size::px(width)
-            })
+            .width(if sheet { Size::fill() } else { Size::px(width) })
             .height(Size::px(if sheet {
                 height + sheet_overhang()
             } else {
@@ -629,7 +625,7 @@ impl Component for PopupFrame {
                     .child(
                         rect()
                             .tw(&tokens, &[w_full(), p(S4)])
-                            .child(entry.content.clone()),
+                            .child(crate::focus::trap(entry.content.clone())),
                     ),
             );
 

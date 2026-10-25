@@ -412,7 +412,7 @@ pub fn freya_theme(tokens: &Tokens) -> Theme {
             background: Preference::Specific(tokens.floating),
             color: Preference::Reference("text_primary"),
             border_fill: Preference::Specific(tokens.floating_outline),
-            font_size: Preference::Specific(crate::typography::CAPTION.size),
+            font_size: Preference::Specific(crate::typography::CAPTION.size.px()),
         },
     );
     theme

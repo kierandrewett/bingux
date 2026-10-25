@@ -59,7 +59,7 @@ impl Ink {
 /// than inventing a new size.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TextStyle {
-    pub size: f32,
+    pub size: TextSize,
     pub weight: FontWeight,
     pub ink: Ink,
     /// Line height as a multiple of `size`.
@@ -82,7 +82,7 @@ impl TextStyle {
         let label = label()
             .text(text.into())
             .color(self.ink.color(tokens))
-            .font_size(self.size)
+            .font_size(self.size.px())
             .font_weight(self.weight)
             .line_height(self.leading)
             .letter_spacing(self.tracking);
@@ -97,7 +97,7 @@ impl TextStyle {
     pub fn paragraph(self, tokens: &Tokens, text: impl Into<String>) -> Paragraph {
         let paragraph = paragraph()
             .color(self.ink.color(tokens))
-            .font_size(self.size)
+            .font_size(self.size.px())
             .font_weight(self.weight)
             .line_height(self.leading)
             .letter_spacing(self.tracking)
@@ -116,7 +116,7 @@ impl TextStyle {
     pub fn span(self, tokens: &Tokens, text: impl Into<String>) -> Span<'static> {
         let span = Span::new(text.into())
             .color(self.ink.color(tokens))
-            .font_size(self.size)
+            .font_size(self.size.px())
             .font_weight(self.weight)
             .letter_spacing(self.tracking);
         if self.tabular {
@@ -139,7 +139,7 @@ impl TextStyle {
 
 /// A single large value: a clock, a percentage, the figure a page is about.
 pub const HERO: TextStyle = TextStyle {
-    size: TEXT_HERO,
+    size: TextSize::Hero,
     weight: FontWeight::LIGHT,
     ink: Ink::Text,
     leading: LEADING_TIGHT,
@@ -150,7 +150,7 @@ pub const HERO: TextStyle = TextStyle {
 /// A page or detail title: the name at the head of an identity block or a
 /// subpage.
 pub const TITLE: TextStyle = TextStyle {
-    size: TEXT_DISPLAY,
+    size: TextSize::Display,
     weight: FontWeight::SEMI_BOLD,
     ink: Ink::Text,
     leading: LEADING_TIGHT,
@@ -160,7 +160,7 @@ pub const TITLE: TextStyle = TextStyle {
 
 /// The name of a page, at the head of its column.
 pub const PAGE_TITLE: TextStyle = TextStyle {
-    size: TEXT_DISPLAY,
+    size: TextSize::Display,
     weight: FontWeight::MEDIUM,
     ink: Ink::Text,
     leading: LEADING_TIGHT,
@@ -171,7 +171,7 @@ pub const PAGE_TITLE: TextStyle = TextStyle {
 /// A group title, above its card. Clearly larger and heavier than row text:
 /// 16 px semibold.
 pub const SECTION: TextStyle = TextStyle {
-    size: TEXT_LG,
+    size: TextSize::Lg,
     weight: FontWeight::SEMI_BOLD,
     ink: Ink::Text,
     leading: LEADING,
@@ -180,7 +180,7 @@ pub const SECTION: TextStyle = TextStyle {
 };
 
 pub const HEADING: TextStyle = TextStyle {
-    size: TEXT_HEADING,
+    size: TextSize::Heading,
     weight: FontWeight::SEMI_BOLD,
     ink: Ink::Text,
     leading: LEADING,
@@ -190,7 +190,7 @@ pub const HEADING: TextStyle = TextStyle {
 
 /// Row titles and body text.
 pub const BODY: TextStyle = TextStyle {
-    size: TEXT_MD,
+    size: TextSize::Md,
     weight: FontWeight::NORMAL,
     ink: Ink::Text,
     leading: LEADING,
@@ -200,7 +200,7 @@ pub const BODY: TextStyle = TextStyle {
 
 /// Body text that must stand out in its row: a name or a state.
 pub const EMPHASIS: TextStyle = TextStyle {
-    size: TEXT_MD,
+    size: TextSize::Md,
     weight: FontWeight::SEMI_BOLD,
     ink: Ink::Text,
     leading: LEADING,
@@ -210,7 +210,7 @@ pub const EMPHASIS: TextStyle = TextStyle {
 
 /// A read-only value on the right of a row.
 pub const VALUE: TextStyle = TextStyle {
-    size: TEXT_MD,
+    size: TextSize::Md,
     weight: FontWeight::NORMAL,
     ink: Ink::Muted,
     leading: LEADING,
@@ -220,7 +220,7 @@ pub const VALUE: TextStyle = TextStyle {
 
 /// A number that changes, such as a count or a level.
 pub const NUMERIC: TextStyle = TextStyle {
-    size: TEXT_MD,
+    size: TextSize::Md,
     weight: FontWeight::NORMAL,
     ink: Ink::Text,
     leading: LEADING,
@@ -230,7 +230,7 @@ pub const NUMERIC: TextStyle = TextStyle {
 
 /// A subtitle, caption or note under a title.
 pub const CAPTION: TextStyle = TextStyle {
-    size: TEXT_SM,
+    size: TextSize::Sm,
     weight: FontWeight::NORMAL,
     ink: Ink::Muted,
     leading: LEADING_LOOSE,
@@ -240,7 +240,7 @@ pub const CAPTION: TextStyle = TextStyle {
 
 /// A badge or a count after a title.
 pub const BADGE: TextStyle = TextStyle {
-    size: TEXT_XS,
+    size: TextSize::Xs,
     weight: FontWeight::SEMI_BOLD,
     ink: Ink::Accent,
     leading: LEADING,
@@ -250,7 +250,7 @@ pub const BADGE: TextStyle = TextStyle {
 
 /// Small capitals above a block of text, tracked out.
 pub const OVERLINE: TextStyle = TextStyle {
-    size: TEXT_XS,
+    size: TextSize::Xs,
     weight: FontWeight::SEMI_BOLD,
     ink: Ink::Muted,
     leading: LEADING,
@@ -260,7 +260,7 @@ pub const OVERLINE: TextStyle = TextStyle {
 
 /// A link or an action set in text.
 pub const LINK: TextStyle = TextStyle {
-    size: TEXT_MD,
+    size: TextSize::Md,
     weight: FontWeight::MEDIUM,
     ink: Ink::Accent,
     leading: LEADING,

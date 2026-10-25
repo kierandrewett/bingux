@@ -13,6 +13,7 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
+use crate::controls::press::{is_touch, point_of, use_press};
 use crate::icons::{self, Icon};
 use crate::motion::{Focusable, PRESENCE_SCALE, use_presence};
 use crate::style::*;
@@ -29,10 +30,10 @@ const SUBMENU_OPEN_DELAY_MS: u64 = 150;
 const CONE_REST_MS: u64 = 300;
 
 /// Space between a menu and its submenu.
-const SUBMENU_GAP: f32 = S1.px();
+const SUBMENU_GAP: f32 = S1.fixed_px();
 
 /// Space kept between a menu and the window edges.
-const MENU_EDGE: f32 = S2.px();
+const MENU_EDGE: f32 = S2.fixed_px();
 
 /// One action in a menu. Build with [`menu_item`] or [`submenu`].
 #[derive(Clone, PartialEq)]
@@ -597,12 +598,17 @@ impl Component for MenuLayer {
 
         let nav = read_nav(overlays);
         let window = *Platform::get().current_window().root_size.read();
-        let panels = layout(
-            &self.menu.items,
-            &nav.open,
-            (self.menu.x, self.menu.y),
-            (window.width, window.height),
-        );
+        let compact = is_compact();
+        let panels = if compact {
+            Vec::new()
+        } else {
+            layout(
+                &self.menu.items,
+                &nav.open,
+                (self.menu.x, self.menu.y),
+                (window.width, window.height),
+            )
+        };
         let root_items = self.menu.items.clone();
 
         let mut elements = Vec::with_capacity(panels.len());
@@ -653,6 +659,72 @@ impl Component for MenuLayer {
             }
             elements.push(body.into_element());
         }
+        if compact {
+            // A phone shows the open level of the menu as an action sheet at
+            // the bottom edge. Back steps out of a submenu.
+            let level = nav.open.len();
+            let mut rows: Vec<Element> = Vec::new();
+            if level > 0 {
+                rows.push(
+                    rect()
+                        .a11y_role(AccessibilityRole::MenuItem)
+                        .tw(&tokens, MENU_ITEM)
+                        .on_press(move |event: Event<PressEventData>| {
+                            event.stop_propagation();
+                            update_nav(overlays, |state| state.close_deepest());
+                        })
+                        .child(icons::icon(
+                            Icon::GoPrevious,
+                            IconSize::Control,
+                            Ink::Text.color(&tokens),
+                        ))
+                        .child(BODY.in_ink(Ink::Text).label(&tokens, "Back".to_string()))
+                        .into_element(),
+                );
+            }
+            rows.extend(
+                panel_items(&self.menu.items, &nav.open, level)
+                    .iter()
+                    .enumerate()
+                    .map(|(index, item)| {
+                        Element::from(MenuRow {
+                            item: item.clone(),
+                            overlays,
+                            level,
+                            index,
+                            highlighted: nav.highlight.get(level).copied().flatten()
+                                == Some(index),
+                            sub: None,
+                        })
+                    }),
+            );
+            let keys = self.menu.items.clone();
+            let overhang = Radius::Overlay.px();
+            elements.push(
+                rect()
+                    .a11y_id(a11y_id)
+                    .a11y_focusable(true)
+                    .position(Position::new_absolute().bottom(-overhang).left(0.0))
+                    .layer(Layer::Overlay)
+                    .opacity(progress)
+                    .tw(&tokens, &[w_full(), bg(Paint::Popover), rounded(Radius::Overlay), clip()])
+                    .on_press(|event: Event<PressEventData>| event.stop_propagation())
+                    .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
+                    .on_global_pointer_move(move |event: Event<PointerEventData>| {
+                        pointer_moved(overlays, global_point(&event));
+                    })
+                    .on_key_down(move |event: Event<KeyboardEventData>| {
+                        handle_key(overlays, &keys, event);
+                    })
+                    .child(
+                        rect()
+                            .tw(&tokens, &[w_full(), flex_col(), p(S2)])
+                            .children(rows),
+                    )
+                    .child(rect().height(Size::px(overhang)))
+                    .into_element(),
+            );
+        }
 
         // The shield closes the menu on a press outside it and keeps the
         // window behind from reacting while the menu is open.
@@ -677,6 +749,7 @@ impl Component for MenuRow {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let mut pressing = use_state(|| false);
+        let press = use_press();
         if self.item.separator {
             return rect()
                 .tw(&tokens, &[w_full(), h(Dim::MenuSeparator), center()])
@@ -738,11 +811,18 @@ impl Component for MenuRow {
                 event.stop_propagation();
                 if enabled {
                     pressing.set(true);
+                    press.begin(&event, None);
                 }
+            })
+            .on_global_pointer_move(move |event: Event<PointerEventData>| {
+                press.moved(&event);
             })
             .on_press(move |event: Event<PressEventData>| {
                 event.stop_propagation();
                 pressing.set(false);
+                if !press.tap(&event) {
+                    return;
+                }
                 if !enabled {
                     return;
                 }
@@ -803,6 +883,8 @@ impl Component for MenuButton {
         let focus = use_focus(a11y_id);
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
+        let press = use_press();
+        let mut touch_at = use_state(|| (0.0_f32, 0.0_f32));
         let mut area = use_state(Area::default);
         let items = self.items.clone();
         let open = overlays.menu_owned_by(a11y_id);
@@ -852,11 +934,28 @@ impl Component for MenuButton {
                 move |event: Event<PointerEventData>| {
                     event.stop_propagation();
                     pressing.set(true);
+                    // A touch opens the menu when it lifts, so a finger that
+                    // scrolls past the button does not open it.
+                    if is_touch(&event) {
+                        touch_at.set(point_of(&event));
+                        press.begin(&event, None);
+                        return;
+                    }
                     let at = global_point(&event);
                     overlays.show_menu_from(Some(a11y_id), at, items.clone(), false);
                 }
             })
             .on_global_pointer_up(move |_| pressing.set_if_modified(false))
+            .on_global_pointer_move(move |event: Event<PointerEventData>| press.moved(&event))
+            .on_press({
+                let items = items.clone();
+                move |event: Event<PressEventData>| {
+                    if !matches!(event.data(), PressEventData::Touch(_)) || !press.tap(&event) {
+                        return;
+                    }
+                    overlays.show_menu_from(Some(a11y_id), touch_at(), items.clone(), false);
+                }
+            })
             .on_key_down(move |event: Event<KeyboardEventData>| {
                 let opens =
                     is_activation_key(&event.key) || event.key == Key::Named(NamedKey::ArrowDown);

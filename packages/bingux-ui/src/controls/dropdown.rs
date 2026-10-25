@@ -6,10 +6,12 @@
 
 use freya::prelude::*;
 
+use super::press::use_press;
 use crate::app_icon::app_icon;
 use crate::icons::{self, Icon};
 use crate::motion::{Focusable, PRESENCE_SCALE, use_presence};
-use crate::shell::overlays::input_shield;
+use crate::shell::menu::menu_item;
+use crate::shell::overlays::{input_shield, use_overlays};
 use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
 use crate::typography::{BODY, Ink};
@@ -133,6 +135,7 @@ impl Component for Dropdown {
         let mut scroll = use_scroll_controller(ScrollConfig::default);
         let mut hovered_item = use_state(|| None::<usize>);
         let a11y_id = use_a11y();
+        let press = use_press();
         let focus = use_focus(a11y_id);
         let enabled = use_enabled(self.enabled);
         let on_select = self.on_select.clone();
@@ -156,6 +159,23 @@ impl Component for Dropdown {
                 open.set(false);
                 highlighted.set(None);
             })
+        };
+        let overlays = use_overlays();
+        // The options as action-sheet rows on a phone; the selected one is ticked.
+        let sheet_items = {
+            let choose = choose.clone();
+            let labels = options.clone();
+            move || {
+                labels
+                    .iter()
+                    .enumerate()
+                    .map(|(index, (_, text))| {
+                        let choose = choose.clone();
+                        menu_item(text.clone(), move |_| choose.call(index))
+                            .checked(Some(index) == selected_index)
+                    })
+                    .collect::<Vec<_>>()
+            }
         };
         let count = options.len();
         let longest = options
@@ -182,7 +202,7 @@ impl Component for Dropdown {
         };
         // On a phone the value never takes more than the field column, so the
         // row's title keeps its room; a long value is cut with an ellipsis.
-        let width = if touch() {
+        let width = if is_compact() {
             width.min(Dim::Field.px())
         } else {
             width
@@ -312,7 +332,7 @@ impl Component for Dropdown {
 
         // On a phone the button has no box: the value is muted and sits at
         // the right, with the chevron.
-        let touch = touch();
+        let touch = is_compact();
         let button = rect()
             .a11y_id(a11y_id)
             .a11y_focusable(enabled)
@@ -360,12 +380,29 @@ impl Component for Dropdown {
                     .on_pointer_down(move |event: Event<PointerEventData>| {
                         event.stop_propagation();
                         pressing.set(true);
+                        press.begin(&event, None);
                     })
                     .on_global_pointer_up(move |_| pressing.set_if_modified(false))
+                    .on_global_pointer_move(move |event: Event<PointerEventData>| {
+                        press.moved(&event);
+                    })
                     .on_press(move |event: Event<PressEventData>| {
                         event.stop_propagation();
                         event.prevent_default();
+                        if !press.tap(&event) {
+                            return;
+                        }
                         a11y_id.request_focus();
+                        if is_compact() {
+                            // A phone lists the options as an action sheet at the
+                            // bottom edge; the sheet's own rows choose.
+                            let origin = {
+                                let area = button_area.read();
+                                (area.min_x(), area.min_y())
+                            };
+                            overlays.show_menu_from(Some(a11y_id), origin, sheet_items(), false);
+                            return;
+                        }
                         let next = !open();
                         if next && let Some(index) = selected_index {
                             scroll.scroll_to_y(offset_for(index, 0, true));
@@ -515,6 +552,7 @@ impl Component for DropdownItem {
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
+        let press = use_press();
         let on_press = self.on_press.clone();
         let on_hover = self.on_hover.clone();
         let on_leave = on_hover.clone();
@@ -544,9 +582,16 @@ impl Component for DropdownItem {
             .on_pointer_down(move |event: Event<PointerEventData>| {
                 event.stop_propagation();
                 pressing.set(true);
+                press.begin(&event, None);
+            })
+            .on_global_pointer_move(move |event: Event<PointerEventData>| {
+                press.moved(&event);
             })
             .on_press(move |event: Event<PressEventData>| {
                 event.stop_propagation();
+                if !press.tap(&event) {
+                    return;
+                }
                 pressing.set(false);
                 on_press.call(());
             })

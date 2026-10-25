@@ -26,8 +26,8 @@ use bingux_ui::style::*;
 
 /// Pixel values of the spacing tokens, for the arrangement and slider
 /// geometry. Boxes themselves are styled with the tokens.
-const GAP_2: f32 = S2.px();
-const GAP_4: f32 = S4.px();
+const GAP_2: f32 = S2.fixed_px();
+const GAP_4: f32 = S4.fixed_px();
 /// How close, in logical pixels, a dragged display must be to another's edge
 /// to snap flush with it.
 const ARRANGEMENT_SNAP: i32 = 12;
@@ -2060,7 +2060,7 @@ fn temperature_control(kelvin: u32, on_moved: impl Into<EventHandler<f64>>) -> E
 /// The strip's geometry: an 8 px gradient bar in a 24 px tall control, with
 /// a thumb 8 by 24 that grows a little while pressed.
 const STRIP_HEIGHT: f32 = GAP_2;
-const STRIP_CONTROL: f32 = S6.px();
+const STRIP_CONTROL: f32 = S6.fixed_px();
 const SCALE_PRESSED: f32 = 1.1;
 const SCALE_MS: u64 = 120;
 const LEVEL_MAX: f64 = 100.0;

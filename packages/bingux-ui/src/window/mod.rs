@@ -36,8 +36,12 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use crate::address::Address;
+use crate::focus::provide_focus_core;
 use crate::shell::with_window;
-use crate::style::{Paint, Radius, Tw, bg, clip, rounded_scaled};
+use crate::style::{
+    Paint, PointerKind, Radius, SizeClass, Tw, bg, clip, pointer_kind, rounded_scaled,
+    set_pointer_kind, set_size_class,
+};
 use crate::surface::use_tokens;
 use crate::theme::NARROW_BELOW;
 
@@ -418,10 +422,29 @@ impl Component for WindowHost {
         });
         use_provide_context(move || manager);
         use_provide_context(move || Window::Main(MainWindow { manager }));
+        // Tab, Shift+Tab and F6 move focus for every window and popup, so the
+        // handler sits on the root. See `focus` for the region model.
+        let focus = provide_focus_core();
+        let keys = move |e: Event<KeyboardEventData>| match &e.key {
+            Key::Named(NamedKey::Tab) if e.modifiers == Modifiers::SHIFT => focus.tab(true),
+            Key::Named(NamedKey::Tab) if e.modifiers.is_empty() => focus.tab(false),
+            Key::Named(NamedKey::F6) if e.modifiers == Modifiers::SHIFT => focus.cycle(true),
+            Key::Named(NamedKey::F6) if e.modifiers.is_empty() => focus.cycle(false),
+            _ => {}
+        };
 
-        // The window's width is the size class: below the narrow breakpoint
-        // the window is a phone, and popups are sheets.
+        // Density is the size class: a narrow window (a phone), or a finger on
+        // any window, gets the fingertip sizes. The class is written before
+        // any child renders, so the whole tree sees this frame's class. Reading
+        // the pointer kind here subscribes the host, so a change of pointer
+        // kind re-runs this and flips the class in place.
         let narrow = Platform::get().current_window().root_size.read().width < NARROW_BELOW;
+        let touch = pointer_kind() == PointerKind::Touch;
+        set_size_class(if narrow || touch {
+            SizeClass::Compact
+        } else {
+            SizeClass::Regular
+        });
 
         let popups = manager.popups.read().clone();
 
@@ -448,6 +471,9 @@ impl Component for WindowHost {
         rect()
             .expanded()
             .tw(&tokens, &[bg(Paint::Backdrop)])
+            .on_global_key_down(keys)
+            .on_global_pointer_down(latch_pointer)
+            .on_global_pointer_move(latch_pointer)
             .child(
                 rect()
                     .expanded()
@@ -461,4 +487,13 @@ impl Component for WindowHost {
                 sheet: narrow,
             }))
     }
+}
+
+/// Record what the pointer event came from. A finger latches touch density
+/// even on a wide window; a mouse press or move latches the mouse again.
+fn latch_pointer(event: Event<PointerEventData>) {
+    set_pointer_kind(match event.data() {
+        PointerEventData::Touch(_) => PointerKind::Touch,
+        PointerEventData::Mouse(_) => PointerKind::Mouse,
+    });
 }

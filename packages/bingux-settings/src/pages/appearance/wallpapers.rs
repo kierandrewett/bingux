@@ -249,7 +249,7 @@ impl Component for WallpaperPicker {
                 tiles.push(placeholder_tile(&tokens));
             }
             tiles.extend((0..PLACEHOLDER_TILES).map(|_| placeholder_tile(&tokens)));
-            rows.extend(grid(&tokens, tiles, if touch() { 2 } else { 4 }));
+            rows.extend(grid(&tokens, tiles, if is_compact() { 2 } else { 4 }));
             return Element::from(
                 Group::titled("Wallpaper")
                     .description("Loading pictures")
@@ -267,7 +267,7 @@ impl Component for WallpaperPicker {
             picture_tile(&tokens, picture, picture.path == current, model, overlays)
         }));
 
-        rows.extend(grid(&tokens, tiles, if touch() { 2 } else { 4 }));
+        rows.extend(grid(&tokens, tiles, if is_compact() { 2 } else { 4 }));
         if all.is_empty() {
             rows.push(
                 status(Status::Empty(

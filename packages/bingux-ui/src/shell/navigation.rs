@@ -16,6 +16,7 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use crate::controls::{action_button, icon_button, search_field};
+use crate::focus::{RegionKind, claim_press, use_focus_core, use_region};
 use crate::icons::{self, Icon};
 use crate::motion::{Focusable, crossfade};
 use crate::shell::sections::{self, SearchHit};
@@ -44,13 +45,16 @@ pub trait NavItem: Copy + PartialEq + 'static {
 pub struct NavigationSplitView<T: NavItem> {
     pub app_title: String,
     pub items: Vec<T>,
-    pub selected: State<T>,
+    pub selected: T,
+    /// Called with the page a sidebar row or the profile chooses.
+    pub on_select: EventHandler<T>,
     pub content: Element,
     pub page_width: Dim,
     /// Set while a subpage is open: its title and what Back does.
     pub subpage: Option<Subpage>,
-    /// See [`NavigationSplitView::start_on_list`].
-    pub start_on_list: bool,
+    /// Narrow windows: whether the list of pages is the screen, and the request
+    /// to show or hide it. Without it the split view keeps that state itself.
+    pub list: Option<(bool, EventHandler<bool>)>,
     pub profile: Option<Profile<T>>,
     /// While the search has text, `results` replaces the page content, and
     /// Enter in the search field calls `on_submit`. See
@@ -99,6 +103,8 @@ impl Component for SidebarRow {
         let on_press = self.on_press.clone();
         let on_press_key = self.on_press.clone();
         let on_key = self.on_key.clone();
+        let core = use_focus_core();
+        let enter_core = core.clone();
         let icon_color = if selected {
             Paint::Text.color(&tokens)
         } else {
@@ -134,13 +140,15 @@ impl Component for SidebarRow {
             .on_pointer_down(move |_: Event<PointerEventData>| pressing.set(true))
             .on_global_pointer_up(move |_| pressing.set_if_modified(false))
             .on_press(move |_: Event<PressEventData>| {
+                claim_press(&core);
                 on_press.call(());
-                a11y_id.request_focus();
+                core.focus_region(RegionKind::Content, false);
             })
             .on_key_down(move |event: Event<KeyboardEventData>| {
                 if is_activation_key(&event.key) {
                     event.stop_propagation();
                     on_press_key.call(());
+                    enter_core.focus_region(RegionKind::Content, true);
                 } else if let Some(on_key) = &on_key {
                     on_key.call(event);
                 }
@@ -159,8 +167,9 @@ impl Component for SidebarRow {
 #[derive(PartialEq)]
 struct ProfileCard<T: NavItem> {
     profile: Profile<T>,
-    selected: State<T>,
-    sidebar_open: State<bool>,
+    selected: T,
+    on_select: EventHandler<T>,
+    on_show_list: EventHandler<bool>,
     full_page: bool,
 }
 
@@ -168,17 +177,17 @@ impl<T: NavItem> Component for ProfileCard<T> {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let target = self.profile.target;
-        let mut selected = self.selected;
-        let mut sidebar_open = self.sidebar_open;
+        let on_select = self.on_select.clone();
+        let on_show_list = self.on_show_list.clone();
         let full_page = self.full_page;
         let row = SidebarRow {
             mark: SidebarMark::Avatar(crate::controls::avatar::current_user()),
             label: self.profile.name.clone(),
-            selected: selected() == target,
+            selected: self.selected == target,
             on_press: (move |_: ()| {
-                selected.set(target);
+                on_select.call(target);
                 if full_page {
-                    sidebar_open.set(false);
+                    on_show_list.call(false);
                 }
             })
             .into(),
@@ -331,8 +340,9 @@ impl Component for PageFrame {
     }
 }
 
-/// Where a page sits: its index in the sidebar and the title of its open subpage.
-type PageKey = (usize, Option<String>);
+/// Where a page sits: its index in the sidebar, the title of its open subpage,
+/// and whether the narrow list of pages is the screen.
+type PageKey = (usize, Option<String>, bool);
 
 /// The kind of move between two pages.
 #[derive(Clone, Copy, PartialEq)]
@@ -353,6 +363,11 @@ impl PageMotion {
 
 /// The move from `previous` to `next`, or none when the page did not change.
 fn page_motion(previous: &PageKey, next: &PageKey) -> Option<PageMotion> {
+    // Showing or hiding the list of pages is not a page move: the list replaces
+    // the page at once, and only a different page slides.
+    if previous.2 != next.2 {
+        return (previous.0 != next.0).then_some(PageMotion::Fade);
+    }
     match (previous.1.is_some(), next.1.is_some()) {
         (false, true) => Some(PageMotion::Push),
         (true, false) => Some(PageMotion::Pop),
@@ -477,17 +492,19 @@ impl<T: NavItem> NavigationSplitView<T> {
     pub fn new(
         app_title: impl Into<String>,
         items: Vec<T>,
-        selected: State<T>,
+        selected: T,
+        on_select: impl Into<EventHandler<T>>,
         content: impl Into<Element>,
     ) -> Self {
         Self {
             app_title: app_title.into(),
             items,
             selected,
+            on_select: on_select.into(),
             content: content.into(),
             page_width: Dim::Page,
             subpage: None,
-            start_on_list: false,
+            list: None,
             profile: None,
             search: None,
         }
@@ -512,10 +529,12 @@ impl<T: NavItem> NavigationSplitView<T> {
         self
     }
 
-    /// On a narrow window, open on the list of pages instead of the selected
-    /// page. Use it when the user did not ask for a page.
-    pub fn start_on_list(mut self, start: bool) -> Self {
-        self.start_on_list = start;
+    /// Narrow windows only: whether the list of pages is the screen. `on_show_list`
+    /// is called with `true` when the list is asked for (Back from a page, Ctrl+F)
+    /// and with `false` when a page is chosen. Without this the split view keeps
+    /// the state itself.
+    pub fn list(mut self, shown: bool, on_show_list: impl Into<EventHandler<bool>>) -> Self {
+        self.list = Some((shown, on_show_list.into()));
         self
     }
 
@@ -557,20 +576,35 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         // On a narrow window this is true while the list of pages is the screen.
         let width = Platform::get().current_window().root_size.read().width;
         let narrow = width < NARROW_BELOW;
-        // Controls and rows read their sizes from this before they are built.
-        set_touch(narrow);
-        let start_on_list = self.start_on_list;
-        let mut sidebar_open = use_state(move || narrow && start_on_list);
+
+        let fallback_list = use_state(|| false);
+        let (list_shown, on_show_list) = match &self.list {
+            Some((shown, on_show_list)) => (*shown, on_show_list.clone()),
+            None => {
+                let mut fallback = fallback_list;
+                (
+                    fallback_list(),
+                    EventHandler::new(move |shown: bool| fallback.set(shown)),
+                )
+            }
+        };
         let side = if narrow { S4 } else { S8 };
+        let header_region = use_region(RegionKind::Header);
         let selected = self.selected;
         // The page on screen. Its key tells a subpage from the page it was
         // opened from.
         let index = self
             .items
             .iter()
-            .position(|item| *item == selected())
+            .position(|item| *item == selected)
             .unwrap_or(0);
-        let page_key: PageKey = (index, self.subpage.as_ref().map(|s| s.title.clone()));
+        // On a narrow window the list of pages is the screen.
+        let list_key = narrow && list_shown;
+        let page_key: PageKey = (
+            index,
+            self.subpage.as_ref().map(|s| s.title.clone()),
+            list_key,
+        );
         let scroll = use_scroll_controller(ScrollConfig::default);
         // The pages with results, when the split view searches.
         let search_hits = self
@@ -582,7 +616,8 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             selected,
             query,
             search_id,
-            sidebar_open,
+            on_select: self.on_select.clone(),
+            on_show_list: on_show_list.clone(),
             full_page,
             profile: self.profile.clone(),
             hits: search_hits.clone(),
@@ -594,16 +629,15 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             .map(|(_, results, on_submit)| (results.clone(), on_submit.clone()));
         let searching = results.is_some() && !query.read().trim().is_empty();
         let submit = results.as_ref().map(|(_, on_submit)| on_submit.clone());
-        let show_list = narrow && sidebar_open() && !searching;
+        let show_list = list_key && !searching;
         // The header is the drag region. It carries Back, the spinner while a
         // page is busy and the window buttons. The page title shows here once
         // the title in the page scrolls under the header.
         // On a narrow window a page goes back to the list of pages.
-        let to_list: EventHandler<()> = (move |_: ()| {
-            let mut sidebar_open = sidebar_open;
-            sidebar_open.set(true);
-        })
-        .into();
+        let to_list: EventHandler<()> = {
+            let on_show_list = on_show_list.clone();
+            (move |_: ()| on_show_list.call(true)).into()
+        };
         let clear_search: EventHandler<()> = (move |_: ()| {
             let mut query = query;
             query.set(String::new());
@@ -617,7 +651,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let title = match &self.subpage {
             Some(subpage) => subpage.title.clone(),
             None if searching => "Search results".to_string(),
-            None => selected().title().to_string(),
+            None => selected.title().to_string(),
         };
         // A desktop header floats over the page and blurs what scrolls under it.
         let overlay = !narrow && !show_list;
@@ -662,6 +696,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         .into();
         // Alt+Left and the mouse Back button go back one step.
         let back_key = back;
+        let request_list = on_show_list.clone();
         let back_pointer = back_key.clone();
         // Page changes move the content. A subpage slides in from the right, a
         // pop slides it out to the right, and a sidebar switch cross-fades. The
@@ -818,9 +853,15 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 .tw(&tokens, &[shadow(Elevation::Sheet)])
         });
         let edge_top = if overlay { Dim::Header.px() } else { 0.0 };
+        let content_region = use_region(RegionKind::Content);
         let content_area = rect()
             .width(Size::fill())
             .height(Size::flex(1.0))
+            .on_press({
+                let press = content_region.clone();
+                move |_: Event<PressEventData>| press.press()
+            })
+            .child(content_region.sentinel())
             .child(page)
             .maybe_child(outgoing)
             .maybe_child(sliver)
@@ -859,9 +900,9 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 {
                     on_back.call(());
                 } else if control && letter == "f" {
-                    // Focus the search. A narrow window opens its sidebar first.
+                    // Focus the search. A narrow window shows the list first.
                     if narrow {
-                        sidebar_open.set(true);
+                        request_list.call(true);
                     }
                     search_id.request_focus();
                 } else if control && (letter == "q" || letter == "w") {
@@ -887,10 +928,14 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             .maybe_child((!narrow).then(|| rect().tw(&tokens, SPLIT_HAIRLINE)))
             .child(
                 rect()
-                    // Sizes change with the touch density, so a change
-                    // remounts the page and it is laid out again.
-                    .key(narrow)
+                    // Sizes follow the size class, which the root sets and
+                    // which re-renders subscribers in place, so no remount.
                     .tw(&tokens, &[w_flex(), h_full(), bg(Paint::Bg)])
+                    .on_press({
+                        let press = header_region.clone();
+                        move |_: Event<PressEventData>| press.press()
+                    })
+                    .child(header_region.sentinel())
                     .child(if overlay {
                         Element::from(
                             rect()
@@ -1035,10 +1080,11 @@ impl Component for ScrollEdge {
 #[derive(PartialEq)]
 struct Sidebar<T: NavItem> {
     items: Vec<T>,
-    selected: State<T>,
+    selected: T,
+    on_select: EventHandler<T>,
     query: State<String>,
     search_id: AccessibilityId,
-    sidebar_open: State<bool>,
+    on_show_list: EventHandler<bool>,
     /// Drawn as the whole window below the header, not as a column.
     full_page: bool,
     profile: Option<Profile<T>>,
@@ -1063,9 +1109,11 @@ fn group_label(tokens: &Tokens, group: &str) -> Element {
 impl<T: NavItem> Component for Sidebar<T> {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let region = use_region(RegionKind::Sidebar);
         let selected = self.selected;
+        let on_select = self.on_select.clone();
+        let on_show_list = self.on_show_list.clone();
         let query = self.query;
-        let sidebar_open = self.sidebar_open;
         let full_page = self.full_page;
         let needle = query.read().trim().to_lowercase();
         let typing = !needle.is_empty();
@@ -1106,7 +1154,8 @@ impl<T: NavItem> Component for Sidebar<T> {
                 item: *item,
                 siblings: visible.clone(),
                 selected,
-                sidebar_open,
+                on_select: on_select.clone(),
+                on_show_list: on_show_list.clone(),
                 full_page,
             }));
         }
@@ -1123,12 +1172,18 @@ impl<T: NavItem> Component for Sidebar<T> {
             Element::from(ProfileCard {
                 profile,
                 selected,
-                sidebar_open,
+                on_select: on_select.clone(),
+                on_show_list: on_show_list.clone(),
                 full_page,
             })
         });
         shell
+            .on_press({
+                let press = region.clone();
+                move |_: Event<PressEventData>| press.press()
+            })
             .child(search_band(query, self.search_id))
+            .child(region.sentinel())
             .maybe_child(card)
             .child(
                 rect()
@@ -1214,8 +1269,9 @@ struct NavEntry<T: NavItem> {
     item: T,
     /// The items currently listed, for Up and Down.
     siblings: Vec<T>,
-    selected: State<T>,
-    sidebar_open: State<bool>,
+    selected: T,
+    on_select: EventHandler<T>,
+    on_show_list: EventHandler<bool>,
     full_page: bool,
 }
 
@@ -1223,26 +1279,26 @@ impl<T: NavItem> Component for NavEntry<T> {
     fn render(&self) -> impl IntoElement {
         let item = self.item;
         let siblings = self.siblings.clone();
-        let mut selected = self.selected;
-        let mut sidebar_open = self.sidebar_open;
+        let selected = self.selected;
         let full_page = self.full_page;
-        let is_selected = selected() == item;
+        let press_select = self.on_select.clone();
+        let press_list = self.on_show_list.clone();
+        let key_select = self.on_select.clone();
         Element::from(SidebarRow {
             mark: SidebarMark::Icon(item.icon()),
             label: item.title().to_string(),
-            selected: is_selected,
+            selected: selected == item,
             on_press: (move |_: ()| {
-                selected.set(item);
+                press_select.call(item);
                 if full_page {
-                    sidebar_open.set(false);
+                    press_list.call(false);
                 }
             })
             .into(),
             on_key: Some(
                 (move |event: Event<KeyboardEventData>| {
-                    // Walk from the selected item, not this entry: focus stays
-                    // here while repeated arrows move the selection on.
-                    let position = siblings.iter().position(|other| *other == selected());
+                    // Walk from the selected item, the page on screen.
+                    let position = siblings.iter().position(|other| *other == selected);
                     let target = match &event.key {
                         Key::Named(NamedKey::ArrowDown) => {
                             position.and_then(|index| siblings.get(index + 1)).copied()
@@ -1257,7 +1313,7 @@ impl<T: NavItem> Component for NavEntry<T> {
                     };
                     if let Some(target) = target {
                         event.stop_propagation();
-                        selected.set(target);
+                        key_select.call(target);
                     }
                 })
                 .into(),

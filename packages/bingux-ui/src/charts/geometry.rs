@@ -10,17 +10,17 @@ pub(crate) const DEFAULT_HEIGHT: f32 = 200.0;
 pub(crate) const Y_TICK_SPACING: f32 = 40.0;
 pub(crate) const X_TICK_SPACING: f32 = 96.0;
 /// The margins round the plot. The bottom holds the x labels.
-pub(crate) const PLOT_TOP: f32 = S2.px();
-pub(crate) const PLOT_RIGHT: f32 = S4.px();
-pub(crate) const PLOT_BOTTOM: f32 = S8.px();
+pub(crate) const PLOT_TOP: f32 = S2.fixed_px();
+pub(crate) const PLOT_RIGHT: f32 = S4.fixed_px();
+pub(crate) const PLOT_BOTTOM: f32 = S8.fixed_px();
 /// The left gutter for y labels is at least this wide and leaves this gap.
-pub(crate) const GUTTER_MIN: f32 = S8.px();
-pub(crate) const GUTTER_GAP: f32 = S2.px();
+pub(crate) const GUTTER_MIN: f32 = S8.fixed_px();
+pub(crate) const GUTTER_GAP: f32 = S2.fixed_px();
 /// One line of caption text, and the gap above x labels and value labels.
 pub(crate) const LABEL_HEIGHT: f32 = 16.0;
-pub(crate) const LABEL_GAP: f32 = S1.px();
+pub(crate) const LABEL_GAP: f32 = S1.fixed_px();
 /// Horizontal room a thinned x label needs beside its text.
-pub(crate) const LABEL_PAD: f32 = S4.px();
+pub(crate) const LABEL_PAD: f32 = S4.fixed_px();
 /// Average advance of a glyph in ems, for estimating text width. Set high
 /// enough that "100%" at caption size never wraps in its gutter.
 pub(crate) const GLYPH_EM: f32 = 0.85;
@@ -45,13 +45,13 @@ pub(crate) const DRAW_MS: u64 = 700;
 /// between bars of one group.
 pub(crate) const BAR_FILL: f32 = 0.72;
 pub(crate) const BAR_MAX: f32 = 56.0;
-pub(crate) const BAR_GAP: f32 = S1.px();
+pub(crate) const BAR_GAP: f32 = S1.fixed_px();
 /// The shortest bar drawn. Anything smaller is zero and is skipped.
 pub(crate) const MIN_BAR: f32 = 0.5;
 /// Bars label their values when there are at most this many.
 pub(crate) const VALUE_LABEL_MAX: usize = 8;
 /// Sparklines: vertical room for their min and max labels.
-pub(crate) const SPARK_PAD: f32 = S4.px();
+pub(crate) const SPARK_PAD: f32 = S4.fixed_px();
 pub(crate) const SPARK_HEIGHT: f32 = 72.0;
 /// Rings and donuts.
 pub(crate) const RING_SIZE: f32 = 120.0;
@@ -72,15 +72,15 @@ pub(crate) const GAUGE_SWEEP: f32 = 1.5 * PI_F32;
 const PI_F32: f32 = std::f32::consts::PI;
 /// Tooltips.
 pub(crate) const TIP_WIDTH: f32 = 176.0;
-pub(crate) const TIP_GAP: f32 = S3.px();
-pub(crate) const TIP_PAD: f32 = S3.px();
+pub(crate) const TIP_GAP: f32 = S3.fixed_px();
+pub(crate) const TIP_PAD: f32 = S3.fixed_px();
 pub(crate) const TIP_ROW: f32 = 20.0;
 pub(crate) const TIP_LAYER: i16 = 1;
 pub(crate) const SWATCH: f32 = 8.0;
 /// A zero minimum width for a flex child that must be allowed to shrink.
 pub(crate) const NO_MIN: f32 = 0.0;
 /// Space between a chart and its legend.
-pub(crate) const LEGEND_GAP: f32 = S3.px();
+pub(crate) const LEGEND_GAP: f32 = S3.fixed_px();
 
 /// The plot rectangle, in the chart box's pixels.
 #[derive(Clone, Copy, Debug, PartialEq)]

@@ -31,38 +31,19 @@ impl NavItem for PageId {
 }
 
 /// Window root. The page or subpage shown is the window's address, provided
-/// by [`bingux_ui::app::Application`] or a snapshot. With `list_first`, a
-/// narrow window opens on the list of pages: no page was asked for.
+/// by [`bingux_ui::app::Application`] or a snapshot. The root address shows
+/// the list of pages on a narrow window and the first page on a wide one.
 #[derive(PartialEq)]
-pub struct App {
-    pub list_first: bool,
-}
+pub struct App;
 
 impl Component for App {
     fn render(&self) -> impl IntoElement {
         let tokens = provide_tokens();
         use_hook(crate::pages::prefetch_all);
         let address = use_address();
-        let start = page_of(&address).unwrap_or(PageId::ALL[0]);
-        let page = use_state(move || start);
-        // The address decides the sidebar page: a row or a forwarded address
-        // that names another page moves the sidebar to it.
-        let mut sidebar = page;
-        use_side_effect_with_deps(&address, move |address: &Address| {
-            if let Some(target) = page_of(address)
-                && *sidebar.peek() != target
-            {
-                sidebar.set(target);
-            }
-        });
-        // The sidebar decides the address: a click on a page opens its top
-        // level, unless the address already names that page.
-        let selected = page();
-        use_side_effect_with_deps(&selected, move |selected: &PageId| {
-            if current_address().as_ref().and_then(page_of) != Some(*selected) {
-                navigate(selected.address());
-            }
-        });
+        // The address is the state: the sidebar shows the page it names, and
+        // the root address names none, so the first page is selected.
+        let selected = page_of(&address).unwrap_or(PageId::ALL[0]);
         let navigator = use_navigator();
         let top = Route::from_address(&address);
         let signed_in = crate::pages::users::use_signed_in();
@@ -86,9 +67,31 @@ impl Component for App {
             query.set(String::new());
         })
         .into();
-        let mut split = NavigationSplitView::new("Settings", PageId::ALL.to_vec(), page, content)
-            .search(query, results, open_first)
-            .start_on_list(self.list_first);
+        // A sidebar click opens the page's top level, unless the address
+        // already names that page.
+        let on_select: EventHandler<PageId> = (move |page: PageId| {
+            if current_address().as_ref().and_then(page_of) != Some(page) {
+                navigate(page.address());
+            }
+        })
+        .into();
+        // Back from a page and Ctrl+F on a narrow window ask for the list of
+        // pages, which is the root address.
+        let on_show_list: EventHandler<bool> = (move |show: bool| {
+            if show {
+                navigate(Address::new(crate::routes::SCHEME));
+            }
+        })
+        .into();
+        let mut split = NavigationSplitView::new(
+            "Settings",
+            PageId::ALL.to_vec(),
+            selected,
+            on_select,
+            content,
+        )
+        .search(query, results, open_first)
+        .list(address.is_root(), on_show_list);
         if let Some((name, _)) = &signed_in {
             split = split.profile(Profile {
                 name: name.clone(),

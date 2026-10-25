@@ -1,6 +1,7 @@
 //! Buttons: `ActionButton`, the accent primary button, the small row pill
 //! and the square `IconButton`.
 
+use super::press::use_press;
 use freya::prelude::*;
 
 use crate::controls::progress::{SpinnerSize, spinner};
@@ -100,6 +101,7 @@ impl Component for ActionButton {
         let focus = use_focus(a11y_id);
         let on_press = self.on_press.clone();
         let on_key = on_press.clone();
+        let press = use_press();
         let usable = use_enabled(self.enabled);
         let enabled = usable && !self.loading;
         let filled = self.accent || self.destructive;
@@ -164,10 +166,20 @@ impl Component for ActionButton {
                     .on_pointer_down(move |event: Event<PointerEventData>| {
                         event.stop_propagation();
                         pressing.set(true);
+                        press.begin(&event, None);
                     })
-                    .on_global_pointer_up(move |_| pressing.set_if_modified(false))
+                    .on_global_pointer_move(move |event: Event<PointerEventData>| {
+                        press.moved(&event);
+                    })
+                    .on_global_pointer_up(move |_| {
+                        press.release();
+                        pressing.set_if_modified(false);
+                    })
                     .on_press(move |event: Event<PressEventData>| {
                         event.stop_propagation();
+                        if !press.tap(&event) {
+                            return;
+                        }
                         on_press.call(());
                         a11y_id.request_focus();
                     })
@@ -243,6 +255,7 @@ impl Component for RowButton {
         let enabled = use_enabled(true);
         let on_press = self.on_press.clone();
         let on_key = on_press.clone();
+        let press = use_press();
         let base = if self.prominent {
             Paint::Transparent
         } else {
@@ -274,10 +287,20 @@ impl Component for RowButton {
                     .on_pointer_down(move |event: Event<PointerEventData>| {
                         event.stop_propagation();
                         pressing.set(true);
+                        press.begin(&event, None);
                     })
-                    .on_global_pointer_up(move |_| pressing.set_if_modified(false))
+                    .on_global_pointer_move(move |event: Event<PointerEventData>| {
+                        press.moved(&event);
+                    })
+                    .on_global_pointer_up(move |_| {
+                        press.release();
+                        pressing.set_if_modified(false);
+                    })
                     .on_press(move |event: Event<PressEventData>| {
                         event.stop_propagation();
+                        if !press.tap(&event) {
+                            return;
+                        }
                         on_press.call(());
                         a11y_id.request_focus();
                     })
@@ -308,6 +331,7 @@ pub struct IconButton {
     danger: bool,
     filled: bool,
     active: bool,
+    enabled: bool,
 }
 
 pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconButton {
@@ -319,6 +343,7 @@ pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconBut
         danger: false,
         filled: false,
         active: false,
+        enabled: true,
     }
 }
 
@@ -352,6 +377,13 @@ impl IconButton {
         self.active = active;
         self
     }
+
+    /// Dim the button and ignore presses, for an action that is not
+    /// available yet. It stays on screen so a header keeps its shape.
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
 }
 
 impl Component for IconButton {
@@ -361,8 +393,10 @@ impl Component for IconButton {
         let mut pressing = use_state(|| false);
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
+        let usable = use_enabled(self.enabled);
         let on_press = self.on_press.clone();
         let on_key = on_press.clone();
+        let press = use_press();
         // Only a hovered danger button takes the danger fill; the state
         // layer from `surface` then sits over it.
         let base = if self.danger && hovering() {
@@ -374,7 +408,8 @@ impl Component for IconButton {
         };
         let button = rect()
             .a11y_id(a11y_id)
-            .a11y_focusable(true)
+            .a11y_focusable(usable)
+            .a11y_enabled(usable)
             .a11y_role(AccessibilityRole::Button)
             .maybe(self.tooltip.is_some(), |element| {
                 element.a11y_alt(self.tooltip.clone().unwrap_or_default())
@@ -391,26 +426,40 @@ impl Component for IconButton {
             .maybe(self.active, |element| {
                 element.tw(&tokens, &[border(Line::Stroke(Dim::Ring, Paint::Accent))])
             })
-            .on_pointer_enter(move |_| hovering.set(true))
-            .on_pointer_leave(move |_| {
-                hovering.set(false);
-                pressing.set_if_modified(false);
-            })
-            .on_pointer_down(move |event: Event<PointerEventData>| {
-                event.stop_propagation();
-                pressing.set(true);
-            })
-            .on_global_pointer_up(move |_| pressing.set_if_modified(false))
-            .on_press(move |event: Event<PressEventData>| {
-                event.stop_propagation();
-                on_press.call(());
-                a11y_id.request_focus();
-            })
-            .on_key_down(move |event: Event<KeyboardEventData>| {
-                if is_activation_key(&event.key) {
-                    event.stop_propagation();
-                    on_key.call(());
-                }
+            .maybe(!usable, |element| element.opacity(0.5))
+            .maybe(usable, |element| {
+                element
+                    .on_pointer_enter(move |_| hovering.set(true))
+                    .on_pointer_leave(move |_| {
+                        hovering.set(false);
+                        pressing.set_if_modified(false);
+                    })
+                    .on_pointer_down(move |event: Event<PointerEventData>| {
+                        event.stop_propagation();
+                        pressing.set(true);
+                        press.begin(&event, None);
+                    })
+                    .on_global_pointer_move(move |event: Event<PointerEventData>| {
+                        press.moved(&event);
+                    })
+                    .on_global_pointer_up(move |_| {
+                        press.release();
+                        pressing.set_if_modified(false);
+                    })
+                    .on_press(move |event: Event<PressEventData>| {
+                        event.stop_propagation();
+                        if !press.tap(&event) {
+                            return;
+                        }
+                        on_press.call(());
+                        a11y_id.request_focus();
+                    })
+                    .on_key_down(move |event: Event<KeyboardEventData>| {
+                        if is_activation_key(&event.key) {
+                            event.stop_propagation();
+                            on_key.call(());
+                        }
+                    })
             })
             .child(icons::icon(
                 self.icon,

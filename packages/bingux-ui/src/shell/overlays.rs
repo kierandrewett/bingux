@@ -10,6 +10,7 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::controls::button::{ActionButton, action_button, primary_button};
+use crate::controls::press::use_press;
 use crate::motion::{PRESENCE_SCALE, use_presence};
 use crate::shell::menu::{Menu, MenuItem, MenuLayer, MenuNav};
 use crate::style::*;
@@ -575,6 +576,7 @@ impl Component for ToastAction {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
+        let press = use_press();
         let on_press = self.on_press.clone();
         let on_key = on_press.clone();
         rect()
@@ -592,8 +594,15 @@ impl Component for ToastAction {
             )
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| hovering.set(false))
+            .on_pointer_down(move |event: Event<PointerEventData>| press.begin(&event, None))
+            .on_global_pointer_move(move |event: Event<PointerEventData>| press.moved(&event))
+            .on_global_pointer_up(move |_| press.release())
             .on_press(move |event: Event<PressEventData>| {
                 event.stop_propagation();
+                // A touch that scrolled off the action is not a tap.
+                if !press.tap(&event) {
+                    return;
+                }
                 on_press.call(());
             })
             .on_key_down(move |event: Event<KeyboardEventData>| {

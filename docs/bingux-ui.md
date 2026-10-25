@@ -35,7 +35,7 @@ struct App;
 impl Component for App {
     fn render(&self) -> impl IntoElement {
         let tokens = provide_tokens();
-        let page = use_state(|| Page::General);
+        let mut page = use_state(|| Page::General);
         let content = Group::new("Options".to_string())
             .row(switch_row("Enabled", true, |_| {}))
             .row(row("Version").value("1.0"));
@@ -46,12 +46,20 @@ impl Component for App {
             .child(OverlayHost::new(NavigationSplitView::new(
                 "My App",
                 vec![Page::General, Page::About],
-                page,
+                page(),
+                move |chosen: Page| page.set(chosen),
                 content,
             )))
     }
 }
 ```
+
+The split view does not own the selected page. `selected` is the page the sidebar
+shows, and `on_select` is called with the page a sidebar row chooses, so the caller
+keeps that state. On a narrow window, `.list(shown, on_show_list)` decides whether the
+list of pages or the page is the screen. `on_show_list` is called with `true` when the
+list is asked for (Back from a page, Ctrl+F) and with `false` when a page is chosen.
+Without `.list`, the split view keeps that state itself.
 
 `OverlayHost` provides the handle returned by `use_overlays()`, which opens
 dialogs and shows toasts from any component below it. It mounts `WindowHost`
@@ -297,6 +305,65 @@ A value computed at run time can still be passed to `Size::px`, such as a
 measured width, a drag offset or a chart's geometry. To add a value, add a
 token or a recipe first.
 
+### Size class and density
+
+Sizes come in two classes, `SizeClass`. `Regular` is the mouse density of a
+desktop window; `Compact` is the fingertip density. The window root
+(`WindowHost`) sets the class at the start of every frame, before any child
+renders:
+
+- `Compact` when the window is narrower than `theme::NARROW_BELOW` (740 px),
+  a phone.
+- `Compact` when the latest pointer event was a touch. A finger on a wide
+  window flips the class to `Compact`; the next mouse press or move flips it
+  back to `Regular`. Pointer kind is latched from the root's global pointer
+  listeners, so this is the only way the window switches density by itself.
+
+Every size token resolves against the current class when it is applied. Each
+kind has one table in `style/tokens.rs`, so tuning a size is one edit. The
+values are:
+
+| Token                               | Regular         | Compact         |
+| ----------------------------------- | --------------- | --------------- |
+| `Dim::Row`                          | 56 px           | 60 px           |
+| `Dim::RowSubtitle`                  | 63 px           | 68 px           |
+| `Dim::Control`                      | 36 px           | 44 px           |
+| `Dim::Button`                       | 40 px           | 48 px           |
+| `Dim::MenuItem`                     | 36 px           | 52 px           |
+| `Dim::NavItem`                      | 40 px           | 56 px           |
+| `Dim::Header`                       | 48 px           | 56 px           |
+| `Dim::SwitchWidth` x `SwitchHeight` | 36 x 20 px      | 48 x 28 px      |
+| `Dim::SliderThumb`                  | 16 px           | 22 px           |
+| `Dim::StepperHalf`                  | 28 px           | 36 px           |
+| `Dim::Field`                        | 240 px          | 168 px          |
+| `Space::S3` / `S4` / `S5`           | 12 / 16 / 20 px | 14 / 18 / 22 px |
+| `Space::S6` / `S8` / `S12`          | 24 / 32 / 48 px | 26 / 36 / 54 px |
+| `TextSize::Sm` / `Md` / `Lg`        | 13 / 14 / 16 px | 14 / 15 / 17 px |
+| `TextSize::Heading` / `Display`     | 18 / 28 px      | 19 / 30 px      |
+| `IconSize::Control` / `Row`         | 16 / 18 px      | 18 / 20 px      |
+| `IconSize::App`                     | 32 px           | 36 px           |
+
+Sizes that are not in the table are the same at both classes. The chart
+geometry, menu edge and display arrangement use `Space::fixed_px()`, which
+reads the regular value whatever the class, because they are constants.
+
+The API, all in `bingux_ui::style` and the prelude:
+
+- `SizeClass::{Regular, Compact}`, with `is_compact()` and `pick(regular,
+compact)`.
+- `size_class()` and `is_compact()` read the class now. Reading either while a
+  component renders subscribes that component, so it re-renders when the class
+  changes. `pick(regular, compact)` is the same read for a value that is not a
+  token.
+- `PointerKind::{Mouse, Touch}` and `pointer_kind()` give the latched pointer
+  kind.
+- `Space::px()`, `TextSize::px()`, `IconSize::px()` and `Dim::px()` resolve at
+  the current class. A style applied with `tw` or `font()` needs no call.
+
+The class is one `State` created once per thread, so it survives every
+re-render. The root writes it before any child renders, so a frame that
+changes the class is consistent: no child sees a mix of densities.
+
 ## Rules
 
 `bingux-ui` is the shell's look in Freya. The source of truth is the shell's
@@ -318,15 +385,15 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
   wide. A standalone button is 40 px and a menu item 36 px. Dropdowns and
   fields in a row share one 240 px column (`Dim::Field`), so their left
   edges line up; a field for a URL or a path uses `Dim::FieldWide` (440 px).
-- **Phone width uses fingertip sizes.** Below 740 px the split view calls
-  `set_touch(true)`: a row is 60 px, a sidebar page 56 px, a control 44 px, a
-  standalone button 48 px, and the switch and slider handles grow. A
-  dropdown, field or slider in a row is cut to 168 px so the row's text
-  keeps room, and a dropdown there shows only its value and a chevron, with
-  no box. A segmented control becomes the same value picker, since a track
-  of segments does not fit beside a title. A row title wraps onto a
-  second line instead of being cut. A level row puts its slider on a second line under its title. `Dim` resolves these sizes when a style is applied, so a style is
-  written once. Crossing the threshold remounts the page once.
+- **Compact density is the fingertip size class.** A window narrower than
+  `NARROW_BELOW` (740 px), or one a finger has touched, resolves every size
+  token to its compact value (see
+  [Size class and density](#size-class-and-density)). A dropdown in a row is
+  capped at `Dim::Field` (168 px) so the row's title keeps its room. A
+  segmented control becomes a dropdown, since a track of segments does not fit
+  beside a title. A row title wraps onto a second line instead of being cut. A
+  change of class re-renders the components that read a size, in place, with
+  no remount.
 - **One inset.** `GUTTER` (16) is the only horizontal inset inside a card:
   row text, free content and the hairline start `GUTTER` from the card's
   edge.
@@ -485,6 +552,15 @@ the control. It grows out from the control and fades in when keyboard focus
 arrives (`FOCUS_IN_MS`), then fades out when focus leaves (`FOCUS_OUT_MS`).
 Pointer focus draws no ring. The ring takes the control's corner radius plus
 its outset, so it follows the shape of the control.
+
+Window focus lives in `focus.rs`. `WindowHost` provides one `FocusCore` for the
+window; Tab and F6 move between focus regions (the sidebar, the content, the
+header). A region draws its ring around the whole area, not around one control.
+Clicking a control claims the press, so a pointer press never starts a ring.
+`trap()` wraps a popup so Tab stays inside it while it is open. Use
+`use_focus_core()` to reach the core: with no host (the gallery, the snapshot
+runner, an inspector window) it returns a detached core, so focus moves do
+nothing and controls still work.
 
 ## Gallery and snapshots
 

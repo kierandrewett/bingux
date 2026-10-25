@@ -245,9 +245,7 @@ impl Navigator {
     /// Opens `route`, remembering its name for the header.
     pub fn push(&self, route: Route) {
         TITLES.with(|titles| {
-            titles
-                .borrow_mut()
-                .insert(route.address(), route.title());
+            titles.borrow_mut().insert(route.address(), route.title());
         });
         navigate(route.address());
     }

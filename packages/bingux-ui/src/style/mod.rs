@@ -403,7 +403,7 @@ fn apply(rect: Rect, tokens: Option<&Tokens>, util: Util) -> Rect {
         Util::Bg(paint) => rect.background(paint.color(tokens)),
         Util::Ink(paint) => rect.color(paint.color(tokens)),
         Util::Font(style) => rect
-            .font_size(style.size)
+            .font_size(style.size.px())
             .font_weight(style.weight)
             .color(style.ink.color(tokens)),
         Util::Surface {

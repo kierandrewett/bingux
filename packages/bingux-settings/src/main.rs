@@ -39,15 +39,15 @@ fn main() {
         snapshot_pages(&dir, &only);
         return;
     }
-    // No argument opens the window on its first page, narrow windows showing
-    // the list of pages; an address opens that page or subpage.
-    let list_first = std::env::args().nth(1).is_none();
+    // No argument opens the window at its root address: the list of pages on
+    // a narrow window, the first page on a wide one. An address opens that
+    // page or subpage.
     Application::new("bingux-settings")
         .scheme(routes::SCHEME)
         .title("Settings")
         .borderless()
         .usage(usage())
-        .run(move || app::App { list_first });
+        .run(|| app::App);
 }
 
 /// The text `--help` prints: the address forms the window understands.
@@ -102,28 +102,28 @@ fn snapshot_pages(dir: &str, only: &[String]) {
     // Each name is an address, as on the command line: `wifi`, `wifi/saved`.
     // BINGUX_SETTINGS_SNAPSHOT_ADDRESS="wifi/saved" renders that one address
     // (it overrides the list), so a page can be captured without a list.
-    let addresses: Vec<Address> = if let Ok(text) = std::env::var("BINGUX_SETTINGS_SNAPSHOT_ADDRESS")
-    {
-        match Address::parse_in(routes::SCHEME, &text) {
-            Some(address) => vec![address],
-            None => {
-                eprintln!("[snapshot] not an address: {text}");
-                return;
-            }
-        }
-    } else if only.is_empty() {
-        PageId::ALL.iter().map(|id| id.address()).collect()
-    } else {
-        only.iter()
-            .filter_map(|name| {
-                let address = Address::parse_in(routes::SCHEME, name);
-                if address.is_none() {
-                    eprintln!("[snapshot] not an address: {name}");
+    let addresses: Vec<Address> =
+        if let Ok(text) = std::env::var("BINGUX_SETTINGS_SNAPSHOT_ADDRESS") {
+            match Address::parse_in(routes::SCHEME, &text) {
+                Some(address) => vec![address],
+                None => {
+                    eprintln!("[snapshot] not an address: {text}");
+                    return;
                 }
-                address
-            })
-            .collect()
-    };
+            }
+        } else if only.is_empty() {
+            PageId::ALL.iter().map(|id| id.address()).collect()
+        } else {
+            only.iter()
+                .filter_map(|name| {
+                    let address = Address::parse_in(routes::SCHEME, name);
+                    if address.is_none() {
+                        eprintln!("[snapshot] not an address: {name}");
+                    }
+                    address
+                })
+                .collect()
+        };
     // BINGUX_SETTINGS_SNAPSHOT_SEARCH="text" starts the window with that text
     // in the search box, so the search results can be captured. See
     // `search_results::initial_query`.
@@ -153,8 +153,13 @@ fn snapshot_pages(dir: &str, only: &[String]) {
         .unwrap_or(theme::WINDOW_SIZE);
     for address in addresses {
         let path = format!("{dir}/{}.png", snapshot_name(&address));
-        let list_first = std::env::var_os("BINGUX_SETTINGS_SNAPSHOT_LIST").is_some();
-        let page = address.clone();
+        // The root address is the list of pages; a page address is that page.
+        let list = std::env::var_os("BINGUX_SETTINGS_SNAPSHOT_LIST").is_some();
+        let page = if list {
+            Address::new(routes::SCHEME)
+        } else {
+            address.clone()
+        };
         let mut shot = bingux_ui::snapshot::Snapshot::new(
             move || {
                 let tokens = theme::load_tokens();
@@ -162,7 +167,7 @@ fn snapshot_pages(dir: &str, only: &[String]) {
                 Element::from(
                     rect()
                         .tw(&tokens, &[w_full(), h_full(), bg(Paint::Bg)])
-                        .child(app::App { list_first }),
+                        .child(app::App),
                 )
             },
             size,
@@ -203,6 +208,17 @@ fn snapshot_pages(dir: &str, only: &[String]) {
             shot.right_click(x, y)
                 .settle(std::time::Duration::from_millis(1000));
         }
+        // BINGUX_SETTINGS_SNAPSHOT_TOUCH="x,y" taps there with one finger, and
+        // BINGUX_SETTINGS_SNAPSHOT_LONG_PRESS="x,y" rests a finger there past the
+        // long-press threshold, before the capture.
+        if let Some([x, y]) = snapshot_numbers::<2>("BINGUX_SETTINGS_SNAPSHOT_TOUCH") {
+            shot.touch(x, y)
+                .settle(std::time::Duration::from_millis(500));
+        }
+        if let Some([x, y]) = snapshot_numbers::<2>("BINGUX_SETTINGS_SNAPSHOT_LONG_PRESS") {
+            shot.long_press(x, y)
+                .settle(std::time::Duration::from_millis(1000));
+        }
         // BINGUX_SETTINGS_SNAPSHOT_SCROLL="x,y,dy" scrolls the wheel by dy over
         // (x, y), and BINGUX_SETTINGS_SNAPSHOT_HOVER="x,y" then moves the
         // pointer there, before the capture.
@@ -216,18 +232,29 @@ fn snapshot_pages(dir: &str, only: &[String]) {
         }
         // BINGUX_SETTINGS_SNAPSHOT_KEYS="escape,escape" presses those keys, in
         // order, after the clicks, to close a popup or a menu from a script.
+        // "shift+tab", "f6" and "shift+f6" drive the focus cycle.
         if let Ok(keys) = std::env::var("BINGUX_SETTINGS_SNAPSHOT_KEYS") {
-            for name in keys.split(',').map(str::trim).filter(|name| !name.is_empty()) {
+            for name in keys
+                .split(',')
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+            {
+                let (modifiers, name) = match name.strip_prefix("shift+") {
+                    Some(rest) => (freya::prelude::Modifiers::SHIFT, rest),
+                    None => (freya::prelude::Modifiers::default(), name),
+                };
                 let key = match name {
                     "escape" => freya::prelude::Key::Named(freya::prelude::NamedKey::Escape),
                     "return" => freya::prelude::Key::Named(freya::prelude::NamedKey::Enter),
                     "tab" => freya::prelude::Key::Named(freya::prelude::NamedKey::Tab),
+                    "f6" => freya::prelude::Key::Named(freya::prelude::NamedKey::F6),
                     other => {
                         eprintln!("[snapshot] unknown key: {other}");
                         continue;
                     }
                 };
-                shot.key(key).settle(std::time::Duration::from_millis(1000));
+                shot.key_with(key, modifiers)
+                    .settle(std::time::Duration::from_millis(1000));
             }
         }
         // BINGUX_SETTINGS_SNAPSHOT_DRAG="x1,y1,x2,y2" drags from the first point
