@@ -30,7 +30,7 @@ const CURSOR_KEY: &str = "cursor-size";
 
 /// The values as the system has them. `None` means the key could not be read
 /// and its row is hidden.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Model {
     screen_reader: Option<bool>,
     screen_keyboard: Option<bool>,
@@ -132,7 +132,7 @@ fn choose_cursor_size(picks: Picks, loaded: State<Option<Model>>, overlays: Over
         previous,
         next,
         move || system::gsettings_set(INTERFACE, "cursor-size", &size.to_string()).map(|_| ()),
-        move || background(loaded, load),
+        move || background(loaded, move || system::load_saved("accessibility", load)),
     );
 }
 
@@ -210,7 +210,7 @@ pub struct AccessibilityPage;
 
 impl Component for AccessibilityPage {
     fn render(&self) -> impl IntoElement {
-        let loaded = system::use_cached("accessibility", load);
+        let loaded = system::use_cached_saved("accessibility", load);
         let overlays = use_overlays();
         let pending: Pending = use_state(BTreeMap::new);
         let picks: Picks = use_state(BTreeMap::new);
@@ -369,5 +369,5 @@ impl Component for AccessibilityPage {
 
 /// Start loading this page's data before it is opened.
 pub fn prefetch() {
-    system::prefetch("accessibility", load);
+    system::prefetch_saved("accessibility", load);
 }

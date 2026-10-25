@@ -15,7 +15,7 @@ use crate::task::spawn_blocking;
 use freya::prelude::*;
 
 /// A readable failure from a system command.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CommandError(pub String);
 
 impl std::fmt::Display for CommandError {
@@ -356,6 +356,39 @@ where
         background(state, move || load_persistent(key, load));
         state
     })
+}
+
+/// Run `load` and save its value under `key`, as [`load_persistent`] does for
+/// a fallible load. Call from the background, never from `render`.
+pub fn load_saved<T: serde::Serialize>(key: &'static str, load: fn() -> T) -> T {
+    let value = load();
+    write_saved(key, &value);
+    value
+}
+
+/// As [`use_cached`], with the persistent cache for a load that cannot fail:
+/// the saved value is shown at once, then `load` refreshes it and the result
+/// is saved. Call from `render`.
+pub fn use_cached_saved<T>(key: &'static str, load: fn() -> T) -> State<Option<T>>
+where
+    T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
+{
+    use_hook(move || {
+        let state = cached_entry(key, || read_saved::<T>(key));
+        background(state, move || load_saved(key, load));
+        state
+    })
+}
+
+/// As [`prefetch_persistent`], for a load that cannot fail. Call once at
+/// start-up.
+pub fn prefetch_saved<T>(key: &'static str, load: fn() -> T)
+where
+    T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
+{
+    background(cached_entry(key, || read_saved::<T>(key)), move || {
+        load_saved(key, load)
+    });
 }
 
 /// Run `work` on the task pool and call `done` with its result on the UI

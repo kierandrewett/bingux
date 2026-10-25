@@ -810,7 +810,15 @@ impl Component for LevelRow {
         let readout: Option<Element> = self.value_text.as_ref().map(|text| -> Element {
             rect()
                 .tw(&tokens, &[flex_row(), justify(Align::End), w_full()])
-                .child(VALUE.label(&tokens, text.clone()).max_lines(1))
+                // Tabular figures: a level that changes keeps its width.
+                .child(
+                    crate::typography::TextStyle {
+                        tabular: true,
+                        ..VALUE
+                    }
+                    .label(&tokens, text.clone())
+                    .max_lines(1),
+                )
                 .into()
         });
 

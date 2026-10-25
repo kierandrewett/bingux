@@ -285,7 +285,7 @@ impl Parser<'_> {
 }
 
 /// One mode Mutter offers for a monitor.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Mode {
     id: String,
     width: u32,
@@ -308,7 +308,7 @@ impl Mode {
 
 /// A monitor and its draft settings. Edits change these fields; Apply sends
 /// them to Mutter.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Monitor {
     connector: String,
     name: String,
@@ -492,13 +492,13 @@ fn trim_number(value: f64) -> String {
 }
 
 /// A read-only monitor from `gnoblinctl`, with rows already formatted.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Record {
     title: String,
     rows: Vec<(String, String)>,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 enum Displays {
     Editable {
         serial: u32,
@@ -512,7 +512,7 @@ enum Displays {
     },
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Night {
     enabled: bool,
     kelvin: u32,
@@ -523,7 +523,7 @@ struct Night {
     to: f64,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Page {
     displays: Result<Displays, CommandError>,
     night: Result<Night, CommandError>,
@@ -940,9 +940,8 @@ fn kelvin_for_level(level: f64) -> u32 {
     TEMP_MIN + ((level / 100.0) * f64::from(TEMP_MAX - TEMP_MIN)).round() as u32
 }
 
-fn reload(mut model: State<Option<Page>>) {
-    model.set(None);
-    background(model, load);
+fn reload(model: State<Option<Page>>) {
+    background(model, || system::load_saved("displays", load));
 }
 
 /// Changes the draft monitors and shows the error, if any. A rejected change
@@ -2365,7 +2364,7 @@ fn identify(overlays: Overlays, names: String) {
 
 impl Component for DisplaysPage {
     fn render(&self) -> impl IntoElement {
-        let model = system::use_cached("displays", load);
+        let model = system::use_cached_saved("displays", load);
         let ctx = use_page_ctx(model);
         let navigator = use_navigator();
         let tokens = use_tokens();
@@ -2435,7 +2434,7 @@ pub struct DisplayPage {
 
 impl Component for DisplayPage {
     fn render(&self) -> impl IntoElement {
-        let model = system::use_cached("displays", load);
+        let model = system::use_cached_saved("displays", load);
         let ctx = use_page_ctx(model);
 
         let page = page_column();
@@ -2483,5 +2482,5 @@ impl Component for DisplayPage {
 
 /// Start loading this page's data before it is opened.
 pub fn prefetch() {
-    system::prefetch("displays", load);
+    system::prefetch_saved("displays", load);
 }
