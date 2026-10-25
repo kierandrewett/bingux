@@ -57,6 +57,8 @@ pub enum Icon {
     Speakers,
     Gamepad,
     Phone,
+    Pause,
+    Inspect,
     NetworkWirelessSignalNone,
     NetworkWirelessSignalWeak,
     NetworkWirelessSignalOk,
@@ -126,7 +128,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 114] = [
+    pub const ALL: [Icon; 116] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -176,6 +178,8 @@ impl Icon {
         Self::Speakers,
         Self::Gamepad,
         Self::Phone,
+        Self::Pause,
+        Self::Inspect,
         Self::NetworkWirelessSignalNone,
         Self::NetworkWirelessSignalWeak,
         Self::NetworkWirelessSignalOk,
@@ -299,6 +303,8 @@ impl Icon {
             Self::Speakers => include_bytes!("../icons/audio-speakers-symbolic.svg"),
             Self::Gamepad => include_bytes!("../icons/input-gaming-symbolic.svg"),
             Self::Phone => include_bytes!("../icons/phone-symbolic.svg"),
+            Self::Pause => include_bytes!("../icons/media-playback-pause-symbolic.svg"),
+            Self::Inspect => include_bytes!("../icons/pointer-inspect-symbolic.svg"),
             Self::NetworkWirelessSignalNone => {
                 include_bytes!("../icons/network-wireless-signal-none-symbolic.svg")
             }

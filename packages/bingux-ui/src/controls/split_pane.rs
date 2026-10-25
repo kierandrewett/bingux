@@ -3,9 +3,11 @@
 //! position survives a rebuild. By default the panes sit side by side;
 //! `.vertical()` stacks them.
 //!
-//! Dragging the divider sets the ratio from the pointer, kept between
-//! `MIN_RATIO` and `MAX_RATIO` so neither pane can close. The divider is a
-//! keyboard focus stop: the arrow keys across its axis move it by `KEY_STEP`.
+//! Dragging the divider sets the ratio from the pointer. The ratio is kept so
+//! that each pane stays at least `MIN_PANE_PX` long; when the container is too
+//! short for that, the panes split it evenly. The divider is a 6px hit zone
+//! with a hairline centred in it, and a keyboard focus stop: the arrow keys
+//! across its axis move it by `KEY_STEP`.
 
 use freya::prelude::*;
 
@@ -13,12 +15,26 @@ use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::use_tokens;
 
-/// Smallest share either pane may take.
+/// Smallest share either pane may take before the length is known.
 const MIN_RATIO: f32 = 0.15;
-/// Largest share either pane may take.
+/// Largest share either pane may take before the length is known.
 const MAX_RATIO: f32 = 0.85;
 /// Share of the length one arrow key press moves the divider.
 const KEY_STEP: f32 = 0.05;
+/// Narrowest either pane may get, in logical pixels, so neither side collapses.
+const MIN_PANE_PX: f32 = 220.0;
+/// Width of the divider's hit zone in logical pixels; the hairline sits centred in it.
+const HIT_PX: f32 = 6.0;
+
+/// The share range that keeps both panes at least `MIN_PANE_PX` long along a
+/// container of `length`. Before the length is known, the fallback range applies.
+fn share_bounds(length: f32) -> (f32, f32) {
+    if length <= 0.0 {
+        return (MIN_RATIO, MAX_RATIO);
+    }
+    let floor = (MIN_PANE_PX / length).clamp(MIN_RATIO, 0.5);
+    (floor, 1.0 - floor)
+}
 
 /// Two panes and the divider between them. See the module docs.
 #[derive(Clone, PartialEq)]
@@ -58,7 +74,14 @@ impl Component for SplitPane {
         let mut dragging = use_state(|| false);
         let mut ratio = self.ratio.clone();
         let vertical = self.vertical;
-        let value = ratio.read().clamp(MIN_RATIO, MAX_RATIO);
+        let bounds = *area.read();
+        let length = if vertical {
+            bounds.height()
+        } else {
+            bounds.width()
+        };
+        let (low, high) = share_bounds(length);
+        let value = ratio.read().clamp(low, high);
 
         let on_move = move |event: Event<PointerEventData>| {
             if !*dragging.peek() {
@@ -74,7 +97,8 @@ impl Component for SplitPane {
             if length <= 0.0 {
                 return;
             }
-            let share = ((pointer as f32 - origin) / length).clamp(MIN_RATIO, MAX_RATIO);
+            let (low, high) = share_bounds(length);
+            let share = ((pointer as f32 - origin) / length).clamp(low, high);
             ratio.set_if_modified(share);
         };
 
@@ -90,30 +114,35 @@ impl Component for SplitPane {
                 _ => return,
             };
             event.stop_propagation();
-            keyed.set_if_modified((value + delta).clamp(MIN_RATIO, MAX_RATIO));
+            keyed.set_if_modified((value + delta).clamp(low, high));
         };
-        let divider = if vertical {
+        let hit = if vertical {
             rect()
-                .tw(&tokens, &[w_full(), py(S1)])
+                .width(Size::fill())
+                .height(Size::px(HIT_PX))
+                .tw(&tokens, &[items(Align::Center), justify(Align::Center)])
                 .child(rect().tw(&tokens, &[w_full(), h(Dim::Hairline), bg(Paint::Separator)]))
         } else {
             rect()
-                .tw(&tokens, &[h_full(), px(S1)])
+                .width(Size::px(HIT_PX))
+                .height(Size::fill())
+                .tw(&tokens, &[items(Align::Center), justify(Align::Center)])
                 .child(rect().tw(&tokens, &[h_full(), w(Dim::Hairline), bg(Paint::Separator)]))
-        }
-        .a11y_id(a11y_id)
-        .a11y_focusable(true)
-        .a11y_role(AccessibilityRole::Splitter)
-        .a11y_alt("Pane divider")
-        .on_key_down(on_key_down)
-        .on_pointer_down(move |event: Event<PointerEventData>| {
-            if !event.data().is_primary() {
-                return;
-            }
-            event.stop_propagation();
-            dragging.set(true);
-        })
-        .focusable(focus(), Radius::Pill);
+        };
+        let divider = hit
+            .a11y_id(a11y_id)
+            .a11y_focusable(true)
+            .a11y_role(AccessibilityRole::Splitter)
+            .a11y_alt("Pane divider")
+            .on_key_down(on_key_down)
+            .on_pointer_down(move |event: Event<PointerEventData>| {
+                if !event.data().is_primary() {
+                    return;
+                }
+                event.stop_propagation();
+                dragging.set(true);
+            })
+            .focusable(focus(), Radius::Pill);
 
         // The first pane is a run-time share of the length, so a raw percent;
         // the second takes what the divider leaves.
@@ -145,6 +174,7 @@ impl Component for SplitPane {
                     w_full(),
                     h_full(),
                     if vertical { flex_col() } else { flex_row() },
+                    grow_children(),
                 ],
             )
             .on_sized(move |event: Event<SizedEventData>| area.set(event.area))

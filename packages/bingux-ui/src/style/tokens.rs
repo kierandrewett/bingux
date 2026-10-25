@@ -13,7 +13,10 @@
 //! written once is right at both sizes. The class is reactive: a component that
 //! reads a size re-renders in place when the class changes.
 
-use freya::prelude::{Color, State, WritableUtils};
+use std::cell::RefCell;
+use std::collections::HashMap;
+
+use freya::prelude::{Color, State, WritableUtils, try_consume_context};
 
 use crate::theme::Tokens;
 
@@ -224,6 +227,8 @@ pub enum Dim {
     Field,
     /// A field for a URL, path or name: 440 px, at most 168 px on a phone.
     FieldWide,
+    /// A colour value beside its swatch and picker button: 144 px.
+    FieldColour,
     /// A dropdown whose options carry application icons: 260 px.
     FieldApps,
     /// A menu of actions: 220 px.
@@ -311,8 +316,16 @@ pub enum Dim {
     SignalBar,
     /// The keyboard focus ring and selection rings: 2 px.
     Ring,
+    /// A round colour-picker thumb: 12 px.
+    Thumb,
+    /// A colour-picker swatch: 16 px.
+    Swatch,
+    /// The label column of a property row, left of its controls: 96 px.
+    Label,
     /// A hairline: 1 px.
     Hairline,
+    /// A selection indicator: 2 px, the underline of the selected tab.
+    Indicator,
     /// A check or radio box: 18 px.
     Check,
     /// A thin progress or slider track: 6 px.
@@ -341,6 +354,12 @@ pub enum Dim {
     Timeline,
     /// The widest a dense inline editor (number, colour, choice) gets: 140 px.
     DenseField,
+    /// A row of the DOM tree and code views: 22 px.
+    CodeRow,
+    /// The indent of one level in the DOM tree: 14 px.
+    TreeIndent,
+    /// The find strip docked at the top of a pane: 26 px.
+    FlatField,
 }
 
 impl Dim {
@@ -419,7 +438,12 @@ impl Dim {
             Dim::IconBox => IconSize::Row.sizes(),
             Dim::SignalBar => same(3.0),
             Dim::Ring => same(2.0),
+            Dim::Thumb => same(12.0),
+            Dim::Swatch => same(16.0),
+            Dim::Label => same(96.0),
             Dim::Hairline => same(1.0),
+            Dim::Indicator => same(2.0),
+            Dim::FieldColour => same(144.0),
             Dim::Check => same(18.0),
             Dim::Track => same(6.0),
             Dim::SpinnerMedium => same(3.0),
@@ -433,6 +457,9 @@ impl Dim {
             Dim::FlameRow => same(20.0),
             Dim::Timeline => same(72.0),
             Dim::DenseField => same(140.0),
+            Dim::CodeRow => same(22.0),
+            Dim::TreeIndent => same(14.0),
+            Dim::FlatField => same(26.0),
         }
     }
 }
@@ -530,10 +557,32 @@ pub enum Paint {
     MockLightBar,
     MockLightSidebar,
     MockLightLine,
+    /// The inspector's content box, over the hovered app element.
+    InspectContent,
+    /// The inspector's padding band, over the hovered app element.
+    InspectPadding,
+    /// The inspector's margin band, over the hovered app element.
+    InspectMargin,
+    /// The dark tag behind the inspector's size label.
+    InspectTag,
+    /// The inspector's size label text.
+    InspectInk,
+    /// The soft shadow under the inspector's hover card.
+    InspectShadow,
     /// A tone at 16%: the fill of a banner.
     Tint(Tone),
     /// A tone at 28%: the edge of a banner.
     TintEdge(Tone),
+    /// Syntax colours of markup: a tag name, an attribute name, an
+    /// attribute value, text and a comment.
+    SyntaxTag,
+    SyntaxAttr,
+    SyntaxValue,
+    SyntaxText,
+    SyntaxComment,
+    /// The fill behind a search hit in a code view, and behind the current hit.
+    SearchHit,
+    SearchCurrent,
 }
 
 /// The tone of a message: information, a warning or an error.
@@ -599,8 +648,69 @@ impl Paint {
             Paint::MockLightBar => Color::from_rgb(228, 228, 228),
             Paint::MockLightSidebar => Color::from_rgb(238, 238, 238),
             Paint::MockLightLine => Color::from_rgb(186, 186, 186),
+            // Chrome's overlay bands: rgba(111,168,220,.66), rgba(147,196,125,.55)
+            // and rgba(246,178,107,.66).
+            Paint::InspectContent => Color::from_argb(0xa8, 0x6f, 0xa8, 0xdc),
+            Paint::InspectPadding => Color::from_argb(0x8c, 0x93, 0xc4, 0x7d),
+            Paint::InspectMargin => Color::from_argb(0xa8, 0xf6, 0xb2, 0x6b),
+            Paint::InspectTag => Color::from_argb(0xee, 0x20, 0x21, 0x24),
+            Paint::InspectInk => Color::WHITE,
+            Paint::InspectShadow => Color::from_argb(0x66, 0x00, 0x00, 0x00),
+            Paint::SyntaxTag => tokens.syntax_tag,
+            Paint::SyntaxAttr => tokens.syntax_attr,
+            Paint::SyntaxValue => tokens.syntax_value,
+            Paint::SyntaxText => tokens.syntax_text,
+            Paint::SyntaxComment => tokens.syntax_comment,
+            Paint::SearchHit => tokens.warning.with_af32(0.30),
+            Paint::SearchCurrent => tokens.warning.with_af32(0.65),
         }
     }
+}
+
+/// Parses `#rrggbb` or `#aarrggbb` (the `#` optional), the form the inspector
+/// reads and commits. Freya's `Color::from_hex` reads 8 digits as RRGGBBAA, so
+/// it is not used here.
+pub fn colour_from_hex(text: &str) -> Option<Color> {
+    let text = text.trim();
+    let digits = text.strip_prefix('#').unwrap_or(text);
+    if !digits.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let value = u32::from_str_radix(digits, 16).ok()?;
+    match digits.len() {
+        6 => Some(colour_from_argb(
+            255,
+            (value >> 16) as u8,
+            (value >> 8) as u8,
+            value as u8,
+        )),
+        8 => Some(colour_from_argb(
+            (value >> 24) as u8,
+            (value >> 16) as u8,
+            (value >> 8) as u8,
+            value as u8,
+        )),
+        _ => None,
+    }
+}
+/// The colour as `#aarrggbb`, the form `colour_from_hex` reads and the
+/// inspector commits.
+pub fn colour_to_hex(colour: Color) -> String {
+    format!(
+        "#{:02x}{:02x}{:02x}{:02x}",
+        colour.a(),
+        colour.r(),
+        colour.g(),
+        colour.b()
+    )
+}
+/// A colour from its channels, read from a file or a field at run time.
+pub fn colour_from_argb(alpha: u8, red: u8, green: u8, blue: u8) -> Color {
+    Color::from_argb(alpha, red, green, blue)
+}
+/// A colour from hue, saturation and value, chosen in a colour picker.
+pub fn colour_from_hsv(hue: f32, saturation: f32, value: f32) -> Color {
+    Color::from_hsv(hue, saturation, value)
 }
 
 /// A border, by what it draws. All are drawn inside the box.
@@ -682,16 +792,103 @@ pub enum PointerKind {
 
 thread_local! {
     // Created once per thread and never dropped, so the handles stay valid for
-    // the life of the UI. A component that reads them while it renders is
-    // subscribed, and re-renders when the value changes.
+    // the life of the UI. The globals mirror the window `WindowHost` last
+    // rendered, and are read only outside a window's tree. Inside one, the
+    // window's own [`WindowDensity`] answers.
     static CLASS: State<SizeClass> = State::create_global(SizeClass::Regular);
     static POINTER: State<PointerKind> = State::create_global(PointerKind::Mouse);
+    static WINDOWS: RefCell<HashMap<u64, WindowDensity>> = RefCell::new(HashMap::new());
+}
+
+/// The density of one window: its size class, the latest pointer kind, and an
+/// optional forced pair that wins over both (a device preview). `WindowHost`
+/// provides it to the window's tree and writes the first two from the window
+/// width and the pointer. A window without a host, such as the inspector, keeps
+/// the value it was made with. Every field is a `State`, so a reader re-renders
+/// when the density changes.
+#[derive(Clone, Copy)]
+pub struct WindowDensity {
+    class: State<SizeClass>,
+    pointer: State<PointerKind>,
+    forced: State<Option<(SizeClass, PointerKind)>>,
+}
+
+impl WindowDensity {
+    pub fn new(class: SizeClass, pointer: PointerKind) -> Self {
+        Self {
+            class: State::create_global(class),
+            pointer: State::create_global(pointer),
+            forced: State::create_global(None),
+        }
+    }
+
+    /// The class this window renders at, forced or measured. Reading it
+    /// subscribes the caller.
+    pub fn class(self) -> SizeClass {
+        match *self.forced.read() {
+            Some((class, _)) => class,
+            None => *self.class.read(),
+        }
+    }
+
+    /// The pointer kind this window renders for, forced or latched.
+    pub fn pointer(self) -> PointerKind {
+        match *self.forced.read() {
+            Some((_, pointer)) => pointer,
+            None => *self.pointer.read(),
+        }
+    }
+
+    /// The pointer kind of the latest pointer event in this window, ignoring
+    /// any forced pair. Reading it subscribes the caller.
+    pub(crate) fn latched_pointer(self) -> PointerKind {
+        *self.pointer.read()
+    }
+
+    /// The class and pointer kind forced on this window, if any.
+    pub fn forced(self) -> Option<(SizeClass, PointerKind)> {
+        *self.forced.read()
+    }
+
+    /// Set the class this window renders at. Subscribers are marked at once.
+    pub(crate) fn set_class(self, class: SizeClass) {
+        let mut state = self.class;
+        state.set_if_modified(class);
+    }
+
+    /// Record the kind of the latest pointer event in this window.
+    pub(crate) fn latch_pointer(self, kind: PointerKind) {
+        let mut state = self.pointer;
+        state.set_if_modified(kind);
+    }
+}
+
+/// The density of the window with this key (the `u64` the platform knows the
+/// window by), made on first use and kept for the life of the UI.
+pub fn window_density(key: impl Into<u64>) -> WindowDensity {
+    WINDOWS.with(|windows| {
+        *windows
+            .borrow_mut()
+            .entry(key.into())
+            .or_insert_with(|| WindowDensity::new(SizeClass::Regular, PointerKind::Mouse))
+    })
+}
+
+/// Force the density of a window to `forced`, or release it with `None`. A
+/// forced window renders at the forced class and pointer kind wherever its
+/// width and pointer would say otherwise.
+pub fn force_density(key: impl Into<u64>, forced: Option<(SizeClass, PointerKind)>) {
+    let mut state = window_density(key).forced;
+    state.set_if_modified(forced);
 }
 
 /// The current size class. Reading it while a component renders subscribes
 /// that component, so it re-renders in place when the class changes.
 pub fn size_class() -> SizeClass {
-    CLASS.with(|class| *class.read())
+    match try_consume_context::<WindowDensity>() {
+        Some(density) => density.class(),
+        None => CLASS.with(|class| *class.read()),
+    }
 }
 
 /// Whether the current size class is compact.
@@ -699,32 +896,35 @@ pub fn is_compact() -> bool {
     size_class().is_compact()
 }
 
+/// Whether the window this tree renders in is held at compact density by a
+/// device preview, whatever its width. Reading it subscribes the caller.
+pub fn device_preview() -> bool {
+    try_consume_context::<WindowDensity>()
+        .is_some_and(|density| matches!(density.forced(), Some((SizeClass::Compact, _))))
+}
+
 /// `regular` at regular density, `compact` at compact density, read now.
 pub fn pick<T>(regular: T, compact: T) -> T {
     size_class().pick(regular, compact)
 }
 
-/// The kind of the latest pointer event.
+/// The kind of the latest pointer event in the current window.
 pub fn pointer_kind() -> PointerKind {
-    POINTER.with(|pointer| *pointer.read())
+    match try_consume_context::<WindowDensity>() {
+        Some(density) => density.pointer(),
+        None => POINTER.with(|pointer| *pointer.read()),
+    }
 }
 
-/// Set the size class. Only the window root calls this, from the window width
-/// and the pointer kind. The state is written at once, so everything that
-/// renders after it in the same pass sees the new class, and subscribers that
-/// already rendered are marked for a re-render.
-pub(crate) fn set_size_class(class: SizeClass) {
+/// Mirror the density of the window `WindowHost` just rendered into the
+/// globals, for readers outside any window tree.
+pub(crate) fn mirror_density(class: SizeClass, pointer: PointerKind) {
     CLASS.with(|state| {
         let mut state = *state;
         state.set_if_modified(class);
     });
-}
-
-/// Record the kind of the latest pointer event. Only the window root calls
-/// this, from its global pointer listeners.
-pub(crate) fn set_pointer_kind(kind: PointerKind) {
     POINTER.with(|state| {
         let mut state = *state;
-        state.set_if_modified(kind);
+        state.set_if_modified(pointer);
     });
 }

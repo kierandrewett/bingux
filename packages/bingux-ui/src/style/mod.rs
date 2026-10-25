@@ -107,6 +107,9 @@ pub enum Util {
     /// animate in and out.
     RoundedScaled(Radius, f32),
     Bg(Paint),
+    /// A run-time colour fill, for a colour chosen while the app runs (a
+    /// picker's value, a swatch). Fixed colours are `Bg(Paint::..)`.
+    Fill(Color),
     /// The text colour children inherit.
     Ink(Paint),
     /// The type children inherit: size, weight and colour of a text style.
@@ -204,6 +207,16 @@ pub fn rounded_scaled(radius: Radius, amount: f32) -> Util {
 pub const fn bg(paint: Paint) -> Util {
     Util::Bg(paint)
 }
+/// A run-time colour fill; see `Util::Fill`.
+pub const fn fill(colour: Color) -> Util {
+    Util::Fill(colour)
+}
+/// A gradient background for a box whose stops are run-time colours, such as
+/// a colour picker's strips. Gradients are not tokens, so this is the one
+/// place the style system paints one.
+pub fn gradient_fill(rect: Rect, gradient: LinearGradient) -> Rect {
+    rect.background(gradient)
+}
 /// The text colour that text inside the box inherits.
 pub const fn ink(paint: Paint) -> Util {
     Util::Ink(paint)
@@ -297,6 +310,12 @@ pub const fn clip() -> Util {
     Util::Clip
 }
 
+/// A horizontally scrolling region, for a row too wide for its space, such
+/// as a breadcrumb. Its children flow left to right.
+pub fn scroll_x() -> ScrollView {
+    ScrollView::new().direction(Direction::Horizontal)
+}
+
 /// Applies utilities and recipes to a box.
 pub trait Tw: Sized {
     /// Apply `utils` in order; later ones override earlier ones.
@@ -386,7 +405,7 @@ fn line_border(tokens: &Tokens, line: Line) -> Border {
 fn apply(rect: Rect, tokens: Option<&Tokens>, util: Util) -> Rect {
     let painted = matches!(
         util,
-        Util::Bg(_) | Util::Ink(_) | Util::Font(_) | Util::Surface { .. } | Util::Border(_)
+        Util::Bg(_) | Util::Fill(_) | Util::Ink(_) | Util::Font(_) | Util::Surface { .. } | Util::Border(_)
     );
     let tokens = match tokens {
         Some(tokens) => tokens,
@@ -401,6 +420,7 @@ fn apply(rect: Rect, tokens: Option<&Tokens>, util: Util) -> Rect {
     }
     match util {
         Util::Bg(paint) => rect.background(paint.color(tokens)),
+        Util::Fill(colour) => rect.background(colour),
         Util::Ink(paint) => rect.color(paint.color(tokens)),
         Util::Font(style) => rect
             .font_size(style.size.px())
@@ -443,7 +463,7 @@ fn apply_layout(rect: Rect, util: Util) -> Rect {
         Util::Rounded(radius) => rect.corner_radius(radius.px()),
         Util::RoundedBy(radius, extra) => rect.corner_radius(radius.px() + extra),
         Util::RoundedScaled(radius, amount) => rect.corner_radius(radius.px() * amount),
-        Util::Bg(_) | Util::Ink(_) | Util::Font(_) | Util::Surface { .. } | Util::Border(_) => rect,
+        Util::Bg(_) | Util::Fill(_) | Util::Ink(_) | Util::Font(_) | Util::Surface { .. } | Util::Border(_) => rect,
         Util::Shadow(elevation) => {
             let (y, blur, opacity) = elevation.params();
             rect.shadow(

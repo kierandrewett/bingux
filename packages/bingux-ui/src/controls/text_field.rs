@@ -31,6 +31,7 @@ pub struct TextField {
     fill: bool,
     well: bool,
     dense: bool,
+    flat: bool,
     password: bool,
     multiline: bool,
     enabled: bool,
@@ -42,6 +43,8 @@ pub struct TextField {
     revert_to: Option<String>,
     on_submit: EventHandler<String>,
     on_change: Option<EventHandler<String>>,
+    /// Up and Down, with the step Shift (10) or Alt (0.1) gives, for scrubbing.
+    on_arrow: Option<EventHandler<f64>>,
     a11y_id: Option<AccessibilityId>,
     autofocus: bool,
 }
@@ -54,6 +57,7 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         width: Dim::Field,
         fill: false,
         well: false,
+        flat: false,
         dense: false,
         password: false,
         multiline: false,
@@ -66,6 +70,7 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         revert_to: None,
         on_submit: on_submit.into(),
         on_change: None,
+        on_arrow: None,
         a11y_id: None,
         autofocus: false,
     }
@@ -97,6 +102,13 @@ impl TextField {
     /// card, dialog or popover keeps the lighter `control` fill.
     pub fn well(mut self) -> Self {
         self.well = true;
+        self
+    }
+
+    /// A square, borderless field with no fill, `Dim::FlatField` tall, for a
+    /// strip docked in a pane such as a find bar.
+    pub fn flat(mut self) -> Self {
+        self.flat = true;
         self
     }
 
@@ -164,6 +176,13 @@ impl TextField {
         self
     }
 
+    /// Up and Down arrows call this with the signed step: 1, 10 with Shift,
+    /// 0.1 with Alt. The field keeps the keys so the caret does not move.
+    pub fn on_arrow(mut self, on_arrow: impl Into<EventHandler<f64>>) -> Self {
+        self.on_arrow = Some(on_arrow.into());
+        self
+    }
+
     /// Give the field an accessibility id, so a window can focus it.
     pub fn a11y_id(mut self, id: AccessibilityId) -> Self {
         self.a11y_id = Some(id);
@@ -190,6 +209,7 @@ impl Component for TextField {
         let mut value = self.value;
         let on_submit = self.on_submit.clone();
         let on_change = self.on_change.clone();
+        let on_arrow = self.on_arrow.clone();
         let revert_to = self.revert_to.clone();
         let multiline = self.multiline;
         let invalid = self.invalid.is_some();
@@ -203,7 +223,9 @@ impl Component for TextField {
         // the tokens are resolved here: the CONTROL recipe's radius and
         // inset, the control or well fill, and the danger edge when invalid.
         let paint = |paint: Paint| Preference::Specific(paint.color(&tokens));
-        let fill = if self.well {
+        let fill = if self.flat {
+            Paint::Transparent
+        } else if self.well {
             Paint::Card
         } else {
             Paint::Control
@@ -240,18 +262,25 @@ impl Component for TextField {
             placeholder_color: Some(paint(Paint::Muted)),
         };
         // The inset: S2 above and below and S3 across, or S0_5 and S2 when dense.
-        let (pad_vertical, pad_horizontal) = if self.dense { (S0_5, S2) } else { (S2, S3) };
+        let (pad_vertical, pad_horizontal) = if self.flat {
+            (S0, S2)
+        } else if self.dense {
+            (S0_5, S2)
+        } else {
+            (S2, S3)
+        };
+        let radius = if self.flat { 0.0 } else { Radius::Control.px() };
         let layout = InputLayoutThemePartial {
-            corner_radius: Some(Preference::Specific(CornerRadius::new_all(
-                Radius::Control.px(),
-            ))),
+            corner_radius: Some(Preference::Specific(CornerRadius::new_all(radius))),
             padding: Some(Preference::Specific(Gaps::new_symmetric(
                 pad_vertical.px(),
                 pad_horizontal.px(),
             ))),
         };
         let width = self.width.px();
-        let control_height = if self.dense {
+        let control_height = if self.flat {
+            Dim::FlatField.px()
+        } else if self.dense {
             Dim::DenseControl.px()
         } else {
             Dim::Control.px()
@@ -287,6 +316,28 @@ impl Component for TextField {
                         }
                         event.stop_propagation();
                         input_id.request_unfocus();
+                        false
+                    }
+                    Key::Named(NamedKey::ArrowUp) | Key::Named(NamedKey::ArrowDown)
+                        if on_arrow.is_some() =>
+                    {
+                        let sign = if matches!(event.key, Key::Named(NamedKey::ArrowUp)) {
+                            1.0
+                        } else {
+                            -1.0
+                        };
+                        let scale = if event.modifiers.contains(Modifiers::SHIFT) {
+                            10.0
+                        } else if event.modifiers.contains(Modifiers::ALT) {
+                            0.1
+                        } else {
+                            1.0
+                        };
+                        if let Some(on_arrow) = &on_arrow {
+                            on_arrow.call(sign * scale);
+                        }
+                        event.stop_propagation();
+                        event.prevent_default();
                         false
                     }
                     // A single-line Enter bubbles up, so a popup can act on it.
@@ -440,7 +491,7 @@ impl Component for TextField {
                         .maybe_child(self.invalid.clone().map(|message| {
                             CAPTION
                                 .in_ink(Ink::Danger)
-                                .selectable(&tokens, message)
+                                .paragraph(&tokens, message)
                                 .max_lines(2)
                         })),
                 )

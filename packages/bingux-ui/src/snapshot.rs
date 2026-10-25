@@ -375,6 +375,12 @@ impl Snapshot {
                         .map_err(|_| format!("wait needs milliseconds: {rest}"))?;
                     self.settle(Duration::from_millis(ms));
                 }
+                "slow" => {
+                    let speed: f32 = rest
+                        .parse()
+                        .map_err(|_| format!("slow needs a speed factor: {rest}"))?;
+                    self.runner.animation_clock().set_speed(speed);
+                }
                 "mark" => {
                     self.mark(rest);
                 }

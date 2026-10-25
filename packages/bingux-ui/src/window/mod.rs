@@ -39,11 +39,11 @@ use crate::address::Address;
 use crate::focus::provide_focus_core;
 use crate::shell::with_window;
 use crate::style::{
-    Paint, PointerKind, Radius, SizeClass, Tw, bg, clip, pointer_kind, rounded_scaled,
-    set_pointer_kind, set_size_class,
+    Paint, PointerKind, Radius, SizeClass, Tw, WindowDensity, bg, center, clip, mirror_density,
+    rounded_scaled, window_density,
 };
 use crate::surface::use_tokens;
-use crate::theme::NARROW_BELOW;
+use crate::theme::{NARROW_BELOW, PHONE_PREVIEW_SIZE};
 
 use popup::{MOTION_MS, PopupEntry, PopupFrame};
 pub use popup::{Popup, PopupAction, PopupActions, PopupFlags, popup, use_popup_actions};
@@ -433,18 +433,23 @@ impl Component for WindowHost {
             _ => {}
         };
 
-        // Density is the size class: a narrow window (a phone), or a finger on
-        // any window, gets the fingertip sizes. The class is written before
-        // any child renders, so the whole tree sees this frame's class. Reading
-        // the pointer kind here subscribes the host, so a change of pointer
-        // kind re-runs this and flips the class in place.
-        let narrow = Platform::get().current_window().root_size.read().width < NARROW_BELOW;
-        let touch = pointer_kind() == PointerKind::Touch;
-        set_size_class(if narrow || touch {
+        // Density is per window. This host owns its window's WindowDensity and
+        // provides it to the tree, so every reader below sees this window's
+        // class, and another window never shares it. A narrow window (a phone),
+        // or a finger on any window, gets the fingertip sizes; a forced pair (a
+        // device preview) wins over both. Reading the latched pointer subscribes
+        // the host, so a change of pointer kind flips the class in place.
+        let window = Platform::get().current_window();
+        let density = use_hook(|| window_density(window.id));
+        use_provide_context(move || density);
+        let narrow = window.root_size.read().width < NARROW_BELOW;
+        let touch = density.latched_pointer() == PointerKind::Touch;
+        density.set_class(if narrow || touch {
             SizeClass::Compact
         } else {
             SizeClass::Regular
         });
+        mirror_density(density.class(), density.pointer());
 
         let popups = manager.popups.read().clone();
 
@@ -472,14 +477,29 @@ impl Component for WindowHost {
             .expanded()
             .tw(&tokens, &[bg(Paint::Backdrop)])
             .on_global_key_down(keys)
-            .on_global_pointer_down(latch_pointer)
-            .on_global_pointer_move(latch_pointer)
+            .on_global_pointer_down(move |event| latch_pointer(density, event))
+            .on_global_pointer_move(move |event| latch_pointer(density, event))
             .child(
                 rect()
                     .expanded()
                     .scale(1.0 - (1.0 - INSET_SCALE) * shown)
                     .tw(&tokens, &[rounded_scaled(Radius::Card, shown), clip()])
-                    .child(self.child.clone()),
+                    .child(
+                        // A device preview holds the page to a phone-wide
+                        // column, centred on black, whatever the window width.
+                        rect().expanded().tw(&tokens, &[center()]).child(
+                            rect()
+                                .width(
+                                    if matches!(density.forced(), Some((SizeClass::Compact, _))) {
+                                        Size::px(PHONE_PREVIEW_SIZE.0)
+                                    } else {
+                                        Size::fill()
+                                    },
+                                )
+                                .height(Size::fill())
+                                .child(self.child.clone()),
+                        ),
+                    ),
             )
             .children(popups.into_iter().map(|entry| PopupFrame {
                 manager,
@@ -491,8 +511,8 @@ impl Component for WindowHost {
 
 /// Record what the pointer event came from. A finger latches touch density
 /// even on a wide window; a mouse press or move latches the mouse again.
-fn latch_pointer(event: Event<PointerEventData>) {
-    set_pointer_kind(match event.data() {
+fn latch_pointer(density: WindowDensity, event: Event<PointerEventData>) {
+    density.latch_pointer(match event.data() {
         PointerEventData::Touch(_) => PointerKind::Touch,
         PointerEventData::Mouse(_) => PointerKind::Mouse,
     });

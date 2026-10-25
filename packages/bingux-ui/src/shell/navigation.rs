@@ -575,7 +575,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let busy = !busy_pages.0.read().is_empty();
         // On a narrow window this is true while the list of pages is the screen.
         let width = Platform::get().current_window().root_size.read().width;
-        let narrow = width < NARROW_BELOW;
+        let narrow = width < NARROW_BELOW || device_preview();
 
         let fallback_list = use_state(|| false);
         let (list_shown, on_show_list) = match &self.list {

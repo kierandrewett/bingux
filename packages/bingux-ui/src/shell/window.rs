@@ -3,7 +3,7 @@
 
 use freya::prelude::*;
 
-use crate::controls::{SpinnerSize, spinner};
+use crate::controls::{SpinnerSize, hover_tip, spinner};
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
 use crate::style::*;
@@ -149,9 +149,7 @@ impl Component for HeaderBar {
 
 /// A small spinner with a "Working" tooltip, shown beside the header title.
 fn busy_indicator() -> Element {
-    TooltipContainer::new(Tooltip::new_text("Working"))
-        .child(spinner(SpinnerSize::Small))
-        .into()
+    hover_tip(spinner(SpinnerSize::Small), "Working")
 }
 
 /// Minimise, maximise/restore and close, drawn as 24 px circles.

@@ -14,6 +14,9 @@ const DEFAULT_FONT_FAMILY: &str = "Adwaita Sans";
 /// Width below which the window is laid out as a phone: the list of pages is
 /// a screen of its own and the window buttons are hidden.
 pub const NARROW_BELOW: f32 = 740.0;
+/// The phone preview's window size, in logical pixels. A device preview asks
+/// the window for this size and lays the page out in a column this wide.
+pub const PHONE_PREVIEW_SIZE: (f32, f32) = (390.0, 800.0);
 /// Window default and minimum size.
 pub const WINDOW_SIZE: (f32, f32) = (1000.0, 740.0);
 pub const WINDOW_MIN_SIZE: (f32, f32) = (360.0, 420.0);
@@ -144,6 +147,12 @@ pub struct Tokens {
     pub floating_outline: Color,
     /// Opaque surface for menus and popovers that float over content.
     pub popover: Color,
+    /// Syntax colours for markup in the inspector's DOM tree.
+    pub syntax_tag: Color,
+    pub syntax_attr: Color,
+    pub syntax_value: Color,
+    pub syntax_text: Color,
+    pub syntax_comment: Color,
 }
 
 impl Tokens {
@@ -188,6 +197,11 @@ impl Tokens {
             floating: rgba(0.12, 0.12, 0.13, 0.82),
             floating_outline: rgba(1.0, 1.0, 1.0, 0.16),
             popover: p.popup,
+            syntax_tag: p.syntax_tag,
+            syntax_attr: p.syntax_attr,
+            syntax_value: p.syntax_value,
+            syntax_text: p.syntax_text,
+            syntax_comment: p.syntax_comment,
         }
     }
 
@@ -222,6 +236,11 @@ struct Palette {
     success: Color,
     warning: Color,
     danger: Color,
+    syntax_tag: Color,
+    syntax_attr: Color,
+    syntax_value: Color,
+    syntax_text: Color,
+    syntax_comment: Color,
 }
 
 impl Palette {
@@ -244,6 +263,11 @@ impl Palette {
             success: hex(0x8ff0a4),
             warning: hex(0xf9f06b),
             danger: hex(0xff7b63),
+            syntax_tag: hex(0x8ec6ff),
+            syntax_attr: hex(0xf9cb8f),
+            syntax_value: hex(0x8fe2a4),
+            syntax_text: hex(0xf0f0f2),
+            syntax_comment: hex(0x8a8a92),
         }
     }
 
@@ -266,6 +290,11 @@ impl Palette {
             success: hex(0x26a269),
             warning: hex(0xcd9309),
             danger: hex(0xc01c28),
+            syntax_tag: hex(0x1f5fa8),
+            syntax_attr: hex(0x9a5a00),
+            syntax_value: hex(0x1d7a3a),
+            syntax_text: hex(0x2e2e32),
+            syntax_comment: hex(0x7a7a80),
         }
     }
 }

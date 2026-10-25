@@ -2,6 +2,7 @@
 //! and the square `IconButton`.
 
 use super::press::use_press;
+use super::tooltip::hover_tip;
 use freya::prelude::*;
 
 use crate::controls::progress::{SpinnerSize, spinner};
@@ -335,6 +336,7 @@ pub struct IconButton {
     filled: bool,
     active: bool,
     enabled: bool,
+    radius: Radius,
 }
 
 pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconButton {
@@ -347,6 +349,7 @@ pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconBut
         filled: false,
         active: false,
         enabled: true,
+        radius: Radius::Pill,
     }
 }
 
@@ -374,10 +377,17 @@ impl IconButton {
         self
     }
 
-    /// Ring the button in the accent colour, for the one button of a set
-    /// that is on or playing.
+    /// Tint the button in the accent colour and draw its icon in the accent,
+    /// for the one button of a set that is on or playing. No ring.
     pub fn active(mut self, active: bool) -> Self {
         self.active = active;
+        self
+    }
+
+    /// The corner radius of the button and its focus ring: pill by default,
+    /// `Mark` for the square toolbar buttons of the inspector.
+    pub fn radius(mut self, radius: Radius) -> Self {
+        self.radius = radius;
         self
     }
 
@@ -405,6 +415,8 @@ impl Component for IconButton {
         // layer from `surface` then sits over it.
         let base = if self.danger && hovering() {
             Paint::Danger
+        } else if self.active {
+            Paint::AccentSoft
         } else if self.filled {
             Paint::Control
         } else {
@@ -425,11 +437,9 @@ impl Component for IconButton {
                     w(self.size),
                     h(self.size),
                     surface(base, hovering(), pressing(), false),
+                    rounded(self.radius),
                 ],
             )
-            .maybe(self.active, |element| {
-                element.tw(&tokens, &[border(Line::Stroke(Dim::Ring, Paint::Accent))])
-            })
             .maybe(!usable, |element| element.opacity(0.5))
             .maybe(usable, |element| {
                 element
@@ -468,13 +478,15 @@ impl Component for IconButton {
             .child(icons::icon(
                 self.icon,
                 IconSize::Control,
-                Ink::Text.color(&tokens),
+                if self.active {
+                    Paint::Accent.color(&tokens)
+                } else {
+                    Paint::Text.color(&tokens)
+                },
             ))
-            .focusable(focus(), Radius::Pill);
+            .focusable(focus(), self.radius);
         match &self.tooltip {
-            Some(text) => TooltipContainer::new(Tooltip::new_text(text.clone()))
-                .child(button)
-                .into(),
+            Some(text) => hover_tip(button, text.clone()),
             None => Element::from(button),
         }
     }
