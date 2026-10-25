@@ -171,7 +171,8 @@ impl Application {
         } else {
             window
         };
-        let mut config = theme::with_font(LaunchConfig::new());
+        let mut config =
+            theme::with_font(LaunchConfig::new()).with_plugin(crate::inspector::plugin());
         if self.borderless {
             config = config.with_plugin(freya::borderless::BorderlessPlugin::new());
         }

@@ -586,3 +586,55 @@ cargo run --manifest-path packages/bingux-ui/Cargo.toml --features testing \
 Use `Snapshot::new(app, size)` with `settle`, `click`, `hover` and `save`
 to script your own captures. Bingux Settings exposes the same renderer as
 `bingux-settings --snapshot DIR` (see [settings](settings.md)).
+
+## Inspector
+
+Every app built with `bingux_ui::app::Application` includes a devtools window,
+modelled on the Chrome and WebKit inspectors. Press Ctrl+Alt+Shift+I to open or
+close it. It opens as a separate native window, and the app needs no code for
+it.
+
+The toolbar holds, from the left: the inspect button (Ctrl+Shift+C), the phone
+preview toggle, the Elements, Performance and Accessibility tabs (Ctrl+[ and
+Ctrl+] step between them), then pause, refresh (F5) and close.
+
+- **Inspect mode** highlights the element under the pointer in the app with
+  content, padding and margin bands and a card naming its tag, size, colour,
+  font, padding, margin and accessible name, role and focusability. A click
+  selects the element and reveals it in the tree; the click never reaches the
+  app. Hold Shift to keep inspecting; Escape cancels.
+- **Phone preview** forces the app window to the compact size class and touch
+  pointer, so it shows the phone layout on a desktop; the inspector itself
+  keeps its desktop density.
+- **Elements** shows the live element tree as markup with syntax colours,
+  closing tags and indent guides. Click a triangle to open a branch, and use
+  Expand recursively in the right-click menu to open everything inside it.
+  Up and Down move the
+  selection, Right opens or enters a branch, Left closes it or goes to the
+  parent, Home and End jump to the ends. Ctrl+F searches tags, attribute
+  values and text, with the hit count and Enter for the next hit. A right
+  click offers Expand recursively, Collapse children, Copy text and Copy
+  element. The breadcrumb under the tree shows the selected element's
+  ancestors; click one to select it. Hovering a row highlights its element in
+  the app.
+- **Styles**, beside the tree, shows the selected element's values as rule
+  blocks: `element.style` for your live edits, then the element's declared
+  values. Click a value to edit it; Enter applies it to the running app and
+  Escape reverts. Up and Down step a number (Shift by 10, Alt by 0.1), and
+  dragging a property's name scrubs its value. The box beside an edit turns it
+  off and back on. A colour swatch opens a colour picker. Computed lists every
+  resolved value with a filter, Layout shows the box model, and Accessibility
+  shows the element's accessible facts.
+- **Performance** records over a period. Stop shows a frame timeline and a
+  flame graph of sampled stacks. Stacks are sampled only while recording, and
+  the view updates live while a recording runs.
+- **Accessibility** lists the issues found in the app, grouped by kind with
+  counts. Selecting an issue selects its element in Elements.
+
+Environment variables for tests and screenshots:
+
+- `BINGUX_INSPECT_OPEN=1` opens the inspector with the first application
+  window.
+- `BINGUX_INSPECT_SHOT=<dir>` writes `inspector.png` and `app.png` to `<dir>`,
+  at most once every 1.5 seconds. Without it, nothing is read back from the
+  canvas.

@@ -538,9 +538,13 @@ dependencies = [
  "bytes",
  "freya",
  "freya-components",
+ "freya-core",
  "freya-testing",
+ "freya-winit",
+ "libc",
  "serde",
  "serde_json",
+ "torin",
 ]
 
 [[package]]

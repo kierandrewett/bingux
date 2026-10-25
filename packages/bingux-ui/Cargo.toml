@@ -15,7 +15,10 @@ default = []
 testing = ["dep:freya-testing", "dep:freya-components"]
 
 [dependencies]
-freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar"] }
+freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar", "engine"] }
+freya-core = "0.5.0-rc.10"
+torin = "0.5.0-rc.10"
+freya-winit = "0.5.0-rc.10"
 freya-testing = { version = "0.5.0-rc.10", optional = true }
 # Snapshots mount the same root integration as the windowed app (Tab focus).
 freya-components = { path = "../vendor/freya-components", optional = true }
@@ -23,6 +26,7 @@ accesskit = "0.24"
 bytes = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+libc = "0.2"
 
 # Desktop scroll feel; see ../vendor/README.md.
 [patch.crates-io]

@@ -173,6 +173,27 @@ pub enum PluginEvent<'a> {
         metrics: Metrics,
     },
 
+    /// Before the layout is measured, with the tree mutable, so a plugin can
+    /// override a node's layout or style for this frame. The Bingux inspector
+    /// live edits use it; the override lands before measuring, so no second
+    /// pass is needed.
+    BeforeMeasuringLayout {
+        window: &'a Window,
+        tree: &'a mut Tree,
+    },
+
+    /// A pointer button was pressed or released, or the cursor moved. Lets a
+    /// plugin tell user-driven changes from idle ones and hit-test the cursor.
+    /// `position` is the cursor in physical pixels. `pressed` is `Some` for a
+    /// button change and `None` for a move. A plugin sets `consumed` on a button
+    /// change to keep it from reaching the application. (Inspector pick mode uses it.)
+    PointerInput {
+        window: &'a Window,
+        position: (f64, f64),
+        pressed: Option<bool>,
+        consumed: &'a mut bool,
+    },
+
     /// Before starting to measure the layout.
     StartedMeasuringLayout {
         window: &'a Window,

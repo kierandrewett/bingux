@@ -183,6 +183,9 @@ pub enum NativeWindowEventAction {
 
     PlatformEvent(PlatformEvent),
 
+    /// Bingux inspector: run layout again on the next frame, see `RequestLayout`.
+    RequestLayout,
+
     User(UserEvent),
 }
 
@@ -691,6 +694,13 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                             app.accessibility_tasks_for_next_render = AccessibilityTask::Init;
                             app.window.request_redraw();
                         }
+                        // Bingux inspector: a plugin asks for a layout pass, for example
+                        // after it edits an element's layout override. Freya runs layout
+                        // only when this flag is set, so the request must set it.
+                        NativeWindowEventAction::RequestLayout => {
+                            app.process_layout_on_next_render = true;
+                            app.window.request_redraw();
+                        }
                         NativeWindowEventAction::User(user_event) => match user_event {
                             UserEvent::RequestRedraw => {
                                 app.window.request_redraw();
@@ -843,6 +853,13 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                                 PluginEvent::StartedMeasuringLayout {
                                     window: &app.window,
                                     tree: &app.tree,
+                                },
+                                PluginHandle::new(&self.proxy),
+                            );
+                            self.plugins.send(
+                                PluginEvent::BeforeMeasuringLayout {
+                                    window: &app.window,
+                                    tree: &mut app.tree,
                                 },
                                 PluginHandle::new(&self.proxy),
                             );
@@ -1051,6 +1068,16 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                 }
 
                 WindowEvent::MouseInput { state, button, .. } => {
+                    let mut consumed = false;
+                    self.plugins.send(
+                        PluginEvent::PointerInput {
+                            window: &app.window,
+                            position: (app.position.x as f64, app.position.y as f64),
+                            pressed: Some(state == ElementState::Pressed),
+                            consumed: &mut consumed,
+                        },
+                        PluginHandle::new(&self.proxy),
+                    );
                     app.mouse_state = state;
                     app.platform
                         .navigation_mode
@@ -1061,15 +1088,17 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                     } else {
                         MouseEventName::MouseUp
                     };
-                    app.process_platform_events(
-                        vec![PlatformEvent::Mouse {
-                            name,
-                            cursor: (app.position.x, app.position.y).into(),
-                            button: Some(map_winit_mouse_button(button)),
-                        }],
-                        &mut self.plugins,
-                        PluginHandle::new(&self.proxy),
-                    );
+                    if !consumed {
+                        app.process_platform_events(
+                            vec![PlatformEvent::Mouse {
+                                name,
+                                cursor: (app.position.x, app.position.y).into(),
+                                button: Some(map_winit_mouse_button(button)),
+                            }],
+                            &mut self.plugins,
+                            PluginHandle::new(&self.proxy),
+                        );
+                    }
                 }
 
                 WindowEvent::KeyboardInput {
@@ -1168,6 +1197,16 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                     }
                 }
                 WindowEvent::CursorMoved { position, .. } => {
+                    let mut consumed = false;
+                    self.plugins.send(
+                        PluginEvent::PointerInput {
+                            window: &app.window,
+                            position: (position.x, position.y),
+                            pressed: None,
+                            consumed: &mut consumed,
+                        },
+                        PluginHandle::new(&self.proxy),
+                    );
                     app.position = CursorPoint::from((position.x, position.y));
                     app.cursor_in_window = true;
 
