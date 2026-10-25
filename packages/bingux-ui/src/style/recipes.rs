@@ -207,7 +207,7 @@ pub const NAV_ITEM: Recipe = &[
     items(Align::Center),
     w_full(),
     h(Dim::NavItem),
-    px(S2),
+    px(NAV_INSET),
     gap(S2),
     rounded(Radius::Control),
 ];

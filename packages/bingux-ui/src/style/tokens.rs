@@ -59,6 +59,11 @@ pub const S8: Space = Space::new(32.0, 36.0);
 pub const S10: Space = Space::new(40.0, 44.0);
 pub const S12: Space = Space::new(48.0, 54.0);
 
+/// The side padding inside a sidebar or list navigation row. It matches the
+/// space above and below the row's 24 px icon (40 px rows on a desktop, 56 px
+/// on a phone), so the icon sits in an even margin at both densities.
+pub const NAV_INSET: Space = Space::new(8.0, 16.0);
+
 /// The one horizontal inset inside a card, a header bar and the page edge
 /// on a phone: row text, hairlines and controls start this far in.
 pub const GUTTER: Space = S4;
