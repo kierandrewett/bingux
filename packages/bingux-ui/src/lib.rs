@@ -47,7 +47,7 @@ pub mod prelude {
     };
     pub use crate::icons::{Icon, icon};
     pub use crate::layout::{
-        boxed, clamp, divider, hstack, page_column, popup_column, spacer, vstack,
+        boxed, clamp, divider, hstack, page_column, popup_column, spacer, tile_rows, vstack,
     };
     pub use crate::motion::{
         AnimatedNumber, Crossfade, Presence, Reveal, animated_number, crossfade, presence, reveal,

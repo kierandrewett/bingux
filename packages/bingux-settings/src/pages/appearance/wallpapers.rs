@@ -16,7 +16,8 @@ use crate::system::{self, background};
 use crate::theme::Tokens;
 use crate::ui::typography::BODY;
 use crate::ui::{
-    Group, Icon, Overlays, Status, dropdown, icon, search_field, status, use_overlays, use_tokens,
+    Group, Icon, Overlays, Status, dropdown, icon, search_field, status, tile_rows, use_overlays,
+    use_tokens,
 };
 use bingux_ui::style::*;
 
@@ -249,7 +250,7 @@ impl Component for WallpaperPicker {
                 tiles.push(placeholder_tile(&tokens));
             }
             tiles.extend((0..PLACEHOLDER_TILES).map(|_| placeholder_tile(&tokens)));
-            rows.extend(grid(&tokens, tiles, if is_compact() { 2 } else { 4 }));
+            rows.extend(tile_rows(&tokens, tiles, TILE_HEIGHT));
             return Element::from(
                 Group::titled("Wallpaper")
                     .description("Loading pictures")
@@ -267,7 +268,7 @@ impl Component for WallpaperPicker {
             picture_tile(&tokens, picture, picture.path == current, model, overlays)
         }));
 
-        rows.extend(grid(&tokens, tiles, if is_compact() { 2 } else { 4 }));
+        rows.extend(tile_rows(&tokens, tiles, TILE_HEIGHT));
         if all.is_empty() {
             rows.push(
                 status(Status::Empty(
@@ -285,32 +286,6 @@ impl Component for WallpaperPicker {
                 .rows(rows),
         )
     }
-}
-
-/// Lays the tiles out in rows of `columns`. The last row is padded with empty
-/// cells so its tiles keep the width of the others.
-fn grid(tokens: &Tokens, tiles: Vec<Element>, columns: usize) -> Vec<Element> {
-    let mut tiles = tiles.into_iter().peekable();
-    let mut rows = Vec::new();
-    while tiles.peek().is_some() {
-        let mut line = rect().tw(
-            tokens,
-            &[flex_row(), grow_children(), gap(S3), w_full(), p(S3)],
-        );
-        for _ in 0..columns {
-            line = match tiles.next() {
-                Some(tile) => line.child(
-                    rect()
-                        .width(Size::flex(1.))
-                        .height(Size::px(TILE_HEIGHT))
-                        .child(tile),
-                ),
-                None => line.child(rect().tw(tokens, &[w_flex()])),
-            };
-        }
-        rows.push(line.into());
-    }
-    rows
 }
 
 /// A tile whose picture is still loading: the same frame and caption height as
