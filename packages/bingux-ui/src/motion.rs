@@ -359,17 +359,27 @@ impl Focusable for Rect {
 fn wrap_focusable(control: Rect, focus: Focus, radius: Radius, inside: bool) -> Rect {
     let tokens = use_tokens();
     let core = use_focus_core();
+    let ring = FocusRing {
+        focus,
+        radius,
+        inside,
+    };
+    if inside {
+        // The ring is a child of the control, so it sizes to the control's
+        // own box and a clipped container edge cannot cut it off. The wrapper
+        // only claims presses.
+        return rect()
+            .tw(&tokens, &[flex_row()])
+            .on_press(move |_: Event<PressEventData>| claim_press(&core))
+            .child(control.child(ring));
+    }
     // A press on a control claims it, so its region does not take the
     // press as empty space and move focus.
     rect()
         .tw(&tokens, &[flex_row()])
         .on_press(move |_: Event<PressEventData>| claim_press(&core))
         .child(control)
-        .child(FocusRing {
-            focus,
-            radius,
-            inside,
-        })
+        .child(ring)
 }
 
 /// The ring itself, drawn as the last child of a [`Focusable::focusable`]
@@ -405,19 +415,18 @@ impl Component for FocusRing {
         // ring's corner radius is the control's plus this distance.
         let travel = FOCUS_TRAVEL * (1.0 - progress);
         if self.inside {
-            // The ring's outer edge sits this far inside the wrapper's edge.
-            let inset = FOCUS_GAP + travel;
-            let inner = move |parent: f32| parent - inset - inset;
+            // The ring is drawn within the wrapper's own box, so a clipped
+            // container edge cannot cut it off.
             return rect()
                 .interactive(false)
-                .position(Position::new_absolute().top(inset).left(inset))
-                .width(Size::func(move |ctx| Some(inner(ctx.parent))))
-                .height(Size::func(move |ctx| Some(inner(ctx.parent))))
+                .position(Position::new_absolute().top(0.).left(0.))
+                .width(Size::percent(100.))
+                .height(Size::percent(100.))
                 .opacity(progress)
                 .tw(
                     &tokens,
                     &[
-                        rounded_by(self.radius, -inset),
+                        rounded_by(self.radius, 0.),
                         border(Line::Ring(Paint::Accent)),
                     ],
                 );

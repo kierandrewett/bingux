@@ -545,10 +545,13 @@ menus and dropdowns use it directly.
 
 Controls draw their focus ring by ending `render` with
 `.focusable(focus(), radius)`, from the `Focusable` trait in `motion.rs`. It
-wraps the control in a row that takes the control's size and adds the ring as
-its last child. Give the wrapper any grow or fill style the control had (for
-example `w_full()` or `w_flex()`). The ring is a 2 px accent border set outside
-the control. It grows out from the control and fades in when keyboard focus
+wraps the control in a row that takes the control's size, and the ring is a
+child of that row. Give the wrapper any grow or fill style the control had
+(for example `w_full()` or `w_flex()`). For a row inside a clipped container
+edge, such as a card's, use `.focusable_inside(focus(), radius)`: the ring
+becomes a child of the control, so it sizes to the control's own box and the
+clip cannot cut it off. The ring is a 2 px accent border set outside the
+control. It grows out from the control and fades in when keyboard focus
 arrives (`FOCUS_IN_MS`), then fades out when focus leaves (`FOCUS_OUT_MS`).
 Pointer focus draws no ring. The ring takes the control's corner radius plus
 its outset, so it follows the shape of the control.
