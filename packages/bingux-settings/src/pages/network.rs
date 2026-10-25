@@ -6,13 +6,14 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
+use super::loading::veiled;
 use super::wifi_editor::{Target, use_editor};
 use crate::icons::{self, Icon};
 use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError};
 use crate::ui::{
     Group, Overlays, PageHeader, ResponseKind, Status, Tokens, action_strip, centered_caption,
-    dialog, heading, page_column, row, skeleton, skeleton_shape, status, strip_action,
+    dialog, heading, page_column, row, status, strip_action,
     use_overlays, use_page_header, use_tokens,
 };
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
@@ -21,7 +22,7 @@ use bingux_ui::style::*;
 const QUICK: Duration = Duration::from_secs(5);
 const CONNECT: Duration = Duration::from_secs(60);
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct WiredDevice {
     name: String,
     state: String,
@@ -31,7 +32,7 @@ struct WiredDevice {
 type Loaded = Result<Vec<WiredDevice>, CommandError>;
 
 /// One VPN profile and whether it is up.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Vpn {
     name: String,
     wireguard: bool,
@@ -134,7 +135,7 @@ fn wired_title(devices: &[WiredDevice], index: usize) -> String {
 /// at start-up. `None` until that list has loaded. A page opened by address
 /// knows only the device, so this gives it the same title its row shows.
 pub fn cached_wired_title(device: &str) -> Option<String> {
-    let model = system::cached::<Loaded>("network");
+    let model = system::cached_persistent::<Vec<WiredDevice>, CommandError>("network");
     let loaded = model.read();
     let devices = loaded.as_ref()?.as_ref().ok()?;
     let index = devices.iter().position(|known| known.name == device)?;
@@ -189,6 +190,27 @@ fn load_vpns() -> VpnLoaded {
         QUICK,
     )?;
     Ok(parse_vpns(&all, &active))
+}
+
+/// One wired device with blank values, drawn under the veil while the first
+/// load runs. Its rows are the ones a loaded device shows, so they are placed
+/// before the data arrives.
+fn placeholder_wired(name: &str) -> Vec<WiredDevice> {
+    vec![WiredDevice {
+        name: name.to_string(),
+        state: "—".to_string(),
+        connection: "—".to_string(),
+    }]
+}
+
+/// One VPN profile with blank values, drawn under the veil while the first
+/// load runs.
+fn placeholder_vpn(name: &str) -> Vec<Vpn> {
+    vec![Vpn {
+        name: name.to_string(),
+        wireguard: false,
+        active: false,
+    }]
 }
 
 /// Pending values for switches that are changing, by key (`wired:enp3s0`,
@@ -416,7 +438,7 @@ impl Component for WiredPage {
         let navigator = use_navigator();
         let overlays = use_overlays();
         let editor = use_editor();
-        let model = system::use_cached("network", load);
+        let model = system::use_cached_persistent("network", load);
         use_page_header(PageHeader::default().hero_title());
 
         // Go back to the list once the device is gone.
@@ -430,12 +452,13 @@ impl Component for WiredPage {
         });
 
         let loaded = model.read().clone();
-        let Some(loaded) = loaded else {
-            return page_column().child(skeleton());
-        };
+        // Until the first load lands, the page is drawn from a placeholder
+        // device under the veil, so its rows are placed before the data.
+        let loading = loaded.is_none();
         let devices = match loaded {
-            Ok(devices) => devices,
-            Err(failure) => {
+            None => placeholder_wired(&self.device),
+            Some(Ok(devices)) => devices,
+            Some(Err(failure)) => {
                 return page_column().child(
                     status(Status::Error(failure.0))
                         .action("Try again", move |_| system::background(model, load)),
@@ -490,7 +513,7 @@ impl Component for WiredPage {
             .row(row("Device").value(device.name.clone()))
             .row(row("Connection").value(connection));
         blocks.push(Element::from(details));
-        page_column().children(blocks)
+        veiled(page_column().children(blocks), loading)
     }
 }
 
@@ -505,7 +528,7 @@ impl Component for VpnPage {
         let tokens = use_tokens();
         let navigator = use_navigator();
         let overlays = use_overlays();
-        let model = system::use_cached("vpn", load_vpns);
+        let model = system::use_cached_persistent("vpn", load_vpns);
         use_page_header(PageHeader::default().hero_title());
 
         // Go back to the list once the profile is gone.
@@ -519,12 +542,11 @@ impl Component for VpnPage {
         });
 
         let loaded = model.read().clone();
-        let Some(loaded) = loaded else {
-            return page_column().child(skeleton());
-        };
+        let loading = loaded.is_none();
         let profiles = match loaded {
-            Ok(profiles) => profiles,
-            Err(failure) => {
+            None => placeholder_vpn(&self.name),
+            Some(Ok(profiles)) => profiles,
+            Some(Err(failure)) => {
                 return page_column().child(
                     status(Status::Error(failure.0))
                         .action("Try again", move |_| system::background(model, load_vpns)),
@@ -558,7 +580,7 @@ impl Component for VpnPage {
             "VPN"
         };
         let details = Group::titled("Details").row(row("Type").value(kind));
-        page_column().children(vec![
+        let page = page_column().children(vec![
             hero(
                 tokens,
                 Icon::NetworkVpn,
@@ -567,7 +589,8 @@ impl Component for VpnPage {
             ),
             Element::from(action_strip(actions)),
             Element::from(details),
-        ])
+        ]);
+        veiled(page, loading)
     }
 }
 
@@ -577,8 +600,8 @@ pub struct NetworkPage;
 impl Component for NetworkPage {
     fn render(&self) -> impl IntoElement {
         let navigator = use_navigator();
-        let vpns = system::use_cached("vpn", load_vpns);
-        let model = system::use_cached("network", load);
+        let vpns = system::use_cached_persistent("vpn", load_vpns);
+        let model = system::use_cached_persistent("network", load);
         let overlays = use_overlays();
         // Snapshot only: BINGUX_SETTINGS_SNAPSHOT_EDITOR=<connection> opens that
         // connection's editor once the page has loaded (see Editor::snapshot_open).
@@ -595,25 +618,28 @@ impl Component for NetworkPage {
                 }
             });
         }
-        let subtitle = model
-            .read()
-            .as_ref()
-            .and_then(|loaded| loaded.as_ref().ok())
-            .map(|wired| wired_subtitle(wired));
+        // While the first load runs the header shows a blank subtitle, so the
+        // header keeps its height and the value fills in later.
+        let subtitle = match model.read().as_ref() {
+            None => Some("—".to_string()),
+            Some(Ok(wired)) => Some(wired_subtitle(wired)),
+            Some(Err(_)) => None,
+        };
         use_page_header(PageHeader {
             subtitle,
             action: None,
             ..Default::default()
         });
-        // Wired and VPN are both drawn on the first frame, so no group
+        // Wired and VPN are both drawn on the first frame, from placeholder
+        // rows under the veil until their first loads land, so no group
         // appears in a second pass once its data arrives.
+        let wired_loaded = model.read().clone();
         let vpn_loaded = vpns.read().clone();
-        let (Some(loaded), Some(vpn_loaded)) = (model.read().clone(), vpn_loaded) else {
-            return page_column().child(skeleton_shape(&[1, 1]));
-        };
-        let wired = match loaded {
-            Ok(wired) => wired,
-            Err(failure) => {
+        let loading = wired_loaded.is_none() || vpn_loaded.is_none();
+        let wired = match wired_loaded {
+            None => placeholder_wired("—"),
+            Some(Ok(wired)) => wired,
+            Some(Err(failure)) => {
                 return page_column().child(
                     status(Status::Error(failure.0))
                         .action("Try again", move |_| system::background(model, load)),
@@ -648,40 +674,44 @@ impl Component for NetworkPage {
             )
         };
         let vpn_group = match vpn_loaded {
-            Ok(list) if list.is_empty() => {
-                Group::titled("VPN").row(status(Status::Empty("No VPN connections.".into())))
-            }
-            Ok(list) => {
-                let rows = list
-                    .into_iter()
-                    .map(|vpn| {
-                        let up = pending_for(&vpn_key(&vpn.name)).unwrap_or(vpn.active);
-                        let route = Route::Vpn {
-                            name: vpn.name.clone(),
-                        };
-                        let menu = vpn_menu(navigator, vpns, overlays, &vpn.name, up);
-                        Element::from(
-                            row(vpn.name)
-                                .leading(Icon::NetworkVpn)
-                                .value(vpn_label(up))
-                                .navigates()
-                                .on_press(move |_| navigator.push(route.clone()))
-                                .context_menu(menu),
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                Group::titled("VPN").rows(rows)
-            }
-            Err(failure) => Group::titled("VPN").row(
+            Some(Err(failure)) => Group::titled("VPN").row(
                 status(Status::Error(failure.0))
                     .action("Try again", move |_| system::background(vpns, load_vpns)),
             ),
+            loaded => {
+                let list = loaded
+                    .and_then(Result::ok)
+                    .unwrap_or_else(|| placeholder_vpn("—"));
+                if list.is_empty() {
+                    Group::titled("VPN").row(status(Status::Empty("No VPN connections.".into())))
+                } else {
+                    let rows = list
+                        .into_iter()
+                        .map(|vpn| {
+                            let up = pending_for(&vpn_key(&vpn.name)).unwrap_or(vpn.active);
+                            let route = Route::Vpn {
+                                name: vpn.name.clone(),
+                            };
+                            let menu = vpn_menu(navigator, vpns, overlays, &vpn.name, up);
+                            Element::from(
+                                row(vpn.name)
+                                    .leading(Icon::NetworkVpn)
+                                    .value(vpn_label(up))
+                                    .navigates()
+                                    .on_press(move |_| navigator.push(route.clone()))
+                                    .context_menu(menu),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    Group::titled("VPN").rows(rows)
+                }
+            }
         };
-        page_column().child(wired_group).child(vpn_group)
+        veiled(page_column().child(wired_group).child(vpn_group), loading)
     }
 }
 
 /// Start loading this page's data before it is opened.
 pub fn prefetch() {
-    system::prefetch("network", load);
+    system::prefetch_persistent("network", load);
 }

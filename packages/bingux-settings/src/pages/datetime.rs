@@ -22,8 +22,8 @@ use crate::routes::{Route, use_navigator};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
     Group, Overlays, Status, caption, choice_row, dropdown, form_row, menu_item, page_column,
-    popup_column, row, search_field, skeleton, status, stepper, styled_label, switch_row,
-    typography, use_overlays, use_page_busy,
+    popup_column, row, search_field, skeleton_row, status, stepper, styled_label,
+    switch_row, typography, use_overlays, use_page_busy,
 };
 
 const INTERFACE: &str = "org.gnome.desktop.interface";
@@ -31,8 +31,17 @@ const DATETIME: &str = "org.gnome.desktop.datetime";
 const CALENDAR: &str = "org.gnome.desktop.calendar";
 /// The most zones drawn at once. Typing narrows a longer list.
 const ZONE_LIMIT: usize = 60;
+/// The placeholder rows drawn while the zone list loads.
+const PLACEHOLDER_ROWS: usize = 8;
 
-#[derive(Clone, PartialEq)]
+/// Every zone name, as `timedatectl` lists them. Saved between runs, since the
+/// list rarely changes.
+fn list_zones() -> Result<Vec<String>, CommandError> {
+    backend::run("timedatectl", &["list-timezones"])
+        .map(|text| text.lines().map(str::to_string).collect())
+}
+
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Model {
     timezone: String,
     /// Offset from UTC, as `+01:00`.
@@ -55,7 +64,7 @@ struct Ctx {
 /// The page's shared state. The subpage and the page read the same cache.
 fn context(overlays: Overlays) -> Ctx {
     Ctx {
-        model: system::cached("datetime"),
+        model: system::cached_persistent::<Model, CommandError>("datetime"),
         overlays,
     }
 }
@@ -218,7 +227,10 @@ fn zone_label(zone: &str) -> String {
 /// holds once a write has landed.
 fn reload(ctx: Ctx) {
     let mut model = ctx.model;
-    background_then(load, move |result| model.set(Some(result)));
+    background_then(
+        move || system::load_persistent("datetime", load),
+        move |result| model.set(Some(result)),
+    );
 }
 
 /// Shows `edit` on the model at once, then runs `work` in the background. A
@@ -677,18 +689,11 @@ impl Component for TimeZonePage {
         let overlays = use_overlays();
         let ctx = context(overlays);
         let query = use_state(String::new);
-        let zones = use_state::<Option<Result<Vec<String>, CommandError>>>(|| None);
-        use_hook(move || {
-            background(zones, || {
-                backend::run("timedatectl", &["list-timezones"])
-                    .map(|text| text.lines().map(str::to_string).collect())
-            })
-        });
-        let Some(Ok(list)) = zones.read().clone() else {
-            return match zones.read().clone() {
-                Some(Err(failure)) => page_column().child(status(Status::Error(failure.0))),
-                _ => page_column().child(skeleton()),
-            };
+        let zones = system::use_cached_persistent("timezones", list_zones);
+        let zone_list = zones.read().clone();
+        let list: &[String] = match &zone_list {
+            Some(Ok(list)) => list,
+            _ => &[],
         };
         let (current, offset) = match displayed(ctx) {
             Some(model) => (model.timezone, model.utc_offset),
@@ -735,9 +740,18 @@ impl Component for TimeZonePage {
                     .context_menu(vec![set_item, copy_item]),
             )
         });
-        let mut group = Group::new(None::<String>).rows(rows);
-        if matching.is_empty() {
-            group = group.row(status(Status::Empty("Nothing matches.".to_string())));
+        let mut group = Group::new(None::<String>);
+        match &zone_list {
+            None => group = group.rows((0..PLACEHOLDER_ROWS).map(|_| skeleton_row())),
+            Some(Err(failure)) => {
+                group = group.row(status(Status::Error(failure.0.clone())));
+            }
+            Some(Ok(_)) => {
+                group = group.rows(rows);
+                if matching.is_empty() {
+                    group = group.row(status(Status::Empty("Nothing matches.".to_string())));
+                }
+            }
         }
 
         let mut page = page_column()
@@ -764,5 +778,5 @@ fn displayed(ctx: Ctx) -> Option<Model> {
 
 /// Start loading this page's data before it is opened.
 pub fn prefetch() {
-    system::prefetch("datetime", load);
+    system::prefetch_persistent("datetime", load);
 }

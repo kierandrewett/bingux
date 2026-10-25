@@ -645,7 +645,9 @@ impl Component for ApplicationsPage {
             .unwrap_or_default();
         let loaded = model.read().clone();
         let list = match loaded {
-            None => Group::titled("Installed").row(skeleton_row()),
+            None => Group::titled("Installed")
+                .trailing(installed_tools(searching, query, sort, limit, *sort.read()))
+                .rows((0..PLACEHOLDER_ROWS).map(|_| skeleton_row())),
             Some(data) => {
                 let needle = query.read().trim().to_lowercase();
                 let order = *sort.read();
@@ -707,6 +709,20 @@ impl Component for ApplicationsPage {
     }
 }
 
+/// Rows drawn while the application list loads, and the rows drawn for an
+/// application whose details have not arrived.
+const PLACEHOLDER_ROWS: usize = 8;
+const DETAIL_ROWS: usize = 6;
+
+/// A detail's text, or `Unknown` while it is empty.
+fn unknown_if_empty(text: &str) -> String {
+    if text.is_empty() {
+        "Unknown".to_string()
+    } else {
+        text.to_string()
+    }
+}
+
 /// One application: its icon and name, what it does with sound, where it came
 /// from, the kinds of file it opens by default, and how to remove it.
 #[derive(PartialEq)]
@@ -760,9 +776,9 @@ impl Component for AppPage {
         // choice is made, so no control is repeated here. The group is a
         // skeleton until `gio mime` has answered, and says so if it fails.
         let defaults = match &data.choices {
-            None => Some(Group::titled("Open by default").row(skeleton_row())),
+            None => Group::titled("Open by default").row(skeleton_row()),
             Some(Err(failure)) => {
-                Some(Group::titled("Open by default").row(status(Status::Error(failure.0.clone()))))
+                Group::titled("Open by default").row(status(Status::Error(failure.0.clone())))
             }
             Some(Ok(choices)) => {
                 let handled: Vec<(usize, bool)> = choices
@@ -775,7 +791,11 @@ impl Component for AppPage {
                         )
                     })
                     .collect();
-                (!handled.is_empty()).then(|| {
+                if handled.is_empty() {
+                    Group::titled("Open by default").row(status(Status::Empty(
+                        "Not registered for any of these.".to_string(),
+                    )))
+                } else {
                     let app = app.clone();
                     Group::titled("Open by default").rows(handled.iter().map(
                         |&(kind, is_default)| {
@@ -796,7 +816,7 @@ impl Component for AppPage {
                             )
                         },
                     ))
-                })
+                }
             }
         };
 
@@ -813,31 +833,28 @@ impl Component for AppPage {
                 .compact(),
             );
 
-        let details = app.details.clone().map(|details| {
-            let mut rows = vec![
-                row("Source").value(details.source.label().to_string()),
-                row("Version").value(if details.version.is_empty() {
-                    "Unknown".to_string()
-                } else {
-                    details.version.clone()
-                }),
-                row("Size").value(
-                    details
-                        .size
-                        .map_or_else(|| "Unknown".to_string(), size_text),
-                ),
-            ];
-            if !details.origin.is_empty() {
-                rows.push(row("Installed from").value(details.origin.clone()));
+        let details = match app.details.clone() {
+            None => Group::titled("Details").rows((0..DETAIL_ROWS).map(|_| skeleton_row())),
+            Some(details) => {
+                let rows = vec![
+                    row("Source").value(details.source.label().to_string()),
+                    row("Version").value(if details.version.is_empty() {
+                        "Unknown".to_string()
+                    } else {
+                        details.version.clone()
+                    }),
+                    row("Size").value(
+                        details
+                            .size
+                            .map_or_else(|| "Unknown".to_string(), size_text),
+                    ),
+                    row("Installed from").value(unknown_if_empty(&details.origin)),
+                    row("Location").value(unknown_if_empty(&details.location)),
+                    row("Category").value(unknown_if_empty(&app.category)),
+                ];
+                Group::titled("Details").rows(rows.into_iter().map(Element::from))
             }
-            if !details.location.is_empty() {
-                rows.push(row("Location").value(details.location.clone()));
-            }
-            if !app.category.is_empty() {
-                rows.push(row("Category").value(app.category.clone()));
-            }
-            Group::titled("Details").rows(rows.into_iter().map(Element::from))
-        });
+        };
 
         // Whether the application starts at login. Writing the switch copies
         // the entry into the user's autostart directory, or hides it there.
@@ -873,30 +890,33 @@ impl Component for AppPage {
             }))
         });
 
-        let uninstall = app.details.as_ref().map(|details| {
-            let (reason, removable) = match &details.removal {
-                Removal::Command(_) => (
-                    "Removes the package this application came from.".to_string(),
-                    true,
-                ),
-                Removal::Files(_) => (
-                    "Deletes the files this application installed.".to_string(),
-                    true,
-                ),
-                Removal::Unavailable(reason) => (reason.to_string(), false),
-            };
-            let target = app.clone();
-            Group::titled("Uninstall").row(
-                row("Uninstall this application").subtitle(reason).trailing(
-                    action_button("Uninstall", move |_| {
-                        ask_uninstall(target.clone(), model, busy, overlays, Some(navigator))
-                    })
-                    .destructive()
-                    .compact()
-                    .enabled(removable),
-                ),
-            )
-        });
+        let uninstall = match app.details.as_ref() {
+            None => Group::titled("Uninstall").row(skeleton_row()),
+            Some(details) => {
+                let (reason, removable) = match &details.removal {
+                    Removal::Command(_) => (
+                        "Removes the package this application came from.".to_string(),
+                        true,
+                    ),
+                    Removal::Files(_) => (
+                        "Deletes the files this application installed.".to_string(),
+                        true,
+                    ),
+                    Removal::Unavailable(reason) => (reason.to_string(), false),
+                };
+                let target = app.clone();
+                Group::titled("Uninstall").row(
+                    row("Uninstall this application").subtitle(reason).trailing(
+                        action_button("Uninstall", move |_| {
+                            ask_uninstall(target.clone(), model, busy, overlays, Some(navigator))
+                        })
+                        .destructive()
+                        .compact()
+                        .enabled(removable),
+                    ),
+                )
+            }
+        };
 
         // The file types the desktop entry says the application opens. Read
         // from the entry only; changing them means editing the entry itself.
@@ -910,12 +930,12 @@ impl Component for AppPage {
             .child(AppSound {
                 app_id: app.id.clone(),
             })
-            .maybe_child(details)
-            .maybe_child(defaults)
+            .child(details)
+            .child(defaults)
             .child(startup)
             .maybe_child(notifications_group)
             .maybe_child(file_types)
-            .maybe_child(uninstall)
+            .child(uninstall)
     }
 }
 
@@ -1395,9 +1415,15 @@ impl Component for DefaultKindPage {
                 .iter()
                 .map(|app| {
                     let chosen = app.id.clone();
-                    radio_row(app.name.clone(), app.id == selected, move |_: ()| {
+                    let row = radio_row(app.name.clone(), app.id == selected, move |_: ()| {
                         set_default(model, kind, chosen.clone(), overlays)
-                    })
+                    });
+                    // Until the row icons are cached, drawing one would block the UI thread.
+                    if data.icons {
+                        row.leading_app(app.icon.clone())
+                    } else {
+                        row
+                    }
                 })
                 .collect();
             radio_rows(None::<String>, rows)

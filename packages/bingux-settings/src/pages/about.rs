@@ -20,7 +20,7 @@ use crate::ui::{
 /// How long `hostnamectl` may take to write the new name.
 const WRITE_TIMEOUT: Duration = Duration::from_secs(60);
 
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Facts {
     hostname: String,
     /// The hardware model, such as "Micro-Star International MS-7C56".
@@ -417,7 +417,7 @@ impl Component for AboutPage {
         let tokens = use_tokens();
         let overlays = use_overlays();
         let window = use_window();
-        let model = system::use_cached("about", collect);
+        let model = system::use_cached_saved("about", collect);
         let shown = use_state(|| None::<String>);
         let draft = use_state(String::new);
         let error = use_state(|| None::<String>);
@@ -581,5 +581,5 @@ impl Component for AboutPage {
 
 /// Start loading this page's data before it is opened.
 pub fn prefetch() {
-    system::prefetch("about", collect);
+    system::prefetch_saved("about", collect);
 }

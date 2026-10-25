@@ -20,6 +20,9 @@ const ZONES: &str = include_str!("../../../assets/timezone/timezones.json");
 /// The map's viewBox is 360 by 145 units: longitude -180 to 180, latitude
 /// 85 down to -60.
 const ASPECT: f32 = 145.0 / 360.0;
+/// The card's height. Fixed, so the page keeps its shape before the map is
+/// measured. The map is drawn at the largest size with its aspect that fits.
+const HEIGHT: f32 = 284.0;
 /// The width used until the map has been measured.
 const FALLBACK_WIDTH: f32 = 640.0;
 /// A click further than this many pixels from every zone picks nothing.
@@ -156,7 +159,13 @@ impl Component for TimeZoneMap {
         } else {
             FALLBACK_WIDTH
         };
-        let height = width * ASPECT;
+        let height = HEIGHT;
+        // The map is centred in the card at the largest size that fits, so the
+        // card's height never depends on its measured width.
+        let drawn_width = width.min(height / ASPECT);
+        let drawn_height = drawn_width * ASPECT;
+        let origin_x = (width - drawn_width) / 2.0;
+        let origin_y = (height - drawn_height) / 2.0;
         let ctx = self.ctx;
         let mut hover = use_state(|| None::<Hover>);
         // The local time of the zone the pointer last rested on, with its zone.
@@ -185,14 +194,20 @@ impl Component for TimeZoneMap {
                     return;
                 }
                 let at = event.element_location();
-                if let Some(zone) = nearest(at.x as f32, at.y as f32, width, height) {
+                if let Some(zone) = nearest(
+                    at.x as f32 - origin_x,
+                    at.y as f32 - origin_y,
+                    drawn_width,
+                    drawn_height,
+                ) {
                     pick_zone(ctx, zone.to_string());
                 }
             })
             .on_pointer_move(move |event: Event<PointerEventData>| {
                 let at = event.element_location();
                 let (x, y) = (at.x as f32, at.y as f32);
-                let Some(zone) = nearest(x, y, width, height) else {
+                let Some(zone) = nearest(x - origin_x, y - origin_y, drawn_width, drawn_height)
+                else {
                     hover.set(None);
                     return;
                 };

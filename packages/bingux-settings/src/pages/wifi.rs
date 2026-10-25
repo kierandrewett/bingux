@@ -9,13 +9,14 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use super::wifi_editor::{Editor, Target, use_editor};
+use super::loading::veiled;
 use crate::icons::{self, Icon};
 use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
     Group, Overlays, PageHeader, PopupAction, PopupActions, ResponseKind, SpinnerSize, Status,
     Tokens, Window, action_strip, caption, centered_caption, dialog, heading, icon_button,
-    page_column, popup, popup_column, row, skeleton, spinner, status, strip_action, switch_row,
+    page_column, popup, popup_column, row, spinner, status, strip_action, switch_row,
     text_field, use_overlays, use_page_busy, use_page_header, use_popup_actions, use_tokens,
     use_window,
 };
@@ -39,7 +40,7 @@ const SCAN_LABEL: &str = "Scanning for Wi-Fi networks.";
 /// The shortest password WPA allows for a hotspot.
 const HOTSPOT_PASSWORD_MIN: usize = 8;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Model {
     /// `enabled`, `disabled` or `missing`, from `nmcli radio`.
     wifi_hw: String,
@@ -52,7 +53,7 @@ struct Model {
     hotspot: Option<String>,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Network {
     ssid: String,
     signal: u8,
@@ -62,6 +63,29 @@ struct Network {
     /// "2.4 GHz", "5 GHz" or "6 GHz", or empty when unknown.
     band: String,
     rate: String,
+}
+
+/// The shape of a loaded page with blank values, drawn under the veil while
+/// the first load runs. Every group and row a loaded page shows is already
+/// placed, so the values fill in without anything moving.
+fn placeholder() -> Model {
+    let blank = || Network {
+        ssid: "—".to_string(),
+        signal: 0,
+        secured: false,
+        in_use: false,
+        saved: false,
+        band: String::new(),
+        rate: String::new(),
+    };
+    Model {
+        wifi_hw: "enabled".into(),
+        wifi_on: true,
+        airplane: false,
+        networks: vec![blank(), blank(), blank()],
+        saved_names: vec!["—".to_string(), "—".to_string()],
+        hotspot: None,
+    }
 }
 
 fn nmcli(args: &[&str], timeout: Duration) -> Result<String, CommandError> {
@@ -132,14 +156,16 @@ fn airplane_blocked() -> bool {
 
 /// Names of the Wi-Fi connection profiles in `NAME,TYPE` output.
 fn parse_saved_wifi(output: &str) -> Vec<String> {
-    output
+    let mut names: Vec<String> = output
         .lines()
         .filter_map(|line| {
             let fields = split_terse(line);
             (fields.get(1).map(String::as_str) == Some("802-11-wireless"))
                 .then(|| fields[0].clone())
         })
-        .collect()
+        .collect();
+    names.sort();
+    names
 }
 
 /// Networks from `device wifi list`. Access points that share an SSID are
@@ -178,12 +204,9 @@ fn parse_networks(output: &str, saved: &[String]) -> Vec<Network> {
             rate: field(6).to_string(),
         });
     }
-    networks.sort_by(|a, b| {
-        b.in_use
-            .cmp(&a.in_use)
-            .then_with(|| b.signal.cmp(&a.signal))
-            .then_with(|| a.ssid.cmp(&b.ssid))
-    });
+    // Sorted by name alone. A rescan changes signal and connection, and a sort
+    // on either would reorder rows on screen while the list is open.
+    networks.sort_by(|a, b| a.ssid.cmp(&b.ssid));
     networks
 }
 
@@ -471,7 +494,7 @@ impl PartialEq for Ui {
 
 fn use_ui() -> Ui {
     Ui {
-        model: system::cached("wifi"),
+        model: use_hook(|| system::cached_persistent::<Model, CommandError>("wifi")),
         busy: use_state(|| None::<String>),
         sheet_error: use_state(|| None::<String>),
         password: use_state(String::new),
@@ -494,7 +517,7 @@ impl Ui {
         // ran, so the optimistic values are cleared on such a read alone.
         let started = SWITCHES_STARTED.load(Ordering::SeqCst);
         let quiet = started == SWITCHES_FINISHED.load(Ordering::SeqCst);
-        background_then(load, move |loaded| {
+        background_then(move || system::load_persistent("wifi", load), move |loaded| {
             if quiet && SWITCHES_STARTED.load(Ordering::SeqCst) == started {
                 let mut wifi = self.wifi_pending;
                 wifi.set(None);
@@ -745,8 +768,17 @@ impl Ui {
     }
 }
 
-fn page(children: Vec<Element>) -> impl IntoElement {
+fn page(children: Vec<Element>) -> Rect {
     page_column().children(children)
+}
+
+/// The text of a value, or a dash when the network does not report one.
+fn or_dash(text: &str) -> String {
+    if text.is_empty() {
+        "—".to_string()
+    } else {
+        text.to_string()
+    }
 }
 
 /// The right-hand column of a network row. Every row has one, so the icons
@@ -882,7 +914,7 @@ impl Component for HotspotBody {
 }
 
 /// The visible networks section. Its heading shows a spinner while a scan runs.
-fn visible_section(ui: Ui, model: &Model, tokens: Tokens) -> Element {
+fn visible_section(ui: Ui, model: &Model, tokens: Tokens, loading: bool) -> Element {
     let title = "Visible networks";
     if model.wifi_hw == "missing" {
         return Element::from(Group::titled(title).row(Element::from(status(Status::Empty(
@@ -921,9 +953,16 @@ fn visible_section(ui: Ui, model: &Model, tokens: Tokens) -> Element {
                 )))),
         );
     }
+    // A blank line of the same height holds the heading still until the count
+    // is known.
+    let count = if loading {
+        " ".to_string()
+    } else {
+        network_count(model.networks.len())
+    };
     Element::from(
         Group::titled(title)
-            .description(network_count(model.networks.len()))
+            .description(count)
             .trailing(trailing)
             .rows(network_rows(ui, &model.networks, tokens)),
     )
@@ -1091,7 +1130,10 @@ impl Component for WifiPage {
         // What the switches show: a switch being changed shows its new value
         // at once, before the backend has applied it.
         let loaded = ui.model.read().clone();
+        // The switch and the subtitle wait for real data, so the placeholder
+        // under the veil can never write a guess to the system.
         let shown = loaded.map(|loaded| loaded.map(|model| ui.shown(model)));
+        let loading = shown.is_none();
         // The master switch lives in the header bar, as in GNOME.
         let master = match shown.as_ref() {
             Some(Ok(model)) if wifi_usable(&model.wifi_hw) => Some(model.wifi_on),
@@ -1107,12 +1149,10 @@ impl Component for WifiPage {
         }
         use_page_header(header);
 
-        let Some(loaded) = shown else {
-            return page(vec![skeleton()]);
-        };
-        let model = match loaded {
-            Ok(model) => model,
-            Err(error) => {
+        let model = match shown {
+            None => placeholder(),
+            Some(Ok(model)) => model,
+            Some(Err(error)) => {
                 return page(vec![Element::from(
                     status(Status::Error(error.0)).action("Try again", move |_| ui.reload()),
                 )]);
@@ -1153,9 +1193,9 @@ impl Component for WifiPage {
                 ])));
         }
 
-        blocks.push(visible_section(ui, &model, tokens));
+        blocks.push(visible_section(ui, &model, tokens, loading));
 
-        page(blocks)
+        veiled(page(blocks), loading)
     }
 }
 
@@ -1169,12 +1209,11 @@ impl Component for SavedNetworksPage {
         use_polling(ui);
 
         let loaded = ui.model.read().clone();
-        let Some(loaded) = loaded else {
-            return page(vec![skeleton()]);
-        };
-        let model = match loaded {
-            Ok(model) => model,
-            Err(error) => {
+        // The saved list draws its rows under the veil until the first load lands.
+        let (model, loading) = match loaded {
+            None => (placeholder(), true),
+            Some(Ok(model)) => (model, false),
+            Some(Err(error)) => {
                 return page(vec![Element::from(
                     status(Status::Error(error.0)).action("Try again", move |_| ui.reload()),
                 )]);
@@ -1206,9 +1245,12 @@ impl Component for SavedNetworksPage {
                     .context_menu(menu),
             )
         });
-        page(vec![Element::from(
-            Group::new(None::<String>).rows(rows.collect::<Vec<_>>()),
-        )])
+        veiled(
+            page(vec![Element::from(
+                Group::new(None::<String>).rows(rows.collect::<Vec<_>>()),
+            )]),
+            loading,
+        )
     }
 }
 
@@ -1238,12 +1280,12 @@ impl Component for NetworkPage {
         });
 
         let loaded = ui.model.read().clone();
-        let Some(loaded) = loaded else {
-            return page(vec![skeleton()]);
-        };
-        let model = match loaded {
-            Ok(model) => model,
-            Err(error) => {
+        // Before the first load the page draws its real rows from a placeholder
+        // under the veil.
+        let (model, loading) = match loaded {
+            None => (placeholder(), true),
+            Some(Ok(model)) => (model, false),
+            Some(Err(error)) => {
                 return page(vec![Element::from(
                     status(Status::Error(error.0)).action("Try again", move |_| ui.reload()),
                 )]);
@@ -1258,7 +1300,9 @@ impl Component for NetworkPage {
         let connecting =
             ui.busy.read().as_deref() == Some(format!("Connecting to {ssid}.").as_str());
 
-        let state = if connecting {
+        let state = if loading {
+            "—"
+        } else if connecting {
             "Connecting"
         } else if connected {
             "Connected"
@@ -1319,27 +1363,34 @@ impl Component for NetworkPage {
         if !actions.is_empty() {
             blocks.push(Element::from(action_strip(actions)));
         }
-        if let Some(network) = visible {
-            let mut facts = Group::titled("Details")
-                .row(row("Signal strength").value(signal_detail(network.signal)));
-            if !network.band.is_empty() {
-                facts = facts.row(row("Frequency").value(network.band.clone()));
-            }
-            facts = facts.row(row("Security").value(if network.secured {
-                "Password protected"
-            } else {
-                "Open"
-            }));
-            if !network.rate.is_empty() {
-                facts = facts.row(row("Speed").value(network.rate.clone()));
-            }
-            blocks.push(Element::from(facts));
-        }
-        page(blocks)
+        // The four facts always show, with a dash for any the network does not
+        // report, so the group keeps its place when the network comes or goes.
+        let (signal, band, security, speed) = match visible {
+            Some(network) => (
+                signal_detail(network.signal),
+                or_dash(&network.band),
+                (if network.secured { "Password protected" } else { "Open" }).to_string(),
+                or_dash(&network.rate),
+            ),
+            None => (
+                "—".to_string(),
+                "—".to_string(),
+                "—".to_string(),
+                "—".to_string(),
+            ),
+        };
+        blocks.push(Element::from(
+            Group::titled("Details")
+                .row(row("Signal strength").value(signal))
+                .row(row("Frequency").value(band))
+                .row(row("Security").value(security))
+                .row(row("Speed").value(speed)),
+        ));
+        veiled(page(blocks), loading)
     }
 }
 
 /// Start loading this page's data before it is opened.
 pub fn prefetch() {
-    system::prefetch("wifi", load);
+    system::prefetch_persistent("wifi", load);
 }

@@ -14,10 +14,10 @@ use freya::prelude::*;
 
 use super::{Loaded, reload, set_font};
 use crate::routes::use_navigator;
-use crate::system::{self, CommandError, background, background_then};
+use crate::system::{self, CommandError, background_then};
 use crate::ui::{
-    Group, Overlays, Status, dropdown, menu_item, page_column, row, search_field, skeleton, status,
-    use_overlays, use_tokens,
+    Group, Overlays, Status, dropdown, menu_item, page_column, row, search_field, skeleton_row,
+    status, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
 
@@ -27,6 +27,8 @@ const FILTER_SERIF: &str = "serif";
 const FILTER_MONOSPACED: &str = "monospaced";
 const FILTER_OTHER: &str = "other";
 const SAMPLE: &str = "The quick brown fox jumps over the lazy dog";
+/// Placeholder rows shown while the font list loads.
+const PLACEHOLDER_ROWS: usize = 6;
 
 /// The search text the page starts with. Snapshots set
 /// `BINGUX_SETTINGS_SNAPSHOT_FONT_SEARCH` so the search can be captured
@@ -109,7 +111,7 @@ const SANS_NAMES: &[&str] = &[
     "work sans",
 ];
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 enum Class {
     Sans,
     Serif,
@@ -117,14 +119,14 @@ enum Class {
     Other,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Font {
     name: String,
     class: Class,
 }
 
 /// Every installed family, sorted by name.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Catalogue {
     fonts: Vec<Font>,
 }
@@ -306,10 +308,9 @@ impl Component for FontPage {
         let navigator = use_navigator();
         let overlays: Overlays = use_overlays();
         let tokens = use_tokens();
-        let fonts = use_state::<Option<Result<Catalogue, CommandError>>>(|| None);
+        let fonts = system::use_cached_persistent("fonts", installed_fonts);
         let filter = use_state(initial_filter);
         let query = use_state(initial_query);
-        use_hook(move || background(fonts, installed_fonts));
 
         // The font in the settings file, or None while that is loading. `shown`
         // is the choice on screen, which leads the file while a change saves.
@@ -324,12 +325,12 @@ impl Component for FontPage {
             }
         });
 
-        let catalogue = match fonts.read().clone() {
-            Some(Ok(catalogue)) => catalogue,
+        let catalogue: Option<Catalogue> = match fonts.read().clone() {
+            Some(Ok(catalogue)) => Some(catalogue),
             Some(Err(failure)) => {
                 return page_column().child(status(Status::Error(failure.0)));
             }
-            None => return page_column().child(skeleton()),
+            None => None,
         };
 
         let chosen = shown.read().clone();
@@ -353,7 +354,11 @@ impl Component for FontPage {
 
         let filter_key = filter.read().clone();
         let query_text = query.read().clone();
-        let found = matching(&catalogue, &filter_key, &query_text);
+        let loaded = catalogue.is_some();
+        let found: Vec<&Font> = catalogue
+            .as_ref()
+            .map(|catalogue| matching(catalogue, &filter_key, &query_text))
+            .unwrap_or_default();
         let total = found.len();
         let mut names: Vec<String> = found.iter().map(|font| font.name.clone()).collect();
         let searching = !query_text.trim().is_empty();
@@ -364,8 +369,13 @@ impl Component for FontPage {
             names.insert(0, name);
         }
 
+        // The list keeps its shape while the fonts load: placeholder rows, and a
+        // caption of the same height that is blank rather than a count.
         let mut rows: Vec<Element> = Vec::new();
-        if !searching && filter_key == FILTER_ALL {
+        if !loaded {
+            rows.extend((0..PLACEHOLDER_ROWS).map(|_| skeleton_row()));
+        }
+        if loaded && !searching && filter_key == FILTER_ALL {
             let pick = on_pick.clone();
             rows.push(
                 row("System default")
@@ -382,10 +392,13 @@ impl Component for FontPage {
                 overlays,
             })
         }));
-        let mut list = Group::new(None::<String>)
-            .description(format!("{total} fonts"))
-            .rows(rows);
-        if names.is_empty() {
+        let caption = if loaded {
+            format!("{total} fonts")
+        } else {
+            "\u{a0}".to_string()
+        };
+        let mut list = Group::new(None::<String>).description(caption).rows(rows);
+        if loaded && names.is_empty() {
             list = list.row(status(Status::Empty("Nothing matches.".to_string())));
         }
 
