@@ -32,6 +32,10 @@ use crate::surface::use_tokens;
 
 /// The scale the panel starts from when it opens.
 const OPEN_SCALE: f32 = 0.94;
+/// The layer of the popup's edge hairline, relative to the popup. Higher
+/// than any depth the panel's content reaches (the header bar's buttons sit
+/// a few dozen levels down), so the outline is drawn over all of it.
+const POPUP_OUTLINE_LAYER: i16 = 1000;
 /// The widest a popup gets, as a share of the window width, so it keeps a
 /// margin on a phone.
 const POPUP_MAX_WIDTH_PERCENT: f32 = 94.0;
@@ -636,14 +640,16 @@ impl Component for PopupFrame {
                 // The panel scales up from a little smaller, about its centre.
                 .scale(OPEN_SCALE + (1.0 - OPEN_SCALE) * progress)
                 .child(panel)
-                // The window's edge, drawn over everything the panel holds
-                // (the header bar paints over a border drawn under it), so
-                // the hairline runs round the whole popup. It has no fill,
-                // so presses reach the panel through it.
+                // The window's edge, drawn over everything the panel holds, so
+                // the hairline runs round the whole popup, header included.
+                // Freya adds each element's depth to its layer, so the header
+                // bar's nodes deep in the panel outrank a shallow sibling: the
+                // outline takes a layer above any depth the panel reaches. It
+                // has no fill, so presses reach the panel through it.
                 .child(
                     rect()
                         .position(Position::new_absolute().top(0.0).left(0.0))
-                        .layer(Layer::Relative(1))
+                        .layer(Layer::Relative(POPUP_OUTLINE_LAYER))
                         .width(Size::px(shown_size.0))
                         .height(Size::px(shown_size.1))
                         .tw(&tokens, &[rounded(Radius::Overlay), border(Line::Hairline)]),
