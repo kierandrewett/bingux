@@ -46,6 +46,8 @@ Item {
     property bool showRetry: false
     property string retryText: "Try again"
     property bool showClock: true
+    // Fade the clock and the card back while a panel (the account picker) is open over them.
+    property bool dimmed: false
 
     property alias topContent: top.data
     property alias overlayContent: overlay.data
@@ -120,7 +122,7 @@ Item {
         anchors.topMargin: Math.round(root.height * 0.08)
         anchors.horizontalCenter: parent.horizontalCenter
         visible: root.showClock
-        opacity: root.showingControls ? 1 : 0
+        opacity: root.showingControls ? (root.dimmed ? 0.25 : 1) : 0
         transform: Translate {
             y: root.leaving ? -16 : root.entered ? 0 : 24
             Behavior on y {
@@ -159,7 +161,7 @@ Item {
         submitLabel: root.submitLabel
         showRetry: root.showRetry
         retryText: root.retryText
-        opacity: root.showingControls ? 1 : 0
+        opacity: root.showingControls ? (root.dimmed ? 0.15 : 1) : 0
         // The exit shrinks the identity a little as it fades, like a sheet
         // closing; the entrance rises from just below its resting place.
         scale: root.leaving ? 0.96 : 1

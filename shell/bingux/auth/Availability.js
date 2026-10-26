@@ -15,6 +15,7 @@ function label(availability) {
         return "Running, locked";
     case "running_foreground":
         return "Running";
+    case "unavailable":
     default:
         return "Unavailable";
     }

@@ -20,6 +20,8 @@ ColumnLayout {
     property Item backdrop: null
     // A normalised model (ProgressModel.js `normalise`), or null.
     property var progress: null
+    // Only the output that takes input offers the failure actions.
+    property bool interactive: true
 
     readonly property bool failed: progress !== null && progress.failure !== null
     readonly property bool indeterminate: progress !== null && Progress.indeterminate(progress)
@@ -143,7 +145,7 @@ ColumnLayout {
         objectName: "progressFailureActions"
         Layout.alignment: Qt.AlignHCenter
         Layout.topMargin: Theme.spaceSmall
-        visible: root.failed
+        visible: root.failed && root.interactive
         spacing: Theme.gap
         AuthButton {
             objectName: "progressRetry"

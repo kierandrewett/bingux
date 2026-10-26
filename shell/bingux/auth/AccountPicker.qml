@@ -24,7 +24,6 @@ Item {
     property int selectedUid: -1
     property bool open: false
     readonly property alias list: list
-    readonly property real shown: reveal
 
     signal chosen(int uid)
     signal dismissed
@@ -87,7 +86,7 @@ Item {
             anchors.fill: parent
             backdrop: root.backdrop
             radius: Theme.cardRadius
-            tint: root.theme.darkInk ? Qt.rgba(1, 1, 1, 0.7) : Qt.rgba(0.1, 0.1, 0.12, 0.42)
+            tint: root.theme.darkInk ? Qt.rgba(1, 1, 1, 0.7) : Theme.softwareRendering ? Qt.rgba(0.12, 0.12, 0.14, 0.96) : Qt.rgba(0.1, 0.1, 0.12, 0.42)
             outline: root.theme.glassOutline
         }
 
