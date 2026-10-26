@@ -65,8 +65,11 @@ class ShareVm(Vm):
 
 def build():
     env = dict(os.environ, CARGO_TARGET_DIR=str(TARGET))
+    cargo = os.environ.get("CARGO") or str(Path.home() / ".cargo/bin/cargo")
+    if not os.access(cargo, os.X_OK):
+        cargo = "cargo"
     subprocess.run(
-        ["cargo", "build", "--release", "--bins", "--examples"],
+        [cargo, "build", "--release", "--bins", "--examples"],
         cwd=ROOT / "packages/bsm-helper",
         env=env,
         check=True,

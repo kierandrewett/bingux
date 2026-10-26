@@ -152,7 +152,6 @@ pub fn child_main(sock: OwnedFd, params: &AuthParams, base: Option<SessionBase>)
 mod tests {
     use super::*;
     use crate::testkit::{TestPam, drive_prompts};
-    use std::os::fd::AsRawFd as _;
 
     fn params(pam: &TestPam, service: &str) -> AuthParams {
         AuthParams {

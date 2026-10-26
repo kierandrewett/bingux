@@ -35,10 +35,15 @@ FAILS=0
 pass() { echo "PASS $1"; }
 fail() { echo "FAIL $1: $2"; FAILS=$((FAILS + 1)); }
 info() { echo "INFO $*"; }
-check() { # name, command...
+check() { # name, command...; status 0 when the check passed
     name=$1
     shift
-    if "$@" >"$WORK/last.out" 2>&1; then pass "$name"; else fail "$name" "$(tr '\n' ' ' <"$WORK/last.out" | cut -c1-300)"; fi
+    if "$@" >"$WORK/last.out" 2>&1; then
+        pass "$name"
+    else
+        fail "$name" "$(tr '\n' ' ' <"$WORK/last.out" | cut -c1-300)"
+        return 1
+    fi
 }
 eq() { # name, expected, actual
     if [ "$2" = "$3" ]; then pass "$1"; else fail "$1" "expected '$2', got '$3'"; fi
@@ -90,7 +95,7 @@ default_grace_ms = 2000
 command = ["/usr/bin/sleep", "infinity"]
 EOF
 }
-LEADER='echo $$ > '$WORK'/leader-$BSM_SESSION_ID.pid; setsid sleep 987 \& exec sleep infinity'
+LEADER='echo $$ > '$WORK'/leader-$BSM_SESSION_ID.pid; setsid sleep 987 & exec sleep infinity'
 BRIDGE='echo $$ > '$WORK'/bridge-$BSM_SESSION_ID.pid; exec sleep infinity'
 write_config "$LEADER" "$BRIDGE"
 systemctl daemon-reload
@@ -101,7 +106,11 @@ eq "unit: KillMode=process" "KillMode=process" "$(systemctl show bsm-helper.serv
 eq "socket: owner and mode" "bsm 600" "$(stat -c '%U %a' $SOCK)"
 
 # ---- connection policy -----------------------------------------------------
-check "connect: the bsm account is served" probe ping
+if ! check "connect: the bsm account is served" probe ping; then
+    echo "--- journal of the helper units ---"
+    journalctl -u bsm-helper.service -u bsm-helper.socket --no-pager -n 40
+    echo "--- end ---"
+fi
 check "connect: root is refused although it can open the socket" sh -c "! $PROBE --socket $SOCK ping"
 check "connect: another account cannot open the socket" sh -c "! runuser -u bsmt2 -- $PROBE --socket $SOCK ping"
 HPID=$(systemctl show bsm-helper.service -p MainPID --value)
@@ -149,7 +158,8 @@ if [ -n "$LSESS" ] && [ "$LSESS" != null ]; then
     echo "--- end ---"
     eq "logind: Type=wayland" "Type=wayland" "$(grep ^Type= "$WORK/session1.show")"
     eq "logind: Class=user" "Class=user" "$(grep ^Class= "$WORK/session1.show")"
-    eq "logind: no seat" "Seat=" "$(grep ^Seat= "$WORK/session1.show")"
+    # logind leaves an empty Seat out of `show-session`.
+    check "logind: no seat (the Seat property is empty or absent)" sh -c "! grep -q '^Seat=.' $WORK/session1.show"
     eq "logind: Active=yes without a seat" "Active=yes" "$(grep ^Active= "$WORK/session1.show")"
     eq "logind: owned by the user" "Name=bsmt1" "$(grep ^Name= "$WORK/session1.show")"
     eq "logind: scope matches SessionOpened.scope" "Scope=$SCOPE" "$(grep ^Scope= "$WORK/session1.show")"
@@ -197,12 +207,13 @@ eq "lock: logind LockedHint=no" "LockedHint=no" "$(loginctl show-session "$LSESS
 # ---- two users at once -----------------------------------------------------
 S2=s000000a2
 G2=1002
-check "second user: OpenSession" probe open bsmt2 "$U2" $S2 $G2 /run/bsm/sessions/$S2-$G2.sock
+probe open bsmt2 "$U2" $S2 $G2 /run/bsm/sessions/$S2-$G2.sock >"$WORK/open2.out" 2>&1
+check "second user: OpenSession" grep -q session_opened "$WORK/open2.out"
 L2=$(loginctl list-sessions --no-legend | awk '$3 == "bsmt2" {print $1}' | head -n 1)
 info "sessions with two users: $(loginctl list-sessions --no-legend | tr '\n' ';')"
 check "second user: its logind session is Active too" sh -c "loginctl show-session $L2 -p Active | grep -qx Active=yes"
 check "second user: a different scope" test "$(loginctl show-session "$L2" -p Scope --value)" != "$SCOPE"
-LEAD2=$(cat "$WORK/leader-$S2.pid")
+LEAD2=$(field "$WORK/open2.out" leader_pid)
 
 # ---- close only one session ------------------------------------------------
 check "close: CloseSession of the first session" probe close $S1 $G1 1000
@@ -273,5 +284,8 @@ check "greeter: it was killed on request" sh -c "grep -q greeter_exited $WORK/gr
 check "greeter: its private directories are removed" sh -c "! test -e /run/bsm-greeter/$GG"
 [ -n "$GPID" ] && check "greeter: the process is gone" sh -c "! kill -0 $GPID 2>/dev/null"
 
+echo "--- journal of the helper units (tail) ---"
+journalctl -u bsm-helper.service -u bsm-helper.socket --no-pager -n 60
+echo "--- end ---"
 echo "RESULT failures=$FAILS"
 [ "$FAILS" = 0 ]

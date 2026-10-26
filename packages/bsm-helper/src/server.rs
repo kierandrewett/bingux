@@ -9,7 +9,7 @@
 use std::collections::VecDeque;
 use std::io;
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use bsm_proto::error::ErrorCode;
@@ -88,6 +88,8 @@ struct HintJob {
 pub struct Server {
     cfg: Config,
     listener: OwnedFd,
+    /// Socket file created by this process (not one passed in by systemd).
+    owned_socket: Option<PathBuf>,
     sigfd: OwnedFd,
     allowed_uid: u32,
     conn: Option<Conn>,
@@ -111,7 +113,10 @@ enum Src {
 }
 
 /// Obtain the listening socket: the one systemd passes, or a fresh one at `path`.
-pub fn acquire_listener(cfg: &Config, allowed_uid: u32) -> io::Result<OwnedFd> {
+/// The second value is the socket file this process created and therefore
+/// removes at shutdown; a socket handed over by systemd belongs to the socket
+/// unit and must never be unlinked here.
+pub fn acquire_listener(cfg: &Config, allowed_uid: u32) -> io::Result<(OwnedFd, Option<PathBuf>)> {
     use std::os::fd::FromRawFd;
     let pid_ok = std::env::var("LISTEN_PID").ok().and_then(|p| p.parse::<u32>().ok()) == Some(std::process::id());
     let fds = std::env::var("LISTEN_FDS").ok().and_then(|p| p.parse::<i32>().ok()).unwrap_or(0);
@@ -133,7 +138,7 @@ pub fn acquire_listener(cfg: &Config, allowed_uid: u32) -> io::Result<OwnedFd> {
             std::env::remove_var("LISTEN_FDS");
             std::env::remove_var("LISTEN_FDNAMES");
         }
-        return Ok(fd);
+        return Ok((fd, None));
     }
     if let Some(dir) = cfg.socket.path.parent() {
         std::fs::create_dir_all(dir)?;
@@ -142,7 +147,7 @@ pub fn acquire_listener(cfg: &Config, allowed_uid: u32) -> io::Result<OwnedFd> {
     if sys::euid() == 0 {
         std::os::unix::fs::chown(&cfg.socket.path, Some(allowed_uid), None)?;
     }
-    Ok(fd)
+    Ok((fd, Some(cfg.socket.path.clone())))
 }
 
 /// Resolve the uid allowed to connect.
@@ -158,7 +163,7 @@ pub fn resolve_allowed_uid(cfg: &Config) -> Result<u32, String> {
 }
 
 impl Server {
-    pub fn new(cfg: Config, listener: OwnedFd, allowed_uid: u32) -> io::Result<Server> {
+    pub fn new(cfg: Config, listener: OwnedFd, owned_socket: Option<PathBuf>, allowed_uid: u32) -> io::Result<Server> {
         let sigfd = sys::signal_fd(&[libc::SIGCHLD, libc::SIGTERM, libc::SIGINT])?;
         unsafe { libc::signal(libc::SIGPIPE, libc::SIG_IGN) };
         let tickets = Tickets::new(cfg.ticket_ttl());
@@ -166,6 +171,7 @@ impl Server {
         let mut s = Server {
             cfg,
             listener,
+            owned_socket,
             sigfd,
             allowed_uid,
             conn: None,
@@ -1059,12 +1065,9 @@ impl Server {
             sys::kill_group(g.pid, libc::SIGKILL);
             greeter::remove_dirs(&g.run.dir);
         }
-        let _ = std::fs::remove_file(&self.cfg.socket.path);
-    }
-
-    /// Path of the socket the helper listens on when not socket-activated.
-    pub fn socket_path(&self) -> &Path {
-        &self.cfg.socket.path
+        if let Some(path) = &self.owned_socket {
+            let _ = std::fs::remove_file(path);
+        }
     }
 }
 

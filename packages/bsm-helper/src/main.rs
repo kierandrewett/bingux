@@ -61,8 +61,8 @@ fn real_main() -> Result<(), String> {
         check_confdir(dir)?;
     }
     let allowed = resolve_allowed_uid(&cfg)?;
-    let listener = acquire_listener(&cfg, allowed).map_err(|e| format!("listening: {e}"))?;
-    let mut server = Server::new(cfg, listener, allowed).map_err(|e| format!("starting: {e}"))?;
+    let (listener, owned) = acquire_listener(&cfg, allowed).map_err(|e| format!("listening: {e}"))?;
+    let mut server = Server::new(cfg, listener, owned, allowed).map_err(|e| format!("starting: {e}"))?;
     eprintln!("bsm-helper: ready");
     server.run().map_err(|e| format!("event loop: {e}"))
 }
