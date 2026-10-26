@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
+import "auth"
 
 // The login greeter on KioskScreen. The card holds three pages: "login" (the
 // account, its password prompt and the session link), "accounts" (switch user
@@ -192,7 +193,7 @@ KioskScreen {
                         }
                     }
                 }
-                SessionAvatar {
+                UserAvatar {
                     Layout.alignment: Qt.AlignHCenter
                     visible: !root.customUser
                     size: 72

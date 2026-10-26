@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell.Widgets
+import ".."
 
 // Round account picture with an initial as the fallback, for the lock screen
 // and the greeter. Drawn over wallpaper, so the fallback is translucent white.

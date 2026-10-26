@@ -1,6 +1,11 @@
 singleton ApplicationCatalog 1.0 ApplicationCatalog.qml
 singleton Theme 1.0 Theme.qml
 singleton Startup 1.0 Startup.qml
+singleton BsmMode 1.0 BsmMode.qml
+singleton BsmSession 1.0 BsmSession.qml
+singleton BsmReadiness 1.0 BsmReadiness.qml
+BsmSurfaceProbe 1.0 BsmSurfaceProbe.qml
+BsmDesktop 1.0 BsmDesktop.qml
 singleton AdwaitaIcons 1.0 AdwaitaIcons.qml
 singleton LaunchFeedback 1.0 LaunchFeedback.qml
 singleton Python 1.0 Python.qml
@@ -158,7 +163,6 @@ KioskCard 1.0 KioskCard.qml
 KioskPage 1.0 KioskPage.qml
 KioskPageStack 1.0 KioskPageStack.qml
 SessionOsd 1.0 SessionOsd.qml
-SessionAvatar 1.0 SessionAvatar.qml
 SessionLink 1.0 SessionLink.qml
 SessionGlass 1.0 SessionGlass.qml
 SessionRow 1.0 SessionRow.qml

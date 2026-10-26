@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import "auth"
 
 // One row in a SessionPopover list: an avatar or icon, a label and an
 // optional tick. The selected row carries a stronger translucent fill.
@@ -41,7 +42,7 @@ AbstractButton {
             anchors.leftMargin: root.contentInset
             anchors.verticalCenter: parent.verticalCenter
             spacing: 10
-            SessionAvatar {
+            UserAvatar {
                 visible: root.iconName === "" && root.avatarName !== ""
                 anchors.verticalCenter: parent.verticalCenter
                 size: 24

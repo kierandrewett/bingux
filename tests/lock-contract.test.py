@@ -57,7 +57,7 @@ class LockContractTest(unittest.TestCase):
 
     def test_screen_only_reads_local_wallpaper_and_calls_finish_after_the_exit(self):
         screen = (ROOT / "shell/bingux/SessionScreen.qml").read_text()
-        self.assertIn("SystemClock", screen)
+        self.assertIn("SystemClock", (ROOT / "shell/bingux/auth/AuthClock.qml").read_text())
         self.assertIn("root.authentication.finish()", screen)
         self.assertNotIn("lock-theme.json", screen)
         self.assertFalse((ROOT / "shell/bingux/LockTheme.qml").exists())
