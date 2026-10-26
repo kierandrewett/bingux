@@ -61,13 +61,29 @@ impl Bridge {
         let _ = self.conn.flush();
     }
 
+    /// Stand in for Gnoblin's layer list: every role is mapped on every
+    /// configured output. Bingux's own claims still come through `ready.sock`.
+    pub(super) fn test_layers(&mut self) {
+        if !self.is_test() {
+            return;
+        }
+        let mut layers = Vec::new();
+        for o in self.outputs.values() {
+            let Some(connector) = o.connector.clone() else { continue };
+            for role in Role::ALL {
+                layers.push(LayerSurface { namespace: role.namespace().into(), connector: connector.clone(), mapped: true });
+            }
+        }
+        let reports = self.readiness.set_layers(layers);
+        self.send_reports(reports);
+    }
+
     fn test_auto_ready(&mut self) {
         if self.readiness_done() {
             return;
         }
-        let outputs: Vec<(String, Option<String>)> =
-            self.outputs.iter().map(|(n, o)| (n.clone(), o.connector.clone())).collect();
-        if outputs.is_empty() || outputs.iter().any(|(_, c)| c.is_none()) {
+        let outputs: Vec<Option<String>> = self.outputs.values().map(|o| o.connector.clone()).collect();
+        if outputs.is_empty() || outputs.iter().any(|c| c.is_none()) {
             return;
         }
         let g = self.generation.clone();
@@ -81,30 +97,18 @@ impl Bridge {
             required: None,
         };
         let mut lines = vec![mk("wallpaper", "launched"), mk("desktop", "launched")];
-        let mut layers = Vec::new();
-        for (_, connector) in &outputs {
-            let connector = connector.clone().unwrap();
-            for (comp, role) in [("wallpaper", Role::Wallpaper), ("desktop", Role::Bar), ("desktop", Role::Dock)] {
+        for connector in outputs.into_iter().flatten() {
+            for (comp, role) in [("wallpaper", "wallpaper"), ("desktop", "bar"), ("desktop", "dock")] {
                 lines.push(ReadyLine {
                     output: Some(connector.clone()),
-                    role: Some(
-                        match role {
-                            Role::Wallpaper => "wallpaper",
-                            Role::Bar => "bar",
-                            Role::Dock => "dock",
-                        }
-                        .into(),
-                    ),
+                    role: Some(role.into()),
                     mapped: Some(true),
                     ..mk(comp, "surface")
                 });
-                layers.push(LayerSurface { namespace: role.namespace().into(), connector: connector.clone(), mapped: true });
             }
         }
         lines.push(mk("wallpaper", "ready"));
         lines.push(mk("desktop", "ready"));
-        let reports = self.readiness.set_layers(layers);
-        self.send_reports(reports);
         for l in lines {
             self.on_ready_line(l);
         }

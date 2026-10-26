@@ -156,6 +156,7 @@ impl Bridge {
         false
     }
     fn test_input(&mut self, _v: serde_json::Value) {}
+    fn test_layers(&mut self) {}
     fn start_test_timers(&mut self) -> Result<()> {
         Ok(())
     }
@@ -768,6 +769,7 @@ impl Bridge {
             }
             let reports = self.readiness.output_configured(name, connector);
             self.send_reports(reports);
+            self.test_layers();
             self.pump_monitors();
         }
     }
