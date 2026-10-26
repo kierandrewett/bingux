@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::os::unix::net::UnixStream;
 use std::sync::mpsc::Sender;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use bsm_proto::scene::{CoverColor, OutputInfo, SceneCommand, SceneEvent};
@@ -36,7 +36,7 @@ use smithay::reexports::wayland_server::protocol::wl_shm::WlShm;
 use smithay::reexports::wayland_server::protocol::wl_subcompositor::WlSubcompositor;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{
-    Client, DataInit, Dispatch, Display, DisplayHandle, GlobalDispatch, New, Resource,
+    Client, DataInit, Display, DisplayHandle, GlobalDispatch, New,
 };
 use smithay::utils::{Logical, Point, Transform};
 use smithay::wayland::buffer::BufferHandler;
@@ -58,7 +58,6 @@ use smithay::wayland::viewporter::ViewporterState;
 
 use crate::engine::{Engine, Probe, SessionKey};
 use crate::gfx::Gfx;
-use crate::harness::HarnessCmd;
 use crate::host::SessionRec;
 use crate::peer::Peer;
 use crate::roles::{ClientState, GlobalKind, Role, client_may_see};
@@ -98,6 +97,12 @@ pub(crate) struct OutputRec {
     pub global: GlobalId,
 }
 
+pub(crate) struct Awaiting {
+    pub plan: crate::engine::Plan,
+    pub now_ms: u64,
+    pub since: Instant,
+}
+
 pub(crate) enum Clock {
     Wall(Instant),
     Manual(u64),
@@ -124,14 +129,20 @@ pub(crate) struct State {
 
     pub compositor_state: CompositorState,
     pub shm_state: ShmState,
+    // The states below own their globals; dropping them would remove the global.
+    #[allow(dead_code)]
     pub output_manager_state: OutputManagerState,
     pub layer_shell_state: WlrLayerShellState,
+    #[allow(dead_code)]
     pub viewporter_state: ViewporterState,
+    #[allow(dead_code)]
     pub fractional_scale_state: FractionalScaleManagerState,
+    #[allow(dead_code)]
     pub presentation_state: PresentationState,
     pub dmabuf_state: DmabufState,
     pub dmabuf_global: Option<DmabufGlobal>,
     pub seat_state: SeatState<State>,
+    #[allow(dead_code)]
     pub seat: Seat<State>,
     pub keyboard: KeyboardHandle<State>,
     pub pointer: PointerHandle<State>,
@@ -156,6 +167,7 @@ pub(crate) struct State {
     pub dpms_on: bool,
     pub frame_seq: u64,
     pub needs_redraw: bool,
+    pub awaiting: Option<Awaiting>,
     pub harness_frames: Vec<crate::harness::CapturedFrame>,
     pub dump_dir: Option<std::path::PathBuf>,
 }
@@ -207,7 +219,6 @@ use smithay::wayland::compositor::{RegionUserData, SubsurfaceUserData, SurfaceUs
 use smithay::wayland::shm::{ShmBufferUserData, ShmPoolUserData};
 use smithay::wayland::viewporter::ViewportState;
 use smithay::wayland::output::{OutputUserData, XdgOutputUserData};
-use smithay::wayland::seat::{KeyboardUserData, PointerUserData, SeatUserData, TouchUserData};
 use smithay::reexports::wayland_protocols::xdg::xdg_output::zv1::server::zxdg_output_v1::ZxdgOutputV1;
 use smithay::reexports::wayland_protocols::wp::viewporter::server::wp_viewport::WpViewport;
 use smithay::reexports::wayland_protocols::wp::fractional_scale::v1::server::wp_fractional_scale_v1::WpFractionalScaleV1;
@@ -447,14 +458,6 @@ impl State {
         let _ = self.evt_tx.send(e);
     }
 
-    pub fn probe_view(&self) -> ProbeView<'_> {
-        ProbeView {
-            greeter_connected: self.greeter.connected.is_some(),
-            outputs: &self.outputs,
-            sessions: &self.sessions,
-        }
-    }
-
     pub fn output_of_layer_surface(&self, surface: &WlSurface) -> Option<Output> {
         self.outputs.iter().find_map(|o| {
             layer_map_for_output(&o.output)
@@ -567,8 +570,13 @@ impl State {
         }
     }
 
-    /// One composed frame: plan, render, answer, advance the engine.
+    /// One composed frame: plan, render, answer, advance the engine. On hardware the
+    /// answer waits for the page flip (see [`State::complete_frame`]).
     pub fn render_frame(&mut self) {
+        if self.awaiting.is_some() {
+            // The previous frame has not reached the screen yet: one plan in flight at a time.
+            return;
+        }
         self.apply_pending_owner();
         let now = self.now_ms();
         let plan = {
@@ -583,23 +591,45 @@ impl State {
         self.reconcile_input();
         self.last_plan = plan.clone();
         let mut frames = Vec::new();
+        let mut deferred = false;
         if self.dpms_on {
             if let Some(mut gfx) = self.gfx.take() {
                 match gfx.render(self, &plan, now) {
-                    Ok(f) => frames = f,
+                    Ok((f, d)) => {
+                        frames = f;
+                        deferred = d;
+                    }
                     Err(e) => log::error!("render failed: {e:#}"),
                 }
                 self.gfx = Some(gfx);
             }
         }
         self.frame_seq += 1;
-        self.after_render(&plan, now);
         self.harness_frames = frames;
+        if deferred {
+            self.awaiting = Some(Awaiting { plan, now_ms: now, since: Instant::now() });
+        } else {
+            self.complete_frame(plan, now);
+        }
+    }
+
+    /// The frame reached the screen (or there is no screen to wait for): send what
+    /// clients are waiting for and let the engine advance, which is when `Protected` and
+    /// the transition phases are reported.
+    pub fn complete_frame(&mut self, plan: crate::engine::Plan, now: u64) {
+        self.after_render(&plan, now);
         self.engine.frame_done();
         for e in self.engine.drain_events() {
             self.emit(e);
         }
         self.needs_redraw = self.engine.transition_running();
+    }
+
+    /// Page flips of the awaited frame completed.
+    pub fn complete_awaiting(&mut self) {
+        if let Some(a) = self.awaiting.take() {
+            self.complete_frame(a.plan, a.now_ms);
+        }
     }
 
     /// End of every loop iteration: flush clients.
@@ -687,6 +717,7 @@ pub(crate) fn run(
         dpms_on: true,
         frame_seq: 0,
         needs_redraw: true,
+        awaiting: None,
         harness_frames: Vec::new(),
         dump_dir: config.frame_dump_dir.clone(),
     };

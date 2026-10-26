@@ -281,7 +281,6 @@ impl Dispatch<BsmSessionHostV1, HostData> for State {
                     report,
                 });
             }
-            _ => {}
         }
     }
 }
@@ -313,7 +312,6 @@ impl Dispatch<BsmSessionSurfaceV1, SurfData> for State {
             bsm_session_surface_v1::Request::Destroy => {
                 state.drop_hosted_surface(&data.session, data.generation, &data.output);
             }
-            _ => {}
         }
     }
 

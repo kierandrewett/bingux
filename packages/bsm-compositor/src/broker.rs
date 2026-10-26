@@ -14,6 +14,9 @@ use anyhow::{Context, Result};
 use bsm_proto::scene::SceneEvent;
 use bsm_proto::state::{Generation, SessionId};
 use smithay::desktop::layer_map_for_output;
+use smithay::desktop::utils::OutputPresentationFeedback;
+use smithay::reexports::wayland_protocols::wp::presentation_time::server::wp_presentation_feedback;
+use smithay::wayland::presentation::Refresh;
 use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{Interest, Mode as PollMode, PostAction};
 use smithay::reexports::wayland_server::backend::{ClientId, DisconnectReason};
@@ -464,11 +467,20 @@ impl State {
     }
 
     pub(crate) fn greeter_after_render(&mut self, time: Duration) {
+        let mono = smithay::utils::Clock::<smithay::utils::Monotonic>::new().now();
         for rec in &self.outputs {
             let map = layer_map_for_output(&rec.output);
+            let mut feedback = OutputPresentationFeedback::new(&rec.output);
             for l in map.layers() {
                 l.send_frame(&rec.output, time, Some(Duration::ZERO), |_, _| Some(rec.output.clone()));
+                l.take_presentation_feedback(
+                    &mut feedback,
+                    |_, _| Some(rec.output.clone()),
+                    |_, _| wp_presentation_feedback::Kind::Vsync,
+                );
             }
+            let refresh = Duration::from_micros(1_000_000_000 / u64::from(rec.info.refresh_mhz.max(1)));
+            feedback.presented::<_, smithay::utils::Monotonic>(mono, Refresh::Fixed(refresh), self.frame_seq, wp_presentation_feedback::Kind::Vsync);
         }
     }
 

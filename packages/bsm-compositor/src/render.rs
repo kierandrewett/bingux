@@ -231,6 +231,13 @@ where
     let pos: Point<f64, Physical> = local.to_physical(tscale);
     match &state.cursor {
         CursorImageStatus::Hidden => None,
+        CursorImageStatus::Surface(s) if !cursor_surface_ok(s) => {
+            // A "cursor" the size of a window is an overlay, not a cursor.
+            let buf = default_cursor?;
+            let e = MemoryRenderBufferRenderElement::from_buffer(renderer, pos, buf, None, None, None, Kind::Cursor)
+                .ok()?;
+            Some(vec![SceneElement::Memory(e)])
+        }
         CursorImageStatus::Surface(s) => {
             let hot = with_states(s, |st| {
                 st.data_map
@@ -250,4 +257,13 @@ where
             Some(vec![SceneElement::Memory(e)])
         }
     }
+}
+
+/// Cursor surfaces larger than this are replaced by the built-in arrow.
+const MAX_CURSOR_PX: i32 = 256;
+
+fn cursor_surface_ok(s: &smithay::reexports::wayland_server::protocol::wl_surface::WlSurface) -> bool {
+    smithay::backend::renderer::utils::with_renderer_surface_state(s, |st| st.buffer_size())
+        .flatten()
+        .is_none_or(|sz| sz.w <= MAX_CURSOR_PX && sz.h <= MAX_CURSOR_PX)
 }

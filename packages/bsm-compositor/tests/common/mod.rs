@@ -74,6 +74,7 @@ pub struct App {
     pub input_state: Vec<u32>,
     pub presented: Vec<(u32, u32)>, // (surface proto id, seq)
     pub closed: bool,
+    pub releases: u32,
     pub layer_closed: u32,
     seat: Option<WlSeat>,
     keyboard: Option<WlKeyboard>,
@@ -88,7 +89,15 @@ macro_rules! ignore_events {
         fn event(_: &mut Self, _: &$ty, _: <$ty as wayland_client::Proxy>::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {}
     })* };
 }
-ignore_events!(WlCompositor, WlShm, WlShmPool, WlBuffer, WlSurface, WlCallback, ZwlrLayerShellV1);
+ignore_events!(WlCompositor, WlShm, WlShmPool, WlSurface, WlCallback, ZwlrLayerShellV1);
+
+impl Dispatch<WlBuffer, ()> for App {
+    fn event(app: &mut Self, _: &WlBuffer, ev: wayland_client::protocol::wl_buffer::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {
+        if let wayland_client::protocol::wl_buffer::Event::Release = ev {
+            app.releases += 1;
+        }
+    }
+}
 
 impl Dispatch<WlOutput, usize> for App {
     fn event(app: &mut Self, _: &WlOutput, ev: wl_output::Event, idx: &usize, _: &Connection, _: &QueueHandle<Self>) {

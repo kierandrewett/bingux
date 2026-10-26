@@ -36,11 +36,13 @@ pub(crate) enum Gfx {
 }
 
 impl Gfx {
-    pub fn render(&mut self, state: &State, plan: &Plan, now_ms: u64) -> Result<Vec<CapturedFrame>> {
+    /// Compose one frame on every output. The flag is true when the frame was queued for a
+    /// page flip: the scene engine then learns of it only when the flip completes.
+    pub fn render(&mut self, state: &State, plan: &Plan, now_ms: u64) -> Result<(Vec<CapturedFrame>, bool)> {
         match self {
-            Gfx::Headless(g) => g.render(state, plan, now_ms),
+            Gfx::Headless(g) => g.render(state, plan, now_ms).map(|f| (f, false)),
             #[cfg(feature = "backend-winit")]
-            Gfx::Winit(g) => g.render(state, plan, now_ms),
+            Gfx::Winit(g) => g.render(state, plan, now_ms).map(|f| (f, false)),
             #[cfg(feature = "backend-drm")]
             Gfx::Drm(g) => g.render(state, plan, now_ms),
         }
@@ -284,6 +286,15 @@ impl State {
 
     pub(crate) fn after_dispatch(&mut self) {
         self.expire_pending();
+        if let Some(a) = &self.awaiting {
+            if a.since.elapsed() > Duration::from_millis(500) {
+                log::warn!("page flip did not complete in 500 ms; releasing the scene engine");
+                self.complete_awaiting();
+            }
+        }
+        if self.backend == crate::Backend::Drm && self.needs_redraw && self.awaiting.is_none() {
+            self.render_frame();
+        }
         self.flush();
     }
 
