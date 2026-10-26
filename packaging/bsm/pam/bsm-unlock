@@ -1,0 +1,8 @@
+#%PAM-1.0
+#
+# Unlock and switch-back through bsm-helper. Authentication and account checks
+# only: no session is opened, so unlocking never creates a second logind session.
+# system-auth carries the distribution's lockout (pam_faillock) and fprintd
+# settings; bsm adds no bypass of its own.
+auth      include   system-auth
+account   include   system-auth

@@ -67,9 +67,10 @@ AmbientCapabilities=
 PrivateTmp=yes
 ProtectSystem=strict
 ReadWritePaths=/run/bsm /var/lib/bsm /var/lib/bingux/greeter
-# Read-only, not hidden: the image converter reads each account's published
-# wallpaper and avatar from its home directory.
-ProtectHome=read-only
+# bsm never opens a path in a home directory: publishers pass image file
+# descriptors over D-Bus, and avatars of signed-out accounts come from
+# /var/lib/AccountsService/icons (readable with ProtectSystem=strict).
+ProtectHome=yes
 ProtectHostname=yes
 ProtectClock=yes
 ProtectKernelModules=yes

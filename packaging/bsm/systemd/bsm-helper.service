@@ -1,0 +1,31 @@
+# bsm-helper: PAM and uid transitions for bsm. Runs as root because opening a
+# user's session needs it; it keeps no session registry and makes no policy
+# decisions (docs/bsm/architecture.md, D3). Started by bsm-helper.socket.
+[Unit]
+Description=bsm privileged PAM and session helper
+Documentation=file:///usr/share/doc/bsm/packaging.md
+Requires=bsm-helper.socket
+After=bsm-helper.socket systemd-logind.service dbus.socket
+Wants=systemd-logind.service
+
+[Service]
+Type=exec
+ExecStart=/usr/libexec/bsm/bsm-helper
+# A restart or stop of the helper must not end hosted sessions: their supervisors
+# run in the user's logind scope and the next helper adopts them.
+KillMode=process
+Restart=on-failure
+RestartSec=1
+LimitCORE=0
+# Deliberately NOT sandboxed with ProtectSystem, ProtectHome, PrivateTmp,
+# PrivateDevices, NoNewPrivileges or a mount namespace: the greeter and every
+# hosted desktop start from this process and would inherit them (a read-only
+# /usr, no setuid binaries such as unix_chkpwd or polkit's agent helper).
+# Settings that only restrict the helper itself are fine:
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+LockPersonality=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native

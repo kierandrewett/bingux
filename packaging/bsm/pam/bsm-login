@@ -1,0 +1,16 @@
+#%PAM-1.0
+#
+# Login through bsm-helper (root). Opens the real session of a hosted desktop:
+# pam_systemd registers a logind session without a seat (the helper passes
+# XDG_SESSION_TYPE=wayland and XDG_SESSION_CLASS=user in the PAM environment) and
+# the session stays open for the whole life of the desktop. Lockout and password
+# policy come from system-auth, so they match every other login on the machine.
+auth      include   system-auth
+auth      optional  pam_gnome_keyring.so
+account   include   system-auth
+password  include   system-auth
+session   optional  pam_keyinit.so force revoke
+session   required  pam_loginuid.so
+session   include   system-auth
+session   required  pam_systemd.so
+session   optional  pam_gnome_keyring.so auto_start
