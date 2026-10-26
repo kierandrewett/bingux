@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Hot-inject freshly built bsm binaries and units into a running live VM.
 
-usage: tests/bsm-vm-inject.py stage [--out DIR] [--build host|container|none] [--shell]
+usage: tests/bsm-vm-inject.py stage [--out DIR] [--build host|container|none] [--shell] [--probe]
        tests/bsm-vm-inject.py status
 
 The live ISO takes over an hour to rebuild. `stage` builds the bsm crates and
@@ -116,9 +116,15 @@ def present_crates():
 
 
 def build_host(crates):
+    """Build each crate; one that does not compile is reported and left out, not fatal."""
     env = dict(os.environ, CARGO_TARGET_DIR=str(TARGET_DIR))
+    failed = []
     for name in crates:
-        run(["cargo", "build", "--release", "--manifest-path", str(ROOT / "packages" / name / "Cargo.toml")], env=env)
+        command = ["cargo", "build", "--release", "--manifest-path", str(ROOT / "packages" / name / "Cargo.toml")]
+        print("+ " + " ".join(command), flush=True)
+        if subprocess.run(command, env=env).returncode != 0:
+            failed.append(name)
+    return failed
 
 
 def build_container(crates):
@@ -169,15 +175,16 @@ def stage(arguments):
     out.mkdir(parents=True, exist_ok=True)
     crates = present_crates()
     missing = [name for name in CRATES if name not in crates]
+    failed_crates = []
     if arguments.build == "host":
-        build_host(crates)
+        failed_crates = build_host(crates)
     elif arguments.build == "container":
         build_container(crates)
     produced = {}
     for name in crates:
         for binary in CRATES[name]:
             path = TARGET_DIR / "release" / binary
-            produced[binary] = path.is_file()
+            produced[binary] = path.is_file() and name not in failed_crates
     absent = sorted(binary for binary, ok in produced.items() if not ok)
     for name in missing:
         absent += [f"{binary} (crate {name} has no Cargo.toml yet)" for binary in CRATES[name]]
@@ -192,7 +199,7 @@ def stage(arguments):
         real = TARGET_DIR / "release" / binary
         link = private / "release" / binary
         link.unlink(missing_ok=True)
-        if real.is_file():
+        if produced.get(binary):
             link.symlink_to(real)
         else:
             link.write_text("#!/bin/sh\necho 'bsm-vm-inject: this binary was not built' >&2\nexit 127\n")
@@ -201,6 +208,16 @@ def stage(arguments):
     image = out / "image"
     shutil.rmtree(image, ignore_errors=True)
     shutil.copytree(ROOT / "packaging/bsm/image", image, symlinks=True)
+    if arguments.probe:
+        # The root checks of tests/bsm-helper-root.sh drive this example binary in the guest.
+        command = ["cargo", "build", "--release", "--examples", "--manifest-path", str(ROOT / "packages/bsm-helper/Cargo.toml")]
+        run(command, env=dict(os.environ, CARGO_TARGET_DIR=str(TARGET_DIR)))
+        probe = TARGET_DIR / "release/examples/bsm-helper-probe"
+        if probe.is_file():
+            destination = out / "root/usr/libexec/bsm/bsm-helper-probe"
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(probe, destination)
+            destination.chmod(0o755)
     sxa = out / "bingux-shell.sxa"
     sxa.unlink(missing_ok=True)
     if arguments.shell:
@@ -212,6 +229,7 @@ def stage(arguments):
         "build": arguments.build,
         "built": sorted(binary for binary, ok in produced.items() if ok),
         "not_built": absent,
+        "crates_failed_to_build": failed_crates,
         "shell_archive": arguments.shell,
         "files": sorted(str(p.relative_to(out / "root")) for p in (out / "root").rglob("*") if p.is_file()),
     }
@@ -238,6 +256,7 @@ def main():
     stage_parser.add_argument("--out", default=str(DEFAULT_OUT))
     stage_parser.add_argument("--build", choices=["host", "container", "none"], default="host")
     stage_parser.add_argument("--shell", action="store_true", help="also pack shell/bingux into a new bingux-shell.sxa")
+    stage_parser.add_argument("--probe", action="store_true", help="also install the bsm-helper-probe example (root checks)")
     stage_parser.set_defaults(func=stage)
     status_parser = commands.add_parser("status", help="show what the last stage contains")
     status_parser.add_argument("--out", default=str(DEFAULT_OUT))
