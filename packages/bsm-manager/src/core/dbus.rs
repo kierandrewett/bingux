@@ -251,7 +251,8 @@ impl Manager {
             .collect()
     }
 
-    fn session_infos(&self) -> Vec<SessionInfo> {
+    /// Every session as `GetSessions` reports it.
+    pub fn session_infos(&self) -> Vec<SessionInfo> {
         use bsm_proto::state::SessionState as S;
         self.sessions
             .values()

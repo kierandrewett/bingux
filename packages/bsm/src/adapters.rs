@@ -97,3 +97,60 @@ pub fn system_publisher(cache_dir: Option<PathBuf>) -> Arc<Publisher> {
     }
     Arc::new(Publisher::new(cfg))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bsm_appearance::convert::Converter;
+    use bsm_proto::control::{Appearance, ColorScheme};
+
+    fn fixture() -> (tempfile::TempDir, AccountPolicy, Arc<Publisher>) {
+        let root = tempfile::tempdir().unwrap();
+        let etc = root.path().join("etc");
+        std::fs::create_dir_all(&etc).unwrap();
+        std::fs::write(
+            etc.join("passwd"),
+            "root:x:0:0:root:/root:/bin/bash\n\
+             alice:x:1000:1000:Alice Example:/home/alice:/bin/bash\n\
+             bob:x:1001:1001:Bob:/home/bob:/bin/zsh\n\
+             daemon:x:2:2:daemon:/:/usr/sbin/nologin\n\
+             svc:x:1500:1500:service:/srv:/usr/sbin/nologin\n",
+        )
+        .unwrap();
+        let policy = AccountPolicy::under(root.path());
+        let cache = root.path().join("cache");
+        // Created by the packaging (tmpfiles.d) and owned by the bsm account.
+        std::fs::create_dir_all(&cache).unwrap();
+        let publisher = Arc::new(Publisher::new(PublisherConfig::new(&cache, Converter::new("/nonexistent/bsm-imgconv"))));
+        (root, policy, publisher)
+    }
+
+    #[test]
+    fn only_eligible_accounts_are_listed() {
+        let (_root, policy, publisher) = fixture();
+        let list = SystemAccounts { policy, publisher }.list().unwrap();
+        let names: Vec<_> = list.iter().map(|a| (a.uid, a.user_name.as_str(), a.display_name.as_str())).collect();
+        assert_eq!(names, vec![(1000, "alice", "Alice Example"), (1001, "bob", "Bob")]);
+    }
+
+    #[test]
+    fn publishing_validates_and_the_result_is_what_the_greeter_shows() {
+        let (_root, policy, publisher) = fixture();
+        let backend = PublisherBackend { publisher: publisher.clone() };
+        let request = |accent: &str| PublishRequest {
+            appearance: Appearance { color_scheme: ColorScheme::Dark, accent: accent.into(), ..Appearance::default() },
+            show_personal_images: false,
+            wallpaper: None,
+            avatar: None,
+        };
+        let e = backend.publish(1000, request("not a colour")).unwrap_err();
+        assert_eq!(e.code, ErrorCode::InvalidArgument);
+        let v = backend.publish(1000, request("#3584E4")).unwrap();
+        assert!(!v.show_personal_images);
+        assert_eq!(v.appearance.accent.len(), 7);
+        // A restart finds it again, through the account source.
+        let list = SystemAccounts { policy, publisher }.list().unwrap();
+        let alice = list.iter().find(|a| a.uid == 1000).unwrap();
+        assert_eq!(alice.published.as_ref().unwrap().appearance, v.appearance);
+    }
+}

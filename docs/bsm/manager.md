@@ -461,8 +461,9 @@ Frames of the last run are written as PNG under `$BSM_TEST_ARTIFACTS` (default `
 * **`LockedHint`** is set through the helper (`SetLockedHint`) for sessions that report a logind session.
 * **bsm restart with reconnecting bridges** is tested in the core (protected, never foreground, closed after
   the window) but not with a real bridge.
-* **DRM and winit backends** were not run by this slice; `--backend winit` and `--backend drm` build and
-  parse, and the compositor owner documents their status.
+* **Backends:** the default-feature build (winit and DRM) compiles. `bsm --backend winit` was smoke-run
+  under the host's Wayland desktop for a few seconds (the nested window opened, EGL initialised, SIGTERM
+  stopped it); the DRM backend was not run by this slice.
 * **Hotplug during a transition** is handled by the compositor; the manager fails a launch whose outputs changed
   after configuration and holds an unlock until every current output has a fresh frame.
 * Multiple sessions per uid are not supported; the most recently foreground one would be chosen (the manager

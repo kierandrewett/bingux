@@ -845,6 +845,11 @@ impl Rig {
         rx.recv_timeout(Duration::from_secs(5)).expect("focus snapshot")
     }
 
+    /// The compositor applies `SetInputOwner` asynchronously: poll until it shows `owner`.
+    pub fn wait_focus(&self, owner: bsm_proto::state::InputOwner) {
+        self.wait(&format!("input owner {owner:?}"), Duration::from_secs(5), |r| r.focus().owner == owner);
+    }
+
     pub fn save_frame(&self, name: &str) {
         let log = self.frames.lock();
         if let Some(f) = log.last.get("Virtual-1") {

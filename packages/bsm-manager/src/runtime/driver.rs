@@ -265,20 +265,7 @@ impl Driver {
         }
         let mut st = self.state.lock();
         st.seat = Some(seat);
-        st.sessions = self
-            .m
-            .sessions()
-            .map(|s| SessionInfo {
-                id: s.id.clone(),
-                generation: s.generation,
-                uid: s.uid,
-                state: s.state,
-                availability: bsm_proto::state::SessionAvailability::NotSignedIn,
-                foreground: self.m.foreground() == Some(&s.id),
-                locked: s.state.is_protected(),
-                progress: 0,
-            })
-            .collect();
+        st.sessions = self.m.session_infos();
     }
 
     fn spawn_job(&self, name: &str, job: impl FnOnce() + Send + 'static, rejected: impl FnOnce()) {

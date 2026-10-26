@@ -98,7 +98,7 @@ scenario!(login_lock_unlock_with_real_frames, {
     let snap = rig.g().snapshot();
     assert_eq!(snap.users.len(), 2);
     assert!(matches!(snap.mode, GreeterMode::Login));
-    assert_eq!(rig.focus().owner, InputOwner::None);
+    rig.wait_focus(InputOwner::None);
 
     // ----- new login: real progress, greeter stays, desktop fades in over it -----
     let fm = rig.frame_mark();
@@ -124,9 +124,17 @@ scenario!(login_lock_unlock_with_real_frames, {
     assert!(frames[first].plan.session.as_ref().unwrap().opacity < 0.5, "the first desktop frame is nearly transparent");
     rig.wait_seen(Seen::A);
     rig.save_frame("01-logged-in");
-    assert_eq!(rig.focus().owner, InputOwner::Session(sid.clone()));
+    rig.wait_focus(InputOwner::Session(sid.clone()));
     assert_eq!(rig.helper.opened().len(), 1);
     let generation = rig.helper.opened()[0].generation;
+    // The last user and the session registry were written atomically, with nothing secret in them.
+    rig.wait("the state file", Duration::from_secs(5), |r| {
+        bsm_manager::runtime::persist::load(&r.state_dir).last_used_uid == Some(ALICE)
+    });
+    let saved = bsm_manager::runtime::persist::load(&rig.state_dir);
+    assert!(saved.sessions.iter().any(|s| s.id == sid && s.uid == ALICE && s.generation == generation && !s.scope.is_empty()));
+    let raw = std::fs::read_to_string(bsm_manager::runtime::persist::path(&rig.state_dir)).unwrap();
+    assert!(!raw.contains(PASSWORD));
 
     // ----- lock: protect first, then the greeter, never the desktop again -----
     let gm = rig.g().mark();
@@ -141,7 +149,7 @@ scenario!(login_lock_unlock_with_real_frames, {
     }
     let _ = animating;
     rig.save_frame("02-locked");
-    assert_eq!(rig.focus().owner, InputOwner::Greeter);
+    rig.wait_focus(InputOwner::Greeter);
     assert_eq!(rig.session_state(&sid), Some(SessionState::LockedGreeterForeground));
     let snap = rig.g().snapshot();
     assert!(matches!(&snap.mode, GreeterMode::Unlock { session, uid } if session == &sid && *uid == ALICE));
@@ -174,7 +182,7 @@ scenario!(login_lock_unlock_with_real_frames, {
     assert!(last < -0.99, "the greeter ends fully off the outputs");
     rig.wait_seen(Seen::A);
     rig.save_frame("03-unlocked");
-    assert_eq!(rig.focus().owner, InputOwner::Session(sid.clone()));
+    rig.wait_focus(InputOwner::Session(sid.clone()));
     assert_eq!(rig.helper.opened().len(), 1, "no relaunch");
     assert_eq!(rig.helper.opened()[0].generation, generation);
     assert!(rig.helper.closed().is_empty());
@@ -205,7 +213,7 @@ scenario!(switch_a_to_b_and_back_resumes_a_without_relaunch, {
     assert_ne!(a, b);
     rig.wait_seen(Seen::B);
     assert_eq!(rig.session_state(&a), Some(SessionState::LockedBackground));
-    assert_eq!(rig.focus().owner, InputOwner::Session(b.clone()));
+    rig.wait_focus(InputOwner::Session(b.clone()));
 
     // Back to A: lock B, pick A, authenticate: A's own Gnoblin resumes with the slide-up.
     let gm = rig.g().mark();
@@ -219,7 +227,7 @@ scenario!(switch_a_to_b_and_back_resumes_a_without_relaunch, {
     rig.wait_seen(Seen::A);
     assert_eq!(rig.session_state(&a), Some(SessionState::Foreground));
     assert_eq!(rig.session_state(&b), Some(SessionState::LockedBackground));
-    assert_eq!(rig.focus().owner, InputOwner::Session(a.clone()));
+    rig.wait_focus(InputOwner::Session(a.clone()));
     let opened = rig.helper.opened();
     assert_eq!(opened.len(), 2, "exactly one launch per account, A was never relaunched");
     assert!(rig.helper.closed().is_empty(), "nothing was closed by switching");
@@ -265,7 +273,7 @@ scenario!(logout_closes_only_that_session_and_a_crash_returns_to_the_greeter, {
     rig.wait("B's processes to be reported gone", Duration::from_secs(10), |r| r.session_state(&b).is_none());
     assert_eq!(rig.helper.closed(), vec![b.clone()], "only B was closed");
     assert_eq!(rig.session_state(&a), Some(SessionState::LockedBackground), "A is untouched");
-    assert_eq!(rig.focus().owner, InputOwner::Greeter);
+    rig.wait_focus(InputOwner::Greeter);
     rig.save_frame("05-after-logout");
 
     // ----- log in B again, then its Gnoblin crashes -----
@@ -277,7 +285,7 @@ scenario!(logout_closes_only_that_session_and_a_crash_returns_to_the_greeter, {
     rig.wait_seen(Seen::Greeter);
     rig.g().wait_after(gm, Duration::from_secs(5), "an error for the greeter", |m| matches!(m, ServerMessage::Error { .. }));
     assert_eq!(rig.session_state(&a), Some(SessionState::LockedBackground), "A survives B's crash");
-    assert_eq!(rig.focus().owner, InputOwner::Greeter);
+    rig.wait_focus(InputOwner::Greeter);
     assert!(rig.helper.closed().contains(&b2));
     assert!(!rig.helper.closed().contains(&a));
     rig.stop();
