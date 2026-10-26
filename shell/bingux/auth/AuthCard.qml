@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Shapes
 import ".."
 
 // The account identity and the credential form, in one column: a leading
@@ -105,12 +106,41 @@ ColumnLayout {
             Accessible.name: text
         }
     }
-    BusyIndicator {
+    // Activity while bsm checks the credentials or finishes the sign-in. A ring
+    // in the screen's ink; it holds still under reduced motion.
+    Item {
+        id: spinner
         Layout.alignment: Qt.AlignHCenter
         implicitWidth: 20
         implicitHeight: 20
         visible: root.busy
-        running: root.busy && !root.theme.reduceMotion
+        Accessible.role: Accessible.Indicator
+        Accessible.name: "Working"
+        Shape {
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+            ShapePath {
+                strokeColor: root.theme.ink
+                strokeWidth: 2
+                fillColor: "transparent"
+                capStyle: ShapePath.RoundCap
+                PathAngleArc {
+                    centerX: 10
+                    centerY: 10
+                    radiusX: 8
+                    radiusY: 8
+                    startAngle: 0
+                    sweepAngle: 260
+                }
+            }
+            RotationAnimator on rotation {
+                from: 0
+                to: 360
+                duration: 900
+                loops: Animation.Infinite
+                running: spinner.visible && !root.theme.reduceMotion
+            }
+        }
     }
     Text {
         id: status

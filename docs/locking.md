@@ -63,8 +63,10 @@ Shots come from `tests/lock-ui.py`, which writes them to `build/lock-shots/`.
 
 ## Appearance
 
-The lock screen and the login greeter share `SessionScreen.qml`. There is no
-separate lock theme file. The screen shows:
+The lock screen is `SessionScreen.qml`, a thin adapter over the shared
+components in `shell/bingux/auth/` (`AuthScreen`, `AuthCard`, `BackgroundView`
+and others), which the bsm greeter draws with too (see
+[the bsm greeter](bsm/greeter.md)). There is no separate lock theme file. The screen shows:
 
 - the user's wallpaper, resolved by `bingux-session wallpaper` from the Bingux
   configuration (`desktop.wallpaper`, then the GNOME background setting). With
