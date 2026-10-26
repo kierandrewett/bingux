@@ -313,13 +313,15 @@ fn add_stream(
         .param_changed(|stream, d, id, param| {
             let mut d = d.borrow_mut();
             let d = &mut *d;
+            log::debug!("stream {}: param_changed id {id} set={}", d.output, param.is_some());
             if id != spa::param::ParamType::Format.as_raw() {
                 return;
             }
             let Some(param) = param else {
                 return;
             };
-            if d.format.parse(param).is_err() {
+            if let Err(e) = d.format.parse(param) {
+                log::error!("stream {}: cannot parse the negotiated format: {e:?}", d.output);
                 return;
             }
             let size = d.format.size();

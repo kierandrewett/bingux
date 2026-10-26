@@ -49,7 +49,7 @@ pub enum Msg {
     /// A virtual monitor stream exists with this PipeWire node.
     MonitorStream { output: String, epoch: u64, node_id: u32 },
     /// The monitor is laid out as requested.
-    MonitorApplied { output: String, epoch: u64, connector: String },
+    MonitorApplied { output: String, epoch: u64, placed: crate::gnoblin::Placed },
     /// A monitor request failed.
     MonitorFailed { output: String, epoch: u64, reason: String },
     /// Gnoblin's layer-surface list.

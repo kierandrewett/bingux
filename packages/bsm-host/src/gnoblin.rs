@@ -58,6 +58,8 @@ pub use sc::{ScreenCastSessionProxy, ScreenCastSessionProxyBlocking};
 
 #[proxy(interface = "org.gnome.Mutter.ScreenCast.Stream", default_service = "org.gnome.Mutter.ScreenCast")]
 trait ScreenCastStream {
+    fn start(&self) -> zbus::Result<()>;
+    fn stop(&self) -> zbus::Result<()>;
     #[zbus(signal)]
     fn pipe_wire_stream_added(&self, node_id: u32) -> zbus::Result<()>;
     #[zbus(property)]
@@ -89,9 +91,9 @@ pub mod rd {
 }
 pub use rd::{RemoteDesktopSessionProxy, RemoteDesktopSessionProxyBlocking};
 
-type DcMode = (String, i32, i32, f64, f64, Vec<f64>, HashMap<String, OwnedValue>);
-type DcMonitor = ((String, String, String, String), Vec<DcMode>, HashMap<String, OwnedValue>);
-type DcLogical = (i32, i32, f64, u32, bool, Vec<(String, String, String, String)>, HashMap<String, OwnedValue>);
+pub type DcMode = (String, i32, i32, f64, f64, Vec<f64>, HashMap<String, OwnedValue>);
+pub type DcMonitor = ((String, String, String, String), Vec<DcMode>, HashMap<String, OwnedValue>);
+pub type DcLogical = (i32, i32, f64, u32, bool, Vec<(String, String, String, String)>, HashMap<String, OwnedValue>);
 type DcApplyMonitor = (String, String, HashMap<String, Value<'static>>);
 type DcApplyLogical = (i32, i32, f64, u32, bool, Vec<DcApplyMonitor>);
 
@@ -133,6 +135,16 @@ pub struct Layout {
     pub transform: u32,
 }
 
+/// Where a monitor ended up in Gnoblin's logical coordinate space.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Placed {
+    pub connector: String,
+    pub x: i32,
+    pub y: i32,
+    pub w: f64,
+    pub h: f64,
+}
+
 pub enum Cmd {
     AddMonitor { output: String, epoch: u64, width: u32, height: u32, refresh_mhz: u32 },
     /// The full layout of all streaming monitors.
@@ -144,7 +156,7 @@ pub enum Cmd {
 
 enum Ev {
     Cmd(Result<Cmd, async_channel::RecvError>),
-    Node { output: String, epoch: u64, node: u32 },
+    Node { path: String, node: u32 },
     SessionClosed(u64),
     Name { name: String, owned: bool },
     Ready(bool),
@@ -252,6 +264,24 @@ async fn run(cmd_rx: async_channel::Receiver<Cmd>, tx: calloop::channel::Sender<
             msg.body().deserialize::<String>().ok().map(Ev::Action)
         })));
     }
+    // Streams of a started session start inside RecordVirtual, so the signal
+    // can beat the reply that names the stream: subscribe for all streams
+    // once and match node ids to monitors by object path.
+    {
+        let rule = zbus::MatchRule::builder()
+            .msg_type(zbus::message::Type::Signal)
+            .sender(MUTTER_SCREENCAST)?
+            .interface("org.gnome.Mutter.ScreenCast.Stream")?
+            .member("PipeWireStreamAdded")?
+            .build();
+        let added = zbus::MessageStream::for_match_rule(rule, &conn, None).await?;
+        events.push(Box::pin(added.filter_map(|m| async move {
+            let msg = m.ok()?;
+            let path = msg.header().path()?.to_string();
+            let node = msg.body().deserialize::<u32>().ok()?;
+            Some(Ev::Node { path, node })
+        })));
+    }
     let mut hosted_seen = name_owned(&dbus, HOSTED_NAME).await;
     if hosted_seen {
         if let Ok(true) = hosted.ready().await {
@@ -259,7 +289,7 @@ async fn run(cmd_rx: async_channel::Receiver<Cmd>, tx: calloop::channel::Sender<
         }
     }
 
-    let mut app = App { conn: conn.clone(), tx: tx.clone(), sessions: None, monitors: HashMap::new(), next_session: 0 };
+    let mut app = App { conn: conn.clone(), tx: tx.clone(), sessions: None, monitors: HashMap::new(), pending_nodes: HashMap::new(), next_session: 0 };
     app.ensure_sessions(&mut events).await?;
     let _ = tx.send(Msg::GnoblinBus);
 
@@ -289,10 +319,10 @@ async fn run(cmd_rx: async_channel::Receiver<Cmd>, tx: calloop::channel::Sender<
                     .filter_map(|l| app.monitors.get(&l.output).map(|m| (l.output.clone(), m.epoch)))
                     .collect();
                 match app.apply_layout(&layout).await {
-                    Ok(connectors) => {
+                    Ok(placed) => {
                         for (output, epoch) in epochs {
-                            if let Some(connector) = connectors.get(&output) {
-                                let _ = tx.send(Msg::MonitorApplied { output, epoch, connector: connector.clone() });
+                            if let Some(p) = placed.get(&output) {
+                                let _ = tx.send(Msg::MonitorApplied { output, epoch, placed: p.clone() });
                             }
                         }
                     }
@@ -304,14 +334,7 @@ async fn run(cmd_rx: async_channel::Receiver<Cmd>, tx: calloop::channel::Sender<
                     }
                 }
             }
-            Ev::Node { output, epoch, node } => {
-                if let Some(m) = app.monitors.get_mut(&output) {
-                    if m.epoch == epoch {
-                        m.node = Some(node);
-                        let _ = tx.send(Msg::MonitorStream { output, epoch, node_id: node });
-                    }
-                }
-            }
+            Ev::Node { path, node } => app.node_added(&path, node),
             Ev::SessionClosed(id) => {
                 if app.sessions.as_ref().is_some_and(|s| s.id == id) {
                     return Err(anyhow!("Gnoblin closed the RemoteDesktop/ScreenCast session"));
@@ -349,6 +372,8 @@ struct App {
     tx: calloop::channel::Sender<Msg>,
     sessions: Option<Sessions>,
     monitors: HashMap<String, Mon>,
+    /// Node ids that arrived before the monitor they belong to was recorded.
+    pending_nodes: HashMap<String, u32>,
     next_session: u64,
 }
 
@@ -379,8 +404,22 @@ impl App {
         Ok(())
     }
 
+    fn node_added(&mut self, path: &str, node: u32) {
+        let hit = self.monitors.iter_mut().find(|(_, m)| m.path.as_str() == path);
+        match hit {
+            Some((output, m)) => {
+                m.node = Some(node);
+                let _ = self.tx.send(Msg::MonitorStream { output: output.clone(), epoch: m.epoch, node_id: node });
+            }
+            None => {
+                self.pending_nodes.insert(path.to_owned(), node);
+            }
+        }
+    }
+
     async fn stop_sessions(&mut self) {
         self.monitors.clear();
+        self.pending_nodes.clear();
         if let Some(s) = self.sessions.take() {
             let _ = s.sc.stop().await;
             let _ = s.rd.stop().await;
@@ -404,19 +443,20 @@ impl App {
         props.insert("cursor-mode", Value::from(2u32));
         let path = sessions.sc.record_virtual(props).await.context("RecordVirtual")?;
         let stream = ScreenCastStreamProxy::builder(&self.conn).path(path.clone())?.build().await?;
-        let added = stream.receive_pipe_wire_stream_added().await?;
-        let out = output.to_owned();
-        events.push(Box::pin(added.filter_map(move |s| {
-            let out = out.clone();
-            async move { s.args().ok().map(|a| Ev::Node { output: out, epoch, node: a.node_id }) }
-        })));
         if let Ok(params) = stream.parameters().await {
             log::debug!("stream {output} parameters: {params:?}");
         }
+        let path_str = path.to_string();
         self.monitors.insert(output.to_owned(), Mon { epoch, path, connector: None, node: None });
         if !sessions.started {
             sessions.rd.start().await.context("RemoteDesktop.Start")?;
             sessions.started = true;
+        } else {
+            // A stream recorded on a started session is started by hand.
+            stream.start().await.context("ScreenCast.Stream.Start")?;
+        }
+        if let Some(node) = self.pending_nodes.remove(&path_str) {
+            self.node_added(&path_str, node);
         }
         let _ = (width, height, refresh_mhz); // the mode is set by PipeWire negotiation
         Ok(())
@@ -424,7 +464,7 @@ impl App {
 
     /// Apply scale and position for every listed monitor and return the
     /// connector assigned to each output.
-    async fn apply_layout(&mut self, layout: &[Layout]) -> Result<HashMap<String, String>> {
+    async fn apply_layout(&mut self, layout: &[Layout]) -> Result<HashMap<String, Placed>> {
         let dc = DisplayConfigProxy::new(&self.conn).await?;
         let (serial, monitors, _logical, _props) = dc.get_current_state().await.context("GetCurrentState")?;
 
@@ -454,9 +494,19 @@ impl App {
             }
         }
 
-        let mut logical: Vec<DcApplyLogical> = Vec::new();
-        let mut result = HashMap::new();
-        for (i, l) in layout.iter().enumerate() {
+        struct Entry {
+            output: String,
+            connector: String,
+            mode_id: String,
+            scale: f64,
+            x: i32,
+            y: i32,
+            w: f64,
+            h: f64,
+            transform: u32,
+        }
+        let mut entries: Vec<Entry> = Vec::new();
+        for l in layout {
             let Some(connector) = self.monitors.get(&l.output).and_then(|m| m.connector.clone()) else { continue };
             let Some(mon) = monitors.iter().find(|m| m.0.0 == connector) else {
                 return Err(anyhow!("monitor {connector} for {} is not in DisplayConfig", l.output));
@@ -472,17 +522,84 @@ impl App {
             if (scale - wanted).abs() > 0.001 {
                 log::warn!("{}: scale {wanted} unsupported for mode {}, using {scale}", l.output, mode.0);
             }
-            logical.push((l.x, l.y, scale, l.transform, i == 0, vec![(connector.clone(), mode.0.clone(), HashMap::new())]));
-            result.insert(l.output.clone(), connector);
+            let (mut w, mut h) = (mode.1 as f64 / scale, mode.2 as f64 / scale);
+            if l.transform % 2 == 1 {
+                std::mem::swap(&mut w, &mut h);
+            }
+            entries.push(Entry { output: l.output.clone(), connector, mode_id: mode.0.clone(), scale, x: l.x, y: l.y, w, h, transform: l.transform });
         }
-        if logical.is_empty() {
-            return Ok(result);
+        if entries.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let rects: Vec<(i32, i32, f64, f64)> = entries.iter().map(|e| (e.x, e.y, e.w, e.h)).collect();
+        let positions = plan_positions(&rects);
+        let mut logical: Vec<DcApplyLogical> = Vec::new();
+        let mut result = HashMap::new();
+        for (i, (e, (x, y))) in entries.iter().zip(positions).enumerate() {
+            logical.push((x, y, e.scale, e.transform, i == 0, vec![(e.connector.clone(), e.mode_id.clone(), HashMap::new())]));
+            result.insert(
+                e.output.clone(),
+                Placed { connector: e.connector.clone(), x, y, w: e.w, h: e.h },
+            );
         }
         dc.apply_monitors_config(serial, 1, logical, HashMap::new())
             .await
             .context("ApplyMonitorsConfig")?;
         Ok(result)
     }
+}
+
+fn overlaps(a: (i32, i32, f64, f64), b: (i32, i32, f64, f64)) -> bool {
+    let (ax1, ay1) = (a.0 as f64 + a.2, a.1 as f64 + a.3);
+    let (bx1, by1) = (b.0 as f64 + b.2, b.1 as f64 + b.3);
+    (a.0 as f64) < bx1 - 0.5 && (b.0 as f64) < ax1 - 0.5 && (a.1 as f64) < by1 - 0.5 && (b.1 as f64) < ay1 - 0.5
+}
+
+fn touches(a: (i32, i32, f64, f64), b: (i32, i32, f64, f64)) -> bool {
+    let (ax1, ay1) = (a.0 as f64 + a.2, a.1 as f64 + a.3);
+    let (bx1, by1) = (b.0 as f64 + b.2, b.1 as f64 + b.3);
+    let eq = |p: f64, q: f64| (p - q).abs() < 0.5;
+    let y_overlap = (a.1 as f64) < by1 - 0.5 && (b.1 as f64) < ay1 - 0.5;
+    let x_overlap = (a.0 as f64) < bx1 - 0.5 && (b.0 as f64) < ax1 - 0.5;
+    ((eq(ax1, b.0 as f64) || eq(bx1, a.0 as f64)) && y_overlap) || ((eq(ay1, b.1 as f64) || eq(by1, a.1 as f64)) && x_overlap)
+}
+
+/// Mutter accepts a layout only when it starts at the origin, nothing
+/// overlaps and every monitor touches another by an edge. `rects` are
+/// `(x, y, logical width, logical height)`. The bsm layout is used (shifted to
+/// the origin) when valid; otherwise the monitors are packed left to right in
+/// bsm's x order so Gnoblin still gets a layout it accepts.
+pub fn plan_positions(rects: &[(i32, i32, f64, f64)]) -> Vec<(i32, i32)> {
+    let (min_x, min_y) = rects.iter().fold((i32::MAX, i32::MAX), |m, r| (m.0.min(r.0), m.1.min(r.1)));
+    let shifted: Vec<_> = rects.iter().map(|r| (r.0 - min_x, r.1 - min_y, r.2, r.3)).collect();
+    let no_overlap = (0..shifted.len()).all(|i| (i + 1..shifted.len()).all(|j| !overlaps(shifted[i], shifted[j])));
+    let connected = {
+        let mut seen = vec![false; shifted.len()];
+        let mut stack = vec![0usize];
+        while let Some(i) = stack.pop() {
+            if std::mem::replace(&mut seen[i], true) {
+                continue;
+            }
+            for j in 0..shifted.len() {
+                if !seen[j] && touches(shifted[i], shifted[j]) {
+                    stack.push(j);
+                }
+            }
+        }
+        seen.iter().all(|s| *s)
+    };
+    if no_overlap && connected {
+        return shifted.iter().map(|r| (r.0, r.1)).collect();
+    }
+    let mut order: Vec<usize> = (0..rects.len()).collect();
+    order.sort_by_key(|i| (rects[*i].0, rects[*i].1));
+    let mut out = vec![(0, 0); rects.len()];
+    let mut x = 0.0_f64;
+    for i in order {
+        out[i] = (x.round() as i32, 0);
+        x += rects[i].2;
+    }
+    out
 }
 
 /// The supported scale closest to `wanted`; `wanted` itself when the list is
@@ -501,6 +618,33 @@ pub fn nearest_scale(wanted: f64, supported: &[f64], preferred: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn valid_layouts_are_kept_and_shifted_to_the_origin() {
+        // Only the right monitor exists so far: it moves to the origin.
+        assert_eq!(plan_positions(&[(800, 0, 960.0, 540.0)]), vec![(0, 0)]);
+        // Side by side keeps its relative placement.
+        assert_eq!(
+            plan_positions(&[(0, 0, 800.0, 600.0), (800, 0, 960.0, 540.0)]),
+            vec![(0, 0), (800, 0)]
+        );
+        // Vertical stack with an offset.
+        assert_eq!(
+            plan_positions(&[(100, 50, 800.0, 600.0), (100, 650, 800.0, 600.0)]),
+            vec![(0, 0), (0, 600)]
+        );
+    }
+
+    #[test]
+    fn gaps_and_overlaps_fall_back_to_packing_left_to_right() {
+        let gap = plan_positions(&[(0, 0, 800.0, 600.0), (1000, 0, 800.0, 600.0)]);
+        assert_eq!(gap, vec![(0, 0), (800, 0)]);
+        let overlap = plan_positions(&[(0, 0, 800.0, 600.0), (400, 0, 800.0, 600.0)]);
+        assert_eq!(overlap, vec![(0, 0), (800, 0)]);
+        // Diagonal neighbours do not share an edge.
+        let diag = plan_positions(&[(0, 0, 800.0, 600.0), (800, 600, 800.0, 600.0)]);
+        assert_eq!(diag, vec![(0, 0), (800, 0)]);
+    }
 
     #[test]
     fn nearest_scale_picks_closest_supported() {

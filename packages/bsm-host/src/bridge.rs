@@ -122,6 +122,8 @@ struct Output {
     committed: u64,
     cursor: Option<CursorBuf>,
     cursor_hidden: bool,
+    /// The monitor's rectangle in Gnoblin's logical space once laid out.
+    logical: Option<LogicalRect>,
 }
 
 struct CursorBuf {
@@ -458,7 +460,7 @@ impl Bridge {
             }
             Msg::Eis(fd) => self.attach_ei(fd),
             Msg::MonitorStream { output, epoch, node_id } => self.on_monitor_stream(&output, epoch, node_id),
-            Msg::MonitorApplied { output, epoch, connector } => self.on_monitor_applied(&output, epoch, &connector),
+            Msg::MonitorApplied { output, epoch, placed } => self.on_monitor_applied(&output, epoch, placed),
             Msg::MonitorFailed { output, epoch, reason } => {
                 if self.outputs.get(&output).is_some_and(|o| o.epoch == epoch) {
                     log::error!("virtual monitor for {output} failed: {reason}");
@@ -559,6 +561,7 @@ impl Bridge {
                 committed: 0,
                 cursor: None,
                 cursor_hidden: false,
+                logical: None,
             },
         );
         let reports = self.readiness.output_added(&name);
@@ -668,7 +671,10 @@ impl Bridge {
             if test {
                 let connector = format!("Test-{epoch}");
                 o.phase = Phase::WaitLayout;
-                self.on_monitor_applied(&name, epoch, &connector);
+                let lw = c.width as f64 * 120.0 / c.scale_120.max(1) as f64;
+                let lh = c.height as f64 * 120.0 / c.scale_120.max(1) as f64;
+                let placed = gnoblin::Placed { connector, x: o.geom.x, y: o.geom.y, w: lw, h: lh };
+                self.on_monitor_applied(&name, epoch, placed);
                 return;
             }
             if let Some(gn) = &self.gn {
@@ -755,12 +761,15 @@ impl Bridge {
         }
     }
 
-    fn on_monitor_applied(&mut self, name: &str, epoch: u64, connector: &str) {
+    fn on_monitor_applied(&mut self, name: &str, epoch: u64, placed: gnoblin::Placed) {
         let Some(o) = self.outputs.get_mut(name) else { return };
         if o.epoch != epoch {
             return;
         }
+        let connector = placed.connector.as_str();
         o.connector = Some(connector.to_owned());
+        o.logical = Some(LogicalRect { x: placed.x as f64, y: placed.y as f64, w: placed.w, h: placed.h });
+
         let first = o.phase != Phase::Applied;
         o.phase = Phase::Applied;
         if first {
@@ -980,14 +989,7 @@ impl Bridge {
     }
 
     fn region(&self, output: &str) -> Option<LogicalRect> {
-        let o = self.outputs.get(output)?;
-        let c = o.configure?;
-        let want = LogicalRect {
-            x: o.geom.x as f64,
-            y: o.geom.y as f64,
-            w: c.width as f64 * 120.0 / c.scale_120.max(1) as f64,
-            h: c.height as f64 * 120.0 / c.scale_120.max(1) as f64,
-        };
+        let want = self.outputs.get(output)?.logical?;
         if self.is_test() {
             return Some(want);
         }
