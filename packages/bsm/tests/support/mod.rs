@@ -633,6 +633,9 @@ impl Rng for FixedRng {
 
 impl Rig {
     pub fn start(cfg: RigConfig) -> Rig {
+        if std::env::var_os("BSM_LOG").is_some() {
+            let _ = tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_env("BSM_LOG")).with_test_writer().try_init();
+        }
         let dir = tempfile::Builder::new().prefix("bsm-rig").tempdir().unwrap();
         std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
         let greeter_socket = dir.path().join("greeter-wayland.sock");

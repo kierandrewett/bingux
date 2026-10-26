@@ -57,7 +57,7 @@ fn selecting_a_user_changes_the_identity_only() {
     // No scene command of any kind, no input change, no helper traffic.
     assert!(sim.scene_cmds(mark).is_empty(), "{:?}", sim.scene_cmds(mark));
     assert!(sim.helper_reqs(mark).is_empty());
-    assert_eq!(sim.input_owner(), InputOwner::None);
+    assert_eq!(sim.input_owner(), InputOwner::Greeter);
     assert!(sim.m.operation().is_none());
     assert!(sim.greeter_msgs(mark).iter().any(|m| matches!(m, ServerMessage::Snapshot(s) if s.selected_uid == Some(BOB))));
 }
@@ -94,13 +94,13 @@ fn new_login_shows_real_progress_and_fades_the_desktop_over_the_greeter() {
     assert_eq!(source, None);
     assert_eq!(target, Some((sid.clone(), sim.gen_of(&sid))));
     // Input has not moved yet: the keystrokes that authenticated stay with the greeter.
-    assert_eq!(sim.input_owner(), InputOwner::None);
+    assert_eq!(sim.input_owner(), InputOwner::Greeter);
     assert!(sim.set_input_owner_cmds(mark).is_empty());
     assert_eq!(sim.m.seat(), SeatState::RevealingSession);
     sim.phase(operation, TransitionPhaseEvent::Prepared);
     sim.phase(operation, TransitionPhaseEvent::Animating);
     assert_eq!(sim.state(&sid), SessionState::ReadyBackground);
-    assert_eq!(sim.input_owner(), InputOwner::None);
+    assert_eq!(sim.input_owner(), InputOwner::Greeter);
     sim.phase(operation, TransitionPhaseEvent::Committed);
     assert_eq!(sim.state(&sid), SessionState::Foreground);
     assert_eq!(sim.input_owner(), InputOwner::Session(sid.clone()));
@@ -451,4 +451,42 @@ fn reduced_motion_still_runs_the_same_gates() {
     sim.bridge_present(&sid);
     let begins = sim.begin_transitions(mark);
     assert!(matches!(&begins[0], SceneCommand::BeginTransition { reduce_motion: true, .. }));
+}
+
+#[test]
+fn the_greeter_owns_input_from_the_moment_it_connects_and_after_every_reconnect() {
+    let mut sim = Sim::new();
+    sim.feed(Input::Start { persisted: Persisted::default() });
+    sim.feed(Input::Accounts(accounts()));
+    sim.feed(Input::HelperConnected);
+    sim.feed(Input::Scene(SceneEvent::Ready { outputs: sim.outputs.clone() }));
+    assert_eq!(sim.input_owner(), InputOwner::None, "no greeter yet, nobody types");
+    let mark = sim.mark();
+    let g = sim.m.greeter.generation.unwrap();
+    sim.feed(Input::Scene(SceneEvent::GreeterConnected { generation: g, pid: GREETER_PID }));
+    assert_eq!(sim.set_input_owner_cmds(mark), vec![InputOwner::Greeter]);
+    assert_eq!(sim.input_owner(), InputOwner::Greeter);
+    // The greeter dies: the compositor drops the owner with it; the new one gets it again.
+    sim.feed(Input::Scene(SceneEvent::GreeterGone { generation: g }));
+    assert_eq!(sim.input_owner(), InputOwner::None);
+    sim.advance(std::time::Duration::from_secs(2));
+    let g2 = sim.m.greeter.generation.unwrap();
+    let mark = sim.mark();
+    sim.feed(Input::Scene(SceneEvent::GreeterConnected { generation: g2, pid: GREETER_PID }));
+    assert_eq!(sim.set_input_owner_cmds(mark), vec![InputOwner::Greeter]);
+    // Also when the greeter process exits (helper report) while locked.
+    sim.conn += 1;
+    sim.feed(Input::GreeterPeer { conn: sim.conn, uid: GREETER_UID, pid: GREETER_PID });
+    sim.greeter(ClientMessage::Hello { version: bsm_proto::PROTOCOL_VERSION });
+    let sid = sim.login(ALICE);
+    sim.call(Sim::session_caller(&sim, &sid), Method::RequestLock { session: None }).unwrap();
+    assert_eq!(sim.input_owner(), InputOwner::Greeter);
+    sim.feed(Input::Helper(bsm_proto::helper::HelperEvent::GreeterExited { generation: g2, status: 1 }));
+    assert_eq!(sim.input_owner(), InputOwner::None);
+    sim.advance(std::time::Duration::from_secs(2));
+    let g3 = sim.m.greeter.generation.unwrap();
+    let mark = sim.mark();
+    sim.feed(Input::Scene(SceneEvent::GreeterConnected { generation: g3, pid: GREETER_PID }));
+    assert_eq!(sim.set_input_owner_cmds(mark), vec![InputOwner::Greeter]);
+    assert!(sim.m.check_invariants().is_ok());
 }

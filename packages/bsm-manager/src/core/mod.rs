@@ -357,6 +357,9 @@ impl Manager {
             }
             SceneEvent::GreeterGone { generation } => {
                 if self.greeter.generation == Some(generation) {
+                    if self.input_owner == InputOwner::Greeter {
+                        self.input_owner = InputOwner::None;
+                    }
                     fx.push(Effect::Helper(bsm_proto::helper::HelperRequest::KillGreeter { generation }));
                     self.greeter_lost(fx);
                 }
@@ -441,6 +444,9 @@ impl Manager {
     /// The greeter is gone (crash, kill, helper report). Nothing it protected is released.
     fn greeter_lost(&mut self, fx: &mut Fx) {
         self.greeter.wayland = false;
+        if self.input_owner == InputOwner::Greeter {
+            self.input_owner = InputOwner::None;
+        }
         self.greeter.generation = None;
         self.greeter.spawn_req = None;
         self.greeter.pid = None;
@@ -654,6 +660,19 @@ impl Manager {
 
     /// Recompute derived state and publish only what changed.
     fn settle(&mut self, fx: &mut Fx) {
+        // The greeter owns physical input whenever it is what the seat shows (booting to the
+        // greeter, authenticating, locked, switching): nothing else may be typed into. Sent
+        // after every greeter (re)connect because the compositor drops the owner with the greeter.
+        if self.greeter.wayland
+            && self.input_owner == InputOwner::None
+            && self.greeter_authoritative()
+            && !self.power_committed()
+            && !self.op.as_ref().is_some_and(|o| o.pending_fail.is_some())
+            && !self.sessions.values().any(|s| s.state == SessionState::LockRequested)
+        {
+            self.input_owner = InputOwner::Greeter;
+            fx.push(Effect::Scene(SceneCommand::SetInputOwner(InputOwner::Greeter)));
+        }
         self.seat = self.compute_seat();
 
         // Persistence: last user and the registry of running sessions.

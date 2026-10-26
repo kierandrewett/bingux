@@ -47,6 +47,7 @@ libc = "0.2"
 tempfile = "3"
 wayland-client = "0.31"
 wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+wayland-protocols = { version = "0.32", features = ["client"] }
 wayland-scanner = "0.31"
 rustix = { version = "1", features = ["process", "fs"] }
 

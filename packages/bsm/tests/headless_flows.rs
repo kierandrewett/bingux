@@ -98,7 +98,7 @@ scenario!(login_lock_unlock_with_real_frames, {
     let snap = rig.g().snapshot();
     assert_eq!(snap.users.len(), 2);
     assert!(matches!(snap.mode, GreeterMode::Login));
-    rig.wait_focus(InputOwner::None);
+    rig.wait_focus(InputOwner::Greeter);
 
     // ----- new login: real progress, greeter stays, desktop fades in over it -----
     let fm = rig.frame_mark();
