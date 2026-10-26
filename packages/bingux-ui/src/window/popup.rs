@@ -281,7 +281,9 @@ fn resize_handle(
 ) -> Rect {
     rect()
         .position(position)
-        .layer(Layer::Relative(2))
+        // Above the outline: the inner part of each band overlaps the panel,
+        // whose deep nodes would otherwise outrank the handle and take the press.
+        .layer(Layer::Relative(POPUP_OUTLINE_LAYER + 1))
         .width(width)
         .height(height)
         .cursor(cursor)
@@ -424,6 +426,10 @@ impl Component for PopupFrame {
         // A sheet's grabber: where its drag began. How far a sheet is pulled
         // lives on the manager, so the window can inset with it.
         let mut grab = use_state(|| None::<f32>);
+        // An outside press closes the popup only when it also began outside.
+        // A drag that starts on a resize handle or in the panel and is let go
+        // over the scrim is not a press on the scrim.
+        let mut outside_down = use_state(|| false);
         let mut pull = manager.sheet_pull;
         let mut pulling = manager.sheet_pulling;
         let motion = tokens.motion(MOTION_MS);
@@ -579,6 +585,7 @@ impl Component for PopupFrame {
             .max_width(Size::window_percent(max_width))
             .max_height(Size::window_percent(max_height))
             .on_press(|event: Event<PressEventData>| event.stop_propagation())
+            .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
             .on_key_down(move |event: Event<KeyboardEventData>| {
                 if event.key == Key::Named(NamedKey::Escape) {
                     event.stop_propagation();
@@ -687,8 +694,11 @@ impl Component for PopupFrame {
             )
             // The scrim fades in with the popup.
             .opacity(progress)
+            .on_pointer_down(move |_: Event<PointerEventData>| outside_down.set(true))
             .on_press(move |_: Event<PressEventData>| {
-                if dismiss_outside {
+                let began_outside = *outside_down.peek();
+                outside_down.set(false);
+                if dismiss_outside && began_outside {
                     window.close();
                 }
             })
