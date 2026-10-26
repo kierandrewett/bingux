@@ -160,11 +160,14 @@ class Run:
         missing = [path for path in BSM_BINARIES if not self.vm.guest_has(path)]
         if missing:
             raise Blocked("not in this image: " + ", ".join(missing))
-        for _ in range(60):
+        if self.state.get("bsm_dead"):
+            raise Blocked(self.state["bsm_dead"])
+        for _ in range(30):
             if self.bsm_pids():
                 break
             time.sleep(2)
         if not self.bsm_pids():
+            self.state["bsm_dead"] = "bsm is not running (see journal-bsm.txt)"
             raise Blocked("bsm is not running (systemctl is-active bsm: " + self.vm.run("systemctl is-active bsm", 10).strip().splitlines()[-1] + ")")
         self.vm.ensure_monitor()
 

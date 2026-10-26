@@ -15,12 +15,12 @@ arch=('x86_64')
 url='https://github.com/kierandrewett/bingux'
 license=('GPL-3.0-or-later')
 # Smithay's DRM backend links libseat, libudev, libinput, libgbm, EGL and
-# libxkbcommon; bsm-host links libpipewire and libei (ScreenCast and
+# libxkbcommon; bsm-host links libpipewire (ScreenCast frames; input goes through a pure Rust EIS client) (
 # RemoteDesktop frames and input from the hosted Gnoblin); bsm-helper links PAM.
 makedepends=('cargo' 'clang' 'pkgconf' 'seatd' 'libinput' 'libdrm' 'mesa' 'libxkbcommon'
-    'systemd-libs' 'wayland' 'pam' 'libpipewire' 'libei' 'dbus')
+    'systemd-libs' 'wayland' 'pam' 'libpipewire' 'dbus')
 depends=('bingux' 'gnoblin' 'seatd' 'polkit' 'dbus' 'pam' 'systemd' 'libinput' 'libdrm' 'mesa'
-    'libxkbcommon' 'libpipewire' 'libei' 'wayland' 'plymouth')
+    'libxkbcommon' 'libpipewire' 'pipewire' 'wireplumber' 'wayland' 'plymouth')
 # bsm.service does not start without a greeter, so greetd stays recommended:
 # bsm-fallback.service starts it when bsm cannot be kept running.
 optdepends=('greetd: login screen that bsm-fallback.service starts when bsm fails')

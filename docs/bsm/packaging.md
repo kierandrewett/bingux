@@ -26,7 +26,7 @@ Both leave greetd installed, so going back is one command or one reboot.
 | `packaging/bsm/bin/bsm-fallback`                | `/usr/libexec/bsm/fallback`                   | Starts greetd when bsm failed for good.                                   |
 | `packaging/bsm/bin/bsm-set-display-manager`     | `/usr/bin/bsm-set-display-manager`            | Switch the display-manager role (never run by the package).               |
 | `packaging/bsm/systemd/*`                       | `/usr/lib/systemd/system/`                    | `bsm.service`, `bsm-seatd.service`, `bsm-helper.socket`, `bsm-helper.service`, `bsm-fallback.service`. |
-| `packaging/bsm/sysusers/bsm.conf`               | `/usr/lib/sysusers.d/bsm.conf`                | Accounts `bsm` and `bingux-greeter`.                                      |
+| `packaging/bsm/sysusers/bsm.conf`               | `/usr/lib/sysusers.d/bsm.conf`                | Accounts `bsm` and `bingux-greeter`; `bsm` is a member of `bingux-greeter` because it chowns the greeter sockets to that group (EPERM otherwise, found in the first VM boot). |
 | `packaging/bsm/tmpfiles/bsm.conf`               | `/usr/lib/tmpfiles.d/bsm.conf`                | `/run/bsm`, `/run/bsm/sessions`, `/var/lib/bsm`, the greeter's home.      |
 | `packaging/bsm/share/tmpfiles-active.conf`      | `/usr/share/bsm/tmpfiles-active.conf`         | Applied by `bsm.service` only, see [Privacy](#privacy).                   |
 | `packaging/bsm/dbus/org.bingux.Session1.conf`   | `/usr/share/dbus-1/system.d/`                 | Bus policy: `bsm` owns `org.bingux.Session1`; every local account may call it, bsm decides per call. |
@@ -60,10 +60,10 @@ bsm-helper.socket -------------------------+          |  Type=notify, WatchdogSe
   asks for DRM master. Taking the display over *without* a blank frame (keeping
   the splash until the greeter has rendered) is not done; it is listed under
   [Status](#status).
-* `bsm-seatd.service` is bsm's own seatd on `/run/bsm-seatd/seatd.sock`,
-  group `bsm`. bsm does not use the distribution's `seatd.service`, so a
-  different socket path or group there cannot break it. bsm reaches it through
-  `LIBSEAT_BACKEND=seatd` and `SEATD_SOCK`.
+* `bsm-seatd.service` is bsm's own seatd, socket group `bsm`. seatd 0.9.3 has no
+  option for the socket path (it listens on `/run/seatd.sock`; setting
+  `SEATD_SOCK` for the server was tried and ignored), so the unit
+  `Conflicts=seatd.service`. bsm reaches it through `LIBSEAT_BACKEND=seatd`.
 * `bsm.service` reports `READY=1` after the compositor is ready, the D-Bus name
   is acquired and the control socket is bound, and sends `WATCHDOG=1` at half of
   `WatchdogSec`. A unit that stops reporting is restarted

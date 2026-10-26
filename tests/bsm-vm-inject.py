@@ -102,6 +102,7 @@ echo "INJECT-LIBS-OK=$((1 - missing))"
 if [ "${1:-}" != "--no-start" ]; then
     # The cutover the image does with a kernel parameter: greetd off, bsm on.
     systemctl stop greetd.service 2>/dev/null || true
+    systemctl reset-failed bsm.service bsm-seatd.service 2>/dev/null || true
     systemctl start bsm-helper.socket
     systemctl start bsm.service || echo "INJECT-BSM-START-FAILED"
 fi

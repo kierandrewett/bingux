@@ -45,7 +45,6 @@ Group=bsm
 # that buffer import and the greeter's dmabuf allocation use.
 SupplementaryGroups=video render
 Environment=LIBSEAT_BACKEND=seatd
-Environment=SEATD_SOCK=/run/bsm-seatd/seatd.sock
 Environment=RUST_BACKTRACE=1
 # /run/bsm, /run/bsm/sessions and /var/lib/bsm come from tmpfiles.d/bsm.conf (not
 # RuntimeDirectory=, which would remove the session sockets on every restart). The
