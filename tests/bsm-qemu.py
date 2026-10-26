@@ -270,6 +270,13 @@ def step_greeter(run):
     run.need_bsm()
     pids = run.bsm_pids()
     run.state["bsm_pid"] = pids[0]
+    for _ in range(45):
+        status, _text = vm.bsmctl_json("status")
+        if isinstance(status, dict) and status.get("greeter_connected"):
+            break
+        time.sleep(2)
+    run.dump("bsmctl-status-greeter", _text)
+    run.check("the greeter is connected to bsm", isinstance(status, dict) and bool(status.get("greeter_connected")), _text[:160])
     run.check("exactly one bsm process", len(pids) == 1, str(pids))
     comm = vm.run(f"cat /proc/{pids[0]}/comm", 10).strip().splitlines()[-1]
     exe = vm.run(f"readlink /proc/{pids[0]}/exe", 10).strip().splitlines()[-1]
@@ -646,9 +653,23 @@ def step_greeter_kill(run):
         run.check(f"display {head}: the lock scene is back", sim > 0.9, f"similarity {sim:.3f}")
 
 
+def collect(run, tag):
+    """Diagnostics from the guest; tolerant of a guest that is going down."""
+    vm = run.vm
+    try:
+        run.dump(f"ps-{tag}", vm.run("ps -eo pid,ppid,user:12,comm,args --forest | cut -c1-200", 30))
+        run.dump(f"journal-bsm-{tag}", vm.run("journalctl -b --no-pager -o short-iso -u bsm -u bsm-helper -u bsm-seatd -u bsm-fallback -u greetd | tail -n 400", 90))
+        run.dump(f"journal-errors-{tag}", vm.run("journalctl -b -p err --no-pager -o cat | tail -n 80", 60))
+        run.dump(f"bsmctl-status-{tag}", vm.bsmctl_json("status")[1])
+        run.dump(f"monitor-log-{tag}", vm.run(f"cat {MONITOR_LOG}", 30))
+    except Exception as error:  # noqa: BLE001
+        run.log(f"collect({tag}) failed: {error}")
+
+
 def step_power(run):
     run.need_bsm()
     vm = run.vm
+    collect(run, "before-power")
     # A blocking shutdown inhibitor: bsm must refuse and restore a scene, never leave a black screen.
     vm.run("nohup systemd-inhibit --what=shutdown --mode=block --who=bsm-test --why=denied-power-test sleep 600 >/dev/null 2>&1 &", 10)
     time.sleep(1.5)
@@ -738,6 +759,8 @@ def main():
         else:
             run.checks["serial shell"] = True
             vm.run("systemctl is-system-running --wait 2>&1 | head -1", 120)
+            # Account B exists before bsm starts: bsm lists accounts at start-up.
+            vm.run(f"id {USER_B[0]} >/dev/null 2>&1 || (useradd -m -G video,audio -s /bin/bash {USER_B[0]} && echo {USER_B[0]}:{USER_B[1]} | chpasswd)", 30)
             if args.inject:
                 run.log("injecting " + args.inject)
                 applied = vm.run("mkdir -p /mnt/bsm-inject && modprobe 9pnet_virtio; modprobe 9p; mount -t 9p -o trans=virtio,version=9p2000.L,ro bsminject /mnt/bsm-inject && sh /mnt/bsm-inject/apply.sh 2>&1 | tail -n 30", 600)
@@ -751,11 +774,7 @@ def main():
                 else:
                     run.steps[name] = {"status": "skipped"}
             if vm.alive():
-                run.dump("ps-final", vm.run("ps -eo pid,ppid,user:12,comm,args --forest | cut -c1-200", 30))
-                run.dump("journal-bsm", vm.run("journalctl -b --no-pager -o short-iso -u bsm -u bsm-helper -u bsm-seatd -u bsm-fallback -u greetd | tail -n 300", 90))
-                run.dump("journal-errors", vm.run("journalctl -b -p err --no-pager -o cat | tail -n 80", 60))
-                run.dump("bsmctl-status", vm.bsmctl_json("status")[1])
-                run.dump("monitor-log", vm.run(f"cat {MONITOR_LOG}", 30))
+                collect(run, "final")
     finally:
         (out / "serial.log").write_bytes(vm.log)
         (out / "report.txt").write_text("\n".join(run.report) + "\n")
