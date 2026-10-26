@@ -40,6 +40,7 @@ ENTRIES = {
     "switcher": "SwitcherShell.qml",
     "emoji": "EmojiShell.qml",
     "capture": "CaptureShell.qml",
+    "bsm-greeter": "BsmGreeterShell.qml",
 }
 SKIP_DIRS = {"__pycache__", ".ruff_cache", ".qmlls.ini"}
 # Python helpers are installed under libexec/bingux/shell and reached through

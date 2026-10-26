@@ -126,6 +126,7 @@ install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bin
 %{_bindir}/bingux-emoji-ui
 %{_bindir}/bingux-greeter
 %{_bindir}/bingux-greeter-session
+%{_bindir}/bingux-bsm-greeter
 %{_bindir}/bingux-session
 %{_bindir}/bingux-wallpaper
 %{_bindir}/bingux-popouts

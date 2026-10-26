@@ -1,0 +1,43 @@
+#!/bin/sh
+# Start the bsm greeter: the Quickshell client that bsm shows at boot, after
+# logout, while a session starts and while a session is locked.
+#
+# bsm-helper runs this as the greeter account with WAYLAND_DISPLAY (bsm's
+# greeter socket) and BSM_CONTROL_SOCKET set. It runs only what this install
+# ships: the QML comes from the packed shell archive next to bingux-shell, and
+# nothing under any user's home is read. The installer rewrites the prefix
+# below for its selected prefix.
+#
+#   BINGUX_BSM_GREETER_SOURCE=DIR   run the QML from a checkout (DIR is
+#                                   shell/bingux) instead of the archive; for
+#                                   development and the fake control server.
+set -eu
+# shellcheck disable=SC3045 # dash and bash both accept -c; no core dumps from the login screen
+ulimit -c 0
+
+PREFIX=/usr/local
+SHELL_BIN="$PREFIX/bin/bingux-shell"
+
+export XDG_SESSION_TYPE=wayland
+export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-wayland}"
+
+# The shell archive unpacks once per content into the cache directory. The
+# greeter account may have no usable home: fall back to its runtime directory.
+if [ -z "${XDG_CACHE_HOME:-}" ]; then
+    if [ -z "${HOME:-}" ] || [ "$HOME" = / ] || [ ! -w "$HOME" ]; then
+        if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
+            echo "bingux-bsm-greeter: no writable HOME or XDG_RUNTIME_DIR for the shell cache" >&2
+            exit 1
+        fi
+        XDG_CACHE_HOME="$XDG_RUNTIME_DIR/cache"
+        mkdir -p "$XDG_CACHE_HOME"
+        export XDG_CACHE_HOME
+    fi
+fi
+
+if [ -n "${BINGUX_BSM_GREETER_SOURCE:-}" ]; then
+    shell_dir=$BINGUX_BSM_GREETER_SOURCE
+else
+    shell_dir=$("$SHELL_BIN" --shell-dir)
+fi
+exec "$SHELL_BIN" -p "$shell_dir/BsmGreeterShell.qml" "$@"

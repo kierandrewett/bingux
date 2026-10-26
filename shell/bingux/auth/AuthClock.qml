@@ -10,6 +10,15 @@ SessionShadow {
     property AuthTheme theme: AuthTheme {}
     property date now: new Date()
 
+    // Qt's "h" is a 12 hour field only together with an AM/PM marker, so the
+    // 12 hour clock face is composed by hand and shows no marker.
+    readonly property string timeText: {
+        if (!root.theme.twelveHourClock)
+            return Qt.formatTime(root.now, "HH:mm");
+        const hour = root.now.getHours() % 12;
+        return (hour === 0 ? 12 : hour) + Qt.formatTime(root.now, ":mm");
+    }
+
     Accessible.role: Accessible.StaticText
     Accessible.name: Qt.formatDate(root.now, "dddd d MMMM") + ", " + Qt.formatTime(root.now, root.theme.twelveHourClock ? "h:mm AP" : "HH:mm")
 
@@ -26,7 +35,7 @@ SessionShadow {
         }
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: Qt.formatTime(root.now, root.theme.twelveHourClock ? "h:mm" : "HH:mm")
+            text: root.timeText
             color: root.theme.ink
             font.family: Theme.fontFamily
             font.pixelSize: 120

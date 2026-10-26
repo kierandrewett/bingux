@@ -169,6 +169,7 @@ def build_payload(source, build, prefix, qml, target, managed=False):
         / "share/applications/bingux-settings.desktop",
         source / "scripts/bingux-clipboard-paste": prefix / "bin/bingux-clipboard-paste",
         source / "scripts/bingux-greeter-session": prefix / "bin/bingux-greeter-session",
+        source / "scripts/bingux-bsm-greeter": prefix / "bin/bingux-bsm-greeter",
         source / "packaging/gnoblin/bingux.lua": prefix / "share/gnoblin/conf.d/bingux.lua",
         source / "packaging/gnoblin/greeter.lua": prefix / "share/bingux/greeter/gnoblin.lua",
         source / "packaging/greetd/config.toml": prefix / "share/bingux/greeter/greetd.toml",
@@ -289,6 +290,12 @@ def build_payload(source, build, prefix, qml, target, managed=False):
             write_generated(
                 destination,
                 path.read_text().replace("/usr/libexec/bingux", str(prefix / "libexec/bingux")),
+            )
+        elif path == source / "scripts/bingux-bsm-greeter":
+            write_generated(
+                destination,
+                path.read_text().replace("PREFIX=/usr/local\n", "PREFIX=" + shlex.quote(str(prefix)) + "\n"),
+                executable=True,
             )
         elif path == source / "scripts/bingux-greeter-session":
             write_generated(

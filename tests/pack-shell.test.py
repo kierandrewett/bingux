@@ -30,6 +30,7 @@ ENTRY_FILES = {
     "SwitcherShell.qml",
     "EmojiShell.qml",
     "CaptureShell.qml",
+    "BsmGreeterShell.qml",
 }
 
 
