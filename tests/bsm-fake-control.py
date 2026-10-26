@@ -139,10 +139,11 @@ class Server:
         self.revision = 0
         self.mode = {"mode": "unlock", "session": "s0000000a", "uid": args.unlock_uid} if args.mode == "unlock" else {"mode": "login"}
         self.selected = args.unlock_uid if args.mode == "unlock" else 1000
+        pictures = not args.no_pictures
         self.users = {
-            1000: account(1000, "alex", "Alex Morgan", "running_locked", "#3584e4", session="s0000000a", root=self.assets),
-            1001: account(1001, "sam", "Sam Rivera", "not_signed_in", "#e66100", clock="12h", root=self.assets),
-            1002: account(1002, "robin", "Robin Chen", "not_signed_in", "#26a269", scheme="light", clock="12h", root=self.assets),
+            1000: account(1000, "alex", "Alex Morgan", "running_locked", "#3584e4", session="s0000000a", picture=pictures, root=self.assets),
+            1001: account(1001, "sam", "Sam Rivera", "not_signed_in", "#e66100", clock="12h", picture=pictures, root=self.assets),
+            1002: account(1002, "robin", "Robin Chen", "not_signed_in", "#26a269", scheme="light", clock="12h", picture=pictures, root=self.assets),
             1003: account(1003, "dana", "Dana Frost", "unavailable", "#c64600", root=self.assets),
         }
         if args.mode == "login":
@@ -458,6 +459,7 @@ async def main():
     parser.add_argument("--mode", choices=["login", "unlock"], default="login")
     parser.add_argument("--unlock-uid", type=int, default=1000)
     parser.add_argument("--selected", type=int, help="account shown first (default: the unlock owner or 1000)")
+    parser.add_argument("--no-pictures", action="store_true", help="every account opts out of personal images")
     parser.add_argument("--auto", action="store_true", help="advance startup progress on a short step timer")
     parser.add_argument("--deny-power", action="store_true", help="refuse power requests as unauthorised")
     parser.add_argument("--log", help="append received message types (never secrets) as JSON lines")

@@ -95,7 +95,7 @@ Item {
         promptText: root.model.promptPlaceholder
         echoVisible: root.model.promptKind === "visible"
         canSubmit: root.interactive && root.model.canSubmit
-        busy: root.model.busy && root.model.connected
+        busy: root.model.busy && root.model.connected && !root.model.showProgress
         submitLabel: root.model.intent === "unlock" ? "Unlock" : "Sign in"
         showRetry: root.model.canRetry
         onSubmitted: text => root.client.respond(text)
@@ -149,15 +149,22 @@ Item {
                 onClicked: root.client.selectUser(root.model.unlockUid)
             }
         ]
-        cornerContent: AuthButton {
-            objectName: "powerButton"
-            visible: root.interactive && root.model.connected
-            theme: authTheme
-            backdrop: screen.backdrop
-            iconName: "system-shutdown-symbolic"
-            Accessible.name: "Power options"
-            onClicked: power.open = !power.open
-        }
+        cornerContent: [
+            BsmNetworkIndicator {
+                objectName: "networkStatus"
+                theme: authTheme
+                backdrop: screen.backdrop
+            },
+            AuthButton {
+                objectName: "powerButton"
+                visible: root.interactive && root.model.connected
+                theme: authTheme
+                backdrop: screen.backdrop
+                iconName: "system-shutdown-symbolic"
+                Accessible.name: "Power options"
+                onClicked: power.open = !power.open
+            }
+        ]
 
         overlayContent: Item {
             anchors.fill: parent

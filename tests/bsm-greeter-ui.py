@@ -30,7 +30,7 @@ import tempfile
 import threading
 import time
 
-from PIL import Image
+from PIL import Image, ImageChops, ImageStat
 
 ROOT = Path(__file__).resolve().parent.parent
 QS = os.environ.get("QS_TEST_BIN", str(ROOT / "build/bingux-shell/quickshell/src/bingux-shell"))
@@ -184,6 +184,12 @@ def region_colour(image, box):
     return crop.getpixel((0, 0))
 
 
+def changed(a, b, box):
+    """Mean per-channel difference between two shots inside a box."""
+    diff = ImageChops.difference(a.crop(box), b.crop(box))
+    return sum(ImageStat.Stat(diff).mean) / 3
+
+
 def distance(a, b):
     return sum(abs(x - y) for x, y in zip(a, b))
 
@@ -238,7 +244,7 @@ def login_scenario():
 
         rig.key("Tab", "Return")
         picker = rig.shot("account-picker")
-        check("picker: opens from the keyboard and covers the lower screen", region_colour(picker, (440, 560, 840, 740)) != region_colour(wrong, (440, 560, 840, 740)))
+        check("picker: opens from the keyboard and covers the lower screen", changed(picker, wrong, (420, 490, 860, 770)) > 12)
         alex_colour = region_colour(picker, (0, 0, 400, 300))
 
         rig.key("Down", "Return")
@@ -298,7 +304,7 @@ def login_scenario():
         power = rig.shot("power-menu")
         rig.key("Down", "Return")
         confirm = rig.shot("power-confirm")
-        check("power: the menu is drawn above the corner", region_colour(power, (1040, 560, 1250, 740)) != region_colour(login, (1040, 560, 1250, 740)))
+        check("power: the menu is drawn above the corner", changed(power, login, (1030, 600, 1260, 740)) > 12)
         rig.key("Return")
         check("power: a confirmed restart reaches bsm", rig.wait_for("power", action="reboot"))
         rig.shot("power-operation", settle=1.0)
@@ -312,10 +318,10 @@ def unlock_scenario():
     try:
         check("unlock: the owner's unlock form starts at once", rig.wait_for("begin_auth", uid=1000, intent="unlock", timeout=20))
         locked = rig.shot("locked-unlock")
-        check("unlock: the picker is not shown by default", region_colour(locked, (440, 500, 840, 540)) == region_colour(locked, (440, 500, 840, 540)))
+        check("unlock: no other account is touched by default", rig.count("select_user") == 0 and rig.count("begin_auth") == 1)
         rig.key("Tab", "Tab", "Return")
         picker = rig.shot("locked-account-picker")
-        check("unlock: the slide-up handle opens the account list", distance(region_colour(picker, (440, 560, 840, 740)), region_colour(locked, (440, 560, 840, 740))) > 20)
+        check("unlock: the slide-up handle opens the account list", changed(picker, locked, (420, 300, 860, 480)) > 12)
         rig.key("Down", "Down", "Return")
         check("unlock: choosing another account only selects it", rig.wait_for("select_user", uid=1002))
         check("unlock: another account authenticates as a switch", rig.wait_for("begin_auth", uid=1002, intent="switch"))
