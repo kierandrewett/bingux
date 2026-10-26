@@ -122,7 +122,10 @@ Implemented server side: `identity` (session, generation, uid), `output_added`,
   the attached buffer is exactly `width x height` at scale 1 with no transform.
   `SurfaceEvidence.presented_frames` counts such commits since the acknowledgement; it
   is reset to 0 when the output changes. `SessionSurfaces` is emitted on configure, ack,
-  the first valid frame, and invalidation (not on every frame).
+  the first valid frame, and invalidation (not on every frame). Every forwarded `report`
+  arms each surface of the session: its next valid, acked commit emits one more
+  `SessionSurfaces` (with the incremented `presented_frames`), so the manager can prove a
+  frame arrived after a report (the `DesktopReady` gate). At most one per surface per report.
 * `presented`: for a visible session after every composed valid commit (sequence
   numbers increase); for a session that is not on screen once, for the first valid
   commit after the ack, as the ready-frame proof.
@@ -281,7 +284,7 @@ is measured by the bridge side (shm copy today).
 Run in `packages/bsm-compositor` (`CARGO_TARGET_DIR=/tmp/bsm-target/bsm-compositor`):
 
 ```text
-cargo test        # 47 tests: 21 unit, 4 extras, 11 frames, 11 security
+cargo test        # 48 tests: 21 unit, 4 extras, 11 frames, 12 security
 ```
 
 All passed, repeatedly (six consecutive runs without a failure). Artifacts are written to
@@ -300,7 +303,7 @@ composed frame (`frames/frame-<seq>-<output>.png`) and `trajectory.csv`
 | Power fade holds, refused fades back    | `frames::power_fade_holds_the_cover_and_a_refused_power_action_fades_back`                     |
 | Greeter crash                           | `frames::greeter_crash_while_protected_shows_the_opaque_cover_until_a_greeter_returns`         |
 | Hotplug while protected / foreground    | `frames::output_changes_never_expose_a_protected_session`, `frames::a_foreground_session_with_an_unproven_new_output_is_not_composed` |
-| Roles, rejections, protocol errors      | `security.rs` (11 tests)                                                                       |
+| Roles, rejections, protocol errors      | `security.rs` (12 tests)                                                                       |
 | Engine invariants                       | `engine::tests` (15 tests), `peer::tests`, `roles::tests`                                      |
 
 The tests drive the real compositor thread with real Wayland clients over real sockets.

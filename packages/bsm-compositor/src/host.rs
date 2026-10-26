@@ -41,6 +41,9 @@ pub(crate) struct HostedSurface {
     pub seq: u32,
     /// A valid commit that has not yet been reported with `presented`.
     pub dirty: bool,
+    /// A report was forwarded and this surface has not committed a valid frame since:
+    /// the next one emits `SessionSurfaces` once (post-report evidence for the gate).
+    pub evidence_pending: bool,
 }
 
 impl HostedSurface {
@@ -225,6 +228,7 @@ impl Dispatch<BsmSessionHostV1, HostData> for State {
                         presented_frames: 0,
                         seq: 0,
                         dirty: false,
+                        evidence_pending: false,
                     },
                 );
                 state.surface_index.insert(surface, (data.session.clone(), output_name));
@@ -280,6 +284,11 @@ impl Dispatch<BsmSessionHostV1, HostData> for State {
                     generation: data.generation,
                     report,
                 });
+                if let Some(rec) = state.sessions.get_mut(&data.session) {
+                    for hs in rec.surfaces.values_mut() {
+                        hs.evidence_pending = true;
+                    }
+                }
             }
         }
     }
@@ -368,14 +377,15 @@ impl State {
         let first = hs.presented_frames == 0;
         hs.presented_frames += 1;
         hs.dirty = true;
-        if first {
-            if !visible {
-                // Ready-frame proof: reported without being shown.
-                hs.seq = hs.seq.wrapping_add(1);
-                hs.dirty = false;
-                let (hi, lo, ns) = split_time(self.clock.now_ms());
-                hs.res.presented(hs.seq, hi, lo, ns);
-            }
+        let report = first | std::mem::take(&mut hs.evidence_pending);
+        if first && !visible {
+            // Ready-frame proof: reported without being shown.
+            hs.seq = hs.seq.wrapping_add(1);
+            hs.dirty = false;
+            let (hi, lo, ns) = split_time(self.clock.now_ms());
+            hs.res.presented(hs.seq, hi, lo, ns);
+        }
+        if report {
             self.report_evidence(&sid);
         }
         self.needs_redraw = true;

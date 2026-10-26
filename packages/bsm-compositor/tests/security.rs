@@ -392,3 +392,35 @@ fn host_evidence_counts_only_frames_after_the_ack_and_resets_on_output_change() 
     assert!(e[0].acked);
     assert_eq!(e[0].presented_frames, 0);
 }
+
+#[test]
+fn a_report_makes_each_surface_publish_one_post_report_evidence_event() {
+    let mut h = harness(2);
+    let mut c = bring_up_session(&mut h, "s00000040", 3, solid([9, 9, 9, 255]));
+    h.sync();
+    h.take_events();
+    let count = |h: &mut Harness| {
+        h.sync();
+        h.events().iter().filter_map(|e| match e {
+            SceneEvent::SessionSurfaces { surfaces, .. } => Some(surfaces.clone()),
+            _ => None,
+        }).collect::<Vec<_>>()
+    };
+    // Without a report, further frames are silent (no flooding).
+    c.host_paint(&solid([9, 9, 9, 255]));
+    assert!(count(&mut h).is_empty(), "frames alone do not emit evidence");
+    // A report arms every surface of the session.
+    c.host.clone().unwrap().report(
+        common::bsm::bsm_session_host_v1::ReportKind::DesktopReady, None, 0, 0, "3".into());
+    c.roundtrip().unwrap();
+    assert!(count(&mut h).is_empty(), "arming alone emits nothing");
+    c.host_paint(&solid([9, 9, 9, 255]));
+    let evs = count(&mut h);
+    assert_eq!(evs.len(), 2, "one event per output frame, not per report: {evs:?}");
+    let last = evs.last().unwrap();
+    assert!(last.iter().all(|s| s.acked && s.presented_frames == 3), "post-report frame counted: {last:?}");
+    // Once only: a further frame emits nothing.
+    h.take_events();
+    c.host_paint(&solid([9, 9, 9, 255]));
+    assert!(count(&mut h).is_empty());
+}
