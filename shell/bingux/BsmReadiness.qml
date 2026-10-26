@@ -80,7 +80,7 @@ QtObject {
     // from an empty `sent`, so a restarted bridge or shell reports everything
     // it knows and the lines stay idempotent for the bridge.
     function flush() {
-        if (!socket.connected || component === "")
+        if (!socket || !socket.connected || component === "")
             return;
         const result = Protocol.diff(BsmMode.generation, component, evaluation, sent);
         sent = result.sent;
@@ -90,8 +90,12 @@ QtObject {
             socket.flush();
     }
 
+    // A Quickshell Socket that failed to connect cannot be reused, so every
+    // attempt gets a new one.
+    property QtObject socket: null
+
     function connect() {
-        if (socket.connected || retry.running)
+        if (socket || retry.running)
             return;
         if (!BsmMode.generationValid) {
             if (!warned)
@@ -99,7 +103,9 @@ QtObject {
             warned = true;
             return;
         }
-        socket.path = BsmMode.readySocketPath;
+        socket = socketComponent.createObject(root, {
+            path: BsmMode.readySocketPath
+        });
         socket.connected = true;
     }
 
@@ -117,22 +123,27 @@ QtObject {
 
     property Timer retry: Timer {
         onTriggered: {
-            socket.connected = false;
+            if (root.socket) {
+                root.socket.destroy();
+                root.socket = null;
+            }
             root.connect();
         }
     }
 
-    property Socket socket: Socket {
-        onConnectionStateChanged: {
-            if (connected) {
-                root.warned = false;
-                root.retryDelay = 500;
-                root.sent = {};
-                root.flush();
-            } else {
-                root.lost("disconnected");
+    property Component socketComponent: Component {
+        Socket {
+            onConnectionStateChanged: {
+                if (connected) {
+                    root.warned = false;
+                    root.retryDelay = 500;
+                    root.sent = {};
+                    root.flush();
+                } else {
+                    root.lost("disconnected");
+                }
             }
+            onError: error => root.lost("socket error " + error)
         }
-        onError: error => root.lost("socket error " + error)
     }
 }

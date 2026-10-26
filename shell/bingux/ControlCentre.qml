@@ -213,7 +213,13 @@ ShellPopup {
                 onLockRequested: {
                     if (!SessionServices.allows("lock"))
                         return;
-                    Quickshell.execDetached(["bingux-lock"]);
+                    if (BsmMode.integrated)
+                        // bsm locks and animates; a refusal is shown as a notification.
+                        BsmSession.request("lock", {
+                            notify: true
+                        });
+                    else
+                        Quickshell.execDetached(["bingux-lock"]);
                     root.visible = false;
                 }
                 onCustomiseRequested: root.openDetail("customise", null, "")

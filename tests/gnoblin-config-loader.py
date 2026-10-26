@@ -61,6 +61,10 @@ def check(document, loads, disable):
         assert "border_width" not in corners
     assert document["protocols"]["wlr-layer-shell"] is True
     assert document["frame-renderers"]["bingux"][1] == "--compact"
+    lock = [entry for entry in document["shortcuts"] if entry["name"] == "bingux-lock"]
+    assert len(lock) == 1, "Super+L lock shortcut missing or duplicated"
+    assert lock[0]["binding"] == "<Super>l"
+    assert lock[0]["command"][:2] == ["sh", "-c"] and "bsmctl lock" in lock[0]["command"][2]
     for name in ("switch_applications", "switch_applications_backward", "switch_windows", "switch_windows_backward"):
         assert document["keybindings"]["wm"][name] == [], name
     if disable:

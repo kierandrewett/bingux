@@ -79,6 +79,8 @@ check: doctor-build native daemons
 	BINGUX_STATUSD_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-statusd python3 tests/audio-osd-feedback.py
 	BINGUX_STATUSD_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-statusd python3 tests/pad-help-event-bridge.py
 	python3 tests/lock-contract.test.py
+	node --test tests/bsm-session.test.mjs tests/bsm-readiness.test.mjs
+	python3 tests/bsm-lock-binding.py
 	python3 tests/qmldir-complete.py --self-test
 	python3 tests/qmldir-complete.py
 	$(MAKE) check-session
@@ -98,6 +100,7 @@ check-session: native daemons shell
 	QS_TEST_BIN=$(SHELL_BIN) QML_IMPORT_PATH=$(abspath $(BUILD_DIR))/qml python3 tests/lock-ui.py
 	QS_TEST_BIN=$(SHELL_BIN) python3 tests/identify.py
 	QS_TEST_BIN=$(SHELL_BIN) python3 tests/pad-help.py
+	QS_TEST_BIN=$(SHELL_BIN) python3 tests/bsm-shell-integration.py
 	QUICKSHELL_BIN=$(SHELL_BIN) bash tests/search-command.sh
 	python3 tests/shell-archive.py --build-dir $(BUILD_DIR)
 

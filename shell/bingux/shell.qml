@@ -1371,4 +1371,18 @@ ShellRoot {
         settings: profileSettings
         visible: dock.startupReady && (profileSettings.dockEnabled)
     }
+
+    // Integrated mode only (BSM_SESSION_ID set): report the bar and dock to bsm
+    // once they have really been drawn, and follow bsm's session actions.
+    // Inactive in a standalone session. Independent of Startup.settled.
+    Loader {
+        active: BsmMode.integrated
+        source: "BsmDesktop.qml"
+        onLoaded: {
+            item.topBar = topBar;
+            item.dock = dock;
+            item.settings = profileSettings;
+            item.start();
+        }
+    }
 }
