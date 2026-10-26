@@ -382,6 +382,19 @@ impl Client {
         self.roundtrip().expect("session configure");
     }
 
+    /// Create one more session surface (for an output that appeared later).
+    pub fn host_add_surface(&mut self, name: &str) {
+        let qh = self.qh.clone();
+        let compositor = self.compositor.clone().unwrap();
+        let host = self.host.clone().unwrap();
+        let surface = compositor.create_surface(&qh, ());
+        let id = wayland_client::Proxy::id(&surface).protocol_id();
+        let ss = host.get_session_surface(&surface, name.to_string(), &qh, id);
+        self.surfaces.push((name.to_string(), surface));
+        self.session_surfaces.push(ss);
+        self.roundtrip().expect("session configure");
+    }
+
     /// Ack the latest configure of every session surface and commit a buffer of exactly
     /// that size painted with `fill`.
     pub fn host_paint(&mut self, fill: &Fill) {

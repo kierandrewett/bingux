@@ -722,11 +722,11 @@ pub(crate) fn run(
 
     // Backend: outputs, renderer, input, and the frame driver.
     let Config { backend, headless, .. } = config;
-    let HeadlessConfig { outputs, drive } = headless;
+    let HeadlessConfig { outputs, drive, draw_cursor } = headless;
     let mut ctl = None;
     match backend {
         Backend::Headless => {
-            crate::gfx::init_headless(&mut state, outputs, drive, &mut ctl)?;
+            crate::gfx::init_headless(&mut state, outputs, drive, draw_cursor, &mut ctl)?;
         }
         Backend::Winit => {
             #[cfg(feature = "backend-winit")]

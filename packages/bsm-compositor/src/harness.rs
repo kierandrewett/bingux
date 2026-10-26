@@ -85,6 +85,8 @@ pub struct HarnessConfig {
     pub cover: CoverColor,
     /// Write every composed frame as `frame-<seq>-<output>.png` here.
     pub frame_dump_dir: Option<PathBuf>,
+    /// Compose the pointer. Off by default so whole-frame comparisons are exact.
+    pub draw_cursor: bool,
 }
 
 impl HarnessConfig {
@@ -102,7 +104,7 @@ impl HarnessConfig {
                 transform: 0,
             })
             .collect();
-        Self { outputs, cover: CoverColor { r: 0.0, g: 0.0, b: 0.0 }, frame_dump_dir: None }
+        Self { outputs, cover: CoverColor { r: 0.0, g: 0.0, b: 0.0 }, frame_dump_dir: None, draw_cursor: false }
     }
 }
 
@@ -136,7 +138,7 @@ impl Harness {
             greeter_socket_gid: None,
             session_socket_dir: session_dir.clone(),
             cover: cfg.cover,
-            headless: HeadlessConfig { outputs: cfg.outputs.clone(), drive: HeadlessDrive::Stepped(ctl_rx) },
+            headless: HeadlessConfig { outputs: cfg.outputs.clone(), drive: HeadlessDrive::Stepped(ctl_rx), draw_cursor: cfg.draw_cursor },
             frame_dump_dir: cfg.frame_dump_dir,
             seat_name: "seat-test".into(),
             drm_device: None,

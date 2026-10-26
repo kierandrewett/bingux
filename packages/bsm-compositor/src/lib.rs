@@ -33,7 +33,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use bsm_proto::scene::{CoverColor, OutputInfo, SceneCommand, SceneEvent};
 
-pub use harness::{CapturedFrame, Harness, HarnessConfig};
+pub use harness::{CapturedFrame, FocusSnapshot, FocusTarget, Harness, HarnessCmd, HarnessConfig};
 pub use smithay::reexports::calloop;
 
 /// Which display backend `run` drives.
@@ -59,6 +59,8 @@ pub enum HeadlessDrive {
 pub struct HeadlessConfig {
     pub outputs: Vec<OutputInfo>,
     pub drive: HeadlessDrive,
+    /// Compose the pointer into the frame. Tests that compare whole frames turn it off.
+    pub draw_cursor: bool,
 }
 
 impl Default for HeadlessConfig {
@@ -75,6 +77,7 @@ impl Default for HeadlessConfig {
                 transform: 0,
             }],
             drive: HeadlessDrive::Wall,
+            draw_cursor: true,
         }
     }
 }

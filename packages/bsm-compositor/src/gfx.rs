@@ -102,7 +102,7 @@ pub(crate) struct HeadOut {
 pub(crate) struct HeadlessGfx {
     renderer: PixmanRenderer,
     outs: HashMap<String, HeadOut>,
-    cursor: MemoryRenderBuffer,
+    cursor: Option<MemoryRenderBuffer>,
 }
 
 impl HeadlessGfx {
@@ -136,7 +136,7 @@ impl HeadlessGfx {
         for rec in &state.outputs {
             self.ensure_output(&rec.info);
             let out = self.outs.get_mut(&rec.info.name).expect("ensured");
-            let elements = build_elements(state, &mut self.renderer, rec, plan, Some(&self.cursor), state.frame_seq);
+            let elements = build_elements(state, &mut self.renderer, rec, plan, self.cursor.as_ref(), state.frame_seq);
             {
                 let mut target = self.renderer.bind(&mut out.image).map_err(|e| anyhow::anyhow!("bind: {e:?}"))?;
                 let c = state.cover;
@@ -183,13 +183,14 @@ pub(crate) fn init_headless(
     state: &mut State,
     outputs: Vec<OutputInfo>,
     drive: HeadlessDrive,
+    draw_cursor: bool,
     _ctl: &mut Option<()>,
 ) -> Result<()> {
     let renderer = PixmanRenderer::new().map_err(|e| anyhow::anyhow!("pixman: {e:?}"))?;
     state.gfx = Some(Gfx::Headless(HeadlessGfx {
         renderer,
         outs: HashMap::new(),
-        cursor: default_cursor_buffer(),
+        cursor: draw_cursor.then(default_cursor_buffer),
     }));
     state.set_outputs(outputs);
     match drive {
