@@ -13,18 +13,19 @@ Architecture decisions D3 and D4: [architecture.md](architecture.md).
 
 ## Status
 
-| Area                                                        | State                                                                                                                              |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Socket, peer check, datagram limits                         | Implemented. Tested unprivileged (`tests/auth_protocol.rs`) and as root in the image (`tests/bsm-helper-root.sh`).                 |
-| PAM conversation (prompts, abort, timeouts, supersede)      | Implemented. Tested unprivileged against the real libpam through a test service directory.                                         |
-| Tickets (single use, bound to uid, intent, generation, TTL) | Implemented. Unit and protocol tests.                                                                                              |
-| Session start, PAM lifetime, termination, adoption          | Implemented. Tested unprivileged with real processes; `pam_systemd`, scopes and `setresuid` are covered by the root script only.   |
-| Greeter launch                                              | Implemented. Same split.                                                                                                           |
-| `SetLockedHint` through logind                              | Implemented with libsystemd's sd-bus. The call itself only runs as root (root script).                                             |
-| Real hosted Gnoblin as the leader                           | Not run here: `gnoblin --hosted` is not in the image yet. The tests use `sleep` as leader and bridge.                              |
+| Area                                                        | State                                                                                                                                                  |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Socket, peer check, datagram limits                         | Implemented. Tested unprivileged (`tests/auth_protocol.rs`, `tests/socket_activation.rs`) and as root in the image (`tests/bsm-helper-root.sh`, passed).   |
+| PAM conversation (prompts, abort, timeouts, supersede)      | Implemented. Tested unprivileged against the real libpam through a test service directory, and against the image's real `system-auth` stack as root.       |
+| Tickets (single use, bound to uid, intent, generation, TTL) | Implemented. Unit and protocol tests.                                                                                                                  |
+| Session start, PAM lifetime, termination, adoption          | Implemented. Tested unprivileged with real processes, and as root in the image with `pam_systemd`, a real scope and `setresuid` (all checks passed).       |
+| Greeter launch                                              | Implemented. Same split; the root run covers identity, capabilities and private directories.                                                           |
+| `SetLockedHint` through logind                              | Implemented with libsystemd's sd-bus. Verified as root in the image: logind reports `LockedHint=yes` then `no`.                                         |
+| Real hosted Gnoblin as the leader                           | Not run here: `gnoblin --hosted` is not in the image yet. The tests use `sleep` as leader and bridge.                                                  |
 
-The section [What ran where](#what-ran-where) lists exactly which suite ran in
-which environment.
+[What ran where](#what-ran-where) lists exactly which suite ran in which
+environment, and [Observed on the image](#observed-on-the-image) records what
+logind and PAM actually did.
 
 ## Processes
 
@@ -391,3 +392,95 @@ does all of that in QEMU.
 `examples/bsm-helper-probe.rs` is a scripted client for those checks
 (`ping`, `login`, `open`, `close`, `lock`, `greeter`, `wait-exit`); every event
 is printed as one JSON line.
+
+## Observed on the image
+
+Run of `tests/bsm-helper-vm.py` on 2026-10-26 against
+`distro/out/bingux-os-2026.10.24-x86_64.iso` (Bingux OS, Arch, kernel
+7.2.11, systemd 262, plain boot without `bingux.bsm`, so the live user's greetd
+session owned seat0 on tty1 during the run): 108 checks passed, 0 failed. The
+helper binary was built on the Fedora 43 host and ran on the image (all
+libraries resolved). The script's output is kept by the run in
+`distro/out/bsm-test/helper-root.txt` (not tracked, `distro/out/` is ignored).
+
+Facts, in the order the design questions arise:
+
+* **Session record.** `loginctl show-session` of a hosted login:
+  `Type=wayland`, `Class=user`, `Active=yes`, `State=active`, `Remote=no`,
+  `Service=bsm-login`, `Desktop=gnoblin`, `Scope=session-19.scope`,
+  `LockedHint=no`, `CanLock=yes`, `VTNr=0`, **no `Seat` property** (logind omits
+  an empty seat). `Leader=` is the supervisor (`bsm-session`), not the desktop:
+  it is the process that called `pam_open_session`.
+* **Seatless is active.** A session without a seat is `Active=yes` and
+  `State=active` at once. The live user's seat0 session on tty1 stayed
+  active at the same time; opening a hosted session did not touch it. D4 holds.
+* **Two sessions per login.** logind lists a `user` class session (ours) and a
+  `manager` class session for the user manager (`systemd --user`), both
+  seatless. The manager session outlives the hosted session by a moment after
+  logout; tests look at class `user`.
+* **Scope.** `session-<id>.scope`, equal to `SessionOpened.scope` and
+  `loginctl`'s `Scope=`. The supervisor, the leader and the bridge are all in
+  it; the helper's own cgroup is not. Stopping the scope's processes also
+  stopped a `setsid` background process started by the leader.
+* **User manager and bus.** After `pam_open_session` returned, `/run/user/<uid>`,
+  `user@<uid>.service` and the bus socket `/run/user/<uid>/bus` existed (the
+  helper waits for them anyway and fails the login if they do not appear).
+* **Identity.** Leader, bridge and greeter run with real, effective, saved and
+  filesystem uid equal to the account and `CapEff` 0. Supplementary groups were
+  applied (`video` for the test account, `render` and one more for the greeter).
+  The helper itself runs as root with `Seccomp: 0` and `NoNewPrivs: 0`, so
+  desktops inherit no filter and setuid helpers work.
+* **Environment.** `XDG_SESSION_TYPE`, `XDG_SESSION_CLASS`,
+  `XDG_SESSION_DESKTOP`, `DESKTOP_SESSION`, `XDG_RUNTIME_DIR`, `XDG_SESSION_ID`
+  (from `pam_systemd`), `USER`, `LOGNAME`, `HOME`, `BSM_SESSION_ID`,
+  `BSM_GENERATION` and the bus address reach the leader and the bridge;
+  `XDG_SEAT`, `XDG_VTNR`, `WAYLAND_DISPLAY` and `DISPLAY` reach neither;
+  `BSM_HOST_SOCKET` reaches the bridge only.
+* **PAM lifetime.** Five seconds after login the logind session was still
+  there: no premature `pam_close_session`. Closing the session, the leader
+  dying (`SIGKILL`, reported as status -9) and a failed start all ended with
+  `pam_close_session` and no `user` class session left.
+* **One handle, proven by the keyring.** The journal shows
+  `gkr-pam: stashed password to try later in open session` in the auth phase and
+  `gkr-pam: unlocked login keyring` in the session phase of the same PAM
+  handle. With a fresh handle per phase the second line could not occur.
+* **Lockout is the distribution's.** The image's `system-auth` has
+  `pam_faillock`; after three wrong passwords through the helper the correct
+  password was refused (`pam_faillock ... temporarily locked out due to 3
+  consecutive failed login attempts`), and worked again after `faillock
+  --reset`. The helper counted and delayed nothing.
+* **LockedHint.** `SetLockedHint` from the root helper changed logind's
+  `LockedHint` to `yes` and back to `no`.
+* **polkit.** `pkcheck --action-id org.freedesktop.login1.reboot` (allowed
+  without authentication for an active local session): exit 0 for the live
+  user's seat0 session, exit 2 (authentication required) for the hosted session.
+  So polkit treats a seatless session as not local, as architecture.md
+  predicts. The `bsm.rules` are not part of this run; whether they cover each
+  needed action is the packaging's check.
+* **Adoption.** Stopping `bsm-helper.service` left the session, its processes and
+  its logind session running; a helper started on demand adopted it and closed
+  it on request.
+* **Failures.** A missing bridge binary failed the login with
+  `bridge: cannot execute /nonexistent/bsm-host: No such file or directory`.
+  Connections from root and from another account were refused.
+
+Found by this run and fixed: at shutdown the helper unlinked its configured
+socket path, which under socket activation is the socket unit's file, so the
+next request found no socket. The helper now removes only a socket it bound
+itself (`tests/socket_activation.rs`).
+
+Not observed: audio and device ACLs (`uaccess`) for a seatless session, camera,
+inhibitors, suspend. Hosted Gnoblin and `bsm-host` were not in the image.
+
+## What ran where
+
+| Suite                                          | Environment                                             | Result                                                |
+| ---------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------- |
+| `cargo test` (unit, protocol, lifecycle, activation) | Fedora 43 host, unprivileged                       | 43 + 21 + 16 + 1 tests passed                         |
+| `tests/bsm-helper-root.sh` via `tests/bsm-helper-vm.py` | QEMU, live ISO of 2026-10-24 (Arch), root in the guest | 108 checks passed, 0 failed                           |
+| Hosted Gnoblin and the real bridge as leader and bridge | not run                                         | blocked on `gnoblin --hosted` and `bsm-host` in the image |
+
+Events while `bsm` is not connected: the end of a session is queued (at most
+64) and delivered to the next connection, so a restarting `bsm` learns that a
+session ended in between. Other events (prompts, `SessionOpened`) are dropped
+with the connection, because their requests are gone with it.

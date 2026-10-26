@@ -461,3 +461,26 @@ fn sigterm_stops_the_helper_cleanly_and_leaves_sessions_running() {
     c2.send(&HelperRequest::CloseSession { session: "s0000a00d".into(), generation: 61, grace_ms: 300 });
     c2.until(|e| matches!(e, HelperEvent::SessionExited { .. }));
 }
+
+#[test]
+fn a_session_that_ends_while_bsm_is_disconnected_is_reported_to_the_next_connection() {
+    if skip_as_root() {
+        return;
+    }
+    let env = Env::new();
+    let mut h = env.start();
+    let c = env.connect();
+    let o = open(&env, &mut h, &c, "s0000a00e", 71);
+    drop(c);
+    std::thread::sleep(Duration::from_millis(300));
+    unsafe { libc::kill(o.leader_pid as i32, libc::SIGKILL) };
+    assert!(wait_dead(o.leader_pid, Duration::from_secs(5)));
+    std::thread::sleep(Duration::from_millis(1500));
+    let c2 = env.connect();
+    match c2.try_recv(Duration::from_secs(5)) {
+        Some(HelperEvent::SessionExited { session, generation, status }) => {
+            assert_eq!((session.as_str(), generation, status), ("s0000a00e", 71, -libc::SIGKILL));
+        }
+        other => panic!("{other:?}"),
+    }
+}

@@ -99,6 +99,9 @@ pub struct Server {
     sessions: Vec<SessionEntry>,
     greeter: Option<GreeterEntry>,
     hints: Vec<HintJob>,
+    /// Session exits that happened while nobody was connected, delivered to the
+    /// next connection so that a restarting bsm does not miss the end of a session.
+    missed_exits: VecDeque<HelperEvent>,
     helper_cgroup: Option<String>,
     shutdown: bool,
 }
@@ -181,6 +184,7 @@ impl Server {
             sessions: Vec::new(),
             greeter: None,
             hints: Vec::new(),
+            missed_exits: VecDeque::new(),
             helper_cgroup,
             shutdown: false,
         };
@@ -242,6 +246,17 @@ impl Server {
     // ---- output ---------------------------------------------------------
 
     fn emit(&mut self, ev: HelperEvent) {
+        if self.conn.is_none() {
+            // Nobody to tell. The end of a session is the one event that cannot be
+            // reconstructed later from the helper's side, so it is kept (bounded).
+            if matches!(ev, HelperEvent::SessionExited { .. }) {
+                if self.missed_exits.len() >= 64 {
+                    self.missed_exits.pop_front();
+                }
+                self.missed_exits.push_back(ev);
+            }
+            return;
+        }
         let Some(conn) = &mut self.conn else { return };
         let Ok(bytes) = serde_json::to_vec(&ev) else { return };
         if !conn.out.is_empty() {
@@ -313,6 +328,9 @@ impl Server {
                 continue;
             }
             self.conn = Some(Conn { fd, out: VecDeque::new() });
+            for ev in std::mem::take(&mut self.missed_exits) {
+                self.emit(ev);
+            }
         }
     }
 

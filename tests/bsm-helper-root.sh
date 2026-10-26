@@ -198,6 +198,21 @@ sleep 5
 check "pam: the session is still open five seconds after login (no premature pam_close_session)" sh -c "loginctl list-sessions --no-legend | awk '{print \$1}' | grep -qx '$LSESS'"
 info "sessions after one login: $(loginctl list-sessions --no-legend | tr '\n' ';')"
 
+# ---- what polkit makes of a seatless session (information, not a verdict) -----
+# org.freedesktop.login1.reboot is allowed without authentication for an active,
+# local session. pkcheck exit status: 0 authorised, 1 not authorised, 2 needs
+# authentication, 3 no agent available. The bsm polkit rules are not installed by
+# this script, so this is the distribution's own behaviour.
+if command -v pkcheck >/dev/null 2>&1; then
+    LIVE_LEADER=$(loginctl list-sessions --no-legend | awk '$4 == "seat0" {print $5; exit}')
+    for entry in "$LEAD:hosted session of bsmt1 (no seat)" "$LIVE_LEADER:the live user's seat0 session"; do
+        pid=${entry%%:*}
+        [ -n "$pid" ] || continue
+        pkcheck --action-id org.freedesktop.login1.reboot --process "$pid" >/dev/null 2>&1
+        info "polkit: org.freedesktop.login1.reboot for ${entry#*:} (pid $pid): pkcheck exit $?"
+    done
+fi
+
 # ---- LockedHint through logind --------------------------------------------
 check "lock: SetLockedHint(true)" probe lock $S1 $G1 true
 eq "lock: logind LockedHint=yes" "LockedHint=yes" "$(loginctl show-session "$LSESS" -p LockedHint)"
@@ -241,19 +256,27 @@ probe open bsmt1 "$U1" $S3 $G3 /run/bsm/sessions/$S3-$G3.sock >"$WORK/open3.out"
 L3=$(field "$WORK/open3.out" logind_session)
 LEAD3=$(field "$WORK/open3.out" leader_pid)
 HOST3=$(field "$WORK/open3.out" host_pid)
+# A watcher must be connected when the leader dies, as bsm is; events are not queued for nobody.
+probe wait-exit $S3 >"$WORK/wait3.out" 2>&1 &
+WAIT3=$!
+sleep 1
 kill -9 "$LEAD3"
-check "leader exit: the helper reports SessionExited" probe wait-exit $S3
+wait $WAIT3
+check "leader exit: the helper reports SessionExited (status -9)" grep -q '"status":-9' "$WORK/wait3.out"
 sleep 2
 check "leader exit: the bridge was stopped with it" sh -c "! kill -0 $HOST3 2>/dev/null"
 check "leader exit: the logind session was closed (pam_close_session ran)" sh -c "! loginctl list-sessions --no-legend | awk '{print \$1}' | grep -qx '$L3'"
 
 # ---- bridge missing: login fails cleanly -----------------------------------
 systemctl stop bsm-helper.service
-write_config "$LEADER" "/nonexistent/bsm-host"
+write_config "$LEADER" "$BRIDGE"
+sed -i 's|^bridge = .*|bridge = ["/nonexistent/bsm-host"]|' /etc/bsm/helper.toml
 probe open bsmt1 "$U1" s000000a4 1004 /run/bsm/sessions/s000000a4-1004.sock >"$WORK/open4.out" 2>&1
+info "open4: $(tr '\n' ' ' <"$WORK/open4.out" | cut -c1-400)"
 check "failure: a missing bridge fails the login with a clear error" grep -q "bsm-host" "$WORK/open4.out"
 sleep 2
-check "failure: no logind session is left behind" sh -c "! loginctl list-sessions --no-legend | awk '\$3 == \"bsmt1\"' | grep -q ."
+# The user manager's own `manager` class session lingers for a moment by design.
+check "failure: no user-class logind session is left behind" sh -c "! loginctl list-sessions --no-legend | awk '\$3 == \"bsmt1\" && \$6 == \"user\"' | grep -q ."
 check "failure: no process of the failed login is left" sh -c "! pgrep -u bsmt1 -f 'sleep infinity'"
 systemctl stop bsm-helper.service
 write_config "$LEADER" "$BRIDGE"
