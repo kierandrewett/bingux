@@ -20,8 +20,8 @@ use zeroize::Zeroize;
 use crate::auth::{self, AuthParams};
 use crate::config::Config;
 use crate::greeter::{self, GreeterEnvInputs, GreeterRun};
-use crate::ipc::{self, AuthChildEvent, AuthParentCmd, Incoming, SupCmd, SupEvent};
-use crate::session::{self, SessionParams};
+use crate::ipc::{self, AuthChildEvent, AuthParentCmd, Incoming, StartParams, SupCmd, SupEvent};
+use crate::session::{self, SessionBase};
 use crate::sys::{self, Passwd, Recv};
 use crate::ticket::{RedeemError, Tickets};
 use crate::{cgroup, env as sessenv, logind};
@@ -39,9 +39,19 @@ struct AuthConv {
     uid: u32,
     intent: AuthIntent,
     generation: Generation,
+    /// May become a session (Login or Switch): the child parks after success.
+    startable: bool,
     deadline: Instant,
     /// A prompt is waiting for a response. Responses at any other time are dropped.
     awaiting: bool,
+}
+
+/// An authenticated child waiting for its ticket to be redeemed. It holds the
+/// PAM handle that authenticated the login. Dropping it closes the socket, which
+/// ends the child; there is no pid to signal, so a recycled pid cannot be hit.
+struct Parked {
+    sock: OwnedFd,
+    pid: libc::pid_t,
 }
 
 /// An aborted authentication child that may still be finishing.
@@ -83,7 +93,7 @@ pub struct Server {
     conn: Option<Conn>,
     auths: Vec<AuthConv>,
     dying: Vec<Dying>,
-    tickets: Tickets,
+    tickets: Tickets<Option<Parked>>,
     sessions: Vec<SessionEntry>,
     greeter: Option<GreeterEntry>,
     hints: Vec<HintJob>,
@@ -186,28 +196,40 @@ impl Server {
             if path.extension().and_then(|e| e.to_str()) != Some("sock") {
                 continue;
             }
-            match session::connect_adopt(&path) {
-                Ok(Some(fd)) => {
-                    let _ = sys::set_nonblocking(fd.as_raw_fd(), true);
-                    // The supervisor's hello arrives as the first message; park the
-                    // entry as not yet identified and fill it in when it does.
-                    self.sessions.push(SessionEntry {
-                        session: String::new(),
-                        generation: 0,
-                        req_id: None,
-                        sup_pid: None,
-                        sup_status: None,
-                        sock: fd,
-                        opened: false,
-                        logind_session: None,
-                        start_deadline: Some(Instant::now() + Duration::from_secs(5)),
-                    });
-                }
+            let fd = match session::connect_adopt(&path) {
+                Ok(Some(fd)) => fd,
                 Ok(None) => {
                     let _ = std::fs::remove_file(&path);
+                    continue;
                 }
-                Err(e) => eprintln!("bsm-helper: adoption of {} failed: {e}", path.display()),
-            }
+                Err(e) => {
+                    eprintln!("bsm-helper: adoption of {} failed: {e}", path.display());
+                    continue;
+                }
+            };
+            // The supervisor answers with its `Opened` description. Waiting here
+            // keeps adoption complete before the first request can arrive.
+            let hello = match sys::wait_readable(fd.as_raw_fd(), Duration::from_secs(2)) {
+                Ok(true) => ipc::recv_msg::<SupEvent>(fd.as_raw_fd()),
+                _ => continue,
+            };
+            let Ok(Incoming::Msg(SupEvent::Opened { session, generation, logind_session, .. })) = hello else {
+                eprintln!("bsm-helper: {} did not announce a session", path.display());
+                continue;
+            };
+            let _ = sys::set_nonblocking(fd.as_raw_fd(), true);
+            eprintln!("bsm-helper: adopted session {session} generation {generation}");
+            self.sessions.push(SessionEntry {
+                session,
+                generation,
+                req_id: None,
+                sup_pid: None,
+                sup_status: None,
+                sock: fd,
+                opened: true,
+                logind_session,
+                start_deadline: None,
+            });
         }
     }
 
@@ -272,6 +294,11 @@ impl Server {
                     continue;
                 }
             }
+            // The old peer may have closed an instant ago without poll having
+            // reported it yet: look before turning the newcomer away.
+            if self.conn.is_some() {
+                self.read_requests();
+            }
             if self.conn.is_some() {
                 eprintln!("bsm-helper: rejected a second connection while one is active");
                 continue;
@@ -311,6 +338,11 @@ impl Server {
             let mut buf = vec![0u8; MAX_DATAGRAM + 1];
             let got = sys::recv(fd, &mut buf);
             match got {
+                Ok(Recv::Data(n)) if n > MAX_DATAGRAM => {
+                    buf.zeroize();
+                    self.drop_connection("oversized datagram");
+                    return;
+                }
                 Ok(Recv::Data(n)) => {
                     let parsed = serde_json::from_slice::<HelperRequest>(&buf[..n]);
                     buf.zeroize();
@@ -389,7 +421,11 @@ impl Server {
         if pw.uid < self.cfg.session.min_uid {
             return Err(format!("uid {} is below the minimum {}", pw.uid, self.cfg.session.min_uid));
         }
-        if pw.uid == self.allowed_uid || pw.name == self.cfg.greeter.user || pw.name == self.cfg.socket.allowed_user {
+        // Without root the helper can only ever start its own uid, which is
+        // also the connecting account's: there is no boundary to protect and
+        // the unprivileged test configuration depends on it.
+        let service = pw.uid == self.allowed_uid || pw.name == self.cfg.greeter.user || pw.name == self.cfg.socket.allowed_user;
+        if service && sys::euid() == 0 {
             return Err("service accounts cannot sign in".into());
         }
         Ok(())
@@ -399,12 +435,14 @@ impl Server {
         let done_err = |this: &mut Self, code: ErrorCode, message: &str| {
             this.emit(HelperEvent::AuthDone { req_id, ok: false, code: Some(code), message: message.to_owned(), ticket: None })
         };
+        // Login and Switch authenticate on the login stack, because the same PAM
+        // handle opens the session if the ticket is redeemed; the manager decides
+        // afterwards whether that is a new login or a resume. Unlock has its own
+        // stack with no session phase.
         let expected = match intent {
-            AuthIntent::Login => &self.cfg.pam.login_service,
-            AuthIntent::Unlock | AuthIntent::Switch => &self.cfg.pam.unlock_service,
+            AuthIntent::Login | AuthIntent::Switch => &self.cfg.pam.login_service,
+            AuthIntent::Unlock => &self.cfg.pam.unlock_service,
         };
-        // Switch authenticates another account to log in or resume. It uses the
-        // unlock stack, which has no session phase; OpenSession is Login only.
         if &service != expected {
             return done_err(self, ErrorCode::InvalidArgument, "PAM service not permitted for this intent");
         }
@@ -433,6 +471,15 @@ impl Server {
             confdir: self.cfg.pam.confdir.clone(),
             prompt_timeout: Duration::from_secs(self.cfg.pam.prompt_timeout_secs),
         };
+        // Only logins can become sessions; an unlock child ends with its verdict.
+        let startable = matches!(intent, AuthIntent::Login | AuthIntent::Switch);
+        let base = startable.then(|| SessionBase {
+            pw: pw.clone(),
+            cfg: self.cfg.session.clone(),
+            state_dir: self.cfg.state_dir.clone(),
+            helper_cgroup: self.helper_cgroup.clone(),
+            cgroup_root: PathBuf::from(cgroup::CGROUP_ROOT),
+        });
         let parent_pid = unsafe { libc::getpid() };
         match unsafe { sys::fork() } {
             Ok(0) => {
@@ -443,7 +490,7 @@ impl Server {
                     unsafe { libc::_exit(1) };
                 }
                 sys::set_process_name("bsm-auth");
-                let code = auth::child_main(child_sock.as_raw_fd(), &params);
+                let code = auth::child_main(child_sock, &params, base);
                 unsafe { libc::_exit(code) };
             }
             Ok(pid) => {
@@ -457,6 +504,7 @@ impl Server {
                     uid: pw.uid,
                     intent,
                     generation,
+                    startable,
                     deadline: Instant::now() + Duration::from_secs(self.cfg.pam.conversation_timeout_secs),
                     awaiting: false,
                 });
@@ -474,7 +522,7 @@ impl Server {
             return;
         }
         conv.awaiting = false;
-        let cmd = AuthParentCmd::Response { text: response.to_owned() };
+        let cmd = AuthParentCmd::Response { text: zeroize::Zeroizing::new(response.to_owned()) };
         let _ = ipc::send_msg(conv.sock.as_raw_fd(), &cmd);
     }
 
@@ -507,10 +555,18 @@ impl Server {
                 }
                 Ok(Incoming::Msg(AuthChildEvent::Done { ok, code, message })) => {
                     let conv = self.auths.remove(i);
-                    self.dying.push(Dying { pid: conv.pid, kill_at: Instant::now() + Duration::from_millis(1000) });
                     if ok {
-                        let ticket = self.mint(&conv);
-                        match ticket {
+                        // A login keeps its child, which holds the authenticated PAM
+                        // handle, as the ticket's payload. Any other child is done.
+                        let parked = if conv.startable {
+                            let _ = sys::set_nonblocking(conv.sock.as_raw_fd(), true);
+                            Some(Parked { sock: conv.sock, pid: conv.pid })
+                        } else {
+                            self.dying.push(Dying { pid: conv.pid, kill_at: Instant::now() + Duration::from_millis(1000) });
+                            None
+                        };
+                        let (uid, intent, generation) = (conv.uid, conv.intent, conv.generation);
+                        match self.mint(uid, &conv.user, intent, generation, parked) {
                             Some(t) => self.emit(HelperEvent::AuthDone { req_id, ok: true, code: None, message: String::new(), ticket: Some(t) }),
                             None => self.emit(HelperEvent::AuthDone {
                                 req_id,
@@ -521,6 +577,7 @@ impl Server {
                             }),
                         }
                     } else {
+                        self.dying.push(Dying { pid: conv.pid, kill_at: Instant::now() + Duration::from_millis(1000) });
                         let code = code.or(Some(ErrorCode::PamFailure));
                         self.emit(HelperEvent::AuthDone { req_id, ok: false, code, message, ticket: None });
                     }
@@ -544,10 +601,10 @@ impl Server {
         }
     }
 
-    fn mint(&mut self, conv: &AuthConv) -> Option<u64> {
+    fn mint(&mut self, uid: u32, user: &str, intent: AuthIntent, generation: Generation, parked: Option<Parked>) -> Option<u64> {
         sys::random_u64().ok()?;
         let mut failed = false;
-        let id = self.tickets.mint(Instant::now(), conv.uid, &conv.user, conv.intent, conv.generation, || {
+        let id = self.tickets.mint(Instant::now(), uid, user, intent, generation, parked, || {
             sys::random_u64().unwrap_or_else(|_| {
                 failed = true;
                 1
@@ -555,7 +612,7 @@ impl Server {
         });
         if failed {
             // A predictable value must never become a ticket.
-            let _ = self.tickets.redeem(Instant::now(), id, conv.generation, conv.intent);
+            let _ = self.tickets.redeem(Instant::now(), id, generation, &[intent]);
             return None;
         }
         Some(id)
@@ -579,7 +636,7 @@ impl Server {
                 message: message.to_owned(),
             })
         };
-        let t = match self.tickets.redeem(Instant::now(), ticket, generation, AuthIntent::Login) {
+        let (t, parked) = match self.tickets.redeem(Instant::now(), ticket, generation, &[AuthIntent::Login, AuthIntent::Switch]) {
             Ok(t) => t,
             Err(RedeemError::WrongGeneration) => return fail(self, ErrorCode::StaleGeneration, "ticket belongs to another generation"),
             Err(RedeemError::Unknown | RedeemError::Expired | RedeemError::WrongIntent) => {
@@ -605,47 +662,28 @@ impl Server {
         if let Err(m) = self.account_allowed(&pw) {
             return fail(self, ErrorCode::InvalidAccount, &m);
         }
-        let (parent_sock, child_sock) = match sys::seqpacket_pair() {
-            Ok(p) => p,
-            Err(e) => return fail(self, ErrorCode::Internal, &format!("socketpair: {e}")),
+        // `parked` is the child that holds the authenticated PAM handle. Anything
+        // that went wrong above dropped it, which ended it.
+        let Some(parked) = parked else {
+            return fail(self, ErrorCode::Unauthorised, "ticket cannot open a session");
         };
-        let params = SessionParams {
-            session: session.clone(),
-            generation,
-            pw,
-            service: self.cfg.pam.login_service.clone(),
-            confdir: self.cfg.pam.confdir.clone(),
-            cfg: self.cfg.session.clone(),
-            state_dir: self.cfg.state_dir.clone(),
-            host_socket: socket_path,
-            output_hints,
-            helper_cgroup: self.helper_cgroup.clone(),
-            cgroup_root: PathBuf::from(cgroup::CGROUP_ROOT),
-        };
-        match unsafe { sys::fork() } {
-            Ok(0) => {
-                // Not tied to the helper's life: see `session`.
-                let code = session::supervisor_main(child_sock, params);
-                unsafe { libc::_exit(code) };
-            }
-            Ok(pid) => {
-                drop(child_sock);
-                let _ = sys::set_nonblocking(parent_sock.as_raw_fd(), true);
-                let budget = Duration::from_secs(self.cfg.session.start_timeout_secs + self.cfg.session.runtime_wait_secs);
-                self.sessions.push(SessionEntry {
-                    session,
-                    generation,
-                    req_id: Some(req_id),
-                    sup_pid: Some(pid),
-                    sup_status: None,
-                    sock: parent_sock,
-                    opened: false,
-                    logind_session: None,
-                    start_deadline: Some(Instant::now() + budget),
-                });
-            }
-            Err(e) => fail(self, ErrorCode::Internal, &format!("fork: {e}")),
+        let start = StartParams { session: session.clone(), generation, host_socket: socket_path, output_hints };
+        match ipc::send_msg(parked.sock.as_raw_fd(), &AuthParentCmd::StartSession(start)) {
+            Ok(true) => {}
+            _ => return fail(self, ErrorCode::HelperFailure, "the authenticated process is gone"),
         }
+        let budget = Duration::from_secs(self.cfg.session.start_timeout_secs + self.cfg.session.runtime_wait_secs);
+        self.sessions.push(SessionEntry {
+            session,
+            generation,
+            req_id: Some(req_id),
+            sup_pid: Some(parked.pid),
+            sup_status: None,
+            sock: parked.sock,
+            opened: false,
+            logind_session: None,
+            start_deadline: Some(Instant::now() + budget),
+        });
     }
 
     fn read_session(&mut self, index: usize) {
@@ -825,6 +863,13 @@ impl Server {
             }
         }
         self.dying.retain(|d| d.pid != pid);
+        // A parked child that died is no longer a valid payload; dropping it also
+        // keeps its pid from being used after the kernel recycles it.
+        for slot in self.tickets.payloads_mut() {
+            if slot.as_ref().is_some_and(|p| p.pid == pid) {
+                *slot = None;
+            }
+        }
         if let Some(i) = self.hints.iter().position(|h| h.pid == pid) {
             let job = self.hints.remove(i);
             if status == 0 {

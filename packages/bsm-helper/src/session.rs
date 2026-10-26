@@ -33,15 +33,13 @@ use crate::cgroup;
 use crate::config::{SessionConfig, Template};
 use crate::env::{self, SessionEnvInputs};
 use crate::ipc::{self, Incoming, SupCmd, SupEvent};
-use crate::pam::{Conversation, Interrupt, Pam};
+use crate::pam::Pam;
 use crate::sys::{self, Passwd};
 
 pub struct SessionParams {
     pub session: SessionId,
     pub generation: Generation,
     pub pw: Passwd,
-    pub service: String,
-    pub confdir: Option<PathBuf>,
     pub cfg: SessionConfig,
     pub state_dir: PathBuf,
     pub host_socket: String,
@@ -63,18 +61,28 @@ pub fn valid_session_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 32 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
-struct NoPrompts;
+/// What a parked child needs besides the dynamic `StartParams`.
+#[derive(Clone)]
+pub struct SessionBase {
+    pub pw: Passwd,
+    pub cfg: SessionConfig,
+    pub state_dir: PathBuf,
+    pub helper_cgroup: Option<String>,
+    pub cgroup_root: PathBuf,
+}
 
-impl Conversation for NoPrompts {
-    fn converse(&mut self, kind: bsm_proto::helper::PamPromptKind, text: &str) -> Result<Option<String>, Interrupt> {
-        use bsm_proto::helper::PamPromptKind::*;
-        match kind {
-            // A session stack that asks for input has nobody to answer it.
-            EchoOff | EchoOn => Err(Interrupt::Cancelled),
-            Info | Error => {
-                eprintln!("bsm-helper: pam session message: {text}");
-                Ok(None)
-            }
+impl SessionBase {
+    pub fn with(self, s: crate::ipc::StartParams) -> SessionParams {
+        SessionParams {
+            session: s.session,
+            generation: s.generation,
+            pw: self.pw,
+            cfg: self.cfg,
+            state_dir: self.state_dir,
+            host_socket: s.host_socket,
+            output_hints: s.output_hints,
+            helper_cgroup: self.helper_cgroup,
+            cgroup_root: self.cgroup_root,
         }
     }
 }
@@ -196,10 +204,13 @@ fn runtime_ready(runtime: &Path, uid: u32) -> bool {
     m.is_dir() && m.uid() == uid && runtime.join("bus").exists()
 }
 
-/// Entry point of the forked supervisor. Returns the process exit status.
-pub fn supervisor_main(sock: OwnedFd, p: SessionParams) -> i32 {
-    sys::reset_signals();
-    sys::close_fds_except(&[sock.as_raw_fd()]);
+/// Entry point of the supervisor: the parked authentication child that was
+/// told to start the session. `pam` is the authenticated handle; `phase` makes
+/// its conversation refuse prompts from now on. Returns the exit status.
+pub fn supervisor_main(sock: OwnedFd, pam: Pam, phase: &std::cell::Cell<bool>, p: SessionParams) -> i32 {
+    phase.set(true);
+    // Unlike the authentication child, the supervisor must survive the helper.
+    sys::die_with_parent(0);
     unsafe {
         libc::setsid();
         libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1 as libc::c_ulong, 0, 0, 0);
@@ -213,7 +224,7 @@ pub fn supervisor_main(sock: OwnedFd, p: SessionParams) -> i32 {
         }
     };
     let mut sup = Supervisor { parent: Some(sock), p, listener: None, adopt_path: None };
-    sup.run(sigfd)
+    sup.run(pam, sigfd)
 }
 
 struct Supervisor {
@@ -240,7 +251,7 @@ impl Supervisor {
         1
     }
 
-    fn run(&mut self, sigfd: OwnedFd) -> i32 {
+    fn run(&mut self, mut pam: Pam, sigfd: OwnedFd) -> i32 {
         let pw = self.p.pw.clone();
         let cfg = self.p.cfg.clone();
         let session_id = self.p.session.clone();
@@ -255,10 +266,9 @@ impl Supervisor {
             locale: &locale,
             extra: &cfg.extra_env,
         };
-        let mut pam = match Pam::start(&self.p.service, &pw.name, self.p.confdir.as_deref(), Box::new(NoPrompts)) {
-            Ok(h) => h,
-            Err(e) => return self.fail(ErrorCode::PamFailure, format!("pam_start: {e}")),
-        };
+        // `pam` is the handle that authenticated this login: credentials and the
+        // session are established on it, as PAM requires, and modules that kept
+        // the authentication token (keyring unlock) can use it.
         for var in env::pam_session_vars(&inputs) {
             if let Err(e) = pam.put_env(&var) {
                 return self.fail(ErrorCode::PamFailure, format!("pam_putenv: {e}"));

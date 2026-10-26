@@ -4,6 +4,8 @@
 //! around [`server::Server`]; the library exists so that the pieces can be
 //! tested without root.
 
+extern crate self as bsm_helper;
+
 pub mod auth;
 pub mod cgroup;
 pub mod config;

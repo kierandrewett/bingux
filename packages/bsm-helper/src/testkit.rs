@@ -31,7 +31,7 @@ pub fn drive_prompts(fd: RawFd, answers: &[&str]) -> Vec<AuthChildEvent> {
         let done = matches!(ev, AuthChildEvent::Done { .. });
         if let AuthChildEvent::Prompt { kind: PamPromptKind::EchoOff | PamPromptKind::EchoOn, .. } = &ev {
             let a = answers.next().expect("more prompts than answers");
-            ipc::send_msg(fd, &AuthParentCmd::Response { text: (*a).to_owned() }).unwrap();
+            ipc::send_msg(fd, &AuthParentCmd::Response { text: zeroize::Zeroizing::new((*a).to_owned()) }).unwrap();
         }
         events.push(ev);
         if done {

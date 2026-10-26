@@ -26,13 +26,13 @@ fn write(path: &Path, text: &str, mode: u32) {
 impl TestPam {
     pub fn new() -> TestPam {
         let uid = unsafe { libc::getuid() };
-        let user = crate::sys::getpwuid(uid).unwrap().expect("test user has a passwd entry").name;
+        let user = bsm_helper::sys::getpwuid(uid).unwrap().expect("test user has a passwd entry").name;
         let dir = tempfile::tempdir().unwrap();
         let d = dir.path();
         write(&d.join("banner"), "welcome banner\n", 0o644);
         write(
             &d.join("check.sh"),
-            &format!("#!/bin/sh\nIFS= read -r -d '' pw\n[ \"$pw\" = \"{PASSWORD}\" ]\n"),
+            &format!("#!/bin/sh\n[ \"$PAM_TYPE\" = auth ] || exit 0\nIFS= read -r -d '' pw\n[ \"$pw\" = \"{PASSWORD}\" ]\n"),
             0o755,
         );
         // The session hook records what a session module sees. pam_exec runs it
@@ -48,7 +48,7 @@ impl TestPam {
             0o755,
         );
         let auth = format!(
-            "auth optional pam_echo.so file={d}/banner\nauth requisite pam_exec.so expose_authtok quiet {d}/check.sh\n\
+            "auth optional pam_echo.so file={d}/banner\nauth requisite pam_exec.so expose_authtok quiet {d}/check.sh\nauth required pam_permit.so\n\
              account required pam_permit.so\n",
             d = d.display()
         );
@@ -62,8 +62,6 @@ impl TestPam {
             0o644,
         );
         write(&d.join("bsm-test-deny"), "auth required pam_deny.so\naccount required pam_permit.so\n", 0o644);
-        // A login stack with no authentication at all, for session-start tests
-        // that redeem tickets minted through a real conversation elsewhere.
         TestPam { dir, user, uid }
     }
 

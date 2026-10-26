@@ -10,7 +10,7 @@ use bsm_proto::helper::{MAX_DATAGRAM, PamPromptKind};
 use bsm_proto::state::{Generation, SessionId};
 use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::sys::{self, Recv};
 
@@ -22,20 +22,25 @@ pub enum AuthChildEvent {
     Done { ok: bool, code: Option<ErrorCode>, message: String },
 }
 
+/// What differs per session when a parked, authenticated child is told to
+/// become the session supervisor. Everything else it inherited at fork.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StartParams {
+    pub session: SessionId,
+    pub generation: Generation,
+    pub host_socket: String,
+    pub output_hints: Vec<(u32, u32)>,
+}
+
 /// Helper to authentication child.
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "t", rename_all = "snake_case")]
 pub enum AuthParentCmd {
-    Response { text: String },
+    Response { text: Zeroizing<String> },
     Abort,
-}
-
-impl Drop for AuthParentCmd {
-    fn drop(&mut self) {
-        if let AuthParentCmd::Response { text } = self {
-            text.zeroize();
-        }
-    }
+    /// After a successful authentication of a login: open the session on this
+    /// same PAM handle and run it. Sent only for a redeemed ticket.
+    StartSession(StartParams),
 }
 
 /// Session supervisor to helper.
@@ -90,6 +95,7 @@ pub fn recv_msg<T: DeserializeOwned>(fd: RawFd) -> std::io::Result<Incoming<T>> 
     let mut buf = vec![0u8; MAX_DATAGRAM + 1];
     let r = sys::recv(fd, &mut buf);
     let out = match r {
+        Ok(Recv::Data(n)) if n > MAX_DATAGRAM => Ok(Incoming::Bad),
         Ok(Recv::Data(n)) => match serde_json::from_slice::<T>(&buf[..n]) {
             Ok(m) => Ok(Incoming::Msg(m)),
             Err(_) => Ok(Incoming::Bad),

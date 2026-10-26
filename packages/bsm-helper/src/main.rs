@@ -23,6 +23,10 @@ fn main() -> ExitCode {
 }
 
 fn real_main() -> Result<(), String> {
+    // Passwords pass through this process and its children: no core dumps and no
+    // ptrace by the user processes it later starts. The unit deliberately sets no
+    // LimitCORE, because rlimits are inherited by every desktop it launches.
+    unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0 as libc::c_ulong, 0, 0, 0) };
     let mut config_path = PathBuf::from(DEFAULT_CONFIG_PATH);
     let mut socket: Option<PathBuf> = None;
     let mut uid: Option<u32> = None;
