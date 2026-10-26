@@ -93,6 +93,11 @@ impl PopupFlags {
     /// Shrink the window's content into a rounded card behind the popup, for a
     /// popup that is a whole task and not a small form.
     pub const INSET_VIEWPORT: Self = Self(1 << 4);
+    /// The body lays itself out: it gets the whole panel under the header,
+    /// with no padding and no scrolling of its own, so it can hold a sidebar
+    /// and a list that each scroll. A file chooser or an app picker is this
+    /// shape; a form is not.
+    pub const FILL: Self = Self(1 << 5);
     /// The usual form: Cancel, OK and, on a phone, the grabber. Use it for a
     /// popup whose body declares a primary action.
     pub const FORM: Self = Self(Self::CANCEL.0 | Self::OK.0 | Self::GRABBER.0);
@@ -609,17 +614,25 @@ impl Component for PopupFrame {
                     .child(tabs)
             }))
             .child(divider(&tokens))
-            .child(
-                ScrollView::new()
-                    .drag_scrolling(false)
-                    .width(Size::fill())
-                    .height(Size::flex(1.0))
-                    .child(
-                        rect()
-                            .tw(&tokens, &[w_full(), p(S4)])
-                            .child(crate::focus::trap(entry.content.clone())),
-                    ),
-            );
+            .child(if flags.contains(PopupFlags::FILL) {
+                Element::from(
+                    rect()
+                        .tw(&tokens, &[w_full(), h_flex(), clip()])
+                        .child(crate::focus::trap(entry.content.clone())),
+                )
+            } else {
+                Element::from(
+                    ScrollView::new()
+                        .drag_scrolling(false)
+                        .width(Size::fill())
+                        .height(Size::flex(1.0))
+                        .child(
+                            rect()
+                                .tw(&tokens, &[w_full(), p(S4)])
+                                .child(crate::focus::trap(entry.content.clone())),
+                        ),
+                )
+            });
 
         // A sheet rests with its overhang below the edge and slides up from
         // under it; a pulled sheet follows the pointer down.

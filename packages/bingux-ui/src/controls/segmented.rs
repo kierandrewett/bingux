@@ -1,5 +1,5 @@
 //! The shell's segmented control (`SegmentedControl.qml`), also used as the
-//! tab rail of a popup. Only the selected segment is in the tab order. Left
+//! tab rail of a popup and an app's tab bar (`tabs`). Only the selected segment is in the tab order. Left
 //! and Right arrows move the selection and focus to the neighbouring segment,
 //! and Home and End go to the first and last.
 //!
@@ -21,13 +21,17 @@ use crate::surface::{use_enabled, use_tokens};
 use crate::typography::{BODY, Ink};
 
 /// The shell's segmented control: a quiet `control` rail where only the
-/// selected segment is raised.
+/// selected segment is raised. `tabs` makes the same rail an app's tab bar:
+/// its segments are tabs, it never becomes a dropdown, and `scroll` lets a
+/// narrow container scroll it sideways rather than squeeze the segments.
 #[derive(PartialEq)]
 pub struct Segmented {
     options: Vec<(String, String)>,
     selected: String,
     on_select: EventHandler<String>,
     fill: bool,
+    tabs: bool,
+    scroll: bool,
 }
 
 pub fn segmented(
@@ -40,6 +44,8 @@ pub fn segmented(
         selected: selected.to_string(),
         on_select: on_select.into(),
         fill: false,
+        tabs: false,
+        scroll: false,
     }
 }
 
@@ -51,14 +57,28 @@ impl Segmented {
         self.fill = true;
         self
     }
+
+    /// Use the rail as a tab bar. Tabs switch views, so like a filled rail
+    /// they stay a rail on a phone.
+    pub fn tabs(mut self) -> Self {
+        self.tabs = true;
+        self
+    }
+
+    /// Scroll the rail sideways when its container is too narrow for it.
+    pub fn scroll(mut self) -> Self {
+        self.scroll = true;
+        self
+    }
 }
 
 impl Component for Segmented {
     fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
         // On a phone a row has no room for a track of segments beside its
         // title, so the same choice is a value picker, as the dropdown is.
         // The density is read here, so a change swaps the child below.
-        if is_compact() && !self.fill {
+        if is_compact() && !self.fill && !self.tabs {
             return crate::controls::dropdown::dropdown(
                 self.options.clone(),
                 self.selected.clone(),
@@ -66,13 +86,25 @@ impl Component for Segmented {
             )
             .into_element();
         }
-        SegmentRail {
+        let rail: Element = SegmentRail {
             options: self.options.clone(),
             selected: self.selected.clone(),
             on_select: self.on_select.clone(),
             fill: self.fill,
         }
-        .into_element()
+        .into_element();
+        if !self.scroll {
+            return rail;
+        }
+        rect()
+            .tw(&tokens, &[w_full(), h(Dim::Control)])
+            .child(
+                scroll_x()
+                    .width(Size::fill())
+                    .height(Size::fill())
+                    .child(rail),
+            )
+            .into_element()
     }
 }
 

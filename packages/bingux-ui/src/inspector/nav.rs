@@ -21,6 +21,15 @@ impl Tab {
             Tab::Accessibility => "Accessibility",
         }
     }
+
+    /// The tab's key in the header's segmented control: its title, which is unique.
+    pub fn key(self) -> &'static str {
+        self.title()
+    }
+
+    pub fn from_key(key: &str) -> Option<Tab> {
+        Tab::ALL.into_iter().find(|tab| tab.key() == key)
+    }
 }
 
 /// The shared state. `Copy`, so closures can capture it.

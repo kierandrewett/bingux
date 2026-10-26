@@ -17,6 +17,8 @@ use std::ptr;
 use std::sync::Once;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
 
+mod demangle;
+
 /// Frames kept per sample.
 const MAX_DEPTH: usize = 64;
 /// Sample buffer capacity in `u64` words (16 MiB). Recording stops when full.
@@ -32,8 +34,10 @@ static CURSOR: AtomicUsize = AtomicUsize::new(0);
 static FULL: AtomicBool = AtomicBool::new(false);
 static TIMER: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 
-/// One sampled call stack, root first, leaf last.
+/// One sampled call stack, root first, leaf last, and when it was taken on the
+/// [`now_ns`] clock.
 pub struct Sample {
+    pub t_ns: u64,
     pub stack: Vec<Box<str>>,
 }
 
@@ -142,7 +146,7 @@ pub fn stop() -> Profile {
     let mut samples = Vec::new();
     let mut at = 0;
     while at + 2 <= used {
-        // raw[at] is the sample time; the tab shows counts, not times.
+        let t_ns = raw[at];
         let depth = raw[at + 1] as usize;
         if at + 2 + depth > used {
             break;
@@ -157,7 +161,7 @@ pub fn stop() -> Profile {
             stack.pop();
         }
         if !stack.is_empty() {
-            samples.push(Sample { stack });
+            samples.push(Sample { t_ns, stack });
         }
         at += 2 + depth;
     }
@@ -390,8 +394,12 @@ fn le_u64(b: &[u8], o: usize) -> Option<u64> {
     Some(u64::from_le_bytes(b.get(o..o + 8)?.try_into().ok()?))
 }
 
-/// Demangles legacy Rust (`_ZN…17h<hash>E`) symbols; anything else is returned as-is.
+/// Demangles Rust symbols, v0 (`_R…`) and legacy (`_ZN…17h<hash>E`); anything
+/// else is returned as-is.
 fn demangle(raw: &str) -> String {
+    if let Some(name) = demangle::demangle(raw) {
+        return name;
+    }
     let Some(mut rest) = raw.strip_prefix("_ZN") else {
         return raw.to_string();
     };

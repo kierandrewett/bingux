@@ -1,0 +1,13 @@
+[package]
+name = "bingux-files"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "Bingux filesystem model and file chooser logic: listing, places, filters, selection; no UI"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+libc = "0.2"

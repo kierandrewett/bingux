@@ -6,7 +6,7 @@
 
 use freya::prelude::*;
 
-use crate::component::ComponentName;
+use crate::component::{ComponentName, Prop, Published};
 use crate::controls::button::action_button;
 use crate::controls::progress::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
@@ -212,6 +212,19 @@ impl Component for Group {
             shown,
             rect()
                 .component("Group")
+                .published(|| {
+                    let call = match &self.title {
+                        Some(title) => {
+                            Published::call("Group::titled").arg(Prop::text("title", title.clone()))
+                        }
+                        None => Published::call("Group::new"),
+                    };
+                    call.maybe_method(
+                        self.description
+                            .as_ref()
+                            .map(|text| Prop::text("description", text.clone())),
+                    )
+                })
                 .tw(&tokens, GROUP)
                 .maybe_child(heading)
                 .child(rect().tw(&tokens, BOX).children(children)),

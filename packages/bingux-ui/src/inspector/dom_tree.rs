@@ -315,11 +315,22 @@ impl Component for DomTree {
         let crumbs = rect()
             .tw(
                 &tokens,
-                &[w_full(), flex_row(), items(Align::Center), gap(S1)],
+                &[
+                    w_full(),
+                    flex_row(),
+                    grow_children(),
+                    items(Align::Center),
+                    gap(S1),
+                    pr(S2),
+                ],
             )
             .child(rect().tw(&tokens, &[w_flex(), clip()]).child(breadcrumb))
             .child(toggle.into_element());
-        root.child(body).child(crumbs)
+        // The hairline is its own box: the crumbs' surface fill would paint
+        // over a border on the row.
+        root.child(body)
+            .child(rect().tw(&tokens, &[w_full(), h(Dim::Hairline), bg(Paint::Separator)]))
+            .child(crumbs)
     }
 }
 

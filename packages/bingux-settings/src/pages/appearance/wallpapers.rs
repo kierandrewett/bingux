@@ -16,8 +16,8 @@ use crate::system::{self, background};
 use crate::theme::Tokens;
 use crate::ui::typography::BODY;
 use crate::ui::{
-    Group, Icon, Overlays, Status, dropdown, icon, search_field, status, tile_rows, use_overlays,
-    use_tokens,
+    Group, Icon, Overlays, Status, Window, dropdown, icon, search_field, status, tile_rows,
+    use_overlays, use_tokens, use_window,
 };
 use bingux_ui::style::*;
 
@@ -205,6 +205,7 @@ impl Component for WallpaperPicker {
     fn render(&self) -> impl IntoElement {
         let model: State<Option<Loaded>> = system::cached("appearance");
         let overlays: Overlays = use_overlays();
+        let window = use_window();
         let tokens = use_tokens();
         let pictures = use_state::<Option<Vec<Picture>>>(|| None);
         let source = use_state(initial_source);
@@ -245,7 +246,7 @@ impl Component for WallpaperPicker {
 
         let mut rows: Vec<Element> = vec![rect().tw(&tokens, ROW).child(toolbar).into()];
         let Some(loaded) = pictures.read().clone() else {
-            let mut tiles: Vec<Element> = vec![add_tile(&tokens, model, overlays)];
+            let mut tiles: Vec<Element> = vec![add_tile(&tokens, model, overlays, window)];
             if !searching && source_key != SOURCE_YOURS {
                 tiles.push(placeholder_tile(&tokens));
             }
@@ -260,7 +261,7 @@ impl Component for WallpaperPicker {
         let all = with_current(loaded, &current);
         let shown = matching(&all, &source_key, &query_text);
 
-        let mut tiles: Vec<Element> = vec![add_tile(&tokens, model, overlays)];
+        let mut tiles: Vec<Element> = vec![add_tile(&tokens, model, overlays, window)];
         if !searching && source_key != SOURCE_YOURS {
             tiles.push(system_tile(&tokens, model, overlays, current.is_empty()));
         }
@@ -308,7 +309,12 @@ fn placeholder_tile(tokens: &Tokens) -> Element {
         .into()
 }
 
-fn add_tile(tokens: &Tokens, model: State<Option<Loaded>>, overlays: Overlays) -> Element {
+fn add_tile(
+    tokens: &Tokens,
+    model: State<Option<Loaded>>,
+    overlays: Overlays,
+    window: Window,
+) -> Element {
     let face = rect()
         .tw(tokens, &[w_full(), h_full(), center(), bg(Paint::Control)])
         .child(icon(
@@ -320,7 +326,7 @@ fn add_tile(tokens: &Tokens, model: State<Option<Loaded>>, overlays: Overlays) -
         tokens,
         thumb(tokens, false, face.into()),
         "Add picture...",
-        move |_| choose_wallpaper(model, overlays),
+        move |_| choose_wallpaper(model, overlays, window),
     )
 }
 

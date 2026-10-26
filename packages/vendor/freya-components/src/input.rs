@@ -474,6 +474,15 @@ impl Component for Input {
                     .with_select_all_on_double_click(is_masked)
             },
         );
+        // An autofocused field that already holds text starts with the caret at its end, so typing appends.
+        let start_at_end = self.auto_focus;
+        use_hook(move || {
+            if start_at_end {
+                let mut editor = editable.editor_mut().write();
+                let end = editor.rope().len_chars();
+                editor.move_cursor_to(end);
+            }
+        });
         let mut is_dragging = use_state(|| false);
         let mut value = self.value.clone();
 

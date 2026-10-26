@@ -27,6 +27,8 @@ bytes = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 libc = "0.2"
+# The filesystem model behind bingux_ui::files (no UI of its own).
+bingux-files = { path = "../bingux-files" }
 
 # Desktop scroll feel; see ../vendor/README.md.
 [patch.crates-io]

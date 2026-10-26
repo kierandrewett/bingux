@@ -14,6 +14,7 @@ pub mod app;
 pub mod app_icon;
 pub mod charts;
 pub mod controls;
+pub mod files;
 pub mod focus;
 pub mod group;
 pub mod icons;
@@ -43,6 +44,7 @@ pub mod prelude {
         Curve, Segment, Series, Unit, bar_chart, donut, line_chart, ring, sparkline,
     };
     pub use crate::controls::*;
+    pub use crate::files::{self, ChooserRequest, Chosen};
     pub use crate::group::{
         Group, Status, StatusBlock, action_row, caption, centered_caption, form_row, heading,
         section_label, skeleton, skeleton_row, skeleton_shape, status,

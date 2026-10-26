@@ -47,6 +47,24 @@ fn main() {
         println!("[snapshot] wrote {path}");
     }
 
+    // The Forms page at phone width: a window under NARROW_BELOW is compact
+    // density, so the fields stack under their titles.
+    let path = format!("{out}/forms-phone.png");
+    snapshot(
+        move || {
+            Element::from(Themed {
+                child: WindowHost::new(Gallery {
+                    initial: Page::Forms,
+                })
+                .into(),
+            })
+        },
+        (390.0, 800.0),
+        700,
+        &path,
+    );
+    println!("[snapshot] wrote {path}");
+
     // Interactive states: the dropdown open and an option hovered. The
     // frame is taller so the Choice group is in view.
     let path = format!("{out}/controls-dropdown.png");

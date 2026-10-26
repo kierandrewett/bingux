@@ -353,6 +353,42 @@ fn checker_cells(mut body: Rect, width: f32, tokens: Tokens) -> Rect {
     body
 }
 
+/// A colour as a square chip of `size` pixels, with a two-by-two checkerboard
+/// behind it, so a translucent colour shows its alpha against a visible
+/// pattern. Every swatch of a colour that can be transparent uses this.
+pub fn colour_chip(tokens: Tokens, colour: Color, size: f32) -> impl IntoElement {
+    let half = size / 2.0;
+    let light = Paint::Knob.color(&tokens);
+    let dark = Paint::Control.color(&tokens);
+    let mut chip = rect().width(Size::px(size)).height(Size::px(size)).tw(
+        &tokens,
+        &[rounded(Radius::Pill), border(Line::Ring(Paint::Separator))],
+    );
+    for row in 0..2 {
+        for col in 0..2 {
+            let tone = if (row + col) % 2 == 0 { light } else { dark };
+            chip = chip.child(
+                rect()
+                    .position(
+                        Position::new_absolute()
+                            .left(col as f32 * half)
+                            .top(row as f32 * half),
+                    )
+                    .width(Size::px(half))
+                    .height(Size::px(half))
+                    .tw(&tokens, &[fill(tone)]),
+            );
+        }
+    }
+    chip.child(
+        rect()
+            .position(Position::new_absolute().left(0.0).top(0.0))
+            .width(Size::px(size))
+            .height(Size::px(size))
+            .tw(&tokens, &[rounded(Radius::Pill), fill(colour)]),
+    )
+}
+
 /// A round handle at an offset inside its parent, outlined so it reads on any
 /// colour.
 fn thumb_handle(tokens: Tokens, x: f32, y: f32, value: Color) -> impl IntoElement {

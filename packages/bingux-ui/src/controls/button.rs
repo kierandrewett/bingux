@@ -5,7 +5,7 @@ use super::press::use_press;
 use super::tooltip::hover_tip;
 use freya::prelude::*;
 
-use crate::component::ComponentName;
+use crate::component::{ComponentName, Prop, Published};
 use crate::controls::progress::{SpinnerSize, spinner};
 use crate::focus::{press_focus, use_focus_core};
 use crate::icons::{self, Icon};
@@ -138,6 +138,13 @@ impl Component for ActionButton {
         };
         rect()
             .component("ActionButton")
+            .published(|| {
+                Published::call("action_button")
+                    .arg(Prop::text("text", self.text.clone()))
+                    .maybe_method(self.accent.then(|| Prop::flag("suggested", true)))
+                    .maybe_method(self.destructive.then(|| Prop::flag("destructive", true)))
+                    .maybe_method((!self.enabled).then(|| Prop::flag("enabled", false)))
+            })
             .a11y_id(a11y_id)
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)
@@ -213,6 +220,10 @@ impl Component for ActionButton {
                     .max_lines(1),
             )
             .focusable(focus(), Radius::Control)
+            // The focus wrapper is what the row lays out, so it grows too.
+            .maybe(self.grow, |wrapper| {
+                wrapper.tw(&tokens, &[w_flex(), grow_children()])
+            })
     }
 }
 

@@ -27,18 +27,27 @@
 //!
 //! Keyboard: a chart with points is focusable. Left and Right move between
 //! points, Home and End jump to the ends, and the tooltip follows.
+//!
+//! Two charts are not about series: [`timeline_chart`] places bars along a time
+//! axis with a limit line and a draggable range (frame times, round trips),
+//! and [`flame_graph`] draws a tree of weighted parts as stacked bars (where
+//! CPU time goes, which folders hold the bytes).
 
 mod data;
+mod flame;
 mod format;
 mod geometry;
 mod palette;
 mod path;
 mod scale;
 mod svg;
+mod timeline;
 mod view;
 
 pub use data::{Point, Segment, Series, SeriesColour};
+pub use flame::{FlameGraph, FlameTree, flame_graph};
 pub use format::Unit;
+pub use timeline::{Bar, TimelineChart, timeline_chart};
 pub use view::{
     BarChart, Curve, Donut, LineChart, Ring, Sparkline, bar_chart, donut, line_chart, ring,
     sparkline,

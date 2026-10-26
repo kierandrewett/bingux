@@ -1054,7 +1054,8 @@ fn confirm_remove_folder(ctx: Ctx, folder: String, remaining: Vec<String>) {
     );
 }
 
-/// Adds a folder to the file search roots. The folder is chosen with the system file picker.
+/// Adds a folder to the file search roots. The folder is chosen with the
+/// Bingux file chooser.
 #[derive(PartialEq)]
 struct FileRootAdd {
     roots: Vec<String>,
@@ -1065,24 +1066,30 @@ impl Component for FileRootAdd {
     fn render(&self) -> impl IntoElement {
         let roots = self.roots.clone();
         let ctx = self.ctx;
+        let window = use_window();
 
         let choose = move |_| {
             let roots = roots.clone();
-            background_then(
-                || {
-                    // The folder check stats the disk, so it runs here, not on the UI thread.
-                    system::pick_path("Choose a folder", system::Pick::Folder)
-                        .map(|picked| picked.map(|path| (searchable(&path), path)))
-                },
-                move |result| match result {
-                    Ok(Some((true, path))) => add_folder(ctx, &roots, path),
-                    Ok(Some((false, _))) => {
-                        ctx.overlays.toast("That folder cannot be searched.");
-                    }
-                    Ok(None) => {}
-                    Err(failure) => {
-                        ctx.overlays.toast(failure.0);
-                    }
+            crate::ui::files::choose(
+                window,
+                crate::ui::files::ChooserRequest::select_folder().title("Choose a folder"),
+                move |chosen| {
+                    let Some(path) = chosen.and_then(|chosen| chosen.paths.into_iter().next())
+                    else {
+                        return;
+                    };
+                    let path = path.to_string_lossy().into_owned();
+                    background_then(
+                        // The folder check stats the disk, so it runs here, not on the UI thread.
+                        move || (searchable(&path), path),
+                        move |(searchable, path)| {
+                            if searchable {
+                                add_folder(ctx, &roots, path);
+                            } else {
+                                ctx.overlays.toast("That folder cannot be searched.");
+                            }
+                        },
+                    );
                 },
             );
         };

@@ -7,12 +7,15 @@ use std::collections::HashMap;
 use freya::prelude::*;
 use freya::torin::prelude::{Alignment, Direction, Gaps, Size};
 use freya_core::accessibility::id::AccessibilityId;
+use freya_core::data::TextStyleData;
 use freya_core::accessibility::focusable::Focusable;
 use freya_core::elements::label::LabelElement;
 use freya_core::elements::paragraph::ParagraphElement;
 use freya_core::elements::rect::RectElement;
 use freya_core::node_id::NodeId;
 use freya_core::tree::Tree;
+
+use crate::component::Published;
 
 /// What kind of element a node is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -58,6 +61,14 @@ pub struct Props {
     pub corner_radius: f32,
     pub font_size: Option<f32>,
     pub text_color: Option<Color>,
+    pub font_weight: Option<FontWeight>,
+    /// Whether the text is set in the monospace face.
+    pub mono: bool,
+    pub opacity: Option<f32>,
+    /// Whether the box clips its children.
+    pub clip: bool,
+    pub shadows: Vec<Shadow>,
+    pub borders: Vec<Border>,
 }
 
 /// The accessibility facts of a node.
@@ -75,6 +86,8 @@ pub struct A11y {
     pub id: Option<AccessibilityId>,
     /// Whether the window's keyboard focus is on this element.
     pub focused: bool,
+    /// The call that built the component, if it published one.
+    pub published: Option<Published>,
 }
 
 /// One element of the tree.
@@ -265,6 +278,14 @@ fn visit(tree: &Tree, id: NodeId, parent: Option<u64>, out: &mut Snapshot) -> Op
             node.a11y = a11y_of(&rect.accessibility);
         } else if let Some(paragraph) = any.downcast_ref::<ParagraphElement>() {
             node.kind = Kind::Paragraph;
+            node.text = Some(
+                paragraph
+                    .spans
+                    .iter()
+                    .map(|span| span.text.as_ref())
+                    .collect(),
+            );
+            node.props = Some(paragraph_props(paragraph));
             node.a11y = a11y_of(&paragraph.accessibility);
         }
     }
@@ -307,60 +328,70 @@ fn a11y_of(data: &freya_core::data::AccessibilityData) -> A11y {
         selected: data.builder.is_selected(),
         id: data.a11y_id,
         focused: false,
+        published: data.builder.author_id().and_then(Published::decode),
+    }
+}
+
+/// The values every element kind shares: its layout, and the text style it
+/// declares or passes down.
+fn base_props(layout: &freya::torin::node::Node, text: &TextStyleData) -> Props {
+    Props {
+        width: size_text(&layout.width),
+        height: size_text(&layout.height),
+        min_width: size_text(&layout.minimum_width),
+        min_height: size_text(&layout.minimum_height),
+        max_width: size_text(&layout.maximum_width),
+        max_height: size_text(&layout.maximum_height),
+        padding: gaps(&layout.padding),
+        margin: gaps(&layout.margin),
+        gap: layout.spacing.get(),
+        direction: direction_key(layout.direction),
+        main_align: alignment_key(&layout.main_alignment),
+        cross_align: alignment_key(&layout.cross_alignment),
+        font_size: text.font_size.map(f32::from),
+        text_color: match &text.color {
+            Some(Fill::Color(color)) => Some(*color),
+            _ => None,
+        },
+        font_weight: text.font_weight,
+        mono: text
+            .font_families
+            .iter()
+            .any(|family| family.as_ref() == crate::typography::mono_family()),
+        ..Props::default()
     }
 }
 
 fn rect_props(rect: &RectElement) -> Props {
-    let layout = &rect.layout.layout;
     let background = match &rect.style.background {
         Fill::Color(color) => Some(*color),
         _ => None,
     };
     Props {
-        width: size_text(&layout.width),
-        height: size_text(&layout.height),
-        min_width: size_text(&layout.minimum_width),
-        min_height: size_text(&layout.minimum_height),
-        max_width: size_text(&layout.maximum_width),
-        max_height: size_text(&layout.maximum_height),
-        padding: gaps(&layout.padding),
-        margin: gaps(&layout.margin),
-        gap: layout.spacing.get(),
-        direction: direction_key(layout.direction),
-        main_align: alignment_key(&layout.main_alignment),
-        cross_align: alignment_key(&layout.cross_alignment),
         background,
         corner_radius: f32::from(rect.style.corner_radius.top_left()),
-        font_size: rect.text_style_data.font_size.map(f32::from),
-        text_color: match &rect.text_style_data.color {
-            Some(Fill::Color(color)) => Some(*color),
-            _ => None,
-        },
+        opacity: rect.effect.as_ref().and_then(|effect| effect.opacity),
+        clip: rect
+            .effect
+            .as_ref()
+            .is_some_and(|effect| effect.overflow == Overflow::Clip),
+        shadows: rect.style.shadows.clone(),
+        borders: rect.style.borders.clone(),
+        ..base_props(&rect.layout.layout, &rect.text_style_data)
     }
 }
 
 fn label_props(label: &LabelElement) -> Props {
-    let layout = &label.layout.layout;
     Props {
-        width: size_text(&layout.width),
-        height: size_text(&layout.height),
-        min_width: size_text(&layout.minimum_width),
-        min_height: size_text(&layout.minimum_height),
-        max_width: size_text(&layout.maximum_width),
-        max_height: size_text(&layout.maximum_height),
-        padding: gaps(&layout.padding),
-        margin: gaps(&layout.margin),
-        gap: layout.spacing.get(),
-        direction: direction_key(layout.direction),
-        main_align: alignment_key(&layout.main_alignment),
-        cross_align: alignment_key(&layout.cross_alignment),
-        background: None,
-        corner_radius: 0.0,
-        font_size: label.text_style_data.font_size.map(f32::from),
-        text_color: match &label.text_style_data.color {
-            Some(Fill::Color(color)) => Some(*color),
-            _ => None,
-        },
+        opacity: label.effect.as_ref().and_then(|effect| effect.opacity),
+        ..base_props(&label.layout.layout, &label.text_style_data)
+    }
+}
+
+fn paragraph_props(paragraph: &ParagraphElement) -> Props {
+    Props {
+        opacity: paragraph.effect.as_ref().and_then(|effect| effect.opacity),
+        ..base_props(&paragraph.layout.layout, &paragraph.text_style_data)
     }
 }
 

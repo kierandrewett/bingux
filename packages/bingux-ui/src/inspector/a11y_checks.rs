@@ -75,6 +75,34 @@ impl IssueKind {
         IssueKind::Performance,
     ];
 
+    /// Why problems of this kind matter, said once for the group.
+    pub fn why(self) -> &'static str {
+        match self {
+            IssueKind::Naming => {
+                "A screen reader announces a control by its role and name. An unnamed control says nothing useful."
+            }
+            IssueKind::Focus => {
+                "Keyboard and switch users can only operate controls that take focus."
+            }
+            IssueKind::TargetSize => {
+                "Small targets are hard to hit with a pointer, a finger or a switch."
+            }
+            IssueKind::Contrast => "Low contrast text is hard to read, especially with low vision.",
+            IssueKind::Geometry => {
+                "An element with no size, or outside the window, cannot be seen or reached."
+            }
+            IssueKind::LayoutShift => {
+                "Content that moves under the pointer or focus causes mis-clicks and loses the user's place."
+            }
+            IssueKind::Motion => {
+                "Long animations, and any animation while reduced motion is on, unsettle or delay users."
+            }
+            IssueKind::Performance => {
+                "Work done on every frame, and slow frames, make the interface stutter and drain battery."
+            }
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             IssueKind::LayoutShift => "Layout shift",
@@ -117,8 +145,6 @@ pub struct Issue {
     pub target: String,
     /// What is wrong.
     pub what: String,
-    /// Why it matters.
-    pub why: &'static str,
     /// How to fix it.
     pub fix: &'static str,
 }
@@ -284,7 +310,6 @@ fn node_checks(snapshot: &Snapshot, node: &Node, history: &FrameHistory, out: &m
             node: Some(node.id),
             target: describe(snapshot, Some(node.id)),
             what: what.into(),
-            why: "A screen reader announces an unnamed control as nothing useful, so the user cannot tell what it does.",
             fix: "Give the element a role and an accessible name.",
         });
     }
@@ -297,7 +322,6 @@ fn node_checks(snapshot: &Snapshot, node: &Node, history: &FrameHistory, out: &m
             node: Some(node.id),
             target: describe(snapshot, Some(node.id)),
             what: "Interactive control cannot take keyboard focus".into(),
-            why: "Keyboard and switch users cannot reach or operate it.",
             fix: "Make the control focusable and give it a visible focus ring.",
         });
     }
@@ -310,7 +334,6 @@ fn node_checks(snapshot: &Snapshot, node: &Node, history: &FrameHistory, out: &m
             node: Some(node.id),
             target: describe(snapshot, Some(node.id)),
             what: "Button has no name and no text, so it is probably icon-only".into(),
-            why: "A reader announces it without saying what it does.",
             fix: "Give it an accessible name, or a text label. A tooltip is not read by every reader.",
         });
     }
@@ -323,7 +346,6 @@ fn node_checks(snapshot: &Snapshot, node: &Node, history: &FrameHistory, out: &m
             node: Some(node.id),
             target: describe(snapshot, Some(node.id)),
             what: "Image has no alternative text".into(),
-            why: "A reader cannot describe the image, so its meaning is lost.",
             fix: "Give the image a name that says what it shows, or hide it from readers if it is decoration.",
         });
     }
@@ -337,7 +359,6 @@ fn node_checks(snapshot: &Snapshot, node: &Node, history: &FrameHistory, out: &m
                 node: Some(node.id),
                 target: describe(snapshot, Some(node.id)),
                 what: "Interactive element has zero width or height".into(),
-                why: "It cannot be seen or pressed.",
                 fix: "Give it a size, or remove it when it is not in use.",
             });
         } else {
@@ -351,7 +372,6 @@ fn node_checks(snapshot: &Snapshot, node: &Node, history: &FrameHistory, out: &m
                         "Target is {width:.0} × {height:.0} px; the minimum is {:.0} × {:.0} px",
                         MIN_TARGET, MIN_TARGET
                     ),
-                    why: "Small targets are hard to hit with a pointer, a finger or a switch.",
                     fix: "Grow the hit area to at least 24 × 24 px, even if the visible mark is smaller.",
                 });
             }
@@ -367,7 +387,6 @@ fn node_checks(snapshot: &Snapshot, node: &Node, history: &FrameHistory, out: &m
                         node: Some(node.id),
                         target: describe(snapshot, Some(node.id)),
                         what: "Interactive element lies outside the window".into(),
-                        why: "A user cannot reach it. Content in a scroll region can show up here too.",
                         fix: "Bring it into view, or check that it is meant to be off screen.",
                     });
                 }
@@ -409,7 +428,6 @@ fn contrast_check(snapshot: &Snapshot, node: &Node, out: &mut Vec<Issue>) {
             node: Some(node.id),
             target: describe(snapshot, Some(node.id)),
             what: format!("Text contrast is {ratio:.2}:1; it needs {needed:.1}:1"),
-            why: "Low contrast text is hard to read, especially for people with low vision.",
             fix: "Darken the text or lighten the background until the ratio meets the minimum.",
         });
     }
@@ -437,7 +455,6 @@ fn sibling_checks(snapshot: &Snapshot, out: &mut Vec<Issue>) {
                         node: Some(first.id),
                         target: describe(snapshot, Some(first.id)),
                         what: format!("{twins} sibling controls share the name \"{name}\""),
-                        why: "A reader lists them as identical, so the user cannot choose between them.",
                         fix: "Give each control a name that says what it does, or group them under a label.",
                     });
                 }
@@ -458,8 +475,10 @@ fn sibling_checks(snapshot: &Snapshot, out: &mut Vec<Issue>) {
                         severity: Severity::Warning,
                         node: Some(first.id),
                         target: describe(snapshot, Some(first.id)),
-                        what: format!("Overlaps the interactive sibling {}", describe(snapshot, Some(second.id))),
-                        why: "The pointer hits whichever is on top, so one of them cannot be reached.",
+                        what: format!(
+                            "Overlaps the interactive sibling {}",
+                            describe(snapshot, Some(second.id))
+                        ),
                         fix: "Separate the controls, or make one of them a child of the other.",
                     });
                 }
@@ -484,7 +503,6 @@ fn history_checks(snapshot: &Snapshot, history: &FrameHistory, out: &mut Vec<Iss
                 "Moved or resized {} time(s) after first paint with no input in the last 500 ms",
                 run.len()
             ),
-            why: "Content that moves under the pointer or focus causes mis-clicks and loses the user's place.",
             fix: "Reserve space for content that loads later, and animate with transforms instead of layout.",
         });
     }
@@ -498,7 +516,6 @@ fn history_checks(snapshot: &Snapshot, history: &FrameHistory, out: &mut Vec<Iss
                 node: target,
                 target: describe(snapshot, target),
                 what: "Animation runs while reduced motion is on".into(),
-                why: "People who turn on reduced motion are often made unwell by movement on screen.",
                 fix: "Skip or shorten the animation when reduced motion is on.",
             });
         }
@@ -509,7 +526,6 @@ fn history_checks(snapshot: &Snapshot, history: &FrameHistory, out: &mut Vec<Iss
                 node: target,
                 target: describe(snapshot, target),
                 what: format!("Animation lasts {} ms", animation.duration.as_millis()),
-                why: "A long animation holds the user's attention and delays the next action.",
                 fix: "Keep UI transitions under 500 ms.",
             });
         }
@@ -522,7 +538,6 @@ fn history_checks(snapshot: &Snapshot, history: &FrameHistory, out: &mut Vec<Iss
             node: Some(id),
             target: describe(snapshot, Some(id)),
             what: format!("Re-rendered on {count} idle frames while nothing was happening"),
-            why: "Work done on every frame keeps the CPU busy and drains battery.",
             fix: "Memoise the component, or move the state it reads out of the render path.",
         });
     }
@@ -549,7 +564,6 @@ fn history_checks(snapshot: &Snapshot, history: &FrameHistory, out: &mut Vec<Iss
                 slow.len(),
                 history.frames.len()
             ),
-            why: "Frames over 50 ms make the interface stutter and feel unresponsive.",
             fix: "Profile the slow frames and move the heavy work out of the render path.",
         });
     }
@@ -610,7 +624,8 @@ fn first_in_chain<T>(
     None
 }
 
-/// `node`'s description for a reader: its kind, id, and name or text.
+/// `node`'s description for a reader: the component that built it (else its
+/// role), its id, and its name or text.
 fn describe(snapshot: &Snapshot, id: Option<u64>) -> String {
     let Some(id) = id else {
         return "Application window".into();
@@ -632,9 +647,9 @@ fn describe(snapshot: &Snapshot, id: Option<u64>) -> String {
             } else {
                 ""
             };
-            format!("{} #{id} \"{shown}{ellipsis}\"", node.kind.name())
+            format!("{} #{id} \"{shown}{ellipsis}\"", node.title())
         }
-        None => format!("{} #{id}", node.kind.name()),
+        None => format!("{} #{id}", node.title()),
     }
 }
 

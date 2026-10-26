@@ -1,11 +1,16 @@
-//! Bundled Adwaita symbolic icons, embedded in the binary at compile time.
+//! The Bingux icon set, embedded in the binary at compile time.
 //!
-//! The SVG files live in `icons/` (see `icons/COPYING` for their licence).
-//! Each icon is recoloured at draw time so it follows the active theme.
+//! The icons are the rounded Phosphor fork of the chat app (`@chat/icons`),
+//! snapped to a 16 px pixel grid so they render as crisply as GNOME's symbolic
+//! icons. The SVG files live in `icons/` and are generated from
+//! `scripts/icons/src` by `make icons`; see `icons/COPYING` for the licence.
+//! Each icon is one fill path, recoloured at draw time so it follows the
+//! active theme.
 
 use freya::prelude::*;
 
-/// Every bundled icon. Names follow the Adwaita symbolic icon they embed.
+/// Every bundled icon. Names follow the Adwaita symbolic icon each one replaces,
+/// so the QML shell and the Rust apps share one vocabulary.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icon {
     GoPrevious,
@@ -124,11 +129,21 @@ pub enum Icon {
     AddOn,
     VideoGeneric,
     ImageGeneric,
+    UserHome,
+    FolderDocuments,
+    FolderMusic,
+    FolderPictures,
+    FolderVideos,
+    DriveHarddisk,
+    TextXGeneric,
+    AudioXGeneric,
+    PackageXGeneric,
+    FolderNew,
 }
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 116] = [
+    pub const ALL: [Icon; 126] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -245,6 +260,16 @@ impl Icon {
         Self::AddOn,
         Self::VideoGeneric,
         Self::ImageGeneric,
+        Self::UserHome,
+        Self::FolderDocuments,
+        Self::FolderMusic,
+        Self::FolderPictures,
+        Self::FolderVideos,
+        Self::DriveHarddisk,
+        Self::TextXGeneric,
+        Self::AudioXGeneric,
+        Self::PackageXGeneric,
+        Self::FolderNew,
     ];
 
     /// The embedded SVG source for this icon.
@@ -304,7 +329,7 @@ impl Icon {
             Self::Gamepad => include_bytes!("../icons/input-gaming-symbolic.svg"),
             Self::Phone => include_bytes!("../icons/phone-symbolic.svg"),
             Self::Pause => include_bytes!("../icons/media-playback-pause-symbolic.svg"),
-            // Adwaita's object picker icon, as GTK's own inspector uses.
+            // The element picker, as GTK's own inspector uses.
             Self::Inspect => include_bytes!("../icons/find-location-symbolic.svg"),
             Self::NetworkWirelessSignalNone => {
                 include_bytes!("../icons/network-wireless-signal-none-symbolic.svg")
@@ -403,6 +428,16 @@ impl Icon {
             Self::AddOn => include_bytes!("../icons/addon-symbolic.svg"),
             Self::VideoGeneric => include_bytes!("../icons/video-generic-symbolic.svg"),
             Self::ImageGeneric => include_bytes!("../icons/image-generic-symbolic.svg"),
+            Self::UserHome => include_bytes!("../icons/user-home-symbolic.svg"),
+            Self::FolderDocuments => include_bytes!("../icons/folder-documents-symbolic.svg"),
+            Self::FolderMusic => include_bytes!("../icons/folder-music-symbolic.svg"),
+            Self::FolderPictures => include_bytes!("../icons/folder-pictures-symbolic.svg"),
+            Self::FolderVideos => include_bytes!("../icons/folder-videos-symbolic.svg"),
+            Self::DriveHarddisk => include_bytes!("../icons/drive-harddisk-symbolic.svg"),
+            Self::TextXGeneric => include_bytes!("../icons/text-x-generic-symbolic.svg"),
+            Self::AudioXGeneric => include_bytes!("../icons/audio-x-generic-symbolic.svg"),
+            Self::PackageXGeneric => include_bytes!("../icons/package-x-generic-symbolic.svg"),
+            Self::FolderNew => include_bytes!("../icons/folder-new-symbolic.svg"),
         }
     }
 }

@@ -10,6 +10,7 @@
 mod a11y;
 mod a11y_checks;
 mod box_model;
+mod details;
 mod dom_tree;
 mod editor;
 mod highlight;
@@ -17,9 +18,9 @@ mod nav;
 mod overrides;
 mod perf;
 mod perf_sample;
+mod props;
 mod shot;
 mod snapshot;
-mod styles;
 mod toolbar;
 mod window;
 
@@ -54,6 +55,9 @@ impl FreyaPlugin for InspectorPlugin {
 
     fn on_event(&mut self, event: &mut PluginEvent, handle: PluginHandle) {
         remember_handle(&handle);
+        // The launch request resolves on the event loop, which may be idle (an
+        // application at rest never measures layout), so every event checks it.
+        poll_pending();
         let inspector = match event {
             PluginEvent::AfterRedraw { window, .. }
             | PluginEvent::BeforeRender { window, .. }
@@ -121,7 +125,9 @@ impl FreyaPlugin for InspectorPlugin {
                 STORE.with(|store| store.borrow().overrides.apply(window.id(), tree, scale));
             }
             PluginEvent::FinishedMeasuringLayout { window, tree } => {
-                poll_pending();
+                if !is_inspector(window.id()) {
+                    STORE.with(|store| store.borrow_mut().last_app = Some(window.id()));
+                }
                 if is_open() && !is_inspector(window.id()) && !paused() {
                     let mut snapshot = Snapshot::capture(tree);
                     if let Some(focus) = Platform::get().try_window(u64::from(window.id())) {
@@ -190,6 +196,9 @@ struct Store {
     auto_opened: bool,
     /// The application window that last measured a tree, and its tree.
     app_window: Option<WindowId>,
+    /// The last application window that measured, kept even while the inspector
+    /// is closed, so opening can ask it for a first snapshot at once.
+    last_app: Option<WindowId>,
     snapshot: Option<Rc<Snapshot>>,
     /// Bumped on every new snapshot, so the window knows to re-read it.
     version: u64,
@@ -244,15 +253,6 @@ fn is_inspector(id: WindowId) -> bool {
     STORE.with(|store| store.borrow().inspector == Some(id))
 }
 
-/// Closes the inspector window if it is open. The toolbar's close button calls
-/// this. Unlike [`toggle_window`], it never opens the window.
-pub(crate) fn close_inspector() {
-    let inspector = STORE.with(|store| store.borrow().inspector);
-    if let Some(id) = inspector {
-        Platform::get().close_window(id);
-    }
-}
-
 /// Opens the inspector if it is closed, closes it if it is open.
 fn toggle_window() {
     let (inspector, opening) = STORE.with(|store| {
@@ -278,6 +278,11 @@ fn toggle_window() {
         });
         STORE.with(|store| store.borrow_mut().pending = Some(pending));
         poll_pending();
+        // An idle application never measures layout on its own, so without this
+        // the inspector would wait for an unrelated repaint before its first tree.
+        if let Some(app) = STORE.with(|store| store.borrow().last_app) {
+            request_layout(app);
+        }
     }
 }
 
@@ -452,13 +457,12 @@ pub(crate) fn refresh() {
     }
 }
 
-/// Sets one property override on a node of the application window. `value` is
-/// the text the editor shows for it and `original` the text it replaced.
+/// Sets one property override on a node of the application window. `original`
+/// is the text the property had before, kept with the first override.
 pub(crate) fn edit(
     window: WindowId,
     node: u64,
     property: &'static str,
-    value: String,
     edit: overrides::Edit,
     original: String,
 ) {
@@ -466,7 +470,7 @@ pub(crate) fn edit(
         store
             .borrow_mut()
             .overrides
-            .set(window, node, property, value, edit, original)
+            .set(window, node, property, edit, original)
     });
     request_layout(window);
 }
@@ -478,13 +482,7 @@ pub(crate) fn reset(window: WindowId, node: u64, property: Option<&'static str>)
     request_layout(window);
 }
 
-/// Turns one override of a node on or off, keeping its edit.
-pub(crate) fn toggle_override(window: WindowId, node: u64, property: &'static str) {
-    STORE.with(|store| store.borrow_mut().overrides.toggle(window, node, property));
-    request_layout(window);
-}
-
-/// Whether a property of a node of the application window is overridden and on.
+/// Whether a property of a node of the application window is overridden.
 pub(crate) fn has_override(window: WindowId, node: u64, property: &'static str) -> bool {
     STORE.with(|store| store.borrow().overrides.has(window, node, property))
 }
@@ -497,6 +495,12 @@ pub(crate) fn overrides_of(window: WindowId, node: u64) -> Vec<(&'static str, ov
 /// The application window the inspector is showing.
 pub(crate) fn app_window() -> Option<WindowId> {
     STORE.with(|store| store.borrow().app_window)
+}
+
+/// The density the application window renders at, so the inspector reads sizes
+/// as the tokens they are there, not at its own density.
+pub(crate) fn app_density(window: WindowId) -> SizeClass {
+    crate::style::window_density(u64::from(window)).class()
 }
 
 thread_local! {

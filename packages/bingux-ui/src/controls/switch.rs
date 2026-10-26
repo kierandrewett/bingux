@@ -6,7 +6,7 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use super::press::use_press;
-use crate::component::ComponentName;
+use crate::component::{ComponentName, Prop, Published, prop_override};
 use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
@@ -47,7 +47,11 @@ impl Component for Switch {
         let mut pressing = use_state(|| false);
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
-        let on = self.on;
+        // The inspector can set the switch live; the app's own value is what
+        // the published call shows.
+        let on = prop_override(a11y_id, "on")
+            .map(|value| value == "true")
+            .unwrap_or(self.on);
         let on_toggle = self.on_toggle.clone();
         let enabled = use_enabled(self.enabled);
         let press = use_press();
@@ -81,6 +85,7 @@ impl Component for Switch {
 
         rect()
             .component("Switch")
+            .published(|| Published::call("switch").arg(Prop::flag("on", self.on).live()))
             .a11y_id(a11y_id)
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)

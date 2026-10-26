@@ -3,6 +3,7 @@
 use bingux_ui::charts::{
     Segment, Series, SeriesColour, Unit, bar_chart, donut, line_chart, ring, sparkline,
 };
+use bingux_ui::controls::form::validate;
 use bingux_ui::prelude::*;
 use bingux_ui::style::Align;
 use freya::prelude::*;
@@ -17,10 +18,11 @@ pub enum Page {
     Typography,
     Icons,
     Motion,
+    Forms,
 }
 
 impl Page {
-    pub const ALL: [Page; 8] = [
+    pub const ALL: [Page; 9] = [
         Page::Controls,
         Page::Buttons,
         Page::Rows,
@@ -28,6 +30,7 @@ impl Page {
         Page::Charts,
         Page::Typography,
         Page::Icons,
+        Page::Forms,
         Page::Motion,
     ];
 }
@@ -42,6 +45,7 @@ impl NavItem for Page {
             Page::Charts => "Charts",
             Page::Typography => "Typography",
             Page::Icons => "Icons",
+            Page::Forms => "Forms",
             Page::Motion => "Motion",
         }
     }
@@ -55,6 +59,7 @@ impl NavItem for Page {
             Page::Charts => Icon::Computer,
             Page::Typography => Icon::About,
             Page::Icons => Icon::Appearance,
+            Page::Forms => Icon::PreferencesSystem,
             Page::Motion => Icon::GoNext,
         }
     }
@@ -84,6 +89,7 @@ impl Component for Gallery {
             Page::Feedback => FeedbackPage.into(),
             Page::Charts => ChartsPage.into(),
             Page::Typography => TypographyPage.into(),
+            Page::Forms => FormsPage.into(),
             Page::Icons => IconsPage.into(),
             Page::Motion => MotionPage.into(),
         };
@@ -308,6 +314,12 @@ impl Component for ButtonsPage {
             ]))
             .child(section_label("Usage meter"))
             .child(usage_meter("35", "GB used", "256 GB total", 35.0 / 256.0))
+            .child(section_label("QR code"))
+            .child(
+                qr_code("https://example.com/pair?key=7f3a9c")
+                    .label("QR code for https://example.com/pair?key=7f3a9c")
+                    .size(176.0),
+            )
             .child(
                 Group::new("Text fields".to_string())
                     .row(row("Plain").trailing(text_field(plain, |_| {}).placeholder("Type here")))
@@ -905,6 +917,129 @@ impl Component for FormDemoBody {
                     )),
             )
         }
+    }
+}
+
+/// Form fields in every state, the live values beside them, and the bar a
+/// form shows while it has changes to apply.
+#[derive(PartialEq)]
+struct FormsPage;
+
+impl Component for FormsPage {
+    fn render(&self) -> impl IntoElement {
+        let mut changed = use_state(|| true);
+        let mut name = use_state(|| "Home".to_string());
+        let mut password = use_state(|| "correct horse battery".to_string());
+        let mut address = use_state(|| "192.168.1.20".to_string());
+        let mut gateway = use_state(|| "192.168.1".to_string());
+        let mut dns = use_state(String::new);
+        let mut key = use_state(|| "yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=".to_string());
+        let mut mtu = use_state(|| "1500".to_string());
+        let allowed = use_state(|| "10.8.0.0/24".to_string());
+        let mut peers = use_state(|| {
+            "# Office\nPublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=\nEndpoint = vpn.example.com:51820"
+                .to_string()
+        });
+        let gateway_error = {
+            let text = gateway.read();
+            if text.is_empty() {
+                None
+            } else {
+                validate::ipv4(&text).err()
+            }
+        };
+        let valid = gateway_error.is_none();
+        let revert = move |_: ()| {
+            name.set("Home".to_string());
+            password.set("correct horse battery".to_string());
+            address.set("192.168.1.20".to_string());
+            gateway.set("192.168.1.1".to_string());
+            dns.set(String::new());
+            mtu.set("1500".to_string());
+            peers.set(String::new());
+            key.set(String::new());
+            changed.set(false);
+        };
+        page_column()
+            .maybe_child(pending_bar(
+                changed(),
+                valid,
+                move |_| changed.set(false),
+                revert,
+            ))
+            .child(
+                Group::titled("Network")
+                    .row(
+                        form_field("Network name", name)
+                            .hint("Exactly as the router shows it")
+                            .validate(validate::ssid)
+                            .autofocus(),
+                    )
+                    .row(
+                        form_field("Password", password)
+                            .password()
+                            .validate(validate::wpa_passphrase)
+                            .hint("8 to 63 characters"),
+                    ),
+            )
+            .child(
+                Group::titled("Addresses")
+                    .row(
+                        form_field("IP address", address)
+                            .monospace()
+                            .validate(validate::ipv4_cidr)
+                            .placeholder("192.168.1.20/24"),
+                    )
+                    .row(
+                        form_field("Gateway", gateway)
+                            .monospace()
+                            .error(gateway_error),
+                    )
+                    .row(
+                        form_field("DNS servers", dns)
+                            .optional()
+                            .monospace()
+                            .placeholder("1.1.1.1, 9.9.9.9")
+                            .validate(validate::ip_list),
+                    ),
+            )
+            .child(
+                Group::titled("Tunnel")
+                    .row(
+                        form_field("Private key", key)
+                            .monospace()
+                            .wide()
+                            .validate(validate::wireguard_key)
+                            .hint("Stays on this computer"),
+                    )
+                    .row(
+                        form_field("MTU", mtu)
+                            .suffix("bytes")
+                            .wide()
+                            .optional()
+                            .validate_with(validate::integer_in(576..=9000)),
+                    )
+                    .row(
+                        form_field("Peers", peers)
+                            .multiline(4)
+                            .wide()
+                            .monospace()
+                            .hint("One peer per block"),
+                    )
+                    .row(
+                        form_field("Allowed IPs", allowed)
+                            .monospace()
+                            .wide()
+                            .validate(validate::ipv4_cidr)
+                            .trailing(icon_button(Icon::ListRemove, |_| {}).tooltip("Remove")),
+                    ),
+            )
+            .child(live_state(vec![
+                ("IP address".to_string(), "192.168.1.20".to_string()),
+                ("Gateway".to_string(), "192.168.1.1".to_string()),
+                ("DNS".to_string(), "192.168.1.1, 9.9.9.9".to_string()),
+                ("Link speed".to_string(), "1 Gbit/s".to_string()),
+            ]))
     }
 }
 

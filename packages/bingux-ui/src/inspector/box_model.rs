@@ -1,79 +1,136 @@
-//! The Layout tab: the node's box as nested layers, margin around padding
-//! around content. The padding and margin fields beneath commit like any
-//! declared property.
+//! The Layout tab: the node's box as nested bands, margin around padding around
+//! content, with each side labelled by the space token it is. Under it the
+//! spacing rows edit the same values as the Properties pane.
 
 use freya::prelude::*;
 use freya::winit::window::WindowId;
 
-use super::editor::{self, Declared, Input};
+use super::editor;
+use super::props::def_row;
 use super::snapshot::Node;
-use super::styles::prop_row;
+use crate::group::Group;
+use crate::style::catalogue;
 use crate::style::*;
 use crate::theme::Tokens;
-use crate::typography::{BODY, CAPTION, styled_label};
+use crate::typography::{CAPTION, CODE, Ink};
 
 /// The Layout tab for one node.
-pub fn view(
-    tokens: &Tokens,
-    window: WindowId,
-    id: u64,
-    node: &Node,
-    picker: State<Option<&'static str>>,
-) -> Element {
+pub fn view(tokens: &Tokens, window: WindowId, id: u64, node: &Node, class: SizeClass) -> Element {
     let Some(props) = node.props.as_ref() else {
         return rect()
-            .tw(tokens, &[w_full(), flex_col(), p(S2)])
-            .child(styled_label(CAPTION, "This element has no box"))
+            .tw(tokens, &[w_full(), p(S4)])
+            .child(CAPTION.label(tokens, "This element has no box"))
             .into();
     };
     let size = match node.area {
-        Some(area) => format!("{:.0} x {:.0}", area.width(), area.height()),
+        Some(area) => format!("{:.0} × {:.0}", area.width(), area.height()),
         None => "no layout".to_string(),
     };
-    let padding = editor::gaps_text(&props.padding);
-    let margin = editor::gaps_text(&props.margin);
     let content: Element = rect()
-        .tw(tokens, &[p(S0_5)])
-        .child(styled_label(BODY, size))
+        .tw(
+            tokens,
+            &[
+                w_full(),
+                py(S3),
+                flex_col(),
+                items(Align::Center),
+                bg(Paint::InspectContent),
+                rounded(Radius::Mark),
+            ],
+        )
+        .child(CODE.label(tokens, size))
         .into();
-    let padding_box = layer(tokens, "padding", &padding, content);
-    let margin_box = layer(tokens, "margin", &margin, padding_box);
-    rect()
-        .tw(tokens, &[w_full(), h_full(), flex_col(), gap(S2)])
-        .child(margin_box)
-        .child(prop_row(
-            tokens,
-            window,
-            id,
-            Declared {
-                name: "padding",
-                value: padding,
-                input: Input::Gaps,
-            },
-            picker,
-        ))
-        .child(prop_row(
-            tokens,
-            window,
-            id,
-            Declared {
-                name: "margin",
-                value: margin,
-                input: Input::Gaps,
-            },
-            picker,
-        ))
+    let padding = band(
+        tokens,
+        "padding",
+        &props.padding,
+        class,
+        Paint::InspectPadding,
+        content,
+    );
+    let margin = band(
+        tokens,
+        "margin",
+        &props.margin,
+        class,
+        Paint::InspectMargin,
+        padding,
+    );
+    let spacing: Vec<Element> = editor::defs(node, class, tokens)
+        .into_iter()
+        .filter(|def| matches!(def.key, "p" | "px" | "py" | "m" | "mx" | "my"))
+        .map(|def| def_row(tokens, window, id, def, class))
+        .collect();
+    let column = rect()
+        .tw(tokens, &[w_full(), flex_col(), gap(S4), p(S4)])
+        .child(margin)
+        .child(Group::titled("Spacing").rows(spacing));
+    ScrollView::new()
+        .drag_scrolling(false)
+        .width(Size::fill())
+        .height(Size::fill())
+        .child(column)
         .into()
 }
 
-/// One layer of the box: its name and values in caption type, the layer inside.
-fn layer(tokens: &Tokens, name: &str, value: &str, inner: Element) -> Element {
+/// A side's value as the token it is, or its pixels.
+fn side(px: f32, class: SizeClass) -> String {
+    match catalogue::space_name(px, class) {
+        Some(name) => name.to_string(),
+        None => editor::number_text(px),
+    }
+}
+
+/// One band of the box: its name, a value at each side, and what lies inside.
+fn band(
+    tokens: &Tokens,
+    name: &str,
+    sides: &[f32; 4],
+    class: SizeClass,
+    paint: Paint,
+    inner: Element,
+) -> Element {
+    let value = |px: f32| {
+        CODE.in_ink(Ink::Text)
+            .label(tokens, side(px, class))
+            .max_lines(1)
+    };
+    let [top, right, bottom, left] = *sides;
+    let centred = |text: Label| {
+        rect()
+            .tw(tokens, &[w_full(), flex_row(), justify(Align::Center)])
+            .child(text)
+    };
     rect()
         .tw(
             tokens,
-            &[w_full(), flex_col(), p(S0_5), border(Line::Outline)],
+            &[
+                w_full(),
+                flex_col(),
+                gap(S1),
+                p(S2),
+                bg(paint),
+                rounded(Radius::Inner),
+            ],
         )
-        .child(styled_label(CAPTION, format!("{name}  {value}")))
-        .child(inner)
+        .child(CAPTION.in_ink(Ink::Muted).label(tokens, name.to_string()))
+        .child(centred(value(top)))
+        .child(
+            rect()
+                .tw(
+                    tokens,
+                    &[
+                        w_full(),
+                        flex_row(),
+                        grow_children(),
+                        items(Align::Center),
+                        gap(S2),
+                    ],
+                )
+                .child(rect().tw(tokens, &[w(Dim::Box7)]).child(value(left)))
+                .child(rect().tw(tokens, &[w_flex()]).child(inner))
+                .child(rect().tw(tokens, &[w(Dim::Box7)]).child(value(right))),
+        )
+        .child(centred(value(bottom)))
         .into()
 }

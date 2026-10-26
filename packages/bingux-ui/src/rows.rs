@@ -11,7 +11,7 @@ use accesskit::Toggled;
 use freya::prelude::*;
 
 use crate::app_icon::app_icon;
-use crate::component::ComponentName;
+use crate::component::{ComponentName, Prop, Published};
 use crate::controls::dropdown::dropdown;
 use crate::controls::press::{Press, use_press};
 use crate::controls::radio::{RadioMark, next_enabled};
@@ -21,7 +21,7 @@ use crate::controls::switch::switch;
 use crate::controls::text_field::text_field;
 use crate::group::{SlotFilter, card_rows, use_row_lit, use_row_match};
 use crate::icons::{self, Icon};
-use crate::motion::{Focusable, MOVE_MS, use_tween};
+use crate::motion::{Focusable, MOVE_MS, RingFit, use_tween};
 use crate::search_highlight::{self, MatchSink};
 use crate::shell::menu::{MenuItem, menu_item};
 use crate::shell::overlays::Overlays;
@@ -57,6 +57,7 @@ pub struct Row {
     leading_avatar: Option<String>,
     leading_signal: Option<(u8, bool)>,
     leading_space: bool,
+    leading_tone: Option<Tone>,
     on_press: Option<EventHandler<()>>,
     enabled: bool,
     navigates: bool,
@@ -88,6 +89,7 @@ pub fn row(title: impl Into<String>) -> Row {
         leading_avatar: None,
         leading_signal: None,
         leading_space: false,
+        leading_tone: None,
         on_press: None,
         enabled: true,
         navigates: false,
@@ -146,6 +148,13 @@ impl Row {
 
     pub fn leading(mut self, icon: Icon) -> Self {
         self.leading = Some(icon);
+        self
+    }
+
+    /// Draws the leading icon in a status tone (accent, warning or danger)
+    /// instead of the muted ink, for a row that reports a problem or a state.
+    pub fn leading_tone(mut self, tone: Tone) -> Self {
+        self.leading_tone = Some(tone);
         self
     }
 
@@ -227,7 +236,24 @@ impl Row {
             return self;
         }
         self.value_trailing = true;
-        self.trailing(ValueText { text: value })
+        self.trailing(ValueText {
+            text: value,
+            mono: false,
+        })
+    }
+
+    /// Like [`Row::value`] in the monospace face, for addresses, keys and
+    /// other values read character by character.
+    pub fn mono_value(mut self, value: impl Into<String>) -> Self {
+        let value = value.into();
+        if value.is_empty() {
+            return self;
+        }
+        self.value_trailing = true;
+        self.trailing(ValueText {
+            text: value,
+            mono: true,
+        })
     }
 
     /// Right click opens `items` as a context menu at the pointer. Use it for
@@ -293,6 +319,7 @@ fn begin_row_touch(
 #[derive(PartialEq)]
 struct ValueText {
     text: String,
+    mono: bool,
 }
 
 impl Component for ValueText {
@@ -300,11 +327,15 @@ impl Component for ValueText {
         let tokens = use_tokens();
         let overlays = try_consume_context::<Overlays>();
         let press = use_press();
+        let style = crate::typography::TextStyle {
+            mono: self.mono,
+            ..VALUE
+        };
         let pressable = use_in_pressable_row();
         // A selection would take the press that opens a pressable row, so
         // there the value is plain text; elsewhere it can be selected.
         let value: Element = if pressable {
-            VALUE
+            style
                 .label(&tokens, self.text.clone())
                 .max_lines(1)
                 .line_height(VALUE.leading)
@@ -316,7 +347,7 @@ impl Component for ValueText {
             // Read-only text is not a control: it can be selected and copied
             // with the pointer, but it is not a Tab stop.
             SelectableText::new()
-                .span(VALUE.span(&tokens, self.text.clone()))
+                .span(style.span(&tokens, self.text.clone()))
                 .max_lines(1)
                 .line_height(VALUE.leading)
                 .text_align(TextAlign::End)
@@ -358,6 +389,7 @@ impl Component for Row {
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
+        let mut face_size = use_state(|| (0.0f32, 0.0f32));
         let press = use_press();
         let generated_id = use_a11y();
         let radio = self.radio.as_ref();
@@ -495,6 +527,23 @@ impl Component for Row {
 
         let on_press = self.on_press.clone();
         let face = rect()
+            .component("Row")
+            .published(|| {
+                Published::call("row")
+                    .arg(Prop::text("title", self.title.clone()))
+                    .maybe_method(
+                        self.subtitle
+                            .as_ref()
+                            .map(|subtitle| Prop::text("subtitle", subtitle.clone())),
+                    )
+                    .maybe_method(
+                        self.badge
+                            .as_ref()
+                            .map(|badge| Prop::text("badge", badge.clone())),
+                    )
+                    .maybe_method((!self.enabled).then(|| Prop::flag("enabled", false)))
+                    .maybe_method(self.selected.then(|| Prop::flag("selected", true)))
+            })
             .a11y_id(a11y_id)
             .a11y_focusable(focusable)
             .a11y_role(if radio.is_some() {
@@ -561,15 +610,23 @@ impl Component for Row {
             .maybe_child({
                 let leading: Option<Element> = match self.leading {
                     Some(leading) => {
-                        let glyph = icons::icon(leading, IconSize::Row, icon_paint.color(&tokens));
-                        // With a subtitle, the icon sits on the title line at
-                        // the top instead of between the two lines. The column
-                        // spans the row's height so its first child is at the top.
+                        let glyph_colour = match self.leading_tone {
+                            Some(tone) => tone.color(&tokens),
+                            None => icon_paint.color(&tokens),
+                        };
+                        let glyph = icons::icon(leading, IconSize::Row, glyph_colour);
+                        // With a subtitle the icon sits beside the text lines,
+                        // centred on them. The column fills the row's height
+                        // only once the row has been sized by its text
+                        // (`fill_minimum`); a plain fill measured as all the
+                        // space the row's parent had left, and stretched the
+                        // first such row of a list.
                         Some(if single_line {
                             glyph.into()
                         } else {
                             rect()
-                                .tw(&tokens, &[h_full(), flex_col(), pt(S0_5)])
+                                .height(Size::fill_minimum())
+                                .tw(&tokens, &[flex_col(), pt(S0_5)])
                                 .child(glyph)
                                 .into()
                         })
@@ -598,8 +655,27 @@ impl Component for Row {
             )
             .child(text_column)
             .maybe_child(trailing)
-            .focusable_inside(focus(), Radius::Control)
-            .tw(&tokens, &[w_full()]);
+            .on_sized(move |event: Event<SizedEventData>| {
+                face_size.set_if_modified((event.area.width(), event.area.height()));
+            });
+        // A row with a subtitle takes its height from its text and pads it,
+        // so the ring is given the measured height. A one-line row has a
+        // fixed height and needs no measuring.
+        let face = if single_line {
+            face.focusable_inside(focus(), Radius::Control)
+        } else {
+            face.focusable_fitted(
+                focus(),
+                Radius::Control,
+                RingFit {
+                    left: GUTTER.px(),
+                    top: S3.px(),
+                    width: face_size().0,
+                    height: face_size().1,
+                },
+            )
+        }
+        .tw(&tokens, &[w_full()]);
         let face = match radio.and_then(|choice| choice.nav.clone()) {
             Some(nav) => {
                 face.on_key_down(move |event: Event<KeyboardEventData>| radio_arrow(&nav, event))
@@ -615,7 +691,7 @@ impl Component for Row {
             searching: query.is_some(),
         };
         rect()
-            .component("Row")
+            .component("RowWithNested")
             .tw(&tokens, &[flex_col(), w_full()])
             .child(face)
             .maybe_child((reveal > 0.0).then(|| {
@@ -1143,7 +1219,10 @@ pub fn text_row(
 pub fn property_row(title: impl Into<String>, value: impl Into<String>) -> Row {
     let mut row = row(title);
     row.value_trailing = true;
-    row.trailing(ValueText { text: value.into() })
+    row.trailing(ValueText {
+        text: value.into(),
+        mono: false,
+    })
 }
 
 /// A row whose trailing text is editable in place: click to edit, Enter

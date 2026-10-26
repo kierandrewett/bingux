@@ -109,10 +109,10 @@ with `navigate(address)`. `current_address()` reads it without subscribing.
 
 | Family           | Components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Controls         | `switch`, `checkbox` (tri-state), `slider` (`step`, `show_value`, `fill`, `gradient(stops)`: the track is a colour ramp instead of the accent fill; the night light's colour temperature uses it, and a hue or brightness ramp is the same call), `segmented` (`fill` for equal segments; only the selected segment is raised, a hovered one brightens its text), `dropdown` (`app_icons`, `width`), `stepper`, `usage_meter` (a figure, its total and a thin bar), `action_strip` of `strip_action` (two to four icon-over-label actions in one rounded bar), `text_field` (`password`, `invalid`, `clearable`), `search_field`, `progress_bar`, `spinner` |
-| Navigation       | `tab_strip(options, selected, on_select)` (flat labels, the selected one underlined; Left, Right, Home and End move the selection; `scroll` for a narrow container; an app's view tabs use it too), `breadcrumb(crumbs, on_select)` (crumbs separated by chevrons, each a Tab stop, the last in normal ink; `code` for a code-face trail; a file manager path uses it too) |
+| Controls         | `switch`, `checkbox` (tri-state), `slider` (`step`, `show_value`, `fill`, `gradient(stops)`: the track is a colour ramp instead of the accent fill; the night light's colour temperature uses it, and a hue or brightness ramp is the same call), `segmented` (`fill` for equal segments; only the selected segment is raised, a hovered one brightens its text), `dropdown` (`app_icons`, `width`), `stepper`, `usage_meter` (a figure, its total and a thin bar), `qr_code` (`ecc`, `label`, `size`: a pure-Rust QR encoder, versions 1 to 15, drawn black on a white tile with the quiet zone in every theme; `QrMatrix::encode` gives the modules; too-long data draws an empty tile), `action_strip` of `strip_action` (two to four icon-over-label actions in one rounded bar), `text_field` (`password`, `invalid`, `clearable`), `search_field`, `progress_bar`, `spinner` |
+| Navigation       | `segmented(options, selected, on_select).tabs()` (the tab bar: each tab a real button with the segmented look, only the selected one raised, Left, Right, Home and End move the selection and focus; `scroll()` for a narrow container; an app's view tabs and the inspector's tabs use it too), `breadcrumb(crumbs, on_select)` (crumbs separated by chevrons, each a Tab stop, the last in normal ink; `code` for a code-face trail; a file manager path uses it too) |
 | Buttons          | `action_button` (`suggested`, `destructive`, `flat`, `loading`, `icon`), `primary_button`, `row_button`, `icon_button` (`tooltip`, `danger`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Rows             | `row` (`subtitle`, `value` (selectable, one line), `badge`, `leading`, `leading_space` (a blank icon column so text lines up), `leading_app`, `navigates`, `selected`, `destructive`, `context_menu`, `on_press` (makes the row activatable)), `radio_row(title, selected, on_select)` (a radio on the leading edge; the whole row selects; `subtitle`, `value`, `leading_app` as for `row`), `radio_rows(title, rows)` (a group of radio rows: Up and Down move the selection, and only the selected row is in the Tab order), `switch_row` (`nested` for sub-rows shown while on), `slider_row` (a `level_row` for a setting), `level_row` (title on the left and a slider filling the rest of the line; `control` such as a mute button sits between them, `footer` under the track, `mark` and `mark_label` for a tick such as 100%, `danger_from`, `value_text`, `max`, `leading`, `context_menu`), `choice_row`, `text_row`, `entry_row`, `expander_row`, `property_row` |
+| Rows             | `row` (`subtitle`, `value` (selectable, one line), `badge`, `leading`, `leading_tone` (draws the leading icon in the accent, warning or danger colour, for a row that reports a state), `leading_space` (a blank icon column so text lines up), `leading_app`, `navigates`, `selected`, `destructive`, `context_menu`, `on_press` (makes the row activatable)), `radio_row(title, selected, on_select)` (a radio on the leading edge; the whole row selects; `subtitle`, `value`, `leading_app` as for `row`), `radio_rows(title, rows)` (a group of radio rows: Up and Down move the selection, and only the selected row is in the Tab order), `switch_row` (`nested` for sub-rows shown while on), `slider_row` (a `level_row` for a setting), `level_row` (title on the left and a slider filling the rest of the line; `control` such as a mute button sits between them, `footer` under the track, `mark` and `mark_label` for a tick such as 100%, `danger_from`, `value_text`, `max`, `leading`, `context_menu`), `choice_row`, `text_row`, `entry_row`, `expander_row`, `property_row` |
 | Icons            | `icon` (bundled symbolic glyphs), `app_icon` (full-colour application icons from the icon theme)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | Groups and text  | `Group` (`description`), `section_label`, `caption`, `centered_caption`, `action_row`, `heading`, `status` (loading, empty, error, info blocks)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Layout           | `hstack(Space)`, `vstack(Space)`, `spacer`, `divider`, `card`, `clamp(Dim, child)`, `page_column`, `tile_rows(tokens, tiles, height)` (two tiles a row on a phone, four on a desktop)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -122,7 +122,7 @@ with `navigate(address)`. `current_address()` reads it without subscribing.
 | Search highlight | `search_highlight::provide(query)` in the results pane, then `search_highlight::label(style, tokens, text)` or `paragraph(...)` for text below it: each matched word gets an accent tint. Outside a search, or with no match, the text draws exactly as `TextStyle` would. While a search has text, a `Row` whose text does not match renders nothing, and a `Group` with no visible row hides with its title. `Group::unfiltered()` keeps every row for a group whose rows matched by other text, such as an index entry                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | Overlays         | `dialog` with `ResponseKind::{Default, Suggested, Destructive}`, `Overlays::toast`, `Overlays::toast_with_action`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | Popups           | `popup(title, content)` with `Popup::size`, `Popup::tabs` and `Popup::address`, opened by `window.open(popup)` from `use_window()`. A popup is a modal panel of its own, centred in the window: a Cancel button on the left, the title in the middle, the primary action on the right. It is 600 px tall unless `Popup::size` says otherwise, and it is clamped to the window. The body declares the primary action with `use_popup_actions(PopupActions { primary: Some(PopupAction { .. }) })`, and the caller closes the popup with `window.close()` once its work succeeds. Build the body with `popup_column()` and put each block in a `Group`, so the cards stand out from the panel. Cancel and Escape close it; Enter runs the primary action. The panel grows to at most 80% of the window height, and the body scrolls past that                                                                                                                                    |
-| Forms            | `form_row(label, control)` for a label beside a control; `segmented(options, selected, on_select).fill()` for a popup tab rail of equal segments (it stays a rail on a phone)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Forms            | `form_row(label, control)` for a label beside a control; `form_field(title, value)` for a validated text row (see Forms below); `live_state(rows)` for a read-only "Right now" group; `pending_bar(dirty, valid, on_apply, on_revert)` for the apply bar of a form with a draft; `segmented(options, selected, on_select).fill()` for a popup tab rail of equal segments (it stays a rail on a phone) |
 | Trees            | `tree_view(roots, expanded, selected)` takes `TreeNode`s (`id`, `label`, `detail`, `icon`, `badge`, `children`) and the sets of open branches and the selected id as state. Rows are `MenuItem` height. Up and Down move the selection, Right opens a branch or enters it, Left closes it or goes to the parent, Enter and Space activate. A click selects; clicking the selected row activates it. `TreeView::on_hover` and `TreeView::on_activate` report to the caller                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | Splits           | `split_pane(first, second, ratio)` with the first pane's share of the length in `ratio` (kept between 0.15 and 0.85). Side by side by default; `.vertical()` stacks the panes. Drag the divider to resize; the divider is a hairline with an `S1` hit zone on each side                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Menus            | `menu_item` and `menu_button(label, items)`. `MenuItem::icon`, `MenuItem::checked`, `MenuItem::destructive` and `MenuItem::disabled`; `menu_separator()`. `Overlays::show_menu` opens at window coordinates and stays on screen: it opens upward or leftward when there is no room. Picking an item closes the menu, then runs it; Escape and an outside press close it. While a menu or dropdown list is open, the window behind it takes no presses, wheel turns or hover, and the wheel never scrolls the page behind a list                                                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -152,6 +152,42 @@ focus on open unless a field is marked `autofocus()`, and Enter in a
 single-line field runs the primary action. Each control has an accessibility
 role and a focus ring.
 Animations are short (80 to 200 ms) and stop when `BINGUX_REDUCED_MOTION=1` is set.
+
+### Forms
+
+`form_field(title, value: State<String>)` is a `Group` row for one text input. The title, with an optional hint line under it, sits at the left and the field at the right; on a phone the title and hint are above and the field fills the row. An error shows under the field in the danger colour, announced to assistive technology as an alert, and the field gets the danger outline. A field that can fail keeps a blank message line, so the row never changes height when a message comes and goes.
+
+```rust
+use bingux_ui::controls::form::validate;
+
+Group::titled("Server")
+    .row(form_field("Address", address).hint("Host name or IP address").validate(validate::hostname_or_ip))
+    .row(form_field("Port", port).suffix("TCP").validate(validate::port))
+    .row(form_field("Key", key).monospace().multiline(3).optional())
+```
+
+| Method                   | Effect                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------ |
+| `hint(text)`             | One muted line under the title.                                                                  |
+| `placeholder(text)`      | Greyed text in the empty field.                                                                  |
+| `password()`             | Masks the text; the field's reveal button shows it.                                              |
+| `monospace()`            | Monospace face for keys and addresses.                                                           |
+| `wide()`                 | `Dim::FieldWide` (440 px) on a desktop, for a key or URL. Give every field of a group the same width. |
+| `suffix(text)`           | A muted unit inside the field's right end, such as `bytes`.                                      |
+| `trailing(element)`      | An element after the field on the same line (phone too), such as a remove `icon_button`.         |
+| `optional()`             | The muted word "Optional" after the title.                                                       |
+| `multiline(lines)`       | A field `lines` lines tall; Enter adds a line.                                                   |
+| `error(Option<String>)`  | Shows a message now, touched or not, for example after a failed Apply. It wins over `validate`.  |
+| `validate(fn)`           | Runs a check from `form::validate`, or your own `fn(&str) -> Result<(), String>`.                |
+| `validate_with(closure)` | The same with a closure, such as `validate::integer_in(576..=9000)`.                             |
+| `on_submit(f)`           | Enter in a single-line field.                                                                    |
+| `autofocus()`            | Takes focus when it first appears; only one field per page.                                      |
+
+`validate` never shows a message on an empty field or on one the person has not left: the message appears once the field is non-empty and has lost focus (or Enter was pressed in it), and from then on follows every keystroke, so it goes as soon as the text is right. The check is for the field only: the form runs the same function again to decide whether Apply is allowed. The validators are pure functions returning a plain-language message; `form::validate` has `ipv4`, `ipv4_cidr`, `ipv6`, `ipv6_cidr`, `ip`, `ip_list` (commas or spaces), `ipv4_netmask_or_prefix`, `mac`, `port`, `hostname_or_ip`, `url`, `wireguard_key`, `ssid` (bytes, not characters), `wpa_passphrase` and `integer_in(range)`. An empty string is an error for every validator, and an IPv6 zone such as `fe80::1%eth0` is rejected.
+
+`pending_bar(dirty, valid, on_apply, on_revert)` returns `Some` only while `dirty`: a group holding "You have unsaved changes", Revert and Apply (disabled while `valid` is false). Put it at the top of a form with `.maybe_child(..)`. `live_state(vec![(label, value)])` is a "Right now" group of read-only rows with monospace, selectable values, to show the effect of what the form sets (address, gateway, DNS, link speed).
+
+Outside a form, `text_field` takes the same looks: `.monospace()`, `.lines(n)` (the height of a `.multiline()` field), `.suffix(text)` and `.danger_outline(bool)` (the outline without the message line). `row(..).mono_value(text)` is `value` in the monospace face, selectable like it.
 
 Menus take the keyboard too. Enter, Space or Down on a menu button opens its
 menu with the first item highlighted. Up and Down move the highlight over
@@ -187,6 +223,114 @@ Phone rule: a panel is a sheet only for choosing a value from a set (a dropdown 
 
 The shield is the only input shield; there is no second copy of the shield or grabber code.
 
+## Files and the file chooser
+
+`bingux_ui::files` is the SDK's answer to "let the person pick a file". An app
+never shells out to `zenity` or `kdialog` and never builds its own picker:
+
+```rust
+use bingux_ui::files::{ChooserRequest, Filter, choose};
+
+choose(
+    use_window(),
+    ChooserRequest::open()
+        .title("Import VPN configuration")
+        .filter(Filter::new("VPN configuration").glob("*.conf").glob("*.ovpn"))
+        .filter(Filter::new("All files")),
+    move |chosen| {
+        // Runs once, on the UI thread. `None` means the person cancelled.
+        if let Some(chosen) = chosen {
+            import(&chosen.paths[0]);
+        }
+    },
+);
+```
+
+`ChooserRequest::open()`, `select_folder()`, `save(name)` and
+`save_files(names)` start a request; `title`, `accept_label`, `multiple`,
+`filter`, `current_filter`, `current_folder`, `current_file`, `choice` and
+`view(ViewMode::{Auto, List, Grid})` refine it. The answer, `Chosen`, holds
+absolute `paths`, the active `current_filter` and the `choices`. The dialog is
+a popup: a panel on a desktop window, a full sheet on a phone (Cancel, the
+accept button, `PopupFlags::FILL`). It has the places sidebar (Recent, Home,
+the XDG folders, volumes, bookmarks; a places menu on a phone), a path bar
+with typed-location entry and suggestions, a sortable list or a grid of
+thumbnails, hidden-file and sort options in the view menu, a name field for
+Save with a replace confirmation, and a file type filter. Folders always stay
+visible under a filter. A folder that cannot be read shows why (no permission,
+not found); an empty one, and the recent list, say so.
+
+Keyboard: Tab walks the toolbar, list and footer. In the list the arrows, Home,
+End and Page keys move (Shift extends when several files are allowed), letters
+jump to a name, Ctrl+A selects all, Enter opens. Ctrl+L, or typing `/` or `~`,
+starts typing a path (`~`, `..` and `file://` work) and Enter goes there.
+Alt+Up is the parent folder, Alt+Left back, Ctrl+H toggles hidden files, and
+Escape cancels. On touch a tap opens a folder and selects a file.
+
+### Layers
+
+| Layer | Where | Depends on |
+| ----- | ----- | ---------- |
+| Filesystem model: listing, MIME, places, bookmarks, recent files, filters, sort, inotify watching, selection, request and answer types, what accepting does | `packages/bingux-files` (crate `bingux-files`, `libc` only, unit tests) | nothing |
+| Views: `PlacesSidebar`, `PathBar`, `FileList`, `FileGrid`, `use_directory`, `use_places`, `empty_state`, `error_state` | `bingux_ui::files` | the model, bingux-ui controls |
+| The dialog: `choose` | `bingux_ui::files` (also in the prelude as `files`, `ChooserRequest`, `Chosen`) | the views |
+
+The model has no UI and no async runtime, so the future Files app, a command
+line tool and a portal backend use it as it is. Listing blocks on the disk
+and takes a `Cancel`; `bingux-ui` runs it on its worker pool and keeps the
+folder current with an inotify watch (bursts merge, a changed folder lists
+again without showing the loading state). MIME types come from a table of the
+common shared-mime-info globs embedded in the crate: it needs no host files
+and no dependency, and, like GIO's fast content type, looks at the name
+only, never at file contents. The list builds only the rows in view, so a
+hundred thousand files scroll as one hundred do, and the grid decodes each
+thumbnail only when its row scrolls in. The views are ordinary components:
+`PlacesSidebar::new(places, current, on_open)`, `PathBar::new(..)`,
+`FileList::new(listing, order, selection).sort(..).multiple(..).on_sort(..)
+.on_pick(..).on_activate(..)` and `FileGrid::new(..)`. A second user of them
+is the Files app.
+
+### Portal mapping
+
+`ChooserRequest` and `Chosen` map one to one onto
+`org.freedesktop.portal.FileChooser`, so a later `bingux-contrib-portals`
+backend (`org.freedesktop.impl.portal.FileChooser`) can host this dialog:
+
+| Portal | Here |
+| ------ | ---- |
+| `OpenFile`, `SaveFile`, `SaveFiles` | `Action::Open` / `Action::SelectFolder`, `Action::Save`, `Action::SaveFiles` |
+| `title` | `title` |
+| `accept_label`, `modal`, `multiple` | the same names |
+| `directory` | `Action::SelectFolder` |
+| `filters` `a(sa(us))` | `filters`; `Filter::from_portal`, `Filter::to_portal`; rule kind 0 is a glob, 1 a MIME type |
+| `current_filter` | an index into `filters` |
+| `choices` `a(ssa(ss)s)` | `choices`; no options means a yes/no choice with `"true"` or `"false"` |
+| `current_name`, `current_folder`, `current_file`, `files` | the same names |
+| response `uris` | `Chosen::paths` through `location::file_uri` |
+| response `current_filter`, `choices` | `Chosen::current_filter`, `Chosen::choices` |
+| response code 1 (cancelled) | the callback gets `None` |
+
+Globs ignore case, so `*.png` shows `A.PNG`. `ViewMode` is the one option the
+portal does not have; a backend leaves it on `Auto`.
+
+### Versions and the system service
+
+`files::VERSION` numbers the compiled-in dialog and rises when a request option
+or the dialog's behaviour changes. The design for sharing the dialog with other
+apps: `bingux-contrib-portals`, a package that depends on `bingux-ui` and
+`bingux-files`, runs the portal backend and hosts the same dialog body in its
+own window, exposing its version as `org.bingux.Portals.Version`. `choose`
+then picks the newest of the compiled-in dialog and the service: it asks the
+service its version, calls the portal when that is higher, and uses the
+compiled-in dialog when the service is missing, older or fails. The compiled-in
+dialog always works. The package is not built yet: it needs a D-Bus client
+(the `dbus` crate over libdbus is the only one in the offline cache; no
+`zbus`) and a hosted native window.
+
+Capture the dialog with `scripts/file-chooser-fixture.py DIR` and
+`HOME=DIR cargo run --example file_chooser --features testing -- OUT` (every
+mode at 1100x820 and 390x800).
+
 ## Charts
 
 `charts` draws sparklines, line and area charts, bar charts, rings and
@@ -212,9 +356,27 @@ line_chart([Series::new("Charge", points)])
 | `bar_chart(series)`  | Grouped bars, or `stacked()`. `categories`, `y_unit`, `label`, `height`.       |
 | `ring(value)`        | A 0 to 1 gauge with a centre caption. `caption`, `colour`, `label`.            |
 | `donut(segments)`    | A share of a whole, with a legend. `unit`, `caption`, `label`.                 |
+| `timeline_chart(bars)` | Bars along a time axis, a limit line and a draggable range. |
+| `flame_graph(tree)`  | Weighted calls as stacked bars, widest first.                                  |
 
 `Series::new(name, points)` takes `(x, y)` pairs, and `Series::values` reads
 values by position. `Segment::new(name, value)` is one slice of a donut.
+
+`timeline_chart(bars)` takes `Bar::new(at, width, value)` in ascending order of
+`at`. `x_range` and `y_max` fix the axes, `x_unit` and `y_unit` format them,
+and `limit(value, name)` draws a dashed line and turns the bars over it red.
+`selection(range)` and `on_select(handler)` make the range the user drags
+yours to keep: the handler gets `Some((from, to))` when a drag ends and `None`
+for a click or Escape. Left and Right walk the bars, and Shift with an arrow
+selects.
+
+`flame_graph(tree)` takes an `Rc<FlameTree>`. Build the tree with
+`push(parent, name, weight)` (node 0 is the root), `add` to grow a weight,
+`label` for the shorter text a bar shows, `highlight` to tint a bar in the
+accent colour, and `sorted()` last. Bars show their label cut with an
+ellipsis; the detail line beneath gives the full name and shares of the whole.
+A click zooms into a bar, Escape zooms out, and the view starts past the calls
+at the top that only call one thing. Down, Up, Left and Right walk the tree.
 
 `Unit` formats values: `Number`, `Percent` (values already in percent),
 `Bytes` (binary units), `Duration` (seconds as `2 h 15 min`) and
@@ -541,11 +703,107 @@ load)` loads a `Resource<T>` in the background: it is `Loading`, then
   revealing the page below, which undims. A second navigation during a slide
   starts from where the page is, with no snap. A sidebar switch cross-fades over
   120 ms. Motion is off under reduced motion (`tokens.motion(ms)` returns 0).
-- Icons are Adwaita symbolic SVGs under `packages/bingux-ui/icons/` with
-  the hard-coded fill removed so they recolour. Add one by copying it from
-  `/usr/share/icons/Adwaita/symbolic/` and adding a variant to `Icon`.
+- Icons are the Bingux set under `packages/bingux-ui/icons/`; see
+  [Icons](#icons) for how to use one and how to add another.
 - A dropdown draws a symbolic icon before each option with `.icons(Vec<Icon>)`,
   in the same order as the options. Sound uses it for each device's kind.
+
+## Icons
+
+The icon set is the chat app's icon fork (`@chat/icons`, a rounded fork of
+Phosphor: continuous "squircle" corners, its fill and weight choices and its own
+custom icons). Icons are the fork's drawings, not redrawn: each SVG is the fork's
+outline scaled to a 16 unit `viewBox` and tinted with the text colour. The Rust
+names (`Icon::NetworkWired`) and the SVG file names (`network-wired-symbolic.svg`)
+follow Adwaita's symbolic vocabulary, which the QML shell also uses.
+
+```rust
+use bingux_ui::icons::{Icon, icon};
+use bingux_ui::style::{IconSize, Paint};
+
+// A 16 px glyph in the muted text colour. Pass a token colour, never a literal.
+icon(Icon::Search, IconSize::Control, Paint::Muted.color(&tokens))
+```
+
+| `IconSize`  | Regular / compact | Use                                         |
+| ----------- | ----------------- | ------------------------------------------- |
+| `Mark`      | 12 / 14 px        | Chevrons, ticks and marks inside a control  |
+| `Text`      | 14 / 16 px        | A symbol in a line of text                  |
+| `Control`   | 16 / 18 px        | Glyphs in buttons, fields and menu items    |
+| `Row`       | 18 / 20 px        | Row and sidebar icons                       |
+| `Hero`      | 48 px             | The icon of an empty or status page         |
+
+### Weights and crispness
+
+The fork has three weights. At 16 px, 16 units of its 256 unit grid are one pixel:
+`regular` strokes are 1 px (too thin to carry an interface), `bold` strokes are
+1.5 px, `fill` icons are solid masses with cut-outs. Bingux uses `bold` for outline
+glyphs (frames, arrows, marks) and `fill` for solid masses (volume, bell, lock,
+shield, discs, folders), the way chat uses its fill weight in buttons. Which
+weight each icon uses is in `scripts/icons/labels.tsv`.
+
+Crispness comes from the choice of weight and size, never from reshaping a curve.
+`build.py` may move a whole icon by up to half a pixel so that its straight edges
+land on pixel boundaries (`best_offset`); nothing else about the outline changes.
+Draw icons at the sizes in the table (16 and 20 px are best) and let Skia
+anti-alias the rest.
+
+Icons that show a state (Wi-Fi signal, battery level, volume) are one drawing per
+state with the same footprint, so the glyph does not jump when the state changes.
+
+### Choose the icon for where it is used
+
+Pick the conventional metaphor for the label the user reads next to the icon, not
+the glyph whose name matches. A sidebar "Network" page needs an ethernet port, not
+a node diagram; "Share" is a box with an up arrow, not a paper plane.
+`scripts/icons/labels.tsv` records, for every icon, where it appears, the metaphor
+people expect there, and the fork glyph or custom drawing that shows it.
+
+### Add or change an icon
+
+1. Find the fork glyph in `~/dev/chat/packages/icons/src/generated/<Name>.ts`.
+2. Add a row to `scripts/icons/labels.tsv` (`file | where it appears | metaphor |
+   <ForkName> <weight>`), then `scripts/icons/map-fork.py` writes
+   `scripts/icons/src/<file>-symbolic.svg`:
+
+   ```xml
+   <svg viewBox="0 0 16 16">
+     <fork name="SpeakerHigh" weight="fill" mode="exact"/>
+   </svg>
+   ```
+
+   For an icon the fork does not have, mark the row `custom` and draw
+   `src/<file>-symbolic.svg` by hand from plain SVG shapes on the 16 grid (see the
+   header of `scripts/icons/build.py`: `stroke`, `fill`, `data-op="cut"`, `rx` for
+   a continuous corner, and `<fork/>` pieces) in the fork's finish: round caps,
+   round corners, the stroke width of its neighbours.
+3. `scripts/icons/import-chat.py` vendors the fork geometry the sources name into
+   `scripts/icons/fork/geometry.json`, so builds do not need a chat checkout.
+4. Add the variant to `Icon`, to `Icon::ALL` and to `Icon::bytes()` in
+   `packages/bingux-ui/src/icons.rs`.
+5. `make icons` compiles the sources into `packages/bingux-ui/icons/` and the
+   shell's copy; `make icons-check` fails when a source is invalid, a file is
+   stale, or `icons.rs` names a missing file. Commit the sources and the output.
+6. Look at it: `scripts/icons/sheets.py --out /tmp/icons` renders every icon at
+   12, 14, 16, 18, 20 and 48 px, white on black and dark on light, beside the
+   Adwaita original, with Freya's own rasteriser, grouped by where the icons are
+   used (top bar, sidebar, controls, status, devices), plus a top-bar mock. Judge
+   them at 1:1 and in the `@4x` copies.
+
+The fork's geometry is MIT-licensed Phosphor work; `packages/bingux-ui/icons/COPYING`
+carries the licence and attribution.
+
+### In the QML shell
+
+`scripts/icons/build.py` also writes `shell/bingux/icons/` (the same icons with
+Adwaita's dark fill, which the shell's `SymbolicIcon` recolours) and
+`shell/bingux/BinguxIconIndex.js` listing their names. The shell still resolves
+icon names through `AdwaitaIcons.qml`, so nothing changes in the shell until it is
+pointed at them: in `AdwaitaIcons.qml`, `import "BinguxIconIndex.js" as BinguxIcons`
+and, after `canonical` is computed, return
+`Qt.resolvedUrl("icons/" + canonical + ".svg")` when `BinguxIcons.names[canonical]`
+is set. Names the shell asks for that are not in the set still fall through to the
+Adwaita theme.
 
 ## Motion
 
@@ -607,6 +865,9 @@ popup so Tab stays inside it while it is open, and closing it restores focus.
 Use `use_focus_core()` to reach the core: with no host (the gallery, the snapshot
 runner, an inspector window) it returns a detached core, so focus moves do nothing
 and controls still work.
+`step_focus(back)` moves focus to the next or previous stop as Tab does, with no
+host needed. A list answers its Up and Down keys with it, so the arrows walk its
+rows (the inspector's Accessibility list does).
 
 ## Gallery and snapshots
 
@@ -637,9 +898,32 @@ modelled on the Chrome and WebKit inspectors. Press Ctrl+Alt+Shift+I to open or
 close it. It opens as a separate native window, and the app needs no code for
 it.
 
-The toolbar holds, from the left: the inspect button (Ctrl+Shift+C), the phone
-preview toggle, the Elements, Performance and Accessibility tabs (Ctrl+[ and
-Ctrl+] step between them), then pause, refresh (F5) and close.
+The header is the shell's header bar: the inspect button (Ctrl+Shift+C) and
+the phone preview toggle at the left, the Elements, Performance and
+Accessibility tabs as a segmented rail in the middle (Ctrl+[ and Ctrl+] step
+between them, Ctrl+1 to Ctrl+3 jump), and pause, refresh (F5) and the window
+controls at the right. Under 760 px the tabs scroll and the tree and
+Properties stack. Before the first snapshot the window says it is waiting for
+an application window and shows a spinner; the first tree arrives as soon as
+the app has laid out.
+
+An app component can publish its call for the Properties pane:
+
+```rust
+rect()
+    .component("Row")
+    .published(|| {
+        Published::call("row")
+            .arg(Prop::text("title", title))
+            .maybe_method(subtitle.map(|text| Prop::text("subtitle", text)))
+    })
+```
+
+`Prop::text`, `flag`, `number` and `choice` say what kind of value a prop is,
+which picks its editor; `.live()` plus `prop_override(a11y_id, "name")` in the
+component lets the inspector change it while the app runs. `property_row` is
+the dense row (name, hint, editor, reset) the pane is built from, and
+`style::catalogue` lists every token by name for tools like this one.
 
 - **Inspect mode** highlights the element under the pointer in the app with
   content, padding and margin bands and a card naming its tag, size, colour,
@@ -666,19 +950,71 @@ Ctrl+] step between them), then pause, refresh (F5) and close.
   copies the outline format. The breadcrumb under the tree shows the selected
   element's ancestors by name; click one to select it. Hovering a row highlights
   its element in the app.
-- **Styles**, beside the tree, shows the selected element's values as rule
-  blocks: `element.style` for your live edits, then the element's declared
-  values. Click a value to edit it; Enter applies it to the running app and
-  Escape reverts. Up and Down step a number (Shift by 10, Alt by 0.1), and
-  dragging a property's name scrubs its value. The box beside an edit turns it
-  off and back on. A colour swatch opens a colour picker. Computed lists every
-  resolved value with a filter, Layout shows the box model, and Accessibility
-  shows the element's accessible facts.
-- **Performance** records over a period. Stop shows a frame timeline and a
-  flame graph of sampled stacks. Stacks are sampled only while recording, and
-  the view updates live while a recording runs.
-- **Accessibility** lists the issues found in the app, grouped by kind with
-  counts. Selecting an issue selects its element in Elements.
+- **Properties**, beside the tree, shows the selected element in bingux-ui's
+  own terms, not as CSS. Under it, three tabs: Properties, Layout and Computed.
+  - *Component* shows the call that built a component that publishes one, such
+    as `row("Wired connection 1")` or `Group::titled("VPN")`, with each
+    argument as a field. Text arguments edit live; a prop edits live when the
+    component opts in (the `Switch`'s `on` does), and is otherwise shown with
+    "set in code".
+  - The groups are named as the Rust API names them: *Layout* (`flex`, `items`,
+    `justify`, `gap`, `clip`), *Spacing* (`p`, `px`, `py`, `m`, `mx`, `my`),
+    *Size* (`w`, `h`, `min_w`, `max_w`, ...), *Paint* (`bg`, `rounded`,
+    `shadow`, `border`, `opacity`), *Text style* (`font`, `ink`, `text`) and
+    *Accessibility* (`name`, `focusable`, and the role).
+  - Each row has the property's name, a hint line with the call it stands for
+    and the value it resolves to (`gap(S3) = 12 px`), and an editor. Space,
+    size, radius, colour, elevation, border, alignment and type style are
+    dropdowns of the tokens, listing each token's value at the density the app
+    window renders at (a phone preview shows the compact values); colours show
+    a chip. A value on no token is a raw value: pick Raw value, type a number
+    or `#rrggbb`, and the hint says "not a token". Numbers step with Up and
+    Down. Enter or a pick applies the edit to the running app; an edited row
+    shows its name in the accent and a reset button, and the header has Reset
+    all.
+  - Copy as Rust copies the element as bingux-ui code: the published call, or
+    `rect().tw(&tokens, &[...])` with the utilities that are not defaults.
+  - Layout draws the box as margin, padding and content bands, each side named
+    by its space token, above the same spacing rows. Computed lists every
+    resolved value, with colour chips, under a filter; every pane scrolls on
+    its own.
+- **Performance** records the app for a while: Record, use the app, Stop. The
+  header shows the state (a dot and "Recording 3.2 s · 142 frames", then
+  "Recorded …") and Clear drops the recording. Four stat tiles summarise the
+  frames: frame rate while drawing, average frame, worst frame and the share
+  over the 16.7 ms budget. Below, a `timeline_chart` lays every frame along a
+  time axis with the budget as a dashed line and slow frames in red; hover a
+  bar for its time and length. Drag across the timeline to select a stretch:
+  the tiles and the call graph then describe only that stretch, and Clear (or a
+  click on the chart, or Escape) returns to the whole recording. Call stacks
+  sampled while recording are a `flame_graph` of the selected stretch: bars
+  carry the function name, cut with an ellipsis, the detail line under the
+  graph gives the full name, its share of all samples and of its own time, the
+  bar under the pointer is highlighted, the application's own code is tinted in
+  the accent colour, and a click zooms into a call (Escape or All calls zooms
+  out). The graph starts past the calls at the top that only call the next one.
+  Rust symbols are demangled, legacy and v0. Before the first recording the
+  tab says what to do instead. Frames are timed and stacks sampled only while a
+  recording runs; the view updates live. The tab scrolls when the window is too
+  short for everything, and the tiles stack two by two when it is narrow.
+  Keyboard: Tab reaches Record, the timeline and the call graph. On the
+  timeline Left and Right move between frames, Shift with an arrow selects, and
+  Escape clears. On the graph Down, Up, Left and Right walk callee, caller and
+  siblings, Enter zooms in and Escape zooms out.
+- **Accessibility** lists what the checks found in the app. The top shows
+  stat tiles with the counts of errors, warnings and notes, and a segmented
+  filter by severity beside Collapse all and Expand all. Issues sit in one card
+  per kind (Naming, Focus, Target size, Contrast, Geometry, Layout shift,
+  Motion, Performance). The card's header names the kind with its count, says
+  why such problems matter, and folds the issues beneath it. An issue row has a
+  severity icon, what is wrong, the element (`Button #485 "Save"`: the component
+  that built it, its id and its name or text) and how to fix it. Hovering an
+  issue outlines its element in the app. Pressing it, or Enter on it, selects
+  the element in Elements, opens the tree down to it and scrolls it into view,
+  and leaves it outlined in the app. Up and Down move between rows, and Tab and
+  Shift+Tab move between every control. Before the first snapshot the tab says
+  it is waiting for an application window, and a window that passes every check
+  shows an empty state.
 
 Environment variables for tests and screenshots:
 

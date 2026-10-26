@@ -371,23 +371,40 @@ pub trait Focusable: Sized {
     /// card's. The ring is drawn just inside the wrapper, so the clip cannot
     /// cut it off. Return the wrapper from `render`.
     fn focusable_inside(self, focus: Focus, radius: Radius) -> Rect;
+
+    /// [`focusable_inside`](Self::focusable_inside) for a control whose height
+    /// comes from its content and whose padding offsets its children, such as
+    /// a row with a subtitle. `fit` is its measured height (from `on_sized`)
+    /// and its padding; without it the ring is sized to the control's
+    /// first layout pass and comes out short.
+    fn focusable_fitted(self, focus: Focus, radius: Radius, fit: RingFit) -> Rect;
 }
 
 impl Focusable for Rect {
     fn focusable(self, focus: Focus, radius: Radius) -> Rect {
-        wrap_focusable(self, focus, radius, false)
+        wrap_focusable(self, focus, radius, false, None)
     }
 
     fn focusable_inside(self, focus: Focus, radius: Radius) -> Rect {
-        wrap_focusable(self, focus, radius, true)
+        wrap_focusable(self, focus, radius, true, None)
+    }
+
+    fn focusable_fitted(self, focus: Focus, radius: Radius, fit: RingFit) -> Rect {
+        wrap_focusable(self, focus, radius, true, Some(fit))
     }
 }
 
 /// Builds the wrapper for [`Focusable`]: the press claim and the ring.
-fn wrap_focusable(control: Rect, focus: Focus, radius: Radius, inside: bool) -> Rect {
+fn wrap_focusable(
+    control: Rect,
+    focus: Focus,
+    radius: Radius,
+    inside: bool,
+    fit: Option<RingFit>,
+) -> Rect {
     let tokens = use_tokens();
     let core = use_focus_core();
-    wrap_focusable_with(&tokens, core, control, focus, radius, inside)
+    wrap_focusable_with(&tokens, core, control, focus, radius, inside, fit)
 }
 
 /// [`wrap_focusable`] with its hooks already taken. A caller whose focus
@@ -400,11 +417,13 @@ pub(crate) fn wrap_focusable_with(
     focus: Focus,
     radius: Radius,
     inside: bool,
+    fit: Option<RingFit>,
 ) -> Rect {
     let ring = FocusRing {
         focus,
         radius,
         inside,
+        fit,
     };
     // The ring is a child of the control, so it sizes to the control's own
     // box. A wrapper of unknown height (a row in a scrolled or stretched
@@ -416,6 +435,18 @@ pub(crate) fn wrap_focusable_with(
         .child(control.child(ring))
 }
 
+/// The measured box of a content-sized control, for [`Focusable::focusable_fitted`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RingFit {
+    /// The control's padding left of its content, which the ring reaches back over.
+    pub left: f32,
+    /// The control's padding above its content, which the ring reaches back over.
+    pub top: f32,
+    /// The control's measured size.
+    pub width: f32,
+    pub height: f32,
+}
+
 /// The ring itself, drawn as the last child of a [`Focusable::focusable`]
 /// wrapper.
 #[derive(Clone, PartialEq)]
@@ -423,6 +454,7 @@ struct FocusRing {
     focus: Focus,
     radius: Radius,
     inside: bool,
+    fit: Option<RingFit>,
 }
 
 impl Component for FocusRing {
@@ -450,12 +482,24 @@ impl Component for FocusRing {
         let travel = FOCUS_TRAVEL * (1.0 - progress);
         if self.inside {
             // The ring is drawn within the wrapper's own box, so a clipped
-            // container edge cannot cut it off.
+            // container edge cannot cut it off. A box that is sized by its
+            // content and padded, so its first-pass size is not its final one,
+            // hands its measured size in (`fit`); a percentage would resolve
+            // against the first pass.
+            let (left, top, width, height) = match self.fit {
+                Some(fit) => (
+                    -fit.left,
+                    -fit.top,
+                    Size::px(fit.width),
+                    Size::px(fit.height),
+                ),
+                None => (0., 0., Size::percent(100.), Size::percent(100.)),
+            };
             return rect()
                 .interactive(false)
-                .position(Position::new_absolute().top(0.).left(0.))
-                .width(Size::percent(100.))
-                .height(Size::percent(100.))
+                .position(Position::new_absolute().top(top).left(left))
+                .width(width)
+                .height(height)
                 .opacity(progress)
                 .tw(
                     &tokens,

@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use freya::animation::*;
 use freya::prelude::*;
 
-use crate::component::ComponentName;
+use crate::component::{ComponentName, Prop, Published};
 use crate::controls::{action_button, icon_button, search_field};
 use crate::focus::{RegionKind, claim_press, use_focus_core, use_region};
 use crate::icons::{self, Icon};
@@ -608,7 +608,16 @@ fn title_row(
                 .into(),
         }
     };
-    let head = rect().component("PageHead").tw(tokens, PAGE_HEAD);
+    let head = rect()
+        .component("PageHead")
+        .published(|| {
+            let call = match &title {
+                Some(title) => Published::call("page").arg(Prop::text("title", title.clone())),
+                None => Published::call("page"),
+            };
+            call.method(Prop::text("status", status.clone()))
+        })
+        .tw(tokens, PAGE_HEAD);
     // A compact page gives its large title more room above it.
     let head = if large.is_some() {
         head.tw_layout(&[pt(S8)])

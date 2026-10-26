@@ -489,7 +489,7 @@ impl Component for Chart {
 
 /// Where a label sits. `Left`, `Centre` and `Right` name the edge at `x`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Align {
+pub(super) enum Align {
     Left,
     Centre,
     Right,
@@ -504,7 +504,7 @@ fn text_align(align: Align) -> TextAlign {
 }
 
 /// A label placed at a pixel box, drawn as a Freya label over the SVG.
-struct Text {
+pub(super) struct Text {
     left: f32,
     top: f32,
     width: f32,
@@ -514,7 +514,7 @@ struct Text {
 }
 
 impl Text {
-    fn new(
+    pub(super) fn new(
         style: TextStyle,
         text: impl Into<String>,
         left: f32,
@@ -534,7 +534,7 @@ impl Text {
 }
 
 /// A label anchored at `x` by its `align` edge, kept inside `bounds`.
-fn anchored(
+pub(super) fn anchored(
     style: TextStyle,
     text: impl Into<String>,
     x: f32,
@@ -558,7 +558,7 @@ fn anchored(
     )
 }
 
-fn text_element(tokens: &Tokens, text: Text) -> impl IntoElement {
+pub(super) fn text_element(tokens: &Tokens, text: Text) -> impl IntoElement {
     rect()
         .position(Position::new_absolute().top(text.top).left(text.left))
         .width(Size::px(text.width))
@@ -582,17 +582,17 @@ struct Scene {
 }
 
 /// The tooltip for the hovered stop.
-struct Tip {
-    anchor: f32,
-    top: f32,
-    title: String,
-    rows: Vec<TipRow>,
+pub(super) struct Tip {
+    pub(super) anchor: f32,
+    pub(super) top: f32,
+    pub(super) title: String,
+    pub(super) rows: Vec<TipRow>,
 }
 
-struct TipRow {
-    colour: Color,
-    name: String,
-    value: String,
+pub(super) struct TipRow {
+    pub(super) colour: Color,
+    pub(super) name: String,
+    pub(super) value: String,
 }
 
 fn nearest_anchor(anchors: &[f32], x: f32) -> Option<usize> {
@@ -631,7 +631,13 @@ fn drawing(scene: Scene, tokens: &Tokens, width: f32, height: f32) -> Rect {
     area
 }
 
-fn focus_outline(tokens: &Tokens, core: FocusCore, focus: Focus, width: f32, height: f32) -> Rect {
+pub(super) fn focus_outline(
+    tokens: &Tokens,
+    core: FocusCore,
+    focus: Focus,
+    width: f32,
+    height: f32,
+) -> Rect {
     wrap_focusable_with(
         tokens,
         core,
@@ -639,13 +645,14 @@ fn focus_outline(tokens: &Tokens, core: FocusCore, focus: Focus, width: f32, hei
         focus,
         Radius::Card,
         false,
+        None,
     )
     .position(Position::new_absolute().top(0.0).left(0.0))
     .layer(Layer::Relative(TIP_LAYER))
 }
 
 /// The popover card that follows the hovered stop.
-fn tooltip(tokens: &Tokens, tip: &Tip, width: f32, height: f32) -> Rect {
+pub(super) fn tooltip(tokens: &Tokens, tip: &Tip, width: f32, height: f32) -> Rect {
     let card_height = TIP_PAD * 2.0 + TIP_ROW * (tip.rows.len() as f32 + 1.0);
     let fits_right = tip.anchor + TIP_GAP + TIP_WIDTH <= width;
     let left = if fits_right {
@@ -777,7 +784,7 @@ fn series_colours(tokens: &Tokens, series: &[Series]) -> Vec<Color> {
 }
 
 /// The left gutter that fits the widest y label, and at least the minimum.
-fn gutter_for(domain: &Domain, unit: Unit) -> f32 {
+pub(super) fn gutter_for(domain: &Domain, unit: Unit) -> f32 {
     let widest = domain
         .ticks
         .iter()
@@ -788,7 +795,7 @@ fn gutter_for(domain: &Domain, unit: Unit) -> f32 {
 
 /// Horizontal grid lines, returning their y labels. The caller places the
 /// baseline.
-fn y_grid(
+pub(super) fn y_grid(
     svg: &mut Svg,
     grid: Color,
     plot: Plot,
@@ -824,7 +831,13 @@ fn y_grid(
 
 /// The axis line at zero, or at the bottom of the plot when zero is off the
 /// domain. Returns its y pixel, which bars grow from.
-fn baseline(svg: &mut Svg, tokens: &Tokens, plot: Plot, y: &Linear, domain: &Domain) -> f32 {
+pub(super) fn baseline(
+    svg: &mut Svg,
+    tokens: &Tokens,
+    plot: Plot,
+    y: &Linear,
+    domain: &Domain,
+) -> f32 {
     let zero = if domain.lo <= 0.0 && domain.hi >= 0.0 {
         y.map(0.0)
     } else {
@@ -842,7 +855,12 @@ fn baseline(svg: &mut Svg, tokens: &Tokens, plot: Plot, y: &Linear, domain: &Dom
 }
 
 /// X labels at `(pixel, text)`, thinned so none collide.
-fn x_labels(texts: &mut Vec<Text>, plot: Plot, width: f32, labels: Vec<(f32, String)>) {
+pub(super) fn x_labels(
+    texts: &mut Vec<Text>,
+    plot: Plot,
+    width: f32,
+    labels: Vec<(f32, String)>,
+) {
     let mut last: Option<(f32, f32)> = None;
     for (px, name) in labels {
         let box_width = text_width(&name, TextSize::Sm.px()) + LABEL_PAD;

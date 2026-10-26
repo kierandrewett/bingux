@@ -1,5 +1,6 @@
-//! The inspector window: the application's element tree on the left and the
-//! selected node's properties on the right.
+//! The inspector window: the shell's header bar with the tabs, and under it the
+//! tab's body. Elements is the application's element tree beside the selected
+//! node's properties; every pane scrolls on its own.
 
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -7,16 +8,21 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
+use super::details::DetailsPane;
 use super::dom_tree::{DomTree, Shot, ancestors};
 use super::nav::{Tab, provide_nav, use_nav};
 use super::snapshot::Snapshot;
-use super::styles::StylesPane;
-use crate::controls::split_pane;
+use crate::controls::{SpinnerSize, spinner, split_pane};
+use crate::icons::Icon;
 use crate::shell::overlays::OverlayHost;
+use crate::shell::status_page;
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::theme::{Tokens, provide_tokens};
-use crate::typography::{CAPTION, styled_label};
+
+/// Below this width the tabs scroll sideways and the tree and the properties
+/// stack, as their columns have no room side by side.
+const NARROW_BELOW: f32 = 760.0;
 
 /// The window's root. Installs the tokens and the body below them.
 pub fn root() -> Element {
@@ -28,10 +34,17 @@ struct InspectorWindow;
 
 impl Component for InspectorWindow {
     fn render(&self) -> impl IntoElement {
-        // The inspector is a fixed Regular, mouse-driven window. It has no
-        // WindowHost, so this provides the density its tree reads, and a device
-        // preview on the application window never reaches it.
-        use_provide_context(|| WindowDensity::new(SizeClass::Regular, PointerKind::Mouse));
+        // The inspector is a fixed Regular, mouse-driven window. Its OverlayHost
+        // puts a WindowHost under this component, which sets the density from the
+        // window's width and the pointer, so a narrow inspector would read
+        // Compact. A forced pair wins over both; a device preview on the
+        // application window never reaches this window, which has its own key.
+        use_hook(|| {
+            force_density(
+                Platform::get().current_window().id,
+                Some((SizeClass::Regular, PointerKind::Mouse)),
+            );
+        });
         let tokens = provide_tokens();
         provide_nav();
         super::set_tokens(tokens);
@@ -51,7 +64,7 @@ impl Component for InspectorBody {
         let expanded = use_state::<HashSet<u64>>(HashSet::new);
         let head_seen = use_state::<Option<u64>>(|| None);
         let wrappers = use_state(|| false);
-        let ratio = use_state(|| 0.58f32);
+        let ratio = use_state(|| 0.5f32);
         let mut version = use_state(|| 0u64);
         let mut snapshot = use_state::<Option<Rc<Snapshot>>>(|| None);
         let mut inspect_on = use_state(super::picking);
@@ -99,7 +112,9 @@ impl Component for InspectorBody {
                             if let Some(head) = head.filter(|&id| *head_seen.peek() != Some(id)) {
                                 head_seen.set(Some(head));
                                 let mut open = expanded.write();
-                                open.extend(ancestors(snap, head).into_iter().filter(|&id| id != head));
+                                open.extend(
+                                    ancestors(snap, head).into_iter().filter(|&id| id != head),
+                                );
                             }
                         }
                         snapshot.set(next);
@@ -116,14 +131,9 @@ impl Component for InspectorBody {
             });
         });
         let tab = *nav.tab.read();
-        let tab_state = nav.tab;
-        let header = super::toolbar::toolbar(
-            &tokens,
-            tab,
-            tab_state,
-            *inspect_on.read(),
-            *paused_on.read(),
-        );
+        let narrow = Platform::get().current_window().root_size.read().width < NARROW_BELOW;
+        let header =
+            super::toolbar::header(tab, nav.tab, *inspect_on.read(), *paused_on.read(), narrow);
         let body = match tab {
             Tab::Elements => elements(
                 &tokens,
@@ -132,21 +142,37 @@ impl Component for InspectorBody {
                 wrappers,
                 ratio,
                 snapshot.read().clone(),
+                narrow,
             ),
             Tab::Performance => super::perf::view(),
             Tab::Accessibility => super::a11y::view(&tokens, &super::issues(), nav),
         };
         let root: Element = rect()
-            .tw(&tokens, &[w_full(), h_full(), flex_col(), grow_children(), bg(Paint::Bg)])
+            .tw(
+                &tokens,
+                &[
+                    w_full(),
+                    h_full(),
+                    flex_col(),
+                    grow_children(),
+                    bg(Paint::Bg),
+                ],
+            )
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
                 let control = event.modifiers == Modifiers::CONTROL;
                 if event.key == Key::Named(NamedKey::F5) {
                     super::refresh();
-                } else if control
-                    && (event.key == Key::Character("[".into())
-                        || event.key == Key::Character("]".into()))
+                    return;
+                }
+                if !control {
+                    return;
+                }
+                let mut tab_state = nav.tab;
+                // Ctrl+[ steps back a tab, Ctrl+] forward, wrapping around;
+                // Ctrl+1 to Ctrl+3 jump to a tab.
+                if event.key == Key::Character("[".into())
+                    || event.key == Key::Character("]".into())
                 {
-                    // Ctrl+[ steps back a tab, Ctrl+] forward, wrapping around.
                     let step = if event.key == Key::Character("[".into()) {
                         -1
                     } else {
@@ -157,13 +183,16 @@ impl Component for InspectorBody {
                         .iter()
                         .position(|tab| *tab == *nav.tab.peek())
                         .unwrap_or(0) as isize;
-                    let next = (current + step).rem_euclid(count) as usize;
-                    let mut tab_state = nav.tab;
-                    tab_state.set(Tab::ALL[next]);
+                    tab_state.set(Tab::ALL[(current + step).rem_euclid(count) as usize]);
+                } else if let Key::Character(text) = &event.key
+                    && let Some(index) = text.parse::<usize>().ok().and_then(|n| n.checked_sub(1))
+                    && let Some(target) = Tab::ALL.get(index)
+                {
+                    tab_state.set(*target);
                 }
             })
             .child(header)
-            .child(body)
+            .child(rect().tw(&tokens, &[w_full(), h_flex()]).child(body))
             .into();
         root
     }
@@ -177,9 +206,16 @@ fn elements(
     wrappers: State<bool>,
     ratio: State<f32>,
     snap: Option<Rc<Snapshot>>,
+    narrow: bool,
 ) -> Element {
     let Some(snap) = snap else {
-        return centred(tokens, "Waiting for an application window");
+        return status_page(Icon::Inspect, "Waiting for an application window")
+            .description(
+                "The tree appears as soon as the application has drawn. \
+                 Open the inspector from an application with Ctrl+Alt+Shift+I.",
+            )
+            .child(spinner(SpinnerSize::Medium))
+            .into();
     };
     let tree = rect()
         .tw(tokens, &[w_full(), h_full(), flex_col(), bg(Paint::Bg)])
@@ -191,37 +227,22 @@ fn elements(
         });
     let chosen = *selected.read();
     let details: Element = match (chosen, super::app_window()) {
-        (Some(id), Some(window)) if snap.node(id).is_some() => StylesPane {
+        (Some(id), Some(window)) if snap.node(id).is_some() => DetailsPane {
             snap: snap.clone(),
             id,
             window,
         }
         .into(),
-        _ => centred(tokens, "Select an element"),
+        _ => status_page(Icon::Inspect, "Select an element")
+            .description(
+                "Pick a row in the tree, or press the inspect button and click the application.",
+            )
+            .into(),
     };
-    // Two columns leave neither the tree nor the properties room below this
-    // width, so the properties stack under the tree.
-    let narrow = Platform::get().current_window().root_size.read().width < 640.0;
     let pane = split_pane(tree, details, ratio);
     let pane = if narrow { pane.vertical() } else { pane };
     rect()
-        .tw(tokens, &[w_full(), h_flex(), flex_row(), grow_children()])
+        .tw(tokens, &[w_full(), h_full(), flex_row(), grow_children()])
         .child(pane)
-        .into()
-}
-
-fn centred(tokens: &Tokens, text: &str) -> Element {
-    rect()
-        .tw(
-            tokens,
-            &[
-                w_full(),
-                h_full(),
-                flex_col(),
-                items(Align::Center),
-                justify(Align::Center),
-            ],
-        )
-        .child(styled_label(CAPTION, text))
         .into()
 }

@@ -24,6 +24,7 @@
 //!   computed at run time (a measured width, a drag offset, a chart).
 
 pub mod recipes;
+pub mod catalogue;
 pub mod tokens;
 
 use freya::prelude::*;
@@ -394,7 +395,18 @@ fn sides_of(gaps: &Gaps) -> [f32; 4] {
     [gaps.top(), gaps.right(), gaps.bottom(), gaps.left()]
 }
 
-fn line_border(tokens: &Tokens, line: Line) -> Border {
+/// The shadow an elevation draws. The inspector compares it with a box's own
+/// shadow to name the elevation.
+pub(crate) fn elevation_shadow(elevation: Elevation) -> Shadow {
+    let (y, blur, opacity) = elevation.params();
+    Shadow::new()
+        .position(ShadowPosition::Normal)
+        .y(y)
+        .blur(blur)
+        .color(Color::BLACK.with_af32(opacity))
+}
+
+pub(crate) fn line_border(tokens: &Tokens, line: Line) -> Border {
     let one = |width: BorderWidth, color: Color| {
         Border::new()
             .width(width)
@@ -500,16 +512,7 @@ fn apply_layout(rect: Rect, util: Util) -> Rect {
         | Util::Font(_)
         | Util::Surface { .. }
         | Util::Border(_) => rect,
-        Util::Shadow(elevation) => {
-            let (y, blur, opacity) = elevation.params();
-            rect.shadow(
-                Shadow::new()
-                    .position(ShadowPosition::Normal)
-                    .y(y)
-                    .blur(blur)
-                    .color(Color::BLACK.with_af32(opacity)),
-            )
-        }
+        Util::Shadow(elevation) => rect.shadow(elevation_shadow(elevation)),
         Util::SheetEdgeShadow(amount) => rect.shadow(
             Shadow::new()
                 .position(ShadowPosition::Normal)

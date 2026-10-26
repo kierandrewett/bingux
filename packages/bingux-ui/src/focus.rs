@@ -125,6 +125,21 @@ fn set_keyboard_mode() {
     mode.set(NavigationMode::Keyboard);
 }
 
+/// Moves keyboard focus to the next focus stop (`back` for the previous), in
+/// keyboard mode with the ring, as Tab does. A list answers its Up and Down
+/// keys with it so the arrows walk the rows. Unlike [`FocusCore::tab`] it
+/// needs no window host, so it also works in the inspector window.
+///
+/// Call it from a key handler. The move is sent a tick later: Freya's own
+/// handler for the arrow keys asks, in the same event, to move inside the
+/// focused accessibility group, and the last request in an event wins, so this
+/// one is queued behind it.
+pub fn step_focus(back: bool) {
+    set_keyboard_mode();
+    let dir = if back { Dir::Backward } else { Dir::Forward };
+    spawn(async move { send_dir(dir) });
+}
+
 impl FocusCore {
     /// Tab (`back` for Shift+Tab): move on in that direction, with a fresh
     /// bounce budget.

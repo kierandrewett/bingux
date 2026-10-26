@@ -531,10 +531,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bingux-files"
+version = "0.1.0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "bingux-ui"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "bingux-files",
  "bytes",
  "freya",
  "freya-components",

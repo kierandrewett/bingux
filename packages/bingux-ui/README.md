@@ -1,7 +1,7 @@
 # bingux-ui
 
 The design system for Bingux's Freya applications: tokens that follow the
-GNOME accent and colour scheme, bundled Adwaita symbolic icons, the shell's
+GNOME accent and colour scheme, the bundled icon set (the chat icon fork), the shell's
 controls (switch, slider, segmented, dropdown, stepper, text field,
 checkbox, radio, progress, spinner), buttons, the row and group family, the
 navigation split view, status pages, banners, alert dialogs and toasts.
@@ -17,4 +17,4 @@ cargo run --example gallery
 cargo run --features testing --example snapshot
 ```
 
-Icons under `icons/` are from the Adwaita icon theme; see `icons/COPYING`.
+Icons under `icons/` come from the chat icon fork of Phosphor (MIT); see `icons/COPYING` and the Icons section of the guide.

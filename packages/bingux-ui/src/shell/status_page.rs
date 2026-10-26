@@ -10,10 +10,22 @@ use crate::controls::button::{action_button, row_button};
 use crate::icons::{self, Icon};
 use crate::style::*;
 use crate::surface::use_tokens;
-use crate::typography::{BODY, HEADING, Ink};
+use crate::theme::Tokens;
+use crate::typography::{BODY, HEADING, Ink, TextStyle};
 
 /// The widest a status page's text gets.
 const PAGE_MAX_WIDTH: f32 = 420.0;
+
+/// Centred wrapping text that fills its box, as `centered_caption` does. A
+/// bare centred label keeps a content-wide box but lays its text out across
+/// the whole column, which pushes a short line off centre.
+fn centred_paragraph(style: TextStyle, tokens: &Tokens, text: String) -> Paragraph {
+    style
+        .paragraph(tokens, text)
+        .width(Size::fill())
+        .max_width(Size::px(PAGE_MAX_WIDTH))
+        .text_align(TextAlign::Center)
+}
 
 /// A centred icon in a muted tile, a title, a description and an
 /// optional action. Fills its parent.
@@ -85,19 +97,16 @@ impl Component for StatusPage {
                         Paint::Muted.color(&tokens),
                     )),
             )
-            .child(
-                HEADING
-                    .in_ink(Ink::Text)
-                    .label(&tokens, self.title.clone())
-                    .text_align(TextAlign::Center),
+            .child(centred_paragraph(
+                HEADING.in_ink(Ink::Text),
+                &tokens,
+                self.title.clone(),
+            ))
+            .maybe_child(
+                self.description
+                    .clone()
+                    .map(|text| centred_paragraph(BODY.in_ink(Ink::Muted), &tokens, text)),
             )
-            .maybe_child(self.description.clone().map(|text| {
-                rect().max_width(Size::px(PAGE_MAX_WIDTH)).child(
-                    BODY.in_ink(Ink::Muted)
-                        .label(&tokens, text)
-                        .text_align(TextAlign::Center),
-                )
-            }))
             .maybe_child(self.action.clone().map(|(label, on_press)| {
                 rect()
                     .tw(&tokens, &[mt(S3)])

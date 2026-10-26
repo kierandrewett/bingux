@@ -15,6 +15,7 @@ use crate::rows::RowTitle;
 use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
 use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
+use crate::theme::Tokens;
 use crate::typography::{BODY, Ink};
 
 /// A generous average glyph width at body size. Freya cannot size a button
@@ -40,6 +41,9 @@ pub enum OptionIcon {
     App(String),
     /// A bundled symbolic icon, such as a headphone or a microphone.
     Symbol(Icon),
+    /// A colour, drawn as a chip over a checkerboard so translucent colours
+    /// show their alpha. For a choice between colours or colour tokens.
+    Colour(Color),
 }
 
 /// `options` are `(key, label)` pairs; `on_select` receives the chosen key.
@@ -89,6 +93,12 @@ impl Dropdown {
     /// options: a headphone for a headset, a speaker for the built-in output.
     pub fn icons(mut self, icons: Vec<Icon>) -> Self {
         self.icons = icons.into_iter().map(OptionIcon::Symbol).collect();
+        self
+    }
+
+    /// Draw a colour chip before each option, in the same order as the options.
+    pub fn colours(mut self, colours: Vec<Color>) -> Self {
+        self.icons = colours.into_iter().map(OptionIcon::Colour).collect();
         self
     }
 
@@ -397,6 +407,7 @@ impl Component for Dropdown {
                         option_icon(
                             icon,
                             if touch { Paint::Muted } else { Paint::Text }.color(&tokens),
+                            tokens,
                         )
                     }))
                     .child(
@@ -533,7 +544,7 @@ impl Component for DropdownItem {
             .maybe_child(
                 self.icon
                     .clone()
-                    .map(|icon| option_icon(icon, Paint::Text.color(&tokens))),
+                    .map(|icon| option_icon(icon, Paint::Text.color(&tokens), tokens)),
             )
             .child(
                 BODY.in_ink(Ink::Text)
@@ -555,9 +566,12 @@ impl Component for DropdownItem {
 }
 
 /// The icon before an option's label: an application icon or a symbol.
-fn option_icon(icon: OptionIcon, colour: Color) -> Element {
+fn option_icon(icon: OptionIcon, colour: Color, tokens: Tokens) -> Element {
     match icon {
         OptionIcon::App(name) => app_icon(name, IconSize::Control).into(),
         OptionIcon::Symbol(symbol) => icons::icon(symbol, IconSize::Text, colour).into(),
+        OptionIcon::Colour(chip) => {
+            super::colour_picker::colour_chip(tokens, chip, IconSize::Text.px()).into_element()
+        }
     }
 }

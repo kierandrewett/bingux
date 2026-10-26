@@ -39,6 +39,12 @@ impl Space {
         resolve(self.regular, self.compact)
     }
 
+    /// The space in logical pixels at `class`, for a tool that reads another
+    /// window's density (the inspector, showing an app at phone size).
+    pub fn px_in(self, class: SizeClass) -> f32 {
+        class.pick(self.regular, self.compact)
+    }
+
     /// The regular value whatever the size class, for geometry that must not
     /// move with the density: a chart's plot margins, a menu's edge.
     pub const fn fixed_px(self) -> f32 {
@@ -139,6 +145,12 @@ impl TextSize {
     pub fn px(self) -> f32 {
         let (regular, compact) = self.sizes();
         resolve(regular, compact)
+    }
+
+    /// The size in logical pixels at `class`; see [`Space::px_in`].
+    pub fn px_in(self, class: SizeClass) -> f32 {
+        let (regular, compact) = self.sizes();
+        class.pick(regular, compact)
     }
 
     /// The (regular, compact) sizes. Compact text is a step larger, so body
@@ -370,6 +382,16 @@ pub enum Dim {
     TreeIndent,
     /// The find strip docked at the top of a pane: 26 px.
     FlatField,
+    /// A file chooser popup: 880 x 700 px, until the window is smaller.
+    ChooserWidth,
+    ChooserHeight,
+    /// The places column of a file chooser: 200 px.
+    PlacesColumn,
+    /// The Size and the Modified columns of a file list: 88 and 112 px.
+    FileSizeColumn,
+    FileModifiedColumn,
+    /// The narrowest a tile of the file grid gets: 132 px.
+    GridTile,
 }
 
 impl Dim {
@@ -377,6 +399,12 @@ impl Dim {
     pub fn px(self) -> f32 {
         let (regular, compact) = self.sizes();
         resolve(regular, compact)
+    }
+
+    /// The size in logical pixels at `class`; see [`Space::px_in`].
+    pub fn px_in(self, class: SizeClass) -> f32 {
+        let (regular, compact) = self.sizes();
+        class.pick(regular, compact)
     }
 
     /// Every box size as (regular, compact) in logical pixels. This is the one
@@ -470,6 +498,12 @@ impl Dim {
             Dim::CodeRow => same(22.0),
             Dim::TreeIndent => same(14.0),
             Dim::FlatField => same(26.0),
+            Dim::ChooserWidth => same(880.0),
+            Dim::ChooserHeight => same(700.0),
+            Dim::PlacesColumn => same(200.0),
+            Dim::FileSizeColumn => same(88.0),
+            Dim::FileModifiedColumn => same(112.0),
+            Dim::GridTile => same(132.0),
         }
     }
 }
@@ -604,7 +638,8 @@ pub enum Tone {
 }
 
 impl Tone {
-    fn color(self, tokens: &Tokens) -> Color {
+    /// The tone's colour in the given tokens.
+    pub fn color(self, tokens: &Tokens) -> Color {
         match self {
             Tone::Accent => tokens.accent,
             Tone::Warning => tokens.warning,
@@ -677,9 +712,8 @@ impl Paint {
     }
 }
 
-/// Parses `#rrggbb` or `#aarrggbb` (the `#` optional), the form the inspector
-/// reads and commits. Freya's `Color::from_hex` reads 8 digits as RRGGBBAA, so
-/// it is not used here.
+/// Parses `#rrggbb` or `#rrggbbaa` (the `#` optional), the form CSS writes and
+/// the inspector shows and commits.
 pub fn colour_from_hex(text: &str) -> Option<Color> {
     let text = text.trim();
     let digits = text.strip_prefix('#').unwrap_or(text);
@@ -695,24 +729,28 @@ pub fn colour_from_hex(text: &str) -> Option<Color> {
             value as u8,
         )),
         8 => Some(colour_from_argb(
+            value as u8,
             (value >> 24) as u8,
             (value >> 16) as u8,
             (value >> 8) as u8,
-            value as u8,
         )),
         _ => None,
     }
 }
-/// The colour as `#aarrggbb`, the form `colour_from_hex` reads and the
-/// inspector commits.
+/// The colour as CSS writes it: `#rrggbb` when opaque, `#rrggbbaa` when
+/// translucent. `colour_from_hex` reads both back.
 pub fn colour_to_hex(colour: Color) -> String {
-    format!(
-        "#{:02x}{:02x}{:02x}{:02x}",
-        colour.a(),
-        colour.r(),
-        colour.g(),
-        colour.b()
-    )
+    if colour.a() == 255 {
+        format!("#{:02x}{:02x}{:02x}", colour.r(), colour.g(), colour.b())
+    } else {
+        format!(
+            "#{:02x}{:02x}{:02x}{:02x}",
+            colour.r(),
+            colour.g(),
+            colour.b(),
+            colour.a()
+        )
+    }
 }
 /// A colour from its channels, read from a file or a field at run time.
 pub fn colour_from_argb(alpha: u8, red: u8, green: u8, blue: u8) -> Color {

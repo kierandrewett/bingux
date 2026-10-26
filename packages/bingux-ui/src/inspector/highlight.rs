@@ -275,6 +275,19 @@ fn draw_value(
         Value::Swatch(color, label) => {
             let chip_top = top + (LINE - SWATCH) / 2.0;
             let chip = rect(x, chip_top, x + SWATCH, chip_top + SWATCH);
+            // A two-by-two checkerboard first, so a translucent colour shows its
+            // alpha against a visible pattern, as `colour_chip` draws it.
+            let half = SWATCH / 2.0;
+            let light = style::Paint::Knob.color(tokens);
+            let dark = style::Paint::Control.color(tokens);
+            for row in 0..2 {
+                for col in 0..2 {
+                    let left = x + col as f32 * half;
+                    let top_cell = chip_top + row as f32 * half;
+                    let tone = if (row + col) % 2 == 0 { light } else { dark };
+                    fill(canvas, rect(left, top_cell, left + half, top_cell + half), tone);
+                }
+            }
             fill(canvas, chip, *color);
             canvas.draw_rect(chip, &stroke(style::Paint::Separator.color(tokens), 1.0));
             canvas.draw_str(label, (x + SWATCH + GAP, base), font, &text);

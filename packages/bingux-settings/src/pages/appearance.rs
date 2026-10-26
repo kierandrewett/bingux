@@ -35,9 +35,10 @@ use crate::system::{
 };
 use crate::theme::{Scheme, SharedTokens, Tokens, accent_names, read_gsettings};
 use crate::ui::typography::{BODY, EMPHASIS};
+use crate::ui::files::{self, ChooserRequest, Filter, ViewMode};
 use crate::ui::{
-    Group, Icon, Overlays, PageHead, Status, focus_stop, icon, menu_item, menu_separator,
-    page_column, row, skeleton_shape, status, use_overlays, use_tokens,
+    Group, Icon, Overlays, PageHead, Status, Window, focus_stop, icon, menu_item, menu_separator,
+    page_column, row, skeleton_shape, status, use_overlays, use_tokens, use_window,
 };
 use bingux_ui::style::*;
 use interface::{Interface, Setting, text_size_row, theme_group};
@@ -133,17 +134,29 @@ fn set_wallpaper(mut model: State<Option<Loaded>>, overlays: Overlays, path: Opt
     );
 }
 
-/// Opens the picture chooser on a background thread, then stores the picked
-/// file. A cancelled chooser leaves the page as it was.
-fn choose_wallpaper(model: State<Option<Loaded>>, overlays: Overlays) {
-    background_then(
-        || system::pick_path("Choose a wallpaper", system::Pick::Image),
-        move |picked| match picked {
-            Ok(Some(path)) => set_wallpaper(model, overlays, Some(path)),
-            Ok(None) => {}
-            Err(failure) => overlays.toast(failure.0),
-        },
-    );
+/// Opens the picture chooser over `window`, then stores the picked file. A
+/// cancelled chooser leaves the page as it was.
+fn choose_wallpaper(model: State<Option<Loaded>>, overlays: Overlays, window: Window) {
+    let mut request = ChooserRequest::open()
+        .title("Choose a wallpaper")
+        .filter(
+            Filter::new("Pictures")
+                .glob("*.png")
+                .glob("*.jpg")
+                .glob("*.jpeg")
+                .glob("*.webp")
+                .glob("*.jxl")
+                .glob("*.avif"),
+        )
+        .view(ViewMode::Grid);
+    if let Some(pictures) = files::user_dir(files::PlaceKind::Pictures) {
+        request = request.current_folder(pictures);
+    }
+    files::choose(window, request, move |chosen| {
+        if let Some(path) = chosen.and_then(|chosen| chosen.paths.into_iter().next()) {
+            set_wallpaper(model, overlays, Some(path.to_string_lossy().into_owned()));
+        }
+    });
 }
 
 fn file_name(path: &str) -> String {
@@ -348,6 +361,7 @@ impl Component for AppearancePage {
     fn render(&self) -> impl IntoElement {
         let model = system::use_cached_persistent("appearance", load);
         let overlays = use_overlays();
+        let window = use_window();
         let shared = use_consume::<SharedTokens>().0;
         let tokens = use_tokens();
         let navigator = use_navigator();
@@ -402,7 +416,9 @@ impl Component for AppearancePage {
                 overlays.show_menu(
                     (at.x as f32, at.y as f32),
                     vec![
-                        menu_item("Choose picture", move |_| choose_wallpaper(model, overlays))
+                        menu_item("Choose picture", move |_| {
+                            choose_wallpaper(model, overlays, window)
+                        })
                             .icon(Icon::ImageGeneric),
                         menu_separator(),
                         menu_item("Use system wallpaper", move |_| {
