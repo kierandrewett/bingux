@@ -159,6 +159,7 @@ pub struct Input {
     style_variant: InputStyleVariant,
     layout_variant: InputLayoutVariant,
     text_align: TextAlign,
+    font_family: Option<&'static str>,
     a11y_id: Option<AccessibilityId>,
     leading: Option<Element>,
     trailing: Option<Element>,
@@ -166,6 +167,8 @@ pub struct Input {
     command: Option<State<Option<InputCommand>>>,
     probe: Option<State<InputProbe>>,
     request: Option<State<Option<InputRequest>>>,
+    keep_selection: bool,
+    keep_focus_in: Vec<Area>,
 }
 
 /// An edit that runs on the text as if its keyboard shortcut was pressed.
@@ -204,6 +207,8 @@ pub struct InputProbe {
 pub enum InputRequest {
     /// Select the word under this window point.
     SelectWordAt { x: f32, y: f32 },
+    /// Select the word at the caret, or the one just before it when the caret ends a word.
+    SelectWordAtCursor,
     /// Drag the start or end of the selection with the pointer. The opposite end stays fixed until the pointer is released.
     DragSelectionEnd { start: bool },
 }
@@ -274,6 +279,7 @@ impl Input {
             style_variant: InputStyleVariant::Normal,
             layout_variant: InputLayoutVariant::Normal,
             text_align: TextAlign::default(),
+            font_family: None,
             a11y_id: None,
             leading: None,
             trailing: None,
@@ -281,6 +287,8 @@ impl Input {
             command: None,
             probe: None,
             request: None,
+            keep_selection: false,
+            keep_focus_in: Vec::new(),
         }
     }
 
@@ -314,6 +322,19 @@ impl Input {
     /// Run `request` when the state is set to it, then clear the state.
     pub fn request(mut self, request: State<Option<InputRequest>>) -> Self {
         self.request = Some(request);
+        self
+    }
+
+    /// Keep the selection highlighted while the input is not focused, as while its own menu is open.
+    pub fn keep_selection(mut self, keep: bool) -> Self {
+        self.keep_selection = keep;
+        self
+    }
+
+    /// Window areas whose touch taps are not taps outside this input, such as its edit bar, so a
+    /// tap on one keeps the focus.
+    pub fn keep_focus_in(mut self, areas: Vec<Area>) -> Self {
+        self.keep_focus_in = areas;
         self
     }
 
@@ -361,6 +382,12 @@ impl Input {
 
     pub fn text_align(mut self, text_align: impl Into<TextAlign>) -> Self {
         self.text_align = text_align.into();
+        self
+    }
+
+    /// Sets the family the text is drawn in, such as a monospace face for keys.
+    pub fn font_family(mut self, family: &'static str) -> Self {
+        self.font_family = Some(family);
         self
     }
 
@@ -435,6 +462,7 @@ impl Component for Input {
         let holder = use_state(ParagraphHolder::default);
         let mut area = use_state(Area::default);
         let mut viewport_area = use_state(Area::default);
+        let mut outer_area = use_state(Area::default);
         let mut scroll_controller = use_scroll_controller(ScrollConfig::default);
         let mut status = use_state(InputStatus::default);
         let is_masked = matches!(self.mode, InputMode::Hidden(_));
@@ -588,12 +616,13 @@ impl Component for Input {
                 InputMode::Shown => editor.rope().to_string(),
             };
             let scale = *scale_factor as f32;
+            // The paragraph's area includes its padding; glyphs start inside it.
             let caret_at = |index: usize| {
                 let rect = paragraph.cursor_rect(&text, index, text_align);
                 InputCaret {
-                    x: area_now.min_x() + rect.left / scale,
-                    top: area_now.min_y() + rect.top / scale,
-                    bottom: area_now.min_y() + rect.bottom / scale,
+                    x: area_now.min_x() + padding.left() + rect.left / scale,
+                    top: area_now.min_y() + padding.top() + rect.top / scale,
+                    bottom: area_now.min_y() + padding.top() + rect.bottom / scale,
                 }
             };
             let next = InputProbe {
@@ -602,7 +631,7 @@ impl Component for Input {
                 caret: shows_caret.then(|| caret_at(editor.cursor_pos())),
                 selection: editor
                     .get_selection_range()
-                    .filter(|_| shows_caret)
+                    .filter(|(start, end)| start != end && shows_caret)
                     .map(|(start, end)| (caret_at(start), caret_at(end))),
             };
             probe_state.set_if_modified(next);
@@ -684,25 +713,31 @@ impl Component for Input {
             if let Some(mut state) = command_state {
                 state.set(None);
             }
-            let mut editable = editable;
-            let character = match command {
-                InputCommand::SelectAll => "a",
-                InputCommand::Copy => "c",
-                InputCommand::Cut => "x",
-                InputCommand::Paste => "v",
-            };
-            let changed = apply_key_edit(
-                &mut editable,
-                &mut value_for_command,
-                on_validate_for_command.as_ref(),
-                &Key::Character(character.to_string()),
-                Modifiers::ctrl_or_meta(),
-                &holder.peek(),
-            );
-            a11y_id.request_focus();
-            if !changed {
-                follow_cursor();
-            }
+            // The edit runs in its own task: reads in it must not subscribe this
+            // effect, or the writes it makes would rerun the effect for ever.
+            let mut value_for_command = value_for_command.clone();
+            let on_validate_for_command = on_validate_for_command.clone();
+            spawn(async move {
+                let mut editable = editable;
+                let character = match command {
+                    InputCommand::SelectAll => "a",
+                    InputCommand::Copy => "c",
+                    InputCommand::Cut => "x",
+                    InputCommand::Paste => "v",
+                };
+                let changed = apply_key_edit(
+                    &mut editable,
+                    &mut value_for_command,
+                    on_validate_for_command.as_ref(),
+                    &Key::Character(character.to_string()),
+                    Modifiers::ctrl_or_meta(),
+                    &holder.peek(),
+                );
+                a11y_id.request_focus();
+                if !changed {
+                    follow_cursor();
+                }
+            });
         });
 
         // Runs a request set by the surrounding UI, such as selecting the word under a touch.
@@ -718,37 +753,54 @@ impl Component for Input {
             if let Some(mut state) = request_state {
                 state.set(None);
             }
-            let mut editable = editable;
-            match request {
-                InputRequest::SelectWordAt { x, y } => {
-                    if !display_placeholder {
-                        let text_area = area.peek().to_f64();
-                        let global_location = CursorPoint::new(x as f64, y as f64)
-                            .clamp(text_area.min(), text_area.max());
-                        let location = (global_location - text_area.min()).to_point();
-                        editable.process_event(EditableEvent::Down {
-                            location,
-                            editor_line: EditorLine::SingleParagraph,
-                            holder: &holder.peek(),
-                        });
-                        let pos = editable.editor().peek().cursor_pos();
-                        let (start, end) = editable.editor().peek().find_word_boundaries(pos);
-                        editable.editor_mut().write().set_selection((start, end));
-                        follow_cursor();
+            // The edit runs in its own task: reads in it must not subscribe this
+            // effect, or the writes it makes would rerun the effect for ever.
+            spawn(async move {
+                a11y_id.request_focus();
+                let mut editable = editable;
+                match request {
+                    InputRequest::SelectWordAt { x, y } => {
+                        if !display_placeholder {
+                            let text_area = area.peek().to_f64();
+                            let global_location = CursorPoint::new(x as f64, y as f64)
+                                .clamp(text_area.min(), text_area.max());
+                            let location = (global_location - text_area.min()).to_point();
+                            editable.process_event(EditableEvent::Down {
+                                location,
+                                editor_line: EditorLine::SingleParagraph,
+                                holder: &holder.peek(),
+                            });
+                            let pos = editable.editor().peek().cursor_pos();
+                            let (start, end) = editable.editor().peek().find_word_boundaries(pos);
+                            editable.editor_mut().write().set_selection((start, end));
+                            follow_cursor();
+                        }
                     }
-                    a11y_id.request_focus();
-                }
-                InputRequest::DragSelectionEnd { start } => {
-                    let range = editable.editor().peek().get_selection_range();
-                    if let Some((from, to)) = range {
-                        // The end that is not dragged stays the anchor; the dragged end becomes the cursor.
-                        let selection = if start { (to, from) } else { (from, to) };
-                        editable.editor_mut().write().set_selection(selection);
+                    InputRequest::SelectWordAtCursor => {
+                        if !display_placeholder {
+                            let editor = editable.editor().peek();
+                            let pos = editor.cursor_pos();
+                            let mut word = editor.find_word_boundaries(pos);
+                            // A caret at the end of a word has no word after it: take the one before.
+                            if word.0 == word.1 && pos > 0 {
+                                word = editor.find_word_boundaries(pos - 1);
+                            }
+                            drop(editor);
+                            editable.editor_mut().write().set_selection(word);
+                            follow_cursor();
+                        }
                     }
-                    is_dragging.set(true);
-                    a11y_id.request_focus();
+                    InputRequest::DragSelectionEnd { start } => {
+                        let range = editable.editor().peek().get_selection_range();
+                        if let Some((from, to)) = range {
+                            // The end that is not dragged stays the anchor; the dragged end becomes the cursor.
+                            let selection = if start { (to, from) } else { (from, to) };
+                            editable.editor_mut().write().set_selection(selection);
+                        }
+                        is_dragging.set(true);
+                    }
                 }
-            }
+            });
         });
 
         let on_key_up = move |e: Event<KeyboardEventData>| {
@@ -832,7 +884,8 @@ impl Component for Input {
             }
         };
 
-        let on_global_pointer_up = move |_: Event<PointerEventData>| {
+        let companions = self.keep_focus_in.clone();
+        let on_global_pointer_up = move |e: Event<PointerEventData>| {
             match *status.read() {
                 InputStatus::Idle if a11y_id.is_focused() => {
                     editable.process_event(EditableEvent::Release);
@@ -843,11 +896,18 @@ impl Component for Input {
                 _ => {}
             };
 
+            // A touch press reaches the input after its release, so a tap on a field that is
+            // already focused finds it not dragging. The tap is inside it, not outside.
+            let tapped_inside = matches!(e.data(), PointerEventData::Touch(_))
+                && (outer_area.read().to_f64().contains(e.global_location())
+                    || companions
+                        .iter()
+                        .any(|area| area.to_f64().contains(e.global_location())));
             if a11y_id.is_focused() {
                 if *is_dragging.read() {
                     // The input is focused and dragging, but it just clicked so we assume the dragging can stop
                     is_dragging.set(false);
-                } else {
+                } else if !tapped_inside {
                     // The input is focused but not dragging, so the click means it was clicked outside, therefore we can unfocus this input
                     a11y_id.request_unfocus();
                 }
@@ -897,6 +957,16 @@ impl Component for Input {
                     .read()
                     .get_visible_selection(EditorLine::SingleParagraph),
             )
+        } else if enabled() && self.keep_selection {
+            // Focus sits elsewhere, such as the field's own menu; the selection stays shown.
+            (
+                theme_colors.background,
+                None,
+                editable
+                    .editor()
+                    .read()
+                    .get_visible_selection(EditorLine::SingleParagraph),
+            )
         } else {
             (theme_colors.background, None, None)
         };
@@ -934,6 +1004,7 @@ impl Component for Input {
 
         rect()
             .a11y_id(a11y_id)
+            .on_sized(move |e: Event<SizedEventData>| outer_area.set_if_modified(e.area))
             .a11y_enabled(self.enabled)
             .a11y_focusable(self.enabled)
             .a11y_auto_focus(self.auto_focus)
@@ -995,6 +1066,7 @@ impl Component for Input {
                             .cursor_color(cursor_color)
                             .color(color)
                             .text_align(self.text_align)
+                            .map(self.font_family, |el, family| el.font_family(family))
                             .maybe(!self.multiline, |el| el.max_lines(1))
                             .highlights(text_selection.map(|h| vec![h]))
                             .maybe(display_placeholder, |el| {

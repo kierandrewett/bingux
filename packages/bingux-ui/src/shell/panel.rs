@@ -322,6 +322,18 @@ pub(crate) fn menu_rect(trigger: PanelTrigger, size: (f32, f32), window: (f32, f
     }
 }
 
+/// Where a text edit bar of `size` sits against a caret or selection: centred
+/// over it, above when there is room, below otherwise, held inside the window.
+pub(crate) fn text_bar_rect(anchor: PanelRect, size: (f32, f32), window: (f32, f32)) -> PanelRect {
+    let (x, y) = place_aligned(anchor, size, window, Side::Above, PANEL_GAP, EdgeAlign::Centre);
+    PanelRect {
+        x,
+        y,
+        width: size.0,
+        height: size.1,
+    }
+}
+
 /// The shield under a panel: a clear layer over the window that takes every
 /// press, wheel turn and hover outside the panel. A press on it, or Escape
 /// anywhere in the window, runs `on_dismiss`. Its children draw over it.
@@ -360,6 +372,9 @@ pub(crate) enum PanelKind {
     /// A centred dialog over a scrim on every size. It has no trigger; its
     /// card is the only child, and a press or Escape outside it dismisses.
     Dialog,
+    /// The text edit bar over a caret or selection. It has no shield, so the
+    /// text under it stays editable; it is placed once its content is measured.
+    Bar,
 }
 
 /// The one floating surface and its backdrop. The surface opens against its
@@ -394,6 +409,8 @@ pub(crate) struct Panel {
     focus: Option<AccessibilityId>,
     on_key: Option<EventHandler<Event<KeyboardEventData>>>,
     on_move: Option<EventHandler<(f32, f32)>>,
+    /// The bar's measured size, read once it is laid out. The bar is placed from it.
+    measure: Option<State<Option<(f32, f32)>>>,
 }
 
 impl Panel {
@@ -420,6 +437,7 @@ impl Panel {
             focus: None,
             on_key: None,
             on_move: None,
+            measure: None,
         }
     }
 
@@ -432,6 +450,19 @@ impl Panel {
             children,
         );
         panel.layer = layer;
+        panel
+    }
+
+    /// The text edit bar, opened over `trigger`'s caret. `measure` holds its
+    /// size once it is laid out, and it is placed from there.
+    pub(crate) fn bar(
+        open: bool,
+        trigger: PanelTrigger,
+        measure: State<Option<(f32, f32)>>,
+        children: Vec<Element>,
+    ) -> Self {
+        let mut panel = Self::new(PanelKind::Bar, open, trigger, children);
+        panel.measure = Some(measure);
         panel
     }
 
@@ -536,6 +567,8 @@ impl Component for Panel {
                     eased,
                     dismiss.clone(),
                 ))
+        } else if self.kind == PanelKind::Bar {
+            self.edit_bar(&tokens, window, progress)
         } else if self.nested {
             self.menu(&tokens, window, progress)
         } else {
@@ -545,9 +578,12 @@ impl Component for Panel {
                 .children(self.overlaid.clone())
         };
 
+        // The bar is sized by its content, so its wrapper is as wide as the window:
+        // a bar inside a zero-width box would wrap every label to one letter.
+        let wrapper_width = if self.kind == PanelKind::Bar { window.0 } else { 0.0 };
         rect()
             .component("Panel")
-            .width(Size::px(0.0))
+            .width(Size::px(wrapper_width))
             .height(Size::px(0.0))
             .maybe_child(visible.then_some(backdrop))
     }
@@ -680,6 +716,41 @@ impl Panel {
             });
         }
         surface
+    }
+
+    /// The text edit bar: a pill of commands at the caret or selection. It is
+    /// sized by its content, read through `measure`, and placed once known.
+    fn edit_bar(&self, tokens: &Tokens, window: (f32, f32), progress: f32) -> Rect {
+        let measure = self.measure;
+        let size = measure.and_then(|measure| *measure.read());
+        let at = size.map(|size| text_bar_rect(self.trigger.anchor(), size, window));
+        let (x, y) = at.map_or((0.0, 0.0), |rect| (rect.x, rect.y));
+        rect()
+            .position(Position::new_global().top(y).left(x))
+            .layer(Layer::Overlay)
+            .width(Size::Inner)
+            .opacity(if at.is_some() { progress } else { 0.0 })
+            .scale(PRESENCE_SCALE + (1.0 - PRESENCE_SCALE) * progress)
+            .tw(
+                tokens,
+                &[
+                    flex_row(),
+                    items(Align::Center),
+                    h(Dim::Control),
+                    rounded(Radius::Pill),
+                    bg(Paint::Floating),
+                    border(Line::Stroke(Dim::Hairline, Paint::FloatingOutline)),
+                    shadow(Elevation::Raised),
+                ],
+            )
+            // A press on the bar never reaches the field under it.
+            .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
+            .on_sized(move |event: Event<SizedEventData>| {
+                if let Some(mut measure) = measure {
+                    measure.set_if_modified(Some((event.area.width(), event.area.height())));
+                }
+            })
+            .children(self.children.clone())
     }
 
     /// The sheet at the bottom edge: a grabber, the title and the rows. Its

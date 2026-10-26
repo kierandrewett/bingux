@@ -314,6 +314,7 @@ impl Snapshot {
     ///
     /// - `click x,y`, `right_click x,y`, `hover x,y`
     /// - `touch x,y`, `long_press x,y`: one finger, tapped or rested past the threshold
+    /// - `touch_down x,y`, `touch_move x,y`, `touch_up x,y`: one finger held across steps
     /// - `scroll x,y,dy`, `drag x1,y1,x2,y2`, `down x,y`/`move x,y`/`up x,y`
     /// - `key escape|return|tab`
     /// - `click-text TEXT`: click the label with that text
@@ -341,6 +342,17 @@ impl Snapshot {
                 "long_press" => {
                     let [x, y] = numbers::<2>(rest)?;
                     self.long_press(x, y);
+                }
+                "touch_down" | "touch_move" | "touch_up" => {
+                    let [x, y] = numbers::<2>(rest)?;
+                    let name = match verb {
+                        "touch_down" => TouchEventName::TouchStart,
+                        "touch_move" => TouchEventName::TouchMove,
+                        _ => TouchEventName::TouchEnd,
+                    };
+                    self.input(format!("{verb} {x},{y}"));
+                    self.send_touch(name, x, y);
+                    self.capture_frame();
                 }
                 "click" => {
                     let [x, y] = numbers::<2>(rest)?;

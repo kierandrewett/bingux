@@ -413,7 +413,7 @@ capture. `BINGUX_SETTINGS_SNAPSHOT_FRAMES=DIR` writes each frame of the
 16 ms animation clock to `DIR/<page>/NNNNNN.png` with a `frames.jsonl`
 manifest, from the first load on. `BINGUX_SETTINGS_SNAPSHOT_SCRIPT` then runs
 a walk of `;`-separated commands: `click x,y`, `right_click x,y`,
-`hover x,y`, `scroll x,y,dy`, `drag x1,y1,x2,y2`, `down x,y`, `move x,y` and `up x,y` (a held drag, so a frame can be saved between steps), `key escape|return|tab`,
+`hover x,y`, `scroll x,y,dy`, `drag x1,y1,x2,y2`, `down x,y`, `move x,y` and `up x,y` (a held drag, so a frame can be saved between steps), `touch x,y` (a finger tap), `long_press x,y` (a finger held past the long-press threshold), `touch_down x,y`, `touch_move x,y` and `touch_up x,y` (a held finger, for dragging a text selection handle), `type TEXT` (keys into the focused field), `key escape|return|tab`,
 `click-text LABEL`, `address PAGE[/SUBPAGE]`, `wait MS`, `mark TEXT` (a
 marker in the manifest) and `save NAME`. Pass `@path` instead to read the
 commands from a file. `scripts/frame-walk.py` drives the whole sidebar this

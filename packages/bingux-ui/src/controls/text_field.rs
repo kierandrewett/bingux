@@ -21,10 +21,10 @@ use crate::icons::{self, Icon};
 use crate::motion::Focusable;
 use crate::shell::menu::{MenuItem, menu_item, menu_separator};
 use crate::shell::overlays::Overlays;
-use crate::shell::panel::PanelTrigger;
+use crate::shell::panel::{Panel, PanelRect, PanelTrigger, text_bar_rect};
 use crate::style::*;
 use crate::surface::{use_enabled, use_tokens};
-use crate::typography::{BODY, CAPTION, Ink};
+use crate::typography::{BODY, CAPTION, Ink, mono_family};
 
 /// A multiline field is this many controls high.
 const MULTILINE_ROWS: f32 = 3.0;
@@ -44,6 +44,14 @@ pub struct TextField {
     flat: bool,
     password: bool,
     multiline: bool,
+    /// How many control heights a multiline field is tall.
+    lines: f32,
+    monospace: bool,
+    /// Draw the danger outline without the field's own message line, for a
+    /// form that shows the message itself.
+    danger_outline: bool,
+    /// A muted unit inside the field's right end, such as `bytes`.
+    suffix: Option<String>,
     enabled: bool,
     leading: Option<Icon>,
     leading_column: Option<Dim>,
@@ -73,6 +81,10 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         dense: false,
         password: false,
         multiline: false,
+        lines: MULTILINE_ROWS,
+        monospace: false,
+        danger_outline: false,
+        suffix: None,
         enabled: true,
         leading: None,
         leading_column: None,
@@ -141,6 +153,33 @@ impl TextField {
     /// Grow to about `rows` lines and accept newlines.
     pub fn multiline(mut self) -> Self {
         self.multiline = true;
+        self
+    }
+
+    /// How many lines tall a multiline field is (default 3). Has no effect
+    /// on a single-line field.
+    pub fn lines(mut self, lines: usize) -> Self {
+        self.lines = lines.max(1) as f32;
+        self
+    }
+
+    /// Draw the text in the monospace face, for keys, addresses and code.
+    pub fn monospace(mut self) -> Self {
+        self.monospace = true;
+        self
+    }
+
+    /// Outline the field in the danger colour without showing a message
+    /// under it, for a form that draws the message itself (see `form_field`).
+    pub fn danger_outline(mut self, outlined: bool) -> Self {
+        self.danger_outline = outlined;
+        self
+    }
+
+    /// A muted unit inside the right end of the field, such as `bytes` or
+    /// `s`, so fields with and without one keep the same width.
+    pub fn suffix(mut self, text: impl Into<String>) -> Self {
+        self.suffix = Some(text.into());
         self
     }
 
@@ -217,6 +256,11 @@ impl TextField {
     }
 }
 
+/// Whether the clipboard holds text, so the touch bar offers Paste.
+fn clipboard_has_text() -> bool {
+    freya::clipboard::Clipboard::get().is_ok_and(|text| !text.is_empty())
+}
+
 /// One context-menu entry; greyed out when `enabled` is false.
 fn edit_item(label: &str, enabled: bool, on_press: impl FnMut(()) + 'static) -> MenuItem {
     let item = menu_item(label, on_press);
@@ -232,7 +276,7 @@ impl Component for TextField {
         let on_arrow = self.on_arrow.clone();
         let revert_to = self.revert_to.clone();
         let multiline = self.multiline;
-        let invalid = self.invalid.is_some();
+        let invalid = self.invalid.is_some() || self.danger_outline;
         let own_id = use_a11y();
         let input_id = self.a11y_id.unwrap_or(own_id);
         let focus = use_focus(input_id);
@@ -335,6 +379,7 @@ impl Component for TextField {
             .theme_colors(colors)
             .theme_layout(layout)
             .mode(mode)
+            .keep_selection(menu_open)
             .command(command)
             .probe(probe)
             .request(request)
@@ -392,7 +437,10 @@ impl Component for TextField {
         } else {
             input = input
                 .multiline(true)
-                .height(Size::px(control_height * MULTILINE_ROWS));
+                .height(Size::px(control_height * self.lines));
+        }
+        if self.monospace {
+            input = input.font_family(mono_family());
         }
         if let Some(placeholder) = &self.placeholder {
             input = input.placeholder(placeholder.clone());
@@ -419,9 +467,16 @@ impl Component for TextField {
             )));
         }
         let clear = self.clearable && has_text;
-        if clear || self.password {
+        if clear || self.password || self.suffix.is_some() {
             let on_change = on_change.clone();
             let mut trailing = rect().tw(&tokens, &[flex_row(), center(), gap(S1)]);
+            if let Some(suffix) = &self.suffix {
+                trailing = trailing.child(
+                    BODY.in_ink(Ink::Muted)
+                        .label(&tokens, suffix.clone())
+                        .max_lines(1),
+                );
+            }
             if clear {
                 trailing = trailing.child(
                     rect()
@@ -461,9 +516,12 @@ impl Component for TextField {
             }
             input = input.trailing(trailing);
         }
-        // Any edit hides the touch bar. The app's on_change sees every edit.
+        // An edit that changes the text hides the touch bar; Select all, which
+        // validates unchanged text, keeps it. The app's on_change sees every edit.
         input = input.on_validate(move |validator: InputValidator| {
-            bar_open.set(false);
+            if *validator.text() != *value.peek() {
+                bar_open.set(false);
+            }
             if let Some(on_change) = &on_change {
                 on_change.call(validator.text().clone());
             }
@@ -492,15 +550,43 @@ impl Component for TextField {
         // full menu. Mouse keeps the right-click menu on the field.
         let seen = *probe.read();
         let show_bar = bar_open() && seen.focused;
-        let window = *Platform::get().current_window().root_size.read();
-        let bar_window = text_edit::anchor(&seen).and_then(|anchor| {
-            text_edit::bar_rect(anchor, *bar_size.read(), (window.width, window.height))
-        });
-        let origin = *field_origin.read();
         let (handle_start, handle_end) = match seen.selection {
             Some((start, end)) if show_bar => (Some(start), Some(end)),
             _ => (None, None),
         };
+        // The bar sits against the caret or selection, inside the field. With no
+        // caret the field is not focused, so there is no bar to place.
+        let text_trigger = match (*field_area.read(), text_edit::anchor(&seen)) {
+            (Some((x0, y0, x1, y1)), Some(caret)) => Some(PanelTrigger::Text {
+                field: PanelRect {
+                    x: x0,
+                    y: y0,
+                    width: x1 - x0,
+                    height: y1 - y0,
+                },
+                caret,
+            }),
+            _ => None,
+        };
+        // The bar's window rectangle once measured. A press inside it is the bar's.
+        let window = *Platform::get().current_window().root_size.read();
+        let bar_hit = text_trigger.zip(*bar_size.read()).map(|(trigger, size)| {
+            text_bar_rect(trigger.anchor(), size, (window.width, window.height))
+        });
+        // A touch on the bar or a handle is not a tap outside the field, which
+        // would take its focus.
+        let companions: Vec<Area> = bar_hit
+            .into_iter()
+            .chain(
+                [handle_start, handle_end]
+                    .into_iter()
+                    .flatten()
+                    .map(text_edit::handle_rect),
+            )
+            .filter(|_| show_bar)
+            .map(text_edit::area)
+            .collect();
+        input = input.keep_focus_in(companions);
         let cut = edit_item("Cut", copyable, move |_| {
             command.set(Some(InputCommand::Cut));
             bar_open.set(false);
@@ -513,37 +599,31 @@ impl Component for TextField {
             command.set(Some(InputCommand::Paste));
             bar_open.set(false);
         });
-        let select = edit_item("Select", seen.caret.is_some(), move |_| {
-            if let Some(at) = probe.read().caret {
-                request.set(Some(InputRequest::SelectWordAt {
-                    x: at.x,
-                    y: (at.top + at.bottom) / 2.0,
-                }));
-            }
+        let select = edit_item("Select", has_text, move |_| {
+            request.set(Some(InputRequest::SelectWordAtCursor));
         });
         let select_all = edit_item("Select all", has_text, move |_| {
             command.set(Some(InputCommand::SelectAll));
         });
-        let bar_entries = if seen.selection.is_some() {
-            vec![cut, copy, paste]
-        } else {
-            vec![paste, select, select_all]
-        };
+        // Paste is offered only while the clipboard holds text. A selection shows
+        // Cut, Copy and Paste; a bare caret shows Paste, Select and Select all.
+        let can_paste = show_bar && clipboard_has_text();
+        let bar_entries: Vec<MenuItem> = match seen.selection {
+            Some(_) => [Some(cut), Some(copy), can_paste.then_some(paste)],
+            None => [can_paste.then_some(paste), Some(select), Some(select_all)],
+        }
+        .into_iter()
+        .flatten()
+        .collect();
         let mut full_menu = items.clone();
         full_menu.extend(self.edit_extra.clone());
         let on_more = EventHandler::new(move |_: ()| {
             bar_open.set(false);
-            if let (Some(overlays), Some(anchor)) = (overlays, bar_window) {
+            if let (Some(overlays), Some(trigger)) = (overlays, text_trigger) {
                 input_id.request_focus();
-                overlays.show_menu_from(
-                    Some(input_id),
-                    PanelTrigger::Control(anchor),
-                    full_menu.clone(),
-                    false,
-                );
+                overlays.show_menu_from(Some(input_id), trigger, full_menu.clone(), false);
             }
         });
-        let bar_offset = bar_window.map(|rect| (rect.x - origin.0, rect.y - origin.1));
         let field = rect()
             .width(if self.fill {
                 Size::fill()
@@ -588,6 +668,12 @@ impl Component for TextField {
                 let inside = (*field_area.read()).is_some_and(|(x0, y0, x1, y1)| {
                     at.0 >= x0 && at.0 <= x1 && at.1 >= y0 && at.1 <= y1
                 });
+                // A press outside the field and its bar hides the bar. A press on the
+                // bar is left to reach its entry.
+                let on_bar = bar_hit.is_some_and(|rect| rect.contains(at));
+                if !inside && !on_bar && *bar_open.read() {
+                    bar_open.set(false);
+                }
                 if is_touch(&event) && inside {
                     pressed_at.set(at);
                     touch.begin(
@@ -623,9 +709,16 @@ impl Component for TextField {
                 }
             })
             .child(input)
-            .maybe_child(handle_start.map(|at| text_edit::handle(&tokens, at, origin, true, request)))
-            .maybe_child(handle_end.map(|at| text_edit::handle(&tokens, at, origin, false, request)))
-            .maybe_child(show_bar.then(|| text_edit::bar(&tokens, bar_entries, on_more, bar_size, bar_offset)))
+            .maybe_child(handle_start.map(|at| text_edit::handle(&tokens, at, true, request)))
+            .maybe_child(handle_end.map(|at| text_edit::handle(&tokens, at, false, request)))
+            .maybe_child(text_trigger.map(|trigger| {
+                Panel::bar(
+                    show_bar,
+                    trigger,
+                    bar_size,
+                    text_edit::bar(&tokens, bar_entries, on_more),
+                )
+            }))
             .focusable(focus(), Radius::Control)
             .maybe(self.fill, |wrapper| wrapper.tw(&tokens, &[w_flex()]));
 

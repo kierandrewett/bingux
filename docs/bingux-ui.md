@@ -139,11 +139,14 @@ wrapping at the ends). Text fields: Enter submits, and Escape reverts an edited
 value and then leaves the field. A password field has a reveal button, and a right
 click opens Cut, Copy, Paste and Select all. On touch, a tap places the caret,
 a second tap on the same spot, or a tap in an empty field, shows a compact edit
-bar (Paste, Select, Select all; Cut, Copy and Paste once there is a selection),
+bar over the caret (Paste while the clipboard holds text, Select, Select all;
+Cut, Copy and Paste once there is a selection),
 and a double tap or a long press selects the word under the finger. Two caret
-handles mark a selection and drag to resize it; the bar follows it. The bar's
-chevron opens the full menu as a floating panel anchored to the bar. Typing,
-Escape, a tap elsewhere or a scroll hides the bar. Apps can append items to the
+handles mark a selection and drag to resize it; the bar, centred over the
+selection, follows it. The bar's chevron opens the full menu as a floating
+panel against the same caret or selection, never a sheet, and the selection
+stays highlighted while it is open. Typing, Escape, a tap elsewhere or a scroll
+hides the bar. Select all keeps it. Apps can append items to the
 menu with `text_field(..).edit_menu_extra(items)`. In a popup, the panel takes
 focus on open unless a field is marked `autofocus()`, and Enter in a
 single-line field runs the primary action. Each control has an accessibility

@@ -2,30 +2,32 @@
 //! and the two lollipop handles that drag a selection's ends.
 //!
 //! Touch only. A mouse keeps the floating right-click menu. The bar holds the
-//! general edit actions, and its chevron opens the full menu anchored to the
-//! bar. Everything is placed in window coordinates from the probe the
-//! vendored `Input` reports. The caller draws it as a child of the field, offset
-//! by the field's area origin, as the tooltip does.
+//! general edit actions, and its chevron opens the full menu as a floating
+//! panel against the same caret. The bar is a `Panel` of kind `Bar`
+//! (`shell::panel`), which places it; this module supplies its entries and the
+//! handles. Everything is in window coordinates from the probe the vendored
+//! `Input` reports. Handles are drawn in the field's frame.
 
 use std::time::Duration;
 
 use freya::prelude::*;
+use freya::torin::prelude::{Point2D, Size2D};
 
 use crate::icons::{self, Icon};
 use crate::shell::menu::MenuItem;
-use crate::shell::panel::{PanelRect, Side, place};
+use crate::shell::panel::PanelRect;
 use crate::style::*;
 use crate::theme::Tokens;
 use crate::typography::BODY;
 
 /// Two taps this close together count as a double tap, which selects a word.
 pub(crate) const DOUBLE_TAP: Duration = Duration::from_millis(350);
-/// Space between the bar and the caret or selection it sits above.
-const BAR_GAP: f32 = 4.0;
 /// Diameter of a handle's knob.
 const KNOB: f32 = 12.0;
 /// Width of a handle's stem, the line through the caret.
 const STEM: f32 = 2.0;
+/// Width of a handle's touch area, centred on its caret.
+const HANDLE_HIT: f32 = 32.0;
 
 /// The window rectangle the bar is placed against: the caret, or the bounding
 /// box of the selection. An empty field has no caret to show, so the bar sits
@@ -57,97 +59,88 @@ pub(crate) fn anchor(probe: &InputProbe) -> Option<PanelRect> {
     })
 }
 
-/// The bar's window rectangle once its size is measured. The bar opens above
-/// its anchor, or below when there is no room, and stays inside the window.
-pub(crate) fn bar_rect(
-    anchor: PanelRect,
-    size: Option<(f32, f32)>,
-    window: (f32, f32),
-) -> Option<PanelRect> {
-    let (width, height) = size?;
-    let (x, y) = place(anchor, (width, height), window, Side::Above, BAR_GAP);
-    Some(PanelRect {
-        x,
-        y,
-        width,
-        height,
-    })
+/// The window rectangle a handle at `caret` covers, its touch area.
+pub(crate) fn handle_rect(caret: InputCaret) -> PanelRect {
+    let height = (caret.bottom - caret.top).max(0.0);
+    PanelRect {
+        x: caret.x - HANDLE_HIT / 2.0,
+        y: caret.top,
+        width: HANDLE_HIT,
+        height: height + KNOB + HANDLE_HIT / 2.0,
+    }
+}
+
+/// A window rectangle as the layout's area, for the taps an input must not
+/// count as outside itself.
+pub(crate) fn area(rect: PanelRect) -> Area {
+    Area::new(
+        Point2D::new(rect.x, rect.y),
+        Size2D::new(rect.width, rect.height),
+    )
 }
 
 /// A lollipop handle at one selection end: a stem through the caret with a
-/// knob below it. Dragging it moves that end of the selection live.
-/// `origin` is the field's area origin, so the handle is placed in its frame.
+/// knob below it. Dragging it moves that end of the selection live. The caret
+/// is in window coordinates, and the handle is placed there. Its touch area is
+/// wider than the knob so a finger can find it.
 pub(crate) fn handle(
     tokens: &Tokens,
     caret: InputCaret,
-    origin: (f32, f32),
     start: bool,
     mut request: State<Option<InputRequest>>,
 ) -> impl IntoElement {
     let height = (caret.bottom - caret.top).max(0.0);
-    let left = caret.x - origin.0 - KNOB / 2.0;
-    let top = caret.top - origin.1;
+    let hit = handle_rect(caret);
     rect()
         .layer(Layer::Overlay)
-        .position(Position::new_absolute().left(left).top(top))
-        .width(Size::px(KNOB))
-        .height(Size::px(height + KNOB))
+        .position(Position::new_global().left(hit.x).top(hit.y))
+        .width(Size::px(hit.width))
+        .height(Size::px(hit.height))
         .on_pointer_down(move |event: Event<PointerEventData>| {
             event.stop_propagation();
             request.set(Some(InputRequest::DragSelectionEnd { start }));
         })
         .child(
             rect()
-                .position(Position::new_absolute().left((KNOB - STEM) / 2.0).top(0.0))
+                .position(
+                    Position::new_absolute()
+                        .left((HANDLE_HIT - STEM) / 2.0)
+                        .top(0.0),
+                )
                 .width(Size::px(STEM))
                 .height(Size::px(height))
                 .tw(tokens, &[bg(Paint::Accent)]),
         )
         .child(
             rect()
-                .position(Position::new_absolute().left(0.0).top(height))
+                .position(
+                    Position::new_absolute()
+                        .left((HANDLE_HIT - KNOB) / 2.0)
+                        .top(height),
+                )
                 .width(Size::px(KNOB))
                 .height(Size::px(KNOB))
                 .tw(tokens, &[rounded(Radius::Pill), bg(Paint::Accent)]),
         )
 }
 
-/// The edit bar: a compact pill of `entries`, each a label, then a chevron
-/// that calls `on_more`. Entries are separated by hairlines. The bar reports
-/// its size through `measure`, so the caller can place it once it is known.
-/// `offset` is the bar's position in the field's frame, `None` until placed.
+/// The edit bar's entries, in order: each label, a hairline between two
+/// entries, then a hairline and the chevron that calls `on_more`. The bar's
+/// [`Panel`](crate::shell::panel::Panel) draws the pill around them.
 pub(crate) fn bar(
     tokens: &Tokens,
     entries: Vec<MenuItem>,
     on_more: EventHandler<()>,
-    mut measure: State<Option<(f32, f32)>>,
-    offset: Option<(f32, f32)>,
-) -> impl IntoElement {
-    let (left, top) = offset.unwrap_or((0.0, 0.0));
-    let mut row = rect()
-        .on_sized(move |event: Event<SizedEventData>| {
-            measure.set_if_modified(Some((event.area.width(), event.area.height())));
-        })
-        .layer(Layer::Overlay)
-        .position(Position::new_absolute().left(left).top(top))
-        .opacity(if offset.is_some() { 1.0 } else { 0.0 })
-        .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
-        .tw(
-            tokens,
-            &[
-                flex_row(),
-                items(Align::Center),
-                h(Dim::Control),
-                rounded(Radius::Pill),
-                bg(Paint::Floating),
-                border(Line::Stroke(Dim::Hairline, Paint::FloatingOutline)),
-                shadow(Elevation::Raised),
-            ],
-        );
+) -> Vec<Element> {
+    let mut children = Vec::new();
     for entry in entries {
-        row = row.child(separator(tokens)).child(bar_entry(tokens, entry));
+        if !children.is_empty() {
+            children.push(separator(tokens).into_element());
+        }
+        children.push(bar_entry(tokens, entry).into_element());
     }
-    row.child(separator(tokens)).child(
+    children.push(separator(tokens).into_element());
+    children.push(
         rect()
             .tw(tokens, &[flex_row(), center(), px(S2), h(Dim::Control)])
             .on_press(move |_| on_more.call(()))
@@ -155,8 +148,10 @@ pub(crate) fn bar(
                 Icon::GoNext,
                 IconSize::Control,
                 Paint::Muted.color(tokens),
-            )),
-    )
+            ))
+            .into_element(),
+    );
+    children
 }
 
 /// One bar entry: its label, dimmed and inert when disabled.
