@@ -419,6 +419,8 @@ struct Slide {
     outgoing: Element,
     outgoing_header: Option<Element>,
     start_x: f32,
+    /// The outgoing page's own scroll, so it holds still as it slides.
+    scroll: ScrollController,
 }
 
 impl Slide {
@@ -429,6 +431,7 @@ impl Slide {
         outgoing: Element,
         outgoing_header: Option<Element>,
         shown: Option<(PageMotion, f32)>,
+        scroll: ScrollController,
     ) -> Self {
         let start_x = match (motion, shown) {
             (PageMotion::Push, Some((PageMotion::Pop, x))) => x,
@@ -442,6 +445,7 @@ impl Slide {
             outgoing,
             outgoing_header,
             start_x,
+            scroll,
         }
     }
 
@@ -553,8 +557,6 @@ fn sheet_header(page: PageKey, back: Option<EventHandler<()>>) -> Element {
 #[derive(Default)]
 struct PageMemory {
     key: Option<PageKey>,
-    /// The page the scroll position was last reset for.
-    scrolled_key: Option<PageKey>,
     element: Option<Element>,
     pending: bool,
     duration: u64,
@@ -565,6 +567,59 @@ struct PageMemory {
     shown: Option<(PageMotion, f32)>,
     /// The header strip the page on screen carries, when it is a sheet.
     element_header: Option<Element>,
+    /// The subpages opened in a row from the page, oldest first.
+    trail: Vec<PageKey>,
+    /// Each page's scroll, kept while the page can still be returned to.
+    controllers: std::collections::HashMap<PageKey, ScrollController>,
+}
+
+impl PageMemory {
+    /// The scroll of `key`, made at the top when the page has none.
+    fn scroll_for(&mut self, key: &PageKey) -> ScrollController {
+        *self
+            .controllers
+            .entry(key.clone())
+            .or_insert_with(|| ScrollController::new(0, 0))
+    }
+
+    /// Moves to `page_key`. When the page changed, returns the page it
+    /// replaced, the motion between them and the replaced page's scroll.
+    fn enter(
+        &mut self,
+        page_key: &PageKey,
+    ) -> Option<(PageKey, Option<PageMotion>, ScrollController)> {
+        let previous = self.key.clone().filter(|previous| previous != page_key)?;
+        // A subpage key is only its title, so a move from one subpage to
+        // another reads as a push. The trail of subpages opened from the
+        // page tells a step back (to one already on the trail) from a
+        // step in.
+        let mut kind = page_motion(&previous, page_key);
+        if page_key.1.is_none() || previous.0 != page_key.0 || previous.2 != page_key.2 {
+            self.trail.clear();
+        }
+        if page_key.1.is_some() {
+            if let Some(at) = self.trail.iter().position(|key| key == page_key) {
+                self.trail.truncate(at + 1);
+                kind = Some(PageMotion::Pop);
+            } else {
+                if self.trail.is_empty() && previous.1.is_some() {
+                    self.trail.push(previous.clone());
+                }
+                self.trail.push(page_key.clone());
+            }
+        }
+        let outgoing = self.scroll_for(&previous);
+        // Only a step back finds the page as it was left. Any other move
+        // starts the page at the top.
+        if kind != Some(PageMotion::Pop) {
+            self.controllers.remove(page_key);
+        }
+        // Keep the pages Back can reach: the page and its subpages. The page
+        // just left stays while its slide runs.
+        self.controllers
+            .retain(|key, _| (key.0 == page_key.0 && key.2 == page_key.2) || *key == previous);
+        Some((previous, kind, outgoing))
+    }
 }
 
 /// The page column: centred, at most `page_width` wide, with the page margins.
@@ -759,7 +814,13 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             self.subpage.as_ref().map(|s| s.title.clone()),
             list_key,
         );
-        let scroll = use_scroll_controller(ScrollConfig::default);
+        // The page being replaced stays on screen in `memory` while a motion
+        // runs. Each page owns its scroll controller, so a page left and
+        // reached again by Back is still where it was, and a page reached any
+        // other way starts at the top.
+        let memory = use_hook(|| Rc::new(RefCell::new(PageMemory::default())));
+        let entered = memory.borrow_mut().enter(&page_key);
+        let scroll = memory.borrow_mut().scroll_for(&page_key);
         // The pages with results, when the split view searches.
         let search_hits = self
             .search
@@ -836,9 +897,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let request_list = on_show_list.clone();
         let back_pointer = back_key.clone();
         // Page changes move the content. A subpage slides in from the right, a
-        // pop slides it out to the right, and a sidebar switch cross-fades. The
-        // page being replaced stays on screen in `memory` while the motion runs.
-        let memory = use_hook(|| Rc::new(RefCell::new(PageMemory::default())));
+        // pop slides it out to the right, and a sidebar switch cross-fades.
         let mut generation = use_state(|| 0u64);
         let anim_memory = memory.clone();
         let anim = use_animation_transition(generation(), move |_, _| {
@@ -847,18 +906,9 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 .function(Function::Expo)
                 .ease(Ease::Out)
         });
-        let mut scroll_effect = scroll;
         let effect_memory = memory.clone();
-        // A new page starts at the top. The effect also runs again when the
-        // scroll position changes, because it reads the scroll state, so it
-        // only resets when the page itself changed; otherwise every wheel
-        // turn would jump back to the top.
-        use_side_effect_with_deps(&page_key, move |key| {
-            let fresh = effect_memory.borrow().scrolled_key.as_ref() != Some(key);
-            if fresh {
-                effect_memory.borrow_mut().scrolled_key = Some(key.clone());
-                scroll_effect.scroll_to_y(0);
-            }
+        // The slide starts after the render that queued it.
+        use_side_effect_with_deps(&page_key, move |_| {
             if effect_memory.borrow().pending {
                 effect_memory.borrow_mut().pending = false;
                 *generation.write() += 1;
@@ -867,12 +917,9 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let mut changed = false;
         {
             let mut memory = memory.borrow_mut();
-            if let Some(previous) = memory.key.clone()
-                && previous != page_key
-            {
+            if let Some((_, kind, outgoing_scroll)) = entered {
                 changed = true;
-                let motion = page_motion(&previous, &page_key)
-                    .filter(|motion| tokens.motion(motion.ms()) > 0);
+                let motion = kind.filter(|motion| tokens.motion(motion.ms()) > 0);
                 let shown = memory.shown.take();
                 let runs = *anim.runs().peek();
                 memory.active = match (motion, memory.element.clone()) {
@@ -885,6 +932,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                             outgoing,
                             memory.element_header.clone(),
                             shown,
+                            outgoing_scroll,
                         ))
                     }
                     _ => {
@@ -934,7 +982,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                         progress,
                         None,
                         None,
-                        Some((0.0, 1.0 - progress, slide.outgoing, None, None)),
+                        Some((0.0, 1.0 - progress, slide.outgoing, None, None, slide.scroll)),
                     ),
                     PageMotion::Push => {
                         memory.borrow_mut().shown = Some((slide.motion, x));
@@ -943,7 +991,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                             1.0,
                             Some(card),
                             overlay.then(|| sheet_header(page_key.clone(), back_key.clone())),
-                            Some((0.0, 1.0, slide.outgoing, None, None)),
+                            Some((0.0, 1.0, slide.outgoing, None, None, slide.scroll)),
                         )
                     }
                     PageMotion::Pop => {
@@ -959,6 +1007,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                                 slide.outgoing,
                                 Some(card),
                                 slide.outgoing_header,
+                                slide.scroll,
                             )),
                         )
                     }
@@ -985,13 +1034,13 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             )
             .maybe_child(page_header);
         let page = slide_frame(page_offset, page_opacity, page_sheet, &tokens, page);
-        let outgoing = outgoing.map(|(offset, opacity, element, sheet, header)| {
+        let outgoing = outgoing.map(|(offset, opacity, element, sheet, header, scroll)| {
             let outgoing_page = rect()
                 .position(Position::new_absolute().top(0.0).left(0.0))
                 .width(Size::fill())
                 .height(Size::fill())
                 .child(
-                    ScrollView::new()
+                    ScrollView::new_controlled(scroll)
                         .scrollbar_inset_top(if overlay { Dim::Header.px() } else { 0.0 })
                         .scrollbar_inset_bottom(Radius::Window.px() + 3.0)
                         .drag_scrolling(false)
