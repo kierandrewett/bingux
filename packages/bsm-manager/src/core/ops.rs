@@ -52,6 +52,9 @@ pub(super) struct Operation {
     /// `BeginTransition` was sent to the compositor.
     pub began: bool,
     pub cancel_requested: bool,
+    /// A power action failed after the cover was committed: the operation ends with this
+    /// code once the compositor has taken the cover away again.
+    pub pending_fail: Option<ErrorCode>,
     /// The irreversible point passed.
     pub committed: bool,
     pub reason: Option<ErrorCode>,
@@ -115,6 +118,7 @@ impl Manager {
             session,
             began: false,
             cancel_requested: false,
+            pending_fail: None,
             committed: false,
             reason: None,
             new_login: false,
@@ -653,8 +657,12 @@ impl Manager {
             TransitionPhaseEvent::Failed => self.transition_failed(ErrorCode::TransitionInterrupted, fx),
             TransitionPhaseEvent::Cancelled => {
                 if self.op.as_ref().is_some_and(|o| o.cancel_requested) {
+                    // The scene is restored: only now does input go back to where it was.
                     self.rollback_power_scene(fx);
-                    self.op_cancelled(fx);
+                    match self.op.as_ref().and_then(|o| o.pending_fail) {
+                        Some(code) => self.op_fail(code, fx),
+                        None => self.op_cancelled(fx),
+                    }
                 } else {
                     self.transition_failed(ErrorCode::TransitionInterrupted, fx);
                 }

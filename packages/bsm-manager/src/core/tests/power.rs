@@ -147,10 +147,15 @@ fn logind_refusal_restores_the_desktop_scene_and_input() {
     assert_eq!(sim.input_owner(), InputOwner::None);
     let mark = sim.mark();
     sim.feed(Input::PowerResult { operation: op, result: Err(BsmError::new(ErrorCode::LogindFailure, "denied")) });
+    // The compositor is asked to take the cover away; input stays revoked until it says the
+    // scene is back (a SetInputOwner before that would be refused and lost).
+    assert!(sim.scene_cmds(mark).iter().any(|c| matches!(c, SceneCommand::CancelTransition { operation } if *operation == op)));
+    assert_eq!(sim.input_owner(), InputOwner::None);
+    assert!(sim.m.operation().is_some());
+    assert!(sim.set_input_owner_cmds(mark).is_empty());
+    sim.phase(op, TransitionPhaseEvent::Cancelled);
     assert!(sim.m.operation().is_none());
     assert_eq!(sim.m.history().last().unwrap().reason, Some(ErrorCode::ShutdownRejected));
-    // The compositor restores what was authorised, and input returns to the user who asked.
-    assert!(sim.scene_cmds(mark).iter().any(|c| matches!(c, SceneCommand::CancelTransition { operation } if *operation == op)));
     assert_eq!(sim.input_owner(), InputOwner::Session(a.clone()));
     assert_eq!(sim.m.seat(), SeatState::UserForeground);
     assert_ne!(sim.m.seat(), SeatState::ShuttingDown);
@@ -169,8 +174,10 @@ fn logind_silence_ends_in_a_failure_not_a_black_screen() {
     sim.phase(op, TransitionPhaseEvent::Committed);
     let mark = sim.mark();
     sim.advance(Duration::from_secs(31));
-    assert!(sim.m.operation().is_none());
     assert!(sim.scene_cmds(mark).iter().any(|c| matches!(c, SceneCommand::CancelTransition { .. })));
+    // Even a compositor that never confirms the restore cannot leave the seat shutting down forever.
+    sim.advance(Duration::from_secs(6));
+    assert!(sim.m.operation().is_none());
     assert_ne!(sim.m.seat(), SeatState::ShuttingDown);
 }
 

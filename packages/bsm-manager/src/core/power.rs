@@ -214,7 +214,7 @@ impl Manager {
     }
 
     pub(super) fn on_power_result(&mut self, id: OperationId, result: Result<(), BsmError>, fx: &mut Fx) {
-        let Some(op) = self.op.as_ref().filter(|o| o.id == id && o.kind == OpKind::Power && o.committed) else {
+        let Some(op) = self.op.as_ref().filter(|o| o.id == id && o.kind == OpKind::Power && o.committed && o.pending_fail.is_none()) else {
             return;
         };
         let action = op.action.unwrap_or(PowerAction::PowerOff);
@@ -233,9 +233,16 @@ impl Manager {
                     ErrorCode::Unauthorised | ErrorCode::Inhibited => e.code,
                     _ => ErrorCode::ShutdownRejected,
                 };
-                self.rollback_power_scene(fx);
                 if action != PowerAction::Suspend {
+                    // Take the cover away first; input goes back when the compositor says the
+                    // scene is restored (a refused SetInputOwner before that would be lost).
+                    if let Some(op) = self.op.as_mut() {
+                        op.pending_fail = Some(code);
+                        op.cancel_requested = true;
+                    }
                     fx.push(Effect::Scene(SceneCommand::CancelTransition { operation: id }));
+                    fx.push(Effect::SetTimer { id: TimerId::Power(id), after: self.policy.transition_grace });
+                    return;
                 }
                 self.op_fail(code, fx);
             }
@@ -248,6 +255,14 @@ impl Manager {
                 Self::log(fx, LogLevel::Error, None, "sleep preparation timed out; sessions were hidden and protection was requested");
                 self.finish_sleep_prep(fx);
             }
+            return;
+        }
+        if self.op.as_ref().is_some_and(|o| o.id == id && o.pending_fail.is_some()) {
+            // The compositor never confirmed the restore: give input back and end the operation.
+            Self::log(fx, LogLevel::Error, None, "the compositor did not confirm the restored scene in time");
+            self.rollback_power_scene(fx);
+            let code = self.op.as_ref().and_then(|o| o.pending_fail).unwrap_or(ErrorCode::ShutdownRejected);
+            self.op_fail(code, fx);
             return;
         }
         self.on_power_result(id, Err(BsmError::new(ErrorCode::Timeout, "logind did not answer")), fx);

@@ -57,6 +57,13 @@ pub const GREETER_BODY: Rgba = [40, 60, 200, 255];
 pub const SESSION_A: Rgba = [30, 180, 60, 255];
 pub const SESSION_B: Rgba = [220, 170, 20, 255];
 
+/// The unified (cgroup v2) path of this process: what the helper reports as the scope and
+/// what the manager matches callers against.
+pub fn scope_path() -> String {
+    let cg = std::fs::read_to_string("/proc/self/cgroup").expect("cgroup");
+    cg.lines().find_map(|l| l.strip_prefix("0::")).expect("a cgroup v2 line").to_owned()
+}
+
 pub fn in_namespace() -> bool {
     std::env::var_os("BSM_IN_USERNS").is_some()
 }
@@ -204,7 +211,7 @@ impl FakeHelper {
                         generation,
                         host_pid: std::process::id(),
                         leader_pid: std::process::id(),
-                        scope: common::my_scope(),
+                        scope: scope_path(),
                         logind_session: Some("c1".into()),
                     },
                 );

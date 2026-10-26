@@ -189,7 +189,9 @@ scenario!(switch_a_to_b_and_back_resumes_a_without_relaunch, {
     let first_fm = rig.frame_mark();
 
     // Switch user: A is protected and the greeter appears; picking B hides A's unlock form.
+    let gm = rig.g().mark();
     rig.root_call(Method::RequestSwitchUser).expect("switch user");
+    rig.wait_operation(gm, OperationPhase::Completed, Some(TransitionKind::SwitchUser));
     rig.wait_seen(Seen::Greeter);
     rig.wait_state(&a, SessionState::LockedGreeterForeground);
     rig.g().send(ClientMessage::SelectUser { uid: BOB });
@@ -206,7 +208,9 @@ scenario!(switch_a_to_b_and_back_resumes_a_without_relaunch, {
     assert_eq!(rig.focus().owner, InputOwner::Session(b.clone()));
 
     // Back to A: lock B, pick A, authenticate: A's own Gnoblin resumes with the slide-up.
+    let gm = rig.g().mark();
     rig.root_call(Method::RequestSwitchUser).expect("switch user");
+    rig.wait_operation(gm, OperationPhase::Completed, Some(TransitionKind::SwitchUser));
     rig.wait_state(&b, SessionState::LockedGreeterForeground);
     let fm = rig.frame_mark();
     let gm = rig.g().mark();
@@ -237,9 +241,10 @@ scenario!(logout_closes_only_that_session_and_a_crash_returns_to_the_greeter, {
     let mut rig = Rig::start(RigConfig::default());
     rig.attach_greeter();
     let a = rig.login(ALICE, SESSION_A, PASSWORD);
+    let gm = rig.g().mark();
     rig.root_call(Method::RequestSwitchUser).unwrap();
+    rig.wait_operation(gm, OperationPhase::Completed, Some(TransitionKind::SwitchUser));
     rig.wait_state(&a, SessionState::LockedGreeterForeground);
-    rig.g().send(ClientMessage::SelectUser { uid: BOB });
     let b = rig.login(BOB, SESSION_B, PASSWORD);
     rig.wait_seen(Seen::B);
 
@@ -302,8 +307,10 @@ scenario!(failures_never_reveal_and_never_wait_forever, {
     rig.g().wait_after(gm, Duration::from_secs(10), "a failed operation", |m| {
         matches!(m, ServerMessage::Operation { phase: OperationPhase::Failed, reason: Some(ErrorCode::Timeout), .. })
     });
-    let snap = rig.g().snapshot();
-    let failure = snap.progress.expect("progress is kept").failure.expect("with its failure");
+    rig.wait("the failure in the greeter's snapshot", Duration::from_secs(5), |r| {
+        r.greeter.as_ref().is_some_and(|g| g.snapshot().progress.is_some_and(|p| p.failure.is_some()))
+    });
+    let failure = rig.g().snapshot().progress.unwrap().failure.unwrap();
     assert_eq!(failure.code, ErrorCode::Timeout);
     for f in rig.all_frames_since(fm) {
         assert!(f.plan.session.is_none(), "no desktop was ever composed");
@@ -364,7 +371,7 @@ scenario!(power_actions_are_authorised_first_and_restore_the_scene_when_refused,
     // The session asks to reboot but polkit says no: nothing is faded, logind is not called.
     rig.system.polkit.store(false, std::sync::atomic::Ordering::SeqCst);
     let caller = {
-        let scope = support::common::my_scope();
+        let scope = support::scope_path();
         bsm_manager::core::Caller { uid: ALICE, pid: std::process::id(), bus_name: ":1.42".into(), cgroup: Some(format!("{scope}/app")) }
     };
     let gm = rig.g().mark();
@@ -388,7 +395,7 @@ scenario!(power_actions_are_authorised_first_and_restore_the_scene_when_refused,
     let frames = rig.all_frames_since(fm);
     assert!(frames.iter().any(|f| f.plan.cover_overlay > 0.9), "the cover was fully up before logind was called");
     rig.wait_seen(Seen::A);
-    assert_eq!(rig.focus().owner, InputOwner::Session(a.clone()), "input is back with the user");
+    rig.wait("input to be back with the user", Duration::from_secs(5), |r| r.focus().owner == InputOwner::Session(a.clone()));
     assert_eq!(rig.rt.as_ref().unwrap().snapshot().seat, Some(SeatState::UserForeground));
 
     // Accepted: the cover stays and the manager does not pretend the machine is back.
