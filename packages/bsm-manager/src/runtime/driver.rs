@@ -11,7 +11,9 @@ use std::io;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, sync_channel};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::Arc;
+
+use parking_lot::{Condvar, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -74,13 +76,13 @@ impl RuntimeHandle {
     /// True once the compositor reported its outputs (the seat left `Booting`).
     pub fn wait_ready(&self, timeout: Duration) -> bool {
         let (lock, cv) = &*self.ready;
-        let g = lock.lock().expect("ready lock");
-        let (g, _) = cv.wait_timeout_while(g, timeout, |r| !*r).expect("ready wait");
+        let mut g = lock.lock();
+        cv.wait_while_for(&mut g, |r| !*r, timeout);
         *g
     }
 
     pub fn snapshot(&self) -> SharedState {
-        self.state.lock().expect("state lock").clone()
+        self.state.lock().clone()
     }
 
     /// Stop the driver. Sessions are not closed: bsm restarting must not end them.
@@ -255,13 +257,13 @@ impl Driver {
         let seat = self.m.seat();
         if seat != SeatState::Booting {
             let (lock, cv) = &*self.ready;
-            let mut g = lock.lock().expect("ready lock");
+            let mut g = lock.lock();
             if !*g {
                 *g = true;
                 cv.notify_all();
             }
         }
-        let mut st = self.state.lock().expect("state lock");
+        let mut st = self.state.lock();
         st.seat = Some(seat);
         st.sessions = self
             .m

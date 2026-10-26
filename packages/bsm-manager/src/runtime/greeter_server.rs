@@ -17,7 +17,9 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{SyncSender, TrySendError, sync_channel};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -117,7 +119,7 @@ impl GreeterServer {
                         let Ok((uid, pid)) = peer_cred(&stream) else { continue };
                         let id = next_id;
                         next_id += 1;
-                        shared.lock().expect("control lock").pending.insert(id, (stream, Instant::now()));
+                        shared.lock().pending.insert(id, (stream, Instant::now()));
                         if tx.send(RtInput::Core(Input::GreeterPeer { conn: id, uid, pid })).is_err() {
                             return;
                         }
@@ -132,7 +134,7 @@ impl GreeterServer {
                 }
             }
             // Drop connections the manager never answered.
-            let mut s = shared.lock().expect("control lock");
+            let mut s = shared.lock();
             s.pending.retain(|_, (_, at)| at.elapsed() < VERDICT_TIMEOUT);
         }
     }
@@ -140,7 +142,7 @@ impl GreeterServer {
     /// The manager's decision about a pending connection.
     pub fn verdict(&self, conn: u64, accept: bool) {
         let stream = {
-            let mut s = self.shared.lock().expect("control lock");
+            let mut s = self.shared.lock();
             s.pending.remove(&conn).map(|(st, _)| st)
         };
         let Some(stream) = stream else { return };
@@ -153,7 +155,7 @@ impl GreeterServer {
         };
         let _ = write_half.set_write_timeout(Some(Duration::from_secs(2)));
         let (out_tx, out_rx) = sync_channel::<String>(WRITE_QUEUE);
-        self.shared.lock().expect("control lock").active = Some(Active { id: conn, out: out_tx, stream: keep });
+        self.shared.lock().active = Some(Active { id: conn, out: out_tx, stream: keep });
         // Writer.
         let shared = self.shared.clone();
         thread::Builder::new()
@@ -166,7 +168,7 @@ impl GreeterServer {
                     }
                 }
                 let _ = w.shutdown(std::net::Shutdown::Both);
-                let mut s = shared.lock().expect("control lock");
+                let mut s = shared.lock();
                 if s.active.as_ref().is_some_and(|a| a.id == conn) {
                     // The reader sees EOF and reports the disconnect.
                     s.active = None;
@@ -181,7 +183,7 @@ impl GreeterServer {
             .spawn(move || {
                 Self::read_loop(conn, read_half, &tx, &shared);
                 {
-                    let mut s = shared.lock().expect("control lock");
+                    let mut s = shared.lock();
                     if s.active.as_ref().is_some_and(|a| a.id == conn) {
                         // Dropping the queue ends the writer thread too.
                         s.active = None;
@@ -241,7 +243,7 @@ impl GreeterServer {
     fn send_on(shared: &Arc<Mutex<Shared>>, conn: u64, msg: &ServerMessage) -> bool {
         let Ok(mut line) = serde_json::to_string(msg) else { return false };
         line.push('\n');
-        let s = shared.lock().expect("control lock");
+        let s = shared.lock();
         match s.active.as_ref().filter(|a| a.id == conn) {
             Some(a) => match a.out.try_send(line) {
                 Ok(()) => true,
@@ -258,7 +260,7 @@ impl GreeterServer {
 
     /// Send to the attached greeter, if any. False when nobody is attached or the queue is full.
     pub fn send(&self, msg: &ServerMessage) -> bool {
-        let id = self.shared.lock().expect("control lock").active.as_ref().map(|a| a.id);
+        let id = self.shared.lock().active.as_ref().map(|a| a.id);
         match id {
             Some(id) => Self::send_on(&self.shared, id, msg),
             None => false,
@@ -267,7 +269,7 @@ impl GreeterServer {
 
     /// Close the attached connection (protocol violation).
     pub fn drop_active(&self) {
-        let mut s = self.shared.lock().expect("control lock");
+        let mut s = self.shared.lock();
         if let Some(a) = s.active.take() {
             let _ = a.stream.shutdown(std::net::Shutdown::Both);
         }

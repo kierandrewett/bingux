@@ -9,7 +9,9 @@ use std::io;
 use std::mem::MaybeUninit;
 use std::os::fd::OwnedFd;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 use std::thread;
 use std::time::Duration;
 
@@ -80,7 +82,7 @@ impl HelperClient {
     fn serve(sock: Socket, writer: &Arc<Mutex<Option<Socket>>>, tx: &DriverTx) -> Result<(), ()> {
         let _ = sock.set_write_timeout(Some(Duration::from_secs(2)));
         let Ok(reader) = sock.try_clone() else { return Ok(()) };
-        *writer.lock().expect("helper writer lock") = Some(sock);
+        *writer.lock() = Some(sock);
         tx.send(RtInput::Core(Input::HelperConnected)).map_err(|_| ())?;
         let mut buf = vec![MaybeUninit::<u8>::uninit(); MAX_DATAGRAM + 1];
         loop {
@@ -102,7 +104,7 @@ impl HelperClient {
                 Err(_) => break,
             }
         }
-        *writer.lock().expect("helper writer lock") = None;
+        *writer.lock() = None;
         tx.send(RtInput::Core(Input::HelperLost)).map_err(|_| ())?;
         Ok(())
     }
@@ -115,7 +117,7 @@ impl HelperClient {
             tracing::error!("helper request too large; refused");
             return false;
         }
-        let guard = self.writer.lock().expect("helper writer lock");
+        let guard = self.writer.lock();
         match guard.as_ref() {
             Some(s) => s.send(&bytes).is_ok(),
             None => false,
