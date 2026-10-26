@@ -137,7 +137,14 @@ QtObject {
         reconcile();
     }
 
+    // Leaving a failed launch tells bsm, which keeps the failed progress in its
+    // snapshots until it is cancelled (any operation id will do) or retried.
     function backToAccounts() {
+        if (root.model.launchFailed)
+            send({
+                type: "cancel_operation",
+                operation_id: root.model.operationId
+            });
         root.model.dismissLaunch();
         root.model.resetConversation();
         reconcile();

@@ -215,6 +215,7 @@ ShellRoot {
         check("a failed launch is not indeterminate", !Progress.indeterminate(model.progress));
         client.backToAccounts();
         check("Back to accounts leaves the failed launch", !model.showProgress);
+        check("Back to accounts cancels the failed launch at bsm", last("cancel_operation") !== null);
         client.handle(snapshot(16, 1001, login, users, progressModel(7, 7, ["auth_accepted"], { failure: { stage: "pam_session", code: "pam_failure", message: "x" } })));
         check("a repeated snapshot does not bring a dismissed failure back", !model.showProgress || model.dismissedLaunch !== "");
         client.handle(snapshot(17, 1001, login, users));

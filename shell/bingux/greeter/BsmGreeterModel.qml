@@ -55,7 +55,8 @@ QtObject {
         }
         return null;
     }
-    readonly property bool canSwitchUser: synced && users.length > 1 && !showProgress && !signingIn
+    // bsm answers busy while a lock or switch fade runs, so the picker waits for it.
+    readonly property bool canSwitchUser: synced && users.length > 1 && !showProgress && !signingIn && !operationActive
 
     // Account list for the picker.
     readonly property var pickerUsers: users.map(user => ({
