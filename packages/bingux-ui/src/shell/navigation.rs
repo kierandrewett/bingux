@@ -756,7 +756,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             .search
             .as_ref()
             .map(|_| sections::hits(&section_registry.0.read()));
-        let sidebar = |full_page: bool| Sidebar {
+        let sidebar = |full_page: bool, results: Option<Element>| Sidebar {
             items: self.items.clone(),
             selected,
             query,
@@ -766,6 +766,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             full_page,
             profile: self.profile.clone(),
             hits: search_hits.clone(),
+            results,
             scroll,
         };
         let results = self
@@ -774,7 +775,9 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             .map(|(_, results, on_submit)| (results.clone(), on_submit.clone()));
         let searching = results.is_some() && !query.read().trim().is_empty();
         let submit = results.as_ref().map(|(_, on_submit)| on_submit.clone());
-        let show_list = list_key && !searching;
+        // On a narrow window the list screen stays while searching: its search
+        // field keeps the focus, and the results fill the screen below it.
+        let show_list = list_key;
         // The header is the drag region. It carries Back, the spinner while a
         // page is busy and the window buttons. The page title shows here once
         // the title in the page scrolls under the header.
@@ -790,7 +793,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         .into();
         let back = match &self.subpage {
             Some(subpage) => Some(subpage.on_back.clone()),
-            None if searching => narrow.then(|| clear_search.clone()),
+            None if searching && !show_list => narrow.then(|| clear_search.clone()),
             None => (narrow && !show_list).then(|| to_list.clone()),
         };
         // A desktop header floats over the page and blurs what scrolls under it.
@@ -1102,7 +1105,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                     on_back.call(());
                 }
             })
-            .maybe_child((!narrow).then(|| sidebar(false)))
+            .maybe_child((!narrow).then(|| sidebar(false, None)))
             .maybe_child((!narrow).then(|| rect().tw(&tokens, SPLIT_HAIRLINE)))
             .child(
                 rect()
@@ -1128,7 +1131,8 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                     })
                     .maybe_child(lifted.then(|| lifted_controls(&tokens)))
                     .child(if show_list {
-                        Element::from(sidebar(true))
+                        // Results are the content area itself, below the field.
+                        Element::from(sidebar(true, searching.then(|| Element::from(content_area))))
                     } else {
                         Element::from(content_area)
                     }),
@@ -1286,6 +1290,9 @@ struct Sidebar<T: NavItem> {
     /// The pages with search results, when the split view searches. While
     /// the search has text, the sidebar lists these instead of its pages.
     hits: Option<Vec<SearchHit>>,
+    /// The results screen, drawn in place of the list under the search field
+    /// while a narrow window searches.
+    results: Option<Element>,
     scroll: ScrollController,
 }
 
@@ -1364,15 +1371,36 @@ impl<T: NavItem> Component for Sidebar<T> {
         } else {
             rect().tw(&tokens, SIDEBAR).component("Sidebar")
         };
-        let card = self.profile.clone().filter(|_| !typing).map(|profile| {
-            Element::from(ProfileCard {
-                profile,
-                selected,
-                on_select: on_select.clone(),
-                on_show_list: on_show_list.clone(),
-                full_page,
-            })
-        });
+        let card = self
+            .profile
+            .clone()
+            .filter(|_| !typing && self.results.is_none())
+            .map(|profile| {
+                Element::from(ProfileCard {
+                    profile,
+                    selected,
+                    on_select: on_select.clone(),
+                    on_show_list: on_show_list.clone(),
+                    full_page,
+                })
+            });
+        let list = rect()
+            .width(Size::fill())
+            .height(Size::flex(1.0))
+            .min_height(Size::px(0.0))
+            .child(
+                ScrollView::new().drag_scrolling(false).child(
+                    rect()
+                        .tw(&tokens, SIDEBAR_LIST)
+                        .tw(&tokens, &[pt(S2)])
+                        .children(entries)
+                        .maybe_child(no_matches.then(|| {
+                            rect()
+                                .tw(&tokens, &[pt(S3), px(S3)])
+                                .child(BODY.in_ink(Ink::Muted).label(&tokens, "Nothing matches."))
+                        })),
+                ),
+            );
         shell
             .on_press({
                 let press = region.clone();
@@ -1381,25 +1409,7 @@ impl<T: NavItem> Component for Sidebar<T> {
             .child(search_band(query, self.search_id))
             .child(region.sentinel())
             .maybe_child(card)
-            .child(
-                rect()
-                    .width(Size::fill())
-                    .height(Size::flex(1.0))
-                    .min_height(Size::px(0.0))
-                    .child(
-                        ScrollView::new().drag_scrolling(false).child(
-                            rect()
-                                .tw(&tokens, SIDEBAR_LIST)
-                                .tw(&tokens, &[pt(S2)])
-                                .children(entries)
-                                .maybe_child(no_matches.then(|| {
-                                    rect().tw(&tokens, &[pt(S3), px(S3)]).child(
-                                        BODY.in_ink(Ink::Muted).label(&tokens, "Nothing matches."),
-                                    )
-                                })),
-                        ),
-                    ),
-            )
+            .child(self.results.clone().unwrap_or_else(|| list.into()))
     }
 }
 

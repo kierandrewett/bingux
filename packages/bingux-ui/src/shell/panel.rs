@@ -323,9 +323,12 @@ pub(crate) fn menu_rect(trigger: PanelTrigger, size: (f32, f32), window: (f32, f
 }
 
 /// Where a text edit bar of `size` sits against a caret or selection: centred
-/// over it, above when there is room, below otherwise, held inside the window.
+/// over it, above when there is room under the window header, below otherwise,
+/// held inside the window. The bar never covers the header.
 pub(crate) fn text_bar_rect(anchor: PanelRect, size: (f32, f32), window: (f32, f32)) -> PanelRect {
-    let (x, y) = place_aligned(anchor, size, window, Side::Above, PANEL_GAP, EdgeAlign::Centre);
+    let room_above = anchor.y - PANEL_GAP - size.1 >= Dim::Header.px();
+    let prefer = if room_above { Side::Above } else { Side::Below };
+    let (x, y) = place_aligned(anchor, size, window, prefer, PANEL_GAP, EdgeAlign::Centre);
     PanelRect {
         x,
         y,
@@ -580,7 +583,11 @@ impl Component for Panel {
 
         // The bar is sized by its content, so its wrapper is as wide as the window:
         // a bar inside a zero-width box would wrap every label to one letter.
-        let wrapper_width = if self.kind == PanelKind::Bar { window.0 } else { 0.0 };
+        let wrapper_width = if self.kind == PanelKind::Bar {
+            window.0
+        } else {
+            0.0
+        };
         rect()
             .component("Panel")
             .width(Size::px(wrapper_width))
