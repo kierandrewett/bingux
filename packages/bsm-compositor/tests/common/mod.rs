@@ -260,6 +260,8 @@ pub struct Client {
     layer_surfaces: Vec<ZwlrLayerSurfaceV1>,
     session_surfaces: Vec<BsmSessionSurfaceV1>,
     pub host: Option<BsmSessionHostV1>,
+    /// Keyboard interactivity the first greeter layer surface asks for.
+    pub kb_mode: KeyboardInteractivity,
 }
 
 impl Client {
@@ -284,6 +286,7 @@ impl Client {
             layer_surfaces: Vec::new(),
             session_surfaces: Vec::new(),
             host: None,
+            kb_mode: KeyboardInteractivity::Exclusive,
         })
     }
 
@@ -357,7 +360,7 @@ impl Client {
             ls.set_anchor(Anchor::Top | Anchor::Bottom | Anchor::Left | Anchor::Right);
             ls.set_size(0, 0);
             ls.set_exclusive_zone(-1);
-            ls.set_keyboard_interactivity(if i == 0 { KeyboardInteractivity::Exclusive } else { KeyboardInteractivity::None });
+            ls.set_keyboard_interactivity(if i == 0 { self.kb_mode } else { KeyboardInteractivity::None });
             surface.commit();
             self.surfaces.push((name.clone(), surface));
             self.layer_surfaces.push(ls);

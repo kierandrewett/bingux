@@ -151,7 +151,9 @@ impl State {
             Ok(c) => {
                 self.greeter.client = Some(c.id());
                 self.greeter.connected = Some((generation, conn.peer.pid));
+                log::info!("greeter connected (generation {generation}, pid {})", conn.peer.pid);
                 self.emit(SceneEvent::GreeterConnected { generation, pid: conn.peer.pid });
+                self.refresh_focus();
                 self.needs_redraw = true;
             }
             Err(e) => log::warn!("insert greeter client: {e}"),

@@ -558,3 +558,31 @@ fn power_fade_holds_the_cover_and_a_refused_power_action_fades_back() {
     assert_all(frame_of(&last, "Virtual-1"), SESSION, "the foreground desktop is back");
     assert_eq!(r.phases(op).last(), Some(&TransitionPhaseEvent::Cancelled));
 }
+
+#[test]
+fn greeter_keyboard_works_whatever_order_owner_and_connection_arrive_in() {
+    // The manager may name the greeter as owner before the greeter process connects, and
+    // Quickshell asks for on-demand rather than exclusive keyboard interactivity.
+    for mode in [
+        wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::KeyboardInteractivity::OnDemand,
+        wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::KeyboardInteractivity::Exclusive,
+    ] {
+        let mut h = Harness::start(HarnessConfig::with_outputs(1, W, H)).unwrap();
+        h.send(SceneCommand::ShowGreeterOnly);
+        h.send(SceneCommand::SetInputOwner(InputOwner::Greeter));
+        h.step(Duration::from_millis(16));
+        h.send(SceneCommand::RegisterGreeter { generation: 1, uid: my_uid(), pid: std::process::id() });
+        let mut c = Client::connect(&h.greeter_socket).unwrap();
+        c.kb_mode = mode;
+        h.wait_event(WAIT, |e| matches!(e, SceneEvent::GreeterConnected { .. })).unwrap();
+        c.greeter_map(greeter_fill());
+        h.step(Duration::from_millis(16));
+        assert_eq!(h.focus().keyboard, Some(FocusTarget::Greeter), "{mode:?}: keyboard focus on the greeter");
+        h.key(30, true);
+        h.key(30, false);
+        h.sync();
+        c.roundtrip().unwrap();
+        assert!(c.app.kb.contains(&KbEvent::Enter), "{mode:?}");
+        assert!(c.app.kb.contains(&KbEvent::Key(30, true)), "{mode:?}: key reached the greeter: {:?}", c.app.kb);
+    }
+}

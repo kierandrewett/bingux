@@ -65,6 +65,9 @@ impl State {
     /// so no event can reach two principals.
     pub(crate) fn set_owner_now(&mut self, o: InputOwner) {
         let changed = self.owner != o;
+        if changed {
+            log::info!("input owner {:?} -> {o:?}", self.owner);
+        }
         self.pending_owner = None;
         let old_session = self.owner_session().cloned();
         self.owner = o;
@@ -313,6 +316,23 @@ impl State {
     {
         let kb = self.keyboard.clone();
         let serial = SERIAL_COUNTER.next_serial();
+        if !self.key_logged && pressed {
+            self.key_logged = true;
+            let focus = kb.current_focus();
+            let who = self.describe_surface(focus.as_ref());
+            if focus.is_some() {
+                log::info!("first key {} delivered to {who} (input owner {:?})", code.raw(), self.owner);
+            } else {
+                log::warn!(
+                    "key {} has no keyboard focus and is dropped (input owner {:?}, greeter connected: {}, \
+                     greeter surface accepting the keyboard: {})",
+                    code.raw(),
+                    self.owner,
+                    self.greeter.connected.is_some(),
+                    self.greeter_keyboard_surface().is_some()
+                );
+            }
+        }
         kb.input::<T, _>(
             self,
             code,

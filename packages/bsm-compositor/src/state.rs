@@ -169,6 +169,8 @@ pub(crate) struct State {
     pub frame_seq: u64,
     pub needs_redraw: bool,
     pub awaiting: Option<Awaiting>,
+    /// The first key since the last focus change has been logged.
+    pub key_logged: bool,
     pub harness_frames: Vec<crate::harness::CapturedFrame>,
     pub dump_dir: Option<std::path::PathBuf>,
 }
@@ -317,7 +319,11 @@ impl SeatHandler for State {
         &mut self.seat_state
     }
 
-    fn focus_changed(&mut self, _seat: &Seat<State>, _focused: Option<&WlSurface>) {}
+    fn focus_changed(&mut self, _seat: &Seat<State>, focused: Option<&WlSurface>) {
+        let who = self.describe_surface(focused);
+        log::info!("keyboard focus -> {who} (input owner {:?})", self.owner);
+        self.key_logged = false;
+    }
 
     fn cursor_image(&mut self, _seat: &Seat<State>, image: CursorImageStatus) {
         // Only the pointer-focused client can set the cursor (Smithay checks), which is
@@ -508,6 +514,19 @@ impl State {
                 .layer_for_surface(surface, WindowSurfaceType::TOPLEVEL)
                 .map(|_| o.output.clone())
         })
+    }
+
+    /// Human readable name of the owner of a surface, for logs.
+    pub fn describe_surface(&self, s: Option<&WlSurface>) -> String {
+        let Some(s) = s else { return "nobody".into() };
+        let mut root = s.clone();
+        while let Some(p) = get_parent(&root) {
+            root = p;
+        }
+        match self.surface_index.get(&root) {
+            Some((sid, out)) => format!("session {sid} ({out})"),
+            None => "greeter".into(),
+        }
     }
 
     pub fn output_infos(&self) -> Vec<OutputInfo> {
@@ -764,6 +783,7 @@ pub(crate) fn run(
         frame_seq: 0,
         needs_redraw: true,
         awaiting: None,
+        key_logged: false,
         harness_frames: Vec::new(),
         dump_dir: config.frame_dump_dir.clone(),
     };

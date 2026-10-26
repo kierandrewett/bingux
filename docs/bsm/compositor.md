@@ -185,6 +185,14 @@ reveals it has reached `Committed`. The greeter therefore keeps the keyboard unt
 first valid desktop frame is on screen. Every frame the owner is re-checked and dropped
 to `None` if it stopped being allowed (crash, unregister, scene change).
 
+Logging (info, visible in `journalctl -u bsm`): `input owner A -> B`, `keyboard focus -> greeter|session ...`,
+`first key N delivered to ...` after every focus change, and a warning `key N has no keyboard focus and is
+dropped (...)` that says whether the greeter is connected and whether any greeter layer surface accepts
+the keyboard (`keyboard_interactivity` none means nobody can type). On DRM each libinput device added is
+logged with its capabilities. **tested**: `frames::greeter_keyboard_works_whatever_order_owner_and_connection_arrive_in`
+(owner set before the greeter connects; on-demand and exclusive interactivity) passes through the harness
+path; the libinput-to-seat path itself is unverified until a VM run shows the log lines.
+
 Cursor: only the owner's cursor is drawn. A client cursor surface larger than 256 px is
 replaced by the built-in arrow. **tested** (`input_goes_only_to_the_owner`,
 `the_cursor_is_drawn_for_the_owner_only`).
@@ -289,7 +297,7 @@ is measured by the bridge side (shm copy today).
 Run in `packages/bsm-compositor` (`CARGO_TARGET_DIR=/tmp/bsm-target/bsm-compositor`):
 
 ```text
-cargo test        # 49 tests: 21 unit, 4 extras, 11 frames, 13 security
+cargo test        # 50 tests: 21 unit, 4 extras, 12 frames, 13 security
 ```
 
 All passed, repeatedly (six consecutive runs without a failure). Artifacts are written to

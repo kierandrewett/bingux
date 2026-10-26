@@ -405,6 +405,12 @@ pub(crate) fn init_drm(state: &mut State, device: Option<PathBuf>) -> Result<()>
                 if let smithay::backend::input::InputEvent::DeviceAdded { device } = &event {
                     use smithay::reexports::input::DeviceConfigError;
                     let mut device = device.clone();
+                    log::info!(
+                        "input device added: {} (keyboard: {}, pointer: {})",
+                        device.name(),
+                        device.has_capability(smithay::reexports::input::DeviceCapability::Keyboard),
+                        device.has_capability(smithay::reexports::input::DeviceCapability::Pointer),
+                    );
                     if device.config_tap_finger_count() > 0 {
                         let _: Result<_, DeviceConfigError> = device.config_tap_set_enabled(true);
                     }
