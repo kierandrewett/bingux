@@ -339,12 +339,20 @@ def login_and_reveal(run, who, uid_key):
     vm = run.vm
     uid = run.state[uid_key]
     user, password = who
-    vm.bsmctl_json(f"select-user {uid}")
+    status, _text = vm.bsmctl_json("status")
+    if not (isinstance(status, dict) and status.get("selected_uid") == uid):
+        vm.bsmctl_json(f"select-user {uid}")
     run.settle(2.5)
     greeter = {h: run.reference(h) for h in range(HEAD_COUNT)}
     started = run.stamp(f"login {user}")
     before_events = len(vm.monitor_events())
+    # The greeter starts the PAM conversation when an account is shown; its password field
+    # takes keys once the first prompt has arrived.
+    run.settle(3.0)
+    run.shot(f"before-password-{user}")
     run.type_password(password)
+    run.settle(1.0)
+    run.shot(f"after-password-{user}")
     done = vm.wait_monitor(lambda e: e.get("event") == "transition" and e.get("kind") == "new_login_fade" and e.get("phase") in ("completed", "committed"), 240)
     events = vm.monitor_events()[before_events:]
     run.check("the reveal transition completed", done is not None)
