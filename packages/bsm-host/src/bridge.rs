@@ -854,11 +854,18 @@ impl Bridge {
     /// Present the newest frame again (copied to a fresh slot).
     fn recommit_latest(&mut self, name: &str) {
         let Some(o) = self.outputs.get_mut(name) else { return };
-        let Some((set, last)) = o.last_slot.clone() else { return };
+        let Some((set, last)) = o.last_slot.clone() else {
+            log::debug!("{name}: no frame to present again");
+            return;
+        };
         if o.set.as_ref().is_none_or(|s| s.id != set.id) {
+            log::debug!("{name}: the newest frame belongs to a retired buffer set");
             return;
         }
-        let Some(slot) = set.claim() else { return };
+        let Some(slot) = set.claim() else {
+            log::warn!("{name}: no free slot to present the newest frame again ({})", o.gate.stats.summary());
+            return;
+        };
         // SAFETY: `slot` is claimed; `last` is pinned so nobody writes it.
         let dst = unsafe { set.slot_mut(slot) };
         dst.copy_from_slice(set.slot(last));

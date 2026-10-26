@@ -87,6 +87,7 @@ pub struct ReportRec {
     pub a: u32,
     pub b: u32,
     pub generation: String,
+    pub at: Instant,
 }
 
 #[derive(Default)]
@@ -417,6 +418,7 @@ impl Dispatch<BsmSessionHostV1, ()> for State {
                     a,
                     b,
                     generation: generation.clone(),
+                    at: Instant::now(),
                 };
                 if generation != state.generation {
                     state.violation(format!("stale generation {generation} in report {rec:?}"));

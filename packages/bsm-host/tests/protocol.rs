@@ -119,8 +119,10 @@ fn presents_only_after_ack_and_reports_every_milestone_in_order() {
     let bridge = env.spawn(&["--test-auto-ready-ms", "150"]);
     env.standin.wait_for("desktop_ready", T, |s| kinds(s).contains(&DESKTOP_READY));
     // a frame must follow desktop_ready (the reveal gate counts it)
-    let after = env.standin.shared.lock().unwrap().frames.len();
-    env.standin.wait_for("a frame after desktop_ready", T, |s| s.frames.len() > after);
+    env.standin.wait_for("a frame presented after desktop_ready", T, |s| {
+        let ready_at = s.reports.iter().find(|r| r.kind == DESKTOP_READY).unwrap().at;
+        s.frames.iter().any(|f| f.at >= ready_at && f.after_ack)
+    });
     let s = env.standin.shared.lock().unwrap();
 
     assert!(s.violations.is_empty(), "violations: {:?}", s.violations);

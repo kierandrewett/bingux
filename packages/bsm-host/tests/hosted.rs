@@ -433,8 +433,17 @@ fn desktop_ready_waits_for_gnoblins_own_layer_list() {
         kids.push(spawn("bingux-dock", "top", "bottom", "48", "0xFF20C040"));
         standin.wait_for("3 of 3 mapped", T, |s| mapped(s) == Some((3, 3)));
         standin.wait_for("desktop_ready", T, |s| s.reports.iter().any(|r| r.kind == 5));
-        let at = standin.shared.lock().unwrap().frames.len();
-        standin.wait_for("a frame after desktop_ready", T, |s| s.frames.len() > at);
+        standin.wait_for("a frame presented after desktop_ready", T, |s| {
+            let ready_at = s.reports.iter().find(|r| r.kind == 5).unwrap().at;
+            s.frames.iter().any(|f| f.at >= ready_at && f.after_ack)
+        });
+        // The frames really show Gnoblin's layer surfaces: wallpaper, bar, dock colours.
+        let near = |a: [u8; 3], b: [u8; 3]| a.iter().zip(b).all(|(x, y)| (*x as i32 - y as i32).abs() <= 3);
+        standin.wait_for("a frame showing the layer surfaces", T, |s| {
+            s.frames.last().is_some_and(|f| {
+                near(px(f, 400, 300), [0x20, 0x40, 0x60]) && near(px(f, 400, 10), [0xD0, 0x40, 0x20]) && near(px(f, 400, 590), [0x20, 0xC0, 0x40])
+            })
+        });
         let f = latest(&standin, "DP-1");
         evidence("hosted-5-layers.png", &f);
         for mut k in kids {
