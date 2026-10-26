@@ -69,7 +69,7 @@ each created by a different path:
 | Role          | How it connects                                                                                                                                                                           | Globals it sees                                                                                                                                                          |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `GREETER`     | `/run/bsm/greeter-wayland.sock`, mode 0660, group `bingux-greeter`. On accept bsm checks uid is the greeter account and pid equals the process `bsm-helper` launched for this generation. | `wl_compositor`, `wl_shm`, `wl_seat`, `wl_output`, `xdg_output`, `zwlr_layer_shell_v1`, `wp_viewporter`, `wp_fractional_scale`, `linux-dmabuf`, `wp_presentation`.        |
-| `HOSTED_USER` | A per-generation socket `/run/bsm/sessions/<id>-<generation>.sock` (random name, mode 0666). On accept bsm checks uid, the systemd scope in `/proc/<pid>/cgroup`, `/proc/<pid>/exe` and the pid reported by the helper. Single use. | `wl_compositor`, `wl_shm`, `linux-dmabuf`, `wl_seat`, `wl_output`, `bsm_session_host_v1`.                                                                                |
+| `HOSTED_USER` | A per-generation socket `/run/bsm/sessions/<id>-<generation>.sock` (random name, mode 0666). On accept bsm checks uid, the pid reported by the helper (`SO_PEERPIDFD` where available) and the systemd scope in `/proc/<pid>/cgroup`; `/proc/<pid>/exe` is checked only when readable. Single use. | `wl_compositor`, `wl_shm`, `linux-dmabuf`, `wl_seat`, `wl_output`, `bsm_session_host_v1`.                                                                                |
 | none          | Any other peer is closed before the Wayland handshake. Clients cannot name their own role or uid.                                                                                          | none                                                                                                                                                                     |
 
 No role sees `ext-session-lock`, screencopy, output management,
@@ -78,7 +78,8 @@ globals use Smithay's global filtering. A test connects as each role and
 compares the registry with the table above.
 
 A same-uid process can read the bridge's `/proc/<pid>/environ`. It still fails
-the `exe` and pid checks and the socket is single use. The remaining trust
+the pid check and the socket is single use. bsm holds no capabilities, so it cannot
+read another uid's `/proc/<pid>/exe`; that check is best effort. The remaining trust
 boundary is "this uid's processes affect this uid's own session surface", which
 is no wider than what that user can already do.
 
@@ -211,11 +212,12 @@ bsm is the source of truth for what the greeter shows before login.
   accounts are excluded by policy (`/etc/bsm/bsm.toml`, defaults documented in the
   packaging).
 * The user's Bingux shell publishes a whitelisted appearance record
-  (`color_scheme`, `accent`, `clock_format`, `reduce_motion`, wallpaper and avatar
-  source paths) over the `PublishAppearance` D-Bus method; the caller's uid is taken
-  from the bus, never from the message.
-* bsm runs the sandboxed `bsm-imgconv` child (no network, seccomp, rlimits,
-  `O_NOFOLLOW`, size and decode caps) to produce resized copies under
+  (`color_scheme`, `accent`, `clock_format`, `reduce_motion`) with the avatar and
+  wallpaper as source image file descriptors over the `PublishAppearance` D-Bus
+  method; the caller's uid is taken from the bus, never from the message. bsm never
+  opens a path a user supplies, and it needs no capability to read a user's home.
+* bsm runs the sandboxed `bsm-imgconv` child as its own uid (no network, seccomp,
+  rlimits, size and decode caps) on those descriptors to produce resized copies under
   `/var/lib/bingux/greeter/<uid>/` through write-to-temp and `rename`. The greeter
   receives paths to these copies only.
 * Existing wallpaper snapshots from `bingux-session export` remain valid; bsm adopts
