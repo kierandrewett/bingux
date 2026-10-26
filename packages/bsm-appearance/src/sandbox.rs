@@ -173,6 +173,9 @@ pub fn build_filter(write_fds: &[RawFd]) -> Result<BpfProgram, String> {
     let not_executable = || rule(vec![condition(2, SeccompCmpOp::MaskedEq(libc::PROT_EXEC as u64), 0)]);
     rules.insert(libc::SYS_mmap, vec![not_executable()]);
     rules.insert(libc::SYS_mprotect, vec![not_executable()]);
+    // Debug builds of the standard library check with fcntl(F_GETFD) that a descriptor is still
+    // open when a `File` is dropped. Querying the flags of a descriptor is harmless.
+    rules.insert(libc::SYS_fcntl, vec![rule(vec![condition(1, SeccompCmpOp::Eq, libc::F_GETFD as u64)])]);
     let filter = SeccompFilter::new(
         rules,
         SeccompAction::KillProcess,

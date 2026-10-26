@@ -73,7 +73,7 @@ pub fn create_exclusive_at(dir: RawFd, name: &str) -> io::Result<File> {
         libc::openat(
             dir,
             name.as_ptr(),
-            libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NOCTTY,
+            libc::O_RDWR | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NOCTTY,
             0o644 as libc::c_uint,
         )
     })?;

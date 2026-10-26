@@ -137,7 +137,7 @@ fn check_output(file: &File, name: &str) -> Result<(), Failure> {
 
 fn image_failure(error: ImageError) -> Failure {
     match &error {
-        ImageError::TooLarge { .. } => Failure::new(exit::LIMITS, "limits", error.to_string()),
+        ImageError::TooLarge { .. } | ImageError::OverLimit(_) => Failure::new(exit::LIMITS, "limits", error.to_string()),
         ImageError::Encode(_) => Failure::new(exit::OUTPUT, "encode", error.to_string()),
         _ => Failure::new(exit::DECODE, "decode", error.to_string()),
     }

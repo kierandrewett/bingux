@@ -59,11 +59,19 @@ pub struct PublisherConfig {
     pub converter: Converter,
     /// Trusted directories an AccountsService `IconFile` may be under.
     pub icon_roots: Vec<PathBuf>,
+    /// Uids that may own an icon file and the directories below the icon root: root, who
+    /// runs accounts-daemon. Anything else (a user-writable icon) is refused.
+    pub trusted_icon_owners: Vec<u32>,
 }
 
 impl PublisherConfig {
     pub fn new(cache_dir: impl Into<PathBuf>, converter: Converter) -> Self {
-        Self { cache_dir: cache_dir.into(), converter, icon_roots: vec![PathBuf::from(ACCOUNTS_SERVICE_ICONS)] }
+        Self {
+            cache_dir: cache_dir.into(),
+            converter,
+            icon_roots: vec![PathBuf::from(ACCOUNTS_SERVICE_ICONS)],
+            trusted_icon_owners: vec![0],
+        }
     }
 
     /// Production defaults: the standard cache directory and the installed converter.
@@ -456,8 +464,10 @@ impl Publisher {
             let Some(parts) = parts else { return Err("icon path is not UTF-8".into()) };
             return match sys::open_beneath(root, &parts) {
                 // The icons directory is root's; files are written by accounts-daemon as root.
-                Ok(opened) if opened.owners.iter().all(|owner| *owner == 0) => Ok(Some(opened.file)),
-                Ok(_) => Err("icon is not owned by root".into()),
+                Ok(opened) if opened.owners.iter().all(|owner| self.config.trusted_icon_owners.contains(owner)) => {
+                    Ok(Some(opened.file))
+                }
+                Ok(_) => Err("icon is not owned by a trusted uid".into()),
                 Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
                 Err(error) => Err(format!("opening the icon: {error}")),
             };

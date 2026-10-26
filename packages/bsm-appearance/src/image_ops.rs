@@ -45,6 +45,8 @@ pub enum ImageError {
     UnsupportedFormat,
     /// The header declares more pixels, or a longer side, than allowed.
     TooLarge { width: u32, height: u32 },
+    /// The decoder refused the image because it would exceed a size or memory limit.
+    OverLimit(String),
     /// The bytes are not a valid image of the detected format.
     Malformed(String),
     /// Encoding the result failed.
@@ -56,6 +58,7 @@ impl fmt::Display for ImageError {
         match self {
             Self::UnsupportedFormat => f.write_str("not a JPEG, PNG or WebP image"),
             Self::TooLarge { width, height } => write!(f, "image is too large ({width}x{height})"),
+            Self::OverLimit(why) => write!(f, "image exceeds the decoder limits: {why}"),
             Self::Malformed(why) => write!(f, "malformed image: {why}"),
             Self::Encode(why) => write!(f, "could not encode the result: {why}"),
         }
@@ -108,7 +111,7 @@ pub fn decode(bytes: &[u8], limits: DecodeLimits) -> Result<DynamicImage, ImageE
     decoder_limits.max_image_height = Some(limits.max_side);
     decoder_limits.max_alloc = Some(limits.max_alloc);
     reader.limits(decoder_limits);
-    let mut decoder = reader.into_decoder().map_err(|error| ImageError::Malformed(error.to_string()))?;
+    let mut decoder = reader.into_decoder().map_err(decode_error)?;
     let (width, height) = decoder.dimensions();
     if width == 0
         || height == 0
@@ -119,9 +122,16 @@ pub fn decode(bytes: &[u8], limits: DecodeLimits) -> Result<DynamicImage, ImageE
         return Err(ImageError::TooLarge { width, height });
     }
     let orientation = decoder.orientation().unwrap_or(image::metadata::Orientation::NoTransforms);
-    let mut decoded = DynamicImage::from_decoder(decoder).map_err(|error| ImageError::Malformed(error.to_string()))?;
+    let mut decoded = DynamicImage::from_decoder(decoder).map_err(decode_error)?;
     decoded.apply_orientation(orientation);
     Ok(decoded)
+}
+
+fn decode_error(error: image::ImageError) -> ImageError {
+    match error {
+        image::ImageError::Limits(why) => ImageError::OverLimit(why.to_string()),
+        other => ImageError::Malformed(other.to_string()),
+    }
 }
 
 fn fit_within(image: &DynamicImage, max_width: u32, max_height: u32) -> DynamicImage {
