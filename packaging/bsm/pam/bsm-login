@@ -1,12 +1,31 @@
 #%PAM-1.0
 #
-# Login through bsm-helper (root). Opens the real session of a hosted desktop:
-# pam_systemd registers a logind session without a seat (the helper passes
-# XDG_SESSION_TYPE=wayland and XDG_SESSION_CLASS=user in the PAM environment) and
-# the session stays open for the whole life of the desktop. Lockout and password
-# policy come from system-auth, so they match every other login on the machine.
+# Login through bsm-helper (root), for Login and Switch authentications.
+#
+# bsm-helper runs pam_authenticate and pam_acct_mgmt for the conversation, keeps
+# that PAM handle in the authenticated child and, when the ticket is redeemed,
+# runs pam_setcred and pam_open_session on the SAME handle. So the session phase
+# below sees what the auth phase learnt (pam_gnome_keyring keeps the password
+# for auto_start, Kerberos and sssd credentials follow the authentication).
+# The session stays open for the whole life of the hosted desktop and is closed
+# only when the desktop ends.
+#
+# pam_systemd registers a logind session WITHOUT a seat: the helper puts
+# XDG_SESSION_TYPE=wayland and XDG_SESSION_CLASS=user in the PAM environment and
+# never sets XDG_SEAT or XDG_VTNR, because bsm owns seat0 (docs/bsm/architecture.md,
+# D4). Fedora's system-auth already carries an optional pam_systemd; a second
+# pam_systemd.so in the same PAM handle returns early without creating another
+# session. The helper checks that the session scope exists and fails the login
+# otherwise.
+#
+# Lockout (pam_faillock), password policy and fingerprint (pam_fprintd) come
+# from system-auth, so they are exactly the machine's own policy and bsm adds
+# none. A fingerprint prompt reaches the greeter as an info message; the
+# fingerprint module and the password prompt are answered through the same
+# conversation.
 auth      include   system-auth
 auth      optional  pam_gnome_keyring.so
+account   required  pam_nologin.so
 account   include   system-auth
 password  include   system-auth
 session   optional  pam_keyinit.so force revoke

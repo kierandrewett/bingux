@@ -1,6 +1,7 @@
 # bsm-helper: PAM and uid transitions for bsm. Runs as root because opening a
 # user's session needs it; it keeps no session registry and makes no policy
-# decisions (docs/bsm/architecture.md, D3). Started by bsm-helper.socket.
+# decisions (docs/bsm/architecture.md, D3, docs/bsm/helper.md). Started by
+# bsm-helper.socket.
 [Unit]
 Description=bsm privileged PAM and session helper
 Documentation=file:///usr/share/doc/bsm/packaging.md
@@ -10,22 +11,26 @@ Wants=systemd-logind.service
 
 [Service]
 Type=exec
+# No --config: /etc/bsm/helper.toml, and every key has a production default.
 ExecStart=/usr/libexec/bsm/bsm-helper
-# A restart or stop of the helper must not end hosted sessions: their supervisors
-# run in the user's logind scope and the next helper adopts them.
+# A restart or stop of the helper must not end hosted sessions. Each session's
+# supervisor is moved into the user's logind session scope by pam_systemd, so it
+# is outside this unit's cgroup, and the next helper adopts it. KillMode=process
+# also keeps the stop of this unit from touching a supervisor that is still in
+# this cgroup because its login is being set up. Authentication children and the
+# greeter die with the helper through PR_SET_PDEATHSIG instead.
 KillMode=process
 Restart=on-failure
 RestartSec=1
-LimitCORE=0
-# Deliberately NOT sandboxed with ProtectSystem, ProtectHome, PrivateTmp,
-# PrivateDevices, NoNewPrivileges or a mount namespace: the greeter and every
-# hosted desktop start from this process and would inherit them (a read-only
-# /usr, no setuid binaries such as unix_chkpwd or polkit's agent helper).
-# Settings that only restrict the helper itself are fine:
-ProtectKernelModules=yes
-ProtectKernelLogs=yes
-ProtectClock=yes
-ProtectHostname=yes
-LockPersonality=yes
-RestrictRealtime=yes
-SystemCallArchitectures=native
+# Deliberately NO sandboxing and NO limits at all, not even the harmless looking
+# ones: seccomp filters, the capability bounding set, rlimits, namespaces and
+# no_new_privs are inherited by every process this service starts, and that is
+# the greeter and every user's desktop. ProtectSystem, ProtectHome, PrivateTmp,
+# PrivateDevices, NoNewPrivileges and mount namespaces would give a user a
+# read-only /usr and no setuid helpers (unix_chkpwd, polkit). The following
+# would be inherited as well and are wrong for a login service:
+#   LimitCORE=0                    desktops could not dump core
+#   SystemCallArchitectures=native no 32-bit programs (Wine, Steam) in a desktop
+#   RestrictRealtime=yes           no realtime threads for audio or the compositor
+#   ProtectKernelModules/Clock/..  seccomp and capability restrictions in desktops
+# The helper protects its own secrets with PR_SET_DUMPABLE=0 instead.
