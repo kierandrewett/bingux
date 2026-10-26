@@ -1,4 +1,5 @@
 mod gnoblin;
+mod usage;
 
 #[cfg(test)]
 #[path = "../tests/record-allocation/mod.rs"]
@@ -112,6 +113,9 @@ fn main() {
 }
 
 fn run() -> io::Result<()> {
+    // Held until `run` returns, whichever way it returns: dropping it stops
+    // the recorder and waits for its round in flight to finish.
+    let _usage_recorder = usage::start();
     let metrics_listener = bind_socket(METRICS_SOCKET_NAME)?;
     let osd_listener = bind_socket(OSD_SOCKET_NAME)?;
     eprintln!("[bingux-statusd] metrics socket ready");

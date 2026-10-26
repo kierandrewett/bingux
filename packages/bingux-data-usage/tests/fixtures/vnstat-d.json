@@ -1,0 +1,156 @@
+{
+  "vnstatversion": "2.9",
+  "jsonversion": "2",
+  "interfaces": [
+    {
+      "name": "eth0",
+      "alias": "",
+      "created": {
+        "date": {
+          "year": 2026,
+          "month": 9,
+          "day": 1
+        }
+      },
+      "updated": {
+        "date": {
+          "year": 2026,
+          "month": 10,
+          "day": 22
+        },
+        "time": {
+          "hour": 2,
+          "minute": 30
+        }
+      },
+      "traffic": {
+        "total": {
+          "rx": 9000000,
+          "tx": 900000
+        },
+        "day": [
+          {
+            "id": 0,
+            "date": {
+              "year": 2026,
+              "month": 10,
+              "day": 20
+            },
+            "rx": 3000000,
+            "tx": 300000
+          },
+          {
+            "id": 1,
+            "date": {
+              "year": 2026,
+              "month": 10,
+              "day": 21
+            },
+            "rx": 4000000,
+            "tx": 400000
+          },
+          {
+            "id": 2,
+            "date": {
+              "year": 2026,
+              "month": 10,
+              "day": 22
+            },
+            "rx": 2000000,
+            "tx": 200000
+          }
+        ]
+      }
+    },
+    {
+      "name": "wlan0",
+      "alias": "",
+      "created": {
+        "date": {
+          "year": 2026,
+          "month": 9,
+          "day": 1
+        }
+      },
+      "updated": {
+        "date": {
+          "year": 2026,
+          "month": 10,
+          "day": 22
+        },
+        "time": {
+          "hour": 2,
+          "minute": 30
+        }
+      },
+      "traffic": {
+        "total": {
+          "rx": 600,
+          "tx": 60
+        },
+        "day": [
+          {
+            "id": 0,
+            "date": {
+              "year": 2026,
+              "month": 10,
+              "day": 21
+            },
+            "rx": 500,
+            "tx": 50
+          },
+          {
+            "id": 1,
+            "date": {
+              "year": 2026,
+              "month": 10,
+              "day": 22
+            },
+            "rx": 100,
+            "tx": 10
+          }
+        ]
+      }
+    },
+    {
+      "name": "docker0",
+      "alias": "",
+      "created": {
+        "date": {
+          "year": 2026,
+          "month": 9,
+          "day": 1
+        }
+      },
+      "updated": {
+        "date": {
+          "year": 2026,
+          "month": 10,
+          "day": 22
+        },
+        "time": {
+          "hour": 2,
+          "minute": 30
+        }
+      },
+      "traffic": {
+        "total": {
+          "rx": 5,
+          "tx": 5
+        },
+        "day": [
+          {
+            "id": 0,
+            "date": {
+              "year": 2026,
+              "month": 10,
+              "day": 22
+            },
+            "rx": 5,
+            "tx": 5
+          }
+        ]
+      }
+    }
+  ]
+}

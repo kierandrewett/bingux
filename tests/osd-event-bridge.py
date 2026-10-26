@@ -112,6 +112,8 @@ def main():
         environment.update(
             {
                 "XDG_RUNTIME_DIR": str(runtime_directory),
+                # The daemon records data usage; keep that out of the real home.
+                "XDG_DATA_HOME": str(runtime_directory / "data"),
                 "DBUS_SESSION_BUS_ADDRESS": f"unix:path={runtime_directory / 'no-session-bus'}",
             }
         )

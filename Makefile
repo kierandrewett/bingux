@@ -56,6 +56,7 @@ check: doctor-build native daemons
 	BINGUX_CONFIG_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-config python3 tests/bingux-config.test.py
 	$(CARGO) test --locked --manifest-path packages/bingux-searchd/Cargo.toml --lib
 	$(CARGO) test --locked --manifest-path packages/bingux-files/Cargo.toml
+	$(CARGO) test --locked --manifest-path packages/bingux-data-usage/Cargo.toml
 	$(CARGO) test --locked --manifest-path packages/bingux-statusd/Cargo.toml
 	python3 tests/shortcut-reload.py
 	python3 tests/gnoblin-menu-focus.py

@@ -40,3 +40,16 @@ microphone watcher. Older status services and installations without an
 active status service retain the Python watcher. If the status feed becomes
 stale, Bingux starts that fallback again. An audio-server failure reports
 unavailable capture data through the status service while it reconnects.
+
+## Network data usage recording
+
+The daemon also hosts the recorder of the `bingux-data-usage` crate on its own
+thread, so no extra service is needed. Once a minute it adds the traffic of
+Ethernet, Wi-Fi, mobile and VPN interfaces to
+`$XDG_DATA_HOME/bingux/data-usage.sqlite3` (`~/.local/share/bingux/` by
+default); Bingux Settings reads it for the Data usage page. The recorder is
+independent of the metrics feed: a full disk or a damaged database is logged to
+stderr at most once a minute, recording retries, and the feed is never
+affected. When the daemon stops the recorder finishes its round and stops with
+it. See `packages/bingux-data-usage/README.md` for the schema, retention and
+reset handling.

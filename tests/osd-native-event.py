@@ -185,6 +185,8 @@ ShellRoot {
 
         daemon_env = os.environ.copy()
         daemon_env["GNOBLIN_COMPOSITOR_SOCKET"] = str(fake_socket)
+        # The daemon records data usage; keep that out of the real home.
+        daemon_env["XDG_DATA_HOME"] = str(fixture / "data")
         daemon = subprocess.Popen(
             [str(STATUSD)],
             cwd=ROOT,
