@@ -79,6 +79,7 @@ check: doctor-build native daemons
 	BINGUX_STATUSD_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-statusd python3 tests/audio-osd-feedback.py
 	BINGUX_STATUSD_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-statusd python3 tests/pad-help-event-bridge.py
 	python3 tests/lock-contract.test.py
+	python3 tests/bsm-greeter-progress.test.py
 	node --test tests/bsm-session.test.mjs tests/bsm-readiness.test.mjs
 	python3 tests/bsm-lock-binding.py
 	python3 tests/qmldir-complete.py --self-test
@@ -88,7 +89,8 @@ check: doctor-build native daemons
 	$(MAKE) rpm-package
 	python3 tests/standalone-install.py
 
-# The lock screen and the login greeter, driven in headless Sway with the
+# The lock screen, the login greeter and the bsm greeter (against the fake bsm
+# control server), driven in headless Sway with the
 # built bingux-shell. Needs sway and grim; the lock client imports the
 # Bingux.Wayland plugin from the build. shell-archive.py installs the build
 # into a scratch prefix and runs the production shells from the packed archive.
@@ -98,6 +100,8 @@ check-session: native daemons shell
 	cp $(BUILD_DIR)/wayland-sync/libbinguxwaylandsync.so packages/bingux-wayland-sync/qmldir $(BUILD_DIR)/qml/Bingux/Wayland/
 	QS_TEST_BIN=$(SHELL_BIN) BINGUX_SESSION_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-session python3 tests/greeter-ui.py
 	QS_TEST_BIN=$(SHELL_BIN) QML_IMPORT_PATH=$(abspath $(BUILD_DIR))/qml python3 tests/lock-ui.py
+	QS_TEST_BIN=$(SHELL_BIN) python3 tests/bsm-greeter-client.test.py
+	QS_TEST_BIN=$(SHELL_BIN) QML_IMPORT_PATH=$(abspath $(BUILD_DIR))/qml python3 tests/bsm-greeter-ui.py
 	QS_TEST_BIN=$(SHELL_BIN) python3 tests/identify.py
 	QS_TEST_BIN=$(SHELL_BIN) python3 tests/pad-help.py
 	QS_TEST_BIN=$(SHELL_BIN) python3 tests/bsm-shell-integration.py

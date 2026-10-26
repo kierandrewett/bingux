@@ -201,12 +201,45 @@ def main():
                 print("headless sway did not start")
                 return 1
 
+            # The bsm greeter talks to bsm's control socket; the fake server
+            # (tests/bsm-fake-control.py) answers with the real protocol.
+            bsm_assets = home / "bsm-assets"
+            bsm_log = home / "bsm-fake.log"
+            fake_bsm = subprocess.Popen(
+                [
+                    sys.executable,
+                    str(ROOT / "tests/bsm-fake-control.py"),
+                    "--socket", str(runtime / "bsm-control.sock"),
+                    "--assets", str(bsm_assets),
+                    "--log", str(bsm_log),
+                ],
+                stdout=subprocess.PIPE,
+                text=True,
+            )
+            fake_bsm.stdout.readline()
+            bsm_environment = environment | {
+                "BSM_CONTROL_SOCKET": str(runtime / "bsm-control.sock"),
+                "BSM_GREETER_CACHE": str(bsm_assets),
+            }
+
             all_ok = True
-            for name in ("bingux-greeter", "bingux-lock"):
+            # The lock goes last: sway keeps the output locked (red) after a lock client ends.
+            for name in ("bingux-greeter", "bingux-bsm-greeter", "bingux-lock"):
                 command = prefix / "bin" / name
+                shell_environment = environment
+                if name == "bingux-bsm-greeter":
+                    # The installed wrapper names its prefix (/usr here); run a copy
+                    # that names the staged one instead.
+                    staged = home / name
+                    staged.write_text(command.read_text().replace("PREFIX=/usr\n", f"PREFIX={prefix}\n"))
+                    staged.chmod(0o755)
+                    shell_environment = bsm_environment
+                    launch = [str(staged)]
+                else:
+                    launch = [str(command), "--no-color"]
                 shell = subprocess.Popen(
-                    [str(command), "--no-color"],
-                    env=environment,
+                    launch,
+                    env=shell_environment,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
@@ -231,13 +264,20 @@ def main():
                     or " ERROR scene:" in line
                     or "is not a type" in line
                 ]
+                if name == "bingux-bsm-greeter":
+                    wrapper_ok = command.is_file() and not command.is_symlink() and os.access(command, os.X_OK)
+                    first_check = ("command is an installed wrapper", wrapper_ok)
+                else:
+                    first_check = ("command is a bingux-shell symlink", os.readlink(command) == "bingux-shell")
                 checks = {
-                    "command is a bingux-shell symlink": os.readlink(command) == "bingux-shell",
+                    first_check[0]: first_check[1],
                     "ran from the unpacked archive": "cache/bingux/shell/" in output and "Launching config" in output,
                     "alive after start": alive,
                     "no QML errors": not qml_errors,
                     "painted content": shot.is_file() and not png_is_flat(shot),
                 }
+                if name == "bingux-bsm-greeter":
+                    checks["greeter said hello to bsm"] = bsm_log.is_file() and '"recv": "hello"' in bsm_log.read_text()
                 (artifacts / f"{name}.checks.json").write_text(
                     json.dumps({"checks": checks, "qml_errors": qml_errors[:20], "screenshot": str(shot)}, indent=2)
                     + "\n"
@@ -251,6 +291,8 @@ def main():
             print(f"artifacts: {artifacts}")
             return 0 if all_ok else 1
         finally:
+            if "fake_bsm" in locals():
+                fake_bsm.terminate()
             sway.terminate()
             sway.wait(timeout=5)
     finally:
