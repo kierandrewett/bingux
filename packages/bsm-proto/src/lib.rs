@@ -8,6 +8,7 @@
 //! * [`control`]: the newline-delimited JSON protocol on the greeter control socket.
 //! * [`helper`]: the framed protocol between `bsm` and the privileged `bsm-helper`.
 //! * [`scene`]: the command and event enums between the session manager and the compositor core.
+//! * [`transition`]: pure timeline math for the compositor-owned animations.
 //! * [`error`]: stable machine-readable error codes shared by every interface.
 //! * [`paths`]: the one place that names runtime paths and bus names.
 //!
@@ -21,6 +22,7 @@ pub mod paths;
 pub mod progress;
 pub mod scene;
 pub mod state;
+pub mod transition;
 
 /// Wire version of the control socket, the helper protocol and the D-Bus interface.
 pub const PROTOCOL_VERSION: u32 = 1;
