@@ -523,3 +523,7 @@ pub fn near(a: Rgba, b: Rgba, tol: i32) -> bool {
 pub fn frame_of<'a>(frames: &'a [CapturedFrame], output: &str) -> &'a CapturedFrame {
     frames.iter().find(|f| f.output == output).expect("frame for output")
 }
+
+pub fn bind_host_cmd(id: &str, generation: u64, scope: String, host_pid: u32) -> SceneCommand {
+    SceneCommand::BindHost { session: id.into(), generation, scope, host_pid }
+}

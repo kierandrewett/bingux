@@ -511,3 +511,50 @@ fn input_goes_only_to_the_owner() {
     assert!(r.host().app.input_state.contains(&1));
     assert_eq!(r.h.focus().keyboard, Some(FocusTarget::Session(SID.into())));
 }
+
+#[test]
+fn power_fade_holds_the_cover_and_a_refused_power_action_fades_back() {
+    let mut r = Rig::new("power_fade", 2, solid(SESSION));
+    r.make_foreground();
+    let op = r.begin(TransitionKind::PowerFade, true, false, 360, false);
+    let mut t0 = None;
+    for i in 0..40 {
+        let f = r.step(if i == 0 { 0 } else { 30 });
+        if f[0].plan.transition.is_none() {
+            break;
+        }
+        t0.get_or_insert(f[0].time_ms);
+        let t = progress(f[0].time_ms - t0.unwrap(), 360, false);
+        let e = bsm_proto::transition::ease_in_out_cubic(t);
+        let want = lerp(SESSION, COVER, e);
+        for out in &f {
+            assert!(near(out.pixel(30, 20), want, 3), "frame {i}: {:?} vs {want:?}", out.pixel(30, 20));
+        }
+    }
+    let f = r.step(16);
+    for out in &f {
+        assert_all(out, COVER, "committed power fade: the cover on every output");
+    }
+    assert!(r.phases(op).contains(&TransitionPhaseEvent::Committed));
+    // Held: nothing changes however long we wait.
+    let f = r.step(5000);
+    assert_all(frame_of(&f, "Virtual-2"), COVER, "the cover is kept");
+
+    // logind refused: the cover fades back out onto the scene authorised before.
+    r.h.send(SceneCommand::CancelTransition { operation: op });
+    let mut prev = 1.0f32;
+    let mut last = None;
+    for i in 0..40 {
+        let f = r.step(if i == 0 { 0 } else { 30 });
+        if f[0].plan.transition.is_none() {
+            last = Some(f);
+            break;
+        }
+        let a = f[0].plan.cover_overlay;
+        assert!(a <= prev + 1e-6, "the cover only recedes");
+        prev = a;
+    }
+    let last = last.expect("fade back finished");
+    assert_all(frame_of(&last, "Virtual-1"), SESSION, "the foreground desktop is back");
+    assert_eq!(r.phases(op).last(), Some(&TransitionPhaseEvent::Cancelled));
+}

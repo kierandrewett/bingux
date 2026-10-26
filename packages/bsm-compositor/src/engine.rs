@@ -109,6 +109,18 @@ struct Running {
     phase: RunPhase,
     /// Progress of the frame planned last.
     last_t: f32,
+    /// Play the timeline backwards (cancel of a committed power fade).
+    reverse: bool,
+}
+
+/// A committed power fade: the cover is held until the system stops, unless the
+/// manager cancels because the operation was refused.
+#[derive(Debug, Clone)]
+struct Held {
+    op: OperationId,
+    snapshot_base: Base,
+    duration_ms: u32,
+    reduce_motion: bool,
 }
 
 #[derive(Debug)]
@@ -116,6 +128,7 @@ pub struct Engine {
     base: Base,
     protected: HashSet<SessionKey>,
     running: Option<Running>,
+    held: Option<Held>,
     /// Sessions protected since the last composed frame.
     pending_protected: Vec<SessionKey>,
     out: Vec<SceneEvent>,
@@ -159,6 +172,7 @@ impl Engine {
             base: Base::Cover,
             protected: HashSet::new(),
             running: None,
+            held: None,
             pending_protected: Vec::new(),
             out: Vec::new(),
         }
@@ -234,6 +248,7 @@ impl Engine {
 
     /// Instant greeter-only scene. A running transition is cancelled.
     pub fn show_greeter_only(&mut self) {
+        self.held = None;
         if let Some(r) = self.running.take() {
             let phase = if r.phase == RunPhase::Settling {
                 TransitionPhaseEvent::Completed
@@ -308,7 +323,9 @@ impl Engine {
             target_was_protected,
             phase: RunPhase::Prepared,
             last_t: 0.0,
+            reverse: false,
         };
+        self.held = None;
         // The target of a reveal is authorised by the manager through this command, so
         // protection is lifted here; the clip in the plan keeps it invisible until the
         // greeter has vacated the area.
@@ -354,20 +371,47 @@ impl Engine {
         self.base = Base::Greeter;
     }
 
-    /// Abort a transition that has not committed.
+    /// Abort a transition that has not committed. A committed power fade is the one
+    /// exception: the manager cancels it when logind refuses, and the cover then fades
+    /// back out onto the scene that was authorised before the fade.
     pub fn cancel(&mut self, operation: OperationId) {
-        let Some(r) = self.running.as_ref() else { return };
-        if r.op != operation || r.phase == RunPhase::Settling {
-            return;
-        }
-        let r = self.running.take().unwrap();
-        if r.target_was_protected {
-            if let Some(t) = &r.target {
-                self.protected.insert(t.clone());
+        if let Some(r) = self.running.as_ref() {
+            if r.op == operation && r.phase != RunPhase::Settling {
+                let r = self.running.take().unwrap();
+                if r.target_was_protected {
+                    if let Some(t) = &r.target {
+                        self.protected.insert(t.clone());
+                    }
+                }
+                self.base = r.snapshot_base.clone();
+                self.phase_event(operation, TransitionPhaseEvent::Cancelled);
+                return;
+            }
+            if r.op == operation && r.kind == TransitionKind::PowerFade {
+                // Committed but not yet confirmed: confirm, then reverse.
+                self.running = None;
+                self.phase_event(operation, TransitionPhaseEvent::Completed);
+            } else {
+                return;
             }
         }
-        self.base = r.snapshot_base.clone();
-        self.phase_event(operation, TransitionPhaseEvent::Cancelled);
+        let Some(h) = self.held.take().filter(|h| h.op == operation) else { return };
+        self.base = h.snapshot_base.clone();
+        self.running = Some(Running {
+            op: operation,
+            kind: TransitionKind::PowerFade,
+            source: None,
+            target: None,
+            duration_ms: h.duration_ms,
+            reduce_motion: h.reduce_motion,
+            power: None,
+            start_ms: None,
+            snapshot_base: h.snapshot_base,
+            target_was_protected: false,
+            phase: RunPhase::Animating,
+            last_t: 0.0,
+            reverse: true,
+        });
     }
 
     fn base_plan(&self, probe: &dyn Probe) -> Plan {
@@ -411,7 +455,7 @@ impl Engine {
         let elapsed = now_ms.saturating_sub(start);
         let t = progress(elapsed, r.duration_ms, r.reduce_motion);
         r.last_t = t;
-        let f = trajectory(r.kind, t);
+        let f = trajectory(r.kind, if r.reverse { 1.0 - t } else { t });
         let mut p = Plan::empty();
         p.transition = Some((r.op, t));
         p.session_above_greeter = f.session_above_greeter;
@@ -462,6 +506,15 @@ impl Engine {
             self.out.push(SceneEvent::Protected { session: k.0, generation: k.1 });
         }
         let Some(mut r) = self.running.take() else { return };
+        if r.reverse {
+            if r.last_t >= 1.0 {
+                // The cover is gone and the authorised scene is fully back.
+                self.phase_event(r.op, TransitionPhaseEvent::Cancelled);
+            } else {
+                self.running = Some(r);
+            }
+            return;
+        }
         match r.phase {
             RunPhase::Prepared => {
                 // The frame just composed was the first animated frame.
@@ -485,6 +538,14 @@ impl Engine {
     }
 
     fn commit(&mut self, r: &mut Running) {
+        if r.kind == TransitionKind::PowerFade {
+            self.held = Some(Held {
+                op: r.op,
+                snapshot_base: r.snapshot_base.clone(),
+                duration_ms: r.duration_ms,
+                reduce_motion: r.reduce_motion,
+            });
+        }
         self.base = end_scene(r.kind, &r.target);
         r.phase = RunPhase::Settling;
         self.phase_event(r.op, TransitionPhaseEvent::Committed);
@@ -771,6 +832,42 @@ mod tests {
         assert!(plans[0].greeter.is_some());
         assert!((plans[plans.len() - 2].cover_overlay - 1.0).abs() < 1e-6);
         assert_eq!(e.base(), &Base::Cover);
+    }
+
+    #[test]
+    fn committed_power_fade_can_be_cancelled_and_fades_the_scene_back() {
+        let p = Fake::new(true);
+        let mut e = Engine::new();
+        e.show_greeter_only();
+        e.begin(&p, 4, TransitionKind::PowerFade, None, None, 360, false, Some(PowerAction::Reboot));
+        run_to_end(&mut e, &p, 40, 100);
+        assert_eq!(e.base(), &Base::Cover);
+        e.drain_events();
+        e.cancel(4);
+        let plans = run_to_end(&mut e, &p, 40, 100);
+        assert!((plans[0].cover_overlay - 1.0).abs() < 1e-6, "starts fully covered");
+        assert!(plans[0].greeter.is_some(), "the previous scene is underneath");
+        let last = &plans[plans.len() - 1];
+        assert!(last.cover_overlay.abs() < 1e-6, "ends with the cover gone");
+        assert!(plans.windows(2).all(|w| w[1].cover_overlay <= w[0].cover_overlay + 1e-6));
+        assert_eq!(e.base(), &Base::Greeter);
+        assert_eq!(phases(&mut e), vec![TransitionPhaseEvent::Cancelled]);
+        assert!(!e.transition_running());
+        // A second cancel is a no-op.
+        e.cancel(4);
+        assert!(e.drain_events().is_empty());
+    }
+
+    #[test]
+    fn suspend_is_not_cancellable_after_commit() {
+        let p = Fake::new(true);
+        let mut e = Engine::new();
+        e.show_greeter_only();
+        e.begin(&p, 5, TransitionKind::Suspend, None, None, 200, false, Some(PowerAction::Suspend));
+        run_to_end(&mut e, &p, 40, 100);
+        e.drain_events();
+        e.cancel(5);
+        assert!(e.drain_events().is_empty());
     }
 
     #[test]

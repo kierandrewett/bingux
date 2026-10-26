@@ -224,7 +224,7 @@ impl State {
 
     // ----- device events -----
 
-    fn bounds(&self) -> Option<(f64, f64, f64, f64)> {
+    pub(crate) fn bounds(&self) -> Option<(f64, f64, f64, f64)> {
         let mut it = self.outputs.iter().map(|o| {
             let l = o.output.current_location();
             let s = o
@@ -303,22 +303,96 @@ impl State {
 
     /// `evdev_code` is the raw Linux key code; xkb keycodes are offset by 8.
     pub fn key(&mut self, evdev_code: u32, pressed: bool, time: u32) {
-        self.key_xkb(Keycode::new(evdev_code + 8), pressed, time, |_, _, _| FilterResult::Forward);
+        let _: Option<()> =
+            self.key_xkb(Keycode::new(evdev_code + 8), pressed, time, |_, _, _| FilterResult::Forward);
     }
 
-    pub fn key_xkb<F>(&mut self, code: Keycode, pressed: bool, time: u32, filter: F)
+    pub fn key_xkb<T, F>(&mut self, code: Keycode, pressed: bool, time: u32, filter: F) -> Option<T>
     where
-        F: FnOnce(&mut State, &smithay::input::keyboard::ModifiersState, smithay::input::keyboard::KeysymHandle<'_>) -> FilterResult<()>,
+        F: FnOnce(&mut State, &smithay::input::keyboard::ModifiersState, smithay::input::keyboard::KeysymHandle<'_>) -> FilterResult<T>,
     {
         let kb = self.keyboard.clone();
         let serial = SERIAL_COUNTER.next_serial();
-        kb.input::<(), _>(
+        kb.input::<T, _>(
             self,
             code,
             if pressed { KeyState::Pressed } else { KeyState::Released },
             serial,
             time,
             filter,
-        );
+        )
+    }
+}
+
+/// VT switch requested through the keyboard (Ctrl+Alt+F1..F12), to be done by the DRM
+/// backend. Intercepted before routing so that no client ever sees the combination.
+pub(crate) fn vt_switch_of(
+    mods: &smithay::input::keyboard::ModifiersState,
+    handle: &smithay::input::keyboard::KeysymHandle<'_>,
+    pressed: bool,
+) -> FilterResult<i32> {
+    use smithay::input::keyboard::xkb;
+    if !pressed || !(mods.ctrl && mods.alt) {
+        return FilterResult::Forward;
+    }
+    for sym in handle.modified_syms() {
+        let raw = sym.raw();
+        if (xkb::keysyms::KEY_XF86Switch_VT_1..=xkb::keysyms::KEY_XF86Switch_VT_12).contains(&raw) {
+            return FilterResult::Intercept((raw - xkb::keysyms::KEY_XF86Switch_VT_1 + 1) as i32);
+        }
+    }
+    FilterResult::Forward
+}
+
+impl State {
+    /// Feed one libinput or winit event into the seat. Returns a requested VT number
+    /// when the key combination for a VT switch was pressed.
+    pub(crate) fn process_input_event<B: smithay::backend::input::InputBackend>(
+        &mut self,
+        event: smithay::backend::input::InputEvent<B>,
+        vt_switch_enabled: bool,
+    ) -> Option<i32> {
+        use smithay::backend::input::{
+            AbsolutePositionEvent, Event, InputEvent, KeyboardKeyEvent, PointerAxisEvent,
+            PointerButtonEvent, PointerMotionEvent,
+        };
+        match event {
+            InputEvent::Keyboard { event } => {
+                let pressed = event.state() == KeyState::Pressed;
+                let time = Event::time_msec(&event);
+                return self.key_xkb::<i32, _>(event.key_code(), pressed, time, |_, mods, handle| {
+                    if vt_switch_enabled {
+                        vt_switch_of(mods, &handle, pressed)
+                    } else {
+                        FilterResult::Forward
+                    }
+                });
+            }
+            InputEvent::PointerMotion { event } => {
+                let t = Event::time_msec(&event);
+                self.pointer_moved_by(event.delta_x(), event.delta_y(), t);
+            }
+            InputEvent::PointerMotionAbsolute { event } => {
+                let t = Event::time_msec(&event);
+                // Absolute devices span the whole layout.
+                if let Some((x0, y0, x1, y1)) = self.bounds() {
+                    let x = x0 + event.x_transformed((x1 - x0) as i32);
+                    let y = y0 + event.y_transformed((y1 - y0) as i32);
+                    self.pointer_moved_to(x, y, t);
+                }
+            }
+            InputEvent::PointerButton { event } => {
+                let t = Event::time_msec(&event);
+                self.pointer_button(event.button_code(), event.state() == ButtonState::Pressed, t);
+            }
+            InputEvent::PointerAxis { event } => {
+                let t = Event::time_msec(&event);
+                let h = event.amount(Axis::Horizontal).unwrap_or_else(|| event.amount_v120(Axis::Horizontal).unwrap_or(0.0) * 15.0 / 120.0);
+                let v = event.amount(Axis::Vertical).unwrap_or_else(|| event.amount_v120(Axis::Vertical).unwrap_or(0.0) * 15.0 / 120.0);
+                self.pointer_scroll(h, v, t);
+            }
+            _ => {}
+        }
+        None
     }
 }

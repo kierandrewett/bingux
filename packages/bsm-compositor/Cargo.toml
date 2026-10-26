@@ -10,7 +10,7 @@ description = "Compositor core of the Bingux Session Manager (bsm): roles, scene
 path = "src/lib.rs"
 
 [features]
-default = []
+default = ["backend-winit"]
 # A window inside an existing Wayland desktop, for development.
 backend-winit = ["smithay/backend_winit"]
 # libseat + udev + DRM/KMS + GBM + GLES + libinput, for the installed system.
