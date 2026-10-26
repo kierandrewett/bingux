@@ -342,6 +342,11 @@ def unlock_scenario():
         rig.close()
 
 
+def has_field(image):
+    """The response field's outline: a lighter run across the card at y 688..720."""
+    return any(sum(1 for x in range(540, 740) if min(image.getpixel((x, y))) > 150) > 150 for y in range(686, 722))
+
+
 def fight_scenario():
     """bsm selects the account of every begin_auth. Two external selections in
     quick succession must not make the greeter and bsm fight over the selection
@@ -357,6 +362,9 @@ def fight_scenario():
         time.sleep(3)
         after = rig.count("begin_auth")
         check("selection: begin_auth does not run away", after == before and after < 20, f"{before} then {after}")
+        settled = rig.shot("selection-settled", settle=1.0)
+        white = sum(1 for x in range(500, 780, 2) for y in range(100, 210, 2) if min(settled.getpixel((x, y))) > 235)
+        check("selection: the clock and the card are drawn after the fight", white > 150 and has_field(settled), f"{white} white pixels")
         check("selection: the greeter never sends select_user by itself", rig.count("select_user") == 0)
         check("selection: it settles on the server's selection", rig.wait_for("begin_auth", uid=1000, count=1))
         return "".join(rig.output)

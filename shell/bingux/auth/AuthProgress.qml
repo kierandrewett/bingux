@@ -96,8 +96,10 @@ ColumnLayout {
             id: pulse
             objectName: "progressActivity"
             visible: root.indeterminate
-            x: Math.min(fill.width, track.width - width)
-            width: Math.min(48, track.width - x)
+            // Fixed width: a width that depended on x made a binding loop.
+            readonly property real span: Math.min(48, track.width)
+            x: Math.max(0, Math.min(fill.width, track.width - span))
+            width: span
             height: track.height
             radius: height / 2
             gradient: Gradient {
