@@ -83,6 +83,15 @@ pub enum HelperRequest {
     KillGreeter {
         generation: Generation,
     },
+    /// Set logind's `LockedHint` on this session's logind session (additive, bsm-helper
+    /// calls `org.freedesktop.login1.Session.SetLockedHint`). Answered by
+    /// `HelperEvent::LockedHintResult`.
+    SetLockedHint {
+        req_id: u64,
+        session: SessionId,
+        generation: Generation,
+        locked: bool,
+    },
 }
 
 /// Helper to bsm.
@@ -138,5 +147,12 @@ pub enum HelperEvent {
     GreeterExited {
         generation: Generation,
         status: i32,
+    },
+    /// Answer to `HelperRequest::SetLockedHint`.
+    LockedHintResult {
+        req_id: u64,
+        ok: bool,
+        code: Option<ErrorCode>,
+        message: String,
     },
 }
