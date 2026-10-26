@@ -492,8 +492,8 @@ pub fn bind_host(h: &Harness, id: &str, generation: u64) {
 /// Full bring-up of one session: register, connect, bind, surfaces, ack, first frame.
 pub fn bring_up_session(h: &mut Harness, id: &str, generation: u64, fill: Fill) -> Client {
     let path = register_session(h, id, generation);
-    let mut c = Client::connect(&path).expect("host connects");
     bind_host(h, id, generation);
+    let mut c = Client::connect(&path).expect("host connects");
     h.wait_event(WAIT, |e| matches!(e, bsm_proto::scene::SceneEvent::SessionConnected { session, .. } if session == id))
         .expect("SessionConnected");
     c.host_bind();

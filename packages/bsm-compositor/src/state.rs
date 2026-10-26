@@ -623,6 +623,8 @@ pub(crate) fn run(
 
     let (internal_tx, internal_rx) = smithay::reexports::calloop::channel::channel::<Internal>();
 
+    // The private session protocol. Only hosted-user connections can see it.
+    dh.create_global::<State, crate::protocol::bsm_session_host_v1::BsmSessionHostV1, ()>(1, ());
     let compositor_state = CompositorState::new::<State>(&dh);
     let shm_state = ShmState::new::<State>(&dh, []);
     let output_manager_state = OutputManagerState::new_with_xdg_output::<State>(&dh);
