@@ -3,12 +3,15 @@
 //! through a channel and never share its state.
 
 pub mod api;
+pub mod client;
+pub mod dbus;
 pub mod driver;
 pub mod greeter_server;
 pub mod helper_client;
 pub mod persist;
 pub mod recovery;
 pub mod rng;
+pub mod system;
 
 pub use api::*;
 pub use driver::{CALL_DEADLINE, RuntimeConfig, RuntimeHandle, channel, start};
