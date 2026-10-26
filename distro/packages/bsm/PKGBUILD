@@ -24,10 +24,7 @@ depends=('bingux' 'gnoblin' 'seatd' 'polkit' 'dbus' 'pam' 'systemd' 'libinput' '
 # bsm.service does not start without a greeter, so greetd stays recommended:
 # bsm-fallback.service starts it when bsm cannot be kept running.
 optdepends=('greetd: login screen that bsm-fallback.service starts when bsm fails')
-# !check: the unit and headless tests run on the host (tests/bsm-headless-e2e.py,
-# cargo test per crate); the container has no GPU or session bus for all of them.
-# Remove !check to run them during makepkg.
-options=('!debug' '!lto' '!check')
+options=('!debug' '!lto')
 install=bsm.install
 source=("bingux-$pkgver.tar.xz" 'bsm.install')
 sha256sums=('SKIP' 'SKIP')
@@ -57,14 +54,8 @@ build() {
     done
 }
 
-check() {
-    cd "$srcdir/bingux-$pkgver" || return
-    export CARGO_TARGET_DIR="$srcdir/target"
-    local crate
-    for crate in bsm-proto "${_crates[@]}"; do
-        cargo test --locked --release --manifest-path "packages/$crate/Cargo.toml"
-    done
-}
+# No check(): the crates' tests need a GPU, a session bus and PAM test stacks that the
+# build container lacks. They run on the host (cargo test per crate, tests/bsm-*.py).
 
 package() {
     cd "$srcdir/bingux-$pkgver" || return
