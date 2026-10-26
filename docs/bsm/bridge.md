@@ -205,7 +205,15 @@ with unit tests.
 | `surfaces_mapped`   | Per output whenever (mapped, required) changes, from `bingux_launched` on. A role counts as mapped only when Bingux says so **and** Gnoblin's `layers.list` shows a mapped layer surface with the role's namespace on that output's monitor. |
 | `desktop_ready`     | Once, when every required component sent `ready`, every required surface is confirmed on every output and every output is configured. A frame is presented again right after the report, so bsm sees a frame that follows it. |
 
-Required roles and namespaces: `wallpaper` = `bingux-wallpaper`, `bar` =
+Required roles per output: the wallpaper on every output; the bar and the dock
+only on the outputs where Bingux declared them with a `surface` line (Bingux
+draws them on the primary monitor only, so a second monitor shows just the
+wallpaper). Every role a component announces must be declared on at least one
+output, so a missing dock still blocks. Declared surfaces are still confirmed in
+Gnoblin's layer list. `surfaces_mapped` `b` is therefore 1 on a second monitor.
+Verified by unit tests; the VM walkthrough with two outputs is the real check.
+
+Roles and namespaces: `wallpaper` = `bingux-wallpaper`, `bar` =
 `bingux-top-bar`, `dock` = `bingux-dock`.
 
 ### `ready.sock`

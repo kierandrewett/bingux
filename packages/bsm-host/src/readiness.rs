@@ -270,6 +270,35 @@ impl Readiness {
         roles
     }
 
+    /// Has Bingux declared (by any `surface` line) that it puts `role` on `output`?
+    fn declared(&self, output: &str, role: Role) -> bool {
+        let connector = self.connectors.get(output).map(String::as_str);
+        let has = |name: &str| self.surfaces.contains_key(&(name.to_owned(), role));
+        has(output) || connector.is_some_and(has)
+    }
+
+    /// Roles required on one output. The wallpaper is on every output. The
+    /// bar and the dock are only where Bingux puts them (it draws them on the
+    /// primary monitor, not on every monitor), so they are required on the
+    /// outputs where Bingux declared them. That every role of a component shows
+    /// up somewhere is checked separately (`declared_everywhere`).
+    fn roles_on(&self, output: &str) -> BTreeSet<Role> {
+        let mut roles = BTreeSet::from([Role::Wallpaper]);
+        for r in Role::ALL {
+            if self.declared(output, r) {
+                roles.insert(r);
+            }
+        }
+        roles
+    }
+
+    /// Every role a component announced was declared on at least one output.
+    fn declared_everywhere(&self) -> bool {
+        self.required_roles()
+            .into_iter()
+            .all(|r| self.configured.iter().any(|o| self.declared(o, r)))
+    }
+
     /// Is `role` mapped on `output`, by Bingux's word and by Gnoblin's list?
     fn confirmed(&self, output: &str, role: Role) -> bool {
         let connector = self.connectors.get(output).map(String::as_str);
@@ -323,9 +352,10 @@ impl Readiness {
 
         if self.launched_reported && self.gnoblin_reported {
             let roles = self.required_roles();
-            let mut all_mapped = true;
+            let mut all_mapped = self.declared_everywhere();
             let outputs: Vec<String> = self.configured.iter().cloned().collect();
             for output in &outputs {
+                let roles = self.roles_on(output);
                 let b = roles.len() as u32;
                 let a = roles.iter().filter(|r| self.confirmed(output, **r)).count() as u32;
                 if a != b {
@@ -453,6 +483,47 @@ mod tests {
         assert!(!reports.contains(&Report::DesktopReady { a: 1, b: 1 }));
         let reports = r.set_layers(all_layers("Meta-0"));
         assert_eq!(reports.last(), Some(&Report::DesktopReady { a: 1, b: 1 }));
+    }
+
+    #[test]
+    fn bar_and_dock_only_on_the_primary_output_do_not_block_the_second() {
+        let mut r = Readiness::new("7");
+        r.output_added("A");
+        r.output_added("B");
+        r.set_gnoblin_ready(true);
+        r.output_configured("A", "Virtual-1");
+        r.output_configured("B", "Virtual-2");
+        r.ready_line(&line(Some("wallpaper"), "launched"));
+        r.ready_line(&line(Some("desktop"), "launched"));
+        for (c, o, role) in [
+            ("wallpaper", "Virtual-1", "wallpaper"),
+            ("wallpaper", "Virtual-2", "wallpaper"),
+            ("desktop", "Virtual-1", "bar"),
+            ("desktop", "Virtual-1", "dock"),
+        ] {
+            r.ready_line(&surface(c, o, role, true));
+        }
+        r.ready_line(&line(Some("wallpaper"), "ready"));
+        r.ready_line(&line(Some("desktop"), "ready"));
+        let mut layers = all_layers("Virtual-1");
+        layers.push(layer(Role::Wallpaper, "Virtual-2"));
+        let reports = r.set_layers(layers);
+        assert!(reports.contains(&Report::SurfacesMapped { output: "B".into(), a: 1, b: 1 }), "{reports:?}");
+        assert_eq!(reports.last(), Some(&Report::DesktopReady { a: 2, b: 2 }));
+    }
+
+    #[test]
+    fn a_role_nobody_declared_anywhere_still_blocks() {
+        let mut r = configured_session();
+        r.ready_line(&line(Some("wallpaper"), "launched"));
+        r.ready_line(&line(Some("desktop"), "launched"));
+        for (c, role) in [("wallpaper", "wallpaper"), ("desktop", "bar")] {
+            r.ready_line(&surface(c, "Meta-0", role, true));
+        }
+        r.ready_line(&line(Some("wallpaper"), "ready"));
+        r.ready_line(&line(Some("desktop"), "ready"));
+        let reports = r.set_layers(all_layers("Meta-0"));
+        assert!(!reports.contains(&Report::DesktopReady { a: 1, b: 1 }), "dock never declared: {reports:?}");
     }
 
     #[test]
