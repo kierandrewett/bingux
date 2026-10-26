@@ -58,41 +58,47 @@ impl HostedEnv {
         std::fs::set_permissions(&runtime, std::os::unix::fs::PermissionsExt::from_mode(0o700)).unwrap();
         let bus_path = dir.join("bus");
         let bus = format!("unix:path={}", bus_path.display());
+        let home = dir.join("home");
+        let empty_xdg = dir.join("xdg");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(&empty_xdg).unwrap();
+        // Nothing of the host session leaks in: private HOME, no autostart
+        // directories, no system bus (so nothing can reach logind).
+        let isolate = |c: &mut Command| {
+            c.env("XDG_RUNTIME_DIR", &runtime)
+                .env("DBUS_SESSION_BUS_ADDRESS", &bus)
+                .env("HOME", &home)
+                .env("XDG_CONFIG_HOME", home.join(".config"))
+                .env("XDG_DATA_HOME", home.join(".local/share"))
+                .env("XDG_CONFIG_DIRS", &empty_xdg)
+                .env("DBUS_SYSTEM_BUS_ADDRESS", format!("unix:path={}", dir.join("no-system-bus").display()))
+                .env_remove("WAYLAND_DISPLAY")
+                .env_remove("DISPLAY");
+        };
         let mut children = Vec::new();
         let log = |n: &str| std::fs::File::create(dir.join(format!("{n}.log"))).unwrap();
 
-        children.push(
-            Command::new("dbus-daemon")
-                .args(["--session", "--nofork", &format!("--address={bus}")])
-                .env("XDG_RUNTIME_DIR", &runtime)
-                .stdout(log("dbus"))
-                .stderr(log("dbus-err"))
-                .spawn()
-                .expect("dbus-daemon"),
-        );
+        {
+            let mut c = Command::new("dbus-daemon");
+            c.args(["--session", "--nofork", &format!("--address={bus}")]);
+            isolate(&mut c);
+            children.push(c.stdout(log("dbus")).stderr(log("dbus-err")).spawn().expect("dbus-daemon"));
+        }
         wait_until(Duration::from_secs(5), || bus_path.exists(), "session bus");
-        children.push(
-            Command::new("pipewire")
-                .env("XDG_RUNTIME_DIR", &runtime)
-                .env("DBUS_SESSION_BUS_ADDRESS", &bus)
-                .stdout(log("pipewire"))
-                .stderr(log("pipewire-err"))
-                .spawn()
-                .expect("pipewire"),
-        );
+        {
+            let mut c = Command::new("pipewire");
+            isolate(&mut c);
+            children.push(c.stdout(log("pipewire")).stderr(log("pipewire-err")).spawn().expect("pipewire"));
+        }
         wait_until(Duration::from_secs(5), || runtime.join("pipewire-0").exists(), "pipewire socket");
 
         // PipeWire links a capture stream to Mutter's node only with a session
         // manager, exactly as in a real user session.
-        children.push(
-            Command::new("wireplumber")
-                .env("XDG_RUNTIME_DIR", &runtime)
-                .env("DBUS_SESSION_BUS_ADDRESS", &bus)
-                .stdout(log("wireplumber"))
-                .stderr(log("wireplumber-err"))
-                .spawn()
-                .expect("wireplumber"),
-        );
+        {
+            let mut c = Command::new("wireplumber");
+            isolate(&mut c);
+            children.push(c.stdout(log("wireplumber")).stderr(log("wireplumber-err")).spawn().expect("wireplumber"));
+        }
         std::thread::sleep(Duration::from_millis(800));
 
         let display = "wl-hosted".to_owned();
@@ -101,16 +107,13 @@ impl HostedEnv {
         let mut cmd;
         if let Some(g) = &real {
             cmd = Command::new(g);
-            cmd.args(["--hosted", "--wayland-display", &display]);
+            cmd.args(["--hosted", "--wayland-display", &display]).env("XDG_SESSION_TYPE", "wayland");
         } else {
             cmd = Command::new("mutter");
             cmd.args(["--headless", "--wayland", "--no-x11", &format!("--wayland-display={display}")]);
         }
-        cmd.env("XDG_RUNTIME_DIR", &runtime)
-            .env("DBUS_SESSION_BUS_ADDRESS", &bus)
-            .env_remove("WAYLAND_DISPLAY")
-            .env_remove("DISPLAY")
-            .stdout(log("compositor"))
+        isolate(&mut cmd);
+        cmd.stdout(log("compositor"))
             .stderr(log("compositor-err"));
         children.push(cmd.spawn().expect("compositor"));
 
@@ -121,7 +124,7 @@ impl HostedEnv {
             .expect("connect to the private bus");
         let dbus = zbus::blocking::fdo::DBusProxy::new(&session).unwrap();
         wait_until(
-            Duration::from_secs(30),
+            Duration::from_secs(60),
             || {
                 ["org.gnome.Mutter.ScreenCast", "org.gnome.Mutter.RemoteDesktop", "org.gnome.Mutter.DisplayConfig"]
                     .iter()
@@ -141,6 +144,28 @@ impl HostedEnv {
                     .expect("serve Hosted1 stub"),
             );
         }
+        if real.is_some() {
+            // The real Gnoblin is usable when its runtime handshake is done.
+            wait_until(
+                Duration::from_secs(90),
+                || {
+                    session
+                        .call_method(
+                            Some("org.gnoblin.Hosted1"),
+                            "/org/gnoblin/Hosted1",
+                            Some("org.freedesktop.DBus.Properties"),
+                            "Get",
+                            &("org.gnoblin.Hosted1", "Ready"),
+                        )
+                        .ok()
+                        .and_then(|m| {
+                            m.body().deserialize::<zbus::zvariant::OwnedValue>().ok().and_then(|v| bool::try_from(v).ok())
+                        })
+                        .unwrap_or(false)
+                },
+                "org.gnoblin.Hosted1 Ready",
+            );
+        }
         wait_until(Duration::from_secs(10), || runtime.join(&display).exists(), "wayland socket");
         HostedEnv { dir, runtime, bus, display, children, _stub: stub, real_gnoblin: real.is_some() }
     }
@@ -150,6 +175,8 @@ impl HostedEnv {
         Command::new(program)
             .args(args)
             .env("XDG_RUNTIME_DIR", &self.runtime)
+            .env("HOME", self.dir.join("home"))
+            .env("XDG_CONFIG_DIRS", self.dir.join("xdg"))
             .env("WAYLAND_DISPLAY", &self.display)
             .env("DBUS_SESSION_BUS_ADDRESS", &self.bus)
             .env_remove("DISPLAY")

@@ -70,14 +70,16 @@ fn marker(f: &Frame) -> Option<(f64, f64, usize)> {
 }
 
 fn spawn_bridge(env: &HostedEnv, standin: &Standin, generation: &str) -> std::process::Child {
-    Command::new(env!("CARGO_BIN_EXE_bsm-host"))
-        .env("BSM_HOST_SOCKET", &standin.socket)
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bsm-host"));
+    if !env.real_gnoblin {
+        cmd.env("GNOBLIN_COMPOSITOR_SOCKET", env.runtime.join("none.sock"));
+    }
+    cmd.env("BSM_HOST_SOCKET", &standin.socket)
         .env("BSM_SESSION_ID", "standin-session")
         .env("BSM_GENERATION", generation)
         .env("XDG_RUNTIME_DIR", &env.runtime)
         .env("DBUS_SESSION_BUS_ADDRESS", &env.bus)
-        .env("GNOBLIN_COMPOSITOR_SOCKET", env.runtime.join("none.sock"))
-        .env("RUST_LOG", "debug")
+        .env("RUST_LOG", "debug,bsm_host::layers=trace")
         .stdout(Stdio::null())
         .stderr(std::fs::File::create(env.dir.join("bridge.log")).unwrap())
         .spawn()
@@ -276,5 +278,210 @@ fn two_outputs_become_two_monitors_at_the_requested_positions() {
         assert_eq!((places[0].0, places[0].1), (0, 0));
         assert_eq!((places[1].0, places[1].1), (800, 0));
         assert!((places[1].2 - 2.0).abs() < 0.01, "scale of B: {places:?}");
+    });
+}
+
+#[test]
+fn a_held_key_repeats_inside_the_session() {
+    if let Err(why) = available() {
+        eprintln!("SKIP: {why}");
+        return;
+    }
+    let env = HostedEnv::start("repeat");
+    let standin = Standin::start(&env.dir, "10");
+    standin.add_output("DP-1", OutputSpec::new(0, 0, 800, 600));
+    let mut bridge = spawn_bridge(&env, &standin, "10");
+    with_logs(&env, &mut bridge, || {
+        standin.wait_for("output_configured", T, |s| s.reports.iter().any(|r| r.kind == OUTPUT_CONFIGURED));
+        standin.wait_for("a real frame", T, |s| !s.frames.is_empty());
+        std::thread::sleep(Duration::from_millis(500));
+        let empty = latest(&standin, "DP-1");
+        let typed = env.dir.join("typed.txt");
+        let script = format!("IFS= read -r line; printf %s \"$line\" > {}; sleep 30", typed.display());
+        let mut term = env.client("foot", &["sh", "-c", &script]);
+        wait_changed(&standin, "DP-1", &empty, 5000);
+        std::thread::sleep(Duration::from_millis(2000));
+        standin.send(Control::KeyboardEnter("DP-1".into()));
+        standin.send(Control::InputState(true));
+        std::thread::sleep(Duration::from_millis(300));
+        standin.send(Control::Key(35, true)); // h, held
+        std::thread::sleep(Duration::from_millis(1500));
+        standin.send(Control::Key(35, false));
+        standin.send(Control::Key(28, true));
+        standin.send(Control::Key(28, false));
+        support::mutter::wait_until(Duration::from_secs(10), || typed.exists(), "the typed line");
+        std::thread::sleep(Duration::from_millis(200));
+        let line = std::fs::read_to_string(&typed).unwrap();
+        eprintln!("held h for 1.5 s, the terminal received {} characters", line.len());
+        assert!(line.chars().all(|c| c == 'h'), "{line:?}");
+        assert!(line.len() >= 5, "no key repeat: {line:?}");
+        let _ = term.kill();
+        let _ = term.wait();
+    });
+}
+
+/// Build Gnoblin's layer-surface test client (needs the Gnoblin sources:
+/// `BSM_TEST_GNOBLIN_SRC`). Returns the path of the client binary.
+fn build_layer_client(dir: &std::path::Path) -> Option<PathBuf> {
+    let src = PathBuf::from(std::env::var_os("BSM_TEST_GNOBLIN_SRC")?);
+    let build = dir.join("layer-client-build");
+    std::fs::create_dir_all(&build).unwrap();
+    let layer_xml = src.join("src/protocols/layer-shell/wlr-layer-shell-unstable-v1.xml");
+    let pkgdata = Command::new("pkg-config").args(["--variable=pkgdatadir", "wayland-protocols"]).output().ok()?;
+    let xdg_xml = PathBuf::from(String::from_utf8(pkgdata.stdout).ok()?.trim()).join("stable/xdg-shell/xdg-shell.xml");
+    for (mode, xml, name) in [
+        ("client-header", &layer_xml, "wlr-layer-shell-unstable-v1-client-protocol.h"),
+        ("private-code", &layer_xml, "layer.c"),
+        ("private-code", &xdg_xml, "xdg.c"),
+    ] {
+        assert!(Command::new("wayland-scanner").args([mode]).arg(xml).arg(build.join(name)).status().ok()?.success());
+    }
+    let cflags = Command::new("pkg-config").args(["--cflags", "--libs", "wayland-client"]).output().ok()?;
+    let mut cc = Command::new("cc");
+    cc.arg(format!("-I{}", build.display()))
+        .arg(src.join("tests/hosted-layer-client.c"))
+        .arg(build.join("layer.c"))
+        .arg(build.join("xdg.c"))
+        .args(String::from_utf8(cflags.stdout).ok()?.split_whitespace())
+        .arg("-o")
+        .arg(build.join("client"));
+    cc.status().ok()?.success().then(|| build.join("client"))
+}
+
+#[test]
+fn desktop_ready_waits_for_gnoblins_own_layer_list() {
+    if let Err(why) = available() {
+        eprintln!("SKIP: {why}");
+        return;
+    }
+    if std::env::var_os("BSM_TEST_GNOBLIN").is_none() {
+        eprintln!("SKIP: needs the real hosted Gnoblin (BSM_TEST_GNOBLIN) for its layer list");
+        return;
+    }
+    let env = HostedEnv::start("layers");
+    let Some(client) = build_layer_client(&env.dir) else {
+        eprintln!("SKIP: BSM_TEST_GNOBLIN_SRC not set or the layer client did not build");
+        return;
+    };
+    let standin = Standin::start(&env.dir, "11");
+    standin.add_output("DP-1", OutputSpec::new(0, 0, 800, 600));
+    let mut bridge = spawn_bridge(&env, &standin, "11");
+    let ready_sock = env.runtime.join("bsm/ready.sock");
+    let say = |line: String| {
+        use std::io::Write;
+        let mut s = std::os::unix::net::UnixStream::connect(&ready_sock).expect("ready.sock");
+        writeln!(s, "{line}").unwrap();
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    with_logs(&env, &mut bridge, || {
+        standin.wait_for("output_configured", T, |s| s.reports.iter().any(|r| r.kind == OUTPUT_CONFIGURED));
+        // The connector Gnoblin gave the virtual monitor.
+        let conn = zbus::blocking::connection::Builder::address(env.bus.as_str()).unwrap().build().unwrap();
+        let reply = conn
+            .call_method(
+                Some("org.gnome.Mutter.DisplayConfig"),
+                "/org/gnome/Mutter/DisplayConfig",
+                Some("org.gnome.Mutter.DisplayConfig"),
+                "GetCurrentState",
+                &(),
+            )
+            .unwrap();
+        let body = reply.body();
+        let (_s, monitors, _l, _p): (
+            u32,
+            Vec<bsm_host::gnoblin::DcMonitor>,
+            Vec<bsm_host::gnoblin::DcLogical>,
+            std::collections::HashMap<String, zbus::zvariant::OwnedValue>,
+        ) = body.deserialize().unwrap();
+        let connector = monitors[0].0.0.clone();
+        eprintln!("DisplayConfig connector: {connector}");
+
+        let g = "11";
+        for c in ["wallpaper", "desktop"] {
+            say(format!(r#"{{"generation":"{g}","component":"{c}","event":"launched"}}"#));
+        }
+        // Bingux claims every surface mapped and says it is ready, but Gnoblin has none.
+        for (c, r) in [("wallpaper", "wallpaper"), ("desktop", "bar"), ("desktop", "dock")] {
+            say(format!(r#"{{"generation":"{g}","component":"{c}","event":"surface","output":"{connector}","role":"{r}","mapped":true}}"#));
+        }
+        for c in ["wallpaper", "desktop"] {
+            say(format!(r#"{{"generation":"{g}","component":"{c}","event":"ready"}}"#));
+        }
+        std::thread::sleep(Duration::from_millis(1500));
+        let has = |kind: u32| standin.shared.lock().unwrap().reports.iter().any(|r| r.kind == kind);
+        assert!(!has(5), "desktop_ready on Bingux's word alone");
+        let mapped = |s: &Shared| s.reports.iter().rev().find(|r| r.kind == 4).map(|r| (r.a, r.b));
+        assert_eq!(mapped(&standin.shared.lock().unwrap()), Some((0, 3)));
+
+        // Gnoblin maps two of the three.
+        let mut kids = Vec::new();
+        let spawn = |ns: &str, layer: &str, anchor: &str, size: &str, colour: &str| {
+            Command::new(&client)
+                .args([ns, layer, anchor, size, colour, &connector])
+                .env("XDG_RUNTIME_DIR", &env.runtime)
+                .env("WAYLAND_DISPLAY", &env.display)
+                .stdout(Stdio::null())
+                .spawn()
+                .expect("layer client")
+        };
+        kids.push(spawn("bingux-wallpaper", "background", "all", "0", "0xFF204060"));
+        kids.push(spawn("bingux-top-bar", "top", "top", "32", "0xFFD04020"));
+        standin.wait_for("2 of 3 mapped", T, |s| mapped(s) == Some((2, 3)));
+        assert!(!has(5), "desktop_ready with the dock missing from Gnoblin's list");
+
+        // The third completes it, and a frame follows the report.
+        kids.push(spawn("bingux-dock", "top", "bottom", "48", "0xFF20C040"));
+        standin.wait_for("3 of 3 mapped", T, |s| mapped(s) == Some((3, 3)));
+        standin.wait_for("desktop_ready", T, |s| s.reports.iter().any(|r| r.kind == 5));
+        let at = standin.shared.lock().unwrap().frames.len();
+        standin.wait_for("a frame after desktop_ready", T, |s| s.frames.len() > at);
+        let f = latest(&standin, "DP-1");
+        evidence("hosted-5-layers.png", &f);
+        for mut k in kids {
+            let _ = k.kill();
+            let _ = k.wait();
+        }
+    });
+}
+
+#[test]
+fn session_actions_from_gnoblin_are_forwarded_to_bsmctl() {
+    if let Err(why) = available() {
+        eprintln!("SKIP: {why}");
+        return;
+    }
+    if std::env::var_os("BSM_TEST_GNOBLIN").is_some() {
+        eprintln!("SKIP: stub signal test (stock Mutter only)");
+        return;
+    }
+    let env = HostedEnv::start("actions");
+    let standin = Standin::start(&env.dir, "12");
+    standin.add_output("DP-1", OutputSpec::new(0, 0, 800, 600));
+    let record = env.dir.join("bsmctl-calls");
+    let fake = env.dir.join("bsmctl");
+    std::fs::write(&fake, format!("#!/bin/sh\necho \"$1\" >> {}\n", record.display())).unwrap();
+    std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let mut bridge = Command::new(env!("CARGO_BIN_EXE_bsm-host"))
+        .env("BSM_HOST_SOCKET", &standin.socket)
+        .env("BSM_GENERATION", "12")
+        .env("XDG_RUNTIME_DIR", &env.runtime)
+        .env("DBUS_SESSION_BUS_ADDRESS", &env.bus)
+        .env("GNOBLIN_COMPOSITOR_SOCKET", env.runtime.join("none.sock"))
+        .env("BSMCTL", &fake)
+        .stdout(Stdio::null())
+        .stderr(std::fs::File::create(env.dir.join("bridge.log")).unwrap())
+        .spawn()
+        .unwrap();
+    with_logs(&env, &mut bridge, || {
+        standin.wait_for("output_configured", T, |s| s.reports.iter().any(|r| r.kind == OUTPUT_CONFIGURED));
+        let conn = zbus::blocking::connection::Builder::address(env.bus.as_str()).unwrap().build().unwrap();
+        for action in ["logout", "poweroff", "hibernate"] {
+            conn.emit_signal(None::<&str>, "/org/gnoblin/Hosted1", "org.gnoblin.Hosted1", "ActionRequested", &(action,))
+                .unwrap();
+        }
+        wait_until(Duration::from_secs(10), || std::fs::read_to_string(&record).is_ok_and(|s| s.lines().count() >= 2), "bsmctl calls");
+        std::thread::sleep(Duration::from_millis(300));
+        let calls = std::fs::read_to_string(&record).unwrap();
+        assert_eq!(calls.lines().collect::<Vec<_>>(), vec!["logout", "poweroff"], "hibernate has no bsm equivalent and must be ignored");
     });
 }

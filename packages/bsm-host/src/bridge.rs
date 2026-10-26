@@ -468,6 +468,7 @@ impl Bridge {
                 }
             }
             Msg::Layers(layers) => {
+                log::debug!("gnoblin layers: {layers:?}");
                 let reports = self.readiness.set_layers(layers);
                 self.send_reports(reports);
             }

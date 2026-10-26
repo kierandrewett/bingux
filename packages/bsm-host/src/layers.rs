@@ -76,8 +76,7 @@ pub fn parse_monitors(msg: &Value, into: &mut HashMap<String, String>) {
                 .get("output_names")
                 .and_then(Value::as_array)
                 .and_then(|a| a.iter().find_map(Value::as_str))
-                .or_else(|| rec.get("connector").and_then(Value::as_str))
-                .or_else(|| rec.get("name").and_then(Value::as_str));
+                .or_else(|| rec.get("connector").and_then(Value::as_str));
             if let Some(c) = connector {
                 into.insert(id, c.to_owned());
             }
@@ -95,7 +94,11 @@ pub struct RawLayer {
 
 /// Layer records in a `layer.list` result.
 pub fn parse_layers(msg: &Value) -> Option<Vec<RawLayer>> {
+    // `layers.list` answers `{"result": [records]}`; older shapes nest the list under `layers`.
     let mut found = Vec::new();
+    if let Some(r) = msg.get("result") {
+        found.push(r);
+    }
     walk(msg, "layers", &mut found);
     let list = found.into_iter().find_map(Value::as_array)?;
     Some(
@@ -150,7 +153,6 @@ fn session(stream: UnixStream, tx: &calloop::channel::Sender<Msg>) -> std::io::R
         line.push('\n');
         w.write_all(line.as_bytes())
     };
-    send(&mut w, json!({"api_version": version()}))?;
     send(
         &mut w,
         json!({"op":"events","api_version":version(),"events":[
@@ -160,7 +162,7 @@ fn session(stream: UnixStream, tx: &calloop::channel::Sender<Msg>) -> std::io::R
     )?;
     send(&mut w, json!({"op":"monitors","api_version":version()}))?;
     let query = |w: &mut UnixStream| -> std::io::Result<()> {
-        send(w, json!({"op":"api","id":"layers","api_version":version(),"method":"layer.list","arguments":{}}))
+        send(w, json!({"op":"api","id":"layers","api_version":version(),"method":"layers.list","arguments":{}}))
     };
     query(&mut w)?;
 
@@ -184,6 +186,7 @@ fn session(stream: UnixStream, tx: &calloop::channel::Sender<Msg>) -> std::io::R
             }
             Err(e) => return Err(e),
         }
+        log::trace!("gnoblin socket: {}", line.trim_end().chars().take(400).collect::<String>());
         let Ok(msg) = serde_json::from_str::<Value>(&line) else { continue };
         let event = msg.get("event").and_then(Value::as_str).unwrap_or("");
         if event == "gnoblin.session.lock-requested" {
@@ -233,6 +236,25 @@ mod tests {
                 LayerSurface { namespace: "bingux-dock".into(), connector: "Meta-1".into(), mapped: false },
             ]
         );
+    }
+
+    #[test]
+    fn a_monitor_without_connector_names_keeps_its_id_as_the_connector() {
+        // Gnoblin's monitor ids are connector names; `name` is the vendor string.
+        let mut monitors = HashMap::new();
+        parse_monitors(&json!({"monitors":[{"id":"Meta-0","name":"MetaVendor","model":"Virtual remote monitor"}]}), &mut monitors);
+        assert!(monitors.is_empty());
+        let msg = json!({"result":[{"namespace":"bingux-dock","monitor_id":"Meta-0","mapped":true}]});
+        assert_eq!(resolve(&parse_layers(&msg).unwrap(), &monitors)[0].connector, "Meta-0");
+    }
+
+    #[test]
+    fn parses_the_plain_result_list_with_connector_monitor_ids() {
+        let msg = json!({"event":"reply","id":"layers","result":[
+            {"id":"l1","namespace":"bingux-top-bar","monitor_id":"Meta-0","mapped":true}]});
+        let layers = resolve(&parse_layers(&msg).unwrap(), &HashMap::new());
+        assert_eq!(layers, vec![LayerSurface { namespace: "bingux-top-bar".into(), connector: "Meta-0".into(), mapped: true }]);
+        assert_eq!(parse_layers(&json!({"result": []})).unwrap(), vec![]);
     }
 
     #[test]
