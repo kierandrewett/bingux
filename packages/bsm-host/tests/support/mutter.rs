@@ -30,6 +30,7 @@ pub struct HostedEnv {
     pub bus: String,
     pub display: String,
     children: Vec<Child>,
+    compositor_idx: usize,
     _stub: Option<zbus::blocking::Connection>,
     pub real_gnoblin: bool,
 }
@@ -85,21 +86,7 @@ impl HostedEnv {
             children.push(c.stdout(log("dbus")).stderr(log("dbus-err")).spawn().expect("dbus-daemon"));
         }
         wait_until(Duration::from_secs(5), || bus_path.exists(), "session bus");
-        {
-            let mut c = Command::new("pipewire");
-            isolate(&mut c);
-            children.push(c.stdout(log("pipewire")).stderr(log("pipewire-err")).spawn().expect("pipewire"));
-        }
-        wait_until(Duration::from_secs(5), || runtime.join("pipewire-0").exists(), "pipewire socket");
-
-        // PipeWire links a capture stream to Mutter's node only with a session
-        // manager, exactly as in a real user session.
-        {
-            let mut c = Command::new("wireplumber");
-            isolate(&mut c);
-            children.push(c.stdout(log("wireplumber")).stderr(log("wireplumber-err")).spawn().expect("wireplumber"));
-        }
-        std::thread::sleep(Duration::from_millis(800));
+        children.extend(spawn_pipewire(&dir, &runtime, &bus));
 
         let display = "wl-hosted".to_owned();
         let real = std::env::var_os("BSM_TEST_GNOBLIN").map(PathBuf::from);
@@ -115,6 +102,7 @@ impl HostedEnv {
         isolate(&mut cmd);
         cmd.stdout(log("compositor"))
             .stderr(log("compositor-err"));
+        let compositor_idx = children.len();
         children.push(cmd.spawn().expect("compositor"));
 
         // Wait for Mutter's services.
@@ -167,7 +155,7 @@ impl HostedEnv {
             );
         }
         wait_until(Duration::from_secs(10), || runtime.join(&display).exists(), "wayland socket");
-        HostedEnv { dir, runtime, bus, display, children, _stub: stub, real_gnoblin: real.is_some() }
+        HostedEnv { dir, runtime, bus, display, children, compositor_idx, _stub: stub, real_gnoblin: real.is_some() }
     }
 
     /// Run a Wayland client inside the hosted Gnoblin.
@@ -188,13 +176,13 @@ impl HostedEnv {
 
     /// Pid of the compositor process (Mutter or Gnoblin).
     pub fn compositor_pid(&self) -> u32 {
-        self.children[3].id()
+        self.children[self.compositor_idx].id()
     }
 
     /// Kill the compositor (simulates a Gnoblin crash).
     pub fn kill_compositor(&mut self) {
-        let _ = self.children[3].kill();
-        let _ = self.children[3].wait();
+        let _ = self.children[self.compositor_idx].kill();
+        let _ = self.children[self.compositor_idx].wait();
     }
 
     pub fn log(&self, name: &str) -> String {
@@ -212,6 +200,34 @@ impl Drop for HostedEnv {
             let _ = std::fs::remove_dir_all(&self.dir);
         }
     }
+}
+
+fn spawn_pipewire(dir: &Path, runtime: &Path, bus: &str) -> Vec<Child> {
+    let home = dir.join("home");
+    let isolate = |c: &mut Command| {
+        c.env("XDG_RUNTIME_DIR", runtime)
+            .env("DBUS_SESSION_BUS_ADDRESS", bus)
+            .env("HOME", &home)
+            .env("XDG_CONFIG_HOME", home.join(".config"))
+            .env("XDG_DATA_HOME", home.join(".local/share"))
+            .env("XDG_CONFIG_DIRS", dir.join("xdg"))
+            .env("DBUS_SYSTEM_BUS_ADDRESS", format!("unix:path={}", dir.join("no-system-bus").display()))
+            .env_remove("WAYLAND_DISPLAY")
+            .env_remove("DISPLAY");
+    };
+    let log = |n: &str| std::fs::File::create(dir.join(format!("{n}.log"))).unwrap();
+    let mut out = Vec::new();
+    let mut c = Command::new("pipewire");
+    isolate(&mut c);
+    out.push(c.stdout(log("pipewire")).stderr(log("pipewire-err")).spawn().expect("pipewire"));
+    wait_until(Duration::from_secs(5), || runtime.join("pipewire-0").exists(), "pipewire socket");
+    // PipeWire links a capture stream to Mutter's node only with a session
+    // manager, exactly as in a real user session.
+    let mut c = Command::new("wireplumber");
+    isolate(&mut c);
+    out.push(c.stdout(log("wireplumber")).stderr(log("wireplumber-err")).spawn().expect("wireplumber"));
+    std::thread::sleep(Duration::from_millis(800));
+    out
 }
 
 pub fn wait_until(timeout: Duration, mut f: impl FnMut() -> bool, what: &str) {

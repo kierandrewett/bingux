@@ -21,11 +21,14 @@ as any screen-sharing client, so the Mutter patch series does not grow.
 
 The helper starts, as the session user inside the scope, with a session D-Bus:
 
-1. `pipewire` and `wireplumber` (the user's normal user services). PipeWire
-   cannot link a capture stream to Mutter's virtual-monitor node without a
-   session manager; without WirePlumber the stream stays `Paused` forever.
-2. `gnoblin --hosted --wayland-display NAME`.
-3. `bsm-host`.
+1. `pipewire` and `wireplumber` come from the user manager (`systemd --user`
+   socket activation), not from the helper. PipeWire cannot link a capture stream
+   to Mutter's virtual-monitor node without a session manager; without
+   WirePlumber the stream stays `Paused` forever. The bridge retries the
+   PipeWire connection for up to 60 s; Gnoblin's Mutter itself needs PipeWire
+   when the first virtual monitor is recorded.
+2. `gnoblin --hosted --wayland-display NAME` (leader).
+3. `bsm-host`. The session ends when either the leader or the bridge exits.
 
 `bsm-host` may start before Gnoblin: it waits up to 120 s for Gnoblin's
 services. Environment:
@@ -37,6 +40,7 @@ services. Environment:
 | `DBUS_SESSION_BUS_ADDRESS` | yes      | The session bus of the hosted Gnoblin.                                                                        |
 | `BSM_SESSION_ID`           | no       | Checked against bsm's `identity` event; a mismatch is logged and bsm's value wins.                           |
 | `BSM_GENERATION`           | no       | Same. The generation used in every report is the one from `identity`.                                        |
+| `BSM_OUTPUT_HINTS`         | no       | `"WxH,WxH"` from `OpenSession.output_hints`. Accepted and ignored: outputs come from bsm's `output_added` events. |
 | `GNOBLIN_COMPOSITOR_SOCKET`| no       | Override of `$XDG_RUNTIME_DIR/gnoblin/compositor-v1.sock`.                                                   |
 | `BSMCTL`                   | no       | Path of `bsmctl` (default: `bsmctl` from `PATH`).                                                            |
 | `RUST_LOG`                 | no       | `info` by default. `debug` logs reports, ready lines and frame statistics every 5 s.                         |

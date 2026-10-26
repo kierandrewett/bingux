@@ -31,6 +31,9 @@ use pw::spa::utils::{Choice, ChoiceEnum, ChoiceFlags, Fraction, Id, Rectangle, S
 use crate::frames::{BPP, OutputGate, copy_rows};
 use crate::msg::{CursorImage, Msg, Rect, StreamStatus};
 
+/// How long to wait for the session's PipeWire socket.
+const PIPEWIRE_WAIT: Duration = Duration::from_secs(60);
+
 pub enum Cmd {
     Add {
         output: String,
@@ -147,9 +150,19 @@ fn run(cmd_rx: pw::channel::Receiver<Cmd>, tx: calloop::channel::Sender<Msg>) ->
     pw::init();
     let mainloop = pw::main_loop::MainLoopRc::new(None).context("pipewire main loop")?;
     let context = pw::context::ContextRc::new(&mainloop, None).context("pipewire context")?;
-    let core = context
-        .connect_rc(None)
-        .context("connect to the session PipeWire instance")?;
+    // The user manager socket-activates PipeWire, so its socket may appear a
+    // little after the bridge starts: retry for up to a minute.
+    let started = Instant::now();
+    let core = loop {
+        match context.connect_rc(None) {
+            Ok(core) => break core,
+            Err(e) if started.elapsed() < PIPEWIRE_WAIT => {
+                log::debug!("PipeWire is not up yet: {e}");
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            Err(e) => return Err(e).context("connect to the session PipeWire instance"),
+        }
+    };
     let entries: Rc<RefCell<HashMap<String, Entry>>> = Rc::default();
 
     let quit_loop = mainloop.clone();
