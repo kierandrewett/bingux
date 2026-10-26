@@ -79,7 +79,7 @@ fn spawn_bridge(env: &HostedEnv, standin: &Standin, generation: &str) -> std::pr
         .env("BSM_GENERATION", generation)
         .env("XDG_RUNTIME_DIR", &env.runtime)
         .env("DBUS_SESSION_BUS_ADDRESS", &env.bus)
-        .env("RUST_LOG", "debug,bsm_host::layers=trace")
+        .env("RUST_LOG", "debug")
         .stdout(Stdio::null())
         .stderr(std::fs::File::create(env.dir.join("bridge.log")).unwrap())
         .spawn()
@@ -109,11 +109,6 @@ fn wait_changed(s: &Standin, out: &str, base: &Frame, min: usize) {
             .find(|f| f.output == out)
             .is_some_and(|f| diff_bbox(base, f, 30).is_some_and(|b| b.4 >= min))
     });
-}
-
-fn wait_frame_after(s: &Standin, out: &str, n_before: usize) -> Frame {
-    s.wait_for("a new frame", T, |sh| sh.frames.iter().filter(|f| f.output == out).count() > n_before);
-    latest(s, out)
 }
 
 fn count(s: &Standin, out: &str) -> usize {
@@ -510,7 +505,10 @@ fn session_actions_from_gnoblin_are_forwarded_to_bsmctl() {
         wait_until(Duration::from_secs(10), || std::fs::read_to_string(&record).is_ok_and(|s| s.lines().count() >= 2), "bsmctl calls");
         std::thread::sleep(Duration::from_millis(300));
         let calls = std::fs::read_to_string(&record).unwrap();
-        assert_eq!(calls.lines().collect::<Vec<_>>(), vec!["logout", "poweroff"], "hibernate has no bsm equivalent and must be ignored");
+        // The calls run concurrently, so their order is not defined.
+        let mut calls: Vec<&str> = calls.lines().collect();
+        calls.sort();
+        assert_eq!(calls, vec!["logout", "poweroff"], "hibernate has no bsm equivalent and must be ignored");
     });
 }
 
@@ -602,4 +600,70 @@ fn measure_costs() {
             eprintln!("{l}");
         }
     });
+}
+
+#[test]
+fn resizing_and_removing_outputs_rebuilds_the_virtual_monitors() {
+    if let Err(why) = available() {
+        eprintln!("SKIP: {why}");
+        return;
+    }
+    let env = HostedEnv::start("rebuild");
+    let standin = Standin::start(&env.dir, "14");
+    standin.add_output("A", OutputSpec::new(0, 0, 800, 600));
+    standin.add_output("B", OutputSpec::new(800, 0, 800, 600));
+    let mut bridge = spawn_bridge(&env, &standin, "14");
+    let pid = bridge.id();
+    with_logs(&env, &mut bridge, || {
+        standin.wait_for("both outputs", T, |s| s.reports.iter().filter(|r| r.kind == OUTPUT_CONFIGURED).count() == 2);
+        standin.wait_for("frames on both", T, |s| s.frames.iter().any(|f| f.output == "A") && s.frames.iter().any(|f| f.output == "B"));
+
+        // A grows: both monitors are rebuilt, frames arrive at the new size, nothing before the ack.
+        standin.send(Control::Reconfigure("A".into(), OutputSpec::new(0, 0, 1024, 768)));
+        standin.wait_for("frames at the new size", T, |s| s.frames.iter().any(|f| f.output == "A" && (f.width, f.height) == (1024, 768)));
+        standin.wait_for("B frames after the rebuild", T, |s| {
+            let a = s.frames.iter().rposition(|f| f.output == "A" && f.width == 1024);
+            let b = s.frames.iter().rposition(|f| f.output == "B");
+            matches!((a, b), (Some(a), Some(b)) if b >= a) || s.reports.iter().filter(|r| r.kind == OUTPUT_CONFIGURED).count() >= 4
+        });
+        assert!(standin.shared.lock().unwrap().violations.is_empty(), "{:?}", standin.shared.lock().unwrap().violations);
+
+        // B goes away: A keeps presenting.
+        standin.send(Control::RemoveOutput("B".into()));
+        std::thread::sleep(Duration::from_millis(1500));
+        let n = count(&standin, "A");
+        let mut client = env.client("weston-clickdot", &[]);
+        standin.wait_for("A changes after B was removed", T, |s| s.frames.iter().filter(|f| f.output == "A").count() > n);
+        let _ = client.kill();
+        let _ = client.wait();
+        assert!(standin.shared.lock().unwrap().violations.is_empty());
+        assert!(std::path::Path::new(&format!("/proc/{pid}")).exists(), "bridge exited");
+    });
+}
+
+#[test]
+fn a_crashed_compositor_ends_the_bridge_with_status_4() {
+    if let Err(why) = available() {
+        eprintln!("SKIP: {why}");
+        return;
+    }
+    let mut env = HostedEnv::start("crash");
+    let standin = Standin::start(&env.dir, "15");
+    standin.add_output("A", OutputSpec::new(0, 0, 800, 600));
+    let mut bridge = spawn_bridge(&env, &standin, "15");
+    standin.wait_for("output_configured", T, |s| s.reports.iter().any(|r| r.kind == OUTPUT_CONFIGURED));
+    standin.wait_for("a frame", T, |s| !s.frames.is_empty());
+    env.kill_compositor();
+    let start = std::time::Instant::now();
+    let code = loop {
+        if let Some(s) = bridge.try_wait().unwrap() {
+            break s.code();
+        }
+        if start.elapsed() > Duration::from_secs(15) {
+            let _ = bridge.kill();
+            panic!("the bridge did not notice the compositor dying\n{}", env.log("bridge.log"));
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert_eq!(code, Some(4), "{}", env.log("bridge.log"));
 }

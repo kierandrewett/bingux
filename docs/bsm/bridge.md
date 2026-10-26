@@ -1,0 +1,377 @@
+# bsm-host: the hosted-session bridge
+
+`bsm-host` (installed at `/usr/libexec/bsm/bsm-host`) is decision D2 of
+[architecture.md](architecture.md). It runs as the user, inside the session
+scope, next to `gnoblin --hosted`. It connects Gnoblin to bsm:
+
+```mermaid
+flowchart LR
+    bsm[bsm compositor] -- "bsm_session_host_v1 + wl_shm + wl_seat (brokered socket)" --- bridge[bsm-host]
+    bridge -- "ScreenCast.RecordVirtual, DisplayConfig, RemoteDesktop (session bus)" --- gnoblin[gnoblin --hosted]
+    gnoblin -- "PipeWire video stream per virtual monitor" --> bridge
+    bridge -- "EIS (libei protocol): keys, pointer, touch" --> gnoblin
+    gnoblin -- "compositor-v1.sock: layers.list, lock request" --> bridge
+    bingux[Bingux wallpaper and shell] -- "ready.sock (JSON lines)" --> bridge
+```
+
+It is a bridge, not a Mutter backend: it uses the same public Mutter D-Bus APIs
+as any screen-sharing client, so the Mutter patch series does not grow.
+
+## Launch contract
+
+The helper starts, as the session user inside the scope, with a session D-Bus:
+
+1. `pipewire` and `wireplumber` (the user's normal user services). PipeWire
+   cannot link a capture stream to Mutter's virtual-monitor node without a
+   session manager; without WirePlumber the stream stays `Paused` forever.
+2. `gnoblin --hosted --wayland-display NAME`.
+3. `bsm-host`.
+
+`bsm-host` may start before Gnoblin: it waits up to 120 s for Gnoblin's
+services. Environment:
+
+| Variable                   | Required | Meaning                                                                                                      |
+| -------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `BSM_HOST_SOCKET`          | yes      | Path of the brokered bsm socket. Given only to the bridge, never to Gnoblin or apps.                         |
+| `XDG_RUNTIME_DIR`          | yes      | The session's runtime directory. `bsm/ready.sock` is created in it, PipeWire and Gnoblin sockets are found there. |
+| `DBUS_SESSION_BUS_ADDRESS` | yes      | The session bus of the hosted Gnoblin.                                                                        |
+| `BSM_SESSION_ID`           | no       | Checked against bsm's `identity` event; a mismatch is logged and bsm's value wins.                           |
+| `BSM_GENERATION`           | no       | Same. The generation used in every report is the one from `identity`.                                        |
+| `GNOBLIN_COMPOSITOR_SOCKET`| no       | Override of `$XDG_RUNTIME_DIR/gnoblin/compositor-v1.sock`.                                                   |
+| `BSMCTL`                   | no       | Path of `bsmctl` (default: `bsmctl` from `PATH`).                                                            |
+| `RUST_LOG`                 | no       | `info` by default. `debug` logs reports, ready lines and frame statistics every 5 s.                         |
+
+Option: `--background-fps N` (default 10): frame rate while the session is not
+receiving input.
+
+The bridge talks to a user-level Gnoblin only; it needs no privilege. Run it
+with `Restart=no` semantics: any exit means the session is over or unusable and
+bsm cleans up.
+
+### Exit status
+
+| Status | Meaning                                                                                          |
+| ------ | ------------------------------------------------------------------------------------------------ |
+| 0      | bsm sent `closed`, or the bridge received SIGTERM/SIGINT. `ready.sock` is removed.               |
+| 1      | Internal error (for example buffers could not be allocated).                                     |
+| 2      | Usage error: missing `BSM_HOST_SOCKET`, `XDG_RUNTIME_DIR` or the bus address, bad argument.      |
+| 3      | The connection to bsm was lost (socket closed, Wayland error).                                   |
+| 4      | Gnoblin is lost: Mutter or `org.gnoblin.Hosted1` vanished, a stream ended or failed, the EIS connection closed, Gnoblin closed the RemoteDesktop session, a virtual monitor could not be created or laid out, or Gnoblin did not appear in 120 s. |
+| 5      | Reserved for protocol errors raised by bsm.                                                      |
+
+## What the bridge does
+
+### Towards bsm (Wayland)
+
+* Binds `wl_compositor`, `wl_shm`, `wl_seat`, every `wl_output` and
+  `bsm_session_host_v1`. The protocol bindings are generated at build time from
+  `packages/bsm/protocol/bsm-session-host-v1.xml` (the single source of truth).
+* For each `output_added` it creates a `wl_surface`, calls `get_session_surface`
+  and creates a matching Gnoblin virtual monitor (below). It acknowledges every
+  `configure` as soon as it arrives, then commits a state-only commit
+  (opaque region, no buffer). **No buffer is ever attached before the ack.**
+  The buffer size is the configure size; `output_added`'s width and height are
+  not used for buffers.
+* `output_changed` with a new position, scale or transform re-applies the layout
+  in place. A configure with a new size rebuilds the virtual monitors (see
+  [limitations](#limitations)). `output_removed` destroys the surface and
+  rebuilds the remaining monitors.
+* Frames are `wl_shm` XRGB8888, 4 slots per output. A slot is written only after
+  the compositor released it. The newest committed slot is pinned so the frame
+  can be presented again (see `desktop_ready`). Damage comes from PipeWire's
+  `VideoDamage` metadata; the damage of frames that were dropped (throttling, no
+  free slot) is accumulated into the next forwarded frame, so a dropped frame
+  never leaves a stale region on screen.
+* The bridge never asks for `wl_surface.frame` callbacks and does not depend on
+  `presented` events for flow control: the compositor may not send either to a
+  background session. Backpressure is slot availability.
+* `input_state`: while inactive, no keyboard, pointer or touch event is
+  forwarded and the frame rate drops to `--background-fps` (see
+  [Background](#background-throttling)). On the transition to inactive every held key,
+  button and touch point is released inside Gnoblin.
+* `closed` ends the bridge with status 0.
+* The cursor: Mutter delivers the pointer image as stream metadata
+  (`cursor-mode` 2). On `wl_pointer.enter` and whenever the image changes, the
+  bridge calls `wl_pointer.set_cursor` with an ARGB8888 buffer built from it
+  (or no surface when Gnoblin hides the cursor). Exactly one cursor is on
+  screen: bsm's.
+
+### Towards Gnoblin (session bus)
+
+* `org.gnome.Mutter.RemoteDesktop.CreateSession`, then
+  `org.gnome.Mutter.ScreenCast.CreateSession` linked to it
+  (`remote-desktop-session-id`), so EIS absolute devices get one region per
+  virtual monitor. `ConnectToEIS` is called before the session starts.
+* One `RecordVirtual` (cursor mode: metadata) per bsm output. The stream's
+  PipeWire node id arrives in `PipeWireStreamAdded`. The first monitor starts
+  the session (`RemoteDesktop.Start`); monitors added later need
+  `ScreenCast.Stream.Start`. Monitors are created one at a time because the
+  bridge assigns each newly appeared `Meta-N` connector to the monitor it just
+  created.
+* **The virtual monitor's mode is set by PipeWire negotiation.** The bridge offers
+  exactly one size (the configure size) and caps `maxFramerate` at the bsm
+  output's refresh rate; Mutter uses both for the monitor's mode.
+* `org.gnome.Mutter.DisplayConfig.ApplyMonitorsConfig` (temporary method) after
+  the stream is streaming: scale (the closest scale Mutter supports for the
+  mode; a different value is logged), position and transform. Mutter accepts
+  only layouts that start at the origin, do not overlap and where every
+  monitor touches another by an edge. The bridge shifts bsm's layout to the
+  origin and, if it is still not valid (a gap, an overlap, a diagonal
+  neighbour), packs the monitors left to right in bsm's x order. Gnoblin's
+  layout is therefore not guaranteed to equal bsm's global layout; bsm routes
+  input to a surface per output, so pointer mapping stays exact.
+* `org.gnoblin.Hosted1.Ready` (property, with `PropertiesChanged`) is the
+  runtime handshake: it becomes `gnoblin_ready`. Loss of the name after it was
+  seen ends the bridge with status 4. `ActionRequested(s)` is matched on
+  interface and path with any sender (it comes from Gnoblin's Lua worker).
+* `$XDG_RUNTIME_DIR/gnoblin/compositor-v1.sock` (JSON lines, API 1.81): the
+  bridge subscribes to `gnoblin.layer.*`, `gnoblin.monitor.*` and
+  `gnoblin.session.lock-requested`, and polls `layers.list` (a plain list of
+  records with `namespace`, `monitor_id` = connector, `mapped`) on every
+  change and every 2 s. The socket may appear after the bridge; it reconnects
+  every 250 ms.
+* Session actions from inside the session are forwarded to bsm through
+  `bsmctl <action>`, which identifies the caller by its cgroup:
+  `ActionRequested` with `logout`, `reboot`, `poweroff`, `suspend`, and
+  `gnoblin.session.lock-requested` as `lock`. `hibernate` has no bsm
+  equivalent and is ignored (logged).
+
+### PipeWire
+
+The bridge consumes each stream in one PipeWire thread. Negotiation is
+deliberate:
+
+* Formats offered: `BGRx` and `BGRA` (both are bytes B, G, R, X/A in memory,
+  which is `wl_shm` XRGB8888; alpha is ignored because the surface is declared
+  opaque). Size fixed to the configure size. Nothing else is accepted.
+* Buffer types: `MemFd` and `MemPtr`. **DMA-BUF is not offered**, so Mutter
+  never negotiates it; the copy path below is the only path. A DMA-BUF path
+  (linux-dmabuf import, no CPU copy) is future work and needs bsm's compositor
+  to offer `zwp_linux_dmabuf_v1` to hosted sessions, which it does.
+* Metadata requested: header, `VideoDamage` (16 rectangles), cursor (up to
+  384x384).
+* The stream is created with `node.dont-fallback` and `node.dont-reconnect`:
+  it links to the node Mutter named, waiting for it if necessary, and never to
+  another video source (without this WirePlumber attached a new monitor's
+  stream to a stale monitor of a stopped session).
+* Each frame is copied row by row from the PipeWire buffer into a free slot
+  (one `memcpy` of the frame when strides match) and a message goes to the main
+  thread, which attaches, damages and commits. A buffer with a zero-size chunk
+  (Mutter's cursor-only update) carries no picture: it is neither forwarded nor
+  allowed to replace a withheld picture. If no slot is free the frame is kept
+  and retried on the next 20 ms tick; a withheld frame is forwarded just before
+  PipeWire frees its buffer (renegotiation).
+
+### Input (EIS)
+
+Input arrives from bsm as ordinary `wl_seat` events on the bridge's connection
+and is forwarded to Gnoblin through an EIS connection obtained from
+`RemoteDesktop.ConnectToEIS` (`reis` client, sender context).
+
+* Keyboard: `wl_keyboard.key` evdev codes become `ei_keyboard.key`. **bsm's
+  keymap is not applied**: Gnoblin interprets the codes with its own keymap, so
+  both must use the same layout (configured in the user's Gnoblin settings).
+  Key repeat is done by Mutter inside the session (a held key repeats; tested).
+* Pointer: `enter`/`motion` give surface-local coordinates in the output's
+  logical space; the bridge adds the origin of the EIS region that matches the
+  monitor's rectangle in Gnoblin's layout (matched by geometry, within 1.5 px;
+  with a single region that region is used) and sends `motion_absolute`.
+  Buttons, smooth scroll (`axis`), 120ths scroll (`axis_value120`, preferred
+  over smooth when both arrive in a frame) and `axis_stop` are forwarded.
+* Touch: `down`/`motion`/`up` map to `ei_touchscreen` the same way.
+* Events are batched with `ei_device.frame` and flushed immediately. Devices
+  that appear after the session started (Mutter creates the absolute pointer and
+  touch devices when the first monitor streams) are bound and resumed as they
+  arrive.
+* Nothing is forwarded while `input_state` is 0. On the active-to-inactive
+  transition, on keyboard `leave` and on touch `cancel`, everything still held
+  is released.
+
+### Readiness reports
+
+Reports use the generation string from bsm's `identity` event. Stale lines are
+ignored. The rules are implemented in `readiness.rs`, a pure state machine
+with unit tests.
+
+| Report              | Sent when                                                                                                                                                                  |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gnoblin_ready`     | Once, when `org.gnoblin.Hosted1.Ready` is true.                                                                                                                            |
+| `output_configured` | Once per output, after `gnoblin_ready`, the virtual monitor exists and streams, DisplayConfig was applied and the configure is acknowledged. `a` = outputs configured, `b` = outputs known. |
+| `bingux_launched`   | Once, when every required component has sent `launched`.                                                                                                                  |
+| `surfaces_mapped`   | Per output whenever (mapped, required) changes, from `bingux_launched` on. A role counts as mapped only when Bingux says so **and** Gnoblin's `layers.list` shows a mapped layer surface with the role's namespace on that output's monitor. |
+| `desktop_ready`     | Once, when every required component sent `ready`, every required surface is confirmed on every output and every output is configured. A frame is presented again right after the report, so bsm sees a frame that follows it. |
+
+Required roles and namespaces: `wallpaper` = `bingux-wallpaper`, `bar` =
+`bingux-top-bar`, `dock` = `bingux-dock`.
+
+### `ready.sock`
+
+`$XDG_RUNTIME_DIR/bsm/ready.sock`, `SOCK_STREAM`. The directory is mode 0700, the
+socket 0600, and a connection is accepted only when `SO_PEERCRED` shows the
+session's own uid (at most 16 connections). One JSON object per line, at most
+4096 bytes; a longer line or invalid JSON closes that connection and nothing
+else. The bridge creates it at startup, before Gnoblin starts Bingux.
+
+```json
+{"generation":"7","component":"wallpaper","event":"launched"}
+{"generation":"7","component":"desktop","event":"launched","required":["bar","dock"]}
+{"generation":"7","component":"desktop","event":"surface","output":"Meta-0","role":"bar","mapped":true}
+{"generation":"7","component":"wallpaper","event":"ready"}
+```
+
+* `generation`: `BSM_GENERATION`. Any other value is counted and ignored.
+* `component`: `wallpaper` or `desktop`. Both must send `launched` and `ready`
+  (a line without `component` counts as one combined reporter for all roles).
+  Default roles: wallpaper component = `wallpaper`; desktop component = `bar`,
+  `dock`. `launched` may list the roles actually mapped (`required`).
+* `output` is the `wl_output` name Bingux sees, which is the Gnoblin connector
+  (`Meta-N`). The bridge also accepts the bsm output name.
+* `surface` with `mapped:false` after a `ready` withdraws that component's
+  `ready`. Duplicate lines are idempotent; a restarted process re-sends them.
+  Popouts never report and never block anything.
+
+## Background throttling
+
+When `input_state` is 0 the session keeps running and keeps serving its
+applications; only the frame forwarding is reduced. The frame gate lets one
+frame through per `1 / --background-fps` seconds and withholds the newest
+frame in between. The withheld frame is forwarded when the interval expires
+(trailing edge, 20 ms timer), so the last state is never lost to throttling. The
+PipeWire stream itself is not paused: pausing it would stop Mutter's frame
+clock and therefore every client's frame callbacks. Becoming active passes the
+next frame immediately.
+
+## Failure modes
+
+| Situation                                           | Behaviour                                                                                                |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| bsm closes or crashes                               | Wayland error or EOF: status 3. `closed`: status 0.                                                      |
+| Gnoblin or Mutter exits                             | D-Bus name loss, EIS EOF or PipeWire stream end: status 4 within about a second.                         |
+| Stream negotiates another size than configured      | Status 4 (the buffer would not match what bsm expects).                                                  |
+| Monitor creation or layout fails                    | Status 4, reason in the log.                                                                             |
+| Frames stop while Gnoblin is alive                  | Not detected by the bridge (an idle desktop sends no frames). bsm judges readiness by frames it receives. |
+| `ready.sock` junk, wrong uid, wrong generation      | That connection or line is dropped; other readiness traffic is unaffected.                               |
+| A compositor that releases buffers slowly           | Frames are dropped when all slots are busy (`no_slot` in the stats); their damage carries to the next frame. |
+| No layer list (Gnoblin's socket missing)            | `surfaces_mapped` stays at `0 of n`: the bridge never confirms a surface on Bingux's word alone.         |
+
+## Test mode
+
+`--test-pattern` exists only when built with `--features test-pattern` (the
+packages never enable it). It skips Gnoblin, D-Bus, PipeWire and EIS, presents
+a generated pattern (`bridge/testing.rs`), pretends every role is mapped in
+Gnoblin's list and takes the Bingux lines from `ready.sock` or, with
+`--test-auto-ready-ms N`, generates them. `--test-input-log PATH` appends every
+forwarded input event as a JSON line. This lets BsmCompositor and BsmManager
+exercise the protocol without Gnoblin.
+
+## Tests and evidence
+
+```
+cd packages/bsm-host
+export CARGO_TARGET_DIR=/tmp/bsm-target/bsm-host LIBCLANG_PATH=/usr/lib64
+cargo test --features test-pattern
+```
+
+* Unit tests: readiness rules, `ready.sock` framing, frame gate, damage
+  accumulation, layout planning, layer-list parsing.
+* `tests/protocol.rs` (feature `test-pattern`): the bridge against
+  `tests/support/standin.rs`, a small `wayland-server` stand-in for bsm. It
+  checks no buffer before the ack, report order and counts, stale generations,
+  socket mode, oversized lines, input gating and release-on-revoke, background
+  rate, resize, clean close and the lost-connection exit status.
+* `tests/hosted.rs`: the real bridge against a private hosted session (own
+  runtime dir, own session bus, PipeWire, WirePlumber, no system bus, private
+  `HOME`): either stock headless Mutter plus a `org.gnoblin.Hosted1` stub, or the
+  real hosted Gnoblin. It proves: real frames arrive as `wl_shm` buffers, a
+  click lands on the exact pixel in a client, typed keys reach a terminal only
+  while active, a held key repeats, two outputs with different scales become two
+  monitors at the requested positions, resize and removal rebuild the monitors,
+  a compositor crash gives status 4, Gnoblin actions are forwarded to `bsmctl`,
+  the cursor image arrives, and `desktop_ready` waits for Gnoblin's own layer
+  list (layer clients are built from Gnoblin's `tests/hosted-layer-client.c`).
+  Tests skip with a message when a tool is missing.
+
+Run against the staged hosted Gnoblin (the script runs everything in a private
+user and mount namespace, nothing on the host changes):
+
+```
+/home/kieran/dev/gnoblin-bsm-wt/scripts/run-staged.sh /usr/local/lib/gnoblin /tmp/gnoblin-bsm/stage \
+  env BSM_TEST_GNOBLIN=/usr/local/lib/gnoblin/bin/gnoblin \
+      BSM_TEST_GNOBLIN_SRC=/home/kieran/dev/gnoblin-bsm-wt \
+      BSM_HOST_EVIDENCE_DIR=/tmp/bsm-host-evidence \
+  <path of the built hosted test binary> --test-threads=1
+```
+
+`BSM_HOST_EVIDENCE_DIR` makes the tests write the frames the stand-in received
+as PNGs. Two from the real Gnoblin run are kept in `docs/bsm/images/`:
+`bridge-real-gnoblin-click.png` (a `weston-clickdot` window in the hosted
+session; the crosshair is where the stand-in clicked, delivered through EIS)
+and `bridge-real-gnoblin-layers.png` (Gnoblin's wallpaper, top bar and dock
+layer surfaces).
+
+### Measured cost of the shared-memory path
+
+`cargo test --release --test hosted measure_costs -- --ignored --nocapture`
+(optional `BSM_BENCH_SIZE=3840x2160`) runs `weston-simple-shm` (a client that
+redraws every frame) in a hosted session and measures the bridge's CPU time over
+10 s with and without input. The numbers below were taken on the development
+machine with stock Mutter 49.7, 1920x1080 at 60 Hz, **while the machine was
+under a load average of about 38** (other builds were running), so they
+overstate the cost; the in-test baseline (the same 8 MB copy between two plain
+memory blocks) took 5.75 ms there, and 1 to 2 ms on an idle machine of this
+class:
+
+| Phase                  | Frames forwarded | Bridge CPU (one core) | CPU per forwarded frame | Compositor CPU |
+| ---------------------- | ---------------- | --------------------- | ----------------------- | -------------- |
+| background (10 fps)    | 9.4 /s           | 2.3 %                 | 2.5 ms                  | 18.8 %         |
+| foreground (input on)  | 20.7 /s          | 4.3 %                 | 2.1 ms                  | 15.1 %         |
+
+Bridge RSS: 112 MiB (4 slots of 8 MiB plus PipeWire's own buffers). The
+foreground rate is limited by the loaded machine and by the stand-in's polling
+release (2 ms), not by the bridge; `no_slot` drops showed up for that reason. The cost
+per forwarded frame is one `memcpy` of the frame plus the message hop; at 4K it
+scales with the pixel count (about 4x). The remaining per-frame cost is in
+Mutter (readback into the PipeWire buffer), which is the price of D2; a
+DMA-BUF path would remove both copies and is the first optimisation to make if
+`measure_costs` shows the copy mattering on real hardware.
+
+## Building
+
+`cargo build --release` in `packages/bsm-host` (edition 2024, standalone
+`Cargo.lock`). The `pipewire` crate generates bindings with `bindgen`, so it
+needs `libclang` and the PipeWire and SPA headers (`pipewire-devel`,
+`clang`). On a machine where `LIBCLANG_PATH` points at an embedded toolchain,
+set `LIBCLANG_PATH=/usr/lib64` (Fedora) or the distribution's libclang
+directory. Runtime libraries: `libpipewire-0.3`. EIS uses the pure-Rust `reis`
+crate, so `libei` is not linked.
+
+## Limitations
+
+Stated plainly so nobody assumes more than was verified:
+
+* **No DMA-BUF path.** Every frame is copied once on the CPU.
+* Mutter sends a frame when the picture changes. The first frame normally
+  arrives when the stream starts. A session that never produces a frame
+  never gets one presented, so it never reaches the reveal gate; bsm's stage
+  timeout reports it. (Once, under a load average above 50, a test saw no first
+  frame within 30 s; it did not repeat in 8 further runs.)
+* **Mutter cannot remove one virtual monitor.** An output removal or a size
+  change of any output recreates every virtual monitor (new RemoteDesktop and
+  ScreenCast sessions, new EIS connection); windows move to the remaining
+  monitors while that happens. Position, scale and transform changes apply in
+  place.
+* Applying a layout after Bingux's surfaces exist can migrate them
+  (Gnoblin observed one bar move between monitors). The layout is applied as
+  soon as each monitor streams, before `output_configured`, which is the
+  earliest the bridge can.
+* `transform` is passed to DisplayConfig only; rotated outputs were not tested.
+* Fractional scales are snapped to what Mutter supports for the mode; the
+  monitor logical size follows. Scale 2 was tested; 1.25 and 1.5 were not.
+* Scroll, touch and `axis_stop` forwarding are implemented and covered by the
+  protocol-level input log, but were not exercised against a real client in the
+  hosted session (pointer buttons, motion and keys were).
+* The keymap of bsm is ignored (see Input).
+* One bridge serves one session (`BSM_HOST_SOCKET` is single use).
+* Not verified in a QEMU image or with the real bsm compositor: the bridge was
+  tested against its own stand-in and the real hosted Gnoblin. The stand-in
+  follows the protocol text, not bsm's implementation.

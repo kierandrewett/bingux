@@ -191,6 +191,12 @@ impl HostedEnv {
         self.children[3].id()
     }
 
+    /// Kill the compositor (simulates a Gnoblin crash).
+    pub fn kill_compositor(&mut self) {
+        let _ = self.children[3].kill();
+        let _ = self.children[3].wait();
+    }
+
     pub fn log(&self, name: &str) -> String {
         std::fs::read_to_string(self.dir.join(name)).unwrap_or_default()
     }

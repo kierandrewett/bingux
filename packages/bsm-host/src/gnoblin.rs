@@ -308,7 +308,7 @@ async fn run(cmd_rx: async_channel::Receiver<Cmd>, tx: calloop::channel::Sender<
                 app.ensure_sessions(&mut events).await?;
             }
             Ev::Cmd(Ok(Cmd::AddMonitor { output, epoch, width, height, refresh_mhz })) => {
-                if let Err(e) = app.add_monitor(&mut events, &output, epoch, width, height, refresh_mhz).await {
+                if let Err(e) = app.add_monitor(&output, epoch, width, height, refresh_mhz).await {
                     log::error!("add monitor {output}: {e:#}");
                     let _ = tx.send(Msg::MonitorFailed { output, epoch, reason: format!("{e:#}") });
                 }
@@ -428,7 +428,6 @@ impl App {
 
     async fn add_monitor(
         &mut self,
-        events: &mut SelectAll<EvStream>,
         output: &str,
         epoch: u64,
         width: u32,

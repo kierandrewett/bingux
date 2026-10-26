@@ -19,7 +19,7 @@ use std::os::fd::OwnedFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use anyhow::{Context as _, Result, anyhow};
 use calloop::generic::Generic;
@@ -143,6 +143,7 @@ struct PendingScroll {
 }
 
 #[derive(Default)]
+#[cfg_attr(not(feature = "test-pattern"), allow(dead_code))]
 struct TestState {
     log: Option<std::fs::File>,
     tick: u64,
@@ -175,7 +176,6 @@ pub struct Bridge {
     compositor: wl_compositor::WlCompositor,
     shm: wl_shm::WlShm,
     host: BsmSessionHostV1,
-    seat: Option<wl_seat::WlSeat>,
     pointer: Option<wl_pointer::WlPointer>,
     keyboard: Option<wl_keyboard::WlKeyboard>,
     touch: Option<wl_touch::WlTouch>,
@@ -203,14 +203,16 @@ pub struct Bridge {
     pw: Option<stream::StreamThread>,
     ei: Option<Ei>,
     ei_token: Option<RegistrationToken>,
+    /// The virtual monitors are being recreated; the old EIS connection ends and a new one follows.
+    rebuilding: bool,
     gnoblin_ready: bool,
     bus_up: bool,
     ready_conns: usize,
 
+    #[cfg_attr(not(feature = "test-pattern"), allow(dead_code))]
     test: TestState,
 
     exit: Option<Exit>,
-    started: Instant,
 }
 
 /// Connect to bsm, run the loop and return the exit status.
@@ -279,7 +281,8 @@ impl Bridge {
         let host = globals
             .bind::<BsmSessionHostV1, _, _>(&qh, 1..=1, ())
             .context("bsm does not offer bsm_session_host_v1 (is this a brokered session socket?)")?;
-        let seat = globals.bind::<wl_seat::WlSeat, _, _>(&qh, 1..=8, ()).ok();
+        // The seat's capabilities event creates the pointer, keyboard and touch objects.
+        let _seat = globals.bind::<wl_seat::WlSeat, _, _>(&qh, 1..=8, ()).ok();
         // Outputs are bound for completeness; geometry comes from the host protocol.
         let outputs: Vec<(u32, u32)> = globals.contents().with_list(|l| {
             l.iter().filter(|g| g.interface == "wl_output").map(|g| (g.name, g.version)).collect()
@@ -302,7 +305,6 @@ impl Bridge {
             compositor,
             shm,
             host,
-            seat,
             pointer: None,
             keyboard: None,
             touch: None,
@@ -326,12 +328,12 @@ impl Bridge {
             pw: None,
             ei: None,
             ei_token: None,
+            rebuilding: false,
             gnoblin_ready: false,
             bus_up: false,
             ready_conns: 0,
             test: TestState { log: test_log, ..TestState::default() },
             exit: None,
-            started: Instant::now(),
         })
     }
 
@@ -591,6 +593,9 @@ impl Bridge {
     fn on_output_removed(&mut self, name: &str) {
         let Some(o) = self.outputs.remove(name) else { return };
         self.surfaces.remove(&o.surface.id());
+        if let Some(pw) = &self.pw {
+            let _ = pw.tx.send(stream::Cmd::Remove { output: name.to_owned() });
+        }
         o.role.destroy();
         o.surface.destroy();
         if let Some(set) = &o.set {
@@ -795,6 +800,10 @@ impl Bridge {
 
     /// Drop every virtual monitor and create them again, one at a time.
     fn rebuild_monitors(&mut self) {
+        self.rebuilding = true;
+        if let Some(ei) = self.ei.as_mut() {
+            ei.release_all();
+        }
         if let Some(gn) = &self.gn {
             let _ = gn.cmd.try_send(gnoblin::Cmd::Reset);
         }
@@ -947,6 +956,7 @@ impl Bridge {
     // ----- input -----
 
     fn attach_ei(&mut self, fd: OwnedFd) {
+        self.rebuilding = false;
         if let Some(t) = self.ei_token.take() {
             self.handle.remove(t);
         }
@@ -964,9 +974,15 @@ impl Bridge {
                 let token = self.handle.insert_source(Generic::new(dup, Interest::READ, Mode::Level), |_, _, b| {
                     if let Some(ei) = b.ei.as_mut() {
                         if let Err(e) = ei.pump() {
-                            log::error!("{e:#}");
                             b.ei = None;
-                            b.fail(Exit::GnoblinLost);
+                            b.ei_token = None;
+                            if b.rebuilding {
+                                // The sessions were stopped on purpose; a new EIS connection follows.
+                                log::debug!("old EIS connection closed: {e:#}");
+                            } else {
+                                log::error!("{e:#}");
+                                b.fail(Exit::GnoblinLost);
+                            }
                             return Ok(PostAction::Remove);
                         }
                     }

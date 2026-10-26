@@ -60,6 +60,8 @@ struct StreamData {
     seq: u64,
     cursor_id: u32,
     streaming_reported: bool,
+    /// Size and format the buffer parameters were last sent for.
+    params_for: Option<(u32, u32, u32)>,
     /// The newest frame withheld by background throttling. Forwarded when the
     /// interval elapses so the last state is never lost to throttling.
     pending: Option<pw::buffer::Buffer<'static>>,
@@ -121,7 +123,8 @@ struct Entry {
 
 impl Entry {
     fn close(self) {
-        self.data.borrow_mut().pending = None;
+        // Never queue a withheld buffer back on a stream that is going away.
+        std::mem::forget(self.data.borrow_mut().pending.take());
         let _ = self.stream.disconnect();
     }
 }
@@ -186,7 +189,10 @@ fn run(cmd_rx: pw::channel::Receiver<Cmd>, tx: calloop::channel::Sender<Msg>) ->
                 let mut d = e.data.borrow_mut();
                 if d.pending.is_some() && (d.gate.is_active() || d.gate.admit(Instant::now())) {
                     if let Some(mut b) = d.pending.take() {
-                        forward(&mut b, &mut d);
+                        log::trace!("stream {}: flushing the withheld frame", d.output);
+                        if forward(&mut b, &mut d) == Fwd::Retry {
+                            d.pending = Some(b);
+                        }
                     }
                 }
             }
@@ -314,6 +320,12 @@ fn add_stream(
             *pw::keys::MEDIA_TYPE => "Video",
             *pw::keys::MEDIA_CATEGORY => "Capture",
             *pw::keys::MEDIA_ROLE => "Screen",
+            // Link to the node Mutter named and to nothing else: if it is not in the
+            // graph yet, wait for it instead of letting the session manager pick
+            // another video source (a stale monitor of a stopped session).
+            "node.dont-fallback" => "true",
+            "node.dont-reconnect" => "true",
+            "node.linger" => "false",
         },
     )
     .context("create stream")?;
@@ -328,6 +340,7 @@ fn add_stream(
         seq: 0,
         cursor_id: 0,
         streaming_reported: false,
+        params_for: None,
         pending: None,
         damage: Damage::none(),
     }));
@@ -335,9 +348,14 @@ fn add_stream(
     let listener = stream
         .add_local_listener_with_user_data(data.clone())
         .state_changed(|_, d, old, new| {
-            let d = d.borrow();
+            let mut d = d.borrow_mut();
             log::debug!("stream {}: {old:?} -> {new:?}", d.output);
             use pw::stream::StreamState as S;
+            if matches!(new, S::Unconnected | S::Error(_)) {
+                // The stream is gone and its buffers with it: queueing a
+                // withheld buffer back could touch freed memory, so it is leaked.
+                std::mem::forget(d.pending.take());
+            }
             match new {
                 S::Error(e) => {
                     let _ = d.tx.send(Msg::Stream {
@@ -380,6 +398,11 @@ fn add_stream(
                 d.format.max_framerate().num,
                 d.format.max_framerate().denom,
             );
+            let key = (size.width, size.height, d.format.format().as_raw());
+            if d.params_for == Some(key) {
+                return;
+            }
+            d.params_for = Some(key);
             let buffers = buffers_param(size.width, size.height);
             // 16 damage rectangles; cursors up to 384x384 ARGB.
             let damage = meta_param(sys::SPA_META_VideoDamage, 16 * std::mem::size_of::<sys::spa_meta_region>() as i32);
@@ -405,6 +428,19 @@ fn add_stream(
                 });
             }
         })
+        .remove_buffer(|_, d, _| {
+            // PipeWire is freeing buffers (renegotiation or teardown). The memory
+            // is still valid inside this callback, so a withheld frame is
+            // forwarded now rather than lost (Mutter sends no new frame for an
+            // unchanged picture), and then leaked: it must not be queued afterwards.
+            let mut d = d.borrow_mut();
+            if let Some(mut b) = d.pending.take() {
+                if forward(&mut b, &mut d) == Fwd::Retry {
+                    log::warn!("stream {}: a withheld frame was lost when its buffer was removed", d.output);
+                }
+                std::mem::forget(b);
+            }
+        })
         .process(|stream, d| process(stream, &mut d.borrow_mut()))
         .register()
         .context("register stream listener")?;
@@ -426,6 +462,11 @@ fn process(stream: &pw::stream::Stream, d: &mut StreamData) {
     let Some(mut buffer) = stream.dequeue_buffer() else { return };
     d.gate.stats.frames_in.fetch_add(1, Ordering::Relaxed);
     handle_cursor(&buffer, d);
+    // A buffer with an empty chunk carries no new picture (a cursor-only
+    // update): it must neither replace a withheld picture nor count as damage.
+    if buffer.datas_mut().first().is_none_or(|data| data.chunk().size() == 0) {
+        return;
+    }
     let frame_damage = buffer
         .find_meta::<MetaVideoDamage>()
         .map(|m| {
@@ -439,52 +480,70 @@ fn process(stream: &pw::stream::Stream, d: &mut StreamData) {
         })
         .unwrap_or_default();
     d.damage.add(&frame_damage);
+    log::trace!("stream {}: frame in, active={} pending={}", d.output, d.gate.is_active(), d.pending.is_some());
     if d.gate.is_active() || d.gate.admit(Instant::now()) {
         d.pending = None;
-        forward(&mut buffer, d);
+        if forward(&mut buffer, d) == Fwd::Retry {
+            // No free slot (or no buffers yet): keep the frame and try again
+            // on the next timer tick, so the last state is never lost.
+            stash(buffer, d);
+        }
     } else {
         // Background: withhold the newest frame; the timer forwards it when due.
         d.gate.stats.dropped_throttle.fetch_add(1, Ordering::Relaxed);
-        // SAFETY: the buffer borrows the stream, which lives in the same `Entry`
-        // and outlives `pending` (see `Entry::close` and field order).
-        d.pending = Some(unsafe { std::mem::transmute::<pw::buffer::Buffer<'_>, pw::buffer::Buffer<'static>>(buffer) });
+        stash(buffer, d);
     }
 }
 
+/// Keep `buffer` as the newest withheld frame.
+fn stash(buffer: pw::buffer::Buffer<'_>, d: &mut StreamData) {
+    // SAFETY: the buffer borrows the stream, which lives in the same `Entry`
+    // and outlives `pending` (see `Entry::close` and field order).
+    d.pending = Some(unsafe { std::mem::transmute::<pw::buffer::Buffer<'_>, pw::buffer::Buffer<'static>>(buffer) });
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Fwd {
+    /// Forwarded, or deliberately dropped (wrong size, empty chunk).
+    Done,
+    /// Could not be forwarded now (no free slot, no buffer set yet); try again.
+    Retry,
+}
+
 /// Copy the frame in `buffer` into a free slot and send it to the main thread.
-fn forward(buffer: &mut pw::buffer::Buffer<'_>, d: &mut StreamData) {
+fn forward(buffer: &mut pw::buffer::Buffer<'_>, d: &mut StreamData) -> Fwd {
     let stats = &d.gate.stats;
     let size = d.format.size();
     if (size.width, size.height) != d.want || size.width == 0 {
         stats.dropped_size.fetch_add(1, Ordering::Relaxed);
-        return;
+        return Fwd::Done;
     }
     let Some(set) = d.gate.buffers() else {
         stats.dropped_no_set.fetch_add(1, Ordering::Relaxed);
-        return;
+        return Fwd::Retry;
     };
     if set.width != size.width || set.height != size.height {
         stats.dropped_size.fetch_add(1, Ordering::Relaxed);
-        return;
+        return Fwd::Retry;
     }
 
-    let Some(data) = buffer.datas_mut().first_mut() else { return };
+    let Some(data) = buffer.datas_mut().first_mut() else { return Fwd::Done };
     let chunk_size = data.chunk().size() as usize;
     let chunk_offset = data.chunk().offset() as usize;
     let src_stride = match data.chunk().stride() {
         s if s > 0 => s as usize,
         _ => size.width as usize * BPP,
     };
-    let Some(src) = data.data() else { return };
+    let Some(src) = data.data() else { return Fwd::Done };
     let row_bytes = size.width as usize * BPP;
     let need = src_stride * (size.height as usize - 1) + row_bytes;
     if chunk_size == 0 || chunk_offset + need > src.len() {
         // No new image (for example a cursor-only update) or a short buffer.
-        return;
+        return Fwd::Done;
     }
     let Some(slot) = set.claim() else {
         stats.dropped_no_slot.fetch_add(1, Ordering::Relaxed);
-        return;
+        return Fwd::Retry;
     };
     let t0 = Instant::now();
     // SAFETY: `slot` was claimed above and is released only by the main thread
@@ -510,6 +569,7 @@ fn forward(buffer: &mut pw::buffer::Buffer<'_>, d: &mut StreamData) {
     {
         set.release(slot);
     }
+    Fwd::Done
 }
 
 fn handle_cursor(buffer: &pw::buffer::Buffer<'_>, d: &mut StreamData) {

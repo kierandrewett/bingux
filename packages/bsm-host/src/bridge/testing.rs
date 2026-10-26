@@ -4,6 +4,7 @@
 //! protocol without Gnoblin. The packages never enable the feature.
 
 use std::io::Write;
+use std::time::Instant;
 
 use calloop::timer::{TimeoutAction, Timer};
 
