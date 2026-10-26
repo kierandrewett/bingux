@@ -47,6 +47,8 @@ DEFAULT_OUT = Path(os.environ.get("BSM_INJECT_DIR", "/tmp/bsm-vm/inject"))
 TARGET_DIR = Path(os.environ.get("BSM_PACKAGING_TARGET", "/tmp/bsm-target/packaging"))
 CONTAINER_IMAGE = "localhost/bsm-arch-build"
 PKGBUILD = ROOT / "distro/packages/bsm/PKGBUILD"
+# The plain cargo, not a caching wrapper: builds go to /tmp, never into the home directory.
+CARGO = os.environ.get("CARGO") or (str(Path.home() / ".cargo/bin/cargo") if (Path.home() / ".cargo/bin/cargo").exists() else "cargo")
 
 # Crates in the order the PKGBUILD builds them, with the binaries each provides.
 CRATES = {
@@ -121,7 +123,7 @@ def build_host(crates):
     env = dict(os.environ, CARGO_TARGET_DIR=str(TARGET_DIR))
     failed = []
     for name in crates:
-        command = ["cargo", "build", "--release", "--manifest-path", str(ROOT / "packages" / name / "Cargo.toml")]
+        command = [CARGO, "build", "--release", "--manifest-path", str(ROOT / "packages" / name / "Cargo.toml")]
         print("+ " + " ".join(command), flush=True)
         if subprocess.run(command, env=env).returncode != 0:
             failed.append(name)
@@ -211,7 +213,7 @@ def stage(arguments):
     shutil.copytree(ROOT / "packaging/bsm/image", image, symlinks=True)
     if arguments.probe:
         # The root checks of tests/bsm-helper-root.sh drive this example binary in the guest.
-        command = ["cargo", "build", "--release", "--examples", "--manifest-path", str(ROOT / "packages/bsm-helper/Cargo.toml")]
+        command = [CARGO, "build", "--release", "--examples", "--manifest-path", str(ROOT / "packages/bsm-helper/Cargo.toml")]
         run(command, env=dict(os.environ, CARGO_TARGET_DIR=str(TARGET_DIR)))
         probe = TARGET_DIR / "release/examples/bsm-helper-probe"
         if probe.is_file():

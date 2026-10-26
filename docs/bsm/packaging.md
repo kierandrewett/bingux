@@ -338,9 +338,9 @@ next `distro/build.sh` run; it has not been started.
 | Item                                                    | Status                  | Evidence |
 | ------------------------------------------------------- | ----------------------- | -------- |
 | Units verify                                            | implemented and tested  | `systemd-analyze verify --root` on a staged tree: `bsm`, `bsm-seatd`, `bsm-helper` (service and socket), `bsm-fallback` load without error (the seatd man page is missing on the Fedora host only). |
-| D-Bus policy                                            | implemented and tested  | `xmllint --noout`. Loaded by a bus: unverified. |
+| D-Bus policy                                            | implemented and tested  | `xmllint --noout`; a `dbus-daemon` started with the file in its include directory parses it (its only complaint is that user `bsm` does not exist on the Fedora host). Per-caller behaviour on a real system bus: unverified. |
 | Polkit rules                                            | implemented but unverified | Logic run in Node with a stub `polkit`; not evaluated by polkitd. |
-| sysusers, tmpfiles                                      | implemented but unverified | Syntax follows the other files in the repository; not run on Arch. |
+| sysusers, tmpfiles                                      | implemented and tested (parsing) | `systemd-sysusers --root` on a scratch root creates both accounts and the `render` membership; `systemd-tmpfiles --root --create` creates every directory (the chown needs root, so ownership and modes are unverified). In the injected VM run the accounts were created on Arch. |
 | PKGBUILD, `bsm.install`                                 | implemented but unverified | `bash -n`; not built with `makepkg` (no Arch toolchain on the host; the image build runs it). `packages/bsm` has no `Cargo.toml` yet. |
 | Boot entries and image drop-ins                         | implemented but unverified | Entry text follows the existing entries; the SMBIOS `kernel-cmdline-extra` path puts `bingux.bsm` on the command line (tested). Drop-ins not booted. |
 | Two-display QEMU harness                                | implemented and tested  | Smoke run against the 2026.10.24 image: two connected connectors, two frame streams. |

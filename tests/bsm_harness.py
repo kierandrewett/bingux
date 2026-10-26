@@ -245,8 +245,8 @@ class BsmVm(Vm):
         return found
 
     def bsmctl_json(self, arguments, timeout=30, as_user=None):
-        """Run `bsmctl --json ARGS` in the guest; (parsed JSON or None, raw output)."""
-        command = f"bsmctl --json {arguments} 2>&1"
+        """Run `bsmctl ARGS --json` in the guest; (parsed JSON or None, raw output)."""
+        command = f"bsmctl {arguments} --json 2>&1"
         out = self.run_as(as_user, command, timeout) if as_user else self.run(command, timeout)
         text = out.strip()
         try:

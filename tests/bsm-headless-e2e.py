@@ -42,6 +42,7 @@ import time
 ROOT = Path(__file__).resolve().parent.parent
 SKIP = 77
 TARGET = Path(os.environ.get("BSM_E2E_TARGET", "/tmp/bsm-target/e2e"))
+CARGO = os.environ.get("CARGO") or (str(Path.home() / ".cargo/bin/cargo") if (Path.home() / ".cargo/bin/cargo").exists() else "cargo")
 
 # Option names this test looks for in `bsm --help`, first match wins.
 WANTED = {
@@ -61,7 +62,7 @@ def find_binary(argument):
         return None
     env = dict(os.environ, CARGO_TARGET_DIR=str(TARGET))
     build = subprocess.run(
-        ["cargo", "build", "--manifest-path", str(manifest), "--bin", "bsm", "--features", "test-auth"],
+        [CARGO, "build", "--manifest-path", str(manifest), "--bin", "bsm", "--features", "test-auth"],
         env=env,
         capture_output=True,
         text=True,
