@@ -1,0 +1,81 @@
+#!/bin/sh
+# Switch the display-manager role between bsm and the standalone greetd login.
+#
+#   bsm-set-display-manager status
+#   bsm-set-display-manager enable  [--force]
+#   bsm-set-display-manager disable
+#
+# Package installation never runs this. It changes what the next boot starts and
+# never starts or stops a running login manager, so it is safe to run from a
+# graphical session. Run it as root. See docs/bsm/packaging.md.
+set -eu
+
+ALIAS=/etc/systemd/system/display-manager.service
+BSM_UNIT=/usr/lib/systemd/system/bsm.service
+STATE=/var/lib/bsm/previous-display-manager
+
+die() { echo "bsm-set-display-manager: $*" >&2; exit 1; }
+
+alias_target() {
+    if [ -L "$ALIAS" ]; then readlink "$ALIAS"; fi
+}
+
+status() {
+    target="$(alias_target)"
+    echo "display-manager.service -> ${target:-(no alias)}"
+    for unit in bsm.service bsm-helper.socket greetd.service; do
+        printf '%s: %s\n' "$unit" "$(systemctl is-enabled "$unit" 2>/dev/null || true)"
+    done
+    if grep -qw 'bingux.bsm' /proc/cmdline; then
+        echo "kernel command line: bingux.bsm is set (image opt-in active)"
+    fi
+}
+
+enable() {
+    force="${1:-}"
+    [ "$(id -u)" -eq 0 ] || die "run as root"
+    [ -e "$BSM_UNIT" ] || die "$BSM_UNIT is missing; install the bsm package"
+    target="$(alias_target)"
+    previous=greetd.service
+    case "$target" in
+        "" | *bsm.service) ;;
+        *)
+            [ "$force" = "--force" ] ||
+                die "display-manager.service already points at $target; use --force to replace it"
+            previous="$(basename "$target")"
+            ;;
+    esac
+    # Remember the display manager that is being replaced, once.
+    if [ ! -f "$STATE" ]; then
+        mkdir -p "$(dirname "$STATE")"
+        echo "$previous" >"$STATE"
+    fi
+    # The old display manager stays installed but is no longer enabled.
+    systemctl disable "$previous" >/dev/null 2>&1 || true
+    systemctl enable bsm.service bsm-helper.socket
+    ln -sfn "$BSM_UNIT" "$ALIAS"
+    systemctl daemon-reload
+    echo "bsm is the display manager from the next boot (was: $(cat "$STATE"))."
+    echo "To go back: bsm-set-display-manager disable"
+}
+
+disable() {
+    [ "$(id -u)" -eq 0 ] || die "run as root"
+    case "$(alias_target)" in
+        *bsm.service) rm -f "$ALIAS" ;;
+    esac
+    systemctl disable bsm.service bsm-helper.socket >/dev/null 2>&1 || true
+    previous=greetd.service
+    if [ -f "$STATE" ]; then previous="$(cat "$STATE")"; fi
+    systemctl enable "$previous"
+    systemctl daemon-reload
+    rm -f "$STATE"
+    echo "$previous is the display manager from the next boot."
+}
+
+case "${1:-status}" in
+    status) status ;;
+    enable) enable "${2:-}" ;;
+    disable) disable ;;
+    *) die "usage: bsm-set-display-manager status|enable [--force]|disable" ;;
+esac

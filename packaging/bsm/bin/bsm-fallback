@@ -1,0 +1,23 @@
+#!/bin/sh
+# Started by bsm-fallback.service when bsm.service has failed for good.
+# Brings the standalone login screen (greetd) up. On the distro image greetd is
+# switched off by `ConditionKernelCommandLine=!bingux.bsm`; a runtime drop-in
+# with an empty condition list lifts that for this boot only. Nothing here
+# touches the enabled units, so the next boot tries bsm again.
+set -eu
+
+log() { echo "bsm-fallback: $*"; }
+
+if ! systemctl cat greetd.service >/dev/null 2>&1; then
+    log "greetd.service is not installed; no fallback login screen is available."
+    log "Switch to a text console (Ctrl+Alt+F3) and read: journalctl -u bsm -u bsm-helper"
+    exit 1
+fi
+
+dropin=/run/systemd/system/greetd.service.d
+mkdir -p "$dropin"
+# An empty assignment resets the condition list set by the image's drop-in.
+printf '[Unit]\nConditionKernelCommandLine=\n' >"$dropin/90-bsm-fallback.conf"
+systemctl daemon-reload
+log "bsm failed; starting greetd. Logs: journalctl -u bsm -u bsm-helper"
+exec systemctl start --no-block greetd.service

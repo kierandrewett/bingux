@@ -1,0 +1,86 @@
+# bsm: the Bingux Session Manager. One persistent process that is the system
+# Wayland compositor and the session manager (see docs/bsm/architecture.md).
+#
+# Installing the package does not enable this unit. The distro image enables it
+# when the kernel command line has `bingux.bsm` (see
+# /usr/lib/systemd/system/bsm.service.d/ in the image), and an administrator
+# switches a machine over with `bsm-set-display-manager enable`; see
+# docs/bsm/packaging.md. There is deliberately no `Alias=display-manager.service`
+# here: an alias in [Install] would make `systemctl enable` fail or replace the
+# alias of the display manager that is already in use.
+[Unit]
+Description=Bingux Session Manager (system compositor and session manager)
+Documentation=file:///usr/share/doc/bsm/packaging.md
+# The seat and the logind view of it must be there before bsm opens the display.
+Requires=bsm-helper.socket bsm-seatd.service
+Wants=systemd-logind.service dbus.socket
+After=systemd-user-sessions.service systemd-logind.service dbus.socket bsm-helper.socket bsm-seatd.service
+# The boot splash keeps the display until plymouth-quit-wait.service returns
+# (the same ordering greetd.service gets from the bingux-os package). bsm
+# cannot take DRM master earlier.
+After=plymouth-start.service plymouth-quit.service plymouth-quit-wait.service
+# bsm owns the first VT for the display-manager role, as greetd and GDM do.
+Conflicts=getty@tty1.service
+After=getty@tty1.service
+# Only the display-manager role is taken over, never graphical.target.
+Before=graphical.target
+# If bsm cannot be kept running, bring a login screen up anyway.
+OnFailure=bsm-fallback.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+# `bsm` is exec'd directly: /proc/PID/comm is "bsm".
+Type=notify
+NotifyAccess=main
+# bsm sends WATCHDOG=1 at half of WATCHDOG_USEC.
+WatchdogSec=30
+ExecStart=/usr/bin/bsm --backend drm
+Restart=on-failure
+RestartSec=1
+TimeoutStartSec=90
+User=bsm
+Group=bsm
+# seatd hands out the DRM and input devices; render is for the GPU render node
+# that buffer import and the greeter's dmabuf allocation use.
+SupplementaryGroups=video render
+Environment=LIBSEAT_BACKEND=seatd
+Environment=SEATD_SOCK=/run/bsm-seatd/seatd.sock
+Environment=RUST_BACKTRACE=1
+# /run/bsm, /run/bsm/sessions and /var/lib/bsm come from tmpfiles.d/bsm.conf (not
+# RuntimeDirectory=, which would remove the session sockets on every restart). The
+# greeter cache directory is tightened to bsm's ownership only while bsm runs
+# (tmpfiles.d/bsm-active.conf; the standard 1777 mode comes back on the next
+# boot without bsm).
+ExecStartPre=+/usr/bin/systemd-tmpfiles --create /usr/share/bsm/tmpfiles-active.conf
+StateDirectory=bsm
+StateDirectoryMode=0750
+LimitCORE=0
+
+# Hardening that leaves DRM, libinput and seatd alone. Not set, on purpose:
+# PrivateDevices (the render node), MemoryDenyWriteExecute (GPU drivers JIT
+# shaders), SystemCallFilter and RestrictNamespaces (the image converter
+# sandbox and the GPU stack have not been profiled; see docs/bsm/packaging.md).
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/run/bsm /var/lib/bsm /var/lib/bingux/greeter
+# Read-only, not hidden: the image converter reads each account's published
+# wallpaper and avatar from its home directory.
+ProtectHome=read-only
+ProtectHostname=yes
+ProtectClock=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=graphical.target

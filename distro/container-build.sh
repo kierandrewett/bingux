@@ -81,7 +81,7 @@ build_package() {
             sed -e "s|^source=(.*|source=(\"$(basename "$bundle")\")|" \
                 -e "s|^sha256sums=(.*|sha256sums=('SKIP')|" "$pkgbuild" >"$dir/PKGBUILD"
             ;;
-        bingux)
+        bingux | bsm)
             local archive
             archive="$(ls "$DISTRO"/sources/bingux-*.tar.xz | head -n 1)"
             [ -f "$archive" ] || {
@@ -130,6 +130,7 @@ register_repo() {
 build_packages() {
     build_package gnoblin
     build_package bingux
+    build_package bsm
     build_package python-blivet
     build_package bingux-installer
     build_package bingux-os
@@ -143,6 +144,10 @@ build_iso() {
     rm -rf "$profile"
     cp -r /usr/share/archiso/configs/releng "$profile"
     cp -a "$DISTRO/profile/." "$profile/"
+    # bsm is opt-in: units and drop-ins that start it only with `bingux.bsm` on
+    # the kernel command line and keep greetd off then (packaging/bsm/image).
+    mkdir -p "$profile/airootfs/etc/systemd/system"
+    cp -a "$WORK/packaging/bsm/image/." "$profile/airootfs/etc/systemd/system/"
     printf '\n[bingux-os]\nSigLevel = Optional TrustAll\nServer = file://%s\n' "$REPO" >>"$profile/pacman.conf"
     # Login screen, wallpaper and skel come from the bingux-os package, which
     # archinstall installs as well.

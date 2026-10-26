@@ -1,0 +1,12 @@
+# Started by bsm.service's OnFailure=. Brings the standalone login screen
+# (greetd) up so the machine is never left without one, then leaves a note in
+# the journal. bsm stays failed until an administrator restarts it.
+[Unit]
+Description=Fall back to greetd after bsm failed
+Documentation=file:///usr/share/doc/bsm/packaging.md
+# bsm has failed, so it is no longer on the display.
+After=bsm.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/bsm/fallback

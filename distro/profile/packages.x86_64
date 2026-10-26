@@ -83,6 +83,9 @@ xorg-xwayland
 gnoblin
 bingux
 bingux-os
+# bsm (session manager): installed, not enabled; the `bingux.bsm` boot entry opts in.
+bsm
+seatd
 greetd
 polkit
 polkit-gnome
