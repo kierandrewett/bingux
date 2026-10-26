@@ -22,8 +22,9 @@ test-pattern = []
 [dependencies]
 bsm-proto = { path = "../bsm-proto" }
 anyhow = "1"
+async-channel = "2"
 async-io = "2"
-calloop = "0.14"
+calloop = { version = "0.14", features = ["signals"] }
 calloop-wayland-source = "0.4"
 futures-util = "0.3"
 libc = "0.2"
