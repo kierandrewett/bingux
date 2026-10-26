@@ -190,6 +190,18 @@ impl Manager {
     /// Final phases. The operation leaves `self.op`, timers are cancelled, history kept.
     fn op_finish(&mut self, phase: OperationPhase, tstate: TransitionState, reason: Option<ErrorCode>, fx: &mut Fx) {
         let Some(mut op) = self.op.take() else { return };
+        // A conversation never outlives the operation it belongs to.
+        if self.challenge.as_ref().is_some_and(|c| c.op == op.id) {
+            let c = self.challenge.take().expect("checked");
+            fx.push(Effect::CancelTimer(TimerId::Auth(c.id)));
+            fx.push(Effect::Helper(HelperRequest::AuthAbort { req_id: c.helper_req }));
+            fx.push(Effect::Greeter(ServerMessage::AuthResult {
+                challenge_id: c.id,
+                ok: false,
+                code: Some(reason.unwrap_or(ErrorCode::Cancelled)),
+                message: "the request ended".into(),
+            }));
+        }
         if !tables::phase_legal(op.phase, phase) && op.phase != phase {
             let msg = format!("illegal final phase {:?} -> {:?}; forcing the final state", op.phase, phase);
             Self::log(fx, LogLevel::Error, None, msg);
@@ -617,6 +629,11 @@ impl Manager {
         };
         if op.id != id {
             Self::log(fx, LogLevel::Warn, None, "transition event for another operation ignored");
+            return;
+        }
+        if !op.began {
+            // A compositor cannot commit what bsm never asked it to run.
+            Self::log(fx, LogLevel::Warn, None, "transition event before BeginTransition ignored");
             return;
         }
         match phase {

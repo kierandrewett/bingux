@@ -6,3 +6,4 @@
 //! See `docs/bsm/manager.md`.
 
 pub mod core;
+pub mod runtime;

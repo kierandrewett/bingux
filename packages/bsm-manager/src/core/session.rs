@@ -654,6 +654,10 @@ impl Manager {
                 fx.push(Effect::Scene(SceneCommand::SetInputOwner(InputOwner::Greeter)));
             }
         }
+        if self.selected_uid != Some(uid) && self.challenge.is_some() {
+            // The identity on screen changes, so the conversation for the old one ends.
+            self.fail_challenge(ErrorCode::Cancelled, "the displayed account changed", fx);
+        }
         self.selected_uid = Some(uid);
         fx.push(Effect::Greeter(bsm_proto::control::ServerMessage::Error {
             request_id: None,
