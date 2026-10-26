@@ -185,7 +185,7 @@ reveals it has reached `Committed`. The greeter therefore keeps the keyboard unt
 first valid desktop frame is on screen. Every frame the owner is re-checked and dropped
 to `None` if it stopped being allowed (crash, unregister, scene change).
 
-Logging (info, visible in `journalctl -u bsm`): `input owner A -> B`, `keyboard focus -> greeter|session ...`,
+Logging (through `tracing`, because `bsm` installs a tracing subscriber without the `log` bridge; info, visible in `journalctl -u bsm`): `input owner A -> B`, `keyboard focus -> greeter|session ...`,
 `first key N delivered to ...` after every focus change, and a warning `key N has no keyboard focus and is
 dropped (...)` that says whether the greeter is connected and whether any greeter layer surface accepts
 the keyboard (`keyboard_interactivity` none means nobody can type). On DRM each libinput device added is

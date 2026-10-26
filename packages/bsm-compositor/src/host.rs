@@ -499,7 +499,7 @@ impl State {
                 true
             }
             Err(e) => {
-                log::warn!("insert hosted client failed: {e}");
+                tracing::warn!("insert hosted client failed: {e}");
                 false
             }
         }

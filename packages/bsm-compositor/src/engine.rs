@@ -335,7 +335,7 @@ impl Engine {
             }
         }
         if let Err(reason) = self.validate(&r, probe) {
-            log::warn!("transition {operation} {kind:?} rejected: {reason}");
+            tracing::warn!("transition {operation} {kind:?} rejected: {reason}");
             if target_was_protected {
                 if let Some(t) = &r.target {
                     self.protected.insert(t.clone());
@@ -446,7 +446,7 @@ impl Engine {
             return self.base_plan(probe);
         }
         if let Err(reason) = self.validate(&r, probe) {
-            log::warn!("transition {} {:?} failed: {reason}", r.op, r.kind);
+            tracing::warn!("transition {} {:?} failed: {reason}", r.op, r.kind);
             self.phase_event(r.op, TransitionPhaseEvent::Failed);
             self.fail_safe(&r);
             return self.base_plan(probe);

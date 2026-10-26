@@ -146,7 +146,9 @@ fn script(cmd: calloop::channel::Sender<SceneCommand>, evt: mpsc::Receiver<Scene
 }
 
 fn main() -> anyhow::Result<()> {
-    let _ = env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
+    let filter = tracing_subscriber::EnvFilter::try_from_env("RUST_LOG")
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    let _ = tracing_subscriber::fmt().with_env_filter(filter).with_writer(std::io::stderr).try_init();
     let hold = std::env::args().any(|a| a == "--hold");
     let dir = std::env::temp_dir().join(format!("bsm-dev-{}", std::process::id()));
     std::fs::create_dir_all(&dir)?;

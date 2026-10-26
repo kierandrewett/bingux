@@ -172,7 +172,7 @@ impl HeadlessGfx {
                 let _ = std::fs::create_dir_all(dir);
                 let path = dir.join(format!("frame-{:05}-{}.png", frame.seq, frame.output));
                 if let Err(e) = frame.save_png(&path) {
-                    log::warn!("frame dump failed: {e:#}");
+                    tracing::warn!("frame dump failed: {e:#}");
                 }
             }
             frames.push(frame);
@@ -288,7 +288,7 @@ impl State {
         self.expire_pending();
         if let Some(a) = &self.awaiting {
             if a.since.elapsed() > Duration::from_millis(500) {
-                log::warn!("page flip did not complete in 500 ms; releasing the scene engine");
+                tracing::warn!("page flip did not complete in 500 ms; releasing the scene engine");
                 self.complete_awaiting();
             }
         }

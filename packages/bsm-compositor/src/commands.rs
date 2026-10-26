@@ -24,7 +24,7 @@ impl State {
             SceneCommand::Protect { session, generation } => {
                 let known = self.sessions.get(&session);
                 if known.is_some_and(|r| r.generation != generation) {
-                    log::warn!("protect for stale generation of {session} dropped");
+                    tracing::warn!("protect for stale generation of {session} dropped");
                 } else {
                     // An unknown session has no pixels; protecting it is trivially true and
                     // still answered after a frame.

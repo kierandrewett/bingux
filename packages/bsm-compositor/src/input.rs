@@ -45,7 +45,7 @@ impl State {
         if self.owner_allowed(&o) {
             self.pending_owner = Some(o);
         } else {
-            log::warn!("input owner {o:?} refused: not the committed foreground");
+            tracing::warn!("input owner {o:?} refused: not the committed foreground");
             self.emit(SceneEvent::InputOwnerChanged(self.owner.clone()));
         }
     }
@@ -66,7 +66,7 @@ impl State {
     pub(crate) fn set_owner_now(&mut self, o: InputOwner) {
         let changed = self.owner != o;
         if changed {
-            log::info!("input owner {:?} -> {o:?}", self.owner);
+            tracing::info!("input owner {:?} -> {o:?}", self.owner);
         }
         self.pending_owner = None;
         let old_session = self.owner_session().cloned();
@@ -321,9 +321,9 @@ impl State {
             let focus = kb.current_focus();
             let who = self.describe_surface(focus.as_ref());
             if focus.is_some() {
-                log::info!("first key {} delivered to {who} (input owner {:?})", code.raw(), self.owner);
+                tracing::info!("first key {} delivered to {who} (input owner {:?})", code.raw(), self.owner);
             } else {
-                log::warn!(
+                tracing::warn!(
                     "key {} has no keyboard focus and is dropped (input owner {:?}, greeter connected: {}, \
                      greeter surface accepting the keyboard: {})",
                     code.raw(),

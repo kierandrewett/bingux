@@ -321,7 +321,7 @@ impl SeatHandler for State {
 
     fn focus_changed(&mut self, _seat: &Seat<State>, focused: Option<&WlSurface>) {
         let who = self.describe_surface(focused);
-        log::info!("keyboard focus -> {who} (input owner {:?})", self.owner);
+        tracing::info!("keyboard focus -> {who} (input owner {:?})", self.owner);
         self.key_logged = false;
     }
 
@@ -662,7 +662,7 @@ impl State {
                         frames = f;
                         deferred = d;
                     }
-                    Err(e) => log::error!("render failed: {e:#}"),
+                    Err(e) => tracing::error!("render failed: {e:#}"),
                 }
                 self.gfx = Some(gfx);
             }
@@ -811,7 +811,7 @@ pub(crate) fn run(
         .insert_source(cmd_rx, |ev, _, state| match ev {
             ChannelEvent::Msg(cmd) => state.handle_command(cmd),
             ChannelEvent::Closed => {
-                log::info!("command channel closed, stopping");
+                tracing::info!("command channel closed, stopping");
                 state.stopped = true;
             }
         })

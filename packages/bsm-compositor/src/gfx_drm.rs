@@ -111,10 +111,10 @@ impl DrmGfx {
             match prop {
                 Some(p) => {
                     if let Err(e) = self.device.set_property(out.connector, p, value) {
-                        log::warn!("DPMS on {}: {e}", out.info.name);
+                        tracing::warn!("DPMS on {}: {e}", out.info.name);
                     }
                 }
-                None => log::warn!("{} has no DPMS property", out.info.name),
+                None => tracing::warn!("{} has no DPMS property", out.info.name),
             }
             if on {
                 let _ = out.compositor.reset_state();
@@ -149,11 +149,11 @@ impl DrmGfx {
                                 out.pending_flip = true;
                                 queued = true;
                             }
-                            Err(e) => log::warn!("queue_frame on {}: {e:?}", out.info.name),
+                            Err(e) => tracing::warn!("queue_frame on {}: {e:?}", out.info.name),
                         }
                     }
                 }
-                Err(e) => log::warn!("render_frame on {}: {e:?}", out.info.name),
+                Err(e) => tracing::warn!("render_frame on {}: {e:?}", out.info.name),
             }
         }
         Ok((Vec::new(), queued))
@@ -266,7 +266,7 @@ impl DrmGfx {
                         DrmOutput { info: info.clone(), connector: *conn, compositor, pending_flip: false },
                     );
                 }
-                Err(e) => log::warn!("cannot drive {}: {e:#}", info.name),
+                Err(e) => tracing::warn!("cannot drive {}: {e:#}", info.name),
             }
         }
         let mut infos: Vec<OutputInfo> = self.outputs.values().map(|o| o.info.clone()).collect();
@@ -287,7 +287,7 @@ impl State {
     pub(crate) fn drm_rescan(&mut self) {
         match self.with_drm(|g| g.sync_outputs()) {
             Some(Ok(infos)) => self.set_outputs(infos),
-            Some(Err(e)) => log::warn!("connector scan failed: {e:#}"),
+            Some(Err(e)) => tracing::warn!("connector scan failed: {e:#}"),
             None => {}
         }
     }
@@ -297,7 +297,7 @@ impl State {
             .with_drm(|g| {
                 if let Some(o) = g.outputs.get_mut(&crtc) {
                     if let Err(e) = o.compositor.frame_submitted() {
-                        log::warn!("frame_submitted on {}: {e:?}", o.info.name);
+                        tracing::warn!("frame_submitted on {}: {e:?}", o.info.name);
                     }
                     o.pending_flip = false;
                 }
@@ -312,7 +312,7 @@ impl State {
     fn drm_session_event(&mut self, ev: SessionEvent) {
         match ev {
             SessionEvent::PauseSession => {
-                log::info!("session paused (VT switched away)");
+                tracing::info!("session paused (VT switched away)");
                 self.with_drm(|g| {
                     g.active = false;
                     g.libinput.suspend();
@@ -325,7 +325,7 @@ impl State {
                 self.complete_awaiting();
             }
             SessionEvent::ActivateSession => {
-                log::info!("session activated");
+                tracing::info!("session activated");
                 let res = self
                     .with_drm(|g| {
                         let r = g.libinput.resume().map_err(|_| anyhow::anyhow!("libinput resume"));
@@ -339,7 +339,7 @@ impl State {
                     })
                     .unwrap_or(Ok(()));
                 if let Err(e) = res {
-                    log::error!("resume failed: {e:#}");
+                    tracing::error!("resume failed: {e:#}");
                 }
                 self.drm_rescan();
                 self.needs_redraw = true;
@@ -393,7 +393,7 @@ pub(crate) fn init_drm(state: &mut State, device: Option<PathBuf>) -> Result<()>
             .handle
             .insert_source(notifier_drm, |ev, _, state| match ev {
                 DrmEvent::VBlank(crtc) => state.drm_vblank(crtc),
-                DrmEvent::Error(e) => log::error!("drm error: {e:?}"),
+                DrmEvent::Error(e) => tracing::error!("drm error: {e:?}"),
             })
             .map_err(|e| anyhow::anyhow!("drm source: {e}"))?,
     );
@@ -405,7 +405,7 @@ pub(crate) fn init_drm(state: &mut State, device: Option<PathBuf>) -> Result<()>
                 if let smithay::backend::input::InputEvent::DeviceAdded { device } = &event {
                     use smithay::reexports::input::DeviceConfigError;
                     let mut device = device.clone();
-                    log::info!(
+                    tracing::info!(
                         "input device added: {} (keyboard: {}, pointer: {})",
                         device.name(),
                         device.has_capability(smithay::reexports::input::DeviceCapability::Keyboard),
@@ -417,7 +417,7 @@ pub(crate) fn init_drm(state: &mut State, device: Option<PathBuf>) -> Result<()>
                 }
                 if let Some(vt) = state.process_input_event(event, true) {
                     if let Err(e) = vt_session.change_vt(vt) {
-                        log::warn!("VT switch to {vt} failed: {e:?}");
+                        tracing::warn!("VT switch to {vt} failed: {e:?}");
                     }
                 }
             })
@@ -430,7 +430,7 @@ pub(crate) fn init_drm(state: &mut State, device: Option<PathBuf>) -> Result<()>
             .insert_source(udev, move |ev, _, state| match ev {
                 UdevEvent::Changed { device_id: d } if d == device_id => state.drm_rescan(),
                 UdevEvent::Removed { device_id: d } if d == device_id => {
-                    log::error!("the display GPU was removed");
+                    tracing::error!("the display GPU was removed");
                     state.stopped = true;
                 }
                 _ => {}

@@ -89,7 +89,7 @@ pub(crate) fn start_greeter_listener(state: &mut State) -> Result<()> {
                     Ok((stream, _)) => state.greeter_accept(stream),
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
                     Err(e) => {
-                        log::warn!("greeter accept: {e}");
+                        tracing::warn!("greeter accept: {e}");
                         break;
                     }
                 }
@@ -122,7 +122,7 @@ impl State {
         let peer = match peer_of(&stream) {
             Ok(p) => p,
             Err(e) => {
-                log::warn!("greeter peer credentials unavailable: {e}");
+                tracing::warn!("greeter peer credentials unavailable: {e}");
                 return;
             }
         };
@@ -140,23 +140,23 @@ impl State {
         let Some(auth) = self.greeter.auth.as_ref() else { return };
         let (generation, uid, pid) = (auth.generation, auth.uid, auth.pid);
         if let Err(why) = verify_greeter(&conn.peer, uid, pid) {
-            log::warn!("greeter connection rejected: {why}");
+            tracing::warn!("greeter connection rejected: {why}");
             return;
         }
         if self.greeter.client.is_some() {
-            log::warn!("second greeter connection rejected: one connection per generation");
+            tracing::warn!("second greeter connection rejected: one connection per generation");
             return;
         }
         match self.insert_role_client(conn.stream, Role::Greeter { generation }) {
             Ok(c) => {
                 self.greeter.client = Some(c.id());
                 self.greeter.connected = Some((generation, conn.peer.pid));
-                log::info!("greeter connected (generation {generation}, pid {})", conn.peer.pid);
+                tracing::info!("greeter connected (generation {generation}, pid {})", conn.peer.pid);
                 self.emit(SceneEvent::GreeterConnected { generation, pid: conn.peer.pid });
                 self.refresh_focus();
                 self.needs_redraw = true;
             }
-            Err(e) => log::warn!("insert greeter client: {e}"),
+            Err(e) => tracing::warn!("insert greeter client: {e}"),
         }
     }
 
@@ -251,7 +251,7 @@ impl State {
                         Ok((stream, _)) => state.session_accept(&sid, gen_, stream),
                         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
                         Err(e) => {
-                            log::warn!("session accept: {e}");
+                            tracing::warn!("session accept: {e}");
                             break;
                         }
                     }
@@ -318,7 +318,7 @@ impl State {
         let peer = match peer_of(&stream) {
             Ok(p) => p,
             Err(e) => {
-                log::warn!("session peer credentials unavailable: {e}");
+                tracing::warn!("session peer credentials unavailable: {e}");
                 return;
             }
         };
@@ -358,7 +358,7 @@ impl State {
     fn reject_session(&mut self, session: &SessionId, reason: String) {
         let Some(rec) = self.sessions.get_mut(session) else { return };
         rec.rejections += 1;
-        log::warn!("session {session}: connection rejected: {reason}");
+        tracing::warn!("session {session}: connection rejected: {reason}");
         if rec.rejections <= MAX_REJECTION_EVENTS {
             let generation = rec.generation;
             self.emit(SceneEvent::SessionConnectionRejected {
