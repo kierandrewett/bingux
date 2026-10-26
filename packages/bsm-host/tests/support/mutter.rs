@@ -186,6 +186,11 @@ impl HostedEnv {
             .unwrap_or_else(|e| panic!("spawn {program}: {e}"))
     }
 
+    /// Pid of the compositor process (Mutter or Gnoblin).
+    pub fn compositor_pid(&self) -> u32 {
+        self.children[3].id()
+    }
+
     pub fn log(&self, name: &str) -> String {
         std::fs::read_to_string(self.dir.join(name)).unwrap_or_default()
     }

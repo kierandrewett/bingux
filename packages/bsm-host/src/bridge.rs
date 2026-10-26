@@ -338,6 +338,15 @@ impl Bridge {
     /// Start the worker threads and the `ready.sock` listener.
     fn start(&mut self) -> Result<()> {
         self.start_ready_socket()?;
+        // Frame statistics for the logs (debug level) every 5 s.
+        self.handle
+            .insert_source(calloop::timer::Timer::from_duration(Duration::from_secs(5)), |_, _, b| {
+                for (n, o) in &b.outputs {
+                    log::debug!("{n}: committed={} presented={} {}", o.committed, o.presented, o.gate.stats.summary());
+                }
+                calloop::timer::TimeoutAction::ToDuration(Duration::from_secs(5))
+            })
+            .map_err(|e| anyhow!("insert stats timer: {e}"))?;
         if self.is_test() {
             return self.start_test_timers();
         }

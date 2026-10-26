@@ -63,6 +63,51 @@ struct StreamData {
     /// The newest frame withheld by background throttling. Forwarded when the
     /// interval elapses so the last state is never lost to throttling.
     pending: Option<pw::buffer::Buffer<'static>>,
+    /// Damage of every frame received since the last one that was forwarded.
+    /// Frames dropped by throttling or for lack of a free slot still changed
+    /// the picture, so their damage is carried into the next forwarded frame.
+    damage: Damage,
+}
+
+/// Accumulated damage in buffer pixels. `Full` means the whole frame.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Damage {
+    Rects(Vec<Rect>),
+    Full,
+}
+
+const MAX_DAMAGE_RECTS: usize = 16;
+
+impl Damage {
+    pub fn none() -> Self {
+        Damage::Rects(Vec::new())
+    }
+
+    /// Add one frame's damage; an empty list means the frame carried no
+    /// damage information and is treated as a full update.
+    pub fn add(&mut self, frame: &[Rect]) {
+        let Damage::Rects(rects) = self else { return };
+        if frame.is_empty() {
+            *self = Damage::Full;
+            return;
+        }
+        rects.extend_from_slice(frame);
+        if rects.len() > MAX_DAMAGE_RECTS {
+            // Collapse to the bounding box instead of growing without bound.
+            let (x0, y0, x1, y1) = rects.iter().fold((i32::MAX, i32::MAX, i32::MIN, i32::MIN), |m, r| {
+                (m.0.min(r.x), m.1.min(r.y), m.2.max(r.x + r.w), m.3.max(r.y + r.h))
+            });
+            *rects = vec![Rect { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }];
+        }
+    }
+
+    /// The rectangles to send; empty means "everything" to the Wayland side.
+    pub fn take(&mut self) -> Vec<Rect> {
+        match std::mem::replace(self, Damage::none()) {
+            Damage::Full => Vec::new(),
+            Damage::Rects(r) => r,
+        }
+    }
 }
 
 type Shared = Rc<RefCell<StreamData>>;
@@ -284,6 +329,7 @@ fn add_stream(
         cursor_id: 0,
         streaming_reported: false,
         pending: None,
+        damage: Damage::none(),
     }));
 
     let listener = stream
@@ -380,6 +426,19 @@ fn process(stream: &pw::stream::Stream, d: &mut StreamData) {
     let Some(mut buffer) = stream.dequeue_buffer() else { return };
     d.gate.stats.frames_in.fetch_add(1, Ordering::Relaxed);
     handle_cursor(&buffer, d);
+    let frame_damage = buffer
+        .find_meta::<MetaVideoDamage>()
+        .map(|m| {
+            m.iter()
+                .map(|r| {
+                    let p = r.position();
+                    let s = r.size();
+                    Rect { x: p.x, y: p.y, w: s.width as i32, h: s.height as i32 }
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    d.damage.add(&frame_damage);
     if d.gate.is_active() || d.gate.admit(Instant::now()) {
         d.pending = None;
         forward(&mut buffer, d);
@@ -409,19 +468,6 @@ fn forward(buffer: &mut pw::buffer::Buffer<'_>, d: &mut StreamData) {
         return;
     }
 
-    let damage = buffer
-        .find_meta::<MetaVideoDamage>()
-        .map(|m| {
-            m.iter()
-                .map(|r| {
-                    let p = r.position();
-                    let s = r.size();
-                    Rect { x: p.x, y: p.y, w: s.width as i32, h: s.height as i32 }
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-
     let Some(data) = buffer.datas_mut().first_mut() else { return };
     let chunk_size = data.chunk().size() as usize;
     let chunk_offset = data.chunk().offset() as usize;
@@ -449,6 +495,7 @@ fn forward(buffer: &mut pw::buffer::Buffer<'_>, d: &mut StreamData) {
     stats.frames_copied.fetch_add(1, Ordering::Relaxed);
     stats.bytes_copied.fetch_add((row_bytes * size.height as usize) as u64, Ordering::Relaxed);
     d.seq += 1;
+    let damage = d.damage.take();
     if d
         .tx
         .send(Msg::Frame {
@@ -513,4 +560,48 @@ fn handle_cursor(buffer: &pw::buffer::Buffer<'_>, d: &mut StreamData) {
             pixels,
         },
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn r(x: i32, y: i32, w: i32, h: i32) -> Rect {
+        Rect { x, y, w, h }
+    }
+
+    #[test]
+    fn damage_of_dropped_frames_is_carried_into_the_next_one() {
+        let mut d = Damage::none();
+        d.add(&[r(0, 0, 10, 10)]); // dropped by throttling
+        d.add(&[r(50, 50, 5, 5)]); // forwarded now
+        assert_eq!(d.take(), vec![r(0, 0, 10, 10), r(50, 50, 5, 5)]);
+        assert_eq!(d.take(), vec![], "damage is consumed once");
+    }
+
+    #[test]
+    fn a_frame_without_damage_information_means_full_damage() {
+        let mut d = Damage::none();
+        d.add(&[r(0, 0, 10, 10)]);
+        d.add(&[]);
+        d.add(&[r(1, 1, 1, 1)]);
+        assert_eq!(d.take(), vec![], "empty means the whole frame");
+    }
+
+    #[test]
+    fn the_rectangle_list_stays_bounded_and_still_covers_everything() {
+        let mut d = Damage::none();
+        let all: Vec<Rect> = (0..40).map(|i| r(i * 10, i * 2, 5, 5)).collect();
+        for x in &all {
+            d.add(&[*x]);
+        }
+        let out = d.take();
+        assert!(!out.is_empty() && out.len() <= MAX_DAMAGE_RECTS, "{} rects", out.len());
+        for x in &all {
+            assert!(
+                out.iter().any(|o| o.x <= x.x && o.y <= x.y && o.x + o.w >= x.x + x.w && o.y + o.h >= x.y + x.h),
+                "{x:?} lost"
+            );
+        }
+    }
 }

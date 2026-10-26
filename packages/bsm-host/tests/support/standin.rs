@@ -101,6 +101,10 @@ pub struct Shared {
     pub client_connected: bool,
     pub client_disconnected: bool,
     pub bound_globals: Vec<String>,
+    /// `wl_pointer.set_cursor` requests: (has surface, hotspot x, hotspot y).
+    pub cursor_sets: Vec<(bool, i32, i32)>,
+    /// Newest buffer committed to a non-session surface: (width, height, ARGB8888 bytes).
+    pub cursor_image: Option<(u32, u32, Vec<u8>)>,
 }
 
 pub enum Control {
@@ -291,6 +295,7 @@ impl Dispatch<wl_surface::WlSurface, Arc<Mutex<SurfaceData>>> for State {
                 buffer.release();
                 let Some(name) = role_output else {
                     // A buffer on a non-session surface: the cursor image.
+                    state.shared.lock().unwrap().cursor_image = Some((w, h, pixels));
                     return;
                 };
                 let Some(o) = state.outputs.get_mut(&name) else { return };
@@ -376,7 +381,11 @@ impl Dispatch<wl_seat::WlSeat, ()> for State {
     }
 }
 impl Dispatch<wl_pointer::WlPointer, ()> for State {
-    fn request(_: &mut Self, _: &Client, _: &wl_pointer::WlPointer, _: wl_pointer::Request, _: &(), _: &DisplayHandle, _: &mut DataInit<'_, Self>) {}
+    fn request(state: &mut Self, _: &Client, _: &wl_pointer::WlPointer, req: wl_pointer::Request, _: &(), _: &DisplayHandle, _: &mut DataInit<'_, Self>) {
+        if let wl_pointer::Request::SetCursor { surface, hotspot_x, hotspot_y, .. } = req {
+            state.shared.lock().unwrap().cursor_sets.push((surface.is_some(), hotspot_x, hotspot_y));
+        }
+    }
 }
 impl Dispatch<wl_keyboard::WlKeyboard, ()> for State {
     fn request(_: &mut Self, _: &Client, _: &wl_keyboard::WlKeyboard, _: wl_keyboard::Request, _: &(), _: &DisplayHandle, _: &mut DataInit<'_, Self>) {}

@@ -177,6 +177,25 @@ fn real_frames_arrive_and_pointer_input_reaches_a_client() {
         standin.wait_for("a frame with the marker at the click", T, |s| {
             s.frames.last().and_then(marker).is_some_and(|(mx, my, _)| (mx - cx as f64).abs() < 3.0 && (my - cy as f64).abs() < 3.0)
         });
+        // The cursor image comes from Mutter's stream metadata and is set as a client cursor.
+        standin.wait_for("a client cursor", T, |s| s.cursor_sets.iter().any(|c| c.0) && s.cursor_image.is_some());
+        {
+            let s = standin.shared.lock().unwrap();
+            let (w, h, px) = s.cursor_image.clone().unwrap();
+            assert!(w > 4 && h > 4 && w <= 384, "cursor size {w}x{h}");
+            assert!(px.chunks_exact(4).any(|p| p[3] > 0), "the cursor image is fully transparent");
+            // Evidence: the cursor over a mid-grey backdrop, as ARGB8888 premultiplied.
+            let mut flat = Vec::with_capacity(px.len());
+            for p in px.chunks_exact(4) {
+                let inv = 255 - p[3] as u32;
+                for c in &p[..3] {
+                    flat.push((*c as u32 + 128 * inv / 255).min(255) as u8);
+                }
+                flat.push(255);
+            }
+            evidence("hosted-3b-cursor.png", &Frame { output: "cursor".into(), seq: 0, width: w, height: h, pixels: flat, after_ack: true, damage: vec![], at: std::time::Instant::now() });
+        }
+
         let clicked = latest(&standin, "HDMI-A-1");
         evidence("hosted-3-after-click.png", &clicked);
         let (mx, my, _) = marker(&clicked).unwrap();
@@ -492,5 +511,95 @@ fn session_actions_from_gnoblin_are_forwarded_to_bsmctl() {
         std::thread::sleep(Duration::from_millis(300));
         let calls = std::fs::read_to_string(&record).unwrap();
         assert_eq!(calls.lines().collect::<Vec<_>>(), vec!["logout", "poweroff"], "hibernate has no bsm equivalent and must be ignored");
+    });
+}
+
+fn cpu_ticks(pid: u32) -> u64 {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).unwrap();
+    let rest = &stat[stat.rfind(')').unwrap() + 2..];
+    let f: Vec<&str> = rest.split_whitespace().collect();
+    f[11].parse::<u64>().unwrap() + f[12].parse::<u64>().unwrap()
+}
+
+fn rss_kib(pid: u32) -> u64 {
+    std::fs::read_to_string(format!("/proc/{pid}/status"))
+        .unwrap()
+        .lines()
+        .find_map(|l| l.strip_prefix("VmRSS:"))
+        .and_then(|v| v.split_whitespace().next()?.parse().ok())
+        .unwrap_or(0)
+}
+
+/// Cost of the shared-memory path. Ignored by default: run with
+/// `cargo test --test hosted measure_costs -- --ignored --nocapture`
+/// (optionally BSM_BENCH_SIZE=3840x2160).
+#[test]
+#[ignore]
+fn measure_costs() {
+    if let Err(why) = available() {
+        eprintln!("SKIP: {why}");
+        return;
+    }
+    if !std::process::Command::new("sh").args(["-c", "command -v weston-simple-shm"]).status().unwrap().success() {
+        eprintln!("SKIP: weston-simple-shm not installed");
+        return;
+    }
+    let (w, h) = std::env::var("BSM_BENCH_SIZE")
+        .ok()
+        .and_then(|s| s.split_once('x').map(|(a, b)| (a.parse().unwrap(), b.parse().unwrap())))
+        .unwrap_or((1920u32, 1080u32));
+    let env = HostedEnv::start("bench");
+    let standin = Standin::start(&env.dir, "13");
+    standin.add_output("DP-1", OutputSpec::new(0, 0, w, h));
+    let mut bridge = spawn_bridge(&env, &standin, "13");
+    let pid = bridge.id();
+    with_logs(&env, &mut bridge, || {
+        standin.wait_for("output_configured", T, |s| s.reports.iter().any(|r| r.kind == OUTPUT_CONFIGURED));
+        standin.wait_for("a frame", T, |s| !s.frames.is_empty());
+        let mut client = env.client("weston-simple-shm", &[]);
+        std::thread::sleep(Duration::from_secs(4));
+        let tick = unsafe { libc::sysconf(libc::_SC_CLK_TCK) } as f64;
+        let window = 10.0;
+        let mut report = String::new();
+        for (label, active) in [("background", false), ("foreground", true)] {
+            standin.send(Control::InputState(active));
+            std::thread::sleep(Duration::from_secs(2));
+            let (b0, m0) = (cpu_ticks(pid), cpu_ticks(env.compositor_pid()));
+            let f0 = count(&standin, "DP-1");
+            std::thread::sleep(Duration::from_secs_f64(window));
+            let (b1, m1) = (cpu_ticks(pid), cpu_ticks(env.compositor_pid()));
+            let f1 = count(&standin, "DP-1");
+            let frames = f1 - f0;
+            let bridge_cpu = (b1 - b0) as f64 / tick / window * 100.0;
+            let mutter_cpu = (m1 - m0) as f64 / tick / window * 100.0;
+            let per_frame_ms = if frames > 0 { (b1 - b0) as f64 / tick * 1000.0 / frames as f64 } else { 0.0 };
+            report += &format!(
+                "{label:>10}: {w}x{h}: {:.1} fps forwarded, bridge {bridge_cpu:.1} % of one core ({per_frame_ms:.2} ms CPU per forwarded frame), compositor {mutter_cpu:.1} %\n",
+                frames as f64 / window
+            );
+        }
+        {
+            // Baseline: the same copy between two plain 8 MB memory blocks.
+            let n = w as usize * h as usize * 4;
+            let src = memmap2::MmapMut::map_anon(n).unwrap();
+            let mut dst = memmap2::MmapMut::map_anon(n).unwrap();
+            dst.copy_from_slice(&src);
+            let t = std::time::Instant::now();
+            for _ in 0..100 {
+                dst.copy_from_slice(&src);
+            }
+            report += &format!("baseline memcpy of one {w}x{h} frame: {:.2} ms\n", t.elapsed().as_secs_f64() * 1000.0 / 100.0);
+        }
+        report += &format!("bridge RSS {} KiB\n", rss_kib(pid));
+        let _ = client.kill();
+        let _ = client.wait();
+        eprintln!("--- measured costs ---\n{report}");
+        // SIGTERM prints the copy statistics.
+        unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+        std::thread::sleep(Duration::from_millis(1500));
+        let log = env.log("bridge.log");
+        for l in log.lines().filter(|l| l.contains("output stats") || l.contains("committed=")) {
+            eprintln!("{l}");
+        }
     });
 }
