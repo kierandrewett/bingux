@@ -118,9 +118,25 @@ def present_crates():
     return [name for name in CRATES if (ROOT / "packages" / name / "Cargo.toml").is_file()]
 
 
+def host_env():
+    """Cargo environment: private target dir, and the system libclang for the bindgen crates.
+
+    A developer shell may export LIBCLANG_PATH for another toolchain (an ESP clang that
+    targets riscv32 makes libspa-sys fail with "__float128 is not supported"); bsm-host
+    needs the host's own libclang. BSM_LIBCLANG_PATH overrides the location.
+    """
+    env = dict(os.environ, CARGO_TARGET_DIR=str(TARGET_DIR))
+    libclang = os.environ.get("BSM_LIBCLANG_PATH")
+    if libclang is None:
+        libclang = next((d for d in ("/usr/lib64", "/usr/lib") if list(Path(d).glob("libclang.so*"))), None)
+    if libclang:
+        env["LIBCLANG_PATH"] = libclang
+    return env
+
+
 def build_host(crates):
     """Build each crate; one that does not compile is reported and left out, not fatal."""
-    env = dict(os.environ, CARGO_TARGET_DIR=str(TARGET_DIR))
+    env = host_env()
     failed = []
     for name in crates:
         command = [CARGO, "build", "--release", "--manifest-path", str(ROOT / "packages" / name / "Cargo.toml")]
@@ -214,7 +230,7 @@ def stage(arguments):
     if arguments.probe:
         # The root checks of tests/bsm-helper-root.sh drive this example binary in the guest.
         command = [CARGO, "build", "--release", "--examples", "--manifest-path", str(ROOT / "packages/bsm-helper/Cargo.toml")]
-        run(command, env=dict(os.environ, CARGO_TARGET_DIR=str(TARGET_DIR)))
+        run(command, env=host_env())
         probe = TARGET_DIR / "release/examples/bsm-helper-probe"
         if probe.is_file():
             destination = out / "root/usr/libexec/bsm/bsm-helper-probe"

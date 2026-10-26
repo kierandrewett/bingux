@@ -313,6 +313,7 @@ accounts, reloads D-Bus and polkit, stops greetd and starts bsm. Limits:
 * Host builds link the Fedora host's libraries. The injected binaries need the
   same sonames in the Arch guest; `apply.sh` runs `ldd` and prints every missing
   library (`--build container` compiles in an Arch container instead).
+* `bsm-host` links libpipewire through bindgen: the host needs the system libclang. The inject script sets `LIBCLANG_PATH` to `/usr/lib64` because a developer shell may export one for another toolchain (an ESP clang fails with `__float128 is not supported`); `BSM_LIBCLANG_PATH` overrides it.
 * Gnoblin is not injected. Hosted mode is part of the Gnoblin build, so steps that
   need a hosted Gnoblin report `blocked` until the image is rebuilt.
 * `--shell` packs the QML tree into a new `bingux-shell.sxa`; that is enough for
@@ -341,7 +342,7 @@ next `distro/build.sh` run; it has not been started.
 | D-Bus policy                                            | implemented and tested  | `xmllint --noout`; a `dbus-daemon` started with the file in its include directory parses it (its only complaint is that user `bsm` does not exist on the Fedora host). Per-caller behaviour on a real system bus: unverified. |
 | Polkit rules                                            | implemented but unverified | Logic run in Node with a stub `polkit`; not evaluated by polkitd. |
 | sysusers, tmpfiles                                      | implemented and tested (parsing) | `systemd-sysusers --root` on a scratch root creates both accounts and the `render` membership; `systemd-tmpfiles --root --create` creates every directory (the chown needs root, so ownership and modes are unverified). In the injected VM run the accounts were created on Arch. |
-| PKGBUILD, `bsm.install`                                 | implemented but unverified | `bash -n`; not built with `makepkg` (no Arch toolchain on the host; the image build runs it). `packages/bsm` has no `Cargo.toml` yet. |
+| PKGBUILD, `bsm.install`                                 | implemented but unverified | `bash -n`; not built with `makepkg` (no Arch toolchain on the host; the image build runs it). `packages/bsm` has no `Cargo.toml` yet; `cargo build --release` of `bsm-helper`, `bsm-host` and `bsm-appearance` succeeds on the host. |
 | Boot entries and image drop-ins                         | implemented but unverified | Entry text follows the existing entries; the SMBIOS `kernel-cmdline-extra` path puts `bingux.bsm` on the command line (tested). Drop-ins not booted. |
 | Two-display QEMU harness                                | implemented and tested  | Smoke run against the 2026.10.24 image: two connected connectors, two frame streams. |
 | Acceptance walkthrough                                  | implemented but unverified | Steps run only to "blocked": the image has no bsm. |

@@ -366,7 +366,8 @@ Ticked means shippable: built, run, and the result recorded.
 - [ ] `systemd-analyze verify` of the units is clean on an Arch system (verified on a staged tree
       on Fedora only; `bsm-seatd.service` references a man page the host lacks).
 - [ ] `makepkg` builds `distro/packages/bsm` in the Arch container. Blocked: `packages/bsm` has no
-      `Cargo.toml` yet, and `bsm-host` does not compile on the host.
+      `Cargo.toml` yet. `bsm-helper`, `bsm-host` and `bsm-appearance` build on the host
+      (`bsm-host` needs the system libclang, not an exported `LIBCLANG_PATH` of another toolchain).
 - [ ] sysusers and tmpfiles apply cleanly on Arch (`systemd-sysusers`, `systemd-tmpfiles --create`).
 - [ ] polkitd evaluates `50-bsm.rules` and `pkcheck` agrees per action for a seatless `bsm-login`
       session (the rule's logic was only run with a stub engine).
