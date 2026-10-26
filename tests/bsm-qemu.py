@@ -749,7 +749,7 @@ def main():
                     run.steps[name] = {"status": "skipped"}
             if vm.alive():
                 run.dump("ps-final", vm.run("ps -eo pid,ppid,user:12,comm,args --forest | cut -c1-200", 30))
-                run.dump("journal-bsm", vm.run("journalctl -b --no-pager -o short-iso -u bsm -u bsm-helper -u bsm-seatd | tail -n 300", 90))
+                run.dump("journal-bsm", vm.run("journalctl -b --no-pager -o short-iso -u bsm -u bsm-helper -u bsm-seatd -u bsm-fallback -u greetd | tail -n 300", 90))
                 run.dump("journal-errors", vm.run("journalctl -b -p err --no-pager -o cat | tail -n 80", 60))
                 run.dump("bsmctl-status", vm.bsmctl_json("status")[1])
                 run.dump("monitor-log", vm.run(f"cat {MONITOR_LOG}", 30))

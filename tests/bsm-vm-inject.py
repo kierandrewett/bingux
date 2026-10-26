@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Hot-inject freshly built bsm binaries and units into a running live VM.
 
-usage: tests/bsm-vm-inject.py stage [--out DIR] [--build host|container|none] [--shell] [--probe]
+usage: tests/bsm-vm-inject.py stage [--out DIR] [--build host|container|none] [--shell] [--probe] [--seatd PATH]
        tests/bsm-vm-inject.py status
 
 The live ISO takes over an hour to rebuild. `stage` builds the bsm crates and
@@ -30,6 +30,7 @@ Limits, read before trusting a result:
   packs shell/bingux into a new archive (scripts/pack-shell.py) and installs it,
   which is enough for QML-only changes of the greeter; C++ plugin changes need
   the image rebuild.
+- Images built before bsm have no seatd; `--seatd PATH` installs one (it needs only libc).
 - Nothing here is part of any package. It is a test accelerator.
 """
 
@@ -193,7 +194,7 @@ def stage(arguments):
         # than failing, and say so, so a partial tree is still useful for the harness.
         print("not built: " + ", ".join(absent))
     # package() `install`s every binary; give absent ones a placeholder in a private copy of target/release.
-    private = out / "work/target"
+    private = out / "target-stage"
     (private / "release").mkdir(parents=True, exist_ok=True)
     for binary in [b for bins in CRATES.values() for b in bins]:
         real = TARGET_DIR / "release" / binary
@@ -218,6 +219,12 @@ def stage(arguments):
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(probe, destination)
             destination.chmod(0o755)
+    if arguments.seatd:
+        # The 2026.10.24 image predates the seatd package; bsm-seatd.service needs the binary.
+        destination = out / "root/usr/bin/seatd"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(arguments.seatd, destination)
+        destination.chmod(0o755)
     sxa = out / "bingux-shell.sxa"
     sxa.unlink(missing_ok=True)
     if arguments.shell:
@@ -257,6 +264,7 @@ def main():
     stage_parser.add_argument("--build", choices=["host", "container", "none"], default="host")
     stage_parser.add_argument("--shell", action="store_true", help="also pack shell/bingux into a new bingux-shell.sxa")
     stage_parser.add_argument("--probe", action="store_true", help="also install the bsm-helper-probe example (root checks)")
+    stage_parser.add_argument("--seatd", help="seatd binary to install as /usr/bin/seatd (images built before bsm lack it)")
     stage_parser.set_defaults(func=stage)
     status_parser = commands.add_parser("status", help="show what the last stage contains")
     status_parser.add_argument("--out", default=str(DEFAULT_OUT))

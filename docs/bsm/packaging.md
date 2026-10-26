@@ -346,12 +346,13 @@ next `distro/build.sh` run; it has not been started.
 | Two-display QEMU harness                                | implemented and tested  | Smoke run against the 2026.10.24 image: two connected connectors, two frame streams. |
 | Acceptance walkthrough                                  | implemented but unverified | Steps run only to "blocked": the image has no bsm. |
 | Frame measurements                                      | implemented and tested  | `tests/bsm-frames.test.py`, 10 tests. |
-| Hot injection                                           | implemented but unverified | See the run log in the commit message of the inject change. |
+| Hot injection                                           | implemented and tested (mechanics) | Against the 2026.10.24 image: 9p mount, tree copied, accounts created, units loaded, `ldd` clean for the helper. bsm itself could not run: `packages/bsm` is not built yet and the image has no seatd. |
+| `OnFailure=` fallback                                   | implemented and tested  | Injected units with a bsm that exits 127: three starts, start limit hit, `bsm-fallback.service` ran and greetd with its greeter was running again. |
 | Plymouth handover without a blank frame                 | not yet implemented     | bsm waits for `plymouth-quit-wait`, as greetd does. |
 | VT switching away from bsm (`Ctrl+Alt+F3`)              | not yet implemented     | Depends on seatd's VT binding; untested. |
 | `bsm.rules` against a booted seatless session           | not yet implemented     | Needs the image. |
 
-Image rebuild must pick up: the `bsm` package (all five crates, `packages/bsm`
+The image rebuild is `distro/build.sh --gnoblin ~/dev/gnoblin-bsm-wt` (the Gnoblin worktree on `feat/bsm-hosted`, committed; the Bingux checkout must be committed too, `BINGUX_ARCHIVE_FROM_HEAD=1` otherwise). It must pick up: the `bsm` package (all five crates, `packages/bsm`
 needs its `Cargo.toml` and lock files), `packaging/bsm/image/` (copied by
 `build_iso`), the three boot entries, `bsm` and `seatd` in `packages.x86_64`, a
 Gnoblin build with `--hosted`, and the `bingux` package with the greeter QML and
