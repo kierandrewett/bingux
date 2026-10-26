@@ -3,7 +3,7 @@
 //! `bsm` binary (accounts and appearance, which call `bsm-appearance`); tests
 //! provide their own doubles.
 
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::SyncSender;
 
 use bsm_proto::error::BsmError;
 use bsm_proto::scene::SceneCommand;
@@ -32,7 +32,7 @@ pub type SceneSink = Box<dyn Fn(SceneCommand) -> bool + Send>;
 
 /// Handle workers use to feed the driver. Bounded: a stuck driver pushes back instead
 /// of growing without limit.
-pub type DriverTx = Sender<RtInput>;
+pub type DriverTx = SyncSender<RtInput>;
 
 /// Eligible accounts as bsm-appearance lists them, with their published appearance.
 pub trait AccountSource: Send + Sync {
