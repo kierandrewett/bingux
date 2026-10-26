@@ -18,6 +18,8 @@ OPTIONS:
     --state-dir <DIR>                State directory (default: /var/lib/bsm)
     --helper-socket <PATH>           bsm-helper socket (default: /run/bsm-helper/helper.sock)
     --dbus <system|session|none|ADDR>  Where to publish org.bingux.Session1 (default: system)
+    --system-services <logind|none>  polkit, inhibitors and power through the system bus (default: logind;
+                                     `none` refuses every power action: development and tests only)
     --outputs <WxH[,WxH...]>         Headless backend: fake outputs side by side (default: 1280x720)
     --frame-dump <DIR>               Headless backend: write every composed frame as a PNG
     --print-config                   Print the resolved settings and exit
@@ -44,6 +46,7 @@ pub struct Cli {
     pub state_dir: Option<PathBuf>,
     pub helper_socket: Option<PathBuf>,
     pub dbus: Option<String>,
+    pub system_services: Option<String>,
     pub outputs: Option<Vec<(u32, u32)>>,
     pub frame_dump: Option<PathBuf>,
     pub print_config: bool,
@@ -120,6 +123,13 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Parsed, String> 
                 let v = value("a bus")?;
                 parse_dbus(&v)?;
                 cli.dbus = Some(v);
+            }
+            "--system-services" => {
+                let v = value("logind or none")?;
+                if v != "logind" && v != "none" {
+                    return Err(format!("unknown system services {v:?}; use logind or none"));
+                }
+                cli.system_services = Some(v);
             }
             "--outputs" => cli.outputs = Some(parse_outputs(&value("a list like 1280x720")?)?),
             "--frame-dump" => cli.frame_dump = Some(value("a directory")?.into()),

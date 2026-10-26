@@ -31,6 +31,8 @@ pub struct Settings {
     pub greeter_socket_mode: u32,
     pub cover: CoverColor,
     pub dbus: DbusMode,
+    /// polkit, logind inhibitors and power calls go to the system bus whatever `dbus` is.
+    pub logind: bool,
     pub outputs: Vec<(u32, u32)>,
     pub frame_dump: Option<PathBuf>,
     pub hidden_users: Vec<String>,
@@ -70,6 +72,12 @@ pub fn resolve(cli: Cli) -> Result<Settings, String> {
     };
     let dbus_name = cli.dbus.clone().or_else(|| file.dbus.clone()).unwrap_or_else(|| "system".into());
     let dbus = parse_dbus(&dbus_name).map_err(|e| format!("dbus: {e}"))?;
+    let services = cli.system_services.clone().or_else(|| file.system_services.clone()).unwrap_or_else(|| {
+        if dbus == DbusMode::None { "none".into() } else { "logind".into() }
+    });
+    if services != "logind" && services != "none" {
+        return Err(format!("system_services must be logind or none, not {services:?}"));
+    }
     let cover = file.cover_color().map_err(|e| e.to_string())?.unwrap_or(CoverColor { r: 0.05, g: 0.06, b: 0.09 });
     let greeter_socket_mode = file.socket_mode().map_err(|e| e.to_string())?;
     Ok(Settings {
@@ -85,6 +93,7 @@ pub fn resolve(cli: Cli) -> Result<Settings, String> {
         greeter_socket_mode,
         cover,
         dbus,
+        logind: services == "logind",
         outputs: cli.outputs.clone().unwrap_or_else(|| vec![(1280, 720)]),
         frame_dump: cli.frame_dump.clone(),
         hidden_users: file.hidden_users.clone(),
@@ -151,7 +160,7 @@ pub fn init_logging() {
     }
 }
 
-/// Stand-in used only when the process runs with `--dbus none` (no bus at all): the
+/// Stand-in used only with `--system-services none`: the
 /// requests that need polkit and logind are refused with a stable error, never granted.
 struct NoSystemBus;
 
@@ -246,8 +255,8 @@ pub fn run(s: Settings) -> Result<(), String> {
     spawn_signal_thread(tx.clone()).map_err(|e| format!("signal thread: {e}"))?;
 
     // The bus first: the name must be ours before anything is promised.
-    let (dbus_handle, system): (Option<Arc<dbus::DbusHandle>>, Arc<dyn SystemServices>) = match &s.dbus {
-        DbusMode::None => (None, Arc::new(NoSystemBus)),
+    let dbus_handle: Option<Arc<dbus::DbusHandle>> = match &s.dbus {
+        DbusMode::None => None,
         mode => {
             let kind = match mode {
                 DbusMode::System => BusKind::System,
@@ -255,10 +264,15 @@ pub fn run(s: Settings) -> Result<(), String> {
                 DbusMode::Address(a) => BusKind::Address(a.clone()),
                 DbusMode::None => unreachable!(),
             };
-            let handle = dbus::spawn(kind.clone(), tx.clone()).map_err(|e| format!("D-Bus service: {e}"))?;
-            let sys = runtime::system::LogindSystem::start(kind, tx.clone()).map_err(|e| format!("logind: {e}"))?;
-            (Some(Arc::new(handle)), sys as Arc<dyn SystemServices>)
+            Some(Arc::new(dbus::spawn(kind, tx.clone()).map_err(|e| format!("D-Bus service: {e}"))?))
         }
+    };
+    // polkit and logind always live on the system bus, wherever our own service is.
+    let system: Arc<dyn SystemServices> = if s.logind {
+        runtime::system::LogindSystem::start(BusKind::System, tx.clone()).map_err(|e| format!("logind: {e}"))?
+    } else {
+        tracing::warn!("system services are off: power actions will be refused");
+        Arc::new(NoSystemBus)
     };
 
     let publisher = system_publisher(None);

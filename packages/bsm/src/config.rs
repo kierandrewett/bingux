@@ -13,6 +13,7 @@
 //! reduce_motion = false
 //! cover = "#0d1117"                  # the opaque colour behind everything
 //! dbus = "system"                    # system | session | none | an address
+//! system_services = "logind"         # logind | none (none refuses power actions; development only)
 //!
 //! [greeter_power]                    # what the greeter may do before anybody signs in
 //! suspend = true
@@ -56,6 +57,7 @@ pub struct FileConfig {
     pub reduce_motion: Option<bool>,
     pub cover: Option<String>,
     pub dbus: Option<String>,
+    pub system_services: Option<String>,
     pub greeter_power: Option<GreeterPowerFile>,
     pub timeouts: Timeouts,
     pub transitions: Transitions,
