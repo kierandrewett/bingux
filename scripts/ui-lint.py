@@ -33,13 +33,15 @@ SOURCES = [
     ROOT / "packages/bingux-settings/src",
 ]
 # The style system defines the values; the palette and icon table hold raw
-# colours and SVG; the snapshot runner is test tooling.
+# colours and SVG; the snapshot runner and the icon contact-sheet example are
+# test tooling (they need exact pixel sizes and plain black and white).
 SKIP_DIRS = {ROOT / "packages/bingux-ui/src/style"}
 SKIP_FILES = {
     ROOT / "packages/bingux-ui/src/theme.rs",
     ROOT / "packages/bingux-ui/src/typography.rs",
     ROOT / "packages/bingux-ui/src/icons.rs",
     ROOT / "packages/bingux-ui/src/snapshot.rs",
+    ROOT / "packages/bingux-ui/examples/icon_sheet.rs",
     ROOT / "packages/bingux-ui/src/surface.rs",
     ROOT / "packages/bingux-ui/src/charts/palette.rs",
     ROOT / "packages/bingux-ui/src/charts/svg.rs",

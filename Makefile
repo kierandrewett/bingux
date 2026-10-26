@@ -13,7 +13,7 @@ OUTPUT ?= dist/bingux-$(VERSION).tar.xz
 SHELL := /bin/bash
 ROOT := $(abspath .)
 
-.PHONY: all native daemons doctor doctor-build check install install-user uninstall-user rpm-package source-archive
+.PHONY: all native daemons icons icons-check doctor doctor-build check install install-user uninstall-user rpm-package source-archive
 all: native daemons
 
 native: $(BUILD_DIR)/bingux-image-clipboard $(BUILD_DIR)/bingux-frame
@@ -37,6 +37,14 @@ daemons:
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-searchd/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-statusd/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-settings/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
+
+# Compile the icon sources (scripts/icons/src, chat glyphs) into the bingux-ui
+# icons and the shell's copy. Needs uv: the script declares its own packages.
+icons:
+	scripts/icons/build.py
+
+icons-check:
+	scripts/icons/build.py --check
 
 doctor-build:
 	python3 scripts/check-dependencies.py --qmake '$(QMAKE)' --cargo '$(CARGO)' --cc '$(CC)' --pkg-config '$(PKG_CONFIG)'

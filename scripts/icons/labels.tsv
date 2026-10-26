@@ -1,0 +1,156 @@
+# file | where the user sees it (label, surface) | the conventional metaphor | chat fork glyph + weight, or custom
+# Read by sheets.py (labelled mapping sheet) and by map-fork.py (writes the <fork/> sources). Names are Adwaita file names without -symbolic.svg.
+network-wireless | Wi-Fi (sidebar), top-bar wireless | Wi-Fi fan | custom: WifiMedium bold scaled 1.5 to fill the box
+network-wireless-signal-none | Wi-Fi list row: no signal | empty fan | custom: WifiNone bold scaled 1.5 to fill the box
+network-wireless-signal-weak | Wi-Fi list row: weak | dot lit | custom: WifiLow bold scaled 1.5 to fill the box
+network-wireless-signal-ok | Wi-Fi list row: ok | one arc lit | custom: WifiMedium bold scaled 1.5 to fill the box
+network-wireless-signal-good | Wi-Fi list row: good | two arcs, partly lit | custom: WifiMedium bold scaled 1.5 to fill the box
+network-wireless-signal-excellent | Wi-Fi list row, hero, top bar: full | full fan | custom: WifiMedium bold scaled 1.5 to fill the box
+network-wireless-disabled | Wi-Fi off | fan with slash | custom: WifiMedium bold + slash
+network-wireless-encrypted | Wi-Fi list row: secured network | padlock | LockKey fill
+network-wireless-hotspot | Hotspot | broadcasting dot with arcs | Broadcast bold
+network-offline | top bar: no network | fan with x | custom: WifiMedium bold + x
+network-error | top bar: network problem | network with x | NetworkX bold
+network-wired | Network (sidebar), wired connection row, top-bar wired | wired network | Network bold
+network-vpn | VPN (rows, Control Centre) | shield | Shield bold
+network-server | Server / share | server stack | HardDrives fill
+airplane-mode | Airplane mode (top bar, Control Centre) | aeroplane | Airplane fill
+bluetooth-active | Bluetooth (sidebar, hero, top bar) | Bluetooth rune | Bluetooth bold
+bluetooth-disabled | Bluetooth off (top bar) | rune with slash | BluetoothSlash bold
+audio-volume-high | Sound (sidebar), volume high (top bar) | speaker with two waves | SpeakerHigh fill
+audio-volume-medium | volume medium (top bar) | speaker with one wave | SpeakerLow fill
+audio-volume-low | volume low (top bar) | speaker, no waves | SpeakerNone fill
+audio-volume-muted | volume muted (top bar) | speaker with x | SpeakerX fill
+audio-input-microphone | Microphone device, Sound page | microphone | Microphone fill
+audio-headphones | Headphones device (Sound, Bluetooth) | headphones | Headphones fill
+audio-speakers | Speakers device (Sound, Bluetooth) | box speaker | SpeakerHifi fill
+audio-card | Sound card device (Sound page) | audio device / waveform | Waveform bold
+media-playback-pause | Pause (inspector toolbar) | two bars | Pause fill
+preferences-system-notifications | Notifications (top bar) | bell | Bell fill
+notifications-disabled | Do not disturb (top bar, Control Centre) | bell with slash | BellSlash fill
+view-app-grid | Applications (sidebar), top-bar launcher | grid of nine dots | DotsNine fill
+system-shutdown | Power (top bar, power menu) | power symbol | Power bold
+battery-level-100 | Power (sidebar), battery full | horizontal battery | BatteryFull bold
+battery-level-50 | battery half | horizontal battery | BatteryMedium bold
+battery-level-0 | battery empty (top bar, Power) | empty battery | BatteryEmpty bold
+battery-level-10 | battery 10% | battery low | BatteryLow bold
+battery-level-20 | battery 20% | battery low | BatteryLow bold
+battery-level-30 | battery 30% | battery medium | BatteryMedium bold
+battery-level-40 | battery 40% | battery medium | BatteryMedium bold
+battery-level-60 | battery 60% | battery high | BatteryHigh bold
+battery-level-70 | battery 70% | battery high | BatteryHigh bold
+battery-level-80 | battery 80% | battery high | BatteryHigh bold
+battery-level-90 | battery 90% | battery full | BatteryFull bold
+battery-level-100-charged | battery charged, plugged in | full battery | BatteryFull bold
+battery-level-0-charging | charging (any level) | battery with bolt | BatteryCharging bold
+battery-level-10-charging | charging | battery with bolt | BatteryCharging bold
+battery-level-20-charging | charging | battery with bolt | BatteryCharging bold
+battery-level-30-charging | charging | battery with bolt | BatteryCharging bold
+battery-level-40-charging | charging | battery with bolt | BatteryCharging bold
+battery-level-50-charging | charging | battery with bolt | BatteryCharging bold
+battery-level-60-charging | charging | battery with bolt | BatteryCharging bold
+battery-level-70-charging | charging | battery with bolt | BatteryCharging bold
+battery-level-80-charging | charging | battery with bolt | BatteryCharging bold
+battery-level-90-charging | charging | battery with bolt | BatteryCharging bold
+battery-level-100-charging | charging | battery with bolt | BatteryCharging bold
+battery-missing | no battery found | battery with warning | BatteryWarning bold
+power-profile-power-saver | Power mode: power saver | leaf | Leaf fill
+power-profile-balanced | Power mode: balanced | speedometer | Speedometer fill
+power-profile-performance | Power mode: performance | lightning bolt | Lightning fill
+display-brightness | Brightness | sun | Sun fill
+night-light | Night light | moon and stars | MoonStars fill
+weather-clear-night | Dark style | moon | Moon fill
+preferences-desktop-accessibility | Accessibility (sidebar) | person in circle | PersonSimpleCircle fill
+applications-graphics | Appearance (sidebar) | palette | Palette fill
+preferences-desktop-wallpaper | Desktop (sidebar), wallpaper | landscape picture | ImageSquare bold
+video-display | Displays (sidebar), display device | monitor | Monitor bold
+system-search | Search (sidebar, search fields) | magnifier | MagnifyingGlass bold
+input-keyboard | Keyboard (sidebar, device) | keyboard | Keyboard bold
+preferences-desktop-keyboard-shortcuts | Keyboard shortcuts row | keyboard | Keyboard bold
+input-mouse | Mouse (sidebar, device) | mouse | Mouse bold
+preferences-system-time | Date & time (sidebar) | clock | Clock bold
+system-users | Users (sidebar) | two people | Users fill
+help-about | About (sidebar) | circled i | Info fill
+computer | Computer (device, About hero) | laptop | Laptop bold
+preferences-system | Details button, Control Centre | gear | Gear fill
+emblem-system | Settings action | gear | Gear fill
+avatar-default | Account avatar placeholder | person | User fill
+user-info | Account details | ID card | IdentificationCard bold
+preferences-other | Other settings | sliders | SlidersHorizontal bold
+object-select | Checkbox, selected row/option | tick | Check bold
+go-next | Row chevron, breadcrumb | chevron right | CaretRight bold
+go-previous | Back button | chevron left | CaretLeft bold
+pan-up | Move up, expanders | chevron up | CaretUp bold
+pan-down | Dropdown arrow, expanders | chevron down | CaretDown bold
+pan-end | Submenu arrow, tree branch | chevron right | CaretRight bold
+edit-clear | Clear text in a search field | circled x | XCircle fill
+list-add | Add, stepper plus | plus | Plus bold
+list-remove | Stepper minus | minus | Minus bold
+view-reveal | Show password | eye | Eye bold
+view-conceal | Hide password | eye with slash | EyeSlash bold
+starred | Preferred display mode | filled star | Star fill
+non-starred | Favourite (off) | outline star | Star bold
+window-close | Window close, dialogs | x | X bold
+window-minimize | Window minimize | bar | Minus bold
+window-maximize | Window maximize | square | Square bold
+window-restore | Window restore | two squares | CopySimple bold
+open-menu | Main menu button | hamburger | List bold
+view-more | More actions | three dots | DotsThreeVertical bold
+view-refresh | Refresh | circular arrow | ArrowClockwise bold
+object-rotate-right | Rotate | circular arrow | ArrowClockwise bold
+sidebar-show | Show sidebar | window with side pane | SidebarSimple bold
+focus-top-bar | Top bar | window with title bar | AppWindow bold
+edit-copy | Copy | two sheets | Copy bold
+edit-delete | Delete | trash can | Trash fill
+user-trash | Forget, Trash | trash can | Trash fill
+view-filter | Filter | funnel | Funnel fill
+find-location | Inspect element (inspector toolbar) | cursor clicking | CursorClick bold
+document-edit | Text editor (Applications) | pencil on page | NotePencil bold
+document-open | Open | open folder | FolderOpen fill
+send-to | Share | square with arrow up | Export bold
+view-list | List view | bulleted list | ListBullets bold
+view-grid | Grid view | four squares | SquaresFour fill
+folder | Folder, Files | folder | Folder fill
+folder-download | Downloads | download arrow | DownloadSimple bold
+bookmarks | Website shortcuts | bookmark | BookmarkSimple bold
+dialog-error | Error status | circled x | XCircle fill
+dialog-information | Information status, notes | circled i | Info fill
+dialog-warning | Warning status | triangle with ! | Warning fill
+help-browser | Help | circled ? | Question fill
+security-high | Secure | shield with tick | ShieldCheck fill
+security-low | Insecure | shield with ! | ShieldWarning fill
+system-lock-screen | Lock | padlock | Lock fill
+dialog-password | Password | key | Key fill
+changes-prevent | Keep awake | coffee cup | Coffee fill
+input-gaming | Game controller (Bluetooth) | game pad | GameController fill
+input-tablet | Tablet (Bluetooth) | tablet | DeviceTablet bold
+input-touchpad | Touchpad | finger tapping | HandTap bold
+phone | Phone (Bluetooth), phone preview | phone | DeviceMobile bold
+camera-web | Webcam (Sound page, Bluetooth) | webcam | Webcam bold
+media-removable | USB drive | USB symbol | Usb bold
+printer | Printer (Bluetooth) | printer | Printer fill
+web-browser | Web (Applications, search) | globe | Globe bold
+x-office-calendar | Calendar (Applications) | calendar | CalendarBlank bold
+mail-unread | Mail (Applications) | envelope | EnvelopeSimple bold
+image-generic | Image viewer (Applications), wallpapers | picture | Image bold
+video-generic | Video (Applications) | video camera | VideoCamera fill
+applications-multimedia | Music (Applications) | music note | MusicNotesSimple fill
+accessories-calculator | Calculation (search) | calculator | Calculator fill
+addon | Add-on sources (search) | plug-in | Plugs bold
+application-x-executable | Generic application tile | box | Cube fill
+user-home | Home (file chooser) | house | House fill
+folder-documents | Documents (file chooser) | stack of files | Files fill
+folder-music | Music (file chooser) | music notes | MusicNotes fill
+folder-pictures | Pictures (file chooser) | pictures | Images fill
+folder-videos | Videos (file chooser) | film strip | FilmStrip fill
+drive-harddisk | Drive (file chooser) | hard disk | HardDrive fill
+text-x-generic | Text file (file chooser) | page with lines | FileText fill
+audio-x-generic | Audio file (file chooser) | page with audio | FileAudio fill
+package-x-generic | Archive file (file chooser) | box | Package fill
+folder-new | New folder (file chooser) | folder with plus | FolderPlus fill
+media-eject | Eject drive (file chooser sidebar) | eject mark | Eject fill
+media-optical | Optical disc (file chooser sidebar) | disc | Disc fill
+folder-templates | Templates folder (file chooser) | page | Notepad fill
+folder-publicshare | Public folder (file chooser) | shared | ShareNetwork bold
+folder-desktop | Desktop folder (file chooser) | desktop screen | Desktop fill
+window-new | Open in new window (menus) | window with arrow | ArrowSquareOut bold

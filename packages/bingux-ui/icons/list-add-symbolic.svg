@@ -1,4 +1,3 @@
-<?xml version="1.0" encoding="UTF-8"?>
 <svg height="16px" viewBox="0 0 16 16" width="16px" xmlns="http://www.w3.org/2000/svg">
-    <path d="m 7 1 v 6 h -6 v 2 h 6 v 6 h 2 v -6 h 6 v -2 h -6 v -6 z m 0 0"/>
+    <path transform="translate(0.25 0) scale(0.062)" d="M213.9,140H140v76a12,12,0,0,1-24,0v-76H40a12,12,0,0,1,0-24h76V40a12,12,0,0,1,24,0v76h76a12,12,0,0,1,11.8,9.9c1.3,7.4-5.3,14.1-13.9,14.1Z"/>
 </svg>

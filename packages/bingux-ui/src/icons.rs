@@ -139,11 +139,17 @@ pub enum Icon {
     AudioXGeneric,
     PackageXGeneric,
     FolderNew,
+    MediaEject,
+    MediaOptical,
+    FolderTemplates,
+    FolderPublicshare,
+    FolderDesktop,
+    WindowNew,
 }
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 126] = [
+    pub const ALL: [Icon; 132] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -270,6 +276,12 @@ impl Icon {
         Self::AudioXGeneric,
         Self::PackageXGeneric,
         Self::FolderNew,
+        Self::MediaEject,
+        Self::MediaOptical,
+        Self::FolderTemplates,
+        Self::FolderPublicshare,
+        Self::FolderDesktop,
+        Self::WindowNew,
     ];
 
     /// The embedded SVG source for this icon.
@@ -438,6 +450,12 @@ impl Icon {
             Self::AudioXGeneric => include_bytes!("../icons/audio-x-generic-symbolic.svg"),
             Self::PackageXGeneric => include_bytes!("../icons/package-x-generic-symbolic.svg"),
             Self::FolderNew => include_bytes!("../icons/folder-new-symbolic.svg"),
+            Self::MediaEject => include_bytes!("../icons/media-eject-symbolic.svg"),
+            Self::MediaOptical => include_bytes!("../icons/media-optical-symbolic.svg"),
+            Self::FolderTemplates => include_bytes!("../icons/folder-templates-symbolic.svg"),
+            Self::FolderPublicshare => include_bytes!("../icons/folder-publicshare-symbolic.svg"),
+            Self::FolderDesktop => include_bytes!("../icons/folder-desktop-symbolic.svg"),
+            Self::WindowNew => include_bytes!("../icons/window-new-symbolic.svg"),
         }
     }
 }
@@ -448,5 +466,15 @@ pub fn icon(icon: Icon, size: crate::style::IconSize, color: Color) -> SvgViewer
     SvgViewer::new(icon.bytes())
         .width(Size::px(size.px()))
         .height(Size::px(size.px()))
+        .fill(color)
+}
+
+/// [`icon`] with its size scaled by `scale` and rounded to whole pixels, so a
+/// zooming view keeps its glyph edges sharp. The size is never below 1 px.
+pub fn icon_scaled(icon: Icon, size: crate::style::IconSize, scale: f32, color: Color) -> SvgViewer {
+    let edge = (size.px() * scale).round().max(1.0);
+    SvgViewer::new(icon.bytes())
+        .width(Size::px(edge))
+        .height(Size::px(edge))
         .fill(color)
 }

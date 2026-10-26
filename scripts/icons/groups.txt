@@ -1,0 +1,47 @@
+# Contact-sheet groups: icons that are used together, in the order they appear.
+# One group per `[name]`, then icon names (without -symbolic.svg), several per line.
+# sheets.py draws each group on its own sheets so icons are judged next to their siblings.
+
+[top-bar]
+view-app-grid network-wired network-wireless-signal-excellent network-wireless-signal-good
+network-wireless-signal-ok network-wireless-signal-weak network-wireless-signal-none
+network-wireless-disabled network-offline network-error network-wireless-encrypted
+preferences-system-notifications notifications-disabled
+audio-volume-high audio-volume-medium audio-volume-low audio-volume-muted
+bluetooth-active bluetooth-disabled airplane-mode network-vpn system-shutdown
+
+[battery]
+battery-level-0 battery-level-10 battery-level-20 battery-level-30 battery-level-40 battery-level-50
+battery-level-60 battery-level-70 battery-level-80 battery-level-90 battery-level-100 battery-level-100-charged
+battery-level-0-charging battery-level-10-charging battery-level-20-charging battery-level-30-charging
+battery-level-40-charging battery-level-50-charging battery-level-60-charging battery-level-70-charging
+battery-level-80-charging battery-level-90-charging battery-level-100-charging battery-missing
+
+[sidebar]
+network-wireless network-wired bluetooth-active preferences-desktop-accessibility applications-graphics
+preferences-desktop-wallpaper system-search video-display audio-volume-high battery-level-100
+input-keyboard input-mouse preferences-system-time system-users view-app-grid help-about
+
+[controls-and-marks]
+object-select go-next go-previous pan-up pan-down pan-end edit-clear list-add list-remove
+view-reveal view-conceal starred non-starred window-close window-minimize window-maximize window-restore
+
+[buttons-and-menus]
+open-menu view-more view-refresh object-rotate-right sidebar-show focus-top-bar edit-copy edit-delete
+user-trash view-filter find-location document-edit document-open send-to view-list view-grid
+media-playback-pause preferences-system emblem-system folder folder-download bookmarks
+
+[status]
+dialog-error dialog-information dialog-warning help-browser security-high security-low
+system-lock-screen dialog-password changes-prevent power-profile-power-saver power-profile-balanced
+power-profile-performance display-brightness night-light weather-clear-night
+
+[devices]
+audio-headphones audio-speakers audio-card audio-input-microphone input-keyboard input-mouse input-tablet
+input-touchpad input-gaming phone computer video-display printer camera-web media-removable network-server
+avatar-default user-info
+
+[applications]
+web-browser x-office-calendar mail-unread image-generic video-generic applications-multimedia
+accessories-calculator addon application-x-executable preferences-other
+preferences-desktop-keyboard-shortcuts
