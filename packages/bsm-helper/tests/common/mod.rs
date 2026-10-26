@@ -116,20 +116,50 @@ socket_root = "{d}/run"
             .arg(&cfg_path)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::inherit())
+            .stderr(std::fs::OpenOptions::new().create(true).append(true).open(self.dir.path().join("helper.log")).unwrap())
             .spawn()
             .expect("spawn bsm-helper");
         let proc = HelperProc { child: Some(child), supervised: Vec::new() };
+        // The socket file appears at bind(), a moment before listen(): wait until
+        // it accepts a connection.
         let deadline = Instant::now() + Duration::from_secs(10);
-        while !self.socket().exists() {
-            assert!(Instant::now() < deadline, "helper did not create its socket");
+        while sys::connect_seqpacket(&self.socket()).is_err() {
+            assert!(Instant::now() < deadline, "helper did not start listening");
             std::thread::sleep(Duration::from_millis(20));
         }
         proc
     }
 
-    pub fn connect(&self) -> Client {
+    /// One raw connection attempt, for tests about connection policy.
+    pub fn connect_raw(&self) -> Client {
         Client::connect(&self.socket())
+    }
+
+    /// A connection the helper has accepted, proven by a Ping/Pong. A descriptor
+    /// that a test just dropped can stay open for a moment in the fork child of a
+    /// concurrently spawned helper, so the helper may still see its previous peer
+    /// and close the newcomer: retry, as a restarting bsm does.
+    pub fn connect(&self) -> Client {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let c = Client::connect(&self.socket());
+            let _ = c.send_raw(&serde_json::to_vec(&HelperRequest::Ping { nonce: u64::MAX }).unwrap());
+            if let Some(HelperEvent::Pong { nonce: u64::MAX }) = c.try_recv(Duration::from_millis(700)) {
+                return c;
+            }
+            assert!(Instant::now() < deadline, "the helper never accepted a connection");
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+}
+
+impl Drop for Env {
+    fn drop(&mut self) {
+        // The helper's log is only interesting when the test failed.
+        if std::thread::panicking() {
+            let log = std::fs::read_to_string(self.dir.path().join("helper.log")).unwrap_or_default();
+            eprintln!("--- helper log ---\n{log}--- end ---");
+        }
     }
 }
 

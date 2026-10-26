@@ -47,7 +47,7 @@ fn a_socket_passed_by_systemd_is_served_and_never_unlinked() {
     assert!(child.wait().unwrap().success());
     assert!(env.socket().exists(), "a socket owned by the socket unit must not be unlinked by the service");
     // It is still usable by the next instance.
-    let again = env.connect();
+    let again = env.connect_raw();
     drop(again);
     drop(listener);
 }

@@ -283,11 +283,13 @@ fn a_leader_that_ignores_sigterm_is_killed_after_the_grace_period() {
     let env = Env::new();
     let cfg = env.config().replace(
         "gnoblin = [\"/bin/sh\", \"-c\", \"env > ",
-        "gnoblin = [\"/bin/sh\", \"-c\", \"trap '' TERM; while :; do sleep 1; done; env > ",
+        &format!("gnoblin = [\"/bin/sh\", \"-c\", \"trap '' TERM; echo ready > {}/trap.ready; while :; do sleep 1; done; env > ", env.path("").display()),
     );
     let mut h = env.start_with(&cfg);
     let c = env.connect();
     let o = open(&env, &mut h, &c, "s0000a00a", 23);
+    // SIGTERM must find the trap in place, or the leader simply dies.
+    wait_for_file(&env.path("trap.ready"));
     let started = Instant::now();
     c.send(&HelperRequest::CloseSession { session: "s0000a00a".into(), generation: 23, grace_ms: 400 });
     c.until(|e| matches!(e, HelperEvent::SessionExited { .. }));
@@ -476,8 +478,17 @@ fn a_session_that_ends_while_bsm_is_disconnected_is_reported_to_the_next_connect
     unsafe { libc::kill(o.leader_pid as i32, libc::SIGKILL) };
     assert!(wait_dead(o.leader_pid, Duration::from_secs(5)));
     std::thread::sleep(Duration::from_millis(1500));
-    let c2 = env.connect();
-    match c2.try_recv(Duration::from_secs(5)) {
+    // The queued exit arrives before anything else, so no Ping handshake here. A
+    // lingering descriptor of the old peer can delay the helper's EOF: retry.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let c2 = loop {
+        let c = env.connect_raw();
+        if let Some(ev) = c.try_recv(Duration::from_millis(1500)) {
+            break (c, ev);
+        }
+        assert!(Instant::now() < deadline, "no event on any connection");
+    };
+    match Some(c2.1) {
         Some(HelperEvent::SessionExited { session, generation, status }) => {
             assert_eq!((session.as_str(), generation, status), ("s0000a00e", 71, -libc::SIGKILL));
         }

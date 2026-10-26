@@ -35,8 +35,9 @@ fn a_peer_with_another_uid_is_rejected() {
     let mut env = Env::new();
     env.allowed_uid = env.pam.uid + 1;
     let _h = env.start();
-    let c = env.connect();
-    c.send(&HelperRequest::Ping { nonce: 1 });
+    let c = env.connect_raw();
+    // The helper may close before the datagram is sent: both outcomes are a refusal.
+    let _ = c.send_raw(&serde_json::to_vec(&HelperRequest::Ping { nonce: 1 }).unwrap());
     assert!(c.closed_within(Duration::from_secs(3)), "connection from the wrong uid must be closed");
 }
 
@@ -50,7 +51,7 @@ fn only_one_connection_at_a_time_and_a_restart_of_the_peer_is_accepted() {
     let first = env.connect();
     first.send(&HelperRequest::Ping { nonce: 1 });
     assert_eq!(first.recv(), HelperEvent::Pong { nonce: 1 });
-    let second = env.connect();
+    let second = env.connect_raw();
     assert!(second.closed_within(Duration::from_secs(3)));
     first.send(&HelperRequest::Ping { nonce: 2 });
     assert_eq!(first.recv(), HelperEvent::Pong { nonce: 2 });
