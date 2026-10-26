@@ -6,11 +6,6 @@ singleton BsmSession 1.0 BsmSession.qml
 singleton BsmReadiness 1.0 BsmReadiness.qml
 BsmSurfaceProbe 1.0 BsmSurfaceProbe.qml
 BsmDesktop 1.0 BsmDesktop.qml
-singleton BsmMode 1.0 BsmMode.qml
-singleton BsmSession 1.0 BsmSession.qml
-singleton BsmReadiness 1.0 BsmReadiness.qml
-BsmSurfaceProbe 1.0 BsmSurfaceProbe.qml
-BsmDesktop 1.0 BsmDesktop.qml
 singleton AdwaitaIcons 1.0 AdwaitaIcons.qml
 singleton LaunchFeedback 1.0 LaunchFeedback.qml
 singleton Python 1.0 Python.qml
