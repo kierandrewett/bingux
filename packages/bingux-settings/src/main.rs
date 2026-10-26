@@ -63,10 +63,20 @@ fn usage() -> String {
          Pages: {}\n\
          \n\
          Subpages:\n\
-         \x20 wifi/saved                       saved Wi-Fi networks\n\
-         \x20 wifi/network/<ssid>              one Wi-Fi network\n\
-         \x20 wired/<device>                   one wired device\n\
-         \x20 wired/vpn/<name>                 one VPN profile\n\
+         \x20 network/wifi                     Wi-Fi networks (also: wifi)\n\
+         \x20 network/wifi/saved               saved Wi-Fi networks\n\
+         \x20 network/wifi/hotspot             Wi-Fi hotspot\n\
+         \x20 network/wifi/network/<ssid>      one Wi-Fi network\n\
+         \x20 network/ethernet/<device>        one wired device (also: wired/<device>)\n\
+         \x20 network/ethernet/<device>/profile/<name>\n\
+         \x20                                  one wired profile\n\
+         \x20 network/vpn/<name>               one VPN (also: wired/vpn/<name>)\n\
+         \x20 network/add-vpn[/<kind>]         add a VPN\n\
+         \x20 network/mobile                   mobile network (also: mobile, wwan, cellular)\n\
+         \x20 network/proxy                    proxy\n\
+         \x20 network/usage                    data usage\n\
+         \x20 network/details/<connection>     a connection's addresses and routes\n\
+         \x20 <connection screen>/<section>    ipv4, ipv6, dns, security, identity, proxy, advanced, tunnel\n\
          \x20 bluetooth/<mac>                  one Bluetooth device\n\
          \x20 display/<index>                  one display, from 0\n\
          \x20 keyboard/shortcuts               keyboard shortcuts\n\

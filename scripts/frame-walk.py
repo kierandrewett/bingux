@@ -65,7 +65,7 @@ NO_MATCH = np.iinfo(np.int64).max
 # Per page: (subpage to open and return from, label of the control that opens
 # the page's popup). Labels are the trigger rows and buttons in src/pages/*.rs.
 WALK = {
-    "wifi": ("wifi/saved", "Connect to hidden network"),
+    "network": ("network/wifi/saved", None),
     "datetime": ("datetime/timezone", "Set date and time"),
     "keyboard": ("keyboard/shortcuts", "Add an input source"),
     "background": ("background/font", None),

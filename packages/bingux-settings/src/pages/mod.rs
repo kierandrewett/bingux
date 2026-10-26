@@ -28,12 +28,9 @@ pub mod power;
 pub mod search;
 pub mod sound;
 pub mod users;
-pub mod wifi;
-pub mod wifi_editor;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PageId {
-    WiFi,
     Network,
     Bluetooth,
     Appearance,
@@ -65,7 +62,7 @@ pub fn prefetch_all() {
     keyboard::prefetch();
     mouse::prefetch();
     network::prefetch();
-    wifi::prefetch();
+    network::wifi::prefetch();
     power::prefetch();
     search::prefetch();
     sound::prefetch();
@@ -74,8 +71,7 @@ pub fn prefetch_all() {
 
 impl PageId {
     /// Sidebar order.
-    pub const ALL: [PageId; 15] = [
-        PageId::WiFi,
+    pub const ALL: [PageId; 14] = [
         PageId::Network,
         PageId::Bluetooth,
         PageId::Displays,
@@ -94,7 +90,6 @@ impl PageId {
 
     pub fn title(self) -> &'static str {
         match self {
-            Self::WiFi => "Wi-Fi",
             Self::Network => "Network",
             Self::Bluetooth => "Bluetooth",
             Self::Appearance => "Appearance",
@@ -117,8 +112,7 @@ impl PageId {
     /// the page as the Related group. Never includes the page itself.
     pub fn related(self) -> &'static [PageId] {
         match self {
-            Self::WiFi => &[PageId::Network, PageId::Bluetooth],
-            Self::Network => &[PageId::WiFi, PageId::Bluetooth],
+            Self::Network => &[PageId::Bluetooth, PageId::Displays],
             Self::Bluetooth => &[PageId::Sound, PageId::Mouse],
             Self::Displays => &[PageId::Appearance, PageId::Power],
             Self::Sound => &[PageId::Bluetooth, PageId::Displays],
@@ -140,7 +134,7 @@ impl PageId {
     /// a hairline in the sidebar, not by a heading.
     pub fn group(self) -> &'static str {
         match self {
-            Self::WiFi | Self::Network | Self::Bluetooth => "connections",
+            Self::Network | Self::Bluetooth => "connections",
             Self::Displays | Self::Sound | Self::Power | Self::Keyboard | Self::Mouse => "devices",
             Self::Appearance | Self::Desktop | Self::Search | Self::Applications => "desktop",
             Self::Accessibility | Self::DateTime | Self::Users | Self::About => "system",
@@ -150,8 +144,9 @@ impl PageId {
     /// Words the sidebar search matches besides the title.
     pub fn keywords(self) -> &'static str {
         match self {
-            Self::WiFi => "wifi wi-fi wireless internet airplane hotspot hidden saved networks",
-            Self::Network => "ethernet wired cable vpn proxy internet",
+            Self::Network => {
+                "network wifi wi-fi wireless ethernet wired cable internet vpn wireguard openvpn proxy hotspot hidden saved networks airplane mobile cellular wwan modem sim apn roaming data usage dns ip address metered captive portal"
+            }
             Self::Bluetooth => "headphones devices pair",
             Self::Appearance => "wallpaper background accent colour color theme dark light",
             Self::Accessibility => {
@@ -173,8 +168,7 @@ impl PageId {
 
     pub fn icon(self) -> Icon {
         match self {
-            Self::WiFi => Icon::Network,
-            Self::Network => Icon::NetworkWired,
+            Self::Network => Icon::Network,
             Self::Bluetooth => Icon::Bluetooth,
             Self::Appearance => Icon::Appearance,
             Self::Accessibility => Icon::Accessibility,
@@ -195,8 +189,7 @@ impl PageId {
     /// The canonical panel name, as accepted on the command line.
     pub fn panel_name(self) -> &'static str {
         match self {
-            Self::WiFi => "wifi",
-            Self::Network => "wired",
+            Self::Network => "network",
             Self::Bluetooth => "bluetooth",
             Self::Appearance => "background",
             Self::Accessibility => "accessibility",
@@ -220,8 +213,8 @@ impl PageId {
     /// the shell's launch sites already pass.
     pub fn from_panel(name: &str) -> Option<Self> {
         Some(match name {
-            "wifi" | "network" | "wi-fi" => Self::WiFi,
-            "wired" | "ethernet" => Self::Network,
+            "network" | "wifi" | "wi-fi" | "wired" | "ethernet" | "vpn" | "mobile" | "wwan"
+            | "cellular" | "proxy" | "usage" | "data-usage" => Self::Network,
             "bluetooth" => Self::Bluetooth,
             "background" | "appearance" => Self::Appearance,
             "accessibility" | "a11y" => Self::Accessibility,
@@ -244,7 +237,6 @@ impl PageId {
     /// its hook state is dropped when the user switches pages.
     pub fn render(self) -> Element {
         match self {
-            Self::WiFi => wifi::WifiPage.into(),
             Self::Network => network::NetworkPage.into(),
             Self::Bluetooth => bluetooth::BluetoothPage.into(),
             Self::Appearance => appearance::AppearancePage.into(),

@@ -19,21 +19,33 @@ with a page name starts on that page.
 - Search for "Settings" or open it from the dock and the Control Centre.
 - Right-click the wallpaper for Change Background… or Display Settings.
 - From a terminal: `bingux-settings [ADDRESS]` or `binguxctl settings [ADDRESS]`.
-- From a link or `xdg-open`: `xdg-open bingux-settings://wifi/saved`. The desktop entry registers the `bingux-settings` scheme.
+- From a link or `xdg-open`: `xdg-open bingux-settings://network/wifi/saved`. The desktop entry registers the `bingux-settings` scheme.
 
 Panels: `network`, `bluetooth`, `background` (Appearance), `desktop`,
 `search`, `display`, `sound`, `power`, `keyboard`, `mouse`, `datetime`,
 `users`, `applications`, `accessibility`, `about`. An unknown or omitted panel opens the
-first page. An address names a page or a subpage. The scheme and the
+first page. An address names a page or a subpage. The old Network addresses
+still work: `wifi`, `wifi/saved`, `wifi/network/<ssid>`, `wired`, `wired/<device>`
+and `wired/vpn/<name>` open the matching screen below `network/`, and the shell's
+`network`, `ethernet` and `vpn` open the Network page. The scheme and the
 `bingux-settings://` prefix may be left off on the command line:
 
 | Address                       | Opens                                                                |
 | ----------------------------- | -------------------------------------------------------------------- |
-| `wifi`                        | Wi-Fi page                                                           |
-| `wifi/saved`                  | Saved networks subpage                                               |
-| `wifi/network/<ssid>`         | A Wi-Fi network's details                                            |
-| `wired/<device>`              | A wired connection's details                                         |
-| `wired/vpn/<name>`            | A VPN's details                                                      |
+| `network`                     | The Network page (Wi-Fi, Ethernet, mobile, VPN)                      |
+| `network/wifi`                | Wi-Fi networks                                                       |
+| `network/wifi/saved`          | Saved networks                                                       |
+| `network/wifi/hotspot`        | Wi-Fi hotspot                                                        |
+| `network/wifi/network/<ssid>` | A Wi-Fi network's details and settings                               |
+| `network/ethernet/<device>`   | A wired device                                                       |
+| `network/ethernet/<device>/profile/<name>` | One wired connection profile                            |
+| `network/vpn/<name>`          | A VPN's details and settings                                         |
+| `network/add-vpn`             | Add a VPN (`/wireguard`, `/openvpn`, `/import`, or a plugin's name)  |
+| `network/mobile`              | Mobile network (also `mobile`, `wwan`, `cellular`)                   |
+| `network/proxy`               | System proxy                                                         |
+| `network/usage`               | Data usage (`/interface/<name>`, `/connection/<name>`)              |
+| `<connection screen>/<section>` | A connection's section: `ipv4`, `ipv6`, `dns`, `security`, `identity`, `proxy`, `advanced`, and for a VPN `tunnel` and `tunnel/peer/<n>`, for example `network/ethernet/enp42s0/profile/Wired%20connection%201/ipv4` |
+| `network/details/<connection>` | A connection's addresses, DNS and routes                            |
 | `bluetooth/<mac>`             | A Bluetooth device's details                                         |
 | `applications/default`        | Default applications                                                 |
 | `applications/default/<kind>` | One default application kind, such as `applications/default/browser` |
@@ -126,13 +138,6 @@ The account page opens with a large initials tile, the full name and the account
 Password appears only on the signed-in account. It is one row, Your password, with a Change password button. The button opens a popup titled Change password, with a caption, Current, New and Retype rows and a Change button. While the change runs the popup stays open with a "Changing your password..." line, and a second press is ignored. If the new passwords differ a caption says so as you type. A failed change keeps the fields and shows the reason in the popup; success closes the popup and a toast confirms it.
 Each account row has a right-click menu with Open, and Change password for the signed-in account. If the list cannot load, the page shows the error with a Try again action.
 
-Wi-Fi opens Network details from the settings button on a saved or connected
-network, or from pressing the connected network. The page shows the signal
-icon, the name and the state (Connected, Saved, Out of range), then a strip of
-actions: Connect or Disconnect, and for a saved network Forget and Settings.
-Forget asks first and returns to the list. Settings opens the connection
-editor with the Details, Identity, IPv4, IPv6 and Security tabs. Below the strip are the signal
-strength in words, the frequency band, the security and the speed.
 Date and Time opens the time zone as a searchable list of cities. The
 zone list shows each UTC offset only for
 the selected zone. Set date and time opens a popup with Date (day, month and
@@ -162,7 +167,7 @@ way round.
 | Desktop, Search | `bingux-config` (`~/.config/bingux/bingux.toml`)                                                                                                                                          | Same validation as `bingux-config set`. See [configuration](configuration.md).                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Displays        | `org.gnome.Mutter.DisplayConfig` over D-Bus, GSettings night light                                                                                                                        | Drag a display to place it; right-click it for Make main, Rotate, Disable or Settings. Apply appears under the arrangement, and on a display's own page, only once the layout has changed. It tries the layout for 15 seconds and reverts unless kept; Keep writes a persistent layout (`~/.config/monitors.xml`). Each display is a row that opens its own page. With several displays, Identify sits on the Displays header and numbers each one. Night light can follow a schedule.                                                                   |
 | Sound           | `wpctl` (WirePlumber)                                                                                                                                                                     | Default devices (inline list, or a subpage with three or more), device kind icons from device properties, volumes, mute, and a row for each application.                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Network         | `nmcli` (NetworkManager)                                                                                                                                                                  | Wi-Fi, airplane mode. Each wired connection and each VPN is a row that opens its details subpage, with the same connect and disconnect actions as its right-click menu.                                                                                                                                                                                                                                                                                                                                                                                  |
+| Network         | `nmcli` (NetworkManager), `mmcli` (ModemManager), GSettings `org.gnome.system.proxy`, `bingux-data-usage` | See [Network](#network). |
 | Bluetooth       | `bluetoothctl` (BlueZ)                                                                                                                                                                    | Power, visibility, scan, pair, connect, auto-connect, forget. Each device is a row that opens its Device details subpage.                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Power           | `powerprofilesctl`, `upower`, GSettings session and screensaver                                                                                                                           | Blank screen and lock delays. The power mode cards apply at once and go back if the change is refused.                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Keyboard, Mouse | GSettings `org.gnome.desktop.peripherals.*`, `gnoblinctl input`                                                                                                                           | See the note below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -174,20 +179,157 @@ way round.
 On Search, the Search subfolders row under File search is Nautilus's GSettings key `org.gnome.nautilus.preferences recursive-search` (Always, Local folders only, Never). It is hidden when that key cannot be read. Each change applies at once and returns to the old value with a toast if the write fails.
 
 A page can replace the sentence under its title with its current state when
-that helps (the connection on Wi-Fi and Network, the battery level on Power).
+that helps (the connection on Network, the battery level on Power).
 A failed change shows a toast instead of an inline message, and a page whose
 tool is missing shows a readable error with a Try again action where that
 makes sense.
 
-On Wi-Fi, Network, Bluetooth and Displays, each item (a Wi-Fi network, a wired connection, a VPN, a Bluetooth device or a display) is a row that opens its own detail subpage, titled with the item's name. Right-clicking a network, device or display opens the same actions as its subpage.
+On Network, Bluetooth and Displays, each item (a Wi-Fi network, a wired connection, a VPN, a Bluetooth device or a display) is a row that opens its own detail subpage, titled with the item's name. Right-clicking a network, device or display opens the same actions as its subpage.
 
-A wired connection's details page has a Settings action that opens the connection editor with the Details, Identity, IPv4 and IPv6 tabs. Details holds Connect automatically, Priority and Metered connection. Identity holds the connection name and a Hardware group: Cloned MAC address, MTU (Automatic or a size in bytes, 576 or more) and Wake on LAN. IPv4 and IPv6 each hold Method, Addresses, Gateway, DNS servers, Search domains, Automatic DNS and routes, and Use this connection only for resources on its network. IPv6 also has Privacy extensions. A text row the method hides is cleared on Apply. Apply writes the changed values in one `nmcli connection modify` call; if it fails, a toast shows the reason and the editor stays open.
+## Network
+
+One Network page covers Wi-Fi, wired Ethernet, mobile broadband, VPNs, the
+proxy and data usage. It is a summary and a list of connections; each
+connection opens its own screen, and nothing is edited in a popup. Popups stay
+only for short prompts: a Wi-Fi password, a hidden network's name, the Wi-Fi
+share code, a SIM PIN, and Forget or Delete confirmations.
+
+### The page
+
+- **Summary.** The title's sentence says what you are online through (for
+  example "Online through Ethernet", "Offline", "Sign-in required", "Airplane
+  mode"). The first group shows the active connection with its internet state,
+  the IP address, gateway and DNS, and a Data usage row with today's totals.
+  When NetworkManager reports a captive portal, a Sign-in required row opens
+  the sign-in page in the browser.
+- **Airplane mode** blocks every radio (`rfkill`). While it is on, the Wi-Fi and
+  Mobile rows say "Off in airplane mode" and their switches are disabled.
+- **Connections.** One row per Wi-Fi radio, per wired device and, when a modem
+  exists, for mobile broadband. Each row shows its state (for example
+  "Connected to Home · 5 GHz", "Connected · 1 Gbit/s · 192.168.0.72", "Cable
+  unplugged", "Carrier · 5G"), has a switch where the connection has one, and
+  opens its screen. A computer with no Wi-Fi hardware or no modem has no row for it.
+- **VPN.** One row per VPN with a switch (a failed connect shows "Failed:" and
+  the reason until the next try) and an Add VPN row.
+- **More.** Proxy and Wi-Fi hotspot.
+
+If NetworkManager cannot be asked, the page shows the error with Try again.
+
+### Wi-Fi
+
+`network/wifi` lists the connected network first, then the networks in range
+(sorted by name, so rows do not move while you read), then Saved networks,
+Connect to hidden network and Wi-Fi hotspot. The header switch is the Wi-Fi
+radio. Pressing a new secured network asks for its password in a small popup that
+stays open while it connects and shows a wrong password there; saved and open
+networks connect at once. A network's screen shows signal, band, security, speed,
+BSSID and IP, then Connect or Disconnect, Share and Forget. Share shows a QR
+code (`WIFI:T:WPA;S:name;P:password;;`), the name, and the password with
+Show and Copy. The hotspot is a subpage (name, password of 8 or more
+characters, band) with Turn on, Share and Turn off.
+
+### Connection settings
+
+Every connection screen (a Wi-Fi network, a wired profile, a VPN) shows its
+state, then a General group that applies at once: Connect automatically,
+Priority, Available to other users and Metered connection. Below it, rows open
+subpages for the larger sections, each a normal page:
+
+| Subpage  | Holds                                                                                   |
+| -------- | --------------------------------------------------------------------------------------- |
+| IPv4     | Automatic (DHCP) first; Manual shows addresses, gateway and routes; Link-local, Shared, Disabled |
+| IPv6     | The same, plus Ignore and privacy extensions                                            |
+| DNS      | Automatic DNS switch, a list of servers, search domains (the DNS override)              |
+| Security | Wi-Fi key type and password; 802.1X (EAP method, identity, certificates) for wired and Wi-Fi Enterprise |
+| Identity | Name, MAC address (preserve, random, stable, custom), MTU, Wake on LAN                  |
+| Proxy    | The connection's own proxy: none or a PAC URL                                           |
+| Advanced | DHCP hostname and client ID, route metric, may-fail, mDNS and LLMNR, retries            |
+
+Switches and dropdowns write with `nmcli connection modify` as you change
+them and go back with a toast if that fails. Fields that must apply together
+(manual addresses and gateway, 802.1X, passwords) show an
+Unsaved changes bar with Revert and Apply, only while something differs; Apply is
+disabled while any field is invalid, and invalid text is never written. After a
+change to a running connection, Settings runs `nmcli device reapply`; if
+NetworkManager refuses, a toast offers Reconnect. A wired device's screen
+lists every profile for it (the active one is marked), and Add profile creates one.
+Each connection also has a Connection details row (addresses, gateway, DNS,
+routes, MAC, MTU, speed, and Wi-Fi facts; read-only, with the saved configuration
+when it is not active) and a Data usage row.
+
+### VPN
+
+A VPN's screen has Connect or Disconnect, Delete (with a confirmation), its
+status (type, device, assigned IP, last error), a Tunnel subpage, and the
+General group and subpages above. Types are found at run time: WireGuard is built in, and
+every NetworkManager VPN plugin whose `.name` file is in
+`/usr/lib/NetworkManager/VPN` or `/etc/NetworkManager/VPN` (OpenVPN, OpenConnect,
+VPNC, SSH...) is offered; a plugin that is not installed is not listed.
+
+- **Add VPN** (`network/add-vpn`) lists the types and Import from file. Import takes
+  a WireGuard `.conf`, an OpenVPN `.ovpn` or a plugin's own format through the file
+  chooser. The manual WireGuard form takes a name, private key, addresses, DNS and a
+  first peer; it is written as a mode-0600 wg-quick file, imported, and removed.
+  A failed creation shows `nmcli`'s message in the form.
+- **Tunnel.** WireGuard: interface (private key, listen port, addresses, DNS, MTU,
+  fwmark) and Peers, each a subpage (public key, preshared key, endpoint, allowed
+  IPs with a Route all traffic switch, keepalive). Peers are read and written through
+  NetworkManager's D-Bus API, because `nmcli` 1.54 cannot. A change to a running
+  WireGuard tunnel applies after turning it off and on. Plugin VPNs show their
+  friendly fields (gateway, user name, authentication, password handling) and
+  an Advanced list of every `vpn.data` key.
+
+### Mobile network
+
+`network/mobile` (also `mobile`, `wwan`, `cellular`) uses ModemManager (`mmcli`)
+and NetworkManager. It shows carrier, technology (2G to 5G), signal, registration and
+roaming state, then Mobile data, Data roaming, Network (Automatic, or choose a
+carrier from a scan), Preferred network type (from the modem's supported modes),
+Access point names (a list; each APN is a subpage with name, APN, user name,
+password, authentication and IP type), SIM (Lock SIM with PIN, Change PIN, Unlock
+with PIN or PUK, attempts left), Data usage, and the modem's manufacturer, model,
+firmware, IMEI and number. Without a modem the address shows "No mobile broadband
+device." and the page has no Mobile row. A locked SIM shows only the unlock entry.
+
+### Proxy
+
+`network/proxy` edits `org.gnome.system.proxy`, the keys GNOME Settings uses:
+Method (None, Manual, Automatic), then host and port for HTTP, HTTPS, FTP and
+SOCKS (or one proxy for every protocol), Ignore hosts, or the Configuration URL.
+The method applies at once; the fields apply together with the Unsaved changes bar.
+
+### Data usage
+
+`network/usage` (also `usage`, `data-usage`; `/interface/<name>` and
+`/connection/<name>` narrow it) shows received and sent totals for Today, This week,
+This month, the billing cycle and a custom range, a chart (hourly for Today, daily
+otherwise), the same totals By interface and By connection (with a Metered badge),
+and Since boot from the kernel counters. The Limit group sets the billing cycle's
+start day, a monthly limit with a unit, and the percentage to warn at; a warning or
+error line shows on the page and as a badge on the Network page's Data usage row.
+A connection page can override the limit. Usage per application is not available:
+this system has no per-process network accounting, and the page says so.
+
+History comes from a recorder inside `bingux-statusd`, which samples
+`/sys/class/net/<interface>/statistics/{rx,tx}_bytes` every 60 seconds for
+Ethernet, Wi-Fi, mobile and VPN interfaces. When `vnstat` is installed and has
+data, Settings reads that instead. The recorder's database is
+`$XDG_DATA_HOME/bingux/data-usage.sqlite3` (`~/.local/share/bingux/` by default), SQLite in WAL
+mode with a versioned schema; minute samples are kept 7 days, hourly totals 90 days
+and daily totals forever. The totals for All leave out VPN interfaces, so tunnelled
+traffic is not counted twice. See `packages/bingux-data-usage/README.md` for the
+schema and the reader API. If no sample is recent, the page says "The data usage
+recorder is not running."
+
+Check the page with `BINGUX_SETTINGS_FAKE_NETWORK=<online|wifi-off|wifi-only|airplane|no-wifi|offline|portal|modem>`
+and `BINGUX_SETTINGS_FAKE_MODEM=<ok|no-sim|locked|roaming|none|puk|pin-lock>` on a
+`--features snapshot` build; they replace what `nmcli` and `mmcli` report and change nothing.
 
 ## Search
 
 The sidebar search finds pages first, then settings. Each settings row shows
 the page it lives on under its title. Up and Down move through the results,
-Enter opens the highlighted one, and Esc clears the search. A query that matches a page's own name or keywords, such as "sound", lists that page as a block with a row that opens it, followed by its matching index entries (at most eight in all); its controls are not filtered. Pages that list their index entries (Wi-Fi, Bluetooth, Displays and Applications) show at most eight per page; a longer query narrows them. Other pages show the controls whose labels match. Ctrl+F moves focus to the search field. The list of searchable settings
+Enter opens the highlighted one, and Esc clears the search. A query that matches a page's own name or keywords, such as "sound", lists that page as a block with a row that opens it, followed by its matching index entries (at most eight in all); its controls are not filtered. Pages that list their index entries (Network, Bluetooth, Displays and Applications) show at most eight per page; a longer query narrows them. Other pages show the controls whose labels match. Ctrl+F moves focus to the search field. The list of searchable settings
 is `src/settings_index.rs`; add a row there when a page gains a setting, with
 plain words a person might type in the keywords column.
 
@@ -288,7 +430,7 @@ A write that fails puts the previous value back and a toast says why.
 
 The Appearance page starts with a preview of the wallpaper on the desktop. Right-click the preview for Choose picture and Use system wallpaper.
 
-Wallpaper is a picker, a titled group with a search field and a source menu (All, Yours or System). The first tile is Add picture, which opens a file picker. The second is System background, which goes back to the picture that came with the system. The other tiles are the pictures, shown as thumbnails in four columns (two on a touch screen). The chosen picture has a check mark. Search filters by file name, and a source with no matches says so. Thumbnails are decoded in the background, and the choice is written to `desktop.wallpaper` in `bingux-config`.
+Wallpaper is a picker, a titled group with a search field and a source menu (All, Yours or System). The first tile is Add picture, which opens the Bingux file chooser on your Pictures folder as a grid of thumbnails, limited to PNG, JPEG, WebP, JPEG XL and AVIF files (see [bingux-ui](bingux-ui.md#files-and-the-file-chooser)). The Search page's "Add a folder" opens the same chooser to select a folder. The second tile is System background, which goes back to the picture that came with the system. The other tiles are the pictures, shown as thumbnails in four columns (two on a touch screen). The chosen picture has a check mark. Search filters by file name, and a source with no matches says so. Thumbnails are decoded in the background, and the choice is written to `desktop.wallpaper` in `bingux-config`.
 
 Font is one summary row that shows the current font on the right. Pressing it opens the Font subpage, which has the full list and search (see Font below). The font is not also shown inline.
 
@@ -423,7 +565,7 @@ back. It then compares consecutive idle frames with PIL and numpy and writes
 
 ```sh
 python3 scripts/frame-walk.py                  # every page
-python3 scripts/frame-walk.py --pages wifi,sound --timeout 300
+python3 scripts/frame-walk.py --pages network,sound --timeout 300
 python3 scripts/frame-walk.py --skip-run       # re-analyse frames already kept
 ```
 

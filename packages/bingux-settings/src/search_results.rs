@@ -39,7 +39,7 @@ const MAX_INDEX_ROWS: usize = 8;
 fn index_only(page: PageId) -> bool {
     matches!(
         page,
-        PageId::WiFi | PageId::Bluetooth | PageId::Displays | PageId::Applications
+        PageId::Network | PageId::Bluetooth | PageId::Displays | PageId::Applications
     )
 }
 

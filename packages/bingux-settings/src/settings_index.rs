@@ -6,28 +6,62 @@ use crate::pages::PageId;
 
 /// Page, visible title, and extra words to match.
 const SETTINGS: &[(PageId, &str, &str)] = &[
-    (PageId::WiFi, "Wi-Fi", "wireless internet on off radio"),
+    (PageId::Network, "Wi-Fi", "wireless internet on off radio"),
     (
-        PageId::WiFi,
+        PageId::Network,
         "Airplane mode",
         "flight offline radios disable wireless",
     ),
     (
-        PageId::WiFi,
+        PageId::Network,
         "Connect to hidden network",
         "ssid hidden join add network",
     ),
     (
-        PageId::WiFi,
+        PageId::Network,
         "Saved networks",
         "remembered forget passwords known",
     ),
     (
-        PageId::WiFi,
+        PageId::Network,
         "Wi-Fi hotspot",
         "share tether access point internet sharing",
     ),
-    (PageId::Network, "Wired", "ethernet cable lan connection"),
+    (
+        PageId::Network,
+        "Wired",
+        "ethernet cable lan connection profile 802.1x",
+    ),
+    (
+        PageId::Network,
+        "Add VPN",
+        "wireguard openvpn import ovpn conf openconnect vpnc tunnel",
+    ),
+    (
+        PageId::Network,
+        "Proxy",
+        "system proxy http https socks pac automatic manual ignore hosts",
+    ),
+    (
+        PageId::Network,
+        "Data usage",
+        "bandwidth traffic downloaded uploaded limit billing cycle monthly warning metered",
+    ),
+    (
+        PageId::Network,
+        "Mobile network",
+        "cellular mobile data sim apn roaming carrier 4g 5g lte modem imei pin",
+    ),
+    (
+        PageId::Network,
+        "Share Wi-Fi network",
+        "qr code password reveal copy share wifi",
+    ),
+    (
+        PageId::Network,
+        "Connection details",
+        "ip address gateway dns routes mac mtu speed",
+    ),
     (
         PageId::Network,
         "VPN",
@@ -79,7 +113,7 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
         "never default route gateway",
     ),
     (
-        PageId::WiFi,
+        PageId::Network,
         "Random MAC address",
         "mac hardware address randomise randomize privacy",
     ),
