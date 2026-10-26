@@ -50,7 +50,7 @@ mkdir -p "$SOURCES" "$ROOT/distro/out"
 # quick `--step package:bingux-os` needs neither a clean tree nor Gnoblin.
 case "$STEP" in
     all | packages) need_bingux=1 need_gnoblin=1 ;;
-    package:bingux) need_bingux=1 need_gnoblin=0 ;;
+    package:bingux | package:bsm) need_bingux=1 need_gnoblin=0 ;;
     package:gnoblin) need_bingux=0 need_gnoblin=1 ;;
     *) need_bingux=0 need_gnoblin=0 ;;
 esac

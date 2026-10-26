@@ -41,7 +41,7 @@ distro/build.sh --gnoblin ~/dev/gnoblin
   script makes `arch-chroot` bind the container's `/dev` because a user
   namespace cannot mount devtmpfs.
 - `--step packages` stops after the pacman repository in `distro/out/repo`;
-  `--step iso` reuses it. `--step package:NAME` rebuilds one package against
+  `--step iso` reuses it. `--step package:NAME` (`package:bsm` regenerates the Bingux archive like `package:bingux`) rebuilds one package against
   that repository, which is the quick loop for PKGBUILD changes. A step
   regenerates only the sources it uses, so `package:bingux-os` needs neither
   a clean tree nor Gnoblin.
