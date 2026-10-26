@@ -133,6 +133,7 @@ pub(crate) struct State {
     #[allow(dead_code)]
     pub output_manager_state: OutputManagerState,
     pub layer_shell_state: WlrLayerShellState,
+    pub xdg_shell_state: XdgShellState,
     #[allow(dead_code)]
     pub viewporter_state: ViewporterState,
     #[allow(dead_code)]
@@ -204,6 +205,7 @@ gated_global!(WlShm, (), ShmState, GlobalKind::WlShm);
 gated_global!(WlSeat, SeatGlobalData<State>, SeatState<State>, GlobalKind::WlSeat);
 gated_global!(WlOutput, WlOutputData, OutputManagerState, GlobalKind::WlOutput);
 gated_global!(ZxdgOutputManagerV1, (), OutputManagerState, GlobalKind::XdgOutput);
+gated_global!(XdgWmBase, (), XdgShellState, GlobalKind::XdgShell);
 gated_global!(WpViewporter, (), ViewporterState, GlobalKind::Viewporter);
 gated_global!(
     WpFractionalScaleManagerV1,
@@ -218,6 +220,14 @@ use smithay::reexports::wayland_server::protocol::{wl_region, wl_shm_pool, wl_su
 use smithay::wayland::compositor::{RegionUserData, SubsurfaceUserData, SurfaceUserData};
 use smithay::wayland::shm::{ShmBufferUserData, ShmPoolUserData};
 use smithay::wayland::viewporter::ViewportState;
+use smithay::reexports::wayland_protocols::xdg::shell::server::{
+    xdg_popup::XdgPopup, xdg_positioner::XdgPositioner, xdg_surface::XdgSurface,
+    xdg_toplevel::XdgToplevel, xdg_wm_base::XdgWmBase,
+};
+use smithay::wayland::shell::xdg::{
+    PopupSurface, PositionerState, ToplevelSurface, XdgPositionerUserData, XdgShellHandler, XdgWmBaseUserData,
+    XdgShellState, XdgShellSurfaceUserData, XdgSurfaceUserData,
+};
 use smithay::wayland::output::{OutputUserData, XdgOutputUserData};
 use smithay::reexports::wayland_protocols::xdg::xdg_output::zv1::server::zxdg_output_v1::ZxdgOutputV1;
 use smithay::reexports::wayland_protocols::wp::viewporter::server::wp_viewport::WpViewport;
@@ -249,6 +259,11 @@ delegate_dispatch!(State: [WpFractionalScaleV1: Weak<WlSurface>] => FractionalSc
 delegate_dispatch!(State: [WpPresentation: u32] => PresentationState);
 delegate_dispatch!(State: [WpPresentationFeedback: ()] => PresentationFeedbackState);
 delegate_layer_shell!(State);
+delegate_dispatch!(State: [XdgWmBase: XdgWmBaseUserData] => XdgShellState);
+delegate_dispatch!(State: [XdgPositioner: XdgPositionerUserData] => XdgShellState);
+delegate_dispatch!(State: [XdgPopup: XdgShellSurfaceUserData] => XdgShellState);
+delegate_dispatch!(State: [XdgSurface: XdgSurfaceUserData] => XdgShellState);
+delegate_dispatch!(State: [XdgToplevel: XdgShellSurfaceUserData] => XdgShellState);
 delegate_dmabuf!(State);
 
 // ---------------------------------------------------------------------------------
@@ -367,6 +382,35 @@ impl WlrLayerShellHandler for State {
             }
         }
         self.needs_redraw = true;
+    }
+}
+
+impl XdgShellHandler for State {
+    fn xdg_shell_state(&mut self) -> &mut XdgShellState {
+        &mut self.xdg_shell_state
+    }
+
+    // Only the greeter sees `xdg_wm_base`, and only so that Qt can start. Toplevels and
+    // popups are acknowledged and configured, never mapped into the scene.
+    fn new_toplevel(&mut self, surface: ToplevelSurface) {
+        surface.send_configure();
+    }
+
+    fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
+        let _ = surface.send_configure();
+    }
+
+    fn grab(&mut self, surface: PopupSurface, _seat: smithay::reexports::wayland_server::protocol::wl_seat::WlSeat, _serial: smithay::utils::Serial) {
+        // No popup grabs: nothing is ever shown, so there is nothing to grab for.
+        surface.send_popup_done();
+    }
+
+    fn reposition_request(&mut self, surface: PopupSurface, positioner: PositionerState, token: u32) {
+        surface.with_pending_state(|s| {
+            s.geometry = positioner.get_geometry();
+            s.positioner = positioner;
+        });
+        surface.send_repositioned(token);
     }
 }
 
@@ -661,6 +705,7 @@ pub(crate) fn run(
     let layer_shell_state = WlrLayerShellState::new_with_filter::<State, _>(&dh, |c| {
         client_may_see(c, GlobalKind::LayerShell)
     });
+    let xdg_shell_state = XdgShellState::new::<State>(&dh);
     let viewporter_state = ViewporterState::new::<State>(&dh);
     let fractional_scale_state = FractionalScaleManagerState::new::<State>(&dh);
     let presentation_state = PresentationState::new::<State>(&dh, libc::CLOCK_MONOTONIC as u32);
@@ -691,6 +736,7 @@ pub(crate) fn run(
         shm_state,
         output_manager_state,
         layer_shell_state,
+        xdg_shell_state,
         viewporter_state,
         fractional_scale_state,
         presentation_state,

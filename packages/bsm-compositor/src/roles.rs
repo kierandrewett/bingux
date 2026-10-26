@@ -26,6 +26,10 @@ pub enum GlobalKind {
     WlOutput,
     XdgOutput,
     LayerShell,
+    /// `xdg_wm_base`: Qt's Wayland platform plugin refuses to start without a shell
+    /// integration. The greeter may create toplevels and popups, but they are accepted
+    /// and never composed: only layer surfaces reach the screen.
+    XdgShell,
     Viewporter,
     FractionalScale,
     LinuxDmabuf,
@@ -48,6 +52,7 @@ pub fn may_see(role: &Role, kind: GlobalKind) -> bool {
                 | WlOutput
                 | XdgOutput
                 | LayerShell
+                | XdgShell
                 | Viewporter
                 | FractionalScale
                 | LinuxDmabuf
@@ -100,7 +105,7 @@ mod tests {
     fn hosted_sees_exactly_the_documented_set() {
         use GlobalKind::*;
         let seen: Vec<_> = [
-            WlCompositor, WlSubcompositor, WlShm, WlSeat, WlOutput, XdgOutput, LayerShell,
+            WlCompositor, WlSubcompositor, WlShm, WlSeat, WlOutput, XdgOutput, LayerShell, XdgShell,
             Viewporter, FractionalScale, LinuxDmabuf, Presentation, SessionHost,
         ]
         .into_iter()

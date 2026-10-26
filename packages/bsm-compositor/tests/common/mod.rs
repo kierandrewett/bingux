@@ -30,6 +30,29 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
     self, Anchor, KeyboardInteractivity, ZwlrLayerSurfaceV1,
 };
 
+use wayland_protocols::xdg::shell::client::xdg_surface::{self, XdgSurface};
+use wayland_protocols::xdg::shell::client::xdg_toplevel::{self, XdgToplevel};
+use wayland_protocols::xdg::shell::client::xdg_wm_base::{self, XdgWmBase};
+
+impl Dispatch<XdgWmBase, ()> for App {
+    fn event(_: &mut Self, base: &XdgWmBase, ev: xdg_wm_base::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {
+        if let xdg_wm_base::Event::Ping { serial } = ev {
+            base.pong(serial);
+        }
+    }
+}
+impl Dispatch<XdgSurface, ()> for App {
+    fn event(app: &mut Self, s: &XdgSurface, ev: xdg_surface::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {
+        if let xdg_surface::Event::Configure { serial } = ev {
+            s.ack_configure(serial);
+            app.xdg_configures += 1;
+        }
+    }
+}
+impl Dispatch<XdgToplevel, ()> for App {
+    fn event(_: &mut Self, _: &XdgToplevel, _: xdg_toplevel::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {}
+}
+
 pub mod bsm {
     use wayland_client;
     use wayland_client::protocol::*;
@@ -75,6 +98,7 @@ pub struct App {
     pub presented: Vec<(u32, u32)>, // (surface proto id, seq)
     pub closed: bool,
     pub releases: u32,
+    pub xdg_configures: u32,
     pub layer_closed: u32,
     seat: Option<WlSeat>,
     keyboard: Option<WlKeyboard>,
@@ -363,6 +387,22 @@ impl Client {
             surface.commit();
         }
         self.roundtrip().unwrap();
+    }
+
+    /// What Qt does at start-up: bind xdg_wm_base and create a toplevel, paint it.
+    pub fn xdg_toplevel_paint(&mut self, fill: &Fill) {
+        let qh = self.qh.clone();
+        let base: XdgWmBase = self.globals.bind(&qh, 1..=6, ()).expect("xdg_wm_base");
+        let surface = self.compositor.clone().unwrap().create_surface(&qh, ());
+        let xs = base.get_xdg_surface(&surface, &qh, ());
+        let _tl = xs.get_toplevel(&qh, ());
+        surface.commit();
+        self.roundtrip().expect("toplevel configure");
+        let buf = make_buffer(self.shm.as_ref().unwrap(), &qh, 64, 48, fill);
+        surface.attach(Some(&buf), 0, 0);
+        surface.damage_buffer(0, 0, 64, 48);
+        surface.commit();
+        self.roundtrip().expect("toplevel commit");
     }
 
     // ----- session bridge behaviour -----

@@ -45,6 +45,7 @@ features = ["wayland_frontend", "desktop", "renderer_pixman"]
 
 [dev-dependencies]
 wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client"] }
 wayland-protocols-wlr = { version = "0.3", features = ["client"] }
 env_logger = "0.11"
 

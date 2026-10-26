@@ -85,11 +85,16 @@ ungated global dispatchers, so only their non-global halves are used).
 | `wl_output`                 | yes     | yes         |
 | `zxdg_output_manager_v1`    | yes     | no          |
 | `zwlr_layer_shell_v1`       | yes     | no          |
+| `xdg_wm_base`               | yes (**) | no         |
 | `wp_viewporter`             | yes     | no          |
 | `wp_fractional_scale_manager_v1` | yes | no         |
 | `zwp_linux_dmabuf_v1`       | yes     | yes         |
 | `wp_presentation`           | yes     | no          |
 | `bsm_session_host_v1`       | no      | yes         |
+
+(**) Qt's Wayland plugin will not start without a shell integration. The greeter may create
+toplevels and popups; they are configured and acknowledged but never composed, never get
+focus and popup grabs are dismissed at once. **tested** (`greeter_xdg_toplevels_are_accepted_but_never_composed`).
 
 (*) An addition to the table in the architecture page: Qt binds `wl_subcompositor`.
 It creates no capability and hosted clients do not get it.
@@ -284,7 +289,7 @@ is measured by the bridge side (shm copy today).
 Run in `packages/bsm-compositor` (`CARGO_TARGET_DIR=/tmp/bsm-target/bsm-compositor`):
 
 ```text
-cargo test        # 48 tests: 21 unit, 4 extras, 11 frames, 12 security
+cargo test        # 49 tests: 21 unit, 4 extras, 11 frames, 13 security
 ```
 
 All passed, repeatedly (six consecutive runs without a failure). Artifacts are written to
@@ -303,7 +308,7 @@ composed frame (`frames/frame-<seq>-<output>.png`) and `trajectory.csv`
 | Power fade holds, refused fades back    | `frames::power_fade_holds_the_cover_and_a_refused_power_action_fades_back`                     |
 | Greeter crash                           | `frames::greeter_crash_while_protected_shows_the_opaque_cover_until_a_greeter_returns`         |
 | Hotplug while protected / foreground    | `frames::output_changes_never_expose_a_protected_session`, `frames::a_foreground_session_with_an_unproven_new_output_is_not_composed` |
-| Roles, rejections, protocol errors      | `security.rs` (12 tests)                                                                       |
+| Roles, rejections, protocol errors      | `security.rs` (13 tests)                                                                       |
 | Engine invariants                       | `engine::tests` (15 tests), `peer::tests`, `roles::tests`                                      |
 
 The tests drive the real compositor thread with real Wayland clients over real sockets.

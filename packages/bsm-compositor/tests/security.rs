@@ -35,12 +35,28 @@ fn greeter_registry_is_exactly_the_documented_set() {
             ("wp_fractional_scale_manager_v1".to_string(), 1),
             ("wp_presentation".to_string(), 1),
             ("wp_viewporter".to_string(), 1),
+            ("xdg_wm_base".to_string(), 1),
             ("zwlr_layer_shell_v1".to_string(), 1),
             ("zwp_linux_dmabuf_v1".to_string(), 1),
             ("zxdg_output_manager_v1".to_string(), 1),
         ]
     );
     assert!(!iface_names(&c).iter().any(|n| n == "bsm_session_host_v1"));
+}
+
+#[test]
+fn greeter_xdg_toplevels_are_accepted_but_never_composed() {
+    let mut h = harness(1);
+    let mut c = connect_greeter(&mut h, 1, solid([10, 20, 30, 255]));
+    c.xdg_toplevel_paint(&solid([250, 0, 250, 255]));
+    assert!(c.app.xdg_configures >= 1, "the toplevel got its configure");
+    h.send(SceneCommand::ShowGreeterOnly);
+    let f = h.step(Duration::from_millis(16));
+    for y in 0..f[0].height {
+        for x in 0..f[0].width {
+            assert_eq!(f[0].pixel(x, y), [10, 20, 30, 255], "only the layer surface is composed");
+        }
+    }
 }
 
 #[test]
@@ -231,12 +247,14 @@ fn greeter_connection_needs_the_registered_uid_and_pid() {
     assert!(!h.events().iter().any(|e| matches!(e, SceneEvent::GreeterConnected { .. })));
     // Wrong uid.
     h.send(SceneCommand::RegisterGreeter { generation: 2, uid: my_uid() + 1, pid: std::process::id() });
+    h.sync();
     let mut raw = UnixStream::connect(&h.greeter_socket).unwrap();
     raw.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
     assert_eq!(raw.read(&mut [0u8; 8]).unwrap_or(0), 0, "wrong uid is closed");
     assert!(!h.events().iter().any(|e| matches!(e, SceneEvent::GreeterConnected { .. })));
     // Right credentials: accepted, exactly once.
     h.send(SceneCommand::RegisterGreeter { generation: 3, uid: my_uid(), pid: std::process::id() });
+    h.sync(); // the manager registers before the greeter is spawned
     let mut good = Client::connect(&h.greeter_socket).expect("registered greeter connects");
     h.wait_event(WAIT, |e| matches!(e, SceneEvent::GreeterConnected { generation: 3, .. })).unwrap();
     assert!(good.roundtrip().is_ok());
