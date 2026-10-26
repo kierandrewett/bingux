@@ -356,7 +356,7 @@ fn a_failed_launch_ends_in_a_visible_failure_with_retry_and_never_waits_forever(
     sim.bridge_to_gnoblin_ready(&sid);
     // Outputs never get configured: the stage times out.
     let mark = sim.mark();
-    sim.advance(std::time::Duration::from_secs(61));
+    sim.advance(std::time::Duration::from_secs(121));
     let failed = sim.m.retained_failure().expect("failure is kept for the greeter").clone();
     assert_eq!(failed.failure.as_ref().unwrap().stage, Stage::OutputsConfigured);
     assert_eq!(failed.failure.as_ref().unwrap().code, ErrorCode::Timeout);

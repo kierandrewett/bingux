@@ -146,7 +146,7 @@ are remembered but do not advance the bar until their predecessors are reached.
 | `DesktopReady`      | The `DesktopReady` report, accepted only once `SurfacesMapped` is reached, **and** on every output a presented frame after it (`presented_frames` above its value at the report; counted). |
 | `ReadyToReveal`     | Outputs unchanged since `OutputsConfigured`; the session becomes `ReadyBackground`.                                  |
 
-Per-stage timeouts (`stage_timeout` 60 s, `GnoblinReady` 90 s) end in `Failed` with the stage, the
+Per-stage timeouts (`stage_timeout` 120 s, `GnoblinReady` 120 s: a software GPU VM needs about 55 s from PAM to Bingux launched) end in `Failed` with the stage, the
 code (`timeout`) and a message in the progress model, which stays in the greeter snapshot until the
 user goes back (`CancelOperation`) or retries (a new `BeginAuth`). The failed session is closed
 (`CloseSession`) and removed once the helper reports its exit (or after `close_timeout`). A change of the
@@ -359,8 +359,8 @@ reboot = true
 poweroff = true
 
 [timeouts]                         # seconds
-stage = 60
-gnoblin_ready = 90
+stage = 120
+gnoblin_ready = 120
 auth = 120
 
 [transitions]                      # milliseconds

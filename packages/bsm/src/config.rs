@@ -21,8 +21,8 @@
 //! poweroff = true
 //!
 //! [timeouts]                         # seconds
-//! stage = 60
-//! gnoblin_ready = 90
+//! stage = 120
+//! gnoblin_ready = 120
 //! auth = 120
 //!
 //! [transitions]                      # milliseconds
