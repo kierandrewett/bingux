@@ -261,7 +261,9 @@ QtObject {
         const unlockOwner = kind === "unlock" && typeof mode.uid === "number" ? mode.uid : -1;
         const selected = typeof raw.selected_uid === "number" ? raw.selected_uid : -1;
 
-        const accountChanged = selected !== selectedUid || kind !== modeKind || unlockOwner !== unlockUid;
+        // bsm selects the account of every begin_auth: a selection that is the one
+        // we are authenticating is the confirmation, not a change.
+        const accountChanged = (selected !== selectedUid && selected !== authUid) || kind !== modeKind || unlockOwner !== unlockUid;
         revision = raw.revision;
         modeKind = kind;
         unlockUid = unlockOwner;

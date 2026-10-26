@@ -28,6 +28,11 @@ QtObject {
     property real lastRequest: 0
     // Request ids of the messages we are waiting on.
     property real authRequest: 0
+    // True from begin_auth until bsm answers it with a prompt or an error. bsm
+    // selects the account of every begin_auth, so a second begin_auth sent
+    // while the first is unanswered makes the two fight over the selection:
+    // each snapshot would trigger another begin_auth. At most one is in flight.
+    property bool awaitingFirstPrompt: false
     property real powerRequest: 0
     property real selectRequest: 0
     // Responses submitted since the conversation began; decides whether a
@@ -80,6 +85,7 @@ QtObject {
                 challenge_id: root.model.challengeId
             });
         authRequest = 0;
+        awaitingFirstPrompt = false;
     }
 
     function beginAuth() {
@@ -89,6 +95,8 @@ QtObject {
         cancelConversation();
         responses = 0;
         authRequest = nextRequest();
+        awaitingFirstPrompt = true;
+        answerTimeout.restart();
         model.authUid = model.selectedUid;
         model.challengeId = 0;
         model.phase = "waiting";
@@ -104,6 +112,10 @@ QtObject {
     // end one that no longer matches the selected account.
     function reconcile() {
         const model = root.model;
+        // Wait for bsm's answer to the begin_auth in flight; the answer (or the
+        // timeout) reconciles again against the latest snapshot.
+        if (awaitingFirstPrompt)
+            return;
         if (model.phase !== "idle" && model.authUid !== model.selectedUid) {
             cancelConversation();
             model.resetConversation();
@@ -214,6 +226,24 @@ QtObject {
         }
     }
 
+    // bsm answered the begin_auth in flight. The screen may have moved to
+    // another account meanwhile: follow the latest snapshot.
+    function answered() {
+        answerTimeout.stop();
+        if (!awaitingFirstPrompt)
+            return;
+        awaitingFirstPrompt = false;
+        Qt.callLater(reconcile);
+    }
+
+    property Timer answerTimeout: Timer {
+        interval: 5000
+        onTriggered: {
+            root.awaitingFirstPrompt = false;
+            root.model.resetConversation();
+        }
+    }
+
     function handlePrompt(message) {
         const model = root.model;
         if (typeof message.challenge_id !== "number" || typeof message.text !== "string")
@@ -222,6 +252,7 @@ QtObject {
             // The first prompt of a conversation answers our begin_auth.
             if (message.request_id !== authRequest)
                 return;
+            answered();
             if (model.challengeId === 0)
                 model.challengeId = message.challenge_id;
         }
@@ -289,6 +320,7 @@ QtObject {
         }
         if (id === authRequest && authRequest !== 0) {
             authRequest = 0;
+            answered();
             model.phase = "idle";
             model.challengeId = 0;
             model.statusText = model.authErrorText(code, typeof message.message === "string" ? message.message : "");
@@ -347,6 +379,7 @@ QtObject {
             } else {
                 root.model.disconnected();
                 root.authRequest = 0;
+                root.awaitingFirstPrompt = false;
                 root.powerRequest = 0;
                 root.selectRequest = 0;
                 reconnect.restart();

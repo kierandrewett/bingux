@@ -342,6 +342,28 @@ def unlock_scenario():
         rig.close()
 
 
+def fight_scenario():
+    """bsm selects the account of every begin_auth. Two external selections in
+    quick succession must not make the greeter and bsm fight over the selection
+    (each snapshot answered by a begin_auth that flips the selection again)."""
+    rig = Rig(["--mode", "login"])
+    try:
+        check("selection: the first conversation starts", rig.wait_for("begin_auth", uid=1000, timeout=20))
+        for _ in range(4):
+            rig.drive(cmd="select", uid=1001)
+            rig.drive(cmd="select", uid=1000)
+        time.sleep(3)
+        before = rig.count("begin_auth")
+        time.sleep(3)
+        after = rig.count("begin_auth")
+        check("selection: begin_auth does not run away", after == before and after < 20, f"{before} then {after}")
+        check("selection: the greeter never sends select_user by itself", rig.count("select_user") == 0)
+        check("selection: it settles on the server's selection", rig.wait_for("begin_auth", uid=1000, count=1))
+        return "".join(rig.output)
+    finally:
+        rig.close()
+
+
 def main():
     for tool in ("sway", "grim", "wtype", "swaymsg"):
         if shutil.which(tool) is None:
@@ -352,6 +374,8 @@ def main():
         return 1
     login_records, login_output = login_scenario()
     unlock_records, unlock_output = unlock_scenario()
+    fight_output = fight_scenario()
+    check("selection: no QML errors", "ERROR" not in fight_output.replace("ERROR: ", "ERROR_"))
     for name, output in (("login", login_output), ("unlock", unlock_output)):
         check(f"{name}: no QML errors", "ERROR" not in output.replace("ERROR: ", "ERROR_"), output[-800:] if "ERROR" in output else "")
         check(f"{name}: no secret or code in the greeter output", "secret" not in output and "123456" not in output)

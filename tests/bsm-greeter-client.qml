@@ -105,6 +105,14 @@ ShellRoot {
         return null;
     }
 
+    property real nextChallenge: 200
+
+    // bsm answers the begin_auth in flight with its first prompt.
+    function answer() {
+        nextChallenge += 1;
+        client.handle({ type: "auth_prompt", request_id: last("begin_auth").request_id, challenge_id: nextChallenge, kind: "secret", text: "Password:" });
+    }
+
     function run() {
         const login = {
             mode: "login"
@@ -163,15 +171,29 @@ ShellRoot {
         // An unavailable account has no conversation; a running one switches.
         client.handle(snapshot(7, 1003, login, users));
         check("an unavailable account is not authenticated", model.selectedUid === 1003 && !model.canAuthenticate && last("begin_auth").uid === 1001 && model.hint === "This account is unavailable");
-        client.handle(snapshot(8, 1002, login, users));
+        // bsm selects the account of every begin_auth. Two begin_auths in flight
+        // fight over the selection, so a snapshot that moves the selection while
+        // one is unanswered sends no second one: no ping-pong.
+        const inflight = out.filter(m => m.type === "begin_auth").length;
+        client.handle(snapshot(8.1, 1000, login, users));
+        client.handle(snapshot(8.2, 1001, login, users));
+        client.handle(snapshot(8.3, 1000, login, users));
+        check("selection snapshots while a begin_auth is unanswered send no more", out.filter(m => m.type === "begin_auth").length === inflight);
+        check("no select_user is ever sent for a snapshot", out.filter(m => m.type === "select_user").length === 0);
+        answer();
+        check("the answer ends the wait", !client.awaitingFirstPrompt);
+        client.handle(snapshot(8.4, 1002, login, users));
         check("an account with a running session authenticates as a switch", last("begin_auth").uid === 1002 && last("begin_auth").intent === "switch");
 
         // Unlock mode: the owner unlocks, anyone else switches.
         const unlock = { mode: "unlock", session: "s0000000a", uid: 1002 };
+        answer();
         client.handle(snapshot(9, 1002, unlock, users));
         check("unlock mode: the owner unlocks", model.unlockMode && last("begin_auth").intent === "unlock");
+        answer();
         client.handle(snapshot(10, 1001, unlock, users));
         check("unlock mode: another account switches", last("begin_auth").uid === 1001 && last("begin_auth").intent === "switch");
+        answer();
         client.handle(snapshot(11, 1002, unlock, users));
 
         // Images only from the greeter cache.

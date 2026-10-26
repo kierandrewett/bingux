@@ -300,9 +300,13 @@ class Server:
         elif kind == "begin_auth":
             uid = message.get("uid")
             self.log("begin_auth", uid=uid, intent=message.get("intent"))
-            if uid != self.selected or uid not in self.users:
-                self.send({"type": "error", "request_id": message.get("request_id"), "code": "invalid_account", "message": "not the selected account"})
+            if uid not in self.users:
+                self.send({"type": "error", "request_id": message.get("request_id"), "code": "invalid_account", "message": "no such account"})
                 return
+            if uid != self.selected:
+                # Like the real manager, begin_auth selects the account itself.
+                self.selected = uid
+                self.push_snapshot()
             if self.progress is not None and self.progress["failure"] is not None:
                 # Signing in again after a failed launch starts from a clean slate.
                 self.progress = None
