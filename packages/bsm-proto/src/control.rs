@@ -215,6 +215,13 @@ pub enum MonitorEvent {
         success: bool,
         reason: Option<ErrorCode>,
     },
+    /// One per change of a launch's `ProgressModel` (additive; also the D-Bus signal
+    /// `SessionLaunchProgress`). Lets operators and tests follow real milestones.
+    Progress {
+        session: SessionId,
+        generation: Generation,
+        model: ProgressModel,
+    },
 }
 
 #[cfg(test)]
