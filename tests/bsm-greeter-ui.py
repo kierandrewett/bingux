@@ -231,7 +231,7 @@ def login_scenario():
     rig = Rig(["--mode", "login"])
     try:
         check("login: the greeter asks for a password for the first account", rig.wait_for("begin_auth", uid=1000, intent="login", timeout=20))
-        login = rig.shot("login")
+        login = rig.shot("login", settle=1.5)
         check("login: hello carries the protocol version", rig.count("hello", version=1) == 1)
         check("login: the picture and the clock are drawn", region_colour(login, (0, 0, 1280, 400)) != region_colour(login, (0, 400, 1280, 800)))
 
@@ -317,7 +317,7 @@ def unlock_scenario():
     rig = Rig(["--mode", "unlock", "--unlock-uid", "1000"])
     try:
         check("unlock: the owner's unlock form starts at once", rig.wait_for("begin_auth", uid=1000, intent="unlock", timeout=20))
-        locked = rig.shot("locked-unlock")
+        locked = rig.shot("locked-unlock", settle=1.5)
         check("unlock: no other account is touched by default", rig.count("select_user") == 0 and rig.count("begin_auth") == 1)
         rig.key("Tab", "Tab", "Return")
         picker = rig.shot("locked-account-picker")
