@@ -60,6 +60,17 @@ pub enum SceneCommand {
         /// Absolute path the bridge's `/proc/<pid>/exe` must resolve to.
         host_exe: String,
     },
+    /// Second step of registration, sent once the helper reported `SessionOpened`. Until it
+    /// arrives a connection to the brokered socket stays un-promoted (no globals, no role).
+    /// `RegisterSession` is sent first with an empty `scope` and `host_pid` 0, because the
+    /// helper needs the socket path before it can start the bridge. A connection that does not
+    /// match uid, scope, pid and exe is closed and reported as `SessionConnectionRejected`.
+    BindHost {
+        session: SessionId,
+        generation: Generation,
+        scope: String,
+        host_pid: u32,
+    },
     /// Drop the session: remove its socket, scene node and buffers. Safe cover until the
     /// next command changes the scene.
     UnregisterSession {
