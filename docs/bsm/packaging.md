@@ -266,6 +266,7 @@ for suspend, and `pkcheck` for a session of another service name.
 | `python3 tests/bsm-frames.test.py`                 | Unit tests of the frame measurements on synthetic fades and slides.     |
 | `python3 tests/bsm-headless-e2e.py`                | `bsm --backend headless` with the test helper; skips (exit 77) until bsm offers it. |
 | `python3 tests/bsm-qemu.py [--iso ISO] [--smoke]`  | The acceptance walkthrough in QEMU with two displays.                   |
+| `flock /tmp/bsm-vm.lock python3 tests/bsm-qemu-security.py` | Security scenarios in QEMU (S3 suspend, SeaBIOS boot through the syslinux menu, logind and polkit findings); results in `security-scenarios-results.md` and `logind-findings.md`. |
 | `python3 tests/bsm-vm-inject.py stage` then `python3 tests/bsm-qemu.py --inject /tmp/bsm-vm/inject` | The same against an older image, with freshly built binaries injected over 9p. |
 
 `tests/bsm-qemu.py` needs QEMU with OVMF, `ffmpeg`, a host render node
@@ -420,6 +421,19 @@ From `review-manager.md` F4 and F5 and `review-helper.md` F4, F8, F9 and F11:
 | helper F8 | PAM `substack`. | BsmHelper (they own `packaging/bsm/pam`). |
 | helper F9 | `hostedSession` caches the `loginctl` answer per logind session id (256 entries). | Logic tested in Node (one spawn for repeated checks). |
 | helper F11 | `bsm.service`: `ProtectKernelTunables`, `RestrictNamespaces=user net`, `DevicePolicy=closed` with `DeviceAllow=char-drm rw` and `char-nvidia* rw`. `bsm-seatd.service`: `CapabilityBoundingSet` (SYS_ADMIN, SYS_TTY_CONFIG, CHOWN, FOWNER, DAC_OVERRIDE, DAC_READ_SEARCH), `RestrictNamespaces=yes`, `PrivateTmp`, `ProtectKernelTunables`, `ProtectKernelLogs`, `ProtectClock`, `RestrictRealtime`. | Not verified in the VM: see below. If DRM or seat access breaks, bisect with drop-ins under `/run/systemd/system/bsm.service.d/`. |
+
+### Findings from the security VM runs
+
+* `bingux-greeter-export.service` fails with `Permission denied` under bsm (the greeter
+  cache root is owned by `bsm`) and restarts every 3 s in each hosted session; the shell
+  has to skip it when `BSM_SESSION_ID` is set (ShellIntegration).
+* `pkaction` shows `implicit active: yes` for the `*-multiple-sessions` login1 actions, so
+  removing them from the rule only withholds a grant if polkit does not count a seatless
+  hosted session as active and local. Whether the `-multiple-sessions` gate bites for a
+  hosted caller is not proven; `probe_power` with two sessions is the test.
+* `bsmctl reboot --json` without `--wait` returns before bsm's polkit check and the check
+  then fails with `NameHasNoOwner` (the caller's bus name is gone): the manager should
+  authorise by the caller's pid or hold the check for a live name (BsmManager).
 
 ### Host load
 
