@@ -296,11 +296,15 @@ impl Driver {
                     self.compositor_gone = true;
                 }
             }
-            Effect::Helper(r) => {
-                if !self.helper.send(&r) {
+            Effect::Helper(mut r) => {
+                let sent = self.helper.send(&r);
+                // F11: the answer is wiped as soon as it was handed to the helper.
+                if let bsm_proto::helper::HelperRequest::AuthResponse { response, .. } = &mut r {
+                    zeroize::Zeroize::zeroize(response);
+                }
+                if !sent {
+                    // The helper client closes a failed connection and its reader reports the loss.
                     tracing::warn!("helper request could not be sent");
-                    // The reader thread reports the loss; if there was never a connection, say so now.
-                    self.queue.push_back(Input::HelperLost);
                 }
             }
             Effect::Greeter(m) => {
@@ -312,7 +316,11 @@ impl Driver {
                     let _ = reply.try_send(result);
                 }
             }
-            Effect::ConnVerdict(v) => self.greeter.verdict(v.conn, v.accept),
+            Effect::ConnVerdict(v) => {
+                if !self.greeter.verdict(v.conn, v.accept) {
+                    self.queue.push_back(Input::GreeterDisconnected { conn: v.conn });
+                }
+            }
             Effect::DropGreeter => self.greeter.drop_active(),
             Effect::SetTimer { id, after } => {
                 self.timers.insert(id, Instant::now() + after);

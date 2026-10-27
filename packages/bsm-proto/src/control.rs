@@ -120,7 +120,7 @@ pub enum PromptKind {
 }
 
 /// Messages from the greeter to bsm.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientMessage {
     Hello {
@@ -151,6 +151,19 @@ pub enum ClientMessage {
     CancelOperation {
         operation_id: OperationId,
     },
+}
+
+/// Debug never shows a secret: the `response` field of an authentication answer is replaced.
+impl std::fmt::Debug for ClientMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut v = serde_json::to_value(self).unwrap_or(serde_json::Value::Null);
+        if let Some(o) = v.as_object_mut() {
+            if let Some(r) = o.get_mut("response") {
+                *r = serde_json::Value::String("<redacted>".into());
+            }
+        }
+        write!(f, "ClientMessage({v})")
+    }
 }
 
 /// Messages from bsm to the greeter.

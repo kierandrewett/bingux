@@ -25,6 +25,7 @@ use std::time::{Duration, Instant};
 
 use bsm_proto::control::{ClientMessage, ServerMessage};
 use bsm_proto::error::ErrorCode;
+use zeroize::Zeroize;
 
 use super::api::{DriverTx, RtInput};
 use crate::core::Input;
@@ -33,6 +34,8 @@ pub const MAX_LINE: usize = 64 * 1024;
 pub const VERDICT_TIMEOUT: Duration = Duration::from_secs(5);
 const WRITE_QUEUE: usize = 256;
 const MAX_MALFORMED: u32 = 10;
+/// Connections that wait for the manager's verdict at one time (F12).
+const MAX_PENDING: usize = 4;
 
 #[derive(Debug, Clone)]
 pub struct ControlConfig {
@@ -119,7 +122,16 @@ impl GreeterServer {
                         let Ok((uid, pid)) = peer_cred(&stream) else { continue };
                         let id = next_id;
                         next_id += 1;
-                        shared.lock().pending.insert(id, (stream, Instant::now()));
+                        {
+                            let mut s = shared.lock();
+                            // F12: a flood of connections cannot use up descriptors that the
+                            // compositor in this process needs. Refused at once, not logged per try.
+                            s.pending.retain(|_, (_, at)| at.elapsed() < VERDICT_TIMEOUT);
+                            if s.pending.len() >= MAX_PENDING {
+                                continue;
+                            }
+                            s.pending.insert(id, (stream, Instant::now()));
+                        }
                         if tx.send(RtInput::Core(Input::GreeterPeer { conn: id, uid, pid })).is_err() {
                             return;
                         }
@@ -140,18 +152,22 @@ impl GreeterServer {
     }
 
     /// The manager's decision about a pending connection.
-    pub fn verdict(&self, conn: u64, accept: bool) {
+    ///
+    /// Returns false when an accepted connection could not be attached (it expired while
+    /// the manager decided, or a descriptor could not be duplicated): the caller must then tell
+    /// the manager the connection is gone, or its view would keep a connection that does not exist (F12).
+    pub fn verdict(&self, conn: u64, accept: bool) -> bool {
         let stream = {
             let mut s = self.shared.lock();
             s.pending.remove(&conn).map(|(st, _)| st)
         };
-        let Some(stream) = stream else { return };
+        let Some(stream) = stream else { return !accept };
         if !accept {
             let _ = stream.shutdown(std::net::Shutdown::Both);
-            return;
+            return true;
         }
         let (Ok(read_half), Ok(write_half), Ok(keep)) = (stream.try_clone(), stream.try_clone(), stream.try_clone()) else {
-            return;
+            return false;
         };
         let _ = write_half.set_write_timeout(Some(Duration::from_secs(2)));
         let (out_tx, out_rx) = sync_channel::<String>(WRITE_QUEUE);
@@ -192,6 +208,7 @@ impl GreeterServer {
                 let _ = tx.send(RtInput::Core(Input::GreeterDisconnected { conn }));
             })
             .ok();
+        true
     }
 
     fn read_loop(conn: u64, mut stream: UnixStream, tx: &DriverTx, shared: &Arc<Mutex<Shared>>) {
@@ -207,12 +224,15 @@ impl GreeterServer {
             };
             buf.extend_from_slice(&chunk[..n]);
             while let Some(pos) = buf.iter().position(|b| *b == b'\n') {
-                let line: Vec<u8> = buf.drain(..=pos).collect();
-                let line = &line[..line.len() - 1];
+                let mut raw: Vec<u8> = buf.drain(..=pos).collect();
+                let line = &raw[..raw.len() - 1];
                 if line.is_empty() {
                     continue;
                 }
-                match serde_json::from_slice::<ClientMessage>(line) {
+                let parsed = serde_json::from_slice::<ClientMessage>(line);
+                // F11: the line may hold a password; it does not stay in freed heap.
+                raw.zeroize();
+                match parsed {
                     Ok(message) => {
                         // Only the type is ever logged.
                         tracing::trace!(conn, kind = message_kind(&message), "greeter message");
@@ -233,6 +253,11 @@ impl GreeterServer {
                     }
                 }
             }
+            if buf.is_empty() {
+                buf.zeroize();
+                buf.reserve(4096);
+            }
+            chunk.zeroize();
             if buf.len() > MAX_LINE {
                 tracing::warn!(conn, "control line too long; disconnecting");
                 return;
@@ -320,7 +345,7 @@ mod tests {
         // Nothing is read before acceptance.
         c.write_all(b"{\"type\":\"hello\",\"version\":1}\n").unwrap();
         assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
-        server.verdict(conn, true);
+        assert!(server.verdict(conn, true));
         let Input::Greeter { message: ClientMessage::Hello { version: 1 }, .. } = next(&rx) else { panic!() };
         // And the other direction.
         assert!(server.send(&ServerMessage::Error { request_id: Some(3), code: ErrorCode::Busy, message: "x".into() }));
@@ -373,6 +398,28 @@ mod tests {
         let mut b = [0u8; 8];
         assert_eq!(c.read(&mut b).unwrap_or(0), 0);
         let _ = server;
+    }
+
+    #[test]
+    fn f12_pending_connections_are_capped_and_a_late_verdict_is_reported() {
+        let (_d, server, rx) = setup();
+        let held: Vec<UnixStream> = (0..MAX_PENDING).map(|_| UnixStream::connect(server.path()).unwrap()).collect();
+        let mut ids = Vec::new();
+        for _ in 0..MAX_PENDING {
+            let Input::GreeterPeer { conn, .. } = next(&rx) else { panic!() };
+            ids.push(conn);
+        }
+        // The next ones are closed at once and the manager hears nothing of them.
+        let mut extra = UnixStream::connect(server.path()).unwrap();
+        extra.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        let mut b = [0u8; 4];
+        assert_eq!(extra.read(&mut b).unwrap_or(0), 0);
+        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+        // A verdict for a connection that is gone is reported so the manager can drop it.
+        assert!(!server.verdict(9999, true));
+        assert!(server.verdict(9999, false));
+        assert!(server.verdict(ids[0], false));
+        drop(held);
     }
 
     #[test]

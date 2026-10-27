@@ -286,17 +286,20 @@ impl Manager {
         fx.push(Effect::SetTimer { id: TimerId::Auth(challenge_id), after: self.policy.auth_timeout });
     }
 
-    fn greeter_auth_response(&mut self, challenge_id: u64, response: String, fx: &mut Fx) {
+    fn greeter_auth_response(&mut self, challenge_id: u64, mut response: String, fx: &mut Fx) {
         let Some(c) = self.challenge.as_mut().filter(|c| c.id == challenge_id) else {
             Self::greeter_error(fx, None, ErrorCode::StaleGeneration, "no such challenge");
+            zeroize::Zeroize::zeroize(&mut response);
             return;
         };
         if !c.awaiting_response {
             Self::greeter_error(fx, None, ErrorCode::Busy, "no answer is expected now");
+            zeroize::Zeroize::zeroize(&mut response);
             return;
         }
         if response.len() > MAX_RESPONSE_BYTES {
             Self::greeter_error(fx, None, ErrorCode::InvalidArgument, "answer too long");
+            zeroize::Zeroize::zeroize(&mut response);
             return;
         }
         c.awaiting_response = false;

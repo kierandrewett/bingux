@@ -33,7 +33,7 @@ pub enum PamPromptKind {
 }
 
 /// bsm to helper.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum HelperRequest {
     Ping { nonce: u64 },
@@ -92,6 +92,19 @@ pub enum HelperRequest {
         generation: Generation,
         locked: bool,
     },
+}
+
+/// Debug never shows a secret: the `response` field of an authentication answer is replaced.
+impl std::fmt::Debug for HelperRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut v = serde_json::to_value(self).unwrap_or(serde_json::Value::Null);
+        if let Some(o) = v.as_object_mut() {
+            if let Some(r) = o.get_mut("response") {
+                *r = serde_json::Value::String("<redacted>".into());
+            }
+        }
+        write!(f, "HelperRequest({v})")
+    }
 }
 
 /// Helper to bsm.
@@ -155,4 +168,21 @@ pub enum HelperEvent {
         code: Option<ErrorCode>,
         message: String,
     },
+}
+
+#[cfg(test)]
+mod secret_tests {
+    use super::*;
+
+    #[test]
+    fn debug_of_an_authentication_answer_never_shows_it() {
+        let r = HelperRequest::AuthResponse { req_id: 1, response: "hunter2-very-secret".into() };
+        let s = format!("{r:?} {:#?}", r);
+        assert!(!s.contains("hunter2"), "{s}");
+        assert!(s.contains("redacted"));
+        let m = crate::control::ClientMessage::AuthResponse { challenge_id: 1, response: "hunter2-very-secret".into() };
+        assert!(!format!("{m:?}").contains("hunter2"));
+        // Other variants stay readable.
+        assert!(format!("{:?}", HelperRequest::Ping { nonce: 4 }).contains("ping"));
+    }
 }

@@ -288,7 +288,7 @@ pub fn run(s: Settings) -> Result<(), String> {
         policy,
         state_dir: s.state_dir.clone(),
         control: ControlConfig { path: s.control_socket(), mode: s.greeter_socket_mode, gid: greeter_gid },
-        helper: HelperEndpoint::Path(s.helper_socket.clone()),
+        helper: HelperEndpoint::Path { path: s.helper_socket.clone(), peer_uid: (s.backend == BackendName::Drm).then_some(0) },
         accounts,
         appearance,
         system,
