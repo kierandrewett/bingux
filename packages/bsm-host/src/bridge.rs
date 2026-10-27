@@ -71,6 +71,8 @@ pub struct Config {
     pub ready_peers: Vec<String>,
     /// How long to keep trying to reach bsm again after the connection was lost.
     pub recovery_window: Duration,
+    /// How long the registry roundtrip of a reconnect may take.
+    pub handshake_timeout: Duration,
     /// A `ready.sock` connection that sends no valid line in this time is closed.
     pub ready_idle: Duration,
     /// From the user's Bingux configuration: whether the dock is enabled.
@@ -743,8 +745,35 @@ impl Bridge {
     fn try_reconnect(&mut self) -> Result<()> {
         let stream = UnixStream::connect(&self.cfg.host_socket)
             .with_context(|| format!("connect to {}", self.cfg.host_socket.display()))?;
-        let conn = Connection::from_socket(stream).context("wayland connection")?;
-        let (globals, queue) = registry_queue_init::<Bridge>(&conn).context("read bsm globals")?;
+        // The registry roundtrip blocks until the peer answers. A half-open
+        // connection (a compositor that accepts and never replies) must not
+        // block the recovery loop, so it runs on a helper thread that is
+        // abandoned, by shutting the socket down, when it takes too long.
+        let killer = stream.try_clone().context("clone the socket")?;
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::Builder::new()
+            .name("bsm-host-handshake".into())
+            .spawn(move || {
+                let result = Connection::from_socket(stream)
+                    .map_err(|e| anyhow!("wayland connection: {e}"))
+                    .and_then(|conn| {
+                        registry_queue_init::<Bridge>(&conn)
+                            .map(|(globals, queue)| (conn, globals, queue))
+                            .map_err(|e| anyhow!("read bsm globals: {e}"))
+                    });
+                let _ = tx.send(result);
+            })
+            .context("spawn the handshake thread")?;
+        let (conn, globals, queue) = match rx.recv_timeout(self.cfg.handshake_timeout) {
+            Ok(r) => r?,
+            Err(_) => {
+                let _ = killer.shutdown(std::net::Shutdown::Both);
+                return Err(anyhow!(
+                    "bsm accepted the connection but did not answer within {:?}",
+                    self.cfg.handshake_timeout
+                ));
+            }
+        };
         let qh = queue.handle();
         let bound = bind_session(&globals, &qh)?;
         let token = calloop_wayland_source::WaylandSource::new(conn.clone(), queue)

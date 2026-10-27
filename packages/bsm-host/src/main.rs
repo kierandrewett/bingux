@@ -98,6 +98,11 @@ fn main() -> ExitCode {
             .and_then(|v| v.parse::<f64>().ok())
             .filter(|v| *v > 0.0 && *v <= 600.0)
             .map_or(bsm_host::ready_sock::IDLE_TIMEOUT, Duration::from_secs_f64),
+        handshake_timeout: std::env::var("BSM_HOST_HANDSHAKE_SECS")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+            .filter(|v| *v > 0.0 && *v <= 600.0)
+            .map_or(Duration::from_secs(10), Duration::from_secs_f64),
         recovery_window: Duration::from_secs_f64(recovery_secs),
         dock_enabled: bsm_host::config::read_dock_enabled(),
         test,

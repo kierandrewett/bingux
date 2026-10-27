@@ -486,3 +486,41 @@ fn a_connection_that_sends_nothing_is_closed_and_frees_its_slot() {
     env.standin.wait_for("bingux_launched", T, |s| kinds(s).contains(&BINGUX_LAUNCHED));
     idle.clear();
 }
+
+#[test]
+fn a_half_open_bsm_cannot_block_the_recovery_loop() {
+    use std::os::unix::net::UnixListener;
+    let mut env = Env::new("halfopen");
+    env.standin.add_output("DP-1", OutputSpec::new(0, 0, 160, 100));
+    let bridge = env.spawn_with(
+        &["--recovery-window", "60"],
+        &[("BSM_HOST_READY_PEERS", "*"), ("BSM_HOST_HANDSHAKE_SECS", "2")],
+    );
+    env.standin.wait_for("frame", T, |s| !s.frames.is_empty());
+    let path = env.standin.socket.clone();
+    env.standin.stop();
+    // A peer that accepts and never answers the registry roundtrip.
+    let _ = std::fs::remove_file(&path);
+    let hole = UnixListener::bind(&path).unwrap();
+    let held = std::thread::spawn(move || {
+        let mut conns = Vec::new();
+        hole.set_nonblocking(true).unwrap();
+        let end = std::time::Instant::now() + Duration::from_secs(8);
+        while std::time::Instant::now() < end {
+            if let Ok((c, _)) = hole.accept() {
+                conns.push(c);
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        conns.len()
+    });
+    // Longer than one handshake timeout: without the timeout the bridge would sit in the roundtrip.
+    std::thread::sleep(Duration::from_millis(4500));
+    env.standin = Standin::start(&env.dir, GEN);
+    env.standin.add_output("DP-1", OutputSpec::new(0, 0, 160, 100));
+    env.standin.wait_for("a frame after the half-open peer was replaced", Duration::from_secs(15), |s| {
+        s.frames.iter().any(|f| f.after_ack)
+    });
+    assert!(held.join().unwrap() >= 2, "the bridge did not retry after the first handshake timed out");
+    drop(bridge);
+}
