@@ -54,7 +54,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from bsm_frames import blend_residual, coverage, fade_alpha, is_monotone, similarity, slide_offset  # noqa: E402
-from bsm_harness import HEAD_COUNT, MONITOR_LOG, BsmVm  # noqa: E402
+from bsm_harness import HEAD_COUNT, MONITOR_LOG, BsmVm, VmLock  # noqa: E402
 from distro_vm import ROOT, find_iso, missing_tools  # noqa: E402
 
 USER_A = ("live", "live")
@@ -842,6 +842,8 @@ def main():
     base = Path(os.environ.get("BSM_VM_DIR", "/tmp/bsm-vm"))
     base.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="bsm-qemu-", dir=base))
+    lock = VmLock().acquire()
+    print(f"VM lock taken after {lock.waited:.0f} s; load average {lock.load_before[0]:.1f}", flush=True)
     vm = BsmVm(work, iso=iso, record=work / "record", inject=args.inject, bsm_param=not args.no_bsm_param)
     run = Run(vm, out)
     wanted = [s.strip() for s in args.only.split(",")] if args.only else [n for n, _ in STEPS]
@@ -886,6 +888,9 @@ def main():
         (out / "checks.json").write_text(json.dumps(run.checks, indent=2) + "\n")
         (out / "steps.json").write_text(json.dumps(run.steps, indent=2) + "\n")
         vm.stop()
+        lock.release()
+        (out / "load.json").write_text(json.dumps({"load_average_before": lock.load_before, "load_average_after": lock.load_after, "lock": lock.waited}, indent=2) + "\n")
+        run.log(f"load average before {lock.load_before[0]:.1f}, after {lock.load_after[0]:.1f} (a result taken above 8 is suspect)")
         for name in ("timeline.json",):
             source = work / "record" / name
             if source.is_file():

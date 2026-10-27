@@ -36,6 +36,38 @@ from distro_vm import Vm, RENDER_NODE
 from bsm_frames import luma_plane
 
 HEAD_COUNT = 2
+LOCK_PATH = os.environ.get("BSM_VM_LOCK", "/tmp/bsm-vm.lock")
+
+
+class VmLock:
+    """Global lock: one bsm VM at a time on this host (`flock /tmp/bsm-vm.lock` is the same lock).
+
+    Parallel guests starve each other and time out at start-up. Held for the VM's whole life
+    and released by `release()` or process exit. Records the load average at both ends.
+    """
+
+    def __init__(self):
+        import fcntl
+
+        self._fcntl = fcntl
+        self.handle = open(LOCK_PATH, "a+")
+        self.load_before = None
+        self.load_after = None
+
+    def acquire(self):
+        started = time.monotonic()
+        self._fcntl.flock(self.handle, self._fcntl.LOCK_EX)
+        self.waited = time.monotonic() - started
+        self.load_before = os.getloadavg()
+        return self
+
+    def release(self):
+        if self.handle is not None:
+            self.load_after = os.getloadavg()
+            self._fcntl.flock(self.handle, self._fcntl.LOCK_UN)
+            self.handle.close()
+            self.handle = None
+
 MONITOR_LOG = "/run/bsm-test/monitor.log"
 
 

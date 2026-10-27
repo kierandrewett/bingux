@@ -277,6 +277,13 @@ series of fade opacity and slide offset per display, the progress milestones wit
 times, `bsmctl` dumps, the monitor log, and the journal of the bsm units. The
 video and the working files stay under `/tmp/bsm-vm` (`BSM_VM_DIR`).
 
+One VM at a time: `tests/bsm-qemu.py` and `tests/bsm-vm-debug.py` take an exclusive
+`flock` on `/tmp/bsm-vm.lock` (`BSM_VM_LOCK`) for the VM's whole life, so they queue behind
+any other bsm VM test, and `tests/bsm-qemu.py` writes `load.json` with the load average
+before and after. Several guests at once, or a busy host, starve the guest's Gnoblin
+and fail at `BinguxLaunched`; treat a result taken with a load average above 8 as
+suspect. Cargo builds in `tests/bsm-vm-inject.py` use `-j4`.
+
 Exit status: 0 every step passed, 1 a check failed, 2 nothing failed but a step
 is blocked.
 

@@ -19,7 +19,7 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from bsm_harness import BsmVm  # noqa: E402
+from bsm_harness import BsmVm, VmLock  # noqa: E402
 from distro_vm import find_iso  # noqa: E402
 
 
@@ -37,6 +37,7 @@ def main():
     base = Path("/tmp/bsm-vm")
     base.mkdir(exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="dbg-", dir=base))
+    lock = VmLock().acquire()
     vm = BsmVm(work, iso=find_iso(args.iso), record=work / "rec", inject=args.inject)
     vm.start()
     try:
@@ -68,6 +69,7 @@ def main():
             print(vm.run(command, 120))
     finally:
         vm.stop()
+        lock.release()
     return 0
 
 

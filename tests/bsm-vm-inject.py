@@ -144,7 +144,7 @@ def build_host(crates):
     env = host_env()
     failed = []
     for name in crates:
-        command = [CARGO, "build", "--release", "--manifest-path", str(ROOT / "packages" / name / "Cargo.toml")]
+        command = [CARGO, "build", "--release", "-j4", "--manifest-path", str(ROOT / "packages" / name / "Cargo.toml")]
         print("+ " + " ".join(command), flush=True)
         if subprocess.run(command, env=env).returncode != 0:
             failed.append(name)
@@ -234,7 +234,7 @@ def stage(arguments):
     shutil.copytree(ROOT / "packaging/bsm/image", image, symlinks=True)
     if arguments.probe:
         # The root checks of tests/bsm-helper-root.sh drive this example binary in the guest.
-        command = [CARGO, "build", "--release", "--examples", "--manifest-path", str(ROOT / "packages/bsm-helper/Cargo.toml")]
+        command = [CARGO, "build", "--release", "-j4", "--examples", "--manifest-path", str(ROOT / "packages/bsm-helper/Cargo.toml")]
         run(command, env=host_env())
         probe = TARGET_DIR / "release/examples/bsm-helper-probe"
         if probe.is_file():
