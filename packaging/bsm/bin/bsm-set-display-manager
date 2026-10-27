@@ -37,14 +37,22 @@ enable() {
     [ -e "$BSM_UNIT" ] || die "$BSM_UNIT is missing; install the bsm package"
     target="$(alias_target)"
     previous=greetd.service
+    # greetd is the display manager bsm replaces by default; any other alias is somebody
+    # else's choice and only changes with --force.
     case "$target" in
         "" | *bsm.service) ;;
+        */greetd.service | greetd.service) ;;
         *)
             [ "$force" = "--force" ] ||
                 die "display-manager.service already points at $target; use --force to replace it"
             previous="$(basename "$target")"
             ;;
     esac
+    # Enable bsm first: if that fails nothing else has been touched.
+    if ! systemctl enable bsm.service bsm-helper.socket; then
+        systemctl disable bsm.service bsm-helper.socket >/dev/null 2>&1 || true
+        die "could not enable bsm.service; nothing was changed"
+    fi
     # Remember the display manager that is being replaced, once.
     if [ ! -f "$STATE" ]; then
         mkdir -p "$(dirname "$STATE")"
@@ -52,7 +60,6 @@ enable() {
     fi
     # The old display manager stays installed but is no longer enabled.
     systemctl disable "$previous" >/dev/null 2>&1 || true
-    systemctl enable bsm.service bsm-helper.socket
     ln -sfn "$BSM_UNIT" "$ALIAS"
     systemctl daemon-reload
     echo "bsm is the display manager from the next boot (was: $(cat "$STATE"))."
@@ -61,13 +68,32 @@ enable() {
 
 disable() {
     [ "$(id -u)" -eq 0 ] || die "run as root"
+    was_bsm=no
     case "$(alias_target)" in
-        *bsm.service) rm -f "$ALIAS" ;;
+        *bsm.service) was_bsm=yes ;;
     esac
+    if [ -f "$STATE" ]; then
+        previous="$(cat "$STATE")"
+    elif [ "$was_bsm" = yes ]; then
+        previous=greetd.service
+    else
+        # bsm never replaced anything here: leave whatever display manager is in place alone.
+        systemctl disable bsm.service bsm-helper.socket >/dev/null 2>&1 || true
+        systemctl daemon-reload
+        echo "bsm was not the display manager; display-manager.service is unchanged ($(alias_target || true))."
+        return 0
+    fi
+    [ "$was_bsm" = yes ] && rm -f "$ALIAS"
     systemctl disable bsm.service bsm-helper.socket >/dev/null 2>&1 || true
-    previous=greetd.service
-    if [ -f "$STATE" ]; then previous="$(cat "$STATE")"; fi
-    systemctl enable "$previous"
+    if ! systemctl enable "$previous"; then
+        # Put everything back: the machine keeps the display manager it had.
+        if [ "$was_bsm" = yes ]; then
+            ln -sfn "$BSM_UNIT" "$ALIAS"
+            systemctl enable bsm.service bsm-helper.socket >/dev/null 2>&1 || true
+        fi
+        systemctl daemon-reload
+        die "could not enable $previous; display-manager.service is unchanged ($(alias_target || echo none))"
+    fi
     systemctl daemon-reload
     rm -f "$STATE"
     echo "$previous is the display manager from the next boot."

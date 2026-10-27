@@ -15,10 +15,13 @@ Documentation=file:///usr/share/doc/bsm/packaging.md
 Requires=bsm-helper.socket bsm-seatd.service
 Wants=systemd-logind.service dbus.socket
 After=systemd-user-sessions.service systemd-logind.service dbus.socket bsm-helper.socket bsm-seatd.service
-# The boot splash keeps the display until plymouth-quit-wait.service returns
-# (the same ordering greetd.service gets from the bingux-os package). bsm
-# cannot take DRM master earlier.
-After=plymouth-start.service plymouth-quit.service plymouth-quit-wait.service
+# bsm starts while the boot splash still has the display and does not wait for
+# plymouth-quit*.service: it takes the display over from the splash and withdraws
+# the splash itself once the greeter is on screen (bsm-plymouth-handover, see
+# docs/bsm/boot.md). plymouth-quit.service is ordered after bsm instead
+# (plymouth-quit.service.d/10-bsm.conf). plymouth-start must be done: the
+# handover talks to plymouthd.
+After=plymouth-start.service
 # bsm owns the first VT for the display-manager role, as greetd and GDM do.
 Conflicts=getty@tty1.service
 After=getty@tty1.service
@@ -35,7 +38,9 @@ Type=notify
 NotifyAccess=main
 # bsm sends WATCHDOG=1 at half of WATCHDOG_USEC.
 WatchdogSec=30
-ExecStart=/usr/bin/bsm --backend drm
+# --hold-first-scene: a display that is already lit (the boot splash) keeps its picture
+# until the greeter is on screen, at most 30 s; then the flat cover is shown (docs/bsm/boot.md).
+ExecStart=/usr/bin/bsm --backend drm --hold-first-scene 30000
 Restart=on-failure
 RestartSec=1
 TimeoutStartSec=90
@@ -52,6 +57,14 @@ Environment=RUST_BACKTRACE=1
 # (tmpfiles.d/bsm-active.conf; the standard 1777 mode comes back on the next
 # boot without bsm).
 ExecStartPre=+/usr/bin/systemd-tmpfiles --create /usr/share/bsm/tmpfiles-active.conf
+# Plymouth releases DRM master and keeps its picture on the display; bsm then takes
+# the master through seatd without a mode set. Nothing happens without a splash.
+ExecStartPre=+/usr/libexec/bsm/bsm-plymouth-handover deactivate
+# READY=1 means the greeter is on the screen: only then is the splash withdrawn,
+# leaving its last picture up until bsm's first frame replaced it.
+ExecStartPost=+/usr/libexec/bsm/bsm-plymouth-handover retain
+# A splash must not outlive a failed start.
+ExecStopPost=+/usr/libexec/bsm/bsm-plymouth-handover failed
 StateDirectory=bsm
 StateDirectoryMode=0750
 LimitCORE=0

@@ -1,12 +1,16 @@
-# Started by bsm.service's OnFailure=. Brings the standalone login screen
-# (greetd) up so the machine is never left without one, then leaves a note in
+# Started by bsm.service's OnFailure=, which systemd runs for every failed start
+# (also the ones Restart= retries). /usr/libexec/bsm/fallback waits for the outcome
+# and brings the standalone login screen (greetd) up only when bsm has given up
+# (start limit hit), so the machine is never left without one, then leaves a note in
 # the journal. bsm stays failed until an administrator restarts it.
 [Unit]
 Description=Fall back to greetd after bsm failed
-Documentation=file:///usr/share/doc/bsm/packaging.md
+Documentation=file:///usr/share/doc/bsm/boot.md
 # bsm has failed, so it is no longer on the display.
 After=bsm.service
 
 [Service]
 Type=oneshot
+# The wait for bsm's outcome (BSM_FALLBACK_MAX_WAIT, 300 s) plus the start of greetd.
+TimeoutStartSec=330
 ExecStart=/usr/libexec/bsm/fallback

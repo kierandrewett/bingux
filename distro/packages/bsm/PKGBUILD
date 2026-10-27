@@ -69,12 +69,17 @@ package() {
     install -Dm755 "$bin/bsm-imgconv" "$pkgdir/usr/libexec/bsm/bsm-imgconv"
     install -Dm755 packaging/bsm/bin/bsm-fallback "$pkgdir/usr/libexec/bsm/fallback"
     install -Dm755 packaging/bsm/bin/bsm-set-display-manager "$pkgdir/usr/bin/bsm-set-display-manager"
+    # bsm.service's hooks around the boot splash (docs/bsm/boot.md).
+    install -Dm755 packaging/bsm/bin/bsm-plymouth-handover "$pkgdir/usr/libexec/bsm/bsm-plymouth-handover"
 
     # Units. None is enabled by the package.
     local unit
     for unit in packaging/bsm/systemd/*; do
         install -Dm644 "$unit" "$pkgdir/usr/lib/systemd/system/$(basename "$unit")"
     done
+    # The stock plymouth-quit.service runs after bsm, which withdraws the splash itself.
+    install -Dm644 packaging/bsm/plymouth/10-bsm-order.conf \
+        "$pkgdir/usr/lib/systemd/system/plymouth-quit.service.d/10-bsm.conf"
     install -Dm644 packaging/bsm/sysusers/bsm.conf "$pkgdir/usr/lib/sysusers.d/bsm.conf"
     install -Dm644 packaging/bsm/tmpfiles/bsm.conf "$pkgdir/usr/lib/tmpfiles.d/bsm.conf"
     # Applied by bsm.service itself, not at boot (see the file).
@@ -90,6 +95,7 @@ package() {
 
     install -Dm644 packaging/bsm/config/bsm.toml "$pkgdir/etc/bsm/bsm.toml"
     install -Dm644 docs/bsm/packaging.md "$pkgdir/usr/share/doc/bsm/packaging.md"
+    install -Dm644 docs/bsm/boot.md "$pkgdir/usr/share/doc/bsm/boot.md"
     install -Dm644 docs/bsm/manager.md "$pkgdir/usr/share/doc/bsm/manager.md"
     install -Dm644 docs/bsm/architecture.md "$pkgdir/usr/share/doc/bsm/architecture.md"
     install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"

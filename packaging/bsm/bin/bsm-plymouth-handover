@@ -1,0 +1,57 @@
+#!/bin/sh
+# Hooks of bsm.service around the boot splash. Run by systemd as root; see
+# docs/bsm/boot.md for the measurements behind the order.
+#
+#   deactivate  ExecStartPre: before bsm opens the display. Plymouth drops DRM
+#               master and keeps scanning out its last picture, so seatd can
+#               hand the master to bsm and no CRTC is touched.
+#   retain      ExecStartPost: after bsm reported READY (the greeter is on the
+#               screen). Plymouth exits and leaves the picture alone. Plain
+#               `plymouth quit` would blank it; the kernel's fbcon takes the
+#               planes over when Plymouth was the last DRM client, which is why
+#               the master has to move to bsm first.
+#   failed      ExecStopPost: only when bsm stopped without success. The splash
+#               must not outlive a broken start: greetd (bsm-fallback) waits for
+#               plymouth-quit-wait, which waits for the splash.
+#
+# Nothing here is an error when there is no splash (plymouth.enable=0, no
+# plymouthd, no plymouth binary): the handover is then simply absent.
+set -u
+
+PLYMOUTH="${BSM_PLYMOUTH:-/usr/bin/plymouth}"
+
+log() { echo "bsm-plymouth-handover: $*"; }
+
+splash_running() {
+    [ -x "$PLYMOUTH" ] && "$PLYMOUTH" --ping >/dev/null 2>&1
+}
+
+case "${1:-}" in
+    deactivate)
+        splash_running || { log "no boot splash is running; nothing to take over"; exit 0; }
+        if "$PLYMOUTH" deactivate; then
+            log "splash deactivated: DRM master released, picture stays on the display"
+        else
+            log "plymouth deactivate failed (status $?); bsm will try to take the display anyway"
+        fi
+        ;;
+    retain)
+        splash_running || exit 0
+        if "$PLYMOUTH" quit --retain-splash; then
+            log "splash withdrawn; the display belongs to bsm"
+        else
+            log "plymouth quit --retain-splash failed (status $?)"
+        fi
+        ;;
+    failed)
+        [ "${SERVICE_RESULT:-success}" = success ] && exit 0
+        splash_running || exit 0
+        "$PLYMOUTH" quit
+        log "bsm ended with ${SERVICE_RESULT:-unknown}; splash withdrawn so a login screen can take the display"
+        ;;
+    *)
+        echo "usage: bsm-plymouth-handover deactivate|retain|failed" >&2
+        exit 2
+        ;;
+esac
+exit 0
