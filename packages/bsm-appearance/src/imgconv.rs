@@ -296,6 +296,17 @@ fn selftest(probe: &str) -> i32 {
                 // kill(2) is not allowed at all, not even at ourselves.
                 libc::kill(libc::getpid(), 0);
             }
+            "futex-shared" => {
+                // A shared (non-private) futex wake: not in the allow list.
+                let word: u32 = 0;
+                libc::syscall(libc::SYS_futex, &word as *const u32, libc::FUTEX_WAKE, 1);
+            }
+            "futex-private" => {
+                let word: u32 = 0;
+                let woken = libc::syscall(libc::SYS_futex, &word as *const u32, libc::FUTEX_WAKE | libc::FUTEX_PRIVATE_FLAG, 1);
+                println!("{}", if woken == 0 { "allowed" } else { "failed" });
+                return if woken == 0 { exit::OK } else { 99 };
+            }
             "kill-self" => {
                 // The one allowed form: signal 0 to this thread of this process.
                 let pid = libc::getpid();

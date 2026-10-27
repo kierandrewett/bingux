@@ -191,13 +191,15 @@ fn the_converter_cannot_be_pointed_at_a_path() {
 fn sandbox_stops_what_it_must_stop() {
     // Each probe tries a forbidden syscall after the sandbox is up. The kernel must kill the
     // process with SIGSYS before the probe's next line runs.
-    for probe in ["socket", "open", "exec", "write", "exec-memory", "kill-other", "kill-raw"] {
+    for probe in ["socket", "open", "exec", "write", "exec-memory", "kill-other", "kill-raw", "futex-shared"] {
         let output = Command::new(env!("CARGO_BIN_EXE_bsm-imgconv")).args(["selftest", probe]).output().unwrap();
         assert_eq!(output.status.signal(), Some(libc::SIGSYS), "probe {probe}: {:?} {}", output.status, String::from_utf8_lossy(&output.stdout));
         assert!(output.stdout.is_empty(), "probe {probe} must not get past the call");
     }
     let output = Command::new(env!("CARGO_BIN_EXE_bsm-imgconv")).args(["selftest", "kill-self"]).output().unwrap();
     assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "allowed", "tgkill at itself stays possible");
+    let output = Command::new(env!("CARGO_BIN_EXE_bsm-imgconv")).args(["selftest", "futex-private"]).output().unwrap();
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "allowed", "private futex ops stay possible");
     let output = Command::new(env!("CARGO_BIN_EXE_bsm-imgconv")).args(["selftest", "memory"]).output().unwrap();
     assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "denied");
     assert_eq!(output.status.code(), Some(0));

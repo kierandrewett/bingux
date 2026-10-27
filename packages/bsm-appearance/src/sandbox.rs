@@ -147,7 +147,6 @@ pub fn build_filter(write_fds: &[RawFd], pid: libc::pid_t, tid: libc::pid_t) -> 
         libc::SYS_mremap,
         libc::SYS_brk,
         libc::SYS_madvise,
-        libc::SYS_futex,
         libc::SYS_exit,
         libc::SYS_exit_group,
         libc::SYS_rt_sigreturn,
@@ -169,6 +168,19 @@ pub fn build_filter(write_fds: &[RawFd], pid: libc::pid_t, tid: libc::pid_t) -> 
     rules.insert(
         libc::SYS_write,
         writable.iter().map(|fd| rule(vec![condition(0, SeccompCmpOp::Eq, *fd as u64)])).collect(),
+    );
+    // futex only with the process-private wait and wake operations (what std and glibc use);
+    // shared futexes and the PI, requeue and robust-list operations are not needed.
+    let futex_ops = [
+        libc::FUTEX_WAIT | libc::FUTEX_PRIVATE_FLAG,
+        libc::FUTEX_WAKE | libc::FUTEX_PRIVATE_FLAG,
+        libc::FUTEX_WAIT_BITSET | libc::FUTEX_PRIVATE_FLAG,
+        libc::FUTEX_WAKE_BITSET | libc::FUTEX_PRIVATE_FLAG,
+        libc::FUTEX_WAIT_BITSET | libc::FUTEX_PRIVATE_FLAG | libc::FUTEX_CLOCK_REALTIME,
+    ];
+    rules.insert(
+        libc::SYS_futex,
+        futex_ops.iter().map(|op| rule(vec![condition(1, SeccompCmpOp::Eq, *op as u64)])).collect(),
     );
     // The only signalling allowed is tgkill to this very thread of this very process (the Rust
     // runtime's abort path). kill, tkill and tgkill at any other process or thread are killed.

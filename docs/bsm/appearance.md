@@ -230,13 +230,13 @@ Order inside the child (the security design):
    16384 px per side before any pixel is decoded, decoder `max_alloc` is half of `RLIMIT_AS`),
    apply EXIF orientation, resize, blur, re-encode, write.
 
-**Seccomp allow list.** `read`, `close`, `munmap`, `mremap`, `brk`, `madvise`, `futex`, `exit`,
+**Seccomp allow list.** `read`, `close`, `munmap`, `mremap`, `brk`, `madvise`, `exit`,
 `exit_group`, `rt_sigreturn`, `rt_sigprocmask`, `sigaltstack`, `getrandom`, `clock_gettime`,
-`sched_yield`, `getpid`, `gettid`; `tgkill` only when its process and thread arguments are this converter's own pid and tid (the Rust abort path; `kill`, `tkill` and `tgkill` at any other process die with `SIGSYS`); `write` only to fd 1, fd 2 and the output
+`sched_yield`, `getpid`, `gettid`; `tgkill` only when its process and thread arguments are this converter's own pid and tid (the Rust abort path; `kill`, `tkill` and `tgkill` at any other process die with `SIGSYS`); `futex` only with the process-private wait, wake, wait-bitset and wake-bitset operations; `write` only to fd 1, fd 2 and the output
 descriptors; `mmap` and `mprotect` only without `PROT_EXEC`; `fcntl` only with `F_GETFD`. No
 `open*`, `socket`, `connect`, `execve`, `clone`, `fork`, `ptrace`, `unshare`, `mount`,
 `prctl`. A forbidden call kills the process with `SIGSYS`; `bsm-imgconv selftest <probe>`
-runs the probes `socket`, `open`, `exec`, `write`, `exec-memory`, `kill-other`, `kill-raw`, `kill-self` (allowed) and `memory` after lock-down,
+runs the probes `socket`, `open`, `exec`, `write`, `exec-memory`, `kill-other`, `kill-raw`, `futex-shared`, `kill-self` and `futex-private` (both allowed) and `memory` after lock-down,
 and the tests assert the kill.
 
 **The gap, precisely.** After lock-down the child can still make the allowed calls, so it can
