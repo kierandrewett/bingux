@@ -225,7 +225,7 @@ active local session" ask for an administrator password instead.
    (the PAM service of hosted logins; only root can create a logind session, so
    an unprivileged process cannot claim it), `Class=user`, `Remote=no`, and
    `Active=yes` gets `YES` for a fixed list of actions whose own `allow_active`
-   default is `yes`: login1 power off, reboot and suspend; udisks2 mounting,
+   default is `yes`: login1 power off, reboot and suspend (the single-session actions only: the `-multiple-sessions` variants keep their stock administrator authentication, so a standard user cannot take the machine down while another account is signed in; bsm asks polkit for them when another account has a running session and treats "needs authentication" as a refusal); udisks2 mounting,
    unlocking, ejecting and powering off the user's own removable media;
    NetworkManager network control, scanning, enable/disable and own and system
    connection settings; power-profiles-daemon switching; colord (except
@@ -400,3 +400,28 @@ with QEMU's `SHUTDOWN` event.
 Not proven: behaviour with default timings in the VM, real GPU drivers (the guest
 has virgl only), real monitors, suspend, DPMS, hotplug, multi-session-per-user, and
 frame stalls and CPU or GPU cost (spec phase 9).
+
+## Review follow-ups (packaging side)
+
+From `review-manager.md` F4 and F5 and `review-helper.md` F4, F8, F9 and F11:
+
+| Finding | Change | State |
+| ------- | ------ | ----- |
+| manager F4 | `*-multiple-sessions` removed from the hosted whitelist in `50-bsm.rules`; `/etc/bsm/bsm.toml` ships with explicit `[greeter_power]` (the manager ignores greeter reboot and power off while a session runs). | Rule logic run in Node; not yet run in the VM (see below). |
+| manager F5 | Unconfirmed whether polkitd answers `CheckAuthorization` from the `bsm` account for another uid's subject. The walkthrough has two probes (`probe_power` in `tests/bsm-qemu.py`): `bsmctl reboot` from inside the hosted session's scope with a blocking inhibitor, with one session (expects `inhibited`: polkit allowed it) and with two (expects a refusal that is not `inhibited`), and it saves the polkit journal. | Not run to a result: see "Host load". `org.freedesktop.policykit.read` is not added until a run shows the refusal. |
+| helper F4 | `/run/bsm-helper` 0711 and `/run/bsm-helper/sessions` 0700 root in tmpfiles; `bsm-helper.socket` `DirectoryMode=0711`. | Shipped; helper-side checks are BsmHelper's. |
+| helper F8 | PAM `substack`. | BsmHelper (they own `packaging/bsm/pam`). |
+| helper F9 | `hostedSession` caches the `loginctl` answer per logind session id (256 entries). | Logic tested in Node (one spawn for repeated checks). |
+| helper F11 | `bsm.service`: `ProtectKernelTunables`, `RestrictNamespaces=user net`, `DevicePolicy=closed` with `DeviceAllow=char-drm rw` and `char-nvidia* rw`. `bsm-seatd.service`: `CapabilityBoundingSet` (SYS_ADMIN, SYS_TTY_CONFIG, CHOWN, FOWNER, DAC_OVERRIDE, DAC_READ_SEARCH), `RestrictNamespaces=yes`, `PrivateTmp`, `ProtectKernelTunables`, `ProtectKernelLogs`, `ProtectClock`, `RestrictRealtime`. | Not verified in the VM: see below. If DRM or seat access breaks, bisect with drop-ins under `/run/systemd/system/bsm.service.d/`. |
+
+### Host load
+
+On the day of these changes the development host ran at a load average of 55 to 70
+(other builds and VMs). With that load the guest's Gnoblin Lua worker is restarted
+during start-up (`gnoblin: restarting Lua runtime worker`, configuration falls back to
+the built-in defaults, so Bingux's autostart never runs and bsm times out at
+`BinguxLaunched` after 120 s). The same failure happens with the unmodified, previously
+passing 2026.10.27 image and no injection (`--only boot,greeter,login-a`), so it is the
+host, not these changes. The boot and greeter steps still pass. The hardening and the
+polkit probes therefore have **not** been confirmed by a green walkthrough; rerun
+`python3 tests/bsm-qemu.py --inject DIR` on a quiet host before rebuilding the image.
