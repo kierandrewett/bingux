@@ -36,6 +36,10 @@ ShellRoot {
         id: greeterModel
     }
 
+    BsmStateFile {
+        model: greeterModel
+    }
+
     BsmAuthClient {
         id: greeterClient
         model: greeterModel

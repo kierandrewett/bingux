@@ -56,8 +56,12 @@ QtObject {
         }
         return null;
     }
-    // bsm answers busy while a lock or switch fade runs, so the picker waits for it.
-    readonly property bool canSwitchUser: synced && users.length > 1 && !showProgress && !signingIn && !operationActive
+    // bsm answers busy while a lock or switch fade runs, so the picker waits
+    // for it. Only a transition that is really running counts: bsm also keeps
+    // an operation in `requested` or `authorising` for as long as the sign-in
+    // conversation waits for the password, and that must not hide the button.
+    readonly property bool transitionRunning: operationId !== 0 && ["preparing", "animating", "committed"].includes(operationPhase)
+    readonly property bool canSwitchUser: synced && users.length > 1 && !showProgress && !signingIn && !transitionRunning
 
     // Account list for the picker.
     readonly property var pickerUsers: users.map(user => ({
@@ -108,6 +112,9 @@ QtObject {
         interval: 4000
         onTriggered: root.signingInSettled = true
     }
+
+    // The last pointer gesture the screen saw, for the state file: "" until one.
+    property string gesture: ""
 
     // Power and other operations.
     property string powerAction: ""

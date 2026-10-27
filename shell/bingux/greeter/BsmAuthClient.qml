@@ -80,6 +80,10 @@ QtObject {
         root.model.resetConversation();
         selectRequest = nextRequest();
         pendingSelect = uid;
+        // bsm answers with a snapshot naming the new account. Until it arrives
+        // the old one is still "selected": a begin_auth for it would be stale.
+        holdForSnapshot = true;
+        snapshotWait.restart();
         send({
             type: "select_user",
             uid: uid
@@ -90,7 +94,10 @@ QtObject {
     // running), kept to retry once; -1 when none is outstanding.
     property int pendingSelect: -1
     // Whether the current attempt already was retried after a busy answer.
-    property bool busyRetried: false
+    // The status line shows the busy message: the next prompt replaces it.
+    property bool busyShown: false
+    property int busyAttempts: 0
+    readonly property int busyAttemptsMax: 8
 
     // bsm refuses selection and authentication while a lock or switch fade
     // runs. Wait for that operation to finish (or a moment) and try once more;
@@ -101,7 +108,7 @@ QtObject {
     }
 
     property Timer busyWait: Timer {
-        interval: 700
+        interval: 600
         onTriggered: root.runBusyRetry()
     }
 
@@ -110,7 +117,6 @@ QtObject {
         const model = root.model;
         if (pendingSelect >= 0) {
             const uid = pendingSelect;
-            pendingSelect = -2;
             selectRequest = nextRequest();
             send({
                 type: "select_user",
@@ -237,9 +243,9 @@ QtObject {
                 // struct next to the `type` tag.
                 const challenge = model.challengeId;
                 if (model.applySnapshot(message)) {
-                    if (model.selectedUid === pendingSelect || pendingSelect === -2) {
+                    if (model.selectedUid === pendingSelect) {
                         pendingSelect = -1;
-                        busyRetried = false;
+                        busyAttempts = 0;
                     }
                     // An account or mode change ended the conversation locally;
                     // tell bsm too, then follow the new selection.
@@ -280,7 +286,7 @@ QtObject {
     // bsm answered the begin_auth in flight. The screen may have moved to
     // another account meanwhile: follow the latest snapshot.
     function answered() {
-        busyRetried = false;
+        busyAttempts = 0;
         answerTimeout.stop();
         if (!awaitingFirstPrompt)
             return;
@@ -321,6 +327,11 @@ QtObject {
         switch (message.kind) {
         case "secret":
         case "visible":
+            if (busyShown) {
+                busyShown = false;
+                model.statusText = "";
+                model.statusIsError = false;
+            }
             model.promptKind = message.kind;
             model.promptText = message.text;
             model.phase = "prompting";
@@ -400,15 +411,18 @@ QtObject {
                     model.phase = "idle";
                     model.challengeId = 0;
                 }
-                if (!busyRetried && !(isSelect && pendingSelect === -2)) {
-                    busyRetried = true;
+                // A lock or switch fade can outlast one wait: keep waiting for it,
+                // quietly, a bounded number of times before telling the user.
+                if (busyAttempts < busyAttemptsMax) {
+                    busyAttempts += 1;
                     retryAfterBusy();
                 } else {
-                    busyRetried = false;
+                    busyAttempts = 0;
                     pendingSelect = -1;
                     selectRequest = 0;
                     model.statusText = model.authErrorText("busy", "");
                     model.statusIsError = true;
+                    busyShown = true;
                     model.rejected();
                 }
                 return;

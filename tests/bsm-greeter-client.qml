@@ -296,9 +296,14 @@ ShellRoot {
         const selects = out.filter(m => m.type === "select_user").length;
         check("busy select_user is held, not resent at once", client.busyWait.running && out.filter(m => m.type === "select_user").length === selects);
         client.handle({ type: "operation", operation_id: 77, kind: "switch_user", phase: "completed", reason: null });
-        check("the finished operation retries select_user once", out.filter(m => m.type === "select_user").length === selects + 1 && !client.busyWait.running);
+        check("the finished operation retries select_user", out.filter(m => m.type === "select_user").length === selects + 1 && !client.busyWait.running);
+        for (let i = 0; i < client.busyAttemptsMax; i++) {
+            client.handle({ type: "error", request_id: null, code: "busy", message: "" });
+            if (client.busyWait.running)
+                client.runBusyRetry();
+        }
         client.handle({ type: "error", request_id: null, code: "busy", message: "" });
-        check("a second busy is shown, not retried", !client.busyWait.running && model.statusLineIsError && model.statusLine === "bsm is busy, try again");
+        check("a long busy window is waited out, then shown", !client.busyWait.running && model.statusLineIsError && model.statusLine === "bsm is busy, try again");
         client.handle(snapshot(22, 1001, login, users));
 
         // Nothing keeps animating once bsm has taken the greeter over.

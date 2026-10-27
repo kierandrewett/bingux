@@ -32,6 +32,7 @@ The driver socket takes one JSON object per line and answers `ok` or
   {"cmd": "clear_progress"}
   {"cmd": "availability", "uid": 1002, "value": "running_locked"}
   {"cmd": "operation", "phase": "failed", "reason": "inhibited"}
+  {"cmd": "lock", "uid": 1000}                          a lock fade, then the unlock screen of that account
   {"cmd": "busy", "seconds": 0.5}                       refuse select_user and begin_auth with busy
   {"cmd": "drop"}                                       close the greeter's connection
   {"cmd": "quit"}
@@ -161,6 +162,9 @@ class Server:
         self.next_challenge = 100
         self.next_operation = 500
         self.operation = None
+        # The operation the real manager keeps in `authorising` for as long as a
+        # sign-in conversation waits for its answer: (id, kind) or None.
+        self.conversation_op = None
         self.log_file = open(args.log, "a", buffering=1) if args.log else None
         self.deny_power = args.deny_power
         self.busy_until = 0.0
@@ -279,6 +283,12 @@ class Server:
         self.send({"type": "auth_result", "challenge_id": self.challenge["id"], "ok": ok, "code": code, "message": message})
         self.challenge = None
 
+    def end_conversation_op(self, phase):
+        if self.conversation_op is not None:
+            self.operation, kind_name = self.conversation_op
+            self.conversation_op = None
+            self.operation_event(kind_name, phase, "cancelled" if phase == "cancelled" else None)
+
     def operation_event(self, kind, phase, reason=None):
         self.send({"type": "operation", "operation_id": self.operation, "kind": kind, "phase": phase, "reason": reason})
 
@@ -302,6 +312,7 @@ class Server:
                 return
             self.selected = uid
             self.challenge = None
+            self.end_conversation_op("cancelled")
             self.push_snapshot()
         elif kind == "begin_auth":
             uid = message.get("uid")
@@ -319,6 +330,15 @@ class Server:
                 self.push_snapshot()
             self.challenge = {"id": self.next_challenge, "uid": uid, "intent": message.get("intent"), "step": "password", "request": message.get("request_id")}
             self.next_challenge += 1
+            if self.conversation_op is None:
+                # BeginAuth opens an operation that stays `authorising` until the
+                # conversation ends: the greeter must not read it as a running fade.
+                kind_name = {"unlock": "unlock_slide_up", "switch": "switch_user"}.get(message.get("intent"), "new_login_fade")
+                self.operation = self.next_operation
+                self.next_operation += 1
+                self.conversation_op = (self.operation, kind_name)
+                self.operation_event(kind_name, "requested")
+                self.operation_event(kind_name, "authorising")
             self.prompt(message.get("request_id"), "secret", "Password: ")
         elif kind == "auth_response":
             # The response is a secret: only its length is ever logged.
@@ -346,6 +366,7 @@ class Server:
             self.log("cancel_auth", challenge_id=message.get("challenge_id"))
             if self.challenge and self.challenge["id"] == message.get("challenge_id"):
                 self.challenge = None
+                self.end_conversation_op("cancelled")
         elif kind == "power":
             self.log("power", action=message.get("action"))
             self.operation = self.next_operation
@@ -369,13 +390,17 @@ class Server:
     def accept(self, c):
         user = self.users[c["uid"]]
         self.result(True)
+        if self.conversation_op is not None:
+            self.operation, kind_name = self.conversation_op
+            self.conversation_op = None
+            self.operation_event(kind_name, "preparing")
         if user["availability"] in ("not_signed_in", "unavailable") and c["intent"] != "unlock":
             self.new_progress(c["uid"])
             user["availability"] = "starting"
             self.push_snapshot()
             if self.args.auto:
                 asyncio.ensure_future(self.auto_progress())
-        else:
+        elif self.operation is None:
             self.operation = self.next_operation
             self.next_operation += 1
             kind = "unlock_slide_up" if c["intent"] == "unlock" else "switch_user"
@@ -428,9 +453,7 @@ class Server:
             # that names the new account follows a moment later.
             if self.challenge is not None:
                 self.result(False, "cancelled", "cancelled")
-                self.operation = self.next_operation
-                self.next_operation += 1
-                self.operation_event("new_login_fade", "cancelled", "cancelled")
+                self.end_conversation_op("cancelled")
                 await self.writer.drain()
                 await asyncio.sleep(0.03)
             self.selected = c["uid"]
@@ -459,6 +482,24 @@ class Server:
             self.push_snapshot()
         elif name == "operation":
             self.operation_event("power_fade", c["phase"], c.get("reason"))
+        elif name == "lock":
+            # A lock: bsm refuses select_user and begin_auth with busy while the
+            # fade runs, ends any open conversation, then publishes unlock mode.
+            self.busy_until = asyncio.get_running_loop().time() + 0.6
+            self.end_conversation_op("cancelled")
+            self.challenge = None
+            self.operation = self.next_operation
+            self.next_operation += 1
+            for phase in ("requested", "authorising", "preparing", "animating"):
+                self.operation_event("lock", phase)
+                await self.writer.drain()
+                await asyncio.sleep(0.1)
+            self.mode = {"mode": "unlock", "session": "s0000000a", "uid": c["uid"]}
+            self.users[c["uid"]].update(availability="running_locked", session="s0000000a")
+            self.selected = c["uid"]
+            self.push_snapshot()
+            await asyncio.sleep(0.2)
+            self.operation_event("lock", "completed")
         elif name == "busy":
             self.busy_until = asyncio.get_running_loop().time() + c["seconds"]
         elif name == "drop":

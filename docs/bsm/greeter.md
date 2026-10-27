@@ -249,8 +249,46 @@ screen of Alex's session, `--no-pictures` shows the opt-out look and
 * `tests/lock-ui.py` is the standalone lock's harness; it passes unchanged
   after the refactor.
 
+### What has run in the real VM
+
+`tests/bsm-greeter-vm.py` boots the live ISO with bsm and two displays, puts
+the current `shell/bingux` QML into the guest (a rebuilt `bingux-shell.sxa`,
+nothing else changes), and drives the real greeter with real input only: QEMU
+key events and the absolute USB tablet. It does not use `bsmctl select-user`
+to move the greeter. These checks pass (last run: all 22), with the screenshots
+in `distro/out/bsm-test/greeter-real/`:
+
+* the Switch user button opens the account list on the login screen, which
+  shows both accounts as `Not signed in`;
+* choosing the other account changes the avatar, name and tint, starts a
+  conversation for it, and reveals nothing (no foreground session);
+* signing in as the first account with the keyboard (real PAM, real hosted
+  session) and the reveal;
+* after `bsmctl lock`: the unlock form of the owner with the `Switch user`
+  handle; clicking the handle opens the list with the owner as `Running,
+  locked` and the other account as `Not signed in`; a swipe up from the bottom
+  edge opens it too; dragging its handle down closes it; choosing the other
+  account changes the screen and reveals nothing.
+
+Two real-system faults were found this way and are fixed. bsm keeps an
+operation in `authorising` for as long as a sign-in conversation waits for its
+password, and the greeter read that as a running fade, so it hid Switch user
+and the locked handle; and a `DragHandler`'s translation is already zero when
+it deactivates, so the swipe and the close-drag never fired. The fake server now
+opens that operation on `begin_auth` and runs a lock fade (`{"cmd": "lock"}`),
+`tests/bsm-greeter-ui.py` asserts the button is offered in both, and the
+greeter writes its non-secret state to
+`$XDG_RUNTIME_DIR/bsm-greeter-state.json` (booleans, ids and phases, never a
+name, prompt or answer) so a harness can see why a control is shown or hidden.
+
+The VM shows the same wallpaper tint for both accounts: bsm only has a
+published wallpaper for accounts that have signed in and exported one, and
+neither test account had.
+
 ### Not covered
 
-The headless Sway session has no pointer, so clicking, tapping and swiping are
-not driven by the tests; the keyboard paths are. The greeter has been run only
-against the fake server; no run against the real `bsm` is recorded here.
+Touch input has not been driven anywhere. In headless Sway
+(`tests/bsm-greeter-ui.py`) there is no pointer at all, so only the keyboard
+paths are exercised there; clicks and swipes have run only in the VM, with a
+tablet pointer. The VM runs use the greeter's software-rendered look
+(`BINGUX_SOFTWARE_RENDERING` is not set there; Qt picked the renderer).

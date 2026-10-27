@@ -222,7 +222,7 @@ def has_red_text(image, box):
     for y in range(box[1], box[3]):
         for x in range(box[0], box[2]):
             r, g, b = image.getpixel((x, y))
-            if r > 200 and g < 150 and b < 130:
+            if r > 225 and g < 150 and b < 130 and r - g > 90:
                 count += 1
     return count > 12
 
@@ -342,6 +342,12 @@ def unlock_scenario():
         rig.close()
 
 
+def state_of(rig):
+    """What the greeter says about itself (shell/bingux/greeter/BsmStateFile.qml)."""
+    path = rig.home / "run/bsm-greeter-state.json"
+    return json.loads(path.read_text()) if path.exists() else {}
+
+
 def has_field(image):
     """The response field's outline: a lighter run across the card at y 688..720."""
     return any(sum(1 for x in range(540, 740) if min(image.getpixel((x, y))) > 150) > 150 for y in range(686, 722))
@@ -392,6 +398,40 @@ def external_select_scenario():
         rig.close()
 
 
+def switch_reachable_scenario():
+    """bsm keeps an operation in `authorising` for as long as a conversation waits
+    for the password. In the real system that hid Switch user and the locked
+    screen's handle; the button must be there with the conversation open, on the
+    login screen and after a lock fade."""
+    rig = Rig(["--mode", "login"])
+    try:
+        check("reachable: the conversation is open", rig.wait_for("begin_auth", uid=1000, timeout=20))
+        time.sleep(1.2)
+        state = state_of(rig)
+        check("reachable: the greeter shows the operation as authorising", state.get("operation", {}).get("phase") == "authorising", str(state))
+        check("reachable: Switch user is offered with the conversation open", state.get("canSwitchUser") is True, str(state))
+        shot = rig.shot("reachable-login", settle=0.3)
+        check("reachable: the Switch user button is drawn", changed(shot, shot, (0, 0, 1, 1)) == 0 and has_button(shot, (20, 748, 146, 780)))
+        rig.drive(cmd="lock", uid=1000)
+        time.sleep(2.5)
+        check("reachable: a lock leads to the unlock form", rig.wait_for("begin_auth", uid=1000, intent="unlock", timeout=10))
+        time.sleep(1.0)
+        state = state_of(rig)
+        check("reachable: after the lock fade the handle is offered", state.get("canSwitchUser") is True and state.get("mode") == "unlock", str(state))
+        locked = rig.shot("reachable-locked", settle=0.3)
+        check("reachable: no stale error shows after the lock", not has_red_text(locked, (400, 655, 880, 685)))
+        check("reachable: the handle is drawn", has_button(locked, (560, 764, 720, 790)))
+        return "".join(rig.output)
+    finally:
+        rig.close()
+
+
+def has_button(image, box):
+    """Light, button-like pixels (the frosted pill or its text) inside a box."""
+    bright = sum(1 for x in range(box[0], box[2], 2) for y in range(box[1], box[3], 2) if sum(image.getpixel((x, y))) / 3 > 140)
+    return bright > 12
+
+
 def busy_scenario():
     """While a fade runs bsm answers busy. The greeter must wait and try once
     more, not stay stuck."""
@@ -405,7 +445,7 @@ def busy_scenario():
         rig.key("Down", "Return")
         check("busy: select_user is refused while busy", rig.wait_for("busy_select_user"))
         check("busy: the greeter retries and reaches the account", rig.wait_for("begin_auth", uid=1001, timeout=10))
-        check("busy: it did not loop", rig.count("busy_select_user") <= 2 and rig.count("busy_begin_auth") <= 2, f"{rig.count('busy_select_user')} {rig.count('busy_begin_auth')}")
+        check("busy: it did not loop", rig.count("busy_select_user") <= 4 and rig.count("busy_begin_auth") <= 4, f"{rig.count('busy_select_user')} {rig.count('busy_begin_auth')}")
         shot = rig.shot("busy-retry-settled", settle=1.0)
         check("busy: the form is usable afterwards", has_field(shot))
         return "".join(rig.output)
@@ -424,6 +464,8 @@ def main():
     login_records, login_output = login_scenario()
     unlock_records, unlock_output = unlock_scenario()
     fight_output = fight_scenario()
+    reach_output = switch_reachable_scenario()
+    check("reachable: no QML errors", "ERROR" not in reach_output.replace("ERROR: ", "ERROR_"))
     busy_output = busy_scenario()
     check("busy: no QML errors", "ERROR" not in busy_output.replace("ERROR: ", "ERROR_"))
     external_output = external_select_scenario()

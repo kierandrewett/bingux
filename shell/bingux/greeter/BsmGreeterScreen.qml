@@ -153,6 +153,7 @@ Item {
         cornerContent: [
             BsmNetworkIndicator {
                 objectName: "networkStatus"
+                active: root.interactive
                 theme: authTheme
                 backdrop: screen.backdrop
             },
@@ -180,10 +181,23 @@ Item {
                 height: 96
                 visible: root.interactive && root.model.unlockMode && root.model.canSwitchUser && !picker.open
                 DragHandler {
+                    id: swipe
+                    // translation is back at zero by the time `active` turns
+                    // false, so the travel is kept while the drag runs.
+                    property real travelled: 0
                     target: null
                     xAxis.enabled: false
-                    onActiveChanged: if (!active && translation.y < -48)
-                        picker.open = true
+                    onTranslationChanged: if (active)
+                        travelled = translation.y
+                    onActiveChanged: {
+                        if (active) {
+                            travelled = 0;
+                            return;
+                        }
+                        root.model.gesture = "swipe " + Math.round(travelled);
+                        if (travelled < -48)
+                            picker.open = true;
+                    }
                 }
                 AbstractButton {
                     id: handle

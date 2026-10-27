@@ -103,10 +103,19 @@ Item {
                 opacity: 0.6
             }
             DragHandler {
+                // translation is back at zero by the time `active` turns false,
+                // so the travel is kept while the drag runs.
+                property real travelled: 0
                 target: null
                 xAxis.enabled: false
-                onActiveChanged: if (!active && translation.y > 64)
-                    root.dismissed()
+                onTranslationChanged: if (active)
+                    travelled = translation.y
+                onActiveChanged: {
+                    if (active)
+                        travelled = 0;
+                    else if (travelled > 64)
+                        root.dismissed();
+                }
             }
         }
 
