@@ -44,6 +44,10 @@ impl Env {
     }
 
     fn spawn(&self, extra: &[&str]) -> Bridge {
+        self.spawn_with(extra, &[("BSM_HOST_READY_PEERS", "*")])
+    }
+
+    fn spawn_with(&self, extra: &[&str], envs: &[(&str, &str)]) -> Bridge {
         let runtime = self.dir.join("run");
         let input_log = self.dir.join("input.jsonl");
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_bsm-host"));
@@ -56,6 +60,7 @@ impl Env {
             .env("BSM_GENERATION", GEN)
             .env("XDG_RUNTIME_DIR", &runtime)
             .env("RUST_LOG", "debug")
+            .envs(envs.iter().copied())
             .stdin(Stdio::null());
         Bridge { child: cmd.spawn().expect("spawn bsm-host"), input_log, runtime }
     }
@@ -309,13 +314,118 @@ fn closed_event_ends_the_bridge_cleanly() {
 }
 
 #[test]
-fn losing_the_bsm_connection_exits_with_status_3() {
+fn losing_the_bsm_connection_for_longer_than_the_window_exits_with_status_3() {
     let mut env = Env::new("lost");
+    env.standin.add_output("DP-1", OutputSpec::new(0, 0, 160, 100));
+    let mut bridge = env.spawn(&["--recovery-window", "2"]);
+    env.standin.wait_for("frame", T, |s| !s.frames.is_empty());
+    env.standin.stop();
+    // The bridge does not give up at once: it keeps the session and retries.
+    assert_eq!(bridge.wait_exit(Duration::from_millis(1200)), None, "gave up before the recovery window");
+    assert_eq!(bridge.wait_exit(T), Some(3));
+}
+
+#[test]
+fn bsm_restart_is_survived_without_rebuilding_and_the_state_is_reported_again() {
+    let mut env = Env::new("restart");
+    env.standin.add_output("HDMI-A-1", OutputSpec::new(0, 0, 320, 200));
+    env.standin.add_output("DP-1", OutputSpec::new(320, 0, 240, 150));
+    let mut bridge = env.spawn(&["--test-auto-ready-ms", "150"]);
+    env.standin.wait_for("desktop_ready", T, |s| kinds(s).contains(&DESKTOP_READY));
+    env.standin.send(Control::InputState(true));
+    std::thread::sleep(Duration::from_millis(200));
+
+    // bsm goes away.
+    env.standin.stop();
+    std::thread::sleep(Duration::from_millis(600));
+    assert!(bridge.child.try_wait().unwrap().is_none(), "the bridge exited when bsm went away");
+
+    // A new bsm answers on the same path, same generation, same outputs.
+    env.standin = Standin::start(&env.dir, GEN);
+    env.standin.add_output("HDMI-A-1", OutputSpec::new(0, 0, 320, 200));
+    env.standin.add_output("DP-1", OutputSpec::new(320, 0, 240, 150));
+    env.standin.wait_for("desktop_ready again", T, |s| kinds(s).contains(&DESKTOP_READY));
+    env.standin.wait_for("a frame presented after desktop_ready", T, |s| {
+        let ready_at = s.reports.iter().find(|r| r.kind == DESKTOP_READY).unwrap().at;
+        s.frames.iter().any(|f| f.at >= ready_at && f.after_ack)
+    });
+    let s = env.standin.shared.lock().unwrap();
+    assert!(s.violations.is_empty(), "{:?}", s.violations);
+    assert!(s.frames.iter().all(|f| f.after_ack), "a buffer before the ack on the new connection");
+    let k = kinds(&s);
+    // the whole state is reported again for the same generation
+    assert_eq!(k.iter().filter(|x| **x == GNOBLIN_READY).count(), 1);
+    assert_eq!(k.iter().filter(|x| **x == BINGUX_LAUNCHED).count(), 1);
+    assert_eq!(k.iter().filter(|x| **x == OUTPUT_CONFIGURED).count(), 2);
+    assert_eq!(k.iter().filter(|x| **x == DESKTOP_READY).count(), 1);
+    assert!(s.reports.iter().all(|r| r.generation == GEN));
+    // both outputs got a surface, a configure and an ack on the new connection
+    assert_eq!(s.acks.len(), 2);
+    drop(s);
+    // Input is revoked until the new bsm says otherwise.
+    let before = bridge.input_events().len();
+    env.standin.send(Control::PointerEnter("DP-1".into(), 5.0, 5.0));
+    env.standin.send(Control::PointerMotion(6.0, 6.0));
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(bridge.input_events().len(), before, "input leaked after the reconnect");
+    env.standin.send(Control::InputState(true));
+    std::thread::sleep(Duration::from_millis(200));
+    env.standin.send(Control::PointerMotion(7.0, 7.0));
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(bridge.input_events().iter().any(|e| e["ev"] == "motion" && e["x"] == 7.0));
+    // and the bridge is still the same process
+    assert!(bridge.child.try_wait().unwrap().is_none());
+}
+
+#[test]
+fn outputs_that_changed_during_the_outage_are_reconciled() {
+    let mut env = Env::new("reconcile");
+    env.standin.add_output("A", OutputSpec::new(0, 0, 160, 100));
+    env.standin.add_output("B", OutputSpec::new(160, 0, 160, 100));
+    let bridge = env.spawn(&["--test-auto-ready-ms", "150"]);
+    env.standin.wait_for("desktop_ready", T, |s| kinds(s).contains(&DESKTOP_READY));
+    env.standin.stop();
+    env.standin = Standin::start(&env.dir, GEN);
+    // B is gone, C is new and A is bigger.
+    env.standin.add_output("A", OutputSpec::new(0, 0, 200, 120));
+    env.standin.add_output("C", OutputSpec::new(200, 0, 100, 60));
+    env.standin.wait_for("frames on A and C", T, |s| {
+        s.frames.iter().any(|f| f.output == "A" && (f.width, f.height) == (200, 120)) && s.frames.iter().any(|f| f.output == "C")
+    });
+    env.standin.wait_for("desktop_ready for the new set", T, |s| kinds(s).contains(&DESKTOP_READY));
+    let s = env.standin.shared.lock().unwrap();
+    assert!(s.violations.is_empty(), "{:?}", s.violations);
+    assert!(s.frames.iter().all(|f| f.output != "B"), "a frame for the vanished output");
+    let last_ready = s.reports.iter().rposition(|r| r.kind == DESKTOP_READY).unwrap();
+    assert_eq!((s.reports[last_ready].a, s.reports[last_ready].b), (2, 2));
+    drop(s);
+    drop(bridge);
+}
+
+#[test]
+fn a_different_generation_after_the_reconnect_is_a_protocol_error() {
+    let mut env = Env::new("othergen");
     env.standin.add_output("DP-1", OutputSpec::new(0, 0, 160, 100));
     let mut bridge = env.spawn(&[]);
     env.standin.wait_for("frame", T, |s| !s.frames.is_empty());
     env.standin.stop();
-    assert_eq!(bridge.wait_exit(T), Some(3));
+    env.standin = Standin::start(&env.dir, "43");
+    env.standin.add_output("DP-1", OutputSpec::new(0, 0, 160, 100));
+    assert_eq!(bridge.wait_exit(T), Some(5));
+}
+
+#[test]
+fn closed_after_a_reconnect_still_ends_the_bridge_cleanly() {
+    let mut env = Env::new("closedafter");
+    env.standin.add_output("DP-1", OutputSpec::new(0, 0, 160, 100));
+    let mut bridge = env.spawn(&[]);
+    env.standin.wait_for("frame", T, |s| !s.frames.is_empty());
+    env.standin.stop();
+    env.standin = Standin::start(&env.dir, GEN);
+    env.standin.add_output("DP-1", OutputSpec::new(0, 0, 160, 100));
+    env.standin.wait_for("frame on the new connection", T, |s| !s.frames.is_empty());
+    env.standin.send(Control::Close);
+    assert_eq!(bridge.wait_exit(T), Some(0));
 }
 
 #[test]
@@ -331,3 +441,48 @@ fn missing_socket_env_is_a_usage_error() {
 
 #[allow(dead_code)]
 fn _unused(_: &Path) {}
+
+#[test]
+fn a_same_uid_process_that_is_not_the_bingux_shell_cannot_report() {
+    let env = Env::new("peers");
+    env.standin.add_output("DP-1", OutputSpec::new(0, 0, 160, 100));
+    // Default peer policy: only quickshell, qs, bingux and bingux-wallpaper may report.
+    let bridge = env.spawn_with(&[], &[]);
+    env.standin.wait_for("output_configured", T, |s| kinds(s).contains(&OUTPUT_CONFIGURED));
+    let mut s = UnixStream::connect(bridge.ready_sock()).expect("connect");
+    let _ = s.write_all(format!("{{\"generation\":\"{GEN}\",\"component\":\"wallpaper\",\"event\":\"launched\"}}\n").as_bytes());
+    let _ = s.write_all(format!("{{\"generation\":\"{GEN}\",\"component\":\"desktop\",\"event\":\"launched\"}}\n").as_bytes());
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(!kinds(&env.standin.shared.lock().unwrap()).contains(&BINGUX_LAUNCHED), "an unknown peer reported");
+    // The same lines from a process that carries an allowed name are accepted.
+    let mut env2 = Env::new("peers2");
+    env2.standin.add_output("DP-1", OutputSpec::new(0, 0, 160, 100));
+    let name = std::env::current_exe().unwrap().file_name().unwrap().to_string_lossy().into_owned();
+    let bridge2 = env2.spawn_with(&[], &[("BSM_HOST_READY_PEERS", &name)]);
+    env2.standin.wait_for("output_configured", T, |s| kinds(s).contains(&OUTPUT_CONFIGURED));
+    bridge2.send_line(&format!("{{\"generation\":\"{GEN}\",\"component\":\"wallpaper\",\"event\":\"launched\"}}"));
+    bridge2.send_line(&format!("{{\"generation\":\"{GEN}\",\"component\":\"desktop\",\"event\":\"launched\"}}"));
+    env2.standin.wait_for("bingux_launched", T, |s| kinds(s).contains(&BINGUX_LAUNCHED));
+    env2.standin.stop();
+    drop(bridge);
+}
+
+#[test]
+fn a_connection_that_sends_nothing_is_closed_and_frees_its_slot() {
+    use std::io::Read;
+    let env = Env::new("idle");
+    env.standin.add_output("DP-1", OutputSpec::new(0, 0, 160, 100));
+    let bridge = env.spawn_with(&[], &[("BSM_HOST_READY_PEERS", "*"), ("BSM_HOST_READY_IDLE_SECS", "1")]);
+    env.standin.wait_for("output_configured", T, |s| kinds(s).contains(&OUTPUT_CONFIGURED));
+    // Sixteen idle connections take every slot...
+    let mut idle: Vec<UnixStream> = (0..16).map(|_| UnixStream::connect(bridge.ready_sock()).unwrap()).collect();
+    std::thread::sleep(Duration::from_millis(300));
+    // ...and are closed after the idle time, so the real reporter still gets in.
+    idle[0].set_read_timeout(Some(Duration::from_secs(4))).unwrap();
+    let mut b = [0u8; 1];
+    assert_eq!(idle[0].read(&mut b).unwrap_or(1), 0, "the idle connection was not closed");
+    bridge.send_line(&format!("{{\"generation\":\"{GEN}\",\"component\":\"wallpaper\",\"event\":\"launched\"}}"));
+    bridge.send_line(&format!("{{\"generation\":\"{GEN}\",\"component\":\"desktop\",\"event\":\"launched\"}}"));
+    env.standin.wait_for("bingux_launched", T, |s| kinds(s).contains(&BINGUX_LAUNCHED));
+    idle.clear();
+}

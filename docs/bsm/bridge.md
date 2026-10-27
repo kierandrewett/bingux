@@ -43,6 +43,9 @@ services. Environment:
 | `BSM_OUTPUT_HINTS`         | no       | `"WxH,WxH"` from `OpenSession.output_hints`. Accepted and ignored: outputs come from bsm's `output_added` events. |
 | `GNOBLIN_COMPOSITOR_SOCKET`| no       | Override of `$XDG_RUNTIME_DIR/gnoblin/compositor-v1.sock`.                                                   |
 | `BSMCTL`                   | no       | Path of `bsmctl` (default: `bsmctl` from `PATH`).                                                            |
+| `BSM_HOST_RECOVERY_SECS`   | no       | How long to keep reconnecting after bsm went away (default 120; `--recovery-window SECS` overrides). |
+| `BSM_HOST_READY_PEERS`     | no       | Comma list of executable names allowed on `ready.sock` (default `quickshell,qs,bingux,bingux-wallpaper`; `*` allows all, used by the tests). |
+| `BSM_HOST_READY_IDLE_SECS` | no       | A `ready.sock` connection that sends no valid line in this time is closed (default 10). |
 | `RUST_LOG`                 | no       | `info` by default. `debug` logs reports, ready lines and frame statistics every 5 s.                         |
 
 Option: `--background-fps N` (default 10): frame rate while the session is not
@@ -59,9 +62,9 @@ bsm cleans up.
 | 0      | bsm sent `closed`, or the bridge received SIGTERM/SIGINT. `ready.sock` is removed.               |
 | 1      | Internal error (for example buffers could not be allocated).                                     |
 | 2      | Usage error: missing `BSM_HOST_SOCKET`, `XDG_RUNTIME_DIR` or the bus address, bad argument.      |
-| 3      | The connection to bsm was lost (socket closed, Wayland error).                                   |
+| 3      | The connection to bsm was lost and bsm did not come back within the recovery window (default 120 s). |
 | 4      | Gnoblin is lost: Mutter or `org.gnoblin.Hosted1` vanished, a stream ended or failed, the EIS connection closed, Gnoblin closed the RemoteDesktop session, a virtual monitor could not be created or laid out, or Gnoblin did not appear in 120 s. |
-| 5      | Reserved for protocol errors raised by bsm.                                                      |
+| 5      | After a reconnect bsm announced another session id or generation than before.                    |
 
 ## What the bridge does
 
@@ -94,6 +97,27 @@ bsm cleans up.
   [Background](#background-throttling)). On the transition to inactive every held key,
   button and touch point is released inside Gnoblin.
 * `closed` ends the bridge with status 0.
+* **bsm restart (review F9).** When the connection to bsm fails (EOF, reset, a
+  protocol error) the bridge does not exit. Gnoblin and the apps keep running
+  (the capture streams keep draining, their frames are dropped), input is
+  released and revoked, the Wayland objects of the dead connection are
+  forgotten, and the bridge reconnects to the **same** `BSM_HOST_SOCKET` path with
+  exponential backoff (100 ms doubling to 2 s) for the recovery window. On
+  reconnect it binds the globals again and the normal handshake runs: `identity`
+  must carry the same session id and generation (otherwise exit 5), every
+  announced output gets a new surface and configure/ack, and the last frame of
+  each output is presented again on the new surface (acked first), so bsm sees
+  a frame without Gnoblin repainting. Virtual monitors are **not** rebuilt when
+  the outputs are unchanged: an output with the same size keeps its monitor; a
+  changed position or scale is re-applied in place; a changed size or a
+  vanished output rebuilds the monitors as usual, and an output that bsm does
+  not announce again after its first burst of events (a Wayland sync marks the
+  end) is treated as removed. The whole readiness state for the generation is
+  reported again (`gnoblin_ready`, `bingux_launched`, then per output
+  `output_configured` and `surfaces_mapped` as each output is acknowledged, and
+  `desktop_ready` when everything is back). `closed` after a reconnect still ends
+  the bridge with status 0. If Gnoblin is gone while bsm is away the bridge
+  exits 4 as usual.
 * The cursor: Mutter delivers the pointer image as stream metadata
   (`cursor-mode` 2). On `wl_pointer.enter` and whenever the image changes, the
   bridge calls `wl_pointer.set_cursor` with an ARGB8888 buffer built from it
@@ -197,6 +221,12 @@ Reports use the generation string from bsm's `identity` event. Stale lines are
 ignored. The rules are implemented in `readiness.rs`, a pure state machine
 with unit tests.
 
+Reports go through a small queue (review F6): a report identical to the last one
+sent for the same kind and output is dropped, and at most 20 reports per second
+(burst 20) are sent; when the budget is exhausted only the newest report of
+each kind and output is kept and sent as soon as budget returns (100 ms timer).
+Nothing is sent while bsm is away.
+
 | Report              | Sent when                                                                                                                                                                  |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `gnoblin_ready`     | Once, when `org.gnoblin.Hosted1.Ready` is true.                                                                                                                            |
@@ -205,13 +235,20 @@ with unit tests.
 | `surfaces_mapped`   | Per output whenever (mapped, required) changes, from `bingux_launched` on. A role counts as mapped only when Bingux says so **and** Gnoblin's `layers.list` shows a mapped layer surface with the role's namespace on that output's monitor. |
 | `desktop_ready`     | Once, when every required component sent `ready`, every required surface is confirmed on every output and every output is configured. A frame is presented again right after the report, so bsm sees a frame that follows it. |
 
-Required roles per output: the wallpaper on every output; the bar and the dock
-only on the outputs where Bingux declared them with a `surface` line (Bingux
-draws them on the primary monitor only, so a second monitor shows just the
-wallpaper). Every role a component announces must be declared on at least one
-output, so a missing dock still blocks. Declared surfaces are still confirmed in
-Gnoblin's layer list. `surfaces_mapped` `b` is therefore 1 on a second monitor.
-Verified by unit tests; the VM walkthrough with two outputs is the real check.
+Required roles (review F13): they do **not** come from the reporter. The
+baseline is the wallpaper, the bar and, unless the user's configuration has
+`[desktop] dock = false` (`~/.config/bingux/bingux.toml`, read at start), the
+dock; each must exist on at least one output. Per output the wallpaper is
+always required, and the bar or dock is required there when Bingux declared it
+with a `surface` line **or** Gnoblin's layer list shows a surface with its
+namespace on that output (mapped or not). A reporter can therefore only add
+requirements, never remove one: it cannot hide a surface Gnoblin already holds.
+Bingux draws the bar and dock on one monitor only, so a second monitor with
+just a wallpaper reports `surfaces_mapped` 1 of 1. The `required` field and a
+`component` other than `wallpaper` or `desktop` (including none) are ignored, and a
+component cannot claim another's role (the wallpaper reporter cannot send a
+`bar` surface). Declared surfaces are still confirmed in Gnoblin's layer list.
+Unit-tested; the two-output VM run is the real check.
 
 Roles and namespaces: `wallpaper` = `bingux-wallpaper`, `bar` =
 `bingux-top-bar`, `dock` = `bingux-dock`.
@@ -220,7 +257,15 @@ Roles and namespaces: `wallpaper` = `bingux-wallpaper`, `bar` =
 
 `$XDG_RUNTIME_DIR/bsm/ready.sock`, `SOCK_STREAM`. The directory is mode 0700, the
 socket 0600, and a connection is accepted only when `SO_PEERCRED` shows the
-session's own uid (at most 16 connections). One JSON object per line, at most
+session's own uid **and**, best effort, a process that looks like the Bingux
+shell: the peer's executable name or `comm` (read from `/proc/<pid>`, pid from
+`SO_PEERCRED`) must be one of `quickshell`, `qs`, `bingux`, `bingux-wallpaper`
+(unreadable `/proc` is accepted). That keeps stray same-uid helpers from
+weakening the reveal gate by accident; it is **not** a security boundary, since
+any process of the uid can run a binary with such a name (the compositor still
+requires acknowledged, presented frames). At most 16 connections; one that sends
+no valid line within 10 s is closed so idle connections cannot starve the real
+reporters. One JSON object per line, at most
 4096 bytes; a longer line or invalid JSON closes that connection and nothing
 else. The bridge creates it at startup, before Gnoblin starts Bingux.
 
@@ -232,10 +277,9 @@ else. The bridge creates it at startup, before Gnoblin starts Bingux.
 ```
 
 * `generation`: `BSM_GENERATION`. Any other value is counted and ignored.
-* `component`: `wallpaper` or `desktop`. Both must send `launched` and `ready`
-  (a line without `component` counts as one combined reporter for all roles).
-  Default roles: wallpaper component = `wallpaper`; desktop component = `bar`,
-  `dock`. `launched` may list the roles actually mapped (`required`).
+* `component`: `wallpaper` or `desktop`. Both must send `launched` and `ready`.
+  Anything else is rejected. Roles: wallpaper component = `wallpaper`; desktop
+  component = `bar`, `dock`. `required` on `launched` is parsed and ignored.
 * `output` is the `wl_output` name Bingux sees, which is the Gnoblin connector
   (`Meta-N`). The bridge also accepts the bsm output name.
 * `surface` with `mapped:false` after a `ready` withdraws that component's
@@ -257,7 +301,7 @@ next frame immediately.
 
 | Situation                                           | Behaviour                                                                                                |
 | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| bsm closes or crashes                               | Wayland error or EOF: status 3. `closed`: status 0.                                                      |
+| bsm closes or crashes                               | The session is kept and the bridge reconnects for up to 120 s (see above), then status 3. `closed`: status 0. |
 | Gnoblin or Mutter exits                             | D-Bus name loss, EIS EOF or PipeWire stream end: status 4 within about a second.                         |
 | Stream negotiates another size than configured      | Status 4 (the buffer would not match what bsm expects).                                                  |
 | Monitor creation or layout fails                    | Status 4, reason in the log.                                                                             |
@@ -290,7 +334,10 @@ cargo test --features test-pattern
   `tests/support/standin.rs`, a small `wayland-server` stand-in for bsm. It
   checks no buffer before the ack, report order and counts, stale generations,
   socket mode, oversized lines, input gating and release-on-revoke, background
-  rate, resize, clean close and the lost-connection exit status.
+  rate, resize, clean close, the lost-connection exit status, surviving a bsm
+  restart (same generation, state reported again, input revoked until `input_state`),
+  outputs that changed during the outage, a changed generation, the `ready.sock`
+  peer policy and idle close.
 * `tests/hosted.rs`: the real bridge against a private hosted session (own
   runtime dir, own session bus, PipeWire, WirePlumber, no system bus, private
   `HOME`): either stock headless Mutter plus a `org.gnoblin.Hosted1` stub, or the
@@ -299,7 +346,8 @@ cargo test --features test-pattern
   while active, a held key repeats, two outputs with different scales become two
   monitors at the requested positions, resize and removal rebuild the monitors,
   a compositor crash gives status 4, Gnoblin actions are forwarded to `bsmctl`,
-  the cursor image arrives, and `desktop_ready` waits for Gnoblin's own layer
+  the cursor image arrives, a bsm restart keeps the session, client and monitor (the
+  monitor is created once), and `desktop_ready` waits for Gnoblin's own layer
   list (layer clients are built from Gnoblin's `tests/hosted-layer-client.c`).
   Tests skip with a message when a tool is missing.
 
@@ -383,7 +431,8 @@ Stated plainly so nobody assumes more than was verified:
   protocol-level input log, but were not exercised against a real client in the
   hosted session (pointer buttons, motion and keys were).
 * The keymap of bsm is ignored (see Input).
-* One bridge serves one session (`BSM_HOST_SOCKET` is single use).
+* One bridge serves one session. After a reconnect the same socket path is used again; bsm must re-arm the registration (BsmManager and BsmCompositor do).
+* bsm-restart recovery is verified against the stand-in compositor and a real hosted Mutter session (frames, the same client, input and no monitor rebuild); it is not verified with the real bsm in a VM. A bsm that accepts the connection but never answers the registry roundtrip would block the reconnect attempt.
 * Not verified in a QEMU image or with the real bsm compositor: the bridge was
   tested against its own stand-in and the real hosted Gnoblin. The stand-in
   follows the protocol text, not bsm's implementation.

@@ -91,15 +91,15 @@ pub enum Report {
     DesktopReady { a: u32, b: u32 },
 }
 
-const COMPONENT_ALL: &str = "all";
 const COMPONENT_WALLPAPER: &str = "wallpaper";
 const COMPONENT_DESKTOP: &str = "desktop";
 
-fn default_roles(component: &str) -> Vec<Role> {
+/// Roles a component may show. A reporter cannot claim a role of another component.
+fn component_roles(component: &str) -> &'static [Role] {
     match component {
-        COMPONENT_WALLPAPER => vec![Role::Wallpaper],
-        COMPONENT_DESKTOP => vec![Role::Bar, Role::Dock],
-        _ => Role::ALL.to_vec(),
+        COMPONENT_WALLPAPER => &[Role::Wallpaper],
+        COMPONENT_DESKTOP => &[Role::Bar, Role::Dock],
+        _ => &[],
     }
 }
 
@@ -107,7 +107,6 @@ fn default_roles(component: &str) -> Vec<Role> {
 struct Component {
     launched: bool,
     ready: bool,
-    roles: Vec<Role>,
 }
 
 #[derive(Debug)]
@@ -128,6 +127,8 @@ pub struct Readiness {
     surfaces_reported: BTreeMap<String, (u32, u32)>,
     desktop_reported: bool,
     rejected: u64,
+    /// From the user's Bingux configuration (`[desktop] dock`), not from a reporter.
+    dock_enabled: bool,
 }
 
 impl Readiness {
@@ -147,7 +148,28 @@ impl Readiness {
             surfaces_reported: BTreeMap::new(),
             desktop_reported: false,
             rejected: 0,
+            dock_enabled: true,
         }
+    }
+
+    /// Whether the user's Bingux configuration enables the dock. Required
+    /// roles come from here and from Gnoblin's layer list, never from the
+    /// reporter alone.
+    pub fn set_dock_enabled(&mut self, enabled: bool) {
+        self.dock_enabled = enabled;
+    }
+
+    /// Forget what was reported so that the current state is reported again
+    /// (after the connection to bsm was re-established). Outputs must be
+    /// configured again on the new connection; Gnoblin's state is kept.
+    pub fn resync(&mut self) -> Vec<Report> {
+        self.gnoblin_reported = false;
+        self.configured.clear();
+        self.configured_reported.clear();
+        self.launched_reported = false;
+        self.surfaces_reported.clear();
+        self.desktop_reported = false;
+        self.evaluate()
     }
 
     pub fn generation(&self) -> &str {
@@ -205,19 +227,17 @@ impl Readiness {
             self.rejected += 1;
             return Vec::new();
         }
-        let component = line
-            .component
-            .clone()
-            .unwrap_or_else(|| COMPONENT_ALL.to_owned());
+        // Only the two known reporters count; `required` on the wire is ignored.
+        let component = match line.component.as_deref() {
+            Some(c @ (COMPONENT_WALLPAPER | COMPONENT_DESKTOP)) => c.to_owned(),
+            _ => {
+                self.rejected += 1;
+                return Vec::new();
+            }
+        };
         match line.event.as_str() {
             "launched" => {
-                let roles = match &line.required {
-                    Some(list) => list.iter().filter_map(|r| Role::parse(r)).collect(),
-                    None => default_roles(&component),
-                };
-                let entry = self.components.entry(component).or_default();
-                entry.launched = true;
-                entry.roles = roles;
+                self.components.entry(component).or_default().launched = true;
             }
             "surface" => {
                 let (Some(output), Some(role), Some(mapped)) =
@@ -226,9 +246,11 @@ impl Readiness {
                     self.rejected += 1;
                     return Vec::new();
                 };
+                if !component_roles(&component).contains(&role) {
+                    self.rejected += 1;
+                    return Vec::new();
+                }
                 self.surfaces.insert((output.clone(), role), mapped);
-                // A surface line implies the reporter exists even if its
-                // `launched` line was lost; launched still has to arrive.
                 if !mapped {
                     // A hidden surface invalidates an earlier `ready`.
                     if let Some(c) = self.components.get_mut(&component) {
@@ -237,11 +259,7 @@ impl Readiness {
                 }
             }
             "ready" => {
-                let entry = self.components.entry(component.clone()).or_default();
-                if entry.roles.is_empty() {
-                    entry.roles = default_roles(&component);
-                }
-                entry.ready = true;
+                self.components.entry(component).or_default().ready = true;
             }
             _ => {
                 self.rejected += 1;
@@ -251,23 +269,25 @@ impl Readiness {
         self.evaluate()
     }
 
-    fn required_components(&self) -> Vec<&'static str> {
-        if self.components.contains_key(COMPONENT_ALL) {
-            vec![COMPONENT_ALL]
-        } else {
-            vec![COMPONENT_WALLPAPER, COMPONENT_DESKTOP]
-        }
+    fn required_components(&self) -> [&'static str; 2] {
+        [COMPONENT_WALLPAPER, COMPONENT_DESKTOP]
     }
 
+    /// The baseline of roles that must exist on some output: from the user's
+    /// configuration, not from a reporter.
     fn required_roles(&self) -> BTreeSet<Role> {
-        let mut roles = BTreeSet::new();
-        for name in self.required_components() {
-            match self.components.get(name) {
-                Some(c) if !c.roles.is_empty() => roles.extend(c.roles.iter().copied()),
-                _ => roles.extend(default_roles(name)),
-            }
+        let mut roles = BTreeSet::from([Role::Wallpaper, Role::Bar]);
+        if self.dock_enabled {
+            roles.insert(Role::Dock);
         }
         roles
+    }
+
+    /// Is a layer surface with `role`'s namespace listed by Gnoblin on `output`
+    /// (mapped or not)?
+    fn listed(&self, output: &str, role: Role) -> bool {
+        let Some(connector) = self.connectors.get(output) else { return false };
+        self.layers.iter().any(|l| l.namespace == role.namespace() && l.connector == *connector)
     }
 
     /// Has Bingux declared (by any `surface` line) that it puts `role` on `output`?
@@ -277,26 +297,27 @@ impl Readiness {
         has(output) || connector.is_some_and(has)
     }
 
-    /// Roles required on one output. The wallpaper is on every output. The
-    /// bar and the dock are only where Bingux puts them (it draws them on the
-    /// primary monitor, not on every monitor), so they are required on the
-    /// outputs where Bingux declared them. That every role of a component shows
-    /// up somewhere is checked separately (`declared_everywhere`).
+    /// Roles required on one output: the wallpaper everywhere, plus every
+    /// Bingux role that Bingux declared on it or that Gnoblin lists on it. A
+    /// reporter can only add requirements here, never remove one: a surface
+    /// Gnoblin already holds for the output is required even if Bingux does
+    /// not mention it. Bingux draws the bar and dock on one monitor only, so
+    /// they are not required on outputs where neither side shows them.
     fn roles_on(&self, output: &str) -> BTreeSet<Role> {
         let mut roles = BTreeSet::from([Role::Wallpaper]);
         for r in Role::ALL {
-            if self.declared(output, r) {
+            if self.declared(output, r) || self.listed(output, r) {
                 roles.insert(r);
             }
         }
         roles
     }
 
-    /// Every role a component announced was declared on at least one output.
+    /// Every baseline role exists on at least one configured output.
     fn declared_everywhere(&self) -> bool {
         self.required_roles()
             .into_iter()
-            .all(|r| self.configured.iter().any(|o| self.declared(o, r)))
+            .all(|r| self.configured.iter().any(|o| self.declared(o, r) || self.listed(o, r)))
     }
 
     /// Is `role` mapped on `output`, by Bingux's word and by Gnoblin's list?
@@ -411,6 +432,26 @@ mod tests {
         }
     }
 
+    fn launch_both(r: &mut Readiness) {
+        r.ready_line(&line(Some("wallpaper"), "launched"));
+        r.ready_line(&line(Some("desktop"), "launched"));
+    }
+
+    fn ready_both(r: &mut Readiness) {
+        r.ready_line(&line(Some("wallpaper"), "ready"));
+        r.ready_line(&line(Some("desktop"), "ready"));
+    }
+
+    fn component_of(role: &str) -> &'static str {
+        if role == "wallpaper" { "wallpaper" } else { "desktop" }
+    }
+
+    fn all_surfaces(r: &mut Readiness, conn: &str) {
+        for role in ["wallpaper", "bar", "dock"] {
+            r.ready_line(&surface(component_of(role), conn, role, true));
+        }
+    }
+
     fn layer(role: Role, connector: &str) -> LayerSurface {
         LayerSurface { namespace: role.namespace().into(), connector: connector.into(), mapped: true }
     }
@@ -486,6 +527,83 @@ mod tests {
     }
 
     #[test]
+    fn the_reporter_cannot_shrink_the_required_set() {
+        let mut r = configured_session();
+        // A combined reporter, a made-up component, and `required` on the wire are all ignored.
+        let mut shrink = line(Some("all"), "launched");
+        shrink.required = Some(vec!["wallpaper".into()]);
+        assert!(r.ready_line(&shrink).is_empty());
+        assert!(r.ready_line(&line(None, "launched")).is_empty());
+        let mut with_required = line(Some("wallpaper"), "launched");
+        with_required.required = Some(vec![]);
+        r.ready_line(&with_required);
+        let reports = r.ready_line(&line(Some("desktop"), "launched"));
+        assert!(reports.contains(&Report::BinguxLaunched));
+        // A component cannot claim another component's role.
+        assert!(r.ready_line(&surface("wallpaper", "Meta-0", "bar", true)).is_empty());
+        assert!(r.rejected() >= 3);
+        // Only the wallpaper declared and ready: bar (baseline) is still missing.
+        r.ready_line(&surface("wallpaper", "Meta-0", "wallpaper", true));
+        ready_both(&mut r);
+        let reports = r.set_layers(vec![layer(Role::Wallpaper, "Meta-0")]);
+        assert!(!reports.contains(&Report::DesktopReady { a: 1, b: 1 }), "{reports:?}");
+    }
+
+    #[test]
+    fn a_surface_gnoblin_lists_is_required_even_when_bingux_never_declares_it() {
+        let mut r = Readiness::new("7");
+        r.output_added("A");
+        r.output_added("B");
+        r.set_gnoblin_ready(true);
+        r.output_configured("A", "Virtual-1");
+        r.output_configured("B", "Virtual-2");
+        launch_both(&mut r);
+        all_surfaces(&mut r, "Virtual-1");
+        r.ready_line(&surface("wallpaper", "Virtual-2", "wallpaper", true));
+        ready_both(&mut r);
+        // Gnoblin has a dock on Virtual-2 (unmapped) that Bingux says nothing about.
+        let mut layers = all_layers("Virtual-1");
+        layers.push(layer(Role::Wallpaper, "Virtual-2"));
+        layers.push(LayerSurface { namespace: Role::Dock.namespace().into(), connector: "Virtual-2".into(), mapped: false });
+        let reports = r.set_layers(layers.clone());
+        assert!(reports.contains(&Report::SurfacesMapped { output: "B".into(), a: 1, b: 2 }), "{reports:?}");
+        assert!(!reports.contains(&Report::DesktopReady { a: 2, b: 2 }));
+    }
+
+    #[test]
+    fn a_disabled_dock_in_the_configuration_is_not_required() {
+        let mut r = configured_session();
+        r.set_dock_enabled(false);
+        launch_both(&mut r);
+        for (c, role) in [("wallpaper", "wallpaper"), ("desktop", "bar")] {
+            r.ready_line(&surface(c, "Meta-0", role, true));
+        }
+        ready_both(&mut r);
+        let reports = r.set_layers(vec![layer(Role::Wallpaper, "Meta-0"), layer(Role::Bar, "Meta-0")]);
+        assert_eq!(reports.last(), Some(&Report::DesktopReady { a: 1, b: 1 }), "{reports:?}");
+    }
+
+    #[test]
+    fn resync_reports_the_current_state_again_once_outputs_are_configured_again() {
+        let mut r = configured_session();
+        launch_both(&mut r);
+        all_surfaces(&mut r, "Meta-0");
+        ready_both(&mut r);
+        r.set_layers(all_layers("Meta-0"));
+        let reports = r.resync();
+        assert_eq!(reports, vec![Report::GnoblinReady, Report::BinguxLaunched]);
+        let reports = r.output_configured("HDMI-A-1", "Meta-0");
+        assert_eq!(
+            reports,
+            vec![
+                Report::OutputConfigured { output: "HDMI-A-1".into(), a: 1, b: 1 },
+                Report::SurfacesMapped { output: "HDMI-A-1".into(), a: 3, b: 3 },
+                Report::DesktopReady { a: 1, b: 1 },
+            ]
+        );
+    }
+
+    #[test]
     fn bar_and_dock_only_on_the_primary_output_do_not_block_the_second() {
         let mut r = Readiness::new("7");
         r.output_added("A");
@@ -531,8 +649,8 @@ mod tests {
         let mut r = configured_session();
         drive_to_ready(&mut r);
         let mut r = configured_session();
-        r.ready_line(&line(None, "launched"));
-        r.ready_line(&surface("all", "Meta-0", "wallpaper", true));
+        launch_both(&mut r);
+        r.ready_line(&surface("wallpaper", "Meta-0", "wallpaper", true));
         let mut layers = all_layers("Meta-0");
         layers[0].mapped = false;
         let reports = r.set_layers(layers);
@@ -542,13 +660,13 @@ mod tests {
     #[test]
     fn layer_on_other_connector_does_not_count() {
         let mut r = configured_session();
-        r.ready_line(&line(None, "launched"));
+        launch_both(&mut r);
         for role in ["wallpaper", "bar", "dock"] {
-            r.ready_line(&surface("all", "Meta-0", role, true));
+            r.ready_line(&surface(component_of(role), "Meta-0", role, true));
         }
         let reports = r.set_layers(all_layers("Meta-1"));
         assert!(reports.iter().all(|x| !matches!(x, Report::SurfacesMapped { a: 1.., .. })), "{reports:?}");
-        r.ready_line(&line(None, "ready"));
+        ready_both(&mut r);
         assert!(!r.set_layers(all_layers("Meta-1")).contains(&Report::DesktopReady { a: 1, b: 1 }));
     }
 
@@ -609,13 +727,13 @@ mod tests {
         assert_eq!(first, vec![Report::OutputConfigured { output: "A".into(), a: 1, b: 2 }]);
         let second = r.output_configured("B", "Meta-1");
         assert_eq!(second, vec![Report::OutputConfigured { output: "B".into(), a: 2, b: 2 }]);
-        r.ready_line(&line(None, "launched"));
+        launch_both(&mut r);
         for conn in ["Meta-0", "Meta-1"] {
             for role in ["wallpaper", "bar", "dock"] {
-                r.ready_line(&surface("all", conn, role, true));
+                r.ready_line(&surface(component_of(role), conn, role, true));
             }
         }
-        r.ready_line(&line(None, "ready"));
+        ready_both(&mut r);
         let mut layers = all_layers("Meta-0");
         let reports = r.set_layers(layers.clone());
         assert!(!reports.contains(&Report::DesktopReady { a: 2, b: 2 }));
@@ -647,11 +765,11 @@ mod tests {
         r.output_added("B");
         r.set_gnoblin_ready(true);
         r.output_configured("A", "Meta-0");
-        r.ready_line(&line(None, "launched"));
+        launch_both(&mut r);
         for role in ["wallpaper", "bar", "dock"] {
-            r.ready_line(&surface("all", "Meta-0", role, true));
+            r.ready_line(&surface(component_of(role), "Meta-0", role, true));
         }
-        r.ready_line(&line(None, "ready"));
+        ready_both(&mut r);
         r.set_layers(all_layers("Meta-0"));
         let reports = r.output_removed("B");
         assert!(reports.contains(&Report::DesktopReady { a: 1, b: 1 }), "{reports:?}");

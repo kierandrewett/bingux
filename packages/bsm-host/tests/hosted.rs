@@ -80,6 +80,7 @@ fn spawn_bridge(env: &HostedEnv, standin: &Standin, generation: &str) -> std::pr
         .env("XDG_RUNTIME_DIR", &env.runtime)
         .env("DBUS_SESSION_BUS_ADDRESS", &env.bus)
         .env("RUST_LOG", "debug")
+        .env("BSM_HOST_READY_PEERS", "*")
         .stdout(Stdio::null())
         .stderr(std::fs::File::create(env.dir.join("bridge.log")).unwrap())
         .spawn()
@@ -666,4 +667,61 @@ fn a_crashed_compositor_ends_the_bridge_with_status_4() {
         std::thread::sleep(Duration::from_millis(50));
     };
     assert_eq!(code, Some(4), "{}", env.log("bridge.log"));
+}
+
+#[test]
+fn a_bsm_restart_keeps_the_session_and_the_virtual_monitors() {
+    if let Err(why) = available() {
+        eprintln!("SKIP: {why}");
+        return;
+    }
+    let mut env = HostedEnv::start("bsmrestart");
+    let mut standin = Standin::start(&env.dir, "17");
+    standin.add_output("DP-1", OutputSpec::new(0, 0, 800, 600));
+    let mut bridge = spawn_bridge(&env, &standin, "17");
+    let pid = bridge.id();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        standin.wait_for("output_configured", T, |s| s.reports.iter().any(|r| r.kind == OUTPUT_CONFIGURED));
+        standin.wait_for("a real frame", T, |s| !s.frames.is_empty());
+        // A client runs in the session and keeps running across the restart.
+        let mut clickdot = env.client("weston-clickdot", &[]);
+        std::thread::sleep(Duration::from_millis(2500));
+        let before = latest(&standin, "DP-1");
+        let (bx, by, _) = marker(&before).expect("the client's crosshair");
+
+        standin.stop();
+        std::thread::sleep(Duration::from_millis(1500));
+        assert!(std::path::Path::new(&format!("/proc/{pid}")).exists(), "the bridge exited when bsm went away");
+        standin = Standin::start(&env.dir, "17");
+        standin.add_output("DP-1", OutputSpec::new(0, 0, 800, 600));
+        standin.wait_for("a frame on the new connection", T, |s| s.frames.iter().any(|f| f.after_ack));
+        let after = latest(&standin, "DP-1");
+        let (ax, ay, _) = marker(&after).expect("the same client is still drawn after the restart");
+        assert!((ax - bx).abs() < 2.0 && (ay - by).abs() < 2.0, "the picture changed across the restart");
+        assert!(standin.shared.lock().unwrap().violations.is_empty());
+
+        // Input works again once the new bsm says so, and reaches the same client.
+        standin.send(Control::PointerEnter("DP-1".into(), 480.0, 380.0));
+        standin.send(Control::InputState(true));
+        std::thread::sleep(Duration::from_millis(400));
+        standin.send(Control::PointerMotion(500.0, 400.0));
+        std::thread::sleep(Duration::from_millis(200));
+        standin.send(Control::PointerButton(0x110, true));
+        standin.send(Control::PointerButton(0x110, false));
+        standin.wait_for("the click to move the crosshair", T, |s| {
+            s.frames.last().and_then(marker).is_some_and(|(mx, my, _)| (mx - 500.0).abs() < 4.0 && (my - 400.0).abs() < 4.0)
+        });
+        let _ = clickdot.kill();
+        let _ = clickdot.wait();
+    }));
+    let _ = bridge.kill();
+    let _ = bridge.wait();
+    let log = env.log("bridge.log");
+    if let Err(e) = result {
+        eprintln!("--- bridge.log ---\n{log}");
+        std::panic::resume_unwind(e);
+    }
+    assert_eq!(log.matches("record virtual monitor").count(), 1, "the virtual monitor was rebuilt:\n{log}");
+    assert!(log.contains("reconnected to bsm"), "{log}");
+    let _ = &mut env;
 }

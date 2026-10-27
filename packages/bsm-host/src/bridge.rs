@@ -14,19 +14,21 @@
 //! created one at a time because Mutter names them `Meta-N` in creation order
 //! and the bridge assigns each new connector to the monitor it just created.
 
+use std::cell::Cell;
 use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::rc::Rc;
 use std::os::fd::OwnedFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result, anyhow};
 use calloop::generic::Generic;
 use calloop::{EventLoop, Interest, LoopHandle, LoopSignal, Mode, PostAction, RegistrationToken};
 use wayland_client::globals::{GlobalList, GlobalListContents, registry_queue_init};
 use wayland_client::protocol::{
-    wl_buffer, wl_compositor, wl_keyboard, wl_output, wl_pointer, wl_region, wl_registry, wl_seat, wl_shm,
+    wl_buffer, wl_callback, wl_compositor, wl_keyboard, wl_output, wl_pointer, wl_region, wl_registry, wl_seat, wl_shm,
     wl_shm_pool, wl_surface, wl_touch,
 };
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum};
@@ -38,6 +40,7 @@ use crate::msg::{CursorImage, Msg, Rect, StreamStatus};
 use crate::proto::bsm_session_host_v1::{self, BsmSessionHostV1, ReportKind};
 use crate::proto::bsm_session_surface_v1::{self, BsmSessionSurfaceV1};
 use crate::readiness::{ReadyLine, Readiness, Report};
+use crate::report_queue::ReportQueue;
 use crate::ready_sock::{self, LineConn, Lines};
 use crate::stream;
 
@@ -64,6 +67,14 @@ pub struct Config {
     pub env_generation: Option<String>,
     pub env_session_id: Option<String>,
     pub background_interval: Duration,
+    /// Executable names allowed to report on `ready.sock` (`*` allows all).
+    pub ready_peers: Vec<String>,
+    /// How long to keep trying to reach bsm again after the connection was lost.
+    pub recovery_window: Duration,
+    /// A `ready.sock` connection that sends no valid line in this time is closed.
+    pub ready_idle: Duration,
+    /// From the user's Bingux configuration: whether the dock is enabled.
+    pub dock_enabled: bool,
     pub test: Option<TestMode>,
 }
 
@@ -124,6 +135,15 @@ struct Output {
     cursor_hidden: bool,
     /// The monitor's rectangle in Gnoblin's logical space once laid out.
     logical: Option<LogicalRect>,
+    /// Its wayland objects belong to a connection to bsm that is gone.
+    stale: bool,
+    /// The newest frame of the previous connection (memory only), presented
+    /// again on the new surface so bsm sees a frame after the reconnect.
+    carry: Option<(Arc<BufferSet>, usize)>,
+    /// Re-announced by bsm after a reconnect and waiting for its configure.
+    reattached: bool,
+    /// Position, scale or transform differ from before the reconnect.
+    relayout_needed: bool,
 }
 
 struct CursorBuf {
@@ -147,7 +167,8 @@ struct PendingScroll {
 struct TestState {
     log: Option<std::fs::File>,
     tick: u64,
-    ready_sent: bool,
+    /// Connectors the generated Bingux lines were last sent for.
+    ready_for: Vec<String>,
 }
 
 #[cfg(feature = "test-pattern")]
@@ -213,6 +234,16 @@ pub struct Bridge {
     test: TestState,
 
     exit: Option<Exit>,
+
+    /// The connection to bsm is up. While it is not, Gnoblin and the apps keep
+    /// running, nothing is forwarded and the bridge reconnects (see `on_bsm_lost`).
+    connected: bool,
+    wl_token: Option<RegistrationToken>,
+    lost_since: Option<Instant>,
+    /// Re-announcing outputs after a reconnect; `sync_cb` marks the end of the burst.
+    reconnecting: bool,
+    sync_cb: Option<wl_callback::WlCallback>,
+    reports: ReportQueue,
 }
 
 /// Connect to bsm, run the loop and return the exit status.
@@ -237,7 +268,7 @@ pub fn run(cfg: Config) -> Result<Exit> {
             }
         })
         .map_err(|e| anyhow!("insert channel: {e}"))?;
-    calloop_wayland_source::WaylandSource::new(conn.clone(), queue)
+    let wl_token = calloop_wayland_source::WaylandSource::new(conn.clone(), queue)
         .insert(handle.clone())
         .map_err(|e| anyhow!("insert wayland source: {e}"))?;
     let signals = calloop::signals::Signals::new(&[calloop::signals::Signal::SIGTERM, calloop::signals::Signal::SIGINT])?;
@@ -246,22 +277,66 @@ pub fn run(cfg: Config) -> Result<Exit> {
         .map_err(|e| anyhow!("insert signals: {e}"))?;
 
     bridge.start()?;
+    bridge.wl_token = Some(wl_token);
 
-    // First roundtrip: identity and outputs.
-    let result = event_loop.run(None, &mut bridge, |b| {
-        if b.exit.is_some() {
-            b.signal.stop();
-        }
-    });
-    bridge.shutdown();
-    match result {
-        Ok(()) => Ok(bridge.exit.unwrap_or(Exit::Clean)),
-        Err(e) => {
-            log::error!("event loop: {e}");
-            // A wayland protocol error carries its own exit status.
-            Ok(bridge.exit.unwrap_or(Exit::BsmLost))
+    loop {
+        let result = event_loop.run(None, &mut bridge, |b| {
+            if b.exit.is_some() {
+                b.signal.stop();
+            }
+        });
+        match result {
+            Ok(()) => break,
+            Err(e) => {
+                if bridge.exit.is_some() {
+                    break;
+                }
+                if bridge.connected {
+                    // The connection to bsm failed (bsm died or restarted, or raised
+                    // a protocol error): keep the session and try again.
+                    bridge.on_bsm_lost(&e.to_string());
+                    if bridge.exit.is_none() {
+                        continue;
+                    }
+                } else {
+                    log::error!("event loop: {e}");
+                    bridge.fail(Exit::Internal);
+                }
+                break;
+            }
         }
     }
+    bridge.shutdown();
+    Ok(bridge.exit.unwrap_or(Exit::Clean))
+}
+
+/// What is bound on the brokered connection.
+struct Bound {
+    compositor: wl_compositor::WlCompositor,
+    shm: wl_shm::WlShm,
+    host: BsmSessionHostV1,
+    cursor_surface: wl_surface::WlSurface,
+}
+
+fn bind_session(globals: &GlobalList, qh: &QueueHandle<Bridge>) -> Result<Bound> {
+    let compositor = globals
+        .bind::<wl_compositor::WlCompositor, _, _>(qh, 4..=6, ())
+        .context("bsm does not offer wl_compositor")?;
+    let shm = globals.bind::<wl_shm::WlShm, _, _>(qh, 1..=1, ()).context("bsm does not offer wl_shm")?;
+    let host = globals
+        .bind::<BsmSessionHostV1, _, _>(qh, 1..=1, ())
+        .context("bsm does not offer bsm_session_host_v1 (is this a brokered session socket?)")?;
+    // The seat's capabilities event creates the pointer, keyboard and touch objects.
+    let _seat = globals.bind::<wl_seat::WlSeat, _, _>(qh, 1..=8, ()).ok();
+    // Outputs are bound for completeness; geometry comes from the host protocol.
+    let outputs: Vec<(u32, u32)> = globals
+        .contents()
+        .with_list(|l| l.iter().filter(|g| g.interface == "wl_output").map(|g| (g.name, g.version)).collect());
+    for (name, version) in outputs {
+        globals.registry().bind::<wl_output::WlOutput, _, _>(name, version.min(4), qh, ());
+    }
+    let cursor_surface = compositor.create_surface(qh, ());
+    Ok(Bound { compositor, shm, host, cursor_surface })
 }
 
 impl Bridge {
@@ -274,23 +349,7 @@ impl Bridge {
         signal: LoopSignal,
         tx: calloop::channel::Sender<Msg>,
     ) -> Result<Self> {
-        let compositor = globals
-            .bind::<wl_compositor::WlCompositor, _, _>(&qh, 4..=6, ())
-            .context("bsm does not offer wl_compositor")?;
-        let shm = globals.bind::<wl_shm::WlShm, _, _>(&qh, 1..=1, ()).context("bsm does not offer wl_shm")?;
-        let host = globals
-            .bind::<BsmSessionHostV1, _, _>(&qh, 1..=1, ())
-            .context("bsm does not offer bsm_session_host_v1 (is this a brokered session socket?)")?;
-        // The seat's capabilities event creates the pointer, keyboard and touch objects.
-        let _seat = globals.bind::<wl_seat::WlSeat, _, _>(&qh, 1..=8, ()).ok();
-        // Outputs are bound for completeness; geometry comes from the host protocol.
-        let outputs: Vec<(u32, u32)> = globals.contents().with_list(|l| {
-            l.iter().filter(|g| g.interface == "wl_output").map(|g| (g.name, g.version)).collect()
-        });
-        for (name, version) in outputs {
-            globals.registry().bind::<wl_output::WlOutput, _, _>(name, version.min(4), &qh, ());
-        }
-        let cursor_surface = compositor.create_surface(&qh, ());
+        let Bound { compositor, shm, host, cursor_surface } = bind_session(globals, &qh)?;
         let test_log = match cfg.test.as_ref().and_then(|t| t.input_log.as_ref()) {
             Some(p) => Some(std::fs::File::create(p).with_context(|| format!("create {}", p.display()))?),
             None => None,
@@ -334,6 +393,12 @@ impl Bridge {
             ready_conns: 0,
             test: TestState { log: test_log, ..TestState::default() },
             exit: None,
+            connected: true,
+            wl_token: None,
+            lost_since: None,
+            reconnecting: false,
+            sync_cb: None,
+            reports: ReportQueue::default(),
         })
     }
 
@@ -349,6 +414,12 @@ impl Bridge {
                 calloop::timer::TimeoutAction::ToDuration(Duration::from_secs(5))
             })
             .map_err(|e| anyhow!("insert stats timer: {e}"))?;
+        self.handle
+            .insert_source(calloop::timer::Timer::from_duration(Duration::from_millis(100)), |_, _, b| {
+                b.flush_reports();
+                calloop::timer::TimeoutAction::ToDuration(Duration::from_millis(100))
+            })
+            .map_err(|e| anyhow!("insert report timer: {e}"))?;
         if self.is_test() {
             return self.start_test_timers();
         }
@@ -366,7 +437,9 @@ impl Bridge {
                 Generic::new(listener, Interest::READ, Mode::Level),
                 |_, listener, b| {
                     let l: &UnixListener = &*listener;
-                    b.accept_ready(l)?;
+                    if let Err(e) = b.accept_ready(l) {
+                        log::warn!("ready.sock accept: {e}");
+                    }
                     Ok(PostAction::Continue)
                 },
             )
@@ -387,6 +460,11 @@ impl Bridge {
                 log::warn!("ready.sock: rejected a peer with another uid");
                 continue;
             }
+            let names = ready_sock::peer_pid(&stream).and_then(ready_sock::peer_names);
+            if !ready_sock::peer_allowed(names.as_deref(), &self.cfg.ready_peers) {
+                log::warn!("ready.sock: refused a same-uid peer that is not the Bingux shell ({names:?})");
+                continue;
+            }
             if self.ready_conns >= ready_sock::MAX_CONNECTIONS {
                 log::warn!("ready.sock: too many connections");
                 continue;
@@ -394,27 +472,51 @@ impl Bridge {
             let mut conn = LineConn::new(stream)?;
             self.ready_conns += 1;
             let fd = conn.stream.try_clone()?;
-            let _ = self.handle.insert_source(
-                Generic::new(fd, Interest::READ, Mode::Level),
-                move |_, _, b| match conn.read() {
-                    Lines::Ok { lines, open } => {
-                        for l in lines {
-                            b.on_ready_line(l);
+            let seen = Rc::new(Cell::new(false));
+            let closed = Rc::new(Cell::new(false));
+            let token = {
+                let (seen, closed) = (seen.clone(), closed.clone());
+                self.handle.insert_source(Generic::new(fd, Interest::READ, Mode::Level), move |_, _, b| {
+                    match conn.read() {
+                        Lines::Ok { lines, open } => {
+                            if !lines.is_empty() {
+                                seen.set(true);
+                            }
+                            for l in lines {
+                                b.on_ready_line(l);
+                            }
+                            if open {
+                                Ok(PostAction::Continue)
+                            } else {
+                                closed.set(true);
+                                b.ready_conns -= 1;
+                                Ok(PostAction::Remove)
+                            }
                         }
-                        if open {
-                            Ok(PostAction::Continue)
-                        } else {
+                        Lines::Violation(why) => {
+                            log::warn!("ready.sock: closing connection: {why}");
+                            closed.set(true);
                             b.ready_conns -= 1;
                             Ok(PostAction::Remove)
                         }
                     }
-                    Lines::Violation(why) => {
-                        log::warn!("ready.sock: closing connection: {why}");
-                        b.ready_conns -= 1;
-                        Ok(PostAction::Remove)
-                    }
-                },
-            );
+                })
+            };
+            // A connection that never sends a valid line is closed.
+            if let Ok(token) = token {
+                let _ = self.handle.insert_source(
+                    calloop::timer::Timer::from_duration(self.cfg.ready_idle),
+                    move |_, _, b| {
+                        if !seen.get() && !closed.get() {
+                            log::warn!("ready.sock: closing a connection that sent nothing");
+                            closed.set(true);
+                            b.ready_conns -= 1;
+                            b.handle.remove(token);
+                        }
+                        calloop::timer::TimeoutAction::Drop
+                    },
+                );
+            }
         }
     }
 
@@ -426,30 +528,53 @@ impl Bridge {
 
     // ----- reports -----
 
+    /// Queue reports for bsm: identical repeats are dropped and the rate is
+    /// capped (see `report_queue.rs`). Nothing is sent while bsm is away; the
+    /// current state is reported again after the reconnect.
     fn send_reports(&mut self, reports: Vec<Report>) {
+        if !self.connected {
+            return;
+        }
+        let now = Instant::now();
         for r in reports {
-            let g = self.generation.clone();
-            log::info!("report {r:?}");
-            match r {
-                Report::GnoblinReady => self.host.report(ReportKind::GnoblinReady, None, 0, 0, g),
-                Report::OutputConfigured { output, a, b } => {
-                    self.host.report(ReportKind::OutputConfigured, Some(output), a, b, g)
-                }
-                Report::BinguxLaunched => self.host.report(ReportKind::BinguxLaunched, None, 0, 0, g),
-                Report::SurfacesMapped { output, a, b } => {
-                    self.host.report(ReportKind::SurfacesMapped, Some(output), a, b, g)
-                }
-                Report::DesktopReady { a, b } => {
-                    self.host.report(ReportKind::DesktopReady, None, a, b, g);
-                    // bsm counts a frame presented after this report: make sure one follows.
-                    let names: Vec<String> = self.outputs.keys().cloned().collect();
-                    for n in names {
-                        self.recommit_latest(&n);
-                    }
-                }
+            for out in self.reports.submit(r, now) {
+                self.transmit(out);
             }
         }
         let _ = self.conn.flush();
+    }
+
+    fn flush_reports(&mut self) {
+        if !self.connected || !self.reports.has_pending() {
+            return;
+        }
+        for out in self.reports.flush(Instant::now()) {
+            self.transmit(out);
+        }
+        let _ = self.conn.flush();
+    }
+
+    fn transmit(&mut self, r: Report) {
+        let g = self.generation.clone();
+        log::info!("report {r:?}");
+        match r {
+            Report::GnoblinReady => self.host.report(ReportKind::GnoblinReady, None, 0, 0, g),
+            Report::OutputConfigured { output, a, b } => {
+                self.host.report(ReportKind::OutputConfigured, Some(output), a, b, g)
+            }
+            Report::BinguxLaunched => self.host.report(ReportKind::BinguxLaunched, None, 0, 0, g),
+            Report::SurfacesMapped { output, a, b } => {
+                self.host.report(ReportKind::SurfacesMapped, Some(output), a, b, g)
+            }
+            Report::DesktopReady { a, b } => {
+                self.host.report(ReportKind::DesktopReady, None, a, b, g);
+                // bsm counts a frame presented after this report: make sure one follows.
+                let names: Vec<String> = self.outputs.keys().cloned().collect();
+                for n in names {
+                    self.recommit_latest(&n);
+                }
+            }
+        }
     }
 
     // ----- messages from threads -----
@@ -538,14 +663,128 @@ impl Bridge {
             let _ = gn.join.join();
         }
         let _ = std::fs::remove_file(ready_sock::socket_path(&self.cfg.runtime_dir));
-        self.host.destroy();
+        if self.connected {
+            self.host.destroy();
+            let _ = self.conn.flush();
+        }
+    }
+
+    // ----- losing and regaining bsm -----
+
+    /// The connection to bsm failed. The session lives on: Gnoblin and the apps
+    /// keep running, input is released and revoked, and the bridge reconnects to
+    /// the same socket path with backoff for `recovery_window`. The Wayland
+    /// objects of the old connection are forgotten (never destroyed: they are
+    /// dead); the last frame of every output is kept to present again.
+    fn on_bsm_lost(&mut self, why: &str) {
+        log::warn!("lost the connection to bsm ({why}); keeping the session and reconnecting");
+        self.set_input_active(false);
+        self.connected = false;
+        self.lost_since = Some(Instant::now());
+        if let Some(t) = self.wl_token.take() {
+            self.handle.remove(t);
+        }
+        self.pointer = None;
+        self.keyboard = None;
+        self.touch = None;
+        self.pointer_focus = None;
+        self.touch_outputs.clear();
+        self.surfaces.clear();
+        self.sync_cb = None;
+        self.reports.reset();
+        for o in self.outputs.values_mut() {
+            o.stale = true;
+            o.gate.set_buffers(None);
+            o.carry = o.last_slot.take();
+            o.set = None;
+            o.retired.clear();
+            o.cursor = None;
+            o.presented = 0;
+            o.reattached = false;
+        }
+        self.schedule_reconnect();
+    }
+
+    fn schedule_reconnect(&mut self) {
+        let window = self.cfg.recovery_window;
+        let start = self.lost_since.unwrap_or_else(Instant::now);
+        let mut delay = Duration::from_millis(100);
+        let timer = calloop::timer::Timer::from_duration(Duration::from_millis(50));
+        let inserted = self.handle.insert_source(timer, move |_, _, b| {
+            use calloop::timer::TimeoutAction;
+            if b.exit.is_some() || b.connected {
+                return TimeoutAction::Drop;
+            }
+            if start.elapsed() > window {
+                log::error!("bsm did not come back within {window:?}: giving up");
+                b.fail(Exit::BsmLost);
+                return TimeoutAction::Drop;
+            }
+            match b.try_reconnect() {
+                Ok(()) => TimeoutAction::Drop,
+                Err(e) => {
+                    log::debug!("reconnect: {e:#}");
+                    let next = delay;
+                    delay = (delay * 2).min(Duration::from_secs(2));
+                    TimeoutAction::ToDuration(next)
+                }
+            }
+        });
+        if let Err(e) = inserted {
+            log::error!("cannot schedule the reconnect: {e}");
+            self.fail(Exit::Internal);
+        }
+    }
+
+    /// One attempt to connect again. `Ok` means the new connection is bound and
+    /// installed; the handshake continues through the normal events (`identity`,
+    /// `output_added`, `configure`), with `reconnecting` set until the compositor's
+    /// first burst of events is over.
+    fn try_reconnect(&mut self) -> Result<()> {
+        let stream = UnixStream::connect(&self.cfg.host_socket)
+            .with_context(|| format!("connect to {}", self.cfg.host_socket.display()))?;
+        let conn = Connection::from_socket(stream).context("wayland connection")?;
+        let (globals, queue) = registry_queue_init::<Bridge>(&conn).context("read bsm globals")?;
+        let qh = queue.handle();
+        let bound = bind_session(&globals, &qh)?;
+        let token = calloop_wayland_source::WaylandSource::new(conn.clone(), queue)
+            .insert(self.handle.clone())
+            .map_err(|e| anyhow!("insert wayland source: {e}"))?;
+        log::info!("reconnected to bsm after {:?}", self.lost_since.map(|t| t.elapsed()).unwrap_or_default());
+        self.conn = conn;
+        self.qh = qh;
+        self.compositor = bound.compositor;
+        self.shm = bound.shm;
+        self.host = bound.host;
+        self.cursor_surface = bound.cursor_surface;
+        self.wl_token = Some(token);
+        self.connected = true;
+        self.reconnecting = true;
+        // Everything the compositor announces next (identity, outputs) ends at this callback.
+        self.sync_cb = Some(self.conn.display().sync(&self.qh, ()));
         let _ = self.conn.flush();
+        Ok(())
+    }
+
+    /// The first burst after a reconnect is over: outputs bsm no longer has are gone.
+    fn on_sync_done(&mut self) {
+        self.sync_cb = None;
+        if !self.reconnecting {
+            return;
+        }
+        self.reconnecting = false;
+        let gone: Vec<String> = self.outputs.iter().filter(|(_, o)| o.stale).map(|(n, _)| n.clone()).collect();
+        for name in gone {
+            log::info!("output {name} did not come back");
+            self.on_output_removed(&name);
+        }
+        self.lost_since = None;
     }
 
     // ----- outputs -----
 
     fn on_output_added(&mut self, name: String, geom: Geometry) {
-        if self.outputs.contains_key(&name) {
+        if self.outputs.get(&name).is_some_and(|o| !o.stale) {
             log::warn!("duplicate output {name}");
             return;
         }
@@ -553,6 +792,19 @@ impl Bridge {
         let surface = self.compositor.create_surface(&self.qh, ());
         let role = self.host.get_session_surface(&surface, name.clone(), &self.qh, name.clone());
         self.surfaces.insert(surface.id(), name.clone());
+        if let Some(o) = self.outputs.get_mut(&name) {
+            // The same output again after a reconnect: keep its virtual monitor.
+            let old = o.geom;
+            o.relayout_needed =
+                (old.x, old.y, old.scale_120, old.transform) != (geom.x, geom.y, geom.scale_120, geom.transform);
+            o.geom = geom;
+            o.surface = surface;
+            o.role = role;
+            o.stale = false;
+            o.reattached = true;
+            o.gate.set_active(false);
+            return;
+        }
         let gate = OutputGate::new(self.cfg.background_interval);
         gate.set_active(self.input_active);
         self.outputs.insert(
@@ -574,6 +826,10 @@ impl Bridge {
                 cursor: None,
                 cursor_hidden: false,
                 logical: None,
+                stale: false,
+                carry: None,
+                reattached: false,
+                relayout_needed: false,
             },
         );
         let reports = self.readiness.output_added(&name);
@@ -596,13 +852,15 @@ impl Bridge {
         if let Some(pw) = &self.pw {
             let _ = pw.tx.send(stream::Cmd::Remove { output: name.to_owned() });
         }
-        o.role.destroy();
-        o.surface.destroy();
-        if let Some(set) = &o.set {
-            set.destroy();
-        }
-        for set in &o.retired {
-            set.destroy();
+        if !o.stale {
+            o.role.destroy();
+            o.surface.destroy();
+            if let Some(set) = &o.set {
+                set.destroy();
+            }
+            for set in &o.retired {
+                set.destroy();
+            }
         }
         self.monitor_queue.retain(|n| n != name);
         if self.in_flight.as_deref() == Some(name) {
@@ -631,15 +889,26 @@ impl Bridge {
         region.destroy();
         o.surface.commit();
 
-        if size_changed {
+        let new_set = size_changed || o.set.is_none();
+        if new_set {
             self.next_set += 1;
             match BufferSet::new(&self.shm, &self.qh, name, self.next_set, c.width, c.height) {
                 Ok(set) => {
                     if let Some(old) = o.gate.set_buffers(Some(set.clone())) {
                         o.retired.push(old);
                     }
-                    o.set = Some(set);
+                    o.set = Some(set.clone());
                     o.last_slot = None;
+                    // After a reconnect: present the last frame again on the new surface.
+                    if let Some((old, slot)) = o.carry.take() {
+                        if (old.width, old.height) == (set.width, set.height) {
+                            if let Some(dst_slot) = set.claim() {
+                                // SAFETY: claimed just now; the old frame is memory only.
+                                unsafe { set.slot_mut(dst_slot) }.copy_from_slice(old.slot(slot));
+                                Self::commit(o, &set, dst_slot, &[]);
+                            }
+                        }
+                    }
                 }
                 Err(e) => {
                     log::error!("buffers for {name}: {e:#}");
@@ -656,6 +925,20 @@ impl Bridge {
         } else if size_changed {
             log::info!("{name} changed size: restarting the virtual monitors");
             self.rebuild_monitors();
+        } else if std::mem::take(&mut o.reattached) {
+            // Back after a reconnect with the same size: the virtual monitor stays.
+            let connector = o.connector.clone();
+            let relayout = std::mem::take(&mut o.relayout_needed);
+            let applied = phase == Phase::Applied;
+            if applied {
+                if let Some(c) = connector {
+                    let reports = self.readiness.output_configured(name, &c);
+                    self.send_reports(reports);
+                }
+            }
+            if relayout {
+                self.relayout();
+            }
         } else {
             self.relayout();
         }
@@ -832,6 +1115,10 @@ impl Bridge {
     // ----- frames -----
 
     fn on_frame(&mut self, name: &str, epoch: u64, set: Arc<BufferSet>, slot: usize, damage: &[Rect]) {
+        if !self.connected {
+            set.release(slot);
+            return;
+        }
         let Some(o) = self.outputs.get_mut(name) else {
             set.release(slot);
             return;
@@ -871,6 +1158,9 @@ impl Bridge {
 
     /// Present the newest frame again (copied to a fresh slot).
     fn recommit_latest(&mut self, name: &str) {
+        if !self.connected {
+            return;
+        }
         let Some(o) = self.outputs.get_mut(name) else { return };
         let Some((set, last)) = o.last_slot.clone() else {
             log::debug!("{name}: no frame to present again");
@@ -938,6 +1228,9 @@ impl Bridge {
     }
 
     fn apply_cursor(&mut self) {
+        if !self.connected {
+            return;
+        }
         let (Some(pointer), Some(focus)) = (self.pointer.clone(), self.pointer_focus.clone()) else { return };
         let Some(o) = self.outputs.get(&focus) else { return };
         if o.cursor_hidden {
@@ -1092,10 +1385,26 @@ impl Bridge {
                 log::warn!("BSM_SESSION_ID={env} differs from the session bsm assigned ({session_id})");
             }
         }
+        if !self.generation.is_empty() {
+            // A reconnect: it must be the same session and generation.
+            if session_id != self.session_id || generation != self.generation {
+                log::error!(
+                    "bsm identifies this connection as session {session_id} generation {generation}, not {} {}: exiting",
+                    self.session_id,
+                    self.generation
+                );
+                self.fail(Exit::Protocol);
+                return;
+            }
+            let reports = self.readiness.resync();
+            self.send_reports(reports);
+            return;
+        }
         self.session_id = session_id;
         self.generation = generation.clone();
         self.uid = uid;
         self.readiness = Readiness::new(&generation);
+        self.readiness.set_dock_enabled(self.cfg.dock_enabled);
         if self.is_test() {
             self.gnoblin_ready = true;
             let reports = self.readiness.set_gnoblin_ready(true);
@@ -1133,6 +1442,14 @@ ignore_events! {
     wl_shm_pool::WlShmPool => (),
     wl_output::WlOutput => (),
     wl_shm::WlShm => (),
+}
+
+impl Dispatch<wl_callback::WlCallback, ()> for Bridge {
+    fn event(state: &mut Self, _: &wl_callback::WlCallback, event: wl_callback::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {
+        if let wl_callback::Event::Done { .. } = event {
+            state.on_sync_done();
+        }
+    }
 }
 
 impl Dispatch<wl_buffer::WlBuffer, BufferTag> for Bridge {

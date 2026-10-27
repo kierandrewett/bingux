@@ -12,6 +12,7 @@ use std::os::fd::AsFd;
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use anyhow::{Context as _, Result};
 
@@ -48,6 +49,49 @@ pub fn bind(runtime_dir: &Path) -> Result<(UnixListener, PathBuf)> {
 /// Is the peer of `stream` the given uid?
 pub fn peer_uid_is(stream: &UnixStream, uid: u32) -> bool {
     rustix::net::sockopt::socket_peercred(stream.as_fd()).is_ok_and(|c| c.uid.as_raw() == uid)
+}
+
+/// Processes that may report: the Bingux shell (Quickshell started as
+/// `bingux` and `bingux-wallpaper`). Matched against the peer's executable
+/// name and `comm`. Best effort: any process of the session uid can run a
+/// binary with such a name, and when `/proc/<pid>` cannot be read the peer is
+/// accepted. It keeps stray same-uid helpers from weakening the reveal gate by
+/// accident; it is not a security boundary (see docs/bsm/bridge.md).
+pub const DEFAULT_PEERS: &[&str] = &["quickshell", "qs", "bingux", "bingux-wallpaper"];
+
+/// Connections that send no valid line within this time are closed, so idle
+/// connections cannot occupy the slots the real reporters need.
+pub const IDLE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// The pid of the peer of `stream` (SO_PEERCRED).
+pub fn peer_pid(stream: &UnixStream) -> Option<u32> {
+    rustix::net::sockopt::socket_peercred(stream.as_fd()).ok().map(|c| c.pid.as_raw_nonzero().get() as u32)
+}
+
+/// Names (executable file name, comm) of process `pid`, if readable.
+pub fn peer_names(pid: u32) -> Option<Vec<String>> {
+    let mut names = Vec::new();
+    if let Ok(exe) = std::fs::read_link(format!("/proc/{pid}/exe")) {
+        if let Some(n) = exe.file_name() {
+            names.push(n.to_string_lossy().into_owned());
+        }
+    }
+    if let Ok(comm) = std::fs::read_to_string(format!("/proc/{pid}/comm")) {
+        names.push(comm.trim().to_owned());
+    }
+    (!names.is_empty()).then_some(names)
+}
+
+/// Is a peer with these names allowed? `None` (unreadable) is allowed;
+/// a `*` entry allows everything (tests).
+pub fn peer_allowed(names: Option<&[String]>, allow: &[String]) -> bool {
+    if allow.iter().any(|a| a == "*") {
+        return true;
+    }
+    match names {
+        None => true,
+        Some(names) => names.iter().any(|n| allow.iter().any(|a| a == n)),
+    }
 }
 
 /// One accepted connection with its partial-line buffer.
@@ -143,6 +187,26 @@ mod tests {
         let lines = parse_lines(&mut buf).unwrap();
         assert_eq!(lines[0].event, "ready");
         assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn peer_policy_is_best_effort_and_configurable() {
+        let allow: Vec<String> = DEFAULT_PEERS.iter().map(|s| s.to_string()).collect();
+        let n = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert!(peer_allowed(Some(&n(&["quickshell", "bingux"])), &allow));
+        assert!(peer_allowed(Some(&n(&["python3", "bingux-wallpaper"])), &allow));
+        assert!(!peer_allowed(Some(&n(&["python3", "python3"])), &allow), "a stray helper is refused");
+        assert!(peer_allowed(None, &allow), "unreadable /proc: accepted, documented");
+        assert!(peer_allowed(Some(&n(&["anything"])), &n(&["*"])));
+    }
+
+    #[test]
+    fn own_process_names_are_readable() {
+        let pid = std::process::id();
+        let names = peer_names(pid).expect("/proc is readable for our own pid");
+        assert!(!names.is_empty());
+        let (a, _b) = UnixStream::pair().unwrap();
+        assert_eq!(peer_pid(&a), Some(pid));
     }
 
     #[test]

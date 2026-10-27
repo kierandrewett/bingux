@@ -80,13 +80,17 @@ impl Bridge {
     }
 
     fn test_auto_ready(&mut self) {
-        if self.readiness_done() {
-            return;
-        }
         let outputs: Vec<Option<String>> = self.outputs.values().map(|o| o.connector.clone()).collect();
         if outputs.is_empty() || outputs.iter().any(|c| c.is_none()) {
             return;
         }
+        // Bingux reports again whenever the set of monitors changes.
+        let mut connectors: Vec<String> = outputs.iter().flatten().cloned().collect();
+        connectors.sort();
+        if self.test.ready_for == connectors {
+            return;
+        }
+        self.test.ready_for = connectors;
         let g = self.generation.clone();
         let mk = |component: &str, event: &str| ReadyLine {
             generation: g.clone(),
@@ -113,11 +117,6 @@ impl Bridge {
         for l in lines {
             self.on_ready_line(l);
         }
-        self.test.ready_sent = true;
-    }
-
-    fn readiness_done(&self) -> bool {
-        self.test.ready_sent
     }
 }
 
