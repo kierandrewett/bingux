@@ -60,7 +60,8 @@ flowchart TB
   most `MAX_DATAGRAM` (64 KiB). Longer datagrams are detected with
   `MSG_TRUNC` and drop the connection; undecodable datagrams are ignored and
   logged by category only (a message can quote the secret).
-* `SO_PEERCRED` uid must equal the `bsm` account (`socket.allowed_user`, or
+* `SO_PEERCRED` uid must equal the `bsm` account (and, review F10, the process must be
+  the compositor: see [Review fixes](#review-fixes)) (`socket.allowed_user`, or
   `socket.allowed_uid` for tests). Root is not exempt: a root process can open
   the socket but is closed at once. Other peers are closed before any byte is
   read.
@@ -110,7 +111,8 @@ Rules:
   receive buffers are zeroed after parsing; the copy handed to libpam is
   zeroed after `strdup`. Limit: `serde_json` may keep transient copies of an
   escaped string in its scratch buffer that this code cannot reach. Lockout
-  policy is the distribution's: nothing here counts failures or delays.
+  policy is the distribution's (see [Review fixes](#review-fixes) for the helper's own
+  back-off, which only adds to it).
 
 ### Tickets
 
@@ -484,3 +486,47 @@ Events while `bsm` is not connected: the end of a session is queued (at most
 64) and delivered to the next connection, so a restarting `bsm` learns that a
 session ended in between. Other events (prompts, `SessionOpened`) are dropped
 with the connection, because their requests are gone with it.
+
+## Review fixes
+
+Findings of `docs/bsm/review-helper.md` fixed in the helper (regression tests in
+`packages/bsm-helper/tests` and `tests/bsm-helper-root.sh`; the root script passed 120
+checks on the 2026-10-26 ISO after them):
+
+* **F1 greeter directories.** `<gen>` is created root-owned 0700, `rt` and `home` are made inside
+  it and handed over with `fchown` on `O_NOFOLLOW` descriptors, `<gen>` is handed over last. Before a
+  new greeter's directories exist, the old greeter's group and (as root) every process of the
+  greeter account must be gone (`SIGKILL`, bounded wait); when a greeter exits or is stopped, leftover
+  processes of the account are killed too, because a `setsid` child leaves the process group.
+* **F3 PAM_USER.** Read back with `pam_get_item` after authentication and after
+  `pam_open_session`; it must still resolve to the uid the helper acts for, else the login fails.
+* **F4 adoption.** The adoption directory is created by `mkdir 0700` + `fchmod`, never
+  `create_dir_all`; adoption needs a directory and a socket owned by the helper's euid, directory
+  mode without group/other bits, socket mode 0600, no symlinks, and a listener with the helper's
+  euid. A loose directory means nothing is adopted. Packaging creates `/run/bsm-helper` 0711 and
+  `/run/bsm-helper/sessions` 0700 through tmpfiles.
+* **F5 descriptors.** Leader, bridge and greeter get `/dev/null` on 0, 1, 2 and nothing else
+  (`close_range`). Consequence: a greeter's stderr no longer reaches the journal; use a wrapper
+  that logs to the greeter's own home when debugging.
+* **F6 teardown.** SIGTERM to the scope, the grace, then the supervisor moves into the helper's cgroup
+  and writes `cgroup.kill` on the scope, waiting for `populated 0`: a respawning process
+  cannot outrun it (verified in the image with a respawner). The tight sweep remains as fallback
+  (no scope, kernel before 5.14). Process-group kills skip reaped children.
+* **F7 throttling.** After `pam.free_failures` (3) consecutive failed guesses the helper
+  adds 2, 4, 8 .. 30 s before the next `AuthStart` for that uid (`busy`); success resets it. A
+  conversation that already received an answer and is then superseded or aborted counts as a failed
+  guess and waits PAM's 2 s failure delay, so aborting cannot skip it. At most 8 authentication children may
+  be ending at once. The distribution's lockout (`pam_faillock`) stays the real policy; stacks
+  without it (the build host's authselect profile has only `pam_faildelay`) get only this back-off.
+* **F8 substack.** `bsm-login` and `bsm-unlock` pull `system-auth` in with `substack`. Tested with
+  real libpam (a `sufficient` module in the included stack ends only the substack) and on the
+  image (`pam_gnome_keyring` stashes the password in auth and unlocks in the session phase).
+  Not tested: a Fedora authselect `system-auth`.
+* **F10 helper socket.** Besides the uid, `/proc/<pid>/exe` must be `socket.allowed_exe`
+  (`/usr/bin/bsm`, ` (deleted)` tolerated for upgrades) and the cgroup path must end in
+  `socket.allowed_cgroup` (`bsm.service`); a pidfd from `SO_PEERPIDFD` proves the pid was not
+  reused during the check. The image converter and any other process of the `bsm` uid are refused
+  before a byte is read and cannot hold the single connection slot. Empty values switch a check off
+  (tests; the image test connects with a probe and names its path). The converter's seccomp changes
+  are BsmAppearance's. Not run: the real `bsm` connecting under these checks (BsmPackaging's walkthrough).
+* **F9** is a packaging polkit change, not helper code.

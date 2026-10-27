@@ -108,6 +108,10 @@ EOF
 LEADER='echo $$ > '$WORK'/leader-$BSM_SESSION_ID.pid; setsid sleep 987 & exec sleep infinity'
 BRIDGE='echo $$ > '$WORK'/bridge-$BSM_SESSION_ID.pid; exec sleep infinity'
 write_config "$LEADER" "$BRIDGE"
+# Images that ship bsm gate its units on `bingux.bsm` with drop-ins; this run boots
+# the plain image (greetd keeps the display), so the helper units must not be gated.
+rm -rf /etc/systemd/system/bsm-helper.socket.d /etc/systemd/system/bsm-helper.service.d \
+    /usr/lib/systemd/system/bsm-helper.socket.d /usr/lib/systemd/system/bsm-helper.service.d
 systemctl daemon-reload
 systemctl stop bsm-helper.service 2>/dev/null
 systemctl start bsm-helper.socket
@@ -212,8 +216,8 @@ for v in XDG_SEAT XDG_VTNR WAYLAND_DISPLAY DISPLAY; do
 done
 check "env: the brokered socket reaches the bridge" sh -c "printf '%s\n' '$BENV' | grep -qx 'BSM_HOST_SOCKET=/run/bsm/sessions/$S1-$G1.sock'"
 check "env: the brokered socket does NOT reach the leader" sh -c "! printf '%s\n' '$LENV' | grep -q '^BSM_HOST_SOCKET='"
-check "keyring: pam_gnome_keyring saw the password in auth and unlocked in session (F8, one handle)" sh -c "journalctl -u bsm-helper.service --no-pager | grep -q 'unlocked login keyring'"
 sleep 5
+check "keyring: pam_gnome_keyring saw the password in auth and unlocked in session (F8, one handle)" sh -c "journalctl -t bsm-helper --no-pager | grep -q 'unlocked login keyring'"
 check "pam: the session is still open five seconds after login (no premature pam_close_session)" sh -c "loginctl list-sessions --no-legend | awk '{print \$1}' | grep -qx '$LSESS'"
 info "sessions after one login: $(loginctl list-sessions --no-legend | tr '\n' ';')"
 

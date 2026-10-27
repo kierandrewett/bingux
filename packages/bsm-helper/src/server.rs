@@ -1027,6 +1027,10 @@ impl Server {
         if self.greeter.as_ref().is_some_and(|g| g.pid == pid)
             && let Some(g) = self.greeter.take()
         {
+            // Descendants that left the process group (setsid) died with nothing to stop them.
+            if let Ok(Some(pw)) = sys::getpwnam(&self.cfg.greeter.user) {
+                sys::kill_user_processes(pw.uid);
+            }
             greeter::remove_dirs(&g.run.dir);
             self.emit(HelperEvent::GreeterExited { generation: g.generation, status });
         }
@@ -1196,6 +1200,9 @@ impl Server {
         }
         if let Some(g) = self.greeter.take() {
             sys::kill_group(g.pid, libc::SIGKILL);
+            if let Ok(Some(pw)) = sys::getpwnam(&self.cfg.greeter.user) {
+                sys::kill_user_processes(pw.uid);
+            }
             greeter::remove_dirs(&g.run.dir);
         }
         if let Some(path) = &self.owned_socket {

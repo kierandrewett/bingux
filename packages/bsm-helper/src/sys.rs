@@ -414,6 +414,16 @@ fn pids_of_uid(uid: u32) -> Vec<libc::pid_t> {
     out
 }
 
+/// SIGKILL every process of the dedicated service account `uid`, once. Root only;
+/// otherwise nothing happens (the unprivileged test account is the caller's own).
+pub fn kill_user_processes(uid: u32) {
+    if unsafe { libc::geteuid() } == 0 && uid != 0 {
+        for pid in pids_of_uid(uid) {
+            unsafe { libc::kill(pid, libc::SIGKILL) };
+        }
+    }
+}
+
 /// Make sure nothing of the dedicated service account `uid` is left (greeter
 /// processes may `setsid` out of the process group). `leader` is a child of ours
 /// that is reaped here. As an unprivileged process (tests) only `leader` is
