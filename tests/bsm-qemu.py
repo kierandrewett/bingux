@@ -862,7 +862,7 @@ def main():
             run.checks["serial shell"] = False
         else:
             run.checks["serial shell"] = True
-            vm.run("systemctl is-system-running --wait 2>&1 | head -1", 120)
+            vm.run("systemctl is-system-running --wait 2>&1 | head -1", 240)
             # Account B exists before bsm starts: bsm lists accounts at start-up.
             vm.run(f"id {USER_B[0]} >/dev/null 2>&1 || (useradd -m -G video,audio -s /bin/bash {USER_B[0]} && echo {USER_B[0]}:{USER_B[1]} | chpasswd)", 30)
             if args.inject:
@@ -878,7 +878,7 @@ def main():
                 # asserted by the compositor's own trajectory tests (packages/bsm-compositor).
                 vm.run(f"mkdir -p /etc/bsm && printf '%s\\n' '[transitions]' {SLOW_TOML} > /etc/bsm/bsm.toml", 20)
                 run.dump("bsm-toml", vm.run("cat /etc/bsm/bsm.toml; systemctl is-active bsm", 20))
-                if vm.run("systemctl is-active bsm", 10).strip().splitlines()[-1] == "active":
+                if (vm.run("systemctl is-active bsm", 30).strip().splitlines() or [""])[-1] == "active":
                     vm.run("systemctl restart bsm", 60)
             for name, function in STEPS:
                 if name in wanted:
