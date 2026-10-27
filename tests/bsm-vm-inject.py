@@ -104,7 +104,8 @@ if [ "${1:-}" != "--no-start" ]; then
     systemctl stop greetd.service 2>/dev/null || true
     systemctl reset-failed bsm.service bsm-seatd.service 2>/dev/null || true
     systemctl start bsm-helper.socket
-    systemctl start bsm.service || echo "INJECT-BSM-START-FAILED"
+    # restart: on an image that already boots bsm the old binary is still running.
+    systemctl restart bsm.service || echo "INJECT-BSM-START-FAILED"
 fi
 echo INJECT-DONE
 """
