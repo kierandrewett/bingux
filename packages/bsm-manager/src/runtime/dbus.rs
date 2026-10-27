@@ -64,7 +64,8 @@
 //! ```
 //!
 //! `PublishAppearance` takes each image as an array of zero or one unix file
-//! descriptors (`ah`): an empty array means "no image of this kind", more than one
+//! descriptors (`ah`): an empty array means "no image of this kind": the published copy is
+//! removed (the state published is the state sent); more than one
 //! descriptor is `InvalidArgument`. bsm never opens a path supplied by a user. Every
 //! descriptor must be a regular file opened read-only, at most [`MAX_IMAGE_BYTES`]
 //! (16 MiB) in size, and not an `O_PATH` descriptor; anything else is refused with

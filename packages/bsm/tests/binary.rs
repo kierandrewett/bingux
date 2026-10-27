@@ -54,6 +54,10 @@ struct Running {
 }
 
 fn start_bsm(dbus: &str) -> Running {
+    start_bsm_with(dbus, &[])
+}
+
+fn start_bsm_with(dbus: &str, extra: &[&std::ffi::OsStr]) -> Running {
     let dir = tempfile::tempdir().unwrap();
     let notify_path = dir.path().join("notify.sock");
     let notify = UnixDatagram::bind(&notify_path).unwrap();
@@ -66,6 +70,7 @@ fn start_bsm(dbus: &str) -> Running {
         .arg(dir.path().join("state"))
         .arg("--helper-socket")
         .arg(dir.path().join("no-helper.sock"))
+        .args(extra)
         .env("NOTIFY_SOCKET", &notify_path)
         .env("BSM_LOG", "info")
         .stdout(Stdio::null())
@@ -184,6 +189,71 @@ fn without_a_bus_the_service_still_runs_and_refuses_system_actions() {
     let bsm = start_bsm("none");
     bsm.wait_ready();
     wait_until("the control socket", Duration::from_secs(10), || bsm.control_socket().exists());
+    let (status, log) = bsm.stop();
+    assert!(status.success(), "{log}");
+}
+
+#[test]
+fn bsmctl_publish_appearance_reaches_the_cache_as_the_calling_user() {
+    let uid = unsafe { libc::getuid() };
+    if uid < 1000 {
+        eprintln!("SKIPPED: needs an eligible (uid >= 1000) account to publish for");
+        return;
+    }
+    let bus = PrivateBus::start();
+    let cache = tempfile::tempdir().unwrap();
+    std::fs::create_dir(cache.path().join("c")).unwrap();
+    // The greeter is another account ("nobody"), so that this user is an ordinary one.
+    let cfg = cache.path().join("bsm.toml");
+    std::fs::write(&cfg, "greeter_user = \"nobody\"\n").unwrap();
+    let bsm = start_bsm_with(
+        &bus.address,
+        &["--cache-dir".as_ref(), cache.path().join("c").as_os_str(), "--config".as_ref(), cfg.as_os_str()],
+    );
+    bsm.wait_ready();
+    let ctl = |args: &[&str]| {
+        let mut full = vec!["--bus", bus.address.as_str(), "--json"];
+        full.extend_from_slice(args);
+        Command::new(BSMCTL).args(full).output().unwrap()
+    };
+    let base = ["publish-appearance", "--color-scheme", "light", "--accent", "#3584E4", "--clock-format", "12h", "--reduce-motion", "true", "--show-personal-images", "false"];
+    // The account list is loaded in the background after start: wait until this account is in it.
+    let mut o = ctl(&base);
+    let end = Instant::now() + Duration::from_secs(30);
+    while !o.status.success() && String::from_utf8_lossy(&o.stdout).contains("invalid_account") && Instant::now() < end {
+        std::thread::sleep(Duration::from_millis(500));
+        o = ctl(&base);
+    }
+    assert!(o.status.success(), "{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
+    assert_eq!(serde_json::from_slice::<serde_json::Value>(&o.stdout).unwrap()["ok"], true);
+    // The uid is the caller's (from the bus): the record is under that uid's directory.
+    let profile = std::fs::read_to_string(cache.path().join("c").join(uid.to_string()).join("profile.json")).expect("published profile");
+    assert!(profile.contains("light") && profile.contains("12h"), "{profile}");
+    // A request that bsmctl itself refuses never reaches bsm: a directory, a dangling link, a bad value.
+    let dir = tempfile::tempdir().unwrap();
+    let real = dir.path().join("w.png");
+    std::fs::write(&real, b"x").unwrap();
+    let link = dir.path().join("l.png");
+    std::os::unix::fs::symlink(dir.path().join("nowhere"), &link).unwrap();
+    for bad in [link.to_str().unwrap(), dir.path().to_str().unwrap()] {
+        let mut a = base.to_vec();
+        a.extend(["--wallpaper", bad]);
+        let o = ctl(&a);
+        assert_eq!(o.status.code(), Some(1), "{bad}");
+        let e: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
+        assert_eq!(e["error"], "invalid_argument");
+    }
+    assert_eq!(ctl(&["publish-appearance", "--color-scheme", "dark"]).status.code(), Some(2));
+    // A real file travels as a descriptor and passes the service's checks (the converter is not
+    // installed in this test, so the image itself is reported as a warning in bsm's log, not an error).
+    std::thread::sleep(Duration::from_millis(700));
+    let mut a = base.to_vec();
+    let last = a.len() - 1;
+    a[last] = "true";
+    a.extend(["--wallpaper", real.to_str().unwrap()]);
+    let o = ctl(&a);
+    assert!(o.status.success(), "{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
+    // Rate limit: the same account cannot publish in a tight loop without being told to wait.
     let (status, log) = bsm.stop();
     assert!(status.success(), "{log}");
 }

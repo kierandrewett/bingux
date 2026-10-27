@@ -26,6 +26,7 @@ pub struct Settings {
     pub backend: BackendName,
     pub runtime_dir: PathBuf,
     pub state_dir: PathBuf,
+    pub cache_dir: Option<PathBuf>,
     pub helper_socket: PathBuf,
     pub greeter_user: String,
     pub greeter_socket_mode: u32,
@@ -87,6 +88,7 @@ pub fn resolve(cli: Cli) -> Result<Settings, String> {
         backend,
         runtime_dir: cli.runtime_dir.clone().or_else(|| file.runtime_dir.clone()).unwrap_or_else(|| bsm_proto::paths::RUNTIME_DIR.into()),
         state_dir: cli.state_dir.clone().or_else(|| file.state_dir.clone()).unwrap_or_else(|| bsm_proto::paths::STATE_DIR.into()),
+        cache_dir: cli.cache_dir.clone().or_else(|| file.cache_dir.clone()),
         helper_socket: cli
             .helper_socket
             .clone()
@@ -145,6 +147,16 @@ pub fn lookup_user(name: &str) -> Option<(u32, u32)> {
     // SAFETY: all pointers are valid for the call; the result points into `buf` and `pwd`.
     let rc = unsafe { libc::getpwnam_r(c.as_ptr(), &mut pwd, buf.as_mut_ptr() as *mut libc::c_char, buf.len(), &mut out) };
     if rc == 0 && !out.is_null() { Some((pwd.pw_uid, pwd.pw_gid)) } else { None }
+}
+
+/// Changing a socket's group needs privilege or membership of that group, which a development
+/// run does not have: outside the DRM backend it is skipped unless root. In production the
+/// packaging may also create the directories setgid, so the group can come from
+/// the directory (setgid) and nothing is chowned; development runs never could. The DRM backend
+/// always tries, as the installed system is set up for it.
+fn can_chown() -> bool {
+    // SAFETY: plain getuid(2).
+    unsafe { libc::geteuid() == 0 }
 }
 
 /// The process name is `bsm`: the binary is named `bsm` and exec'd directly. This keeps it
@@ -285,7 +297,7 @@ pub fn run(s: Settings) -> Result<(), String> {
         Arc::new(NoSystemBus)
     };
 
-    let publisher = system_publisher(None);
+    let publisher = system_publisher(s.cache_dir.clone());
     let mut accounts_policy = bsm_appearance::accounts::AccountPolicy::system();
     accounts_policy.extra_hidden = s.hidden_users.clone();
     let accounts = Arc::new(SystemAccounts { policy: accounts_policy, publisher: publisher.clone() });
@@ -297,7 +309,7 @@ pub fn run(s: Settings) -> Result<(), String> {
     let cfg = RuntimeConfig {
         policy,
         state_dir: s.state_dir.clone(),
-        control: ControlConfig { path: s.control_socket(), mode: s.greeter_socket_mode, gid: greeter_gid },
+        control: ControlConfig { path: s.control_socket(), mode: s.greeter_socket_mode, gid: greeter_gid.filter(|_| s.backend == BackendName::Drm || can_chown()) },
         helper: HelperEndpoint::Path { path: s.helper_socket.clone(), peer_uid: (s.backend == BackendName::Drm).then_some(0) },
         accounts,
         appearance,
@@ -392,7 +404,7 @@ fn run_compositor(
         runtime_dir: s.runtime_dir.clone(),
         greeter_socket: s.greeter_socket(),
         greeter_socket_mode: s.greeter_socket_mode,
-        greeter_socket_gid: lookup_user(&s.greeter_user).map(|ids| ids.1),
+        greeter_socket_gid: lookup_user(&s.greeter_user).map(|ids| ids.1).filter(|_| s.backend == BackendName::Drm || can_chown()),
         session_socket_dir: s.session_dir(),
         cover: s.cover,
         frame_dump_dir: s.frame_dump.clone(),

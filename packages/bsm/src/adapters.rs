@@ -61,9 +61,10 @@ pub struct PublisherBackend {
     pub publisher: Arc<Publisher>,
 }
 
+/// The published state is exactly what was sent: no descriptor removes the published copy.
 fn image(update: Option<FdHandle>) -> ImageUpdate {
     match update {
-        None => ImageUpdate::Keep,
+        None => ImageUpdate::Clear,
         Some(h) => match h.0.try_clone() {
             Ok(fd) => ImageUpdate::Set(File::from(fd)),
             Err(e) => {
@@ -152,5 +153,22 @@ mod tests {
         let list = SystemAccounts { policy, publisher }.list().unwrap();
         let alice = list.iter().find(|a| a.uid == 1000).unwrap();
         assert_eq!(alice.published.as_ref().unwrap().appearance, v.appearance);
+    }
+}
+
+#[cfg(test)]
+mod clear_tests {
+    use super::*;
+
+    #[test]
+    fn no_descriptor_clears_the_published_copy() {
+        assert!(matches!(image(None), ImageUpdate::Clear));
+        let (r, w) = {
+            let f = tempfile::tempfile().unwrap();
+            (f.try_clone().unwrap(), f)
+        };
+        drop(r);
+        let h = FdHandle(Arc::new(std::os::fd::OwnedFd::from(w)));
+        assert!(matches!(image(Some(h)), ImageUpdate::Set(_)));
     }
 }

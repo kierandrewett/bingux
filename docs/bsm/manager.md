@@ -418,6 +418,18 @@ and for root or the greeter `select-user UID`. Options: `--json`, `--wait`, `--t
   `progress` (a full progress model), plus `selected_user_changed`, `appearance_changed`,
   `session_readiness_changed`. The subscription exists before a request is sent when `--wait` is used, so
   a fast operation cannot be missed.
+* `publish-appearance --color-scheme dark|light --accent #rrggbb --clock-format 12h|24h --reduce-motion true|false
+  [--show-personal-images true|false] [--wallpaper PATH] [--avatar PATH]`: run as the account whose appearance it is;
+  bsm takes the uid from the bus. The four appearance options are required (a missing or bad value is exit 2). The
+  images are opened by `bsmctl` itself with the caller's rights (links are followed; it must be a regular file of at
+  most 16 MiB, checked with `fstat` on the open descriptor) and handed over as file descriptors: bsm never opens a
+  path. The state published is the state sent: an omitted image removes the published copy, and
+  `--show-personal-images false` removes both. Output is `{"ok":true}` (`--json`) or `published`; errors are the usual
+  `{"error":..,"message":..}` with exit 1 (`invalid_argument` for a path `bsmctl` refuses or the service rejects,
+  `busy` when the account publishes more often than every 500 ms, `invalid_account` for a non-eligible uid,
+  `unauthorised` for root and the greeter). **Tested** against the real `bsm` on a private bus with the cache in a
+  temporary directory (`--cache-dir`, or `cache_dir` in `bsm.toml`); the image conversion needs the installed
+  `bsm-imgconv` and was not exercised by that test.
 * No command can override authentication, unlock or expose another desktop; the service has no such
   method, and `bsmctl` has no word for it (a unit test asserts `unlock`, `login`, `activate` do not parse).
 

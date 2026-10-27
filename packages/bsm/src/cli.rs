@@ -21,6 +21,7 @@ OPTIONS:
     --system-services <logind|none>  polkit, inhibitors and power through the system bus (default: logind;
                                      `none` refuses every power action: development and tests only)
     --outputs <WxH[,WxH...]>         Headless backend: fake outputs side by side (default: 1280x720)
+    --cache-dir <DIR>                Greeter appearance cache (default: /var/lib/bingux/greeter)
     --frame-dump <DIR>               Headless backend: write every composed frame as a PNG
     --hold-first-scene <MS>          DRM backend: keep what is on a lit display (the boot splash) until
                                      the greeter is ready, at most MS milliseconds (default: 0 = off,
@@ -52,6 +53,7 @@ pub struct Cli {
     pub system_services: Option<String>,
     pub outputs: Option<Vec<(u32, u32)>>,
     pub frame_dump: Option<PathBuf>,
+    pub cache_dir: Option<PathBuf>,
     pub hold_first_scene_ms: Option<u64>,
     pub print_config: bool,
 }
@@ -136,6 +138,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Parsed, String> 
                 cli.system_services = Some(v);
             }
             "--outputs" => cli.outputs = Some(parse_outputs(&value("a list like 1280x720")?)?),
+            "--cache-dir" => cli.cache_dir = Some(value("a directory")?.into()),
             "--frame-dump" => cli.frame_dump = Some(value("a directory")?.into()),
             "--hold-first-scene" => {
                 let v = value("milliseconds")?;

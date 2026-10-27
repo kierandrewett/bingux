@@ -17,8 +17,9 @@ use std::io::Write;
 use std::time::Duration;
 
 use bsm_manager::core::{DbusSignal, OperationInfo, SessionInfo, StatusInfo, UserInfo};
-use bsm_manager::runtime::client::{Client, ClientError, monitor_event};
+use bsm_manager::runtime::client::{Client, ClientError, Publish, monitor_event};
 use bsm_manager::runtime::dbus::BusKind;
+use bsm_proto::control::{Appearance, ClockFormat, ColorScheme};
 use bsm_proto::error::ErrorCode;
 use serde_json::{Value, json};
 
@@ -43,6 +44,16 @@ ACTIONS (the request returns at once; --wait blocks until it finished):
     suspend | reboot | poweroff
     cancel OPERATION       cancel an operation that has not passed its point of no return
     select-user UID        (root) show another account on the greeter; reveals nothing
+    publish-appearance     publish this account's greeter appearance (see below)
+
+PUBLISH-APPEARANCE (run as the account whose appearance it is; bsm takes the uid from the bus):
+    --color-scheme dark|light  --accent #rrggbb  --clock-format 12h|24h  --reduce-motion true|false
+                           all four are required
+    --show-personal-images true|false   (default true)
+    --wallpaper PATH  --avatar PATH     optional images. bsmctl opens them itself with the caller's
+                           rights (links are followed; regular file, at most 16 MiB) and hands bsm
+                           the open descriptors; bsm never opens a path. Omitted: no image, the
+                           published copy is removed (the state published is the state sent).
 
 OPTIONS:
     --json                 machine readable output
@@ -68,6 +79,15 @@ pub enum Command {
     PowerOff,
     Cancel(u64),
     SelectUser(u32),
+    PublishAppearance(PublishArgs),
+}
+
+#[derive(Debug, PartialEq)]
+pub struct PublishArgs {
+    pub appearance: Appearance,
+    pub show_personal_images: bool,
+    pub wallpaper: Option<std::path::PathBuf>,
+    pub avatar: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -92,6 +112,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Parsed, String> 
     let mut timeout = Duration::from_secs(60);
     let mut bus = "system".to_owned();
     let mut rest: Vec<String> = Vec::new();
+    let mut opt: std::collections::BTreeMap<&'static str, String> = Default::default();
     let mut it = args.into_iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -104,6 +125,22 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Parsed, String> 
                 timeout = Duration::from_secs(v.parse().map_err(|_| format!("bad timeout {v:?}"))?);
             }
             "--bus" => bus = it.next().ok_or("--bus needs a value")?,
+            "--wallpaper" | "--avatar" | "--color-scheme" | "--accent" | "--clock-format" | "--reduce-motion"
+            | "--show-personal-images" => {
+                let key: &'static str = match a.as_str() {
+                    "--wallpaper" => "wallpaper",
+                    "--avatar" => "avatar",
+                    "--color-scheme" => "color-scheme",
+                    "--accent" => "accent",
+                    "--clock-format" => "clock-format",
+                    "--reduce-motion" => "reduce-motion",
+                    _ => "show-personal-images",
+                };
+                let v = it.next().ok_or_else(|| format!("{a} needs a value"))?;
+                if opt.insert(key, v).is_some() {
+                    return Err(format!("{a} given twice"));
+                }
+            }
             s if s.starts_with("--") => return Err(format!("unknown option {s:?}; try --help")),
             _ => rest.push(a),
         }
@@ -125,13 +162,76 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Parsed, String> 
         "reboot" => Command::Reboot,
         "poweroff" | "power-off" => Command::PowerOff,
         "cancel" => Command::Cancel(one(&mut r).ok_or("cancel needs an operation id")?.parse().map_err(|_| "bad operation id")?),
+        "publish-appearance" => Command::PublishAppearance(publish_args(&mut opt)?),
         "select-user" => Command::SelectUser(one(&mut r).ok_or("select-user needs a uid")?.parse().map_err(|_| "bad uid")?),
         other => return Err(format!("unknown command {other:?}; try --help")),
     };
     if r.next().is_some() {
         return Err("too many arguments".into());
     }
+    if let Some(k) = opt.keys().next() {
+        return Err(format!("--{k} is only for publish-appearance"));
+    }
     Ok(Parsed::Run(Args { json, wait, timeout, bus, command }))
+}
+
+fn parse_bool(flag: &str, v: &str) -> Result<bool, String> {
+    match v {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => Err(format!("{flag} must be true or false, not {v:?}")),
+    }
+}
+
+fn publish_args(opt: &mut std::collections::BTreeMap<&'static str, String>) -> Result<PublishArgs, String> {
+    let mut need = |k: &str| opt.remove(k).ok_or_else(|| format!("publish-appearance needs --{k}"));
+    let color_scheme = match need("color-scheme")?.as_str() {
+        "dark" => ColorScheme::Dark,
+        "light" => ColorScheme::Light,
+        v => return Err(format!("--color-scheme must be dark or light, not {v:?}")),
+    };
+    let accent = need("accent")?;
+    if !(accent.len() == 7 && accent.starts_with('#') && accent[1..].bytes().all(|b| b.is_ascii_hexdigit())) {
+        return Err(format!("--accent must be #rrggbb, not {accent:?}"));
+    }
+    let clock_format = match need("clock-format")?.as_str() {
+        "12h" => ClockFormat::H12,
+        "24h" => ClockFormat::H24,
+        v => return Err(format!("--clock-format must be 12h or 24h, not {v:?}")),
+    };
+    let reduce_motion = parse_bool("--reduce-motion", &need("reduce-motion")?)?;
+    let show_personal_images = match opt.remove("show-personal-images") {
+        Some(v) => parse_bool("--show-personal-images", &v)?,
+        None => true,
+    };
+    Ok(PublishArgs {
+        appearance: Appearance { color_scheme, accent, clock_format, reduce_motion },
+        show_personal_images,
+        wallpaper: opt.remove("wallpaper").map(Into::into),
+        avatar: opt.remove("avatar").map(Into::into),
+    })
+}
+
+/// Open an image the way the service requires it: read only, close-on-exec, a regular file of
+/// at most `MAX_IMAGE_BYTES`. Symlinks are followed: the file is opened with the calling user's
+/// own rights (wallpapers are often links), checked with `fstat` on the open descriptor, and bsm
+/// only ever receives the descriptor, never a path.
+pub fn open_image(path: &std::path::Path) -> Result<std::fs::File, ClientError> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    let bad = |m: String| ClientError { code: Some(ErrorCode::InvalidArgument), message: m };
+    let f = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NONBLOCK)
+        .open(path)
+        .map_err(|e| bad(format!("cannot open {}: {e}", path.display())))?;
+    let m = f.metadata().map_err(|e| bad(format!("cannot stat {}: {e}", path.display())))?;
+    if !m.is_file() {
+        return Err(bad(format!("{} is not a regular file", path.display())));
+    }
+    if m.size() > bsm_manager::runtime::dbus::MAX_IMAGE_BYTES {
+        return Err(bad(format!("{} is larger than 16 MiB", path.display())));
+    }
+    Ok(f)
 }
 
 fn name_of<T: serde::Serialize>(v: &T) -> Value {
@@ -315,6 +415,18 @@ fn go(c: &Client, a: &Args) -> Result<i32, ClientError> {
             c.select_greeter_user(*uid)?;
             print_value(&json!({"ok": true}), "ok\n".into(), j);
         }
+        Command::PublishAppearance(p) => {
+            let wall = p.wallpaper.as_deref().map(open_image).transpose()?;
+            let avatar = p.avatar.as_deref().map(open_image).transpose()?;
+            use std::os::fd::AsFd;
+            c.publish_appearance(&Publish {
+                appearance: &p.appearance,
+                show_personal_images: p.show_personal_images,
+                wallpaper: wall.as_ref().map(|f| f.as_fd()),
+                avatar: avatar.as_ref().map(|f| f.as_fd()),
+            })?;
+            print_value(&json!({"ok": true}), "published\n".into(), j);
+        }
         Command::Cancel(op) => {
             c.cancel_operation(*op)?;
             print_value(&json!({"ok": true}), "ok\n".into(), j);
@@ -375,6 +487,57 @@ mod tests {
         assert!(p(&["status", "extra"]).unwrap_err().contains("too many"));
         assert!(p(&["select-user", "x"]).is_err());
         assert!(p(&["--nope", "status"]).is_err());
+    }
+
+    fn publish(extra: &[&str]) -> Result<Parsed, String> {
+        let mut a = vec!["publish-appearance", "--color-scheme", "dark", "--accent", "#3584e4", "--clock-format", "24h", "--reduce-motion", "false"];
+        a.extend_from_slice(extra);
+        p(&a)
+    }
+
+    #[test]
+    fn publish_appearance_parses_and_validates() {
+        let Parsed::Run(a) = publish(&["--wallpaper", "/w.png", "--avatar", "/a.png", "--show-personal-images", "false", "--json"]).unwrap() else { panic!() };
+        let Command::PublishAppearance(x) = a.command else { panic!() };
+        assert_eq!(x.appearance.accent, "#3584e4");
+        assert!(!x.show_personal_images && !x.appearance.reduce_motion);
+        assert_eq!(x.wallpaper.as_deref(), Some(std::path::Path::new("/w.png")));
+        let Parsed::Run(a) = publish(&[]).unwrap() else { panic!() };
+        let Command::PublishAppearance(x) = a.command else { panic!() };
+        assert!(x.show_personal_images && x.wallpaper.is_none() && x.avatar.is_none());
+        assert!(p(&["publish-appearance"]).unwrap_err().contains("needs --"));
+        for bad in [["--color-scheme", "blue"], ["--accent", "red"], ["--clock-format", "25h"], ["--reduce-motion", "yes"]] {
+            let mut a = vec!["publish-appearance", "--color-scheme", "dark", "--accent", "#112233", "--clock-format", "24h", "--reduce-motion", "true"];
+            let i = a.iter().position(|x| *x == bad[0]).unwrap();
+            a[i + 1] = bad[1];
+            assert!(p(&a).is_err(), "{bad:?}");
+        }
+        assert!(p(&["status", "--accent", "#000000"]).unwrap_err().contains("only for publish-appearance"));
+        assert!(publish(&["--wallpaper", "/a", "--wallpaper", "/b"]).unwrap_err().contains("twice"));
+    }
+
+    #[test]
+    fn images_are_opened_by_the_caller_with_the_service_rules() {
+        use std::os::unix::fs::symlink;
+        let d = tempfile::tempdir().unwrap();
+        let ok = d.path().join("a.png");
+        std::fs::write(&ok, b"png").unwrap();
+        assert!(open_image(&ok).is_ok());
+        let link = d.path().join("l.png");
+        symlink(&ok, &link).unwrap();
+        assert!(open_image(&link).is_ok(), "a link to a regular file is the user's own file");
+        let dangling = d.path().join("d.png");
+        symlink(d.path().join("nowhere"), &dangling).unwrap();
+        assert!(open_image(&dangling).is_err());
+        assert!(open_image(d.path()).unwrap_err().message.contains("not a regular file"));
+        let fifo = d.path().join("f");
+        let c = std::ffi::CString::new(fifo.to_str().unwrap()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(c.as_ptr(), 0o600) }, 0);
+        assert!(open_image(&fifo).unwrap_err().message.contains("not a regular file"));
+        let big = d.path().join("big");
+        std::fs::File::create(&big).unwrap().set_len(17 * 1024 * 1024).unwrap();
+        assert!(open_image(&big).unwrap_err().message.contains("16 MiB"));
+        assert!(open_image(&d.path().join("missing")).is_err());
     }
 
     #[test]

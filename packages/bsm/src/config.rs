@@ -5,6 +5,7 @@
 //! backend = "drm"                    # drm | winit | headless (the command line wins)
 //! runtime_dir = "/run/bsm"
 //! state_dir = "/var/lib/bsm"
+//! cache_dir = "/var/lib/bingux/greeter"   # published greeter appearance, one directory per uid
 //! helper_socket = "/run/bsm-helper/helper.sock"
 //! greeter_user = "bingux-greeter"
 //! greeter_socket_mode = "0660"
@@ -59,6 +60,7 @@ pub struct FileConfig {
     pub backend: Option<String>,
     pub runtime_dir: Option<PathBuf>,
     pub state_dir: Option<PathBuf>,
+    pub cache_dir: Option<PathBuf>,
     pub helper_socket: Option<PathBuf>,
     pub greeter_user: Option<String>,
     pub greeter_socket_mode: Option<String>,
