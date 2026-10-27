@@ -27,6 +27,7 @@ pub struct ActionButton {
     loading: bool,
     grow: bool,
     compact: bool,
+    autofocus: bool,
     on_press: EventHandler<()>,
 }
 
@@ -44,6 +45,7 @@ pub fn action_button(
         loading: false,
         grow: false,
         compact: false,
+        autofocus: false,
         on_press: on_press.into(),
     }
 }
@@ -79,6 +81,13 @@ impl ActionButton {
         self
     }
 
+    /// Take the keyboard focus when the button first appears, so Enter
+    /// presses it. A dialog gives it to its safe answer.
+    pub fn autofocus(mut self) -> Self {
+        self.autofocus = true;
+        self
+    }
+
     pub fn icon(mut self, icon: Icon) -> Self {
         self.icon = Some(icon);
         self
@@ -103,6 +112,12 @@ impl Component for ActionButton {
         let a11y_id = use_a11y();
         let core = use_focus_core();
         let focus = use_focus(a11y_id);
+        let autofocus = self.autofocus;
+        use_side_effect(move || {
+            if autofocus {
+                a11y_id.request_focus();
+            }
+        });
         let on_press = self.on_press.clone();
         let on_key = on_press.clone();
         let press = use_press();
@@ -350,6 +365,7 @@ pub struct IconButton {
     filled: bool,
     active: bool,
     enabled: bool,
+    busy: bool,
     radius: Radius,
 }
 
@@ -363,7 +379,8 @@ pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconBut
         filled: false,
         active: false,
         enabled: true,
-        radius: Radius::Pill,
+        busy: false,
+        radius: Radius::Control,
     }
 }
 
@@ -398,8 +415,9 @@ impl IconButton {
         self
     }
 
-    /// The corner radius of the button and its focus ring: pill by default,
-    /// `Mark` for the square toolbar buttons of the inspector.
+    /// The corner radius of the button and its focus ring: `Control` by
+    /// default, like every other button; `Mark` for the square toolbar buttons
+    /// of the inspector.
     pub fn radius(mut self, radius: Radius) -> Self {
         self.radius = radius;
         self
@@ -409,6 +427,13 @@ impl IconButton {
     /// available yet. It stays on screen so a header keeps its shape.
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
+        self
+    }
+
+    /// Show a spinner in place of the icon and ignore presses, while the
+    /// action it starts is running. The button keeps its size.
+    pub fn busy(mut self, busy: bool) -> Self {
+        self.busy = busy;
         self
     }
 }
@@ -422,7 +447,12 @@ impl Component for IconButton {
         let core = use_focus_core();
         let focus = use_focus(a11y_id);
         let usable = use_enabled(self.enabled);
-        let on_press = self.on_press.clone();
+        // A busy button swallows presses, so a slow action is not asked twice.
+        let on_press = if self.busy {
+            EventHandler::new(|_: ()| {})
+        } else {
+            self.on_press.clone()
+        };
         let on_key = on_press.clone();
         let press = use_press();
         // Only a hovered danger button takes the danger fill; the state
@@ -490,15 +520,20 @@ impl Component for IconButton {
                         }
                     })
             })
-            .child(icons::icon(
-                self.icon,
-                IconSize::Control,
-                if self.active {
-                    Paint::Accent.color(&tokens)
-                } else {
-                    Paint::Text.color(&tokens)
-                },
-            ))
+            .child(if self.busy {
+                Element::from(spinner(SpinnerSize::Small))
+            } else {
+                icons::icon(
+                    self.icon,
+                    IconSize::Control,
+                    if self.active {
+                        Paint::Accent.color(&tokens)
+                    } else {
+                        Paint::Text.color(&tokens)
+                    },
+                )
+                .into()
+            })
             .focusable(focus(), self.radius);
         match &self.tooltip {
             Some(text) => hover_tip(button, text.clone()),

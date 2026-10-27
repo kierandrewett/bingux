@@ -211,6 +211,8 @@ pub enum InputRequest {
     SelectWordAtCursor,
     /// Drag the start or end of the selection with the pointer. The opposite end stays fixed until the pointer is released.
     DragSelectionEnd { start: bool },
+    /// Select the characters from `start` to `end` (character positions, not bytes), such as a file name without its extension.
+    SelectRange { start: usize, end: usize },
 }
 
 /// Runs one key edit on `editable` and writes the text to `value`, unless
@@ -807,6 +809,14 @@ impl Component for Input {
                             editable.editor_mut().write().set_selection(selection);
                         }
                         is_dragging.set(true);
+                    }
+                    InputRequest::SelectRange { start, end } => {
+                        let length = editable.editor().peek().rope().len_chars();
+                        editable
+                            .editor_mut()
+                            .write()
+                            .set_selection((start.min(length), end.min(length)));
+                        follow_cursor();
                     }
                 }
             });

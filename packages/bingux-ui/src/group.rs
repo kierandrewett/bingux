@@ -114,6 +114,7 @@ pub struct Group {
     title: Option<String>,
     description: Option<String>,
     trailing: Option<Element>,
+    below_title: Option<Element>,
     filtered: bool,
     rows: Vec<Element>,
 }
@@ -124,6 +125,7 @@ impl Group {
             title: title.into(),
             description: None,
             trailing: None,
+            below_title: None,
             filtered: true,
             rows: Vec::new(),
         }
@@ -142,12 +144,28 @@ impl Group {
         self
     }
 
+    /// An element between the title line and the card, such as a search field
+    /// that belongs to the group's list.
+    pub fn below_title(mut self, element: impl Into<Element>) -> Self {
+        self.below_title = Some(element.into());
+        self
+    }
+
     pub fn titled(title: &str) -> Self {
         Self::new(Some(title.to_string()))
     }
 
     pub fn row(mut self, row: impl Into<Element>) -> Self {
         self.rows.push(row.into());
+        self
+    }
+
+    /// Free content on the card, such as a chart or a preview, 16 px from
+    /// the card's edge on every side. A row sits flush against the card, so
+    /// content that is not a row goes here.
+    pub fn content(mut self, content: impl Into<Element>) -> Self {
+        self.rows
+            .push(rect().tw_layout(BOX_BODY).child(content.into()).into());
         self
     }
 
@@ -227,6 +245,7 @@ impl Component for Group {
                 })
                 .tw(&tokens, GROUP)
                 .maybe_child(heading)
+                .maybe_child(self.below_title.clone())
                 .child(rect().tw(&tokens, BOX).children(children)),
         )
     }
@@ -500,7 +519,20 @@ pub fn skeleton() -> Element {
 /// rows it will show are already in place when its data arrives.
 pub fn skeleton_shape(sections: &[usize]) -> Element {
     Skeleton {
-        sections: sections.to_vec(),
+        sections: sections.iter().map(|&rows| "-".repeat(rows)).collect(),
+    }
+    .into()
+}
+
+/// Skeleton sections spelled row by row, for a page whose rows differ in
+/// height. Each string is one section and each character one row: `-` a
+/// one-line row, `=` a row with a second line of text, `#` a block the height
+/// of the arrangement canvas. A leading `~TEXT|` gives the section's title a
+/// description under it, set in the real text so that it wraps as the real one
+/// will.
+pub fn skeleton_rows(sections: &[&str]) -> Element {
+    Skeleton {
+        sections: sections.iter().map(|section| section.to_string()).collect(),
     }
     .into()
 }
@@ -509,39 +541,74 @@ const SKELETON_ROWS: usize = 3;
 
 #[derive(PartialEq)]
 struct Skeleton {
-    sections: Vec<usize>,
+    sections: Vec<String>,
+}
+
+/// A bar standing in for a group title, in a box as tall as the real title,
+/// so the card below it starts where the real card will.
+fn skeleton_title(tokens: &Tokens, description: Option<&str>) -> Element {
+    rect()
+        .tw(tokens, &[w_full()])
+        .child(
+            rect()
+                .opacity(0.0)
+                .tw(tokens, GROUP_HEAD_TEXT)
+                .child(section_label("Mg"))
+                .maybe_child(description.map(|text| caption(text.to_string()))),
+        )
+        .child(
+            rect()
+                .position(Position::new_absolute().top(0.0).left(0.0))
+                .tw(tokens, &[w_full(), h_full(), flex_col(), justify(Align::Center)])
+                .child(skeleton_bar(tokens, Dim::SkeletonTitle)),
+        )
+        .into()
+}
+
+fn skeleton_line(tokens: &Tokens, kind: char) -> Element {
+    let bar = |width: Dim| skeleton_bar(tokens, width);
+    match kind {
+        '#' => rect()
+            .tw(tokens, &[w_full(), h(Dim::ArrangementHeight), bg(Paint::Control)])
+            .into(),
+        '=' => rect()
+            .tw(tokens, ROW)
+            .tw(tokens, &[h(Dim::RowSubtitle)])
+            .child(
+                rect()
+                    .tw(tokens, &[flex_col(), gap(S1), w_flex()])
+                    .child(bar(Dim::SkeletonLabel))
+                    .child(bar(Dim::SkeletonValue)),
+            )
+            .child(bar(Dim::SkeletonValue))
+            .into(),
+        _ => rect()
+            .tw(tokens, ROW)
+            .child(rect().tw(tokens, &[w_flex()]).child(bar(Dim::SkeletonLabel)))
+            .child(bar(Dim::SkeletonValue))
+            .into(),
+    }
 }
 
 impl Component for Skeleton {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let bar = |width: Dim| skeleton_bar(&tokens, width);
-        let section = |rows: usize| {
-            let rows = (0..rows).map(|_| {
-                Element::from(
-                    rect()
-                        .tw(&tokens, ROW)
-                        .child(
-                            rect()
-                                .tw(&tokens, &[w_flex()])
-                                .child(bar(Dim::SkeletonLabel)),
-                        )
-                        .child(bar(Dim::SkeletonValue)),
-                )
-            });
-            rect()
-                .tw(&tokens, GROUP)
-                .child(bar(Dim::SkeletonTitle))
-                .child(
-                    rect()
-                        .tw(&tokens, BOX)
-                        .children(plain_rows(&tokens, rows.collect())),
-                )
-        };
         let sections: Vec<Element> = self
             .sections
             .iter()
-            .map(|&rows| Element::from(section(rows)))
+            .map(|rows| {
+                let (description, rows) = match rows.strip_prefix('~').and_then(|rest| rest.split_once('|')) {
+                    Some((text, rows)) => (Some(text), rows),
+                    None => (None, rows.as_str()),
+                };
+                let lines: Vec<Element> = rows.chars().map(|kind| skeleton_line(&tokens, kind)).collect();
+                Element::from(
+                    rect()
+                        .tw(&tokens, GROUP)
+                        .child(skeleton_title(&tokens, description))
+                        .child(rect().tw(&tokens, BOX).children(plain_rows(&tokens, lines))),
+                )
+            })
             .collect();
         page_column().children(sections)
     }

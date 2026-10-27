@@ -171,6 +171,16 @@ impl TypeAhead {
         }
     }
 
+    /// Whether a word is being typed at `now`: a letter came less than a
+    /// pause ago. Other keys, such as Space for Quick Look, leave a word
+    /// that is being typed alone.
+    pub fn is_active(&self, now: Instant) -> bool {
+        !self.buffer.is_empty()
+            && self
+                .last
+                .is_some_and(|last| now.duration_since(last) <= PAUSE)
+    }
+
     /// Add a typed character at `now` and return the prefix so far.
     pub fn push(&mut self, character: char, now: Instant) -> &str {
         if self
@@ -269,5 +279,15 @@ mod tests {
             type_ahead_target(names.len(), |i| names[i], None, "z"),
             None
         );
+    }
+
+    #[test]
+    fn a_word_is_being_typed_until_the_pause() {
+        let mut typed = TypeAhead::new();
+        let start = Instant::now();
+        assert!(!typed.is_active(start), "nothing typed yet");
+        typed.push('a', start);
+        assert!(typed.is_active(start + Duration::from_millis(400)));
+        assert!(!typed.is_active(start + Duration::from_millis(1500)));
     }
 }

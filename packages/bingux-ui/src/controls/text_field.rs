@@ -55,6 +55,8 @@ pub struct TextField {
     enabled: bool,
     leading: Option<Icon>,
     leading_column: Option<Dim>,
+    /// A removable token before the text; see [`TextField::leading_chip`].
+    leading_chip: Option<(String, String, EventHandler<()>)>,
     clearable: bool,
     invalid: Option<String>,
     validates: bool,
@@ -65,6 +67,14 @@ pub struct TextField {
     on_arrow: Option<EventHandler<f64>>,
     a11y_id: Option<AccessibilityId>,
     autofocus: bool,
+    /// Select all the text when the field first appears.
+    select_all: bool,
+    /// Select this range of characters when the field first appears.
+    select_range: Option<(usize, usize)>,
+    /// Called when Escape is pressed, before the field gives up focus.
+    on_escape: Option<EventHandler<()>>,
+    /// Told which modifiers were held, just before Enter submits.
+    on_enter_modifiers: Option<EventHandler<Modifiers>>,
     /// Apps' own entries, appended to the full edit menu after the general ones.
     edit_extra: Vec<MenuItem>,
 }
@@ -88,6 +98,7 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         enabled: true,
         leading: None,
         leading_column: None,
+        leading_chip: None,
         clearable: false,
         invalid: None,
         validates: false,
@@ -97,6 +108,10 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         on_arrow: None,
         a11y_id: None,
         autofocus: false,
+        select_all: false,
+        select_range: None,
+        on_escape: None,
+        on_enter_modifiers: None,
         edit_extra: Vec::new(),
     }
 }
@@ -201,6 +216,22 @@ impl TextField {
         self
     }
 
+    /// A removable token after the leading glyph and before the text, such as
+    /// the folder a search is limited to (`in Downloads`). `label` is drawn
+    /// in the token and `remove_label` names its close button for the
+    /// pointer's tooltip and for assistive technology; `on_remove` runs when
+    /// the button is pressed. The token sits inside the field, so adding or
+    /// removing it never changes the field's own size.
+    pub fn leading_chip(
+        mut self,
+        label: impl Into<String>,
+        remove_label: impl Into<String>,
+        on_remove: impl Into<EventHandler<()>>,
+    ) -> Self {
+        self.leading_chip = Some((label.into(), remove_label.into(), on_remove.into()));
+        self
+    }
+
     /// Show a clear button while the field has text.
     pub fn clearable(mut self) -> Self {
         self.clearable = true;
@@ -248,6 +279,40 @@ impl TextField {
         self
     }
 
+    /// Select the whole text when the field first appears, so typing replaces
+    /// it and Ctrl+C copies it, as a browser's address bar does when it is
+    /// focused. Pair it with [`autofocus`](Self::autofocus).
+    pub fn select_all_on_open(mut self) -> Self {
+        self.select_all = true;
+        self
+    }
+
+    /// Select the characters from `start` to `end` (positions in characters)
+    /// when the field first appears, such as a file name without its
+    /// extension. Pair it with [`autofocus`](Self::autofocus).
+    pub fn select_range(mut self, start: usize, end: usize) -> Self {
+        self.select_range = Some((start, end));
+        self
+    }
+
+    /// Escape is the owner's: `on_escape` runs, and the field neither restores
+    /// its `revert_to` text nor gives up focus. The owner closes what the
+    /// field is in, or keeps typing going, as it decides. A field with no
+    /// `on_escape` reverts and gives up focus.
+    pub fn on_escape(mut self, on_escape: impl Into<EventHandler<()>>) -> Self {
+        self.on_escape = Some(on_escape.into());
+        self
+    }
+
+    /// Told which modifiers were held (Ctrl, Shift, Alt) each time Enter is
+    /// pressed, just before the field submits, so the submit handler can tell
+    /// Enter from Ctrl+Enter or Shift+Enter. A synthetic key press carries
+    /// its modifiers here even where the window system's live state does not.
+    pub fn on_enter_modifiers(mut self, handler: impl Into<EventHandler<Modifiers>>) -> Self {
+        self.on_enter_modifiers = Some(handler.into());
+        self
+    }
+
     /// Append app-specific entries to the full edit menu, after Cut, Copy,
     /// Paste and Select all. The touch bar's chevron opens that menu.
     pub fn edit_menu_extra(mut self, items: Vec<MenuItem>) -> Self {
@@ -275,6 +340,8 @@ impl Component for TextField {
         let on_change = self.on_change.clone();
         let on_arrow = self.on_arrow.clone();
         let revert_to = self.revert_to.clone();
+        let on_escape = self.on_escape.clone();
+        let on_enter_modifiers = self.on_enter_modifiers.clone();
         let multiline = self.multiline;
         let invalid = self.invalid.is_some() || self.danger_outline;
         let own_id = use_a11y();
@@ -284,7 +351,16 @@ impl Component for TextField {
         let mut command = use_state::<Option<InputCommand>>(|| None);
         let touch = use_press();
         let probe = use_state(InputProbe::default);
-        let mut request = use_state::<Option<InputRequest>>(|| None);
+        let select_all = self.select_all;
+        use_hook(move || {
+            if select_all {
+                command.set(Some(InputCommand::SelectAll));
+            }
+        });
+        let select_range = self.select_range;
+        let mut request = use_state::<Option<InputRequest>>(|| {
+            select_range.map(|(start, end)| InputRequest::SelectRange { start, end })
+        });
         let mut bar_open = use_state(|| false);
         let bar_size = use_state::<Option<(f32, f32)>>(|| None);
         let mut field_origin = use_state(|| (0.0_f32, 0.0_f32));
@@ -341,6 +417,10 @@ impl Component for TextField {
             (S0, S2)
         } else if self.dense {
             (S0_5, S2)
+        } else if self.leading_column.is_some() {
+            // The glyph column starts where a row's icon column does, so the
+            // text lines up with the row names beside it.
+            (S2, S2)
         } else {
             (S2, S3)
         };
@@ -389,6 +469,12 @@ impl Component for TextField {
             .on_pre_key_down(move |event: Event<KeyboardEventData>| {
                 match &event.key {
                     Key::Named(NamedKey::Escape) => {
+                        if let Some(on_escape) = &on_escape {
+                            on_escape.call(());
+                            event.stop_propagation();
+                            bar_open.set(false);
+                            return false;
+                        }
                         if let Some(text) = revert_to.clone() {
                             value.set(text);
                         }
@@ -420,7 +506,12 @@ impl Component for TextField {
                         false
                     }
                     // A single-line Enter bubbles up, so a popup can act on it.
-                    Key::Named(NamedKey::Enter) if !multiline => true,
+                    Key::Named(NamedKey::Enter) if !multiline => {
+                        if let Some(on_enter) = &on_enter_modifiers {
+                            on_enter.call(event.modifiers);
+                        }
+                        true
+                    }
                     // Tab moves focus, as Freya's own field does.
                     Key::Named(NamedKey::Tab) => false,
                     _ => {
@@ -445,31 +536,77 @@ impl Component for TextField {
         if let Some(placeholder) = &self.placeholder {
             input = input.placeholder(placeholder.clone());
         }
+        let mut leading: Option<Rect> = None;
         if let Some(icon) = self.leading {
             // With a column the glyph is a fixed-width box at row size, with the
             // rows' icon-to-text gap, so the glyph and the text line up with the
             // rows that share the column. Without one the glyph sits at control
             // size, tucked against the text.
             let (glyph_size, after) = match self.leading_column {
-                Some(_) => (IconSize::Row, S2),
+                Some(_) => (IconSize::Row, S0),
                 None => (IconSize::Control, S1),
             };
+            // The field's text cursor belongs to the text. A glyph or button
+            // beside it shows the normal pointer, as every other control does.
             let mut glyph = rect()
                 .height(Size::fill())
+                .cursor(CursorIcon::default())
                 .tw(&tokens, &[mr(after), flex_row(), center()]);
             if let Some(column) = self.leading_column {
                 glyph = glyph.tw(&tokens, &[w(column)]);
             }
-            input = input.leading(glyph.child(icons::icon(
+            leading = Some(glyph.child(icons::icon(
                 icon,
                 glyph_size,
                 Paint::Muted.color(&tokens),
             )));
         }
+        if let Some((label, remove_label, on_remove)) = &self.leading_chip {
+            let on_remove = on_remove.clone();
+            let chip = rect()
+                .component("TextFieldChip")
+                .a11y_alt(label.clone())
+                .cursor(CursorIcon::default())
+                .tw(
+                    &tokens,
+                    &[
+                        flex_row(),
+                        items(Align::Center),
+                        gap(S1),
+                        pl(S2),
+                        rounded(Radius::Mark),
+                        bg(Paint::AccentSoft),
+                        mr(S2),
+                    ],
+                )
+                .child(
+                    CAPTION
+                        .in_ink(Ink::Text)
+                        .label(&tokens, label.clone())
+                        .max_lines(1),
+                )
+                .child(
+                    icon_button(Icon::WindowClose, move |_| on_remove.call(()))
+                        .size(Dim::Box5)
+                        .tooltip(remove_label),
+                );
+            leading = Some(
+                rect()
+                    .height(Size::fill())
+                    .tw(&tokens, &[flex_row(), items(Align::Center)])
+                    .maybe_child(leading.take())
+                    .child(chip),
+            );
+        }
+        if let Some(leading) = leading {
+            input = input.leading(leading);
+        }
         let clear = self.clearable && has_text;
         if clear || self.password || self.suffix.is_some() {
             let on_change = on_change.clone();
-            let mut trailing = rect().tw(&tokens, &[flex_row(), center(), gap(S1)]);
+            let mut trailing = rect()
+                .cursor(CursorIcon::default())
+                .tw(&tokens, &[flex_row(), center(), gap(S1)]);
             if let Some(suffix) = &self.suffix {
                 trailing = trailing.child(
                     BODY.in_ink(Ink::Muted)
@@ -482,7 +619,7 @@ impl Component for TextField {
                     rect()
                         .tw(
                             &tokens,
-                            &[w(Dim::Box5), h(Dim::Box5), rounded(Radius::Pill), center()],
+                            &[w(Dim::Box5), h(Dim::Box5), rounded(Radius::Mark), center()],
                         )
                         .on_pointer_down(move |event: Event<PointerEventData>| {
                             let left = matches!(event.data(), PointerEventData::Mouse(mouse) if mouse.button == Some(MouseButton::Left));

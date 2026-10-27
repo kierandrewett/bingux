@@ -6,6 +6,8 @@
 //! tint. Text outside such a pane, or text with no match, draws exactly as the
 //! plain [`TextStyle`] would.
 
+use std::ops::Range;
+
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
@@ -71,6 +73,48 @@ pub fn marked(style: TextStyle, tokens: &Tokens, text: &str) -> Option<Paragraph
             .highlight_color(mark_colour(tokens))
             .key(ranges),
     )
+}
+
+/// One line of `text` in `style` with the given byte `ranges` marked on the
+/// same accent tint as a search: the way a list shows which letters of a name
+/// matched a query. `ranges` are sorted, do not overlap and lie on character
+/// boundaries. The line is cut with an ellipsis when it does not fit; chain
+/// more paragraph options onto the result. With no ranges it is plain text in
+/// the same element type, so a row that gains or loses its marks keeps its
+/// place in the tree.
+pub fn highlighted_label(
+    style: TextStyle,
+    tokens: &Tokens,
+    text: &str,
+    ranges: &[Range<usize>],
+) -> Paragraph {
+    let chars: Vec<(usize, usize)> = ranges
+        .iter()
+        .map(|range| {
+            let start = text[..range.start].chars().count();
+            (start, start + text[range.clone()].chars().count())
+        })
+        .collect();
+    // See `marked`: the key makes each highlight set a measured element.
+    style
+        .paragraph(tokens, text)
+        .max_lines(1)
+        .text_overflow(TextOverflow::Ellipsis)
+        .highlights(chars.clone())
+        .highlight_color(mark_colour(tokens))
+        .key(chars)
+}
+
+/// [`highlighted_label`] with the font size scaled by `scale`, rounded to
+/// the nearest quarter pixel, as `TextStyle::label_scaled` does.
+pub fn highlighted_label_scaled(
+    style: TextStyle,
+    tokens: &Tokens,
+    text: &str,
+    ranges: &[Range<usize>],
+    scale: f32,
+) -> Paragraph {
+    style.scale_paragraph(highlighted_label(style, tokens, text, ranges), scale)
 }
 
 /// The search text of the pane above, trimmed, or `None` when no search is

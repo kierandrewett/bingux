@@ -1,21 +1,49 @@
-//! The places sidebar: Recent, Home, the XDG folders, devices and bookmarks.
+//! The places list: Recent, Home and the user folders, the user's bookmarks,
+//! and the drives with how full each one is.
+//!
+//! [`PlacesSidebar`] is the column beside a file view. [`PlacesMenu`] is the
+//! same list in a sheet behind one button, for a phone. Both draw a
+//! `PlaceList`, so the rows, their context menus and the keyboard are the
+//! same.
+//!
+//! Every row is a Tab stop. Up and Down walk the rows, Home and End go to the
+//! first and the last, a letter jumps to the next row that starts with it,
+//! Enter opens, Delete removes a bookmark, and the Menu key or Shift+F10
+//! opens the row's menu. A right click or a long press opens it too.
 
-use bingux_files::{Place, PlaceKind, Places};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::rc::Rc;
+use std::time::{Duration, Instant};
+
+use bingux_files::places::special_folder;
+use bingux_files::{Place, Places};
 use freya::prelude::*;
 
 use super::directory::Where;
-use super::glyphs::place_icon;
+use super::drives::{Drives, use_drives};
+use super::glyphs::folder_icon;
+use super::places_model::{
+    Item, ItemKind, Release, Section, UsageLine, current_name, release_for, sections, selected,
+    type_ahead, usage_line,
+};
 use crate::component::ComponentName;
-use crate::controls::focus_stop;
-use crate::focus::step_focus;
-use crate::icons;
-use crate::layout::divider;
+use crate::controls::{StopRing, focus_stop, focus_stop_with, path_label, text_field, usage_bar};
+use crate::focus::{focus_node, step_focus};
+use crate::icons::{self, Icon};
+use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
+use crate::shell::{MenuItem, Overlays, ResponseKind, dialog, menu_item, menu_separator};
 use crate::style::*;
 use crate::surface::use_tokens;
-use crate::typography::BODY;
+use crate::task::spawn_blocking;
+use crate::typography::{BODY, CAPTION, Ink};
+
+/// How long a pause ends a typed prefix, so the next letter starts again.
+const TYPE_AHEAD_RESET: Duration = Duration::from_millis(900);
 
 /// A column of the system's places. The place that is exactly the current
-/// location is selected. Each row is a Tab stop; Up and Down walk the rows.
+/// location is selected; failing that, the drive the location is on.
 ///
 /// Use it beside any file view. A second user besides the chooser is the
 /// Files app's own sidebar.
@@ -25,6 +53,9 @@ pub struct PlacesSidebar {
     current: Where,
     recent: bool,
     on_open: EventHandler<Where>,
+    on_open_new_window: Option<EventHandler<Where>>,
+    on_properties: Option<EventHandler<Where>>,
+    reload: Option<State<u32>>,
 }
 
 impl PlacesSidebar {
@@ -35,6 +66,9 @@ impl PlacesSidebar {
             current,
             recent: true,
             on_open: on_open.into(),
+            on_open_new_window: None,
+            on_properties: None,
+            reload: None,
         }
     }
 
@@ -44,50 +78,38 @@ impl PlacesSidebar {
         self.recent = recent;
         self
     }
+
+    /// Adds "Open in a new window" to the row menus. The handler receives the
+    /// place. Without it the item is left out.
+    pub fn on_open_new_window(mut self, handler: impl Into<EventHandler<Where>>) -> Self {
+        self.on_open_new_window = Some(handler.into());
+        self
+    }
+
+    /// Adds "Properties" to the row menus. The handler receives the place.
+    /// Without it the item is left out.
+    pub fn on_properties(mut self, handler: impl Into<EventHandler<Where>>) -> Self {
+        self.on_properties = Some(handler.into());
+        self
+    }
+
+    /// A counter the list adds one to each time it changes the bookmarks, so
+    /// whoever loaded `places` can load them again.
+    pub fn reload(mut self, reload: State<u32>) -> Self {
+        self.reload = Some(reload);
+        self
+    }
 }
 
 impl Component for PlacesSidebar {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let groups = [
-            &self.places.standard,
-            &self.places.devices,
-            &self.places.bookmarks,
-        ];
-        let mut column = rect().tw(&tokens, &[flex_col(), w_full(), p(S2), gap(S0_5)]);
-        let mut first = true;
-        for places in groups {
-            let rows: Vec<&Place> = places
-                .iter()
-                .filter(|place| self.recent || place.kind != PlaceKind::Recent)
-                .collect();
-            if rows.is_empty() {
-                continue;
-            }
-            if !first {
-                column = column.child(
-                    rect()
-                        .tw(&tokens, &[w_full(), py(S2), px(S2)])
-                        .child(divider(&tokens)),
-                );
-            }
-            first = false;
-            for place in rows {
-                let target = match &place.path {
-                    Some(path) => Where::Folder(path.clone()),
-                    None => Where::Recent,
-                };
-                column = column.child(Element::from(PlaceRow {
-                    icon: place_icon(place.kind),
-                    label: place.name.clone(),
-                    selected: target == self.current,
-                    on_press: {
-                        let on_open = self.on_open.clone();
-                        EventHandler::new(move |_: ()| on_open.call(target.clone()))
-                    },
-                }));
-            }
-        }
+        let drives = use_drives();
+        let list = drives.list();
+        let bookmarks = use_bookmarks(self.reload);
+        let shown = bookmarks.current(&self.places.bookmarks);
+        let groups = sections(&self.places, &shown, &list.mounts, self.recent);
+        let chosen = selected(&groups, &self.current, &list.mounts);
         rect()
             .component("PlacesSidebar")
             .tw(&tokens, &[w_full(), h_full()])
@@ -96,31 +118,709 @@ impl Component for PlacesSidebar {
                     .drag_scrolling(false)
                     .width(Size::fill())
                     .height(Size::fill())
-                    .child(column),
+                    .child(
+                        rect()
+                            .tw(&tokens, &[flex_col(), w_full(), p(S2)])
+                            .child(PlaceList {
+                                sections: groups,
+                                selected: chosen,
+                                settled: list.settled,
+                                drives,
+                                bookmarks,
+                                bookmark_source: self.places.bookmarks.clone(),
+                                actions: Actions {
+                                    on_open: self.on_open.clone(),
+                                    on_open_new_window: self.on_open_new_window.clone(),
+                                    on_properties: self.on_properties.clone(),
+                                },
+                                measure: None,
+                                on_escape: None,
+                            }),
+                    ),
             )
     }
 }
 
+/// The places on a phone: one button showing where you are, which opens a
+/// sheet of the same list the sidebar has, with the drives and how full they
+/// are. Put it in the toolbar in place of the sidebar.
+#[derive(PartialEq)]
+pub struct PlacesMenu {
+    places: Places,
+    current: Where,
+    recent: bool,
+    on_open: EventHandler<Where>,
+    on_open_new_window: Option<EventHandler<Where>>,
+    on_properties: Option<EventHandler<Where>>,
+    reload: Option<State<u32>>,
+}
+
+impl PlacesMenu {
+    /// `on_open` receives the place a person picks. The sheet closes first.
+    pub fn new(places: Places, current: Where, on_open: impl Into<EventHandler<Where>>) -> Self {
+        PlacesMenu {
+            places,
+            current,
+            recent: true,
+            on_open: on_open.into(),
+            on_open_new_window: None,
+            on_properties: None,
+            reload: None,
+        }
+    }
+
+    /// Whether the Recent place is listed (default true).
+    pub fn recent(mut self, recent: bool) -> Self {
+        self.recent = recent;
+        self
+    }
+
+    /// See [`PlacesSidebar::on_open_new_window`].
+    pub fn on_open_new_window(mut self, handler: impl Into<EventHandler<Where>>) -> Self {
+        self.on_open_new_window = Some(handler.into());
+        self
+    }
+
+    /// See [`PlacesSidebar::on_properties`].
+    pub fn on_properties(mut self, handler: impl Into<EventHandler<Where>>) -> Self {
+        self.on_properties = Some(handler.into());
+        self
+    }
+
+    /// See [`PlacesSidebar::reload`].
+    pub fn reload(mut self, reload: State<u32>) -> Self {
+        self.reload = Some(reload);
+        self
+    }
+}
+
+impl Component for PlacesMenu {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let mut open = use_state(|| false);
+        let mut hovering = use_state(|| false);
+        let mut area = use_state(Area::default);
+        let measured = use_state(|| 0.0_f32);
+        let scroll = use_scroll_controller(ScrollConfig::default);
+        let drives = use_drives();
+        let list = drives.list();
+        let bookmarks = use_bookmarks(self.reload);
+        let shown = bookmarks.current(&self.places.bookmarks);
+        let groups = sections(&self.places, &shown, &list.mounts, self.recent);
+        let chosen = selected(&groups, &self.current, &list.mounts);
+        let row = chosen.map(|(group, item)| &groups[group].items[item]);
+        let name = current_name(&self.current, row);
+        let icon = match (row, &self.current) {
+            (Some(item), _) => item.icon,
+            (None, Where::Recent) => Icon::Clock,
+            (None, Where::Folder(path)) => folder_icon(special_folder(path)),
+        };
+
+        let content = rect()
+            .component("PlacesMenu")
+            .tw(
+                &tokens,
+                &[
+                    flex_row(),
+                    grow_children(),
+                    items(Align::Center),
+                    w_full(),
+                    h(Dim::Control),
+                    px(S3),
+                    gap(S2),
+                    rounded(Radius::Control),
+                    surface(Paint::Control, hovering() || open(), false, false),
+                ],
+            )
+            .on_sized(move |event: Event<SizedEventData>| area.set_if_modified(event.area))
+            .on_pointer_enter(move |_| hovering.set(true))
+            .on_pointer_leave(move |_| hovering.set(false))
+            .child(icons::icon(
+                icon,
+                IconSize::Control,
+                Paint::Text.color(&tokens),
+            ))
+            .child(
+                rect().tw(&tokens, &[w_flex()]).child(
+                    BODY.in_ink(Ink::Text)
+                        .label(&tokens, name)
+                        .max_lines(1)
+                        .text_overflow(TextOverflow::Ellipsis),
+                ),
+            )
+            .child(icons::icon(
+                Icon::PanDown,
+                IconSize::Row,
+                Paint::Muted.color(&tokens),
+            ));
+        let button = focus_stop(
+            content,
+            "Places",
+            AccessibilityRole::Button,
+            true,
+            Radius::Control,
+            move |_: ()| open.set(!open()),
+        );
+
+        let close = {
+            let on_open = self.on_open.clone();
+            EventHandler::new(move |target: Where| {
+                open.set(false);
+                on_open.call(target);
+            })
+        };
+        let wrap = |handler: &Option<EventHandler<Where>>| {
+            handler.clone().map(|handler| {
+                EventHandler::new(move |target: Where| {
+                    open.set(false);
+                    handler.call(target);
+                })
+            })
+        };
+        let rows = PlaceList {
+            sections: groups.clone(),
+            selected: chosen,
+            settled: list.settled,
+            drives,
+            bookmarks,
+            bookmark_source: self.places.bookmarks.clone(),
+            actions: Actions {
+                on_open: close,
+                on_open_new_window: wrap(&self.on_open_new_window),
+                on_properties: wrap(&self.on_properties),
+            },
+            measure: Some(measured),
+            on_escape: Some(EventHandler::new(move |_: ()| open.set(false))),
+        };
+        let rows_height = match *measured.read() {
+            height if height > 0.0 => height,
+            // Until the list has been laid out once, a row's worth each.
+            _ => {
+                groups.iter().map(|group| group.items.len()).sum::<usize>() as f32
+                    * Dim::NavItem.px()
+            }
+        };
+        let panel = Panel::new(
+            PanelKind::Choice,
+            open(),
+            PanelTrigger::Control(PanelRect::from_area(&area.read())),
+            vec![Element::from(rows)],
+        )
+        .size(area.read().width().max(Dim::DropdownMenu.px()), rows_height)
+        .scroll(scroll)
+        .on_dismiss(move |_: ()| open.set(false))
+        .title("Places");
+
+        rect()
+            .component("PlacesMenuHost")
+            .tw(&tokens, &[w_full()])
+            .child(button)
+            .child(Element::from(panel))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Bookmarks
+// ---------------------------------------------------------------------------
+
+/// Changing the bookmarks from a menu or the Delete key. The file is written
+/// on a worker, and the list shows the result as soon as it is read back.
+#[derive(Clone, Copy, PartialEq)]
+struct Bookmarks {
+    /// The bookmarks as last read back, with the props they were read
+    /// against. They count only while the props are still those, so a list
+    /// the owner reloads takes over.
+    local: State<Option<(Vec<Place>, Vec<Place>)>>,
+    reload: Option<State<u32>>,
+    overlays: Option<Overlays>,
+}
+
+fn use_bookmarks(reload: Option<State<u32>>) -> Bookmarks {
+    Bookmarks {
+        local: use_state(|| None),
+        reload,
+        overlays: try_consume_context::<Overlays>(),
+    }
+}
+
+impl Bookmarks {
+    /// The bookmarks to show, given the ones the owner passed in.
+    fn current(&self, from_props: &[Place]) -> Vec<Place> {
+        match &*self.local.read() {
+            Some((source, loaded)) if source == from_props => loaded.clone(),
+            _ => from_props.to_vec(),
+        }
+    }
+
+    /// Add or remove the bookmark `path`. `source` is the bookmarks the list
+    /// was drawn from; `name` is what to call it in a message.
+    fn change(self, source: Vec<Place>, path: PathBuf, add: bool, name: String) {
+        let mut local = self.local;
+        let mut reload = self.reload;
+        let overlays = self.overlays;
+        spawn(async move {
+            let target = path.clone();
+            let outcome = spawn_blocking(move || {
+                let done = if add {
+                    Places::add_bookmark(&target)
+                } else {
+                    Places::remove_bookmark(&target)
+                };
+                done.map(|()| Places::load_without_devices().bookmarks)
+            })
+            .await;
+            match outcome {
+                Ok(loaded) => {
+                    local.set(Some((source, loaded.clone())));
+                    if let Some(reload) = &mut reload {
+                        *reload.write() += 1;
+                    }
+                    if let (false, Some(overlays)) = (add, overlays) {
+                        overlays.toast_with_action(
+                            format!("Removed {name} from the bookmarks."),
+                            "Undo",
+                            move |_: ()| {
+                                self.change(loaded.clone(), path.clone(), true, name.clone())
+                            },
+                        );
+                    }
+                }
+                Err(error) => {
+                    if let Some(overlays) = overlays {
+                        overlays.toast(format!("The bookmarks could not be changed: {error}."));
+                    }
+                }
+            }
+        });
+    }
+
+    /// Give the bookmark `path` the label `name`. An empty name takes the
+    /// folder's own name back.
+    fn rename(self, source: Vec<Place>, path: PathBuf, name: String) {
+        let mut local = self.local;
+        let mut reload = self.reload;
+        let overlays = self.overlays;
+        spawn(async move {
+            let outcome = spawn_blocking(move || {
+                Places::rename_bookmark(&path, &name)
+                    .map(|()| Places::load_without_devices().bookmarks)
+            })
+            .await;
+            match outcome {
+                Ok(loaded) => {
+                    local.set(Some((source, loaded)));
+                    if let Some(reload) = &mut reload {
+                        *reload.write() += 1;
+                    }
+                }
+                Err(error) => {
+                    if let Some(overlays) = overlays {
+                        overlays.toast(format!("The bookmark could not be renamed: {error}."));
+                    }
+                }
+            }
+        });
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The list
+// ---------------------------------------------------------------------------
+
+/// What a row can ask of the app around it.
+#[derive(Clone, PartialEq)]
+struct Actions {
+    on_open: EventHandler<Where>,
+    on_open_new_window: Option<EventHandler<Where>>,
+    on_properties: Option<EventHandler<Where>>,
+}
+
+/// The groups and rows, and the keys that walk them.
+#[derive(PartialEq)]
+struct PlaceList {
+    sections: Vec<Section>,
+    selected: Option<(usize, usize)>,
+    settled: bool,
+    drives: Drives,
+    bookmarks: Bookmarks,
+    /// The bookmarks the owner passed in, which `bookmarks` is read against.
+    bookmark_source: Vec<Place>,
+    actions: Actions,
+    /// Receives the height of the list, for a sheet that has to know it.
+    measure: Option<State<f32>>,
+    on_escape: Option<EventHandler<()>>,
+}
+
+impl PlaceList {
+    /// The menu of a row. Text only, like every menu of the file views: what
+    /// the row offers is in its context menu, not in buttons on the row.
+    fn menu(
+        &self,
+        item: &Item,
+        release: Option<Release>,
+        busy: bool,
+        draft: State<String>,
+    ) -> Vec<MenuItem> {
+        let actions = &self.actions;
+        let target = item.target.clone();
+        let mut menu = vec![menu_item("Open", {
+            let on_open = actions.on_open.clone();
+            let target = target.clone();
+            move |_: ()| on_open.call(target.clone())
+        })];
+        if let Some(handler) = &actions.on_open_new_window {
+            let handler = handler.clone();
+            let target = target.clone();
+            menu.push(menu_item("Open in new window", move |_: ()| {
+                handler.call(target.clone())
+            }));
+        }
+        let Some(path) = item.path() else {
+            return menu;
+        };
+        let bookmarks = self.bookmarks;
+        let source = self.bookmark_source.clone();
+        let (path_buf, name) = (path.to_path_buf(), item.label.clone());
+        let mut own = Vec::new();
+        if item.kind == ItemKind::Bookmark {
+            let (source, path_buf, name) = (source.clone(), path_buf.clone(), name.clone());
+            own.push(menu_item("Rename…", move |_: ()| {
+                let Some(overlays) = bookmarks.overlays else {
+                    return;
+                };
+                let mut draft = draft;
+                draft.set(name.clone());
+                let (source, path_buf) = (source.clone(), path_buf.clone());
+                overlays.show_dialog(
+                    dialog("Rename bookmark", "")
+                        .content(Element::from(
+                            text_field(draft, |_: String| {})
+                                .fill_width()
+                                .placeholder("Bookmark name")
+                                .autofocus(),
+                        ))
+                        .cancel("Cancel")
+                        .response("Rename", ResponseKind::Suggested, move |_: ()| {
+                            bookmarks.rename(
+                                source.clone(),
+                                path_buf.clone(),
+                                draft.peek().clone(),
+                            )
+                        }),
+                );
+            }));
+        }
+        if let (Some(mount), Some(how)) = (&item.mount, release) {
+            let drives = self.drives;
+            let with = |how: Release| {
+                let mount = mount.clone();
+                let item = menu_item(how.label(), move |_: ()| drives.release(mount.clone(), how));
+                if busy { item.disabled() } else { item }
+            };
+            own.push(with(how));
+            if how == Release::Eject {
+                own.push(with(Release::Unmount));
+            }
+        }
+        // A user folder is in the list already, and the model hides a
+        // bookmark of it, so only bookmarks and drives can be (un)bookmarked.
+        if item.kind != ItemKind::Place {
+            own.push(if item.bookmarked {
+                menu_item("Remove from bookmarks", {
+                    let (source, path_buf, name) = (source.clone(), path_buf.clone(), name.clone());
+                    move |_: ()| bookmarks.change(source.clone(), path_buf.clone(), false, name.clone())
+                })
+            } else {
+                menu_item("Add to bookmarks", {
+                    let (source, path_buf, name) = (source.clone(), path_buf.clone(), name.clone());
+                    move |_: ()| bookmarks.change(source.clone(), path_buf.clone(), true, name.clone())
+                })
+            });
+        }
+        if !own.is_empty() {
+            menu.push(menu_separator());
+            menu.extend(own);
+        }
+        menu.push(menu_separator());
+        let text = path.display().to_string();
+        let overlays = self.bookmarks.overlays;
+        menu.push(menu_item(
+            "Copy path",
+            move |_: ()| match freya::clipboard::Clipboard::set(text.clone()) {
+                Ok(()) => {
+                    if let Some(overlays) = overlays {
+                        overlays.toast("Copied.");
+                    }
+                }
+                Err(_) => {
+                    if let Some(overlays) = overlays {
+                        overlays.toast("The path could not be copied.");
+                    }
+                }
+            },
+        ));
+        if let Some(handler) = &actions.on_properties {
+            let handler = handler.clone();
+            menu.push(menu_item("Properties", move |_: ()| {
+                handler.call(target.clone())
+            }));
+        }
+        menu
+    }
+}
+
+/// What names a row across renders: what it is and where it goes.
+fn row_key(item: &Item) -> String {
+    format!("{:?}|{:?}", item.kind, item.target)
+}
+
+impl Component for PlaceList {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let total: usize = self.sections.iter().map(|group| group.items.len()).sum();
+        // One focus node per row, kept while the row exists, so Home, End and
+        // type-ahead can ask for a row and a row that moves keeps its focus.
+        let pool = use_hook(|| Rc::new(RefCell::new(HashMap::<String, AccessibilityId>::new())));
+        let ids: Vec<AccessibilityId> = {
+            let mut pool = pool.borrow_mut();
+            let keys: Vec<String> = self
+                .sections
+                .iter()
+                .flat_map(|group| group.items.iter().map(row_key))
+                .collect();
+            pool.retain(|key, _| keys.contains(key));
+            keys.into_iter()
+                .map(|key| *pool.entry(key).or_insert_with(AccessibilityId::new_unique))
+                .collect()
+        };
+        let typed = use_hook(|| Rc::new(RefCell::new((String::new(), Instant::now()))));
+        // The name typed into the rename dialog of a bookmark.
+        let rename_draft = use_state(String::new);
+
+        let mut column = rect()
+            .component("PlaceList")
+            .tw(&tokens, &[flex_col(), w_full(), gap(S0_5)])
+            .on_sized({
+                let measure = self.measure;
+                move |event: Event<SizedEventData>| {
+                    if let Some(mut measure) = measure {
+                        measure.set_if_modified(event.area.height());
+                    }
+                }
+            });
+        let mut labels = Vec::with_capacity(total);
+        let mut removable: Vec<Option<(PathBuf, String)>> = Vec::with_capacity(total);
+        let mut index = 0;
+        for (group_index, group) in self.sections.iter().enumerate() {
+            if let Some(title) = group.title {
+                column = column.child(
+                    rect()
+                        .tw(&tokens, NAV_LABEL)
+                        .child(CAPTION.label(&tokens, title)),
+                );
+            }
+            for (item_index, item) in group.items.iter().enumerate() {
+                let release = item.mount.as_ref().and_then(release_for);
+                let busy = item
+                    .mount
+                    .as_ref()
+                    .is_some_and(|mount| self.drives.is_busy(mount.id));
+                labels.push(item.label.clone());
+                removable.push(match (item.kind, item.path()) {
+                    (ItemKind::Bookmark, Some(path)) => {
+                        Some((path.to_path_buf(), item.label.clone()))
+                    }
+                    _ => None,
+                });
+                let on_open = {
+                    let handler = self.actions.on_open.clone();
+                    let target = item.target.clone();
+                    EventHandler::new(move |_: ()| handler.call(target.clone()))
+                };
+                column = column.child(Element::from(PlaceRow {
+                    key: row_key(item),
+                    id: ids[index],
+                    icon: item.icon,
+                    label: item.label.clone(),
+                    kind: item.kind,
+                    selected: self.selected == Some((group_index, item_index)),
+                    usage: usage_line(item.mount.as_ref(), self.settled),
+                    menu: self.menu(item, release, busy, rename_draft),
+                    on_open,
+                }));
+                index += 1;
+            }
+        }
+
+        let bookmarks = self.bookmarks;
+        let source = self.bookmark_source.clone();
+        let on_escape = self.on_escape.clone();
+        column.on_key_down(move |event: Event<KeyboardEventData>| {
+            let focused = *Platform::get()
+                .current_window()
+                .focused_accessibility_id
+                .peek();
+            let at = ids.iter().position(|id| *id == focused);
+            match &event.key {
+                Key::Named(NamedKey::ArrowDown) => {
+                    event.stop_propagation();
+                    step_focus(false);
+                }
+                Key::Named(NamedKey::ArrowUp) => {
+                    event.stop_propagation();
+                    step_focus(true);
+                }
+                Key::Named(NamedKey::Home) => {
+                    if let Some(id) = ids.first() {
+                        event.stop_propagation();
+                        focus_node(*id);
+                    }
+                }
+                Key::Named(NamedKey::End) => {
+                    if let Some(id) = ids.last() {
+                        event.stop_propagation();
+                        focus_node(*id);
+                    }
+                }
+                Key::Named(NamedKey::Delete) => {
+                    if let Some(at) = at
+                        && let Some(Some((path, name))) = removable.get(at)
+                    {
+                        event.stop_propagation();
+                        // Focus stays in the list: on the row that follows,
+                        // or the one before when the last row goes.
+                        if let Some(next) = ids
+                            .get(at + 1)
+                            .or_else(|| at.checked_sub(1).and_then(|before| ids.get(before)))
+                        {
+                            focus_node(*next);
+                        }
+                        bookmarks.change(source.clone(), path.clone(), false, name.clone());
+                    }
+                }
+                Key::Named(NamedKey::Escape) => {
+                    if let Some(on_escape) = &on_escape {
+                        event.stop_propagation();
+                        on_escape.call(());
+                    }
+                }
+                Key::Character(text) => {
+                    let plain = !(event.modifiers.contains(Modifiers::CONTROL)
+                        || event.modifiers.contains(Modifiers::ALT)
+                        || event.modifiers.contains(Modifiers::META));
+                    if !plain || text.trim().is_empty() {
+                        return;
+                    }
+                    let mut typed = typed.borrow_mut();
+                    if typed.1.elapsed() > TYPE_AHEAD_RESET {
+                        typed.0.clear();
+                    }
+                    typed.0.push_str(text);
+                    typed.1 = Instant::now();
+                    if let Some(found) = type_ahead(&labels, at, &typed.0) {
+                        event.stop_propagation();
+                        focus_node(ids[found]);
+                    }
+                }
+                _ => {}
+            }
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// One row
+// ---------------------------------------------------------------------------
+
 #[derive(PartialEq)]
 struct PlaceRow {
-    icon: crate::icons::Icon,
+    /// Names the row across renders, so a row keeps its place in the tree,
+    /// and its focus node, when another row above it comes or goes.
+    key: String,
+    id: AccessibilityId,
+    icon: Icon,
     label: String,
+    kind: ItemKind,
     selected: bool,
-    on_press: EventHandler<()>,
+    usage: UsageLine,
+    menu: Vec<MenuItem>,
+    on_open: EventHandler<()>,
 }
 
 impl Component for PlaceRow {
+    fn render_key(&self) -> DiffKey {
+        let mut hasher = std::hash::DefaultHasher::new();
+        std::hash::Hash::hash(&self.key, &mut hasher);
+        DiffKey::U64(std::hash::Hasher::finish(&hasher))
+    }
+
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
-        let ink = if self.selected {
-            Paint::Text
+        let silent = matches!(self.usage, UsageLine::NotResponding);
+        let icon_paint = if self.selected {
+            Paint::Accent
+        } else if silent {
+            Paint::MutedFaint
         } else {
             Paint::Muted
         };
+        let ink = if silent { Ink::Muted } else { Ink::Text };
+        let name: Element = match self.kind {
+            ItemKind::Place => BODY
+                .in_ink(ink)
+                .label(&tokens, self.label.clone())
+                .max_lines(1)
+                .text_overflow(TextOverflow::Ellipsis)
+                .into(),
+            // Names people gave, which can be long.
+            ItemKind::Bookmark | ItemKind::Drive => {
+                path_label(self.label.clone()).ink(ink).middle().into()
+            }
+        };
+
+        let (line, spoken): (Option<Element>, Option<String>) = match &self.usage {
+            UsageLine::Nothing => (None, None),
+            // The bar's track and a blank line, so the row is as tall as it
+            // will be and does not jump when the figures arrive.
+            UsageLine::Reading => (
+                Some(
+                    rect()
+                        .tw(&tokens, &[flex_col(), w_full(), gap(S0_5)])
+                        .child(usage_bar(None))
+                        .child(CAPTION.label(&tokens, " "))
+                        .into(),
+                ),
+                None,
+            ),
+            UsageLine::Known { fraction, text, .. } => (
+                Some(
+                    rect()
+                        .tw(&tokens, &[flex_col(), w_full(), gap(S0_5)])
+                        .child(usage_bar(*fraction))
+                        .child(
+                            CAPTION
+                                .label(&tokens, text.clone())
+                                .max_lines(1)
+                                .text_overflow(TextOverflow::Ellipsis),
+                        )
+                        .into(),
+                ),
+                Some(text.clone()),
+            ),
+            UsageLine::NotResponding => (
+                Some(CAPTION.label(&tokens, "Not responding").max_lines(1).into()),
+                Some("Not responding".to_string()),
+            ),
+        };
+        let tall = line.is_some();
+
         let content = rect()
             .component("PlaceRow")
-            .tw(&tokens, NAV_ITEM)
+            .tw(&tokens, LIST_ITEM)
+            .tw(&tokens, &[grow_children()])
+            .maybe(!tall, |row| row.tw(&tokens, &[h(Dim::NavItem)]))
+            .maybe(tall, |row| row.tw(&tokens, &[py(S1)]))
             .tw(
                 &tokens,
                 &[surface(
@@ -139,34 +839,40 @@ impl Component for PlaceRow {
             .child(rect().tw(&tokens, NAV_ICON).child(icons::icon(
                 self.icon,
                 IconSize::Row,
-                ink.color(&tokens),
+                icon_paint.color(&tokens),
             )))
             .child(
-                BODY.label(&tokens, self.label.clone())
-                    .max_lines(1)
-                    .text_overflow(TextOverflow::Ellipsis),
+                rect()
+                    .tw(&tokens, &[flex_col(), w_flex(), gap(S0_5)])
+                    .child(rect().tw(&tokens, &[w_full()]).child(name))
+                    .maybe_child(line),
             );
-        let on_press = self.on_press.clone();
-        focus_stop(
+
+        let spoken = match spoken {
+            Some(text) => format!("{}, {text}", self.label),
+            None => self.label.clone(),
+        };
+        let on_open = self.on_open.clone();
+        focus_stop_with(
+            self.id,
             content,
-            self.label.clone(),
+            spoken,
             AccessibilityRole::Tab,
             true,
             Radius::Control,
-            move |_: ()| on_press.call(()),
+            move |_: ()| on_open.call(()),
+            self.menu.clone(),
+            // A row with a figure under its name takes its height from its
+            // content, so its ring is told the padding it reaches back over.
+            if tall {
+                StopRing::Fitted {
+                    left: NAV_INSET.px(),
+                    top: S1.px(),
+                }
+            } else {
+                StopRing::Inside
+            },
         )
         .tw(&tokens, &[w_full()])
-        // The wrapper hears the keys of the focused row inside it.
-        .on_key_down(|event: Event<KeyboardEventData>| match event.key {
-            Key::Named(NamedKey::ArrowDown) => {
-                event.stop_propagation();
-                step_focus(false);
-            }
-            Key::Named(NamedKey::ArrowUp) => {
-                event.stop_propagation();
-                step_focus(true);
-            }
-            _ => {}
-        })
     }
 }

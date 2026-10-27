@@ -13,6 +13,8 @@ use crate::icons::{self, Icon};
 use crate::motion::Focusable;
 use crate::rows::RowTitle;
 use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
+use crate::shell::menu_query::{Candidate, Mark, Reaction};
+use crate::shell::type_ahead::{dimmed, marked_label, use_list_query};
 use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
 use crate::theme::Tokens;
@@ -26,7 +28,7 @@ const GLYPH_WIDTH: f32 = 8.2;
 /// Left padding, gap and chevron with its right padding. Used for the
 /// measured width only.
 fn button_chrome() -> f32 {
-    S3.px() + S2.px() + IconSize::Control.px() + S2.px()
+    S3.px() + S2.px() + IconSize::Row.px() + S2.px()
 }
 
 /// The button on a phone: the value at the row's end, no box.
@@ -152,6 +154,7 @@ impl Component for Dropdown {
         let mut button_area = use_state(Area::default);
         let mut scroll = use_scroll_controller(ScrollConfig::default);
         let mut hovered_item = use_state(|| None::<usize>);
+        let ahead = use_list_query();
         let a11y_id = use_a11y();
         let press = use_press();
         let focus = use_focus(a11y_id);
@@ -186,7 +189,7 @@ impl Component for Dropdown {
         let icon_space = if self.icons.is_empty() {
             0.0
         } else {
-            IconSize::Control.px() + S2.px()
+            IconSize::Row.px() + S2.px()
         };
         // The measured width is only maths; the bounds come from tokens.
         let width = match self.fixed_width {
@@ -235,6 +238,42 @@ impl Component for Dropdown {
             let choose = choose.clone();
             let type_options = options.clone();
             move |event: Event<KeyboardEventData>| {
+                // Type-ahead first: typed letters, and the keys that walk and
+                // pick the matches while a query is active.
+                let items: Vec<Candidate> = type_options
+                    .iter()
+                    .map(|(_, text)| Candidate {
+                        label: text,
+                        selectable: true,
+                    })
+                    .collect();
+                match ahead.key(&event, &items, highlighted().or(selected_index)) {
+                    Reaction::Ignored => {}
+                    Reaction::Handled => {
+                        event.stop_propagation();
+                        return;
+                    }
+                    // Open, a match takes the highlight; closed, it chooses.
+                    Reaction::Focus(index) => {
+                        event.stop_propagation();
+                        if open() {
+                            highlighted.set(Some(index));
+                            scroll.scroll_to_y(offset_for(
+                                index,
+                                <(i32, i32)>::from(scroll).1,
+                                false,
+                            ));
+                        } else {
+                            choose.call(index);
+                        }
+                        return;
+                    }
+                    Reaction::Activate(index) => {
+                        event.stop_propagation();
+                        choose.call(index);
+                        return;
+                    }
+                }
                 match &event.key {
                     key if is_activation_key(key) => {
                         if open() {
@@ -250,16 +289,6 @@ impl Component for Dropdown {
                             }
                             open.set(true);
                         }
-                    }
-                    Key::Named(NamedKey::Escape) => {
-                        // A closed dropdown returns before the shared stop
-                        // below, so Escape reaches the popup around it.
-                        if !open() {
-                            return;
-                        }
-                        event.stop_propagation();
-                        open.set(false);
-                        highlighted.set(None);
                     }
                     Key::Named(named)
                         if matches!(
@@ -289,37 +318,6 @@ impl Component for Dropdown {
                         highlighted.set(Some(next));
                         scroll.scroll_to_y(offset_for(next, <(i32, i32)>::from(scroll).1, !open()));
                         open.set(true);
-                    }
-                    // Type-ahead: the next option, after the current one, whose
-                    // label starts with the typed letter. Closed, it chooses.
-                    Key::Character(typed) if event.modifiers.is_empty() => {
-                        let Some(letter) = typed.chars().next() else {
-                            return;
-                        };
-                        let start = highlighted()
-                            .or(selected_index)
-                            .map_or(0, |index| index + 1);
-                        let found =
-                            (0..count)
-                                .map(|offset| (start + offset) % count)
-                                .find(|&index| {
-                                    type_options[index].1.chars().next().is_some_and(|first| {
-                                        first.to_lowercase().eq(letter.to_lowercase())
-                                    })
-                                });
-                        let Some(index) = found else {
-                            return;
-                        };
-                        if open() {
-                            highlighted.set(Some(index));
-                            scroll.scroll_to_y(offset_for(
-                                index,
-                                <(i32, i32)>::from(scroll).1,
-                                false,
-                            ));
-                        } else {
-                            choose.call(index);
-                        }
                     }
                     _ => return,
                 }
@@ -428,11 +426,15 @@ impl Component for Dropdown {
                     .tw(&tokens, &[flex_row(), center()])
                     .child(icons::icon(
                         Icon::PanDown,
-                        IconSize::Control,
+                        IconSize::Row,
                         Paint::Muted.color(&tokens),
                     )),
             )
-            .focusable(focus(), Radius::Control);
+            .focusable(
+                // The open list owns the keyboard, and the ring would run under it.
+                if open() { Focus::Not } else { focus() },
+                Radius::Control,
+            );
 
         let menu_width = button_width().max(Dim::DropdownMenu.px());
         let rows = options
@@ -444,6 +446,7 @@ impl Component for Dropdown {
                     icon: option_icons.get(index).cloned(),
                     text: text.clone(),
                     selected: Some(index) == selected_index,
+                    mark: ahead.mark(index),
                     highlighted: hovered_item().is_none() && Some(index) == highlighted(),
                     on_press: EventHandler::new(move |_: ()| choose.call(index)),
                     on_hover: EventHandler::new(move |inside: bool| {
@@ -455,6 +458,7 @@ impl Component for Dropdown {
         let dismiss = EventHandler::new(move |_: ()| {
             open.set(false);
             highlighted.set(None);
+            ahead.clear();
         });
         let row_title = try_consume_context::<RowTitle>();
         let mut panel = Panel::new(
@@ -465,6 +469,16 @@ impl Component for Dropdown {
         )
         .size(menu_width, list_height)
         .scroll(scroll)
+        .pill(ahead.pill())
+        .on_escape({
+            // Escape takes back a typed query first, then closes the list.
+            let dismiss = dismiss.clone();
+            EventHandler::new(move |_: ()| {
+                if !ahead.escape() {
+                    dismiss.call(());
+                }
+            })
+        })
         .on_dismiss(dismiss);
         // An explicit title wins; otherwise the sheet header is the row's title.
         if let Some(title) = self
@@ -488,6 +502,8 @@ struct DropdownItem {
     text: String,
     selected: bool,
     highlighted: bool,
+    /// How the option shows while a typed query is active.
+    mark: Mark,
     on_press: EventHandler<()>,
     on_hover: EventHandler<bool>,
 }
@@ -505,6 +521,9 @@ impl Component for DropdownItem {
             .component("DropdownItem")
             .a11y_role(AccessibilityRole::MenuItem)
             .tw(&tokens, MENU_ITEM)
+            .maybe(dimmed(&self.mark).is_some(), |row| {
+                row.opacity(dimmed(&self.mark).unwrap_or(1.0))
+            })
             // The selected option keeps the fill it has when highlighted, so
             // it does not dim when the pointer moves to another option.
             .tw(
@@ -546,16 +565,10 @@ impl Component for DropdownItem {
                     .clone()
                     .map(|icon| option_icon(icon, Paint::Text.color(&tokens), tokens)),
             )
-            .child(
-                BODY.in_ink(Ink::Text)
-                    .label(&tokens, self.text.clone())
-                    .max_lines(1)
-                    .text_overflow(TextOverflow::Ellipsis)
-                    .width(Size::flex(1.0)),
-            )
+            .child(marked_label(&tokens, Ink::Text, &self.text, &self.mark))
             .child(icons::icon(
                 Icon::Check,
-                IconSize::Mark,
+                IconSize::Control,
                 if self.selected {
                     Paint::Accent.color(&tokens)
                 } else {
@@ -569,9 +582,9 @@ impl Component for DropdownItem {
 fn option_icon(icon: OptionIcon, colour: Color, tokens: Tokens) -> Element {
     match icon {
         OptionIcon::App(name) => app_icon(name, IconSize::Control).into(),
-        OptionIcon::Symbol(symbol) => icons::icon(symbol, IconSize::Text, colour).into(),
+        OptionIcon::Symbol(symbol) => icons::icon(symbol, IconSize::Row, colour).into(),
         OptionIcon::Colour(chip) => {
-            super::colour_picker::colour_chip(tokens, chip, IconSize::Text.px()).into_element()
+            super::colour_picker::colour_chip(tokens, chip, IconSize::Control.px()).into_element()
         }
     }
 }

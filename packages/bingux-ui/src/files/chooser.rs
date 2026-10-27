@@ -6,9 +6,11 @@
 //! accept button (Open, Select or Save), as every popup does.
 //!
 //! Keyboard: Tab walks the toolbar, the list and the footer. In the list the
-//! arrows, Home, End and Page keys move; typing letters jumps to a name;
-//! Enter opens. Ctrl+L, or typing `/` or `~` in the list, starts typing a
-//! path. Alt+Up goes to the parent folder, Alt+Left back, Ctrl+H shows or
+//! arrows, Home, End and Page keys move; Enter opens. Typing a name, or
+//! Ctrl+F, searches the folder in the address bar, which is also the search
+//! box (see [`search`](super::search): Ctrl+Enter searches the subfolders,
+//! Escape ends the search). Ctrl+L, or typing `/` or `~` in the list, starts
+//! typing a path. Alt+Up goes to the parent folder, Alt+Left back, Ctrl+H shows or
 //! hides hidden files. Escape cancels.
 
 use std::cell::RefCell;
@@ -18,28 +20,33 @@ use std::sync::Arc;
 
 use bingux_files::request::accept;
 use bingux_files::{
-    Accept, Action, Choice, ChooserRequest, Chosen, Entry, Listing, Selection, Sort, SortKey, View,
-    ViewMode, location,
+    Accept, Action, Choice, ChooserRequest, Chosen, Entry, Filter, Listing, Selection, Sort,
+    SortKey, View, ViewMode, location,
 };
 use freya::prelude::*;
 
-use super::directory::{Load, Where, home_folder, use_directory, use_places};
-use super::file_grid::FileGrid;
-use super::file_list::FileList;
-use super::glyphs::place_icon;
-use super::path_bar::PathBar;
-use super::places_view::PlacesSidebar;
-use super::states::{empty_state, error_state, loading_state};
+use super::actions::{Capabilities, open_default};
+use super::address_bar::AddressBar;
+use super::browser::{Browse, Trail};
+use super::directory::{Load, Reload, Where, home_folder, use_directory};
+use super::places_view::{PlacesMenu, PlacesSidebar};
+use super::search::{Deep, DeepResults, DeepStatus, Find, SearchLink, SearchView, step_selection, use_subfolder_search};
+use super::skeleton::skeleton;
+use super::states::{empty_state, error_state, no_matches_state};
+use super::view::FileView;
+use super::view_state;
+use super::zoom::{DEFAULT_PX, REQUESTED_GRID_PX, ViewKind, kind_of, nearest_level, switch_kind};
 use crate::component::ComponentName;
-use crate::controls::{checkbox, dropdown, icon_button, text_field};
+use crate::controls::{SplitButton, checkbox, dropdown, icon_button, text_field};
 use crate::group::{Status, status};
 use crate::icons::Icon;
 use crate::layout::divider;
 use crate::shell::{
-    MenuItem, Overlays, ResponseKind, dialog, menu_button, menu_item, menu_separator, use_overlays,
+    MenuItem, Overlays, ResponseKind, dialog, menu_item, menu_separator, use_overlays,
 };
 use crate::style::*;
 use crate::surface::use_tokens;
+use crate::task::use_resource;
 use crate::typography::BODY;
 use crate::window::{
     PopupAction, PopupActions, PopupFlags, PopupWindow, Window, WindowLike, WindowParent, popup,
@@ -67,7 +74,13 @@ pub fn choose(
         Dim::ChooserHeight.px()
     };
     window.open(
-        popup(title, ChooserBody { request, done })
+        popup(
+            title,
+            ChooserBody {
+                request,
+                host: Host::Dialog(done),
+            },
+        )
             .size(Dim::ChooserWidth.px(), height)
             .flags(PopupFlags::FORM | PopupFlags::FILL | PopupFlags::NO_DISMISS_OUTSIDE),
     )
@@ -94,35 +107,87 @@ impl Done {
     }
 }
 
+/// What the body is part of: a dialog that answers a request, or a window
+/// that browses. The body is one component for both, so every fix to the
+/// list, the address bar or the sidebar reaches both.
+#[derive(Clone, PartialEq)]
+enum Host {
+    Dialog(Done),
+    Browser(Browse),
+}
+
+impl Host {
+    /// The request a browsing window stands in for: any file or folder may
+    /// be selected, and nothing is asked.
+    fn request() -> ChooserRequest {
+        ChooserRequest::open().multiple(true)
+    }
+}
+
+/// The chooser's body as a window's content; see [`super::browse`].
+pub(super) fn browse_body(browse: Browse) -> Element {
+    ChooserBody {
+        request: Host::request(),
+        host: Host::Browser(browse),
+    }
+    .into()
+}
+
+/// The places of this system. The key is the bookmark count, so changing a
+/// bookmark loads them again.
+fn load_places(_: u32) -> Result<bingux_files::Places, String> {
+    Ok(bingux_files::Places::load_without_devices())
+}
+
 /// Moving between folders. All `State`s, so it is `Copy`.
 #[derive(Clone, Copy)]
 struct Nav {
     location: State<Where>,
     history: State<Vec<Where>>,
+    forward: State<Vec<Where>>,
     selection: State<Selection>,
     editing: State<bool>,
+    /// The search in the address bar; going anywhere ends it.
+    find: State<Find>,
     problem: State<Option<String>>,
     sort: State<Sort>,
+    /// The icon size of the folder shown: its remembered one, or `fallback`.
+    level: State<u16>,
+    /// What a folder with nothing remembered opens at.
+    fallback: u16,
 }
 
 impl Nav {
     fn arrive(mut self, at: Where) {
         // The recent files read newest first; a folder reads by name.
         let recent = matches!(at, Where::Recent);
-        if recent != matches!(*self.location.peek(), Where::Recent) {
-            self.sort.set(if recent {
-                Sort {
-                    key: SortKey::Modified,
-                    descending: true,
-                    folders_first: true,
-                }
-            } else {
-                Sort::default()
-            });
+        // A folder the person has shown a way before shows that way again.
+        let remembered = match &at {
+            Where::Folder(path) => view_state::folder(path),
+            Where::Recent => None,
+        };
+        match remembered {
+            Some(view) => {
+                self.sort.set(view.sort.into());
+                self.level.set(nearest_level(f32::from(view.icon_px)));
+            }
+            None => {
+                self.level.set(self.fallback);
+                self.sort.set(if recent {
+                    Sort {
+                        key: SortKey::Modified,
+                        descending: true,
+                        folders_first: true,
+                    }
+                } else {
+                    Sort::default()
+                });
+            }
         }
         self.location.set(at);
         self.selection.write().clear();
         self.editing.set(false);
+        self.find.set(Find::default());
         self.problem.set(None);
     }
 
@@ -132,14 +197,59 @@ impl Nav {
             return;
         }
         self.history.write().push(from);
+        self.forward.write().clear();
         self.arrive(to);
     }
 
     fn back(mut self) {
         let previous = self.history.write().pop();
         if let Some(previous) = previous {
+            let from = self.location.peek().clone();
+            self.forward.write().push(from);
             self.arrive(previous);
         }
+    }
+
+    fn forward(mut self) {
+        let next = self.forward.write().pop();
+        if let Some(next) = next {
+            let from = self.location.peek().clone();
+            self.history.write().push(from);
+            self.arrive(next);
+        }
+    }
+
+    /// Keep how this folder is sorted, so it opens that way next time. The
+    /// recent files have no folder to remember it in. The icon size is the
+    /// folder's own, kept by the view when the person zooms.
+    fn remember_sort(self, sort: Sort) {
+        let Where::Folder(path) = self.location.peek().clone() else {
+            return;
+        };
+        let icon_px = view_state::folder(&path).map_or(self.fallback, |view| view.icon_px);
+        view_state::remember_folder(
+            &path,
+            view_state::FolderView {
+                icon_px,
+                sort: sort.into(),
+            },
+        );
+    }
+
+    /// Keep the icon size the toolbar chose for this folder. (The view keeps
+    /// the ones the person zooms to.)
+    fn remember_level(self, icon_px: u16) {
+        let Where::Folder(path) = self.location.peek().clone() else {
+            return;
+        };
+        let sort = view_state::folder(&path).map_or(*self.sort.peek(), |view| view.sort.into());
+        view_state::remember_folder(
+            &path,
+            view_state::FolderView {
+                icon_px,
+                sort: sort.into(),
+            },
+        );
     }
 
     fn up(self) {
@@ -156,15 +266,30 @@ impl Nav {
 #[derive(Clone)]
 struct Session {
     request: Rc<ChooserRequest>,
+    /// The filters the dropdown offers: the request's, or the presets.
+    filters: Rc<Vec<Filter>>,
     home: PathBuf,
     nav: Nav,
     load: State<Load>,
+    reload: Reload,
     name: State<String>,
     filter: State<Option<usize>>,
+    /// The address bar's text, set when a typed letter starts a search.
+    draft: State<String>,
+    find: State<Find>,
+    /// The subfolder search; its results replace the folder's listing while
+    /// they are on show.
+    deep: Deep,
+    /// Search build and dependency folders too (the default).
+    include_noise: State<bool>,
+    /// Bumped to give the keyboard back to the list.
+    focus: State<u32>,
+    /// Counts changes to the bookmarks, so the places load again.
+    places_rev: State<u32>,
     choices: State<Vec<(String, String)>>,
     window: Window,
     overlays: Overlays,
-    done: Done,
+    host: Host,
 }
 
 impl Session {
@@ -176,11 +301,105 @@ impl Session {
         }
     }
 
+    /// The listing on show: the subfolder search's matches while they are
+    /// shown, else the folder's.
     fn listing(&self) -> Option<Arc<Listing>> {
+        if let Some(query) = self.find.peek().deep_query()
+            && let Some(results) = self.deep.results_for(&query)
+        {
+            return Some(results.listing.clone());
+        }
         match &*self.load.peek() {
             Load::Ready(listing) => Some(listing.clone()),
             _ => None,
         }
+    }
+
+    // ---- search -----------------------------------------------------
+
+    /// A letter typed on the list, or Ctrl+F (`typed` empty): the address bar
+    /// becomes a search of this folder.
+    fn start_search(&self, typed: &str) {
+        if !matches!(&*self.nav.location.peek(), Where::Folder(_)) {
+            return;
+        }
+        let mut find = self.find;
+        let mut draft = self.draft;
+        let mut editing = self.nav.editing;
+        let selection = self.nav.selection.peek().clone();
+        let was = find.peek().scoped;
+        // Two letters typed before the field has the keyboard join up.
+        let text = if was {
+            format!("{}{}", draft.peek(), typed)
+        } else {
+            typed.to_string()
+        };
+        {
+            let mut find = find.write();
+            find.begin(&selection);
+            if !typed.is_empty() {
+                let query = text.trim().to_string();
+                if find.query != query {
+                    find.query = query;
+                    find.deep = None;
+                }
+            }
+        }
+        if !typed.is_empty() || !was {
+            draft.set(text);
+        }
+        // A field that is already there takes the keyboard back.
+        find.write().focus += 1;
+        editing.set(true);
+    }
+
+    /// Escape, the chip's close button: show the whole folder again with the
+    /// selection the person had, and give the keyboard back to the list.
+    fn clear_search(&self) {
+        let mut find = self.find;
+        let restored = find.write().clear();
+        if let Some(before) = restored {
+            let mut selection = self.nav.selection;
+            selection.set(before);
+        }
+        let mut editing = self.nav.editing;
+        editing.set(false);
+        let mut focus = self.focus;
+        let next = *focus.peek() + 1;
+        focus.set(next);
+    }
+
+    /// Ctrl+Enter, the last row, or Enter with no match: search the
+    /// subfolders for what is typed.
+    fn start_deep(&self) {
+        let mut find = self.find;
+        let Some(query) = find.peek().query() else {
+            return;
+        };
+        find.write().deep = Some(query.text().to_string());
+    }
+
+    /// Open `path` of the listing on show, as Enter does on its row.
+    fn open_match(&self, listing: &Listing, order: &[usize]) {
+        let Some(first) = order.first().copied() else {
+            self.start_deep();
+            return;
+        };
+        let cursor = self.nav.selection.peek().cursor().map(PathBuf::from);
+        let at = cursor
+            .and_then(|path| order.iter().copied().find(|index| listing.entries[*index].path == path))
+            .unwrap_or(first);
+        self.activate(at);
+    }
+
+    /// Up or Down in the address field: move the selected match.
+    fn step_match(&self, listing: &Listing, order: &[usize], by: i32) {
+        let paths: Vec<&std::path::Path> = order
+            .iter()
+            .map(|index| listing.entries[*index].path.as_path())
+            .collect();
+        let mut selection = self.nav.selection;
+        step_selection(&mut selection.write(), &paths, by);
     }
 
     fn selected_entries(&self) -> Vec<Entry> {
@@ -196,13 +415,31 @@ impl Session {
             .collect()
     }
 
+    /// Answer the request. A browsing window has none to answer.
     fn finish(&self, paths: Vec<PathBuf>) {
-        self.done.finish(Some(Chosen {
+        let Host::Dialog(done) = &self.host else {
+            return;
+        };
+        done.finish(Some(Chosen {
             paths,
             current_filter: *self.filter.peek(),
             choices: self.choices.peek().clone(),
         }));
         self.window.close();
+    }
+
+    /// A file was chosen: a dialog answers with it; a browsing window opens
+    /// it in the application the system names for its type.
+    fn open_file(&self, path: PathBuf) {
+        match &self.host {
+            Host::Dialog(_) => self.finish(vec![path]),
+            Host::Browser(_) => {
+                let mut problem = self.nav.problem;
+                if let Err(error) = open_default(&path) {
+                    problem.set(Some(format!("Could not open the file: {error}.")));
+                }
+            }
+        }
     }
 
     /// The accept button, Enter in the name field, or a double click.
@@ -280,6 +517,10 @@ impl Session {
             let mut name = self.name;
             name.set(entry.name.clone());
         }
+        if matches!(self.host, Host::Browser(_)) {
+            self.open_file(entry.path.clone());
+            return;
+        }
         self.accept();
     }
 
@@ -299,32 +540,15 @@ impl Session {
         }
     }
 
-    /// Whether the accept button is ready.
+    /// Whether the accept button is ready. It reads (not peeks) the state it
+    /// depends on, so the button follows the selection and the name.
     fn can_accept(&self) -> bool {
-        if *self.nav.editing.peek() {
-            return false;
-        }
         match self.request.action {
-            Action::Open => !self.nav.selection.peek().is_empty(),
+            Action::Open => !self.nav.selection.read().is_empty(),
             Action::SelectFolder | Action::SaveFiles => {
-                matches!(*self.nav.location.peek(), Where::Folder(_))
+                matches!(*self.nav.location.read(), Where::Folder(_))
             }
-            Action::Save => !self.name.peek().trim().is_empty(),
-        }
-    }
-
-    /// Open what a person typed in the path bar.
-    fn open_typed(&self, text: &str) {
-        let mut problem = self.nav.problem;
-        let target = location::resolve(text, &self.folder(), &self.home);
-        match std::fs::metadata(&target) {
-            Ok(meta) if meta.is_dir() => self.nav.go(Where::Folder(target)),
-            Ok(_) if self.request.action == Action::Open => {
-                // A file typed in full is the answer.
-                self.finish(vec![target]);
-            }
-            Ok(_) => problem.set(Some("That is a file, not a folder.".into())),
-            Err(_) => problem.set(Some(format!("{} does not exist.", target.display()))),
+            Action::Save => !self.name.read().trim().is_empty(),
         }
     }
 }
@@ -343,24 +567,24 @@ fn accept_all_paths(
     }
 }
 
-/// Whether a filter lets only pictures through, so a grid of thumbnails suits
-/// it better than a list.
-fn only_pictures(filter: &bingux_files::Filter) -> bool {
-    !filter.rules.is_empty()
-        && filter.rules.iter().all(|rule| match rule {
-            bingux_files::Rule::Mime(mime) => mime.starts_with("image/"),
-            bingux_files::Rule::Glob(pattern) => {
-                bingux_files::mime::for_name(&format!("x{}", pattern.trim_start_matches('*')))
-                    .category
-                    == bingux_files::Category::Image
-            }
-        })
+/// What the list shows: the listing (the folder's, or the subfolder
+/// search's matches), the order of its rows, and the counts around them.
+#[derive(Clone, PartialEq)]
+struct Shown {
+    listing: Arc<Listing>,
+    order: Arc<Vec<usize>>,
+    /// Entries the file type filter hides.
+    hidden_by_filter: usize,
+    /// Entries a search chooses among: what hidden files and the filter let
+    /// through.
+    of: usize,
+    results: Option<Arc<DeepResults>>,
 }
 
 #[derive(PartialEq)]
 struct ChooserBody {
     request: ChooserRequest,
-    done: Done,
+    host: Host,
 }
 
 impl Component for ChooserBody {
@@ -375,17 +599,47 @@ impl Component for ChooserBody {
             move || Rc::new(request)
         });
 
-        let location = use_state({
+        let trail = use_hook({
+            let host = self.host.clone();
             let start = request.initial_folder(&home);
-            move || Where::Folder(start)
+            move || match host {
+                Host::Browser(browse) => browse.memory.trail(),
+                Host::Dialog(_) => Trail::new(Where::Folder(start)),
+            }
         });
-        let history = use_state(Vec::<Where>::new);
+        // A folder the person has shown a way before opens that way again,
+        // the first one too.
+        let remembered = match &trail.at {
+            Where::Folder(path) => view_state::folder(path),
+            Where::Recent => None,
+        };
+        let location = use_state({
+            let at = trail.at.clone();
+            move || at
+        });
+        let history = use_state({
+            let back = trail.back.clone();
+            move || back
+        });
+        let forward = use_state({
+            let ahead = trail.forward.clone();
+            move || ahead
+        });
         let selection = use_state(Selection::new);
-        let sort = use_state(Sort::default);
+        let sort = use_state(move || remembered.map_or_else(Sort::default, |view| view.sort.into()));
         let mut show_hidden = use_state(|| false);
+        let filters = use_hook({
+            let request = request.clone();
+            move || Rc::new(request.effective_filters())
+        });
         let filter = use_state(|| request.initial_filter());
         let name = use_state(|| request.initial_name());
-        let grid = use_state(|| None::<bool>);
+        let fallback = default_level(&request);
+        let level = use_state(move || {
+            remembered.map_or(fallback, |view| nearest_level(f32::from(view.icon_px)))
+        });
+        let new_folder = use_state(|| 0_u32);
+        let focus = use_state(|| 0_u32);
         let choices = use_state(|| {
             request
                 .choices
@@ -395,42 +649,94 @@ impl Component for ChooserBody {
         });
         let mut editing = use_state(|| false);
         let draft = use_state(String::new);
+        let find = use_state(Find::default);
+        let include_noise = use_state(|| true);
         let problem = use_state(|| None::<String>);
-        let places = use_places();
+        let places_rev = use_state(|| 0_u32);
+        let places = use_resource(*places_rev.read(), load_places).with(Clone::clone);
         let current = location.read().clone();
-        let load = use_directory(&current);
+        let (load, reload) = use_directory(&current);
+        // The subfolder search: running exactly while a search of the
+        // subfolders is on show for the folder on show.
+        let deep = use_subfolder_search(
+            match &current {
+                Where::Folder(path) => Some(path.clone()),
+                Where::Recent => None,
+            },
+            find.read().deep_query(),
+            *show_hidden.read(),
+            *include_noise.read(),
+            // The file type filter is the chooser's, so the walk leaves out
+            // what it would only hide.
+            if matches!(request.action, Action::SelectFolder | Action::SaveFiles) {
+                None
+            } else {
+                (*filter.read()).and_then(|index| filters.get(index).cloned())
+            },
+            match &*load.read() {
+                Load::Ready(listing) => listing.mount,
+                _ => bingux_files::mounts::MountKind::Other,
+            },
+        );
 
         let nav = Nav {
             location,
             history,
+            forward,
             selection,
             editing,
+            find,
             problem,
             sort,
+            level,
+            fallback,
         };
         let session = Session {
             request: request.clone(),
+            filters: filters.clone(),
             home: home.clone(),
             nav,
             load,
+            reload,
             name,
             filter,
+            draft,
+            find,
+            deep: deep.clone(),
+            include_noise,
+            focus,
+            places_rev,
             choices,
             window,
             overlays,
-            done: self.done.clone(),
+            host: self.host.clone(),
         };
 
         // A popup that goes away, however it goes, is a cancel.
-        if let Window::Popup(popup_window) = window
+        if let Host::Dialog(done) = &self.host
+            && let Window::Popup(popup_window) = window
             && let Some(entry) = popup_window.entry()
         {
             let closing = entry.closing;
-            let done = self.done.clone();
+            let done = done.clone();
             use_side_effect(move || {
                 if *closing.read() {
                     done.finish(None);
                 }
+            });
+        }
+        // A tab keeps where it is, so it is there when it comes back.
+        if let Host::Browser(browse) = &self.host {
+            let browse = browse.clone();
+            use_side_effect(move || {
+                let at = location.read().clone();
+                let trail = Trail {
+                    at: at.clone(),
+                    back: history.read().clone(),
+                    forward: forward.read().clone(),
+                };
+                browse.memory.set(trail);
+                browse.on_location.call(at);
             });
         }
 
@@ -451,43 +757,156 @@ impl Component for ChooserBody {
         // The order is computed with the listing it indexes and travels with
         // it, so a view never pairs one folder's rows with another's order.
         let shown = use_memo({
-            let request = request.clone();
-            move || match &*load.read() {
-                Load::Ready(listing) => {
-                    let active = if folder_mode {
-                        None
-                    } else {
-                        (*filter.read()).and_then(|index| request.filters.get(index))
-                    };
-                    let order = Arc::new(listing.select(&View {
-                        show_hidden: *show_hidden.read(),
-                        filter: active,
-                        directories_only: false,
-                        sort: *sort.read(),
-                    }));
-                    Some((listing.clone(), order))
-                }
-                _ => None,
+            let filters = filters.clone();
+            let deep = deep.clone();
+            move || {
+                // A subfolder search replaces the folder's listing with its
+                // matches while they are on show.
+                let find = find.read().clone();
+                let results = find.deep_query().and_then(|query| deep.results_for(&query));
+                let listing = match &results {
+                    Some(results) => results.listing.clone(),
+                    None => match &*load.read() {
+                        Load::Ready(listing) => listing.clone(),
+                        _ => return None,
+                    },
+                };
+                let active = if folder_mode {
+                    None
+                } else {
+                    (*filter.read()).and_then(|index| filters.get(index))
+                };
+                let shown = listing.select_counted(&View {
+                    show_hidden: *show_hidden.read(),
+                    filter: active,
+                    directories_only: false,
+                    sort: *sort.read(),
+                });
+                // What the search chooses among: what the hidden-file
+                // setting and the file type filter let through.
+                let of = shown.order.len();
+                let order = match find.query() {
+                    Some(query) => bingux_files::search::rank(&listing.entries, &shown.order, &query),
+                    None => shown.order,
+                };
+                Some(Shown {
+                    listing,
+                    order: Arc::new(order),
+                    hidden_by_filter: shown.hidden_by_filter,
+                    of,
+                    results,
+                })
             }
         });
         let shown = shown.read().clone();
         let order = shown
             .as_ref()
-            .map_or_else(|| Arc::new(Vec::new()), |(_, order)| order.clone());
+            .map_or_else(|| Arc::new(Vec::new()), |shown| shown.order.clone());
+        let filtered_out = shown.as_ref().map_or(0, |shown| shown.hidden_by_filter);
         let current_load = match (&*load.read(), &shown) {
-            (Load::Ready(_), Some((listing, _))) => Load::Ready(listing.clone()),
+            (Load::Ready(_), Some(shown)) => Load::Ready(shown.listing.clone()),
             (Load::Ready(_), None) => Load::Loading,
             (other, _) => other.clone(),
         };
+        let search_view = {
+            let find = find.read();
+            find.query().zip(shown.as_ref()).map(|(query, shown)| SearchView {
+                query,
+                of: shown.of,
+                deep: shown.results.as_ref().map(|results| DeepStatus {
+                    // What the list shows: the file type filter has already
+                    // taken its share out of what the walker found.
+                    found: shown.order.len(),
+                    ..results.status()
+                }),
+            })
+        };
+        // A new search text selects its best match, so Enter opens it; with
+        // no match nothing stays selected that the list does not show.
+        let selected_for = use_hook(|| Rc::new(RefCell::new(None::<(String, bool, bool)>)));
+        {
+            let key = find
+                .read()
+                .query()
+                .map(|query| {
+                    (
+                        query.text().to_string(),
+                        shown.as_ref().is_some_and(|shown| shown.results.is_some()),
+                        // Results that start empty and fill select their first.
+                        !order.is_empty(),
+                    )
+                });
+            if *selected_for.borrow() != key {
+                *selected_for.borrow_mut() = key.clone();
+                if key.is_some()
+                    && let Some(shown) = shown.clone()
+                {
+                    spawn(async move {
+                        let mut selection = selection;
+                        match shown.order.first() {
+                            Some(first) => selection
+                                .write()
+                                .select_only(&shown.listing.entries[*first].path),
+                            None => selection.write().clear(),
+                        }
+                    });
+                }
+            }
+        }
+        let address_search = {
+            let session = session.clone();
+            let listing = shown.as_ref().map(|shown| shown.listing.clone());
+            let order = order.clone();
+            let folder = match &current {
+                Where::Folder(path) => path
+                    .file_name()
+                    .map_or_else(|| path.display().to_string(), |name| name.to_string_lossy().into_owned()),
+                Where::Recent => String::new(),
+            };
+            let on_step = {
+                let (session, listing, order) = (session.clone(), listing.clone(), order.clone());
+                move |by: i32| {
+                    if let Some(listing) = &listing {
+                        session.step_match(listing, &order, by);
+                    }
+                }
+            };
+            let on_open = {
+                let (session, listing, order) = (session.clone(), listing.clone(), order.clone());
+                move |_: ()| {
+                    if let Some(listing) = &listing {
+                        session.open_match(listing, &order);
+                    }
+                }
+            };
+            SearchLink::new(find, selection, folder)
+                .listing(match &*load.read() {
+                    Load::Ready(listing) => Some(listing.clone()),
+                    _ => None,
+                })
+                .deep(shown.as_ref().and_then(|shown| {
+                    shown.results.as_ref().map(|results| DeepStatus {
+                        found: shown.order.len(),
+                        ..results.status()
+                    })
+                }))
+                .on_step(on_step)
+                .on_open(on_open)
+                .on_deep({
+                    let session = session.clone();
+                    move |_: ()| session.start_deep()
+                })
+                .on_stop({
+                    let deep = deep.clone();
+                    move |_: ()| deep.stop()
+                })
+                .on_clear(move |_: ()| session.clear_search())
+        };
 
         let active_filter = (!folder_mode)
-            .then(|| (*filter.read()).and_then(|index| request.filters.get(index)))
+            .then(|| (*filter.read()).and_then(|index| filters.get(index)))
             .flatten();
-        let use_grid = grid.read().unwrap_or_else(|| match request.view {
-            ViewMode::Grid => true,
-            ViewMode::List => false,
-            ViewMode::Auto => active_filter.is_some_and(only_pictures),
-        }) && !compact_list_only(compact);
+        let use_grid = kind_of(*level.read()) == ViewKind::Grid;
 
         let shortcuts = {
             let session = session.clone();
@@ -504,9 +923,39 @@ impl Component for ChooserBody {
                         event.stop_propagation();
                         session.nav.back();
                     }
+                    Key::Named(NamedKey::ArrowRight) if alt => {
+                        event.stop_propagation();
+                        session.nav.forward();
+                    }
+                    Key::Named(NamedKey::Home) if alt => {
+                        event.stop_propagation();
+                        session.nav.go(Where::Folder(session.home.clone()));
+                    }
+                    // Backspace goes up a folder, as in a browser's file view.
+                    Key::Named(NamedKey::Backspace) if !ctrl && !alt => {
+                        event.stop_propagation();
+                        session.nav.up();
+                    }
+                    Key::Named(NamedKey::F5) if !ctrl && !alt => {
+                        event.stop_propagation();
+                        session.reload.run();
+                    }
+                    Key::Character(text) if ctrl && !alt && text.eq_ignore_ascii_case("r") => {
+                        event.stop_propagation();
+                        session.reload.run();
+                    }
+                    // Escape ends a search wherever the keyboard is.
+                    Key::Named(NamedKey::Escape) if session.find.peek().scoped => {
+                        event.stop_propagation();
+                        session.clear_search();
+                    }
+                    Key::Character(text) if ctrl && !alt && text.eq_ignore_ascii_case("f") => {
+                        event.stop_propagation();
+                        session.start_search("");
+                    }
                     Key::Character(text) if ctrl && text.eq_ignore_ascii_case("l") => {
                         event.stop_propagation();
-                        draft.set(PathBar::text_of(&session.nav.location.peek()));
+                        draft.set(AddressBar::text_of(&session.nav.location.peek()));
                         editing.set(true);
                     }
                     Key::Character(text) if ctrl && text.eq_ignore_ascii_case("h") => {
@@ -531,10 +980,27 @@ impl Component for ChooserBody {
             &order,
             selection,
             sort,
+            show_hidden,
+            level,
+            new_folder,
+            focus,
+            Arc::new(
+                places
+                    .value()
+                    .map(|places| {
+                        places
+                            .bookmarks
+                            .iter()
+                            .filter_map(|place| place.path.clone())
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            ),
             use_grid,
             folder_mode,
-            *show_hidden.read(),
+            filtered_out,
             active_filter.is_some(),
+            search_view.clone(),
         );
         let toolbar = toolbar(
             &tokens,
@@ -547,8 +1013,11 @@ impl Component for ChooserBody {
             use_grid,
             sort,
             show_hidden,
-            grid,
-            history,
+            level,
+            new_folder,
+            focus,
+            (!compact && shows_filters(&session)).then(|| filter_control(&session)),
+            address_search,
         );
         let footer = footer(&tokens, compact, &session, saving, problem);
 
@@ -572,31 +1041,57 @@ impl Component for ChooserBody {
                             .tw(&tokens, &[flex_row(), h_full(), w(Dim::PlacesColumn)])
                             .child(
                                 rect().tw(&tokens, &[w_flex(), h_full()]).child(
-                                    PlacesSidebar::new(
-                                        places,
-                                        current.clone(),
-                                        move |to: Where| nav.go(to),
-                                    )
-                                    .recent(request.action == Action::Open),
+                                    {
+                                        let sidebar = PlacesSidebar::new(
+                                            places,
+                                            current.clone(),
+                                            move |to: Where| nav.go(to),
+                                        )
+                                        .recent(request.action == Action::Open)
+                                        .reload(places_rev);
+                                        match &self.host {
+                                            Host::Browser(browse) => {
+                                                let on_new_tab = browse.on_new_tab.clone();
+                                                sidebar.on_open_new_window(move |to: Where| {
+                                                    if let Where::Folder(path) = to {
+                                                        on_new_tab.call(path);
+                                                    }
+                                                })
+                                            }
+                                            Host::Dialog(_) => sidebar,
+                                        }
+                                    },
                                 ),
                             )
                             .child(rect().tw(&tokens, SPLIT_HAIRLINE))
                     }))
-                    .child(rect().tw(&tokens, &[w_flex(), h_full()]).child(main)),
+                    .child(
+                        rect()
+                            .tw(&tokens, &[flex_col(), w_flex(), h_full(), grow_children()])
+                            .child(
+                                rect()
+                                    .tw(&tokens, &[w_full(), h_flex(), grow_children()])
+                                    .child(main),
+                            )
+                            .maybe_child(footer.map(|footer| {
+                                rect()
+                                    .tw(&tokens, &[flex_col(), w_full()])
+                                    .child(divider(&tokens))
+                                    .child(footer)
+                            })),
+                    ),
             )
-            .maybe_child(footer.map(|footer| {
-                rect()
-                    .tw(&tokens, &[flex_col(), w_full()])
-                    .child(divider(&tokens))
-                    .child(footer)
-            }))
     }
 }
 
-/// On a phone the grid is for thumbnails only when asked; a list reads better
-/// at a finger's size. The switch is still the person's.
-fn compact_list_only(_compact: bool) -> bool {
-    false
+/// The icon size a folder opens at when nothing is remembered for it: 16 px,
+/// in a list, unless the app asked for a grid, which opens at a large
+/// picture size. Neither the filter nor the size of the window decides it.
+fn default_level(request: &ChooserRequest) -> u16 {
+    match request.view {
+        ViewMode::Grid => REQUESTED_GRID_PX,
+        ViewMode::List | ViewMode::Auto => DEFAULT_PX,
+    }
 }
 
 /// The list, the grid or the state that stands in for them.
@@ -606,22 +1101,35 @@ fn main_area(
     load: &Load,
     order: &Arc<Vec<usize>>,
     selection: State<Selection>,
-    mut sort: State<Sort>,
+    sort: State<Sort>,
+    show_hidden: State<bool>,
+    level: State<u16>,
+    new_folder: State<u32>,
+    focus: State<u32>,
+    bookmarks: Arc<Vec<PathBuf>>,
     use_grid: bool,
     folder_mode: bool,
-    show_hidden: bool,
+    filtered_out: usize,
     filtered: bool,
+    search: Option<SearchView>,
 ) -> Element {
     match load {
-        Load::Loading => loading_state(),
+        Load::Loading => skeleton(use_grid),
         Load::Failed(error) => error_state(error),
-        Load::Ready(listing) if order.is_empty() => {
-            let hidden_items = !show_hidden && listing.entries.iter().any(|entry| entry.hidden);
-            let others = listing.entries.iter().any(|entry| !entry.hidden);
-            empty_state(listing.recent, hidden_items && !others, filtered && others)
-        }
         Load::Ready(listing) => {
-            let multiple = session.request.multiple;
+            let shown_hidden = *show_hidden.peek();
+            let placeholder = order.is_empty().then(|| {
+                if let Some(search) = &search {
+                    return no_matches_state(
+                        search.query.text(),
+                        search.deep.as_ref().map(|deep| deep.running),
+                    );
+                }
+                let hidden_items =
+                    !shown_hidden && listing.entries.iter().any(|entry| entry.hidden);
+                let others = listing.entries.iter().any(|entry| !entry.hidden);
+                empty_state(listing.recent, hidden_items && !others, filtered && others)
+            });
             let pick = {
                 let session = session.clone();
                 move |index: usize| session.picked(index)
@@ -630,34 +1138,66 @@ fn main_area(
                 let session = session.clone();
                 move |index: usize| session.activate(index)
             };
-            if use_grid {
-                FileGrid::new(listing.clone(), order.clone(), selection)
-                    .multiple(multiple)
-                    .folders_only(folder_mode)
-                    .autofocus(!matches!(session.request.action, Action::Save))
-                    .on_pick(pick)
-                    .on_activate(activate)
-                    .into()
-            } else {
-                FileList::new(listing.clone(), order.clone(), selection)
-                    .sort(*sort.peek())
-                    .multiple(multiple)
-                    .folders_only(folder_mode)
-                    .autofocus(!matches!(session.request.action, Action::Save))
-                    .on_sort(move |key: SortKey| {
-                        let next = sort.peek().toggled(key);
-                        sort.set(next);
-                    })
-                    .on_pick(pick)
-                    .on_activate(activate)
-                    .into()
+            let nav = session.nav;
+            let mut places_rev = session.places_rev;
+            let mut sort = sort;
+            let mut show_hidden = show_hidden;
+            let mut view = FileView::new(listing.clone(), order.clone(), selection)
+                .icon_px(level)
+                .sort(*sort.peek())
+                .multiple(session.request.multiple)
+                .folders_only(folder_mode)
+                .autofocus(
+                    !matches!(session.request.action, Action::Save) && !session.find.peek().scoped,
+                )
+                .search(search)
+                .on_search({
+                    let session = session.clone();
+                    move |typed: String| session.start_search(&typed)
+                })
+                .show_hidden(shown_hidden)
+                .filtered_out(filtered_out)
+                .thumbnails(listing.mount.thumbnails())
+                .new_folder(new_folder)
+                .focus(focus)
+                .bookmarks(bookmarks)
+                .on_refresh({
+                    let reload = session.reload.clone();
+                    move |_: ()| reload.begin()
+                })
+                .on_bookmarks_changed(move |_: ()| {
+                    let next = *places_rev.peek() + 1;
+                    places_rev.set(next);
+                })
+                .on_sort(move |key: SortKey| {
+                    let next = sort.peek().toggled(key);
+                    sort.set(next);
+                    nav.remember_sort(next);
+                })
+                .on_sort_set(move |next: Sort| {
+                    sort.set(next);
+                    nav.remember_sort(next);
+                })
+                .on_show_hidden(move |on: bool| show_hidden.set(on))
+                .on_open_folder(move |path: PathBuf| nav.go(Where::Folder(path)))
+                .on_pick(pick)
+                .on_activate(activate);
+            if let Host::Browser(browse) = &session.host {
+                view = view
+                    .caps(Capabilities::FILES_APP)
+                    .on_open_new_window(browse.on_new_tab.clone());
             }
+            if let Some(placeholder) = placeholder {
+                view = view.placeholder(placeholder);
+            }
+            view.into()
         }
     }
 }
 
-/// Back, the path, the view switch and the view menu; on a phone the places
-/// menu comes first and the path moves to a line of its own.
+/// Back, Forward, Up, the address bar, the view switch and the view menu; on
+/// a phone the places menu comes first and the address bar takes a line of
+/// its own.
 #[allow(clippy::too_many_arguments)]
 fn toolbar(
     tokens: &crate::theme::Tokens,
@@ -670,13 +1210,18 @@ fn toolbar(
     use_grid: bool,
     sort: State<Sort>,
     show_hidden: State<bool>,
-    mut grid: State<Option<bool>>,
-    history: State<Vec<Where>>,
+    mut level: State<u16>,
+    mut new_folder: State<u32>,
+    mut focus: State<u32>,
+    filter: Option<Element>,
+    search: SearchLink,
 ) -> Element {
     let nav = session.nav;
+    let mut places_rev = session.places_rev;
     let current = nav.location.read().clone();
-    let can_go_back = !history.read().is_empty();
-    let path_bar = PathBar::new(
+    let can_go_back = !nav.history.read().is_empty();
+    let can_go_forward = !nav.forward.read().is_empty();
+    let path_bar = AddressBar::new(
         current.clone(),
         session.home.clone(),
         editing,
@@ -684,35 +1229,73 @@ fn toolbar(
         move |to: Where| nav.go(to),
         {
             let session = session.clone();
-            move |text: String| session.open_typed(&text)
+            move |path: PathBuf| session.open_file(path)
         },
     )
-    .folders_only(folder_mode);
+    .folders_only(folder_mode)
+    .accepts_file(session.request.action == Action::Open)
+    .show_hidden(*show_hidden.read())
+    .on_bookmarks_changed(move |_: ()| {
+        let next = *places_rev.peek() + 1;
+        places_rev.set(next);
+    })
+    .search(search)
+    .on_close_edit(move |_: ()| {
+        let next = *focus.peek() + 1;
+        focus.set(next);
+    });
 
     let back = icon_button(Icon::GoPrevious, move |_: ()| nav.back())
         .size(Dim::Control)
         .tooltip("Back")
         .enabled(can_go_back);
+    let forward = icon_button(Icon::GoNext, move |_: ()| nav.forward())
+        .size(Dim::Control)
+        .tooltip("Forward")
+        .enabled(can_go_forward);
     let has_parent = matches!(&current, Where::Folder(path) if path.parent().is_some());
-    let parent = icon_button(Icon::PanUp, move |_: ()| nav.up())
+    let parent = icon_button(Icon::GoUp, move |_: ()| nav.up())
         .size(Dim::Control)
         .tooltip("Parent folder")
         .enabled(has_parent);
-    let view_switch = icon_button(
-        if use_grid {
-            Icon::ViewList
-        } else {
-            Icon::ViewGrid
-        },
-        move |_: ()| grid.set(Some(!use_grid)),
-    )
+    // Recent has no folder to read again.
+    let reload = session.reload.clone();
+    let busy = reload.busy();
+    let refresh = icon_button(Icon::Refresh, move |_: ()| reload.run())
+        .size(Dim::Control)
+        .tooltip("Refresh")
+        .enabled(matches!(current, Where::Folder(_)))
+        .busy(busy);
+    let can_create = matches!(current, Where::Folder(_));
+    let create = icon_button(Icon::FolderNew, move |_: ()| {
+        let next = *new_folder.peek() + 1;
+        new_folder.set(next);
+    })
     .size(Dim::Control)
+    .tooltip("New folder")
+    .enabled(can_create);
+    // The switch between a list and a grid, and the menu of the view's other
+    // choices (sort, hidden files), in one control.
+    let view = SplitButton::new(if use_grid {
+        Icon::ViewList
+    } else {
+        Icon::ViewGrid
+    })
     .tooltip(if use_grid {
         "Show a list"
     } else {
-        "Show thumbnails"
-    });
-    let view_menu = menu_button("View options", view_items(sort, show_hidden)).icon(Icon::OpenMenu);
+        "Show a grid"
+    })
+    .menu_label("View options")
+    .on_press(move |_: ()| {
+        let next = switch_kind(
+            *level.peek(),
+            if use_grid { ViewKind::List } else { ViewKind::Grid },
+        );
+        level.set(next);
+        nav.remember_level(next);
+    })
+    .menu(view_items(nav, sort, show_hidden, session.include_noise));
 
     if compact {
         let first = rect()
@@ -727,13 +1310,15 @@ fn toolbar(
                 ],
             )
             .child(
-                rect()
-                    .tw(tokens, &[w_flex()])
-                    .child(places_menu(places, &current, session)),
+                rect().tw(tokens, &[w_flex()]).child(
+                    PlacesMenu::new(places.clone(), current.clone(), move |to: Where| nav.go(to))
+                        .recent(session.request.action == Action::Open)
+                        .reload(session.places_rev),
+                ),
             )
             .child(parent)
-            .child(view_switch)
-            .child(view_menu);
+            .child(create)
+            .child(view);
         return rect()
             .tw(tokens, &[flex_col(), w_full(), p(S2), gap(S2)])
             .child(first)
@@ -753,20 +1338,28 @@ fn toolbar(
             ],
         )
         .child(back)
+        .child(forward)
         .child(parent)
+        .child(refresh)
         .child(rect().tw(tokens, &[w_flex()]).child(path_bar))
-        .child(view_switch)
-        .child(view_menu)
+        .maybe_child(filter)
+        .child(create)
+        .child(view)
         .into()
 }
 
 /// The sort and hidden-file choices of the view menu.
-fn view_items(mut sort: State<Sort>, mut show_hidden: State<bool>) -> Vec<MenuItem> {
+fn view_items(
+    nav: Nav,
+    mut sort: State<Sort>,
+    mut show_hidden: State<bool>,
+    mut include_noise: State<bool>,
+) -> Vec<MenuItem> {
     let now = *sort.read();
     let by = |label: &str, key: SortKey| {
         menu_item(label, move |_: ()| {
             let current = *sort.peek();
-            sort.set(if current.key == key {
+            let next = if current.key == key {
                 current
             } else {
                 Sort {
@@ -774,20 +1367,25 @@ fn view_items(mut sort: State<Sort>, mut show_hidden: State<bool>) -> Vec<MenuIt
                     descending: false,
                     ..current
                 }
-            });
+            };
+            sort.set(next);
+            nav.remember_sort(next);
         })
         .checked(now.key == key)
     };
     vec![
         by("Sort by name", SortKey::Name),
         by("Sort by size", SortKey::Size),
+        by("Sort by type", SortKey::Kind),
         by("Sort by modified", SortKey::Modified),
         menu_item("Reverse order", move |_: ()| {
             let current = *sort.peek();
-            sort.set(Sort {
+            let next = Sort {
                 descending: !current.descending,
                 ..current
-            });
+            };
+            sort.set(next);
+            nav.remember_sort(next);
         })
         .checked(now.descending),
         menu_separator(),
@@ -796,62 +1394,18 @@ fn view_items(mut sort: State<Sort>, mut show_hidden: State<bool>) -> Vec<MenuIt
             show_hidden.set(!shown);
         })
         .checked(*show_hidden.read()),
+        menu_item("Search build and dependency folders", move |_: ()| {
+            let included = *include_noise.peek();
+            include_noise.set(!included);
+        })
+        .checked(*include_noise.read()),
     ]
 }
 
-/// A phone's replacement for the sidebar: a menu of every place.
-fn places_menu(places: &bingux_files::Places, current: &Where, session: &Session) -> Element {
-    let all: Vec<&bingux_files::Place> = places
-        .all()
-        .filter(|place| {
-            session.request.action == Action::Open || place.kind != bingux_files::PlaceKind::Recent
-        })
-        .collect();
-    let target_of = |place: &bingux_files::Place| match &place.path {
-        Some(path) => Where::Folder(path.clone()),
-        None => Where::Recent,
-    };
-    let mut options: Vec<(String, String)> = all
-        .iter()
-        .enumerate()
-        .map(|(index, place)| (index.to_string(), place.name.clone()))
-        .collect();
-    let mut glyphs: Vec<Icon> = all.iter().map(|place| place_icon(place.kind)).collect();
-    let selected = match all.iter().position(|place| target_of(place) == *current) {
-        Some(index) => index.to_string(),
-        None => {
-            // Somewhere that is not a place: name it, so the menu says where you are.
-            let label = match current {
-                Where::Folder(path) => path.file_name().map_or_else(
-                    || "Computer".to_string(),
-                    |n| n.to_string_lossy().into_owned(),
-                ),
-                Where::Recent => "Recent".to_string(),
-            };
-            options.push(("here".into(), label));
-            glyphs.push(Icon::Folder);
-            "here".into()
-        }
-    };
-    let targets: Vec<Where> = all.iter().map(|place| target_of(place)).collect();
-    let nav = session.nav;
-    Element::from(
-        dropdown(options, selected, move |key: String| {
-            if let Some(target) = key
-                .parse::<usize>()
-                .ok()
-                .and_then(|index| targets.get(index))
-            {
-                nav.go(target.clone());
-            }
-        })
-        .icons(glyphs)
-        .title("Places"),
-    )
-}
-
-/// The bottom strip: the name to save under, the file type filter, the
-/// request's choices and any problem. `None` when there is nothing to show.
+/// The strip under the content pane: the name to save under, the request's
+/// choices and any problem. `None` when there is nothing to show. On a phone
+/// it also holds the file type, which a desktop keeps in the toolbar. It sits
+/// in the content pane, so the sidebar runs the dialog's full height.
 fn footer(
     tokens: &crate::theme::Tokens,
     compact: bool,
@@ -860,10 +1414,9 @@ fn footer(
     problem: State<Option<String>>,
 ) -> Option<Element> {
     let request = &session.request;
-    let show_filters =
-        request.filters.len() > 1 && matches!(request.action, Action::Open | Action::Save);
+    let show_picker = compact && shows_filters(session);
     let message = problem.read().clone();
-    if !saving && !show_filters && request.choices.is_empty() && message.is_none() {
+    if !saving && !show_picker && request.choices.is_empty() && message.is_none() {
         return None;
     }
     let name_field = saving.then(|| {
@@ -874,29 +1427,6 @@ fn footer(
                 .autofocus(),
         )
     });
-    let picker = show_filters.then(|| {
-        let options: Vec<(String, String)> = request
-            .filters
-            .iter()
-            .enumerate()
-            .map(|(index, filter)| (index.to_string(), filter.name.clone()))
-            .collect();
-        let selected = session.filter.read().unwrap_or(0).to_string();
-        let mut filter = session.filter;
-        let nav = session.nav;
-        let picker = dropdown(options, selected, move |key: String| {
-            filter.set(key.parse().ok());
-            let mut selection = nav.selection;
-            selection.write().clear();
-        })
-        .title("File type");
-        Element::from(if compact {
-            picker
-        } else {
-            picker.min_width(Dim::Field)
-        })
-    });
-
     // A phone's sheet reaches the bottom edge of the screen, so its last
     // line keeps clear of the screen's corners.
     let mut column = rect()
@@ -906,28 +1436,8 @@ fn footer(
     for choice in &request.choices {
         column = column.child(choice_control(tokens, session, choice));
     }
-    if compact {
-        column = column
-            .maybe_child(name_field)
-            .maybe_child(picker.map(|picker| {
-                Element::from(
-                    rect()
-                        .tw(
-                            tokens,
-                            &[
-                                flex_row(),
-                                grow_children(),
-                                items(Align::Center),
-                                w_full(),
-                                px(S2),
-                            ],
-                        )
-                        .child(BODY.label(tokens, "File type"))
-                        .child(rect().tw(tokens, &[w_flex()]))
-                        .child(picker),
-                )
-            }));
-    } else if name_field.is_some() || picker.is_some() {
+    column = column.maybe_child(name_field);
+    if show_picker {
         column = column.child(
             rect()
                 .tw(
@@ -937,14 +1447,43 @@ fn footer(
                         grow_children(),
                         items(Align::Center),
                         w_full(),
-                        gap(S3),
+                        px(S2),
                     ],
                 )
-                .child(rect().tw(tokens, &[w_flex()]).maybe_child(name_field))
-                .maybe_child(picker),
+                .child(BODY.label(tokens, "File type"))
+                .child(rect().tw(tokens, &[w_flex()]))
+                .child(filter_control(session)),
         );
     }
     Some(column.into())
+}
+
+/// Whether the request offers a file type filter to choose from.
+fn shows_filters(session: &Session) -> bool {
+    matches!(session.host, Host::Dialog(_))
+        && !session.filters.is_empty()
+        && matches!(session.request.action, Action::Open | Action::Save)
+}
+
+/// The file type dropdown: every filter of the request, or the presets.
+/// Choosing one clears the selection, which may hold files it now hides.
+fn filter_control(session: &Session) -> Element {
+    let options: Vec<(String, String)> = session
+        .filters
+        .iter()
+        .enumerate()
+        .map(|(index, filter)| (index.to_string(), filter.name.clone()))
+        .collect();
+    let selected = session.filter.read().unwrap_or(0).to_string();
+    let mut filter = session.filter;
+    let nav = session.nav;
+    dropdown(options, selected, move |key: String| {
+        filter.set(key.parse().ok());
+        let mut selection = nav.selection;
+        selection.write().clear();
+    })
+    .title("File type")
+    .into()
 }
 
 /// One of the request's choices: a checkbox, or a menu of options.

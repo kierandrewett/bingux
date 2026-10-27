@@ -1,597 +1,313 @@
-//! The file list: rows of icon, name, size and modified time.
+//! The list: rows of icon, name and columns.
 //!
-//! Only the rows in view are built, so a folder of a hundred thousand files
-//! scrolls as smoothly as one of ten. The list is one keyboard stop: the arrow
-//! keys, Home, End and Page Up and Down move the cursor, Shift extends the
-//! selection, Ctrl+A selects everything, Enter opens the cursor row, and
-//! typing letters jumps to a name that starts with them. Click selects; a
-//! second click, or a tap on a phone, opens. Ctrl-click and Shift-click
-//! select several.
+//! Only the rows in view are built. A row is one component with its own
+//! key, and it holds no closure over the listing: its handlers read the
+//! latest [`Ctx`](super::view::Ctx) through [`Shared`], so a row that did
+//! not change is not drawn again.
+//!
+//! Zooming changes the icon and nothing else. The icon slot is `icon_px`
+//! wide and tall; the row is as tall as the sidebar's rows (`Dim::NavItem`)
+//! and grows only as far as the icon needs. The text, its size and the column
+//! widths are the same at every level (see `columns.rs`). From
+//! [`LIST_PICTURE_PX`] up, the slot of an image, video or document shows its
+//! picture (see `thumbnails.rs`). The header is mounted by
+//! [`FileView`](super::view::FileView), which makes the one [`Plan`] header
+//! and rows share.
+//!
+//! A row is the sidebar's row: `LIST_ITEM`, the same radius, inset, fills and
+//! minimum height, held `LIST_EDGE` clear of the list's sides so its rounded
+//! fill shows. The press, though, is taken across the full width.
+//!
+//! On a phone the list has no header and two lines to a row, and a finger
+//! scrolls it.
 
-use std::cell::RefCell;
-use std::hash::{Hash, Hasher};
-use std::path::Path;
+use std::cell::Cell;
 use std::rc::Rc;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::SystemTime;
 
-use bingux_files::selection::{TypeAhead, type_ahead_target};
-use bingux_files::{Entry, Listing, Selection, Sort, SortKey, display};
+use bingux_files::Entry;
 use freya::prelude::*;
 
-use super::glyphs::entry_icon;
+use super::actions::Ui;
+use super::columns::{
+    CELL_PADDING, Column, ColumnLayout, DateStyle, Plan, cell, cell_text_styled, gutter, name_cell, plan_in,
+    row_padding,
+};
+use super::interaction::Lattice;
+use super::rename_field::RenameField;
+use super::thumbnails::{LIST_PICTURE_PX, face};
+use super::view::{Ctx, Rows, Shared};
+use super::zoom::bucket_px;
 use crate::component::ComponentName;
-use crate::controls::focus_stop;
-use crate::icons::{self, Icon};
-use crate::motion::Focusable;
+use crate::controls::path_label::{measure_text, path_label};
 use crate::style::*;
 use crate::surface::use_tokens;
-use crate::typography::{BODY, CAPTION};
+use crate::typography::{BODY, CAPTION, TextStyle};
 
-/// Two presses on one row this close together open it.
-const DOUBLE_CLICK: Duration = Duration::from_millis(400);
+/// Numbers in a column share one width per digit, so a column of sizes lines
+/// up.
+const FIGURES: TextStyle = TextStyle {
+    tabular: true,
+    ..CAPTION
+};
 
-/// The rows a view shows: a listing and the order its entries appear in.
-#[derive(Clone, PartialEq)]
-pub(super) struct Rows {
-    pub listing: Arc<Listing>,
-    /// Indices into `listing.entries`, in display order.
-    pub order: Arc<Vec<usize>>,
+/// How many rows around the viewport a double click on a column edge
+/// measures.
+const FIT_SAMPLE: usize = 300;
+
+/// The height of a list row whose icon is `icon_px`: the sidebar row's height
+/// `nav_item`, or the icon and `pad` above and below it when that is more.
+pub(super) fn row_height_for(icon_px: u16, nav_item: f32, pad: f32) -> f32 {
+    nav_item.max(f32::from(icon_px) + 2.0 * pad)
 }
 
-impl Rows {
-    pub fn len(&self) -> usize {
-        self.order.len()
-    }
-
-    pub fn entry(&self, row: usize) -> &Entry {
-        &self.listing.entries[self.order[row]]
-    }
-
-    pub fn paths(&self) -> Vec<&Path> {
-        (0..self.len())
-            .map(|row| self.entry(row).path.as_path())
-            .collect()
-    }
-
-    pub fn row_of(&self, path: &Path) -> Option<usize> {
-        (0..self.len()).find(|row| self.entry(*row).path == path)
-    }
+/// [`row_height_for`] at the current density.
+pub(super) fn row_height(icon_px: u16) -> f32 {
+    row_height_for(icon_px, Dim::NavItem.px(), S1.px())
 }
 
-/// How a view reacts to the pointer: shared by the list and the grid so they
-/// select, open and navigate the same way.
-#[derive(Clone, PartialEq)]
-pub(super) struct Behaviour {
-    pub rows: Rows,
-    pub selection: State<Selection>,
-    pub multiple: bool,
-    /// Only folders can be selected; files are shown but dimmed.
-    pub folders_only: bool,
-    pub modifiers: State<Modifiers>,
-    pub last_click: State<Option<(Instant, usize)>>,
-    pub on_pick: EventHandler<usize>,
-    pub on_activate: EventHandler<usize>,
-}
-
-impl Behaviour {
-    pub fn selectable(&self, entry: &Entry) -> bool {
-        !self.folders_only || entry.is_dir()
-    }
-
-    /// A row was pressed. `touch` is a finger: a tap opens a folder at once
-    /// and selects (or toggles) a file.
-    pub fn pressed(&self, row: usize, touch: bool) {
-        let entry = self.rows.entry(row);
-        if !self.selectable(entry) {
-            return;
-        }
-        let entry_index = self.rows.order[row];
-        let path = entry.path.clone();
-        let mut selection = self.selection;
-        if touch {
-            if entry.is_dir() {
-                selection.write().select_only(&path);
-                self.on_activate.call(entry_index);
-            } else if self.multiple {
-                selection.write().toggle(&path);
-                self.on_pick.call(entry_index);
-            } else {
-                selection.write().select_only(&path);
-                self.on_pick.call(entry_index);
-            }
-            return;
-        }
-        let held = *self.modifiers.peek();
-        if self.multiple && held.contains(Modifiers::CONTROL) {
-            selection.write().toggle(&path);
-            self.on_pick.call(entry_index);
-        } else if self.multiple && held.contains(Modifiers::SHIFT) {
-            let paths = self.rows.paths();
-            selection.write().extend_to(&path, &paths);
-            self.on_pick.call(entry_index);
-        } else {
-            let now = Instant::now();
-            let mut last_click = self.last_click;
-            let double = last_click.peek().is_some_and(|(then, previous)| {
-                previous == row && now.duration_since(then) < DOUBLE_CLICK
-            });
-            last_click.set(Some((now, row)));
-            selection.write().select_only(&path);
-            self.on_pick.call(entry_index);
-            if double {
-                self.on_activate.call(entry_index);
-            }
-        }
-    }
-
-    /// Select the row at `target` (extending with Shift when several are
-    /// allowed) and report it.
-    pub fn go_to(&self, target: usize, extend: bool) {
-        let entry = self.rows.entry(target);
-        let mut selection = self.selection;
-        if extend && self.multiple {
-            let paths = self.rows.paths();
-            selection.write().extend_to(&entry.path, &paths);
-        } else {
-            selection.write().select_only(&entry.path);
-        }
-        self.on_pick.call(self.rows.order[target]);
-    }
-
-    /// The row the cursor is on.
-    pub fn cursor_row(&self) -> Option<usize> {
-        let selection = self.selection.read();
-        selection.cursor().and_then(|path| self.rows.row_of(path))
-    }
-
-    /// Ctrl+A.
-    pub fn select_all(&self) {
-        if self.multiple {
-            let paths: Vec<&Path> = (0..self.rows.len())
-                .filter(|row| self.selectable(self.rows.entry(*row)))
-                .map(|row| self.rows.entry(row).path.as_path())
-                .collect();
-            let mut selection = self.selection;
-            selection.write().select_all(&paths);
-        }
-    }
-
-    /// Typing a letter: the row it jumps to, if a name starts with what has
-    /// been typed.
-    pub fn type_ahead(&self, typed: &str) -> Option<usize> {
-        type_ahead_target(
-            self.rows.len(),
-            |row| self.rows.entry(row).name.as_str(),
-            self.cursor_row(),
-            typed,
-        )
-        .filter(|row| self.selectable(self.rows.entry(*row)))
-    }
-}
-
-/// The scroll offset that keeps `row` in view, as the scroll controller
-/// stores it (negative). `current` is the present offset.
-pub(super) fn offset_for(
-    row: usize,
-    row_height: f32,
-    current: i32,
-    rows: usize,
-    viewport: f32,
-) -> i32 {
-    let top = row as f32 * row_height;
-    let furthest = (rows as f32 * row_height - viewport).max(0.0);
-    let shown_top = -(current as f32);
-    let want = if top < shown_top {
-        top
-    } else if top + row_height > shown_top + viewport {
-        top + row_height - viewport
-    } else {
-        shown_top
-    };
-    -(want.clamp(0.0, furthest) as i32)
-}
-
-/// A sortable list of files with columns.
-///
-/// The caller owns the [`Selection`] and the order: [`Listing::select`] makes
-/// the order, [`Sort`] and the show-hidden switch are the caller's.
+/// The rows of a list. Mounted by the file view.
 #[derive(PartialEq)]
-pub struct FileList {
-    listing: Arc<Listing>,
-    order: Arc<Vec<usize>>,
-    selection: State<Selection>,
-    sort: Sort,
-    multiple: bool,
-    folders_only: bool,
-    autofocus: bool,
-    on_sort: EventHandler<SortKey>,
-    on_pick: EventHandler<usize>,
-    on_activate: EventHandler<usize>,
+pub(super) struct ListView {
+    pub shared: Shared,
+    pub rows: Rows,
+    pub icon_px: u16,
+    pub layout: ColumnLayout,
+    pub compact: bool,
 }
 
-impl FileList {
-    /// A list of `order` (indices into `listing.entries`).
-    pub fn new(listing: Arc<Listing>, order: Arc<Vec<usize>>, selection: State<Selection>) -> Self {
-        FileList {
-            listing,
-            order,
-            selection,
-            sort: Sort::default(),
-            multiple: false,
-            folders_only: false,
-            autofocus: false,
-            on_sort: EventHandler::new(|_: SortKey| {}),
-            on_pick: EventHandler::new(|_: usize| {}),
-            on_activate: EventHandler::new(|_: usize| {}),
-        }
-    }
-
-    /// The order the column headers show as sorted.
-    pub fn sort(mut self, sort: Sort) -> Self {
-        self.sort = sort;
-        self
-    }
-
-    /// Allow several rows to be selected.
-    pub fn multiple(mut self, multiple: bool) -> Self {
-        self.multiple = multiple;
-        self
-    }
-
-    /// Dim the files and make only folders selectable.
-    pub fn folders_only(mut self, folders_only: bool) -> Self {
-        self.folders_only = folders_only;
-        self
-    }
-
-    /// Take keyboard focus when the list appears, so arrows, letters and `/`
-    /// work at once; a chooser that opens on a name field leaves it off.
-    pub fn autofocus(mut self, autofocus: bool) -> Self {
-        self.autofocus = autofocus;
-        self
-    }
-
-    /// A column header was pressed.
-    pub fn on_sort(mut self, handler: impl Into<EventHandler<SortKey>>) -> Self {
-        self.on_sort = handler.into();
-        self
-    }
-
-    /// A row was picked by the pointer or the keyboard. Gets the entry's index
-    /// in the listing.
-    pub fn on_pick(mut self, handler: impl Into<EventHandler<usize>>) -> Self {
-        self.on_pick = handler.into();
-        self
-    }
-
-    /// A row was opened: double-clicked, tapped (a folder), or Enter on the
-    /// cursor row. Gets the entry's index in the listing.
-    pub fn on_activate(mut self, handler: impl Into<EventHandler<usize>>) -> Self {
-        self.on_activate = handler.into();
-        self
-    }
-}
-
-/// What every row needs to draw. The selection is part of it, so rows redraw
-/// when the selection changes.
+/// What every row needs to draw.
 #[derive(Clone, PartialEq)]
 struct RowsData {
-    behaviour: Behaviour,
-    selection: Selection,
+    shared: Shared,
+    rows: Rows,
+    icon_px: u16,
+    /// The decode size of a row's picture, or 0 when rows show icons only.
+    bucket: u32,
+    plan: Plan,
     compact: bool,
-    recent: bool,
+    row_height: f32,
+    /// The room the Name cell has, for deciding whether a name needs cutting.
+    name_room: f32,
 }
 
-impl Component for FileList {
+impl Component for ListView {
     fn render_key(&self) -> DiffKey {
-        // A different folder is a new list, scrolled to the top.
+        // A different folder is a new list, scrolled to where it was left.
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        self.listing.path.hash(&mut hasher);
-        self.listing.recent.hash(&mut hasher);
-        DiffKey::U64(hasher.finish())
+        std::hash::Hash::hash(&self.rows.listing.path, &mut hasher);
+        std::hash::Hash::hash(&self.rows.listing.recent, &mut hasher);
+        DiffKey::U64(std::hash::Hasher::finish(&hasher))
     }
 
     fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let compact = is_compact();
-        let a11y_id = use_a11y();
-        let focus = use_focus(a11y_id);
-        let autofocus = self.autofocus;
-        use_side_effect(move || {
-            if autofocus {
-                a11y_id.request_focus();
-            }
-        });
-        let scroll = use_scroll_controller(ScrollConfig::default);
-        let mut viewport = use_state(Area::default);
-        let modifiers = use_state(Modifiers::default);
-        let last_click = use_state(|| None::<(Instant, usize)>);
-        let typed = use_hook(|| Rc::new(RefCell::new(TypeAhead::new())));
-        let selection = self.selection;
-        let row_height = Dim::NavItem.px();
+        let ctx = self.shared.get();
+        let icon_px = self.icon_px;
+        let compact = self.compact;
+        let row_height = row_height(icon_px);
+        let mut viewport = ctx.viewport;
+        let width = viewport.read().width();
+        let row_width = width - 2.0 * row_padding();
+        let plan = plan_in(&self.layout, f32::from(icon_px), row_width, ctx.location_column());
+        ctx.lattice.set(Some(Lattice {
+            columns: 1,
+            count: self.rows.len(),
+            pad_x: 0.0,
+            pad_y: 0.0,
+            item_w: width,
+            item_h: row_height,
+            gap_x: 0.0,
+            gap_y: 0.0,
+        }));
+        anchor_zoom(&ctx, f32::from(icon_px), row_height, 1);
 
-        let rows = Rows {
-            listing: self.listing.clone(),
-            order: self.order.clone(),
+        let name_room = plan_name_room(&plan, row_width, icon_px);
+        let bucket = if ctx.thumbnails && icon_px >= LIST_PICTURE_PX {
+            let device_scale = *Platform::get().current_window().scale_factor.read() as f32;
+            bucket_px(f32::from(icon_px), device_scale)
+        } else {
+            0
         };
-        let behaviour = Behaviour {
-            rows: rows.clone(),
-            selection,
-            multiple: self.multiple,
-            folders_only: self.folders_only,
-            modifiers,
-            last_click,
-            on_pick: self.on_pick.clone(),
-            on_activate: self.on_activate.clone(),
-        };
-
-        let on_key_down = {
-            let behaviour = behaviour.clone();
-            let typed = typed.clone();
-            let mut scroll = scroll;
-            move |event: Event<KeyboardEventData>| {
-                let count = behaviour.rows.len();
-                let extend = event.modifiers.contains(Modifiers::SHIFT);
-                let ctrl = event.modifiers.contains(Modifiers::CONTROL);
-                let page = ((viewport.peek().height() / row_height) as usize).max(1);
-                let from = behaviour.cursor_row();
-                let target = match &event.key {
-                    Key::Named(NamedKey::ArrowDown) => Some(from.map_or(0, |at| at + 1)),
-                    Key::Named(NamedKey::ArrowUp) => {
-                        Some(from.map_or(count.saturating_sub(1), |at| at.saturating_sub(1)))
-                    }
-                    Key::Named(NamedKey::PageDown) => Some(from.map_or(0, |at| at + page)),
-                    Key::Named(NamedKey::PageUp) => {
-                        Some(from.map_or(count.saturating_sub(1), |at| at.saturating_sub(page)))
-                    }
-                    Key::Named(NamedKey::Home) => Some(0),
-                    Key::Named(NamedKey::End) => Some(count.saturating_sub(1)),
-                    Key::Named(NamedKey::Enter) => {
-                        if let Some(row) = from {
-                            event.stop_propagation();
-                            behaviour.on_activate.call(behaviour.rows.order[row]);
-                        }
-                        return;
-                    }
-                    Key::Character(text) if ctrl && text.eq_ignore_ascii_case("a") => {
-                        event.stop_propagation();
-                        behaviour.select_all();
-                        return;
-                    }
-                    Key::Character(text) if ctrl && text == " " => {
-                        if let Some(row) = from {
-                            event.stop_propagation();
-                            let path = behaviour.rows.entry(row).path.clone();
-                            let mut selection = behaviour.selection;
-                            selection.write().toggle(&path);
-                        }
-                        return;
-                    }
-                    Key::Character(text)
-                        if !ctrl
-                            && !event.modifiers.contains(Modifiers::ALT)
-                            && text.chars().count() == 1
-                            && text != " "
-                            && text != "/"
-                            && text != "~" =>
-                    {
-                        let prefix = typed
-                            .borrow_mut()
-                            .push(text.chars().next().unwrap_or(' '), Instant::now())
-                            .to_string();
-                        event.stop_propagation();
-                        behaviour.type_ahead(&prefix)
-                    }
-                    _ => None,
-                };
-                let Some(target) = target.filter(|_| count > 0) else {
-                    return;
-                };
-                event.stop_propagation();
-                let target = target.min(count - 1);
-                if !behaviour.selectable(behaviour.rows.entry(target)) {
-                    return;
-                }
-                behaviour.go_to(target, extend);
-                let offset = offset_for(
-                    target,
-                    row_height,
-                    <(i32, i32)>::from(scroll).1,
-                    count,
-                    viewport.peek().height(),
-                );
-                scroll.scroll_to_y(offset);
-            }
-        };
-
         let data = RowsData {
-            behaviour,
-            selection: selection.read().clone(),
+            shared: self.shared.clone(),
+            rows: self.rows.clone(),
+            icon_px,
+            bucket,
+            plan,
             compact,
-            recent: self.listing.recent,
+            row_height,
+            name_room,
         };
-        let body = VirtualScrollView::new_with_data_controlled(
+        VirtualScrollView::new_with_data_controlled(
             data,
             |item, data: &RowsData| {
-                let entry = data.behaviour.rows.entry(item.index).clone();
-                let selected = data.selection.contains(&entry.path);
-                let enabled = data.behaviour.selectable(&entry);
-                let behaviour = data.behaviour.clone();
-                let row = item.index;
                 Element::from(FileRow {
-                    entry,
-                    row,
-                    selected,
-                    enabled,
+                    shared: data.shared.clone(),
+                    rows: data.rows.clone(),
+                    row: item.index,
+                    icon_px: data.icon_px,
+                    bucket: data.bucket,
+                    plan: data.plan.clone(),
                     compact: data.compact,
-                    recent: data.recent,
-                    on_press: EventHandler::new(move |touch: bool| behaviour.pressed(row, touch)),
+                    height: data.row_height,
+                    name_room: data.name_room,
                 })
             },
-            scroll,
+            ctx.scroll,
         )
-        .length(self.order.len())
+        .length(self.rows.len())
         .item_size(row_height)
         .drag_scrolling(compact)
-        .on_sized(move |event: Event<SizedEventData>| viewport.set(event.area));
-
-        let header = (!compact).then(|| {
-            Element::from(ColumnHeaders {
-                sort: self.sort,
-                recent: self.listing.recent,
-                on_sort: self.on_sort.clone(),
-            })
-        });
-
-        rect()
-            .component("FileList")
-            .a11y_id(a11y_id)
-            .a11y_focusable(true)
-            .a11y_role(AccessibilityRole::List)
-            .a11y_alt("Files")
-            .tw(&tokens, &[flex_col(), w_full(), h_full(), px(S2)])
-            .on_key_down(on_key_down)
-            .on_global_key_down(move |event: Event<KeyboardEventData>| {
-                let mut held = modifiers;
-                held.set(event.modifiers);
-            })
-            .on_global_key_up(move |event: Event<KeyboardEventData>| {
-                let mut held = modifiers;
-                held.set(event.modifiers);
-            })
-            .maybe_child(header)
-            .child(rect().tw(&tokens, &[w_full(), h_flex()]).child(body))
-            .focusable(focus(), Radius::Control)
-            .tw(&tokens, &[w_full(), h_full()])
+        .pass_ctrl_wheel(true)
+        .on_sized(move |event: Event<SizedEventData>| viewport.set_if_modified(event.area))
     }
 }
 
-#[derive(PartialEq)]
-struct ColumnHeaders {
-    sort: Sort,
-    recent: bool,
-    on_sort: EventHandler<SortKey>,
+/// Keeps the content under the pointer fixed while the zoom changes, and the
+/// first row at the top when only the width does. `zoom_px` is the icon size
+/// of this frame.
+pub(super) fn anchor_zoom(ctx: &Ctx, zoom_px: f32, pitch: f32, columns: usize) {
+    let seen = ctx.zoom_seen.clone();
+    let before = seen.get();
+    seen.set(Some((zoom_px, pitch, columns)));
+    let Some((old_zoom, old_pitch, old_columns)) = before else {
+        return;
+    };
+    if (old_pitch - pitch).abs() < f32::EPSILON && old_columns == columns {
+        return;
+    }
+    let mut scroll = ctx.scroll;
+    let offset = -(<(i32, i32)>::from(scroll).1 as f32);
+    let viewport = *ctx.viewport.peek();
+    let zoomed = (old_zoom - zoom_px).abs() > f32::EPSILON;
+    let pointer = if zoomed {
+        ctx.zoom
+            .anchor()
+            .map_or(viewport.height() / 2.0, |anchor| anchor.1)
+    } else {
+        0.0
+    };
+    let next = super::interaction::anchored_offset(
+        offset, pointer, old_pitch, old_columns, pitch, columns,
+    );
+    scroll.scroll_to_y(-(next.max(0.0).round() as i32));
 }
 
-impl Component for ColumnHeaders {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let column = |key: SortKey, title: &str, width: Option<Dim>| {
-            Element::from(ColumnHeader {
-                key,
-                title: title.to_string(),
-                width,
-                sorted: (self.sort.key == key).then_some(self.sort.descending),
-                on_sort: self.on_sort.clone(),
-            })
-        };
-        rect()
-            .tw(
-                &tokens,
-                &[
-                    flex_row(),
-                    grow_children(),
-                    items(Align::Center),
-                    w_full(),
-                    h(Dim::Control),
-                    px(S3),
-                    gap(S3),
-                ],
-            )
-            .child(rect().tw(&tokens, &[w(Dim::IconRow)]))
-            .child(column(SortKey::Name, "Name", None))
-            .child(if self.recent {
-                column(SortKey::Kind, "Type", Some(Dim::FileSizeColumn))
+/// The room the Name cell leaves for text: the row less the icon slot, the
+/// other columns and the cell's own padding.
+fn plan_name_room(plan: &Plan, row_width: f32, icon_px: u16) -> f32 {
+    let others: f32 = plan.columns.iter().map(|(_, width)| width).sum();
+    (row_width - gutter(f32::from(icon_px)) - others - 2.0 * CELL_PADDING.px()).max(0.0)
+}
+
+/// A file name. A name that fits is a plain label, which costs one node and
+/// no second layout; one that does not is cut in the middle, keeping its
+/// extension (see `path_label`). The text is the same size in a row and under
+/// a tile. `marks` are the bytes of `name` a search matched, drawn on an
+/// accent tint; a name that has to be cut is drawn without them.
+pub(super) fn name_label(
+    tokens: &crate::theme::Tokens,
+    name: &str,
+    room: f32,
+    centre: bool,
+    marks: &[std::ops::Range<usize>],
+) -> Element {
+    if room <= 0.0 || measure_text(name, BODY) <= room {
+        if !marks.is_empty() {
+            let label = crate::search_highlight::highlighted_label(BODY, tokens, name, marks);
+            return if centre {
+                label
+                    .text_align(TextAlign::Center)
+                    .width(Size::fill())
+                    .into()
             } else {
-                column(SortKey::Size, "Size", Some(Dim::FileSizeColumn))
-            })
-            .child(column(
-                SortKey::Modified,
-                if self.recent { "Last used" } else { "Modified" },
-                Some(Dim::FileModifiedColumn),
-            ))
-    }
-}
-
-#[derive(PartialEq)]
-struct ColumnHeader {
-    key: SortKey,
-    title: String,
-    width: Option<Dim>,
-    /// `Some(descending)` when the list is sorted by this column.
-    sorted: Option<bool>,
-    on_sort: EventHandler<SortKey>,
-}
-
-impl Component for ColumnHeader {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let mut hovering = use_state(|| false);
-        let key = self.key;
-        let on_sort = self.on_sort.clone();
-        let arrow = self.sorted.map(|descending| {
-            icons::icon(
-                if descending {
-                    Icon::PanDown
-                } else {
-                    Icon::PanUp
-                },
-                IconSize::Mark,
-                Paint::Muted.color(&tokens),
-            )
-        });
-        let content = rect()
-            .tw(
-                &tokens,
-                &[
-                    flex_row(),
-                    items(Align::Center),
-                    h_full(),
-                    px(S1),
-                    gap(S1),
-                    rounded(Radius::Mark),
-                    surface(Paint::Transparent, hovering(), false, false),
-                ],
-            )
-            .on_pointer_enter(move |_| hovering.set(true))
-            .on_pointer_leave(move |_| hovering.set(false))
-            .child(
-                CAPTION
-                    .in_ink(if self.sorted.is_some() {
-                        crate::typography::Ink::Text
-                    } else {
-                        crate::typography::Ink::Muted
-                    })
-                    .label(&tokens, self.title.clone())
-                    .max_lines(1),
-            )
-            .maybe_child(arrow);
-        let button = focus_stop(
-            content,
-            format!("Sort by {}", self.title),
-            AccessibilityRole::Button,
-            true,
-            Radius::Mark,
-            move |_: ()| on_sort.call(key),
-        );
-        match self.width {
-            Some(width) => button.tw(&tokens, &[w(width), h_full()]),
-            None => button.tw(&tokens, &[w_flex(), h_full()]),
+                label.into()
+            };
         }
+        let label = BODY.label(tokens, name.to_string()).max_lines(1);
+        return if centre {
+            label
+                .text_align(TextAlign::Center)
+                .width(Size::fill())
+                .into()
+        } else {
+            label.into()
+        };
     }
+    let cut = path_label(name.to_string()).name().style(BODY).tooltip(false);
+    if centre { cut.centre().into() } else { cut.into() }
+}
+
+/// The keys of the list that move the cursor. Returns true when used.
+pub(super) fn navigate(ctx: &Ctx, event: &Event<KeyboardEventData>) -> bool {
+    let count = ctx.rows.len();
+    if count == 0 {
+        return false;
+    }
+    let extend = event.modifiers.contains(Modifiers::SHIFT);
+    let row_height = ctx
+        .lattice
+        .get()
+        .map_or(1.0, |lattice| lattice.item_h.max(1.0));
+    let page = ((ctx.viewport.peek().height() / row_height) as usize).max(1);
+    let from = ctx.cursor_row();
+    let last = count - 1;
+    let target = match &event.key {
+        Key::Named(NamedKey::ArrowDown) => from.map_or(0, |at| at + 1),
+        Key::Named(NamedKey::ArrowUp) => from.map_or(last, |at| at.saturating_sub(1)),
+        Key::Named(NamedKey::PageDown) => from.map_or(0, |at| at + page),
+        Key::Named(NamedKey::PageUp) => from.map_or(last, |at| at.saturating_sub(page)),
+        Key::Named(NamedKey::Home) => 0,
+        Key::Named(NamedKey::End) => last,
+        _ => return false,
+    };
+    let target = target.min(last);
+    if ctx.selectable(ctx.rows.entry(target)) {
+        ctx.go_to(target, extend);
+        ctx.reveal(target);
+    }
+    true
+}
+
+/// The widest text in `column` among the rows near the top of the view, in
+/// drawn pixels, for a double click on a column's edge.
+pub(super) fn widest(ctx: &Ctx, column: Column) -> f32 {
+    let now = SystemTime::now();
+    let dates = if ctx.recent {
+        DateStyle::Relative
+    } else {
+        DateStyle::Absolute
+    };
+    let pitch = ctx
+        .lattice
+        .get()
+        .map_or(1.0, |lattice| (lattice.item_h + lattice.gap_y).max(1.0));
+    let top = (-(<(i32, i32)>::from(ctx.scroll).1 as f32) / pitch) as usize;
+    let first = top.saturating_sub(FIT_SAMPLE / 4);
+    let last = (first + FIT_SAMPLE).min(ctx.rows.len());
+    (first..last)
+        .map(|row| {
+            let entry = ctx.rows.entry(row);
+            let text = ctx
+                .result_folder(entry)
+                .filter(|_| column == Column::Location)
+                .unwrap_or_else(|| cell_text_styled(column, entry, now, &ctx.home, dates));
+            measure_text(&text, FIGURES)
+        })
+        .fold(0.0, f32::max)
 }
 
 #[derive(PartialEq)]
 struct FileRow {
-    entry: Entry,
+    shared: Shared,
+    rows: Rows,
     row: usize,
-    selected: bool,
-    enabled: bool,
+    icon_px: u16,
+    bucket: u32,
+    plan: Plan,
     compact: bool,
-    recent: bool,
-    /// `true` when the press came from a finger.
-    on_press: EventHandler<bool>,
+    height: f32,
+    name_room: f32,
 }
 
 impl Component for FileRow {
@@ -602,111 +318,215 @@ impl Component for FileRow {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
-        let entry = &self.entry;
-        let on_press = self.on_press.clone();
-        let muted = Paint::Muted.color(&tokens);
-        let icon = icons::icon(
-            entry_icon(entry),
-            IconSize::Row,
-            if entry.is_dir() {
-                Paint::Accent.color(&tokens)
-            } else {
-                muted
-            },
-        );
-        let modified = entry.modified.map(display::modified).unwrap_or_default();
-        let size = if entry.is_dir() {
-            String::new()
-        } else if self.recent {
-            entry.mime.description.to_string()
-        } else {
-            display::size(entry.size)
+        let mut pressing = use_state(|| false);
+        let ctx = self.shared.get();
+        let Some(entry) = (self.row < self.rows.len()).then(|| self.rows.entry(self.row)) else {
+            return rect().into_element();
         };
-        let name = BODY
-            .label(&tokens, entry.name.clone())
-            .max_lines(1)
-            .text_overflow(TextOverflow::Ellipsis);
-        let text: Element = if self.compact {
+        let row = self.row;
+        if !entry.sized {
+            ctx.wants
+                .want(&self.rows.listing, &[self.rows.order[row]]);
+        }
+        let selected = ctx.env.selection.read().contains(&entry.path);
+        let renaming = ctx
+            .env
+            .ui
+            .rename
+            .read()
+            .as_ref()
+            .is_some_and(|rename| rename.path == entry.path);
+        let drop_target = entry.is_dir() && *ctx.gestures.over.read() == Some(row);
+        let enabled = ctx.selectable(entry);
+        let dim = !enabled || ctx.cut_dim(&entry.path);
+
+        let icon = face(&tokens, entry, self.icon_px, self.bucket, self.bucket > 0);
+        let now = SystemTime::now();
+        let dates = if ctx.recent {
+            DateStyle::Relative
+        } else {
+            DateStyle::Absolute
+        };
+        let name: Element = if renaming {
+            RenameField::new(&ctx.env, entry).list(ctx.focus).into()
+        } else {
+            name_label(&tokens, &entry.name, self.name_room, false, &ctx.marks(&entry.name))
+        };
+
+        // The fill is the sidebar's row, inset from the list's sides. The
+        // events are on the outer box, so the press is taken across the
+        // whole width, and the rounded fill is only what shows.
+        let mut line = rect()
+            .tw(&tokens, LIST_ITEM)
+            .tw(
+                &tokens,
+                &[
+                    grow_children(),
+                    h_full(),
+                    // The header has no gap between its cells, and the row's
+                    // cells must line up with it.
+                    gap(S0),
+                    surface(
+                        Paint::Transparent,
+                        (hovering() && enabled) || drop_target,
+                        pressing() && enabled,
+                        selected,
+                    ),
+                ],
+            )
+            .maybe(drop_target, |line| {
+                line.tw(&tokens, &[border(Line::Stroke(Dim::Ring, Paint::Accent))])
+            })
+            .child(
+                rect()
+                    .width(Size::px(gutter(f32::from(self.icon_px))))
+                    .tw_layout(&[flex_row(), items(Align::Center), h_full()])
+                    .child(icon),
+            );
+
+        if self.compact {
+            let size = if entry.is_dir() {
+                String::new()
+            } else {
+                bingux_files::display::size(entry.size)
+            };
+            let modified = cell_text_styled(Column::Modified, entry, now, &ctx.home, dates);
             let detail = [size.as_str(), modified.as_str()]
                 .iter()
                 .filter(|part| !part.is_empty())
                 .copied()
                 .collect::<Vec<_>>()
                 .join(" · ");
-            rect()
-                .tw(&tokens, &[flex_col(), w_flex()])
-                .child(name)
-                .maybe_child((!detail.is_empty()).then(|| {
-                    CAPTION
-                        .label(&tokens, detail)
+            // A search result says where it is, not how big.
+            let detail = ctx.result_folder(entry).unwrap_or(detail);
+            line = line.child(
+                rect()
+                    .tw(&tokens, &[flex_col(), w_flex()])
+                    .child(name)
+                    .maybe_child((!detail.is_empty()).then(|| {
+                        CAPTION
+                            .label(&tokens, detail)
+                            .max_lines(1)
+                            .text_overflow(TextOverflow::Ellipsis)
+                    })),
+            );
+        } else {
+            line = line.child(name_cell(&self.plan, name));
+            for (column, width) in &self.plan.columns {
+                let text = ctx
+                    .result_folder(entry)
+                    .filter(|_| *column == Column::Location)
+                    .unwrap_or_else(|| cell_text_styled(*column, entry, now, &ctx.home, dates));
+                let content: Element = match column {
+                    Column::Location => path_label(text)
+                        .style(CAPTION)
+                        .ink(crate::typography::Ink::Muted)
+                        .tooltip(false)
+                        .into(),
+                    _ => FIGURES
+                        .in_ink(crate::typography::Ink::Muted)
+                        .label(&tokens, text)
                         .max_lines(1)
                         .text_overflow(TextOverflow::Ellipsis)
-                }))
-                .into()
-        } else {
-            rect()
-                .tw(
-                    &tokens,
-                    &[flex_row(), items(Align::Center), w_flex(), gap(S2)],
-                )
-                .child(rect().tw(&tokens, &[w_flex()]).child(name))
-                .into()
-        };
-        let mut row = rect()
+                        .into(),
+                };
+                line = line.child(cell(*width, column.right_aligned(), content));
+            }
+        }
+
+        rect()
             .component("FileRow")
-            .tw(
-                &tokens,
-                &[
-                    flex_row(),
-                    grow_children(),
-                    items(Align::Center),
-                    w_full(),
-                    h(Dim::NavItem),
-                    px(S3),
-                    gap(S3),
-                    rounded(Radius::Control),
-                    surface(
-                        Paint::Transparent,
-                        hovering() && self.enabled,
-                        false,
-                        self.selected,
-                    ),
-                ],
-            )
+            .height(Size::px(self.height))
+            .tw(&tokens, &[flex_col(), w_full(), px(LIST_EDGE)])
             .a11y_role(AccessibilityRole::ListBoxOption)
             .a11y_alt(entry.name.clone())
-            .a11y_builder({
-                let selected = self.selected;
-                move |builder| builder.set_selected(selected)
+            .a11y_builder(move |builder| builder.set_selected(selected))
+            .maybe(dim, |outer| outer.opacity(DISABLED_OPACITY))
+            .on_pointer_enter({
+                let shared = self.shared.clone();
+                move |event: Event<PointerEventData>| {
+                    hovering.set(true);
+                    shared.get().row_enter(row, &event);
+                }
             })
-            .maybe(!self.enabled, |row| row.opacity(DISABLED_OPACITY))
-            .on_pointer_enter(move |_| hovering.set(true))
-            .on_pointer_leave(move |_| hovering.set(false))
-            .on_press(move |event: Event<PressEventData>| {
-                event.stop_propagation();
-                on_press.call(matches!(event.data(), PressEventData::Touch(_)));
+            .on_pointer_leave({
+                let shared = self.shared.clone();
+                move |_| {
+                    hovering.set(false);
+                    pressing.set_if_modified(false);
+                    shared.get().row_leave(row);
+                }
             })
-            .child(icon)
-            .child(text);
-        if !self.compact {
-            row = row
-                .child(
-                    rect().tw(&tokens, &[w(Dim::FileSizeColumn)]).child(
-                        CAPTION
-                            .label(&tokens, size)
-                            .max_lines(1)
-                            .text_overflow(TextOverflow::Ellipsis),
-                    ),
-                )
-                .child(
-                    rect().tw(&tokens, &[w(Dim::FileModifiedColumn)]).child(
-                        CAPTION
-                            .label(&tokens, modified)
-                            .max_lines(1)
-                            .text_overflow(TextOverflow::Ellipsis),
-                    ),
-                );
+            .on_pointer_down({
+                let shared = self.shared.clone();
+                move |event: Event<PointerEventData>| {
+                    pressing.set(true);
+                    let ctx = shared.get();
+                    if crate::controls::press::is_touch(&event) {
+                        // A touch in the rename field is the field's: its own
+                        // long press and taps.
+                        if renaming {
+                            return;
+                        }
+                        let menu = shared.clone();
+                        ctx.press.begin(
+                            &event,
+                            Some(EventHandler::new(move |at: (f32, f32)| {
+                                menu.get().row_menu(
+                                    row,
+                                    crate::shell::panel::PanelTrigger::Pointer(at),
+                                    false,
+                                );
+                            })),
+                        );
+                    } else {
+                        ctx.row_pointer_down(row, &event);
+                    }
+                }
+            })
+            .on_global_pointer_up(move |_| pressing.set_if_modified(false))
+            .on_press({
+                let shared = self.shared.clone();
+                move |event: Event<PressEventData>| {
+                    event.stop_propagation();
+                    let ctx = shared.get();
+                    let touch = matches!(event.data(), PressEventData::Touch(_));
+                    if touch && (renaming || !ctx.press.tap(&event)) {
+                        return;
+                    }
+                    ctx.pressed(row, touch);
+                }
+            })
+            .child(line)
+            .into_element()
+    }
+}
+
+#[allow(dead_code)]
+fn unused(_: &Ui, _: &Cell<u8>, _: &Rc<u8>, _: &Entry) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::files::zoom::LADDER;
+
+    #[test]
+    fn a_row_is_a_sidebar_row_until_the_icon_needs_more() {
+        // At mouse density a sidebar row is 40 px and the padding is 4 px.
+        for px in [16, 20, 24, 32] {
+            assert_eq!(row_height_for(px, 40.0, 4.0), 40.0, "{px}");
         }
-        row
+        // Touch density: 56 px rows hold the whole list range.
+        for px in [16, 20, 24, 32] {
+            assert_eq!(row_height_for(px, 56.0, 4.0), 56.0, "{px}");
+        }
+        // An icon that does not fit with its padding makes the row taller.
+        assert_eq!(row_height_for(48, 40.0, 4.0), 56.0);
+    }
+
+    #[test]
+    fn the_row_never_shrinks_as_the_icon_grows() {
+        let heights: Vec<f32> = LADDER.iter().map(|px| row_height_for(*px, 40.0, 4.0)).collect();
+        assert!(heights.windows(2).all(|pair| pair[0] <= pair[1]));
     }
 }

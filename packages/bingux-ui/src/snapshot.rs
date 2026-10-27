@@ -316,7 +316,7 @@ impl Snapshot {
     /// - `touch x,y`, `long_press x,y`: one finger, tapped or rested past the threshold
     /// - `touch_down x,y`, `touch_move x,y`, `touch_up x,y`: one finger held across steps
     /// - `scroll x,y,dy`, `drag x1,y1,x2,y2`, `down x,y`/`move x,y`/`up x,y`
-    /// - `key escape|return|tab`
+    /// - `key escape|return|tab|space|left|right|up|down|CHARACTER`, with `shift+`, `ctrl+` or `alt+` in front
     /// - `click-text TEXT`: click the label with that text
     /// - `address ADDRESS`: navigate, e.g. `address wifi/saved`
     /// - `wait MS`: let the app run for that long, recording frames
@@ -387,15 +387,36 @@ impl Snapshot {
                     self.release((x, y));
                 }
                 "key" => {
-                    let (modifiers, key) = match rest.strip_prefix("shift+") {
-                        Some(key) => (Modifiers::SHIFT, key),
-                        None => (Modifiers::default(), rest),
-                    };
+                    // Any of `shift+`, `ctrl+` and `alt+` in front.
+                    let mut modifiers = Modifiers::default();
+                    let mut key = rest;
+                    loop {
+                        if let Some(more) = key.strip_prefix("shift+") {
+                            modifiers |= Modifiers::SHIFT;
+                            key = more;
+                        } else if let Some(more) = key.strip_prefix("ctrl+") {
+                            modifiers |= Modifiers::CONTROL;
+                            key = more;
+                        } else if let Some(more) = key.strip_prefix("alt+") {
+                            modifiers |= Modifiers::ALT;
+                            key = more;
+                        } else {
+                            break;
+                        }
+                    }
                     let key = match key {
                         "escape" => Key::Named(NamedKey::Escape),
                         "return" => Key::Named(NamedKey::Enter),
                         "tab" => Key::Named(NamedKey::Tab),
                         "f6" => Key::Named(NamedKey::F6),
+                        "delete" => Key::Named(NamedKey::Delete),
+                        "space" => Key::Character(" ".to_owned()),
+                        "left" => Key::Named(NamedKey::ArrowLeft),
+                        "right" => Key::Named(NamedKey::ArrowRight),
+                        "up" => Key::Named(NamedKey::ArrowUp),
+                        "down" => Key::Named(NamedKey::ArrowDown),
+                        // A single character, such as the `i` of Ctrl+I.
+                        other if other.chars().count() == 1 => Key::Character(other.to_owned()),
                         other => return Err(format!("unknown key: {other}")),
                     };
                     self.key_with(key, modifiers);

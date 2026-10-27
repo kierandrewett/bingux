@@ -124,6 +124,23 @@ impl<T> Drop for JobFuture<T> {
     }
 }
 
+/// Testing builds only: `BINGUX_UI_RESULT_DELAY_MS=N` holds back the result of
+/// every background job for N milliseconds after the work has run, so a page
+/// stays in its loading state long enough to capture the frames before the
+/// data lands. The job's own work is not delayed, only its delivery.
+#[cfg(feature = "testing")]
+fn result_delay() -> Option<std::time::Duration> {
+    static DELAY: LazyLock<Option<std::time::Duration>> = LazyLock::new(|| {
+        std::env::var("BINGUX_UI_RESULT_DELAY_MS")
+            .ok()?
+            .parse::<u64>()
+            .ok()
+            .filter(|ms| *ms > 0)
+            .map(std::time::Duration::from_millis)
+    });
+    *DELAY
+}
+
 /// Queue `work` on the pool and return the future of its result.
 ///
 /// The job starts as soon as a worker is free, whether or not the future has
@@ -142,10 +159,21 @@ pub fn try_spawn_blocking<T: Send + 'static>(
             return;
         }
         let outcome = catch_unwind(AssertUnwindSafe(work)).map_err(|_| JobPanicked);
-        let previous = std::mem::replace(&mut *lock(&job_slot), Slot::Done(outcome));
-        if let Slot::Pending(Some(waker)) = previous {
-            waker.wake();
+        let deliver = move || {
+            let previous = std::mem::replace(&mut *lock(&job_slot), Slot::Done(outcome));
+            if let Slot::Pending(Some(waker)) = previous {
+                waker.wake();
+            }
+        };
+        #[cfg(feature = "testing")]
+        if let Some(delay) = result_delay() {
+            thread::spawn(move || {
+                thread::sleep(delay);
+                deliver();
+            });
+            return;
         }
+        deliver();
     }));
     JobFuture { slot, cancelled }
 }

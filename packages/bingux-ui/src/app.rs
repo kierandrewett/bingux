@@ -15,7 +15,9 @@ use std::cell::{Cell, RefCell};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
-use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex, PoisonError};
+use std::task::{Poll, Waker};
 use std::time::Duration;
 
 use freya::prelude::*;
@@ -93,6 +95,7 @@ impl Application {
     /// the window closes, or straight away when another copy took the
     /// address.
     pub fn run<E: IntoElement + 'static>(self, root: impl Fn() -> E + 'static) {
+        tune_allocator();
         let argument = std::env::args().nth(1);
         if matches!(argument.as_deref(), Some("--help") | Some("-h")) {
             println!("{}", self.usage);
@@ -141,11 +144,12 @@ impl Application {
                 }
             }
         };
-        let (sender, receiver) = mpsc::channel::<String>();
+        let inbox = Arc::new(Inbox::default());
         if let Some(listener) = listener {
-            std::thread::spawn(move || listen(listener, sender));
+            let inbox = Arc::clone(&inbox);
+            std::thread::spawn(move || listen(listener, &inbox));
         }
-        FORWARDED.with(|slot| *slot.borrow_mut() = Some(receiver));
+        FORWARDED.with(|slot| *slot.borrow_mut() = Some(inbox));
 
         let scheme = self.scheme.clone();
         let (width, height) = self.size;
@@ -156,8 +160,8 @@ impl Application {
             let address = provide_address(initial.clone());
             let scheme = scheme.clone();
             use_hook(move || {
-                if let Some(receiver) = FORWARDED.with(|slot| slot.borrow_mut().take()) {
-                    start_forwarding(receiver, address, scheme);
+                if let Some(inbox) = FORWARDED.with(|slot| slot.borrow_mut().take()) {
+                    start_forwarding(inbox, address, scheme);
                 }
             });
             root()
@@ -180,10 +184,25 @@ impl Application {
     }
 }
 
+/// Keep glibc's heap from holding on to freed memory. The default lets every
+/// worker thread open its own arena and raises the threshold for mapping big
+/// buffers up to 32 MiB, so decoded pictures and page models freed by one
+/// thread stay in the process. Two arenas, and buffers over 256 KiB mapped
+/// and unmapped on their own, hand that memory back.
+fn tune_allocator() {
+    // SAFETY: `mallopt` only sets allocator parameters. It runs first in
+    // `run`, before the worker threads exist.
+    unsafe {
+        libc::mallopt(libc::M_ARENA_MAX, 2);
+        libc::mallopt(libc::M_MMAP_THRESHOLD, 256 * 1024);
+        libc::mallopt(libc::M_TRIM_THRESHOLD, 1024 * 1024);
+    }
+}
+
 thread_local! {
     /// The forwarded addresses, from the listener thread to the window's
     /// root. The root takes it once, when the window opens.
-    static FORWARDED: RefCell<Option<Receiver<String>>> = const { RefCell::new(None) };
+    static FORWARDED: RefCell<Option<Arc<Inbox>>> = const { RefCell::new(None) };
     /// The window's address state, read by [`navigate`].
     static WINDOW_ADDRESS: Cell<Option<State<Address>>> = const { Cell::new(None) };
 }
@@ -197,42 +216,70 @@ fn socket_path(app_id: &str) -> PathBuf {
     dir.join(format!("{app_id}.sock"))
 }
 
+/// The addresses forwarded by other copies, waiting for the window. The
+/// listener thread pushes and wakes the window's task, so the window sleeps
+/// until a copy actually hands off: no timer runs while the app is idle.
+#[derive(Default)]
+struct Inbox {
+    state: Mutex<InboxState>,
+}
+
+#[derive(Default)]
+struct InboxState {
+    queue: VecDeque<String>,
+    waker: Option<Waker>,
+}
+
+impl Inbox {
+    fn push(&self, line: String) {
+        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        state.queue.push_back(line);
+        if let Some(waker) = state.waker.take() {
+            waker.wake();
+        }
+    }
+
+    async fn next(&self) -> String {
+        std::future::poll_fn(|cx| {
+            let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+            match state.queue.pop_front() {
+                Some(line) => Poll::Ready(line),
+                None => {
+                    state.waker = Some(cx.waker().clone());
+                    Poll::Pending
+                }
+            }
+        })
+        .await
+    }
+}
+
 /// Accept connections and pass each line on to the window. A client sends
 /// one address per connection; an empty line only raises the window.
-fn listen(listener: UnixListener, sender: Sender<String>) {
+fn listen(listener: UnixListener, inbox: &Inbox) {
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
         // A client that connects and says nothing must not hold the listener.
         let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
         let mut line = String::new();
-        if BufReader::new(stream).read_line(&mut line).is_ok()
-            && sender.send(line.trim_end().to_string()).is_err()
-        {
-            // The window is gone: there is nothing left to forward to.
-            return;
+        if BufReader::new(stream).read_line(&mut line).is_ok() {
+            inbox.push(line.trim_end().to_string());
         }
     }
 }
 
-/// Watch for forwarded addresses on the window's thread. Each one opens its
-/// address and raises the window. The check is a short poll, like the
-/// background helpers in `runtime`, because the listener is a plain thread.
-fn start_forwarding(receiver: Receiver<String>, address: State<Address>, scheme: String) {
+/// Open each forwarded address on the window's thread and raise the window.
+fn start_forwarding(inbox: Arc<Inbox>, address: State<Address>, scheme: String) {
     spawn(async move {
         let mut address = address;
         loop {
-            match receiver.try_recv() {
-                Ok(text) => {
-                    if !text.is_empty()
-                        && let Some(target) = Address::parse_in(&scheme, &text)
-                    {
-                        address.set(target);
-                    }
-                    Platform::get().focus_window(Platform::window_id());
-                }
-                Err(TryRecvError::Empty) => timer(Duration::from_millis(50)).await,
-                Err(TryRecvError::Disconnected) => return,
+            let text = inbox.next().await;
+            if !text.is_empty()
+                && let Some(target) = Address::parse_in(&scheme, &text)
+            {
+                address.set(target);
             }
+            Platform::get().focus_window(Platform::window_id());
         }
     });
 }

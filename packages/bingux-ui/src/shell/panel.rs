@@ -7,12 +7,13 @@
 use freya::animation::*;
 use freya::prelude::*;
 
+use super::menu_query::Pill;
 use crate::component::ComponentName;
 use crate::motion::{PRESENCE_SCALE, use_presence};
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
-use crate::typography::{EMPHASIS, Ink};
+use crate::typography::{BODY, CAPTION, EMPHASIS, Ink};
 
 /// Space kept between a floating panel and the window edges.
 pub(crate) const PANEL_EDGE: f32 = S2.fixed_px();
@@ -139,8 +140,10 @@ pub(crate) enum PanelTrigger {
     Pointer((f32, f32)),
     /// A button or field the panel belongs to.
     Control(PanelRect),
-    /// A list row. Submenus open beside it.
-    Row(PanelRect),
+    /// A list row. Submenus open beside it, on the given side when there is
+    /// room: a submenu goes the way its parent went, so it never covers the
+    /// panels it came from.
+    Row(PanelRect, Side),
     /// A text field. The panel sits against the caret or selection, not the
     /// whole field.
     Text { field: PanelRect, caret: PanelRect },
@@ -153,7 +156,7 @@ impl PanelTrigger {
     pub(crate) fn anchor(self) -> PanelRect {
         match self {
             Self::Pointer(point) => PanelRect::at_point(point),
-            Self::Control(rect) | Self::Row(rect) | Self::Keyboard(rect) => rect,
+            Self::Control(rect) | Self::Row(rect, _) | Self::Keyboard(rect) => rect,
             Self::Text { caret, .. } => caret,
         }
     }
@@ -161,7 +164,7 @@ impl PanelTrigger {
     /// The side the panel opens on when there is room.
     pub(crate) fn preferred_side(self) -> Side {
         match self {
-            Self::Row(_) => Side::Right,
+            Self::Row(_, side) => side,
             Self::Pointer(_) | Self::Control(_) | Self::Text { .. } | Self::Keyboard(_) => {
                 Side::Below
             }
@@ -340,15 +343,19 @@ pub(crate) fn text_bar_rect(anchor: PanelRect, size: (f32, f32), window: (f32, f
 /// The shield under a panel: a clear layer over the window that takes every
 /// press, wheel turn and hover outside the panel. A press on it, or Escape
 /// anywhere in the window, runs `on_dismiss`. Its children draw over it.
-pub(crate) fn shield(tokens: &Tokens, on_dismiss: EventHandler<()>) -> Rect {
-    let press = on_dismiss.clone();
+pub(crate) fn shield(
+    tokens: &Tokens,
+    on_dismiss: EventHandler<()>,
+    on_escape: EventHandler<()>,
+) -> Rect {
+    let press = on_dismiss;
     rect()
         .position(Position::new_global().top(0.0).left(0.0))
         .tw(tokens, &[w_screen(), h_screen()])
         .on_global_key_down(move |event: Event<KeyboardEventData>| {
             if event.key == Key::Named(NamedKey::Escape) {
                 event.stop_propagation();
-                on_dismiss.call(());
+                on_escape.call(());
             }
         })
         .on_pointer_down(move |event: Event<PointerEventData>| {
@@ -414,6 +421,10 @@ pub(crate) struct Panel {
     on_move: Option<EventHandler<(f32, f32)>>,
     /// The bar's measured size, read once it is laid out. The bar is placed from it.
     measure: Option<State<Option<(f32, f32)>>>,
+    /// The type-ahead query, drawn as a pill beside the surface.
+    pill: Option<Pill>,
+    /// What Escape does, when it is more than dismissing.
+    on_escape: Option<EventHandler<()>>,
 }
 
 impl Panel {
@@ -441,6 +452,8 @@ impl Panel {
             on_key: None,
             on_move: None,
             measure: None,
+            pill: None,
+            on_escape: None,
         }
     }
 
@@ -516,6 +529,21 @@ impl Panel {
         self
     }
 
+    /// Shows the query of type-ahead as a pill beside the surface.
+    pub(crate) fn pill(mut self, pill: Option<Pill>) -> Self {
+        self.pill = pill;
+        self
+    }
+
+    /// What Escape does, anywhere in the window, instead of dismissing: a
+    /// panel that takes back a typed query or a submenu first uses it. The
+    /// handler dismisses the panel itself when there is nothing to take back.
+    /// The panel's own key handler must leave Escape alone, since both hear it.
+    pub(crate) fn on_escape(mut self, on_escape: impl Into<EventHandler<()>>) -> Self {
+        self.on_escape = Some(on_escape.into());
+        self
+    }
+
     /// Makes this the root of a menu: its surface takes `focus`, key presses
     /// go to `on_key`, and every pointer move in the window goes to `on_move`.
     pub(crate) fn navigation(
@@ -546,6 +574,12 @@ impl Component for Panel {
         let window = (root.width, root.height);
         let sheet = self.kind == PanelKind::Choice && is_compact();
         let dismiss = self.on_dismiss.clone();
+        // Escape closes the panel, unless the panel has something to take back
+        // first (a typed query, an open submenu).
+        let escape = self
+            .on_escape
+            .clone()
+            .unwrap_or_else(|| dismiss.clone());
         let grab = use_state(|| None::<f32>);
         let pull = use_state(|| 0.0_f32);
         let eased = use_sheet_pull(pull, tokens.motion(MOTION_MS));
@@ -553,7 +587,7 @@ impl Component for Panel {
         let backdrop = if self.kind == PanelKind::Dialog {
             self.centred(&tokens, dismiss, progress)
         } else if sheet {
-            shield(&tokens, dismiss.clone())
+            shield(&tokens, dismiss.clone(), escape.clone())
                 .layer(self.layer)
                 .child(
                     rect()
@@ -575,7 +609,7 @@ impl Component for Panel {
         } else if self.nested {
             self.menu(&tokens, window, progress)
         } else {
-            shield(&tokens, dismiss.clone())
+            shield(&tokens, dismiss.clone(), escape.clone())
                 .layer(self.layer)
                 .child(self.menu(&tokens, window, progress))
                 .children(self.overlaid.clone())
@@ -588,11 +622,75 @@ impl Component for Panel {
         } else {
             0.0
         };
+        let pill = if visible && !sheet {
+            self.query_pill(&tokens, window, progress)
+        } else {
+            None
+        };
         rect()
             .component("Panel")
             .width(Size::px(wrapper_width))
             .height(Size::px(0.0))
             .maybe_child(visible.then_some(backdrop))
+            .maybe_child(pill)
+    }
+}
+
+impl Panel {
+    /// The query pill of a menu or list that has type-ahead: a small pill
+    /// under the surface (above it when there is no room below), aligned to
+    /// its left edge. It sits outside the rows, so nothing in the list
+    /// shifts, and it is announced to a screen reader as a polite status.
+    fn query_pill(&self, tokens: &Tokens, window: (f32, f32), progress: f32) -> Option<Rect> {
+        let pill = self.pill.as_ref()?;
+        let viewport = if self.scroll.is_some() {
+            self.content_height.min(Dim::MenuList.px())
+        } else {
+            self.content_height
+        };
+        let placed = menu_rect(
+            self.trigger,
+            (self.width, viewport + 2.0 * S2.px()),
+            window,
+        );
+        let height = Dim::Box7.px();
+        let below = placed.bottom() + PANEL_GAP;
+        let y = if below + height + PANEL_EDGE <= window.1 {
+            below
+        } else {
+            (placed.y - PANEL_GAP - height).max(PANEL_EDGE)
+        };
+        Some(
+            rect()
+                .component("QueryPill")
+                .position(Position::new_global().top(y).left(placed.x))
+                .layer(Layer::Overlay)
+                .opacity(progress)
+                .a11y_role(AccessibilityRole::Status)
+                .a11y_alt(pill.announcement())
+                .a11y_builder(|builder| builder.set_live(accesskit::Live::Polite))
+                .tw(
+                    tokens,
+                    &[
+                        flex_row(),
+                        items(Align::Center),
+                        gap(S2),
+                        h(Dim::Box7),
+                        px(S3),
+                        rounded(Radius::Pill),
+                        bg(Paint::Popover),
+                        border(Line::Hairline),
+                        shadow(Elevation::Raised),
+                    ],
+                )
+                .child(BODY.in_ink(Ink::Text).label(tokens, pill.query.clone()).max_lines(1))
+                .child(
+                    CAPTION
+                        .in_ink(Ink::Muted)
+                        .label(tokens, pill.count_text())
+                        .max_lines(1),
+                ),
+        )
     }
 }
 
@@ -601,7 +699,7 @@ impl Panel {
     /// it. The scrim and the card fade and scale in separately. A press on the
     /// scrim, or Escape, dismisses; the card stops its own presses.
     fn centred(&self, tokens: &Tokens, dismiss: EventHandler<()>, progress: f32) -> Rect {
-        shield(tokens, dismiss)
+        shield(tokens, dismiss.clone(), dismiss)
             .layer(self.layer)
             .child(
                 rect()

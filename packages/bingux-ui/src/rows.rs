@@ -818,7 +818,9 @@ impl LevelRow {
     }
 
     /// A label under the track, centred on the mark, such as "100%" for a
-    /// boost. It shows only with a mark, and once the track is measured.
+    /// boost. It shows only with a mark. Its line is laid out from the first
+    /// frame and stays invisible until the track is measured, so the row
+    /// never grows when the width arrives.
     pub fn mark_label(mut self, text: impl Into<String>) -> Self {
         self.mark_label = Some(text.into());
         self
@@ -942,7 +944,7 @@ impl Component for LevelRow {
         }
         let measured = track_width();
         let boost_label: Option<Element> = match (self.mark, &self.mark_label) {
-            (Some(point), Some(text)) if measured > 0.0 => {
+            (Some(point), Some(text)) => {
                 // The tick is where the thumb's centre sits at `point`: half
                 // a thumb in, then the travel up to it. The label is centred
                 // on that x, so its box starts half a label to the left.
@@ -953,6 +955,7 @@ impl Component for LevelRow {
                 Some(
                     rect()
                         .tw(&tokens, &[flex_row(), w_full()])
+                        .opacity(if measured > 0.0 { 1.0 } else { 0.0 })
                         .child(rect().width(Size::px(left)))
                         .child(
                             rect()

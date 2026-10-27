@@ -140,6 +140,15 @@ pub fn step_focus(back: bool) {
     spawn(async move { send_dir(dir) });
 }
 
+/// Moves keyboard focus to the stop `id`, in keyboard mode with the ring.
+/// A list uses it for Home, End and type-ahead, where [`step_focus`] only
+/// walks to a neighbour. It is sent a tick later, for the reason
+/// [`step_focus`] is.
+pub fn focus_node(id: AccessibilityId) {
+    set_keyboard_mode();
+    spawn(async move { send(AccessibilityFocusStrategy::Node(id)) });
+}
+
 impl FocusCore {
     /// Tab (`back` for Shift+Tab): move on in that direction, with a fresh
     /// bounce budget.

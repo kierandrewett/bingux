@@ -199,6 +199,7 @@ pub struct VirtualScrollView<D, B: Fn(VirtualItem, &D) -> Element> {
     on_sized: Option<EventHandler<Event<SizedEventData>>>,
     invert_scroll_wheel: bool,
     drag_scrolling: bool,
+    pass_ctrl_wheel: bool,
     scrollbar: Callback<ScrollBarContext, Element>,
     key: DiffKey,
 }
@@ -228,6 +229,7 @@ impl<D: PartialEq, B: Fn(VirtualItem, &D) -> Element> PartialEq for VirtualScrol
             && self.scroll_with_arrows == other.scroll_with_arrows
             && self.scroll_controller == other.scroll_controller
             && self.invert_scroll_wheel == other.invert_scroll_wheel
+            && self.pass_ctrl_wheel == other.pass_ctrl_wheel
             && self.scrollbar == other.scrollbar
     }
 }
@@ -253,6 +255,7 @@ impl<B: Fn(VirtualItem, &()) -> Element> VirtualScrollView<(), B> {
             on_sized: None,
             invert_scroll_wheel: false,
             drag_scrolling: true,
+            pass_ctrl_wheel: false,
             scrollbar: ScrollBar::default_renderer(),
             key: DiffKey::None,
         }
@@ -278,6 +281,7 @@ impl<B: Fn(VirtualItem, &()) -> Element> VirtualScrollView<(), B> {
             on_sized: None,
             invert_scroll_wheel: false,
             drag_scrolling: true,
+            pass_ctrl_wheel: false,
             scrollbar: ScrollBar::default_renderer(),
             key: DiffKey::None,
         }
@@ -327,6 +331,7 @@ impl<D, B: Fn(VirtualItem, &D) -> Element> VirtualScrollView<D, B> {
             on_sized: None,
             invert_scroll_wheel: false,
             drag_scrolling: true,
+            pass_ctrl_wheel: false,
             scrollbar: ScrollBar::default_renderer(),
             key: DiffKey::None,
         }
@@ -357,6 +362,7 @@ impl<D, B: Fn(VirtualItem, &D) -> Element> VirtualScrollView<D, B> {
             on_sized: None,
             invert_scroll_wheel: false,
             drag_scrolling: true,
+            pass_ctrl_wheel: false,
             scrollbar: ScrollBar::default_renderer(),
             key: DiffKey::None,
         }
@@ -414,6 +420,14 @@ impl<D, B: Fn(VirtualItem, &D) -> Element> VirtualScrollView<D, B> {
         self
     }
 
+    /// Bingux patch. When `true`, a wheel event while Ctrl is held does not scroll and is not
+    /// stopped, so an ancestor's `on_wheel` can use it, for instance to zoom. The default is
+    /// `false`, as upstream.
+    pub fn pass_ctrl_wheel(mut self, pass_ctrl_wheel: bool) -> Self {
+        self.pass_ctrl_wheel = pass_ctrl_wheel;
+        self
+    }
+
     /// Sets the renderer used for each visible scrollbar.
     pub fn scrollbar(mut self, scrollbar: impl Into<Callback<ScrollBarContext, Element>>) -> Self {
         self.scrollbar = scrollbar.into();
@@ -467,6 +481,7 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
         let a11y_id = use_a11y();
         let mut timeout = super::shared::use_idle_timer();
         let mut pressing_shift = use_state(|| false);
+        let mut pressing_ctrl = use_state(|| false);
         let mut clicking_scrollbar = use_state::<Option<(Axis, f64)>>(|| None);
         let mut size = use_state(SizedEventData::default);
         let mut scroll_controller = self
@@ -538,6 +553,7 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
 
         let scroll_with_arrows = self.scroll_with_arrows;
         let invert_scroll_wheel = self.invert_scroll_wheel;
+        let pass_ctrl_wheel = self.pass_ctrl_wheel;
 
         let on_capture_global_pointer_up = move |e: Event<PointerEventData>| {
             if clicking_scrollbar.read().is_some() {
@@ -560,6 +576,11 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
         };
 
         let on_wheel = move |e: Event<WheelEventData>| {
+            // Bingux patch: leave the event to an ancestor while Ctrl is held.
+            if pass_ctrl_wheel && *pressing_ctrl.read() {
+                return;
+            }
+
             // Only invert direction on deviced-sourced wheel events
             let invert_direction = e.source.is_device()
                 && (*pressing_shift.read() || invert_scroll_wheel)
@@ -727,6 +748,12 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
             let data = e;
             if data.key == Key::Named(NamedKey::Shift) {
                 pressing_shift.set(true);
+            } else if data.key == Key::Named(NamedKey::Control) {
+                pressing_ctrl.set(true);
+            } else {
+                // Any other key reports the modifiers held now, so a Ctrl
+                // released while the window had no focus cannot stay stuck.
+                pressing_ctrl.set_if_modified(data.modifiers.contains(Modifiers::CONTROL));
             }
         };
 
@@ -734,6 +761,8 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
             let data = e;
             if data.key == Key::Named(NamedKey::Shift) {
                 pressing_shift.set(false);
+            } else if data.key == Key::Named(NamedKey::Control) {
+                pressing_ctrl.set(false);
             }
         };
 

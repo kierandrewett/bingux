@@ -1,9 +1,13 @@
 //! Gallery pages shared by the windowed gallery and the snapshot example.
 
+use std::rc::Rc;
+
 use bingux_ui::charts::{
-    Segment, Series, SeriesColour, Unit, bar_chart, donut, line_chart, ring, sparkline,
+    Bar, FlameTree, Segment, Series, SeriesColour, Unit, bar_chart, donut, flame_graph, line_chart,
+    ring, sparkline, timeline_chart,
 };
 use bingux_ui::controls::form::validate;
+use bingux_ui::prelude::MenuItem;
 use bingux_ui::prelude::*;
 use bingux_ui::style::Align;
 use freya::prelude::*;
@@ -241,6 +245,8 @@ struct ButtonsPage;
 
 impl Component for ButtonsPage {
     fn render(&self) -> impl IntoElement {
+        let mut view = use_state(|| "list");
+        let overlays = use_overlays();
         let plain = use_state(String::new);
         let query = use_state(|| "wifi".to_string());
         let secret = use_state(|| "hunter2".to_string());
@@ -248,7 +254,7 @@ impl Component for ButtonsPage {
         page_column()
             .child(
                 Group::new("Menus".to_string())
-                    .description("Opens where the pointer is pressed, or from the keyboard.")
+                    .description("Opens against the button, or from the keyboard.")
                     .row(row("Menu").trailing(menu_button(
                         "Actions",
                         vec![
@@ -306,6 +312,40 @@ impl Component for ButtonsPage {
                     ),
                 ),
             )
+            .child(
+                Group::new("Split buttons".to_string())
+                    .description(
+                        "A primary action and a menu. The chevron, Down and Enter open the menu; Escape closes it.",
+                    )
+                    .row(row("View: press the icon to switch, the chevron to pick").trailing(
+                        split_button(if view() == "list" { Icon::ViewList } else { Icon::ViewGrid })
+                            .tooltip("Switch view")
+                            .menu_label("View options")
+                            .on_press(move |_| view.set(if view() == "list" { "grid" } else { "list" }))
+                            .menu(view_items(view)),
+                    ))
+                    .row(row("With a label").trailing(
+                        split_button(Icon::Folder)
+                            .label("Open")
+                            .menu_label("Open options")
+                            .menu(vec![
+                                menu_item("Open in new window", |_| {}),
+                                menu_item("Open as administrator", |_| {}),
+                            ]),
+                    ))
+                    .row(row("The chevron runs your own handler").trailing(
+                        split_button(Icon::Refresh)
+                            .tooltip("Refresh")
+                            .menu_label("Refresh options")
+                            .on_menu(move |_| overlays.toast("Open your own popup here")),
+                    ))
+                    .row(row("Disabled").trailing(
+                        split_button(Icon::ViewList)
+                            .tooltip("Switch view")
+                            .menu(view_items(view))
+                            .enabled(false),
+                    )),
+            )
             .child(section_label("Action strip"))
             .child(action_strip(vec![
                 strip_action(Icon::Delete, "Forget", |_| {}),
@@ -331,6 +371,15 @@ impl Component for ButtonsPage {
                     .row(row("Disabled").trailing(text_field(plain, |_| {}).enabled(false))),
             )
     }
+}
+
+/// The menu of a view button: list or grid, the current one ticked.
+fn view_items(view: State<&'static str>) -> Vec<MenuItem> {
+    let pick = |name: &'static str, label: &'static str| {
+        let mut view = view;
+        menu_item(label, move |_| view.set(name)).checked(view() == name)
+    };
+    vec![pick("list", "List"), pick("grid", "Grid")]
 }
 
 /// What a subpage holds: the header shows Back and the title.
@@ -761,28 +810,66 @@ impl Component for ChartsPage {
                 .stacked()
                 .label("Stacked hours by category"),
             ))
+            .child(chart_card(
+                &tokens,
+                bar_chart([
+                    Series::values("Received", hourly(1.0, 22.0e9)),
+                    Series::values("Sent", hourly(2.0, 9.0e9)),
+                ])
+                .categories((0..24).map(|hour| format!("{hour:02}:00")))
+                .details((0..24).map(|hour| format!("{hour:02}:00 - {:02}:00", (hour + 1) % 24)))
+                .y_unit(Unit::DecimalBytes)
+                .stacked()
+                .label("Data received and sent per hour"),
+            ))
             .child(section_label("Share"))
             .child(
                 hstack(S6)
-                    .child(chart_card(
-                        &tokens,
-                        donut([
-                            Segment::new("Apps", gib(210.0)),
-                            Segment::new("System", gib(90.0)),
-                            Segment::new("Cache", gib(45.0)),
-                        ])
-                        .unit(Unit::Bytes)
-                        .caption("Used")
-                        .label("Storage used by category"),
-                    ))
-                    .child(chart_card(
-                        &tokens,
-                        ring(0.62)
-                            .caption("62%")
-                            .colour(SeriesColour::Success)
-                            .label("Battery"),
-                    )),
+                    .tw(&tokens, &[grow_children()])
+                    .child(
+                        rect().tw(&tokens, &[w_flex()]).child(chart_card(
+                            &tokens,
+                            donut([
+                                Segment::new("Apps", gib(210.0)),
+                                Segment::new("System", gib(90.0)),
+                                Segment::new("Cache", gib(45.0)),
+                            ])
+                            .unit(Unit::Bytes)
+                            .caption("Used")
+                            .label("Storage used by category"),
+                        )),
+                    )
+                    .child(
+                        rect().tw(&tokens, &[w_flex()]).child(chart_card(
+                            &tokens,
+                            ring(0.62)
+                                .caption("62%")
+                                .colour(SeriesColour::Success)
+                                .label("Battery"),
+                        )),
+                    ),
             )
+            .child(section_label("Timeline and call stacks"))
+            .child(chart_card(
+                &tokens,
+                timeline_chart((0..90).map(|frame| {
+                    let at = f64::from(frame) * 0.13;
+                    let slow = frame % 17 == 0;
+                    Bar::new(at, 0.012, if slow { 31.0 } else { 9.0 + f64::from(frame % 5) })
+                }))
+                .x_range(0.0, 12.0)
+                .x_unit(Unit::Suffix("s"))
+                .y_unit(Unit::Suffix("ms"))
+                .limit(16.7, "Budget")
+                .value_name("Frame")
+                .label("Frame times"),
+            ))
+            .child(chart_card(
+                &tokens,
+                rect()
+                    .tw(&tokens, &[h(Dim::ArrangementHeight)])
+                    .child(flame_graph(Rc::new(demo_tree())).label("Call stacks")),
+            ))
             .child(section_label("Sparklines"))
             .child(chart_card(
                 &tokens,
@@ -820,6 +907,31 @@ impl Component for ChartsPage {
                     ),
             ))
     }
+}
+
+/// Traffic per hour over a day: quiet at night, busier later, with `peak`
+/// the busiest hour.
+fn hourly(phase: f64, peak: f64) -> Vec<f64> {
+    (0..24)
+        .map(|hour| {
+            let day = ((f64::from(hour) - 6.0) / 24.0 * std::f64::consts::TAU + phase).sin();
+            (peak * (0.55 + 0.45 * day) * if hour < 5 { 0.2 } else { 1.0 }).max(0.0)
+        })
+        .collect()
+}
+
+/// A small call tree for the flame graph.
+fn demo_tree() -> FlameTree {
+    let mut tree = FlameTree::new("All");
+    let render = tree.push(0, "render", 70.0);
+    let layout = tree.push(render, "layout", 30.0);
+    tree.push(layout, "measure text", 18.0);
+    tree.push(render, "paint", 28.0);
+    let input = tree.push(0, "input", 18.0);
+    tree.push(input, "dispatch", 12.0);
+    tree.push(0, "idle", 12.0);
+    tree.add(0, 100.0);
+    tree.sorted()
 }
 
 /// Hourly values over 24 hours: a smooth wave between `low` and `high`.

@@ -17,6 +17,7 @@ mod highlight;
 mod nav;
 mod overrides;
 mod perf;
+mod perf_log;
 mod perf_sample;
 mod props;
 mod shot;
@@ -65,6 +66,9 @@ impl FreyaPlugin for InspectorPlugin {
             _ => false,
         };
         STORE.with(|store| perf::on_event(&*event, inspector, &mut store.borrow_mut().history));
+        if !inspector {
+            perf_log::on_event(&*event);
+        }
         match event {
             PluginEvent::WindowCreated { window, .. } => {
                 let id = window.id();

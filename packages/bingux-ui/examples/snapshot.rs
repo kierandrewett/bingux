@@ -5,6 +5,7 @@
 #[path = "gallery/pages.rs"]
 mod pages;
 
+use bingux_ui::window::{WindowLike, WindowParent};
 use bingux_ui::controls::text_field::text_field;
 use bingux_ui::controls::{dropdown, primary_button, switch};
 use bingux_ui::group::Group;

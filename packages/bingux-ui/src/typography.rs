@@ -84,6 +84,20 @@ impl TextStyle {
         self.label_in_color(self.ink.color(tokens), text.into())
     }
 
+    /// [`Self::label`] with the font size scaled by `scale`, rounded to the
+    /// nearest quarter pixel. Leading and tracking stay as they are. A view
+    /// that zooms its text uses this.
+    pub fn label_scaled(self, tokens: &Tokens, text: impl Into<String>, scale: f32) -> Label {
+        let size = (self.size.px() * scale * 4.0).round() / 4.0;
+        self.label(tokens, text).font_size(size)
+    }
+
+    /// A paragraph of this style with the font size scaled by `scale`,
+    /// rounded to the nearest quarter pixel, as [`Self::label_scaled`] does.
+    pub fn scale_paragraph(self, paragraph: Paragraph, scale: f32) -> Paragraph {
+        paragraph.font_size((self.size.px() * scale * 4.0).round() / 4.0)
+    }
+
     /// A single line in this style, coloured by a surface paint rather than
     /// an ink. Developer markup uses it for its syntax colours.
     pub fn label_in_paint(self, tokens: &Tokens, text: impl Into<String>, paint: Paint) -> Label {

@@ -113,29 +113,46 @@ pub(crate) fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
 }
 
 /// The recent files that still exist, newest first, at most `limit`, as a
-/// listing. Reads the disk: call it on a worker.
+/// listing. Reads the disk: call it on a worker. Files on a network mount
+/// are not looked at (a stale share could hold the call for minutes): they
+/// are listed by name and time of use, unsized and not checked for existing.
 pub fn list(xbel_path: &Path, limit: usize) -> Listing {
     let xbel = fs::read_to_string(xbel_path).unwrap_or_default();
+    let mounts = crate::mounts::all_mounts();
     let mut entries = Vec::new();
     for item in parse(&xbel) {
         if entries.len() >= limit {
             break;
         }
-        if let Ok(mut entry) = Entry::from_path(&item.path, false)
-            && !entry.is_dir()
-        {
+        let visited = item
+            .visited
+            .filter(|seconds| *seconds >= 0)
+            .map(|seconds| UNIX_EPOCH + Duration::from_secs(seconds as u64));
+        let remote = crate::mounts::mount_for(&item.path, &mounts)
+            .is_some_and(|mount| mount.kind == crate::mounts::MountKind::Network);
+        let entry = if remote {
+            let name = item
+                .path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            Some(Entry::named(item.path.clone(), name, crate::Kind::File, false, false))
+        } else {
+            Entry::from_path(&item.path, false).ok().filter(|entry| !entry.is_dir())
+        };
+        if let Some(mut entry) = entry {
             // The list is about when you used a file, not when it was saved.
-            if let Some(visited) = item.visited.filter(|seconds| *seconds >= 0) {
-                entry.modified = Some(UNIX_EPOCH + Duration::from_secs(visited as u64));
+            if visited.is_some() {
+                entry.modified = visited;
             }
             entries.push(entry);
         }
     }
-    Listing {
-        path: PathBuf::new(),
-        recent: true,
-        entries,
-    }
+    let mut listing = Listing::new(PathBuf::new());
+    listing.recent = true;
+    listing.entries = entries;
+    listing.complete = true;
+    listing
 }
 
 /// `$XDG_DATA_HOME/recently-used.xbel`, or `~/.local/share/recently-used.xbel`.

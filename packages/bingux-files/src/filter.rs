@@ -44,6 +44,10 @@ pub struct Filter {
     pub rules: Vec<Rule>,
 }
 
+/// What a filter is called in this crate's own docs and in the portal's:
+/// `FileFilter` in the design notes, [`Filter`] in code.
+pub type FileFilter = Filter;
+
 impl Filter {
     pub fn new(name: impl Into<String>) -> Self {
         Filter {
@@ -62,6 +66,101 @@ impl Filter {
     pub fn mime(mut self, mime: impl Into<String>) -> Self {
         self.rules.push(Rule::Mime(mime.into()));
         self
+    }
+
+    /// A filter from what an app author writes: file extensions, globs and
+    /// MIME types, separated by commas, semicolons or spaces.
+    ///
+    /// | Text | Rule |
+    /// | ---- | ---- |
+    /// | `png`, `.png` | glob `*.png` |
+    /// | `*.png`, `report-??.txt` | glob as written |
+    /// | `image/*`, `application/pdf` | MIME type |
+    pub fn parse(name: impl Into<String>, spec: &str) -> Self {
+        let mut filter = Filter::new(name);
+        for token in spec.split(|c: char| c == ',' || c == ';' || c.is_whitespace()) {
+            if token.is_empty() {
+                continue;
+            }
+            if token.contains('/') {
+                filter.rules.push(Rule::Mime(token.to_string()));
+            } else if token.contains(['*', '?', '[']) {
+                filter.rules.push(Rule::Glob(token.to_string()));
+            } else {
+                let extension = token.trim_start_matches('.');
+                if !extension.is_empty() {
+                    filter.rules.push(Rule::Glob(format!("*.{extension}")));
+                }
+            }
+        }
+        filter
+    }
+
+    /// Everything.
+    pub fn all_files() -> Self {
+        Filter::new("All files")
+    }
+
+    pub fn images() -> Self {
+        Filter::new("Images").mime("image/*")
+    }
+
+    pub fn audio() -> Self {
+        Filter::new("Audio").mime("audio/*")
+    }
+
+    pub fn video() -> Self {
+        Filter::new("Video").mime("video/*")
+    }
+
+    pub fn documents() -> Self {
+        Filter::parse(
+            "Documents",
+            "pdf doc docx odt rtf xls xlsx ods csv ppt pptx odp epub txt md",
+        )
+    }
+
+    pub fn archives() -> Self {
+        Filter::parse(
+            "Archives",
+            "zip tar tar.gz tgz gz xz bz2 zst 7z rar iso",
+        )
+    }
+
+    pub fn text() -> Self {
+        Filter::new("Text").mime("text/plain")
+    }
+
+    /// The presets of a chooser's filter menu, "All files" first.
+    pub fn presets() -> Vec<Filter> {
+        vec![
+            Filter::all_files(),
+            Filter::images(),
+            Filter::audio(),
+            Filter::video(),
+            Filter::documents(),
+            Filter::archives(),
+            Filter::text(),
+        ]
+    }
+
+    /// No rules: everything passes.
+    pub fn is_all(&self) -> bool {
+        self.rules.is_empty()
+    }
+
+    /// The rules as people write them: `*.png, image/webp`.
+    pub fn patterns_text(&self) -> String {
+        let mut text = String::new();
+        for rule in &self.rules {
+            if !text.is_empty() {
+                text.push_str(", ");
+            }
+            match rule {
+                Rule::Glob(pattern) | Rule::Mime(pattern) => text.push_str(pattern),
+            }
+        }
+        text
     }
 
     /// A filter from the portal's wire form.
@@ -98,13 +197,136 @@ impl Filter {
     pub fn accepts_entry(&self, entry: &Entry) -> bool {
         entry.is_dir() || self.accepts(&entry.name, entry.mime.mime)
     }
+
+    /// [`Filter::accepts_entry`], by its shorter name.
+    pub fn matches(&self, entry: &Entry) -> bool {
+        self.accepts_entry(entry)
+    }
+
+    /// The filter prepared for testing many entries: patterns are lowered
+    /// and sorted into fast cases once, not once per file. [`Listing::select`]
+    /// uses this.
+    ///
+    /// [`Listing::select`]: crate::listing::Listing::select
+    pub fn matcher(&self) -> Matcher {
+        let mut matcher = Matcher {
+            all: self.rules.is_empty(),
+            suffixes: Vec::new(),
+            globs: Vec::new(),
+            groups: Vec::new(),
+            mimes: Vec::new(),
+        };
+        for rule in &self.rules {
+            match rule {
+                Rule::Glob(pattern) => match plain_suffix(pattern) {
+                    Some(suffix) => matcher.suffixes.push(suffix),
+                    None => matcher
+                        .globs
+                        .push(pattern.chars().flat_map(char::to_lowercase).collect()),
+                },
+                Rule::Mime(wanted) => match wanted.strip_suffix("/*") {
+                    Some(group) => matcher.groups.push(group.to_ascii_lowercase()),
+                    None => matcher.mimes.push(wanted.clone()),
+                },
+            }
+        }
+        matcher
+    }
+}
+
+/// `.png` for the glob `*.png`: a star, then letters, digits, dots and
+/// dashes. The common case, tested as a case-insensitive suffix.
+fn plain_suffix(pattern: &str) -> Option<Vec<u8>> {
+    let rest = pattern.strip_prefix('*')?;
+    (!rest.is_empty()
+        && rest
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_' | b'+')))
+    .then(|| rest.to_ascii_lowercase().into_bytes())
+}
+
+/// A [`Filter`] prepared for many files. See [`Filter::matcher`].
+#[derive(Clone, Debug)]
+pub struct Matcher {
+    all: bool,
+    suffixes: Vec<Vec<u8>>,
+    globs: Vec<Vec<char>>,
+    groups: Vec<String>,
+    mimes: Vec<String>,
+}
+
+impl Matcher {
+    /// Whether a file called `name` of type `mime` passes.
+    pub fn accepts(&self, name: &str, mime: &str) -> bool {
+        if self.all {
+            return true;
+        }
+        let bytes = name.as_bytes();
+        if self.suffixes.iter().any(|suffix| {
+            bytes.len() >= suffix.len() && bytes[bytes.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
+        }) {
+            return true;
+        }
+        if !self.groups.is_empty()
+            && let Some((kind, _)) = mime.split_once('/')
+            && self.groups.iter().any(|group| kind.eq_ignore_ascii_case(group))
+        {
+            return true;
+        }
+        if self.mimes.iter().any(|wanted| mime::is_a(mime, wanted)) {
+            return true;
+        }
+        if self.globs.is_empty() {
+            return false;
+        }
+        let mut stack = ['\0'; 128];
+        let lowered = lower(name, &mut stack);
+        let name: &[char] = match &lowered {
+            Lowered::Stack(len) => &stack[..*len],
+            Lowered::Heap(chars) => chars,
+        };
+        self.globs.iter().any(|pattern| glob_chars(pattern, name))
+    }
+
+    /// Whether `entry` is shown: folders always are.
+    pub fn matches(&self, entry: &Entry) -> bool {
+        entry.is_dir() || self.accepts(&entry.name, entry.mime.mime)
+    }
+}
+
+enum Lowered {
+    Stack(usize),
+    Heap(Vec<char>),
+}
+
+/// `text` lower-cased into `stack` when it fits, else on the heap.
+fn lower(text: &str, stack: &mut [char; 128]) -> Lowered {
+    let mut len = 0;
+    for c in text.chars().flat_map(char::to_lowercase) {
+        if len == stack.len() {
+            return Lowered::Heap(text.chars().flat_map(char::to_lowercase).collect());
+        }
+        stack[len] = c;
+        len += 1;
+    }
+    Lowered::Stack(len)
 }
 
 /// Match `name` against a glob of `*` (any run), `?` (one character) and
 /// `[abc]`, `[a-z]`, `[!abc]` (one character from a set), ignoring case.
 pub fn glob_match(pattern: &str, name: &str) -> bool {
     let pattern: Vec<char> = pattern.chars().flat_map(char::to_lowercase).collect();
-    let name: Vec<char> = name.chars().flat_map(char::to_lowercase).collect();
+    let mut stack = ['\0'; 128];
+    let lowered = lower(name, &mut stack);
+    let name: &[char] = match &lowered {
+        Lowered::Stack(len) => &stack[..*len],
+        Lowered::Heap(chars) => chars,
+    };
+    glob_chars(&pattern, name)
+}
+
+/// [`glob_match`] on text that is lower-case already.
+fn glob_chars(pattern: &[char], name: &[char]) -> bool {
     let (mut p, mut n) = (0, 0);
     // Where the last `*` is, and how much of the name it has swallowed.
     let mut star: Option<(usize, usize)> = None;
@@ -121,7 +343,7 @@ pub fn glob_match(pattern: &str, name: &str) -> bool {
                     n += 1;
                     continue;
                 }
-                '[' => match parse_class(&pattern, p, name[n]) {
+                '[' => match parse_class(pattern, p, name[n]) {
                     Some((true, width)) => {
                         p += width;
                         n += 1;
@@ -214,5 +436,87 @@ mod tests {
         assert!(filter.accepts("x.ovpn", "application/x-openvpn-profile"));
         assert!(filter.accepts("notes", "text/markdown"));
         assert!(!filter.accepts("a.png", "image/png"));
+    }
+
+    #[test]
+    fn parses_what_app_authors_write() {
+        let filter = Filter::parse("Pictures", "png, .JPG;image/webp *.gif report-??.txt");
+        assert_eq!(
+            filter.rules,
+            [
+                Rule::Glob("*.png".into()),
+                Rule::Glob("*.JPG".into()),
+                Rule::Mime("image/webp".into()),
+                Rule::Glob("*.gif".into()),
+                Rule::Glob("report-??.txt".into()),
+            ]
+        );
+        assert_eq!(filter.patterns_text(), "*.png, *.JPG, image/webp, *.gif, report-??.txt");
+        assert!(Filter::parse("none", " , ; ").is_all());
+    }
+
+    fn file(name: &str) -> Entry {
+        Entry::named(
+            std::path::PathBuf::from("/x").join(name),
+            name.to_string(),
+            crate::Kind::File,
+            false,
+            false,
+        )
+    }
+
+    #[test]
+    fn presets_pick_the_right_files() {
+        let names = ["a.PNG", "b.mp3", "c.mkv", "d.pdf", "e.tar.gz", "f.rs", "g.txt", "h"];
+        let shown = |filter: &Filter| -> Vec<&str> {
+            let matcher = filter.matcher();
+            names
+                .iter()
+                .copied()
+                .filter(|name| matcher.matches(&file(name)))
+                .collect()
+        };
+        assert_eq!(shown(&Filter::all_files()).len(), names.len());
+        assert_eq!(shown(&Filter::images()), ["a.PNG"]);
+        assert_eq!(shown(&Filter::audio()), ["b.mp3"]);
+        assert_eq!(shown(&Filter::video()), ["c.mkv"]);
+        assert_eq!(shown(&Filter::documents()), ["d.pdf", "g.txt"]);
+        assert_eq!(shown(&Filter::archives()), ["e.tar.gz"]);
+        assert_eq!(shown(&Filter::text()), ["f.rs", "g.txt"]);
+        assert_eq!(Filter::presets()[0].name, "All files");
+    }
+
+    #[test]
+    fn the_matcher_agrees_with_the_slow_path() {
+        let filters = [
+            Filter::parse("x", "*.png *.jpg"),
+            Filter::parse("y", "image/* application/pdf"),
+            Filter::parse("z", "[a-c]*.txt report-??.* *.ÄÖ"),
+            Filter::new("empty"),
+        ];
+        let names = [
+            "A.PNG", "photo.jpg", "beta.txt", "report-12.md", "x.ä", "x.Äö", ".png", "png", "d.pdf",
+            "a very long name that goes on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on.txt",
+        ];
+        for filter in &filters {
+            let matcher = filter.matcher();
+            for name in names {
+                let mime = crate::mime::for_name(name).mime;
+                assert_eq!(
+                    matcher.accepts(name, mime),
+                    filter.accepts(name, mime),
+                    "{} on {name}",
+                    filter.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn folders_always_pass() {
+        let mut folder = file("Pictures");
+        folder.kind = crate::Kind::Directory;
+        assert!(Filter::parse("x", "png").matches(&folder));
+        assert!(Filter::parse("x", "png").matcher().matches(&folder));
     }
 }

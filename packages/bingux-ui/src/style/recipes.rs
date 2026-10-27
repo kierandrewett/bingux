@@ -127,8 +127,8 @@ pub const BUTTON_COMPACT: Recipe = &[
     gap(S2),
     rounded(Radius::Control),
 ];
-/// A round icon-only button.
-pub const ICON_BUTTON: Recipe = &[center(), w(Dim::Box7), h(Dim::Box7), rounded(Radius::Pill)];
+/// An icon-only button.
+pub const ICON_BUTTON: Recipe = &[center(), w(Dim::Box7), h(Dim::Box7), rounded(Radius::Control)];
 /// A small rounded count or tag after a title.
 pub const BADGE_BOX: Recipe = &[
     flex_row(),
@@ -192,7 +192,7 @@ pub const HEADER: Recipe = &[
 /// The sidebar column.
 pub const SIDEBAR: Recipe = &[flex_col(), w(Dim::Sidebar), h_full()];
 /// The list of pages in the sidebar.
-pub const SIDEBAR_LIST: Recipe = &[flex_col(), w_full(), px(S2), pb(S4), gap(S0_5)];
+pub const SIDEBAR_LIST: Recipe = &[flex_col(), w_full(), px(LIST_EDGE), pb(S4), gap(S0_5)];
 /// The search band at the top of the sidebar, on the header line.
 pub const SIDEBAR_SEARCH: Recipe = &[
     flex_row(),
@@ -201,16 +201,31 @@ pub const SIDEBAR_SEARCH: Recipe = &[
     h(Dim::Header),
     px(S2),
 ];
-/// A row in the sidebar: a page, the profile or a search result.
-pub const NAV_ITEM: Recipe = &[
-    flex_row(),
-    items(Align::Center),
-    w_full(),
-    h(Dim::NavItem),
-    px(NAV_INSET),
-    gap(S2),
-    rounded(Radius::Control),
-];
+/// The shape of a selectable item in a list, written once for the sidebar
+/// row, the places row and the file row: a flex row, its icon and text
+/// `NAV_INSET` in from the ends of the rounded fill, `S2` between them. The
+/// two recipes differ only in the height rule.
+macro_rules! list_item {
+    ($height:expr) => {
+        &[
+            flex_row(),
+            items(Align::Center),
+            w_full(),
+            $height,
+            px(NAV_INSET),
+            gap(S2),
+            rounded(Radius::Control),
+        ]
+    };
+}
+/// A row in the sidebar: a page, the profile or a search result. One height.
+pub const NAV_ITEM: Recipe = list_item!(h(Dim::NavItem));
+/// A row that is at least as tall as a sidebar row and grows with its
+/// content: a place with a second line, a file row with a big icon. Set a
+/// height with `Size::px` when the content decides it. Fill it with
+/// `surface(Paint::Transparent, hover, press, selected)` as the sidebar does,
+/// and keep the list's sides `LIST_EDGE` clear of its container.
+pub const LIST_ITEM: Recipe = list_item!(min_h(Dim::NavItem));
 /// The icon column of a sidebar row: a box of the column width with the icon centred.
 pub const NAV_ICON: Recipe = &[
     flex_row(),

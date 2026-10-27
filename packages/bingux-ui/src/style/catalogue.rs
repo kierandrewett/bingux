@@ -118,6 +118,7 @@ const DIMS: &[(&str, Dim)] = &[
     ("FieldApps", Dim::FieldApps),
     ("ArrangementHint", Dim::ArrangementHint),
     ("Menu", Dim::Menu),
+    ("MenuWide", Dim::MenuWide),
     ("DropdownMenu", Dim::DropdownMenu),
     ("ArrangementHeight", Dim::ArrangementHeight),
     ("MenuList", Dim::MenuList),

@@ -174,8 +174,10 @@ impl Hash for ImageSource {
 
 pub type DecodeSize = euclid::Size2D<u32, ()>;
 
-/// Limit the amount of images that are loaded in parallel.
-static DECODE_LIMIT: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(4));
+/// Limit the amount of images that are loaded in parallel. Each load decodes
+/// the whole picture before it is scaled down, so two at a time (upstream: 4)
+/// halves the peak when a folder of large pictures opens.
+static DECODE_LIMIT: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(2));
 
 impl ImageSource {
     pub(crate) fn is_remote(&self) -> bool {
@@ -216,11 +218,16 @@ impl ImageSource {
         thread(move || {
             let image = SkImage::from_encoded(unsafe { SkData::new_bytes(&bytes) })
                 .context("Failed to decode Image.")?;
-            let image = image.make_raster_image(None, None).unwrap_or(image);
+            // A raster image owns its pixels, so the encoded file is not kept:
+            // the cache would otherwise hold every picture's full file for the
+            // asset's age (an hour), tens of megabytes for a wallpaper folder.
+            let rasterised = image.make_raster_image(None, None);
+            let kept = if rasterised.is_some() { Bytes::new() } else { bytes };
+            let image = rasterised.unwrap_or(image);
             let image = decode_size
                 .and_then(|target| Self::downsample(&image, target, &sampling_mode))
                 .unwrap_or(image);
-            Ok((image, bytes))
+            Ok((image, kept))
         })
         .await
     }

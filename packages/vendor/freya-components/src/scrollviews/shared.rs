@@ -5,16 +5,24 @@ use torin::{
 };
 
 /// Bingux patch: how long a scrollbar stays after the last scroll or pointer
-/// movement before it fades out, and how often the idle check runs.
+/// movement before it fades out.
 pub const SCROLLBAR_IDLE: std::time::Duration = std::time::Duration::from_secs(3);
-const IDLE_TICK: std::time::Duration = std::time::Duration::from_millis(200);
 
 /// Bingux patch: freya-sdk's `Timeout` only checks once per duration, so a
-/// 3 s timeout fired anywhere between 3 and 6 s. This one checks every 200 ms.
+/// 3 s timeout fired anywhere between 3 and 6 s. This one sleeps until the
+/// idle period can have ended and checks then, and sleeps no more while the
+/// bar is hidden: a scroll view at rest has no timer running. (An earlier
+/// version ticked every 200 ms for ever, which kept the app awake five times
+/// a second for each scroll view.)
 #[derive(Clone, Copy, PartialEq)]
 pub struct IdleTimer {
     elapsed: State<bool>,
     since: State<std::time::Instant>,
+    /// A task is sleeping towards the end of the idle period.
+    waiting: State<bool>,
+    /// The scroll view's scope, which owns the sleeping task: it ends with
+    /// the view, wherever `reset` is called from.
+    scope: ScopeId,
 }
 
 impl IdleTimer {
@@ -27,22 +35,38 @@ impl IdleTimer {
     pub fn reset(&mut self) {
         self.since.set_if_modified(std::time::Instant::now());
         self.elapsed.set_if_modified(false);
+        if !*self.waiting.peek() {
+            self.waiting.set(true);
+            self.wait();
+        }
+    }
+
+    fn wait(&self) {
+        let (mut elapsed, since, mut waiting) = (self.elapsed, self.since, self.waiting);
+        spawn_in_scope(async move {
+            loop {
+                let left = SCROLLBAR_IDLE.saturating_sub(since.peek().elapsed());
+                if left.is_zero() {
+                    elapsed.set_if_modified(true);
+                    waiting.set(false);
+                    return;
+                }
+                timer(left).await;
+            }
+        }, self.scope);
     }
 }
 
 pub fn use_idle_timer() -> IdleTimer {
     use_hook(|| {
-        let mut elapsed = State::create(false);
-        let since = State::create(std::time::Instant::now());
-        spawn(async move {
-            loop {
-                timer(IDLE_TICK).await;
-                if since.peek().elapsed() >= SCROLLBAR_IDLE && !*elapsed.peek() {
-                    elapsed.set(true);
-                }
-            }
-        });
-        IdleTimer { elapsed, since }
+        let idle = IdleTimer {
+            elapsed: State::create(false),
+            since: State::create(std::time::Instant::now()),
+            waiting: State::create(true),
+            scope: current_scope_id(),
+        };
+        idle.wait();
+        idle
     })
 }
 

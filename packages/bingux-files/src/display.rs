@@ -105,6 +105,28 @@ pub fn modified(time: SystemTime) -> String {
     modified_at(seconds, now, local_offset(seconds))
 }
 
+/// A time in full, for a Properties dialog: `9 Mar 2024, 12:34`.
+pub fn full_at(seconds: i64, offset: i64) -> String {
+    let then = Civil::from_unix(seconds, offset);
+    format!(
+        "{} {} {}, {:02}:{:02}",
+        then.day,
+        MONTHS[then.month as usize - 1],
+        then.year,
+        then.hour,
+        then.minute
+    )
+}
+
+/// [`full_at`] for a `SystemTime`, in the local time zone.
+pub fn full(time: SystemTime) -> String {
+    let seconds = match time.duration_since(UNIX_EPOCH) {
+        Ok(after) => after.as_secs() as i64,
+        Err(before) => -(before.duration().as_secs() as i64),
+    };
+    full_at(seconds, local_offset(seconds))
+}
+
 /// The local zone's offset from UTC at `seconds`, from the C library.
 pub fn local_offset(seconds: i64) -> i64 {
     let time = seconds as libc::time_t;
@@ -143,5 +165,7 @@ mod tests {
         assert_eq!(modified_at(then, then + 400 * 86_400, 0), "9 Mar 2024");
         // An offset of +2 h moves the clock.
         assert_eq!(modified_at(then, then + 60, 7200), "14:34");
+        assert_eq!(full_at(then, 0), "9 Mar 2024, 12:34");
+        assert_eq!(full_at(then, 7200), "9 Mar 2024, 14:34");
     }
 }

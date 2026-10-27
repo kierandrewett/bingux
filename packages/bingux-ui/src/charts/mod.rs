@@ -15,6 +15,13 @@
 //! shows a muted baseline and "No data yet", so nothing shifts when data
 //! arrives.
 //!
+//! A chart is free content and has no padding of its own: put it in a
+//! `boxed` card or `Group::content`, which keep it 16 px from the card edge.
+//! Hovering a point or bar draws a crosshair or highlight and a tooltip card
+//! with the x label, each series and, for stacked bars, the total. A finger
+//! shows it after a press and hold. Values are written by a [`Unit`], or by
+//! the caller's own `y_format`.
+//!
 //! ```ignore
 //! use bingux_ui::charts::{Curve, Series, Unit, line_chart};
 //!

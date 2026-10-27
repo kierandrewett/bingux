@@ -64,6 +64,22 @@ pub struct Dialog {
     pub responses: Vec<DialogResponse>,
     /// Extra content between the body and the responses, such as a field.
     pub content: Option<Element>,
+    /// Set by [`framed_dialog`]: the card is the content alone, at this size.
+    pub frame: Option<DialogFrame>,
+    /// The response that has the keyboard focus when the dialog opens, by
+    /// index. `None` focuses the card itself, so Enter chooses nothing.
+    pub focus: Option<usize>,
+    /// Runs once the dialog has faded out and is gone. A dialog opened from
+    /// the keyboard gives the keyboard back to its owner here.
+    pub on_closed: Option<EventHandler<()>>,
+}
+
+/// The size of a [`framed_dialog`], in logical pixels. The card never grows
+/// past the window: it keeps a margin on a phone and a small window.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DialogFrame {
+    pub width: f32,
+    pub height: f32,
 }
 
 pub fn dialog(title: impl Into<String>, body: impl Into<String>) -> Dialog {
@@ -72,10 +88,46 @@ pub fn dialog(title: impl Into<String>, body: impl Into<String>) -> Dialog {
         body: body.into(),
         responses: Vec::new(),
         content: None,
+        frame: None,
+        focus: None,
+        on_closed: None,
+    }
+}
+
+/// A dialog that is only `content`: no title, text or buttons of its own, on
+/// the same card, scrim and motion as an alert, `width` by `height` px (cut
+/// down to fit the window). Escape and a press on the scrim close it. The
+/// content draws its own header, scrolls itself and handles its own keys,
+/// with `title` for assistive technology.
+///
+/// This is for a dialog whose body is the point: a Quick Look preview, a
+/// properties sheet, an image viewer. An alert with a question uses
+/// [`dialog`].
+pub fn framed_dialog(
+    title: impl Into<String>,
+    content: impl Into<Element>,
+    width: f32,
+    height: f32,
+) -> Dialog {
+    Dialog {
+        title: title.into(),
+        body: String::new(),
+        responses: Vec::new(),
+        content: Some(content.into()),
+        frame: Some(DialogFrame { width, height }),
+        focus: None,
+        on_closed: None,
     }
 }
 
 impl Dialog {
+    /// Call `handler` when the dialog has closed and gone, whichever way it
+    /// closed. Use it to put the keyboard focus back where it was.
+    pub fn on_closed(mut self, handler: impl Into<EventHandler<()>>) -> Self {
+        self.on_closed = Some(handler.into());
+        self
+    }
+
     pub fn response(
         mut self,
         label: impl Into<String>,
@@ -97,6 +149,14 @@ impl Dialog {
 
     pub fn content(mut self, content: impl Into<Element>) -> Self {
         self.content = Some(content.into());
+        self
+    }
+
+    /// Give the response added last the keyboard focus when the dialog opens,
+    /// so Enter chooses it. Put it on the safe answer of a question that
+    /// loses data: the destructive button never has the focus by default.
+    pub fn focus_response(mut self) -> Self {
+        self.focus = self.responses.len().checked_sub(1);
         self
     }
 }
@@ -154,6 +214,12 @@ impl Overlays {
         self.dialog.set(Some(dialog));
     }
 
+    /// Whether a dialog is open or fading out. A component that floats its
+    /// own card over the page, such as a hover card, stays hidden meanwhile.
+    pub fn dialog_open(self) -> bool {
+        self.dialog.read().is_some()
+    }
+
     /// Close the open dialog. It animates out before it leaves the window.
     pub fn dismiss_dialog(mut self) {
         if self.dialog.read().is_some() && !*self.dialog_closing.read() {
@@ -163,8 +229,16 @@ impl Overlays {
 
     fn finish_dialog(mut self) {
         if *self.dialog_closing.read() {
+            let closed = self
+                .dialog
+                .peek()
+                .as_ref()
+                .and_then(|dialog| dialog.on_closed.clone());
             self.dialog.set(None);
             self.dialog_closing.set(false);
+            if let Some(closed) = closed {
+                closed.call(());
+            }
         }
     }
 
@@ -416,6 +490,19 @@ impl Component for OverlayLayers {
 /// The widest a dialog gets, as a share of the window width, so it keeps a
 /// margin on a phone.
 const DIALOG_MAX_WIDTH_PERCENT: f32 = 94.0;
+/// The tallest a framed dialog gets, as a share of the window height.
+const DIALOG_MAX_HEIGHT_PERCENT: f32 = 90.0;
+
+/// The card of a [`framed_dialog`]: the alert card without its padding and
+/// gap, clipped so the content's corners follow the card's.
+const DIALOG_FRAME: Recipe = &[
+    flex_col(),
+    rounded(Radius::Overlay),
+    bg(Paint::Bg),
+    border(Line::Hairline),
+    shadow(Elevation::Floating),
+    clip(),
+];
 
 #[derive(PartialEq)]
 struct DialogLayer {
@@ -430,10 +517,17 @@ impl Component for DialogLayer {
         let tokens = use_tokens();
         let overlays = self.overlays;
         let a11y_id = use_a11y();
-        use_side_effect(move || a11y_id.request_focus());
+        // The card takes the focus unless a response was asked to.
+        let focus_card = self.dialog.focus.is_none();
+        use_side_effect(move || {
+            if focus_card {
+                a11y_id.request_focus();
+            }
+        });
 
         let responses = self.dialog.responses.clone();
-        let buttons = responses.iter().map(|response| {
+        let focused = self.dialog.focus;
+        let buttons = responses.iter().enumerate().map(|(index, response)| {
             let on_press = response.on_press.clone();
             let press = move |_: ()| {
                 on_press.call(());
@@ -446,8 +540,34 @@ impl Component for DialogLayer {
                 }
                 ResponseKind::Default => action_button(response.label.clone(), press),
             };
+            let button = if focused == Some(index) {
+                button.autofocus()
+            } else {
+                button
+            };
             Element::from(button.grow())
         });
+
+        if let Some(frame) = self.dialog.frame {
+            let card = rect()
+                .a11y_id(a11y_id)
+                .a11y_focusable(true)
+                .a11y_role(AccessibilityRole::Dialog)
+                .a11y_alt(self.dialog.title.clone())
+                .tw(&tokens, DIALOG_FRAME)
+                .width(Size::px(frame.width))
+                .height(Size::px(frame.height))
+                .max_width(Size::window_percent(DIALOG_MAX_WIDTH_PERCENT))
+                .max_height(Size::window_percent(DIALOG_MAX_HEIGHT_PERCENT))
+                // A press on the card never reaches the panel's scrim.
+                .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
+                .maybe_child(self.dialog.content.clone());
+            return Element::from(
+                Panel::dialog(!self.closing, self.layer, vec![card.into_element()])
+                    .on_dismiss(EventHandler::new(move |_: ()| overlays.dismiss_dialog()))
+                    .on_closed(EventHandler::new(move |_: ()| overlays.finish_dialog())),
+            );
+        }
 
         let card = rect()
             .a11y_id(a11y_id)

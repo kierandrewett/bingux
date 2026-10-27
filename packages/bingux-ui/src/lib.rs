@@ -47,7 +47,7 @@ pub mod prelude {
     pub use crate::files::{self, ChooserRequest, Chosen};
     pub use crate::group::{
         Group, Status, StatusBlock, action_row, caption, centered_caption, form_row, heading,
-        section_label, skeleton, skeleton_row, skeleton_shape, status,
+        section_label, skeleton, skeleton_row, skeleton_rows, skeleton_shape, status,
     };
     pub use crate::icons::{Icon, icon};
     pub use crate::layout::{
@@ -65,7 +65,7 @@ pub mod prelude {
     pub use crate::shell::{
         Banner, BannerKind, Dialog, HeaderBar, MenuButton, MenuItem, NavItem, NavigationSplitView,
         OverlayHost, Overlays, PageAction, PageHead, Profile, ResponseKind, SearchField,
-        StatusPage, WindowControls, banner, dialog, menu_button, menu_item, menu_separator,
+        StatusPage, WindowControls, banner, dialog, framed_dialog, menu_button, menu_item, menu_separator,
         status_page, submenu, use_overlays, use_page_busy,
     };
     pub use crate::style::*;

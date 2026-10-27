@@ -38,12 +38,33 @@ pub fn empty_state(recent: bool, hidden_items: bool, filtered: bool) -> Element 
     Element::from(status_page(Icon::Folder, title).description(description))
 }
 
+/// A search with no matches. `subfolders` is the state of the subfolder
+/// search when its results are on show: `Some(true)` while it still runs.
+pub fn no_matches_state(query: &str, subfolders: Option<bool>) -> Element {
+    let (title, description) = match subfolders {
+        Some(true) => (
+            "Searching…".to_string(),
+            "Nothing has matched yet.".to_string(),
+        ),
+        Some(false) => (
+            "Nothing found".to_string(),
+            format!("No name in this folder or below it matches “{query}”."),
+        ),
+        None => (
+            format!("No names match “{query}”"),
+            "Press Ctrl+Enter to search the subfolders too.".to_string(),
+        ),
+    };
+    Element::from(status_page(Icon::Search, title).description(description))
+}
+
 /// A folder that could not be read, with the reason in plain words.
 pub fn error_state(error: &ListError) -> Element {
     let (icon, title) = match error {
         ListError::PermissionDenied => (Icon::ChangesPrevent, "No permission"),
         ListError::NotFound => (Icon::DialogWarning, "Folder not found"),
         ListError::NotADirectory => (Icon::DialogWarning, "Not a folder"),
+        ListError::Unresponsive => (Icon::DialogWarning, "Drive not responding"),
         ListError::Cancelled | ListError::Other(_) => (Icon::DialogError, "Cannot open folder"),
     };
     Element::from(status_page(icon, title).description(error.to_string()))

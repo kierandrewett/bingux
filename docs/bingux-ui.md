@@ -111,33 +111,36 @@ with `navigate(address)`. `current_address()` reads it without subscribing.
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Controls         | `switch`, `checkbox` (tri-state), `slider` (`step`, `show_value`, `fill`, `gradient(stops)`: the track is a colour ramp instead of the accent fill; the night light's colour temperature uses it, and a hue or brightness ramp is the same call), `segmented` (`fill` for equal segments; only the selected segment is raised, a hovered one brightens its text), `dropdown` (`app_icons`, `width`), `stepper`, `usage_meter` (a figure, its total and a thin bar), `qr_code` (`ecc`, `label`, `size`: a pure-Rust QR encoder, versions 1 to 15, drawn black on a white tile with the quiet zone in every theme; `QrMatrix::encode` gives the modules; too-long data draws an empty tile), `action_strip` of `strip_action` (two to four icon-over-label actions in one rounded bar), `text_field` (`password`, `invalid`, `clearable`), `search_field`, `progress_bar`, `spinner` |
 | Navigation       | `segmented(options, selected, on_select).tabs()` (the tab bar: each tab a real button with the segmented look, only the selected one raised, Left, Right, Home and End move the selection and focus; `scroll()` for a narrow container; an app's view tabs and the inspector's tabs use it too), `breadcrumb(crumbs, on_select)` (crumbs separated by chevrons, each a Tab stop, the last in normal ink; `code` for a code-face trail; a file manager path uses it too) |
-| Buttons          | `action_button` (`suggested`, `destructive`, `flat`, `loading`, `icon`), `primary_button`, `row_button`, `icon_button` (`tooltip`, `danger`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Buttons          | `action_button` (`suggested`, `destructive`, `flat`, `loading`, `icon`), `primary_button`, `row_button`, `icon_button` (`tooltip`, `danger`, `busy` (a spinner in place of the icon, the size unchanged), `radius`: `Control` like every button by default), `split_button(icon)` or `SplitButton::new(icon)` (a primary action and a menu in one control: `on_press`, `tooltip` or `label` (the primary segment's name), `menu(items)` or `on_menu(handler)` for the chevron, `menu_label` (the chevron's name), `enabled`; see Split buttons) |
 | Rows             | `row` (`subtitle`, `value` (selectable, one line), `badge`, `leading`, `leading_tone` (draws the leading icon in the accent, warning or danger colour, for a row that reports a state), `leading_space` (a blank icon column so text lines up), `leading_app`, `navigates`, `selected`, `destructive`, `context_menu`, `on_press` (makes the row activatable)), `radio_row(title, selected, on_select)` (a radio on the leading edge; the whole row selects; `subtitle`, `value`, `leading_app` as for `row`), `radio_rows(title, rows)` (a group of radio rows: Up and Down move the selection, and only the selected row is in the Tab order), `switch_row` (`nested` for sub-rows shown while on), `slider_row` (a `level_row` for a setting), `level_row` (title on the left and a slider filling the rest of the line; `control` such as a mute button sits between them, `footer` under the track, `mark` and `mark_label` for a tick such as 100%, `danger_from`, `value_text`, `max`, `leading`, `context_menu`), `choice_row`, `text_row`, `entry_row`, `expander_row`, `property_row` |
 | Icons            | `icon` (bundled symbolic glyphs), `app_icon` (full-colour application icons from the icon theme)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| Groups and text  | `Group` (`description`), `section_label`, `caption`, `centered_caption`, `action_row`, `heading`, `status` (loading, empty, error, info blocks)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Groups and text  | `Group` (`description`, `content` for a chart or other free content), `section_label`, `caption`, `centered_caption`, `action_row`, `heading`, `status` (loading, empty, error, info blocks)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Path text        | `path_label(path)` (one line that ellipses a long path in the middle, keeping the start and the end: `~/Documents/…/Reports/final.pdf`; `style`, `ink`, `name` for a file name, `middle` for other text, `selectable`, `copyable`; see Path text below). `elide_path`, `elide_name`, `elide_middle` are the same cuts as pure functions of a width and a measure function |
 | Layout           | `hstack(Space)`, `vstack(Space)`, `spacer`, `divider`, `card`, `clamp(Dim, child)`, `page_column`, `tile_rows(tokens, tiles, height)` (two tiles a row on a phone, four on a desktop)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | Shell            | `NavigationSplitView` with `NavItem` and `subpage`, `HeaderBar`, `WindowControls`, `status_page`, `banner`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Page header      | `PageHead` (`subtitle`, `action`, `switch`): the title block that starts each page's content, with a status line under the title and one action or master switch at the right                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Search           | `NavigationSplitView::search(query, results)`: while the sidebar search has text, `results` replaces the page. Ctrl+F focuses it and Escape clears it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | Search highlight | `search_highlight::provide(query)` in the results pane, then `search_highlight::label(style, tokens, text)` or `paragraph(...)` for text below it: each matched word gets an accent tint. Outside a search, or with no match, the text draws exactly as `TextStyle` would. While a search has text, a `Row` whose text does not match renders nothing, and a `Group` with no visible row hides with its title. `Group::unfiltered()` keeps every row for a group whose rows matched by other text, such as an index entry                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| Overlays         | `dialog` with `ResponseKind::{Default, Suggested, Destructive}`, `Overlays::toast`, `Overlays::toast_with_action`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Overlays         | `dialog` with `ResponseKind::{Default, Suggested, Destructive}`, `framed_dialog(title, content, width, height)` (a dialog that is only its content, for a preview or a properties sheet), `Overlays::toast`, `Overlays::toast_with_action`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | Popups           | `popup(title, content)` with `Popup::size`, `Popup::tabs` and `Popup::address`, opened by `window.open(popup)` from `use_window()`. A popup is a modal panel of its own, centred in the window: a Cancel button on the left, the title in the middle, the primary action on the right. It is 600 px tall unless `Popup::size` says otherwise, and it is clamped to the window. The body declares the primary action with `use_popup_actions(PopupActions { primary: Some(PopupAction { .. }) })`, and the caller closes the popup with `window.close()` once its work succeeds. Build the body with `popup_column()` and put each block in a `Group`, so the cards stand out from the panel. Cancel and Escape close it; Enter runs the primary action. The panel grows to at most 80% of the window height, and the body scrolls past that                                                                                                                                    |
 | Forms            | `form_row(label, control)` for a label beside a control; `form_field(title, value)` for a validated text row (see Forms below); `live_state(rows)` for a read-only "Right now" group; `pending_bar(dirty, valid, on_apply, on_revert)` for the apply bar of a form with a draft; `segmented(options, selected, on_select).fill()` for a popup tab rail of equal segments (it stays a rail on a phone) |
 | Trees            | `tree_view(roots, expanded, selected)` takes `TreeNode`s (`id`, `label`, `detail`, `icon`, `badge`, `children`) and the sets of open branches and the selected id as state. Rows are `MenuItem` height. Up and Down move the selection, Right opens a branch or enters it, Left closes it or goes to the parent, Enter and Space activate. A click selects; clicking the selected row activates it. `TreeView::on_hover` and `TreeView::on_activate` report to the caller                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | Splits           | `split_pane(first, second, ratio)` with the first pane's share of the length in `ratio` (kept between 0.15 and 0.85). Side by side by default; `.vertical()` stacks the panes. Drag the divider to resize; the divider is a hairline with an `S1` hit zone on each side                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Menus            | `menu_item` and `menu_button(label, items)`. `MenuItem::icon`, `MenuItem::checked`, `MenuItem::destructive` and `MenuItem::disabled`; `menu_separator()`. `Overlays::show_menu` opens at window coordinates and stays on screen: it opens upward or leftward when there is no room. Picking an item closes the menu, then runs it; Escape and an outside press close it. While a menu or dropdown list is open, the window behind it takes no presses, wheel turns or hover, and the wheel never scrolls the page behind a list                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Menus            | `menu_item` and `menu_button(label, items)`. `MenuItem::checked` (state is a tick; menus are text, and `MenuItem::icon` is only for a menu whose rows the icon names, never in the file views), `menu_button` opens its menu against its own button (below it, above when there is no room, edge aligned, kept inside the window), `Overlays::show_menu` at a point is for context menus only; `MenuItem::destructive` and `MenuItem::disabled`; `menu_separator()`. `Overlays::show_menu` opens at window coordinates and stays on screen: it opens upward or leftward when there is no room. Picking an item closes the menu, then runs it; Escape and an outside press close it. While a menu or dropdown list is open, the window behind it takes no presses, wheel turns or hover, and the wheel never scrolls the page behind a list                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 Every control supports keyboard use: Enter and Space activate. Arrows move
 sliders and steppers. Page Up and Page Down move sliders and steppers by ten
 steps, and Home and End go to the ends. Open dropdown menus take arrows, Page
-Up, Page Down, Home and End, and a typed letter jumps to the next option that
-starts with it. Enter, Space and the arrows open a closed dropdown. Escape closes
+Up, Page Down, Home and End, and typing searches their options (see Type-ahead
+below). Enter, Space and the arrows open a closed dropdown. Escape closes
 dropdowns, menus, popups and dialogs. Segmented controls and radio groups are
 roving: only the selected item is in the tab order, and the arrows move the
 selection and focus together (Up and Down also work in a vertical radio group,
 wrapping at the ends). Text fields: Enter submits, and Escape reverts an edited
 value and then leaves the field. A password field has a reveal button, and a right
-click opens Cut, Copy, Paste and Select all. On touch, a tap places the caret,
+click opens Cut, Copy, Paste and Select all. The text cursor shows over the
+editable text only: the reveal and clear buttons, the search glyph and any
+suffix show the normal pointer, as every other control does. On touch, a tap places the caret,
 a second tap on the same spot, or a tap in an empty field, shows a compact edit
 bar over the caret (Paste while the clipboard holds text, Select, Select all;
 Cut, Copy and Paste once there is a selection),
@@ -152,6 +155,49 @@ focus on open unless a field is marked `autofocus()`, and Enter in a
 single-line field runs the primary action. Each control has an accessibility
 role and a focus ring.
 Animations are short (80 to 200 ms) and stop when `BINGUX_REDUCED_MOTION=1` is set.
+
+### Split buttons
+
+`SplitButton::new(icon)` is a primary action beside a chevron that opens a menu: the view button of a file manager, whose icon switches the view and whose menu picks one. It follows the Bingux interaction layers and the nested radius rule.
+
+```rust
+SplitButton::new(Icon::ViewList)
+    .tooltip("Switch view")            // the primary segment's tooltip and name
+    .menu_label("View options")        // the chevron's accessible name
+    .on_press(move |_| toggle_view())  // the primary segment
+    .menu(vec![                        // the chevron opens this, against the whole control
+        menu_item("List", move |_| set_view(List)).checked(is_list),
+        menu_item("Grid", move |_| set_view(Grid)).checked(!is_list),
+    ])
+```
+
+| Part | Behaviour |
+| ---- | --------- |
+| At rest | The icon, a hairline and a chevron, with no fill. The control is `Dim::Button` tall. |
+| Pointer over | The whole control becomes one `Radius::Control` box with the hover layer, and the hairline fades out. The segment under the pointer takes a second hover layer, or the press layer while down. The segments sit `S1` inside the box, so their corners are `Radius::Inner` (the box radius less that inset). |
+| Keyboard | Tab reaches the primary segment, then the chevron, each with its own focus ring. Enter and Space press the focused segment (on the chevron they open the menu). Down on either segment opens the menu with the first item highlighted; Escape closes it and focus returns to the segment that opened it. |
+| Menu | The same menu and placement as `menu_button` and `dropdown`: below the control, its edge aligned with the control's, above when there is no room, and held inside the window. A press on the chevron while the menu is open closes it. A mouse opens it on press, a touch on lift. |
+| `on_menu(handler)` | The chevron runs `handler` instead of opening a menu, for an app that draws its own popup. Without `menu` or `on_menu` the control is the primary segment alone. |
+| `label(text)` | Shows text after the icon; the segment grows to fit and the text is its accessible name. Otherwise the segment is square and `tooltip` is the name. Set one of them: a segment with no name fails the inspector's accessibility check. |
+| `enabled(false)` | Dims the control and ignores the pointer and keys; both segments stay in place. |
+
+On touch every size token takes its compact value, so the control is `Dim::Button` (48 px) tall.
+
+### Path text
+
+`path_label(path)` shows a path on one line and, when it does not fit, cuts it in the middle as the macOS Finder does, so you see where it starts and where it ends. Whole middle segments go first, from the middle outward, behind one `…` segment. The first segment (`/`, `~`, a mount name or `smb://host`) and the last stay. Only when `first/…/last` is still too wide is the last segment shortened in its middle, keeping its extension (`final-rep…2026.pdf`), and finally the first. The text is never empty: the least is `…`.
+
+```rust
+path_label("/home/kieran/Documents/Reports/final.pdf")
+    .style(CAPTION)
+    .copyable(true)      // right click: Copy path
+
+path_label("final-report-2026-edition.pdf").name()   // keeps ".pdf"
+```
+
+The label fills the width of its parent and is one line tall, so a cut never moves anything around it. It measures the text with the font and size it draws in, redoes the cut when the width changes, and shows the whole text on its first frame before it has a width. While the text is cut, the full text is the hover tooltip. `.copyable(true)` adds a right click (or long press) item that copies the whole text, not the cut one. `.selectable(true)` lets the pointer select the shown text and Ctrl+C copy it; use it in a properties dialog, not in a list row, where a selection would take the press that opens the row.
+
+To decide a cut in your own layout, call `elide_path(path, max_width, &|text| width_of(text))`, `elide_name` or `elide_middle`. A wider `max_width` never gives a shorter result.
 
 ### Forms
 
@@ -187,17 +233,51 @@ Group::titled("Server")
 
 `pending_bar(dirty, valid, on_apply, on_revert)` returns `Some` only while `dirty`: a group holding "You have unsaved changes", Revert and Apply (disabled while `valid` is false). Put it at the top of a form with `.maybe_child(..)`. `live_state(vec![(label, value)])` is a "Right now" group of read-only rows with monospace, selectable values, to show the effect of what the form sets (address, gateway, DNS, link speed).
 
-Outside a form, `text_field` takes the same looks: `.monospace()`, `.lines(n)` (the height of a `.multiline()` field), `.suffix(text)` and `.danger_outline(bool)` (the outline without the message line). `row(..).mono_value(text)` is `value` in the monospace face, selectable like it.
+Outside a form, `text_field` takes the same looks: `.monospace()`, `.lines(n)` (the height of a `.multiline()` field), `.suffix(text)` and `.danger_outline(bool)` (the outline without the message line). `row(..).mono_value(text)` is `value` in the monospace face, selectable like it. `.leading_chip(label, remove_label, on_remove)` puts a removable token (such as the `in Downloads` scope of a search) inside the field after the leading glyph; it never changes the field's size. `.on_enter_modifiers(f)` reports Ctrl, Shift and Alt just before Enter submits, so a field can tell Enter from Ctrl+Enter.
 
 Menus take the keyboard too. Enter, Space or Down on a menu button opens its
 menu with the first item highlighted. Up and Down move the highlight over
-enabled items and skip separators; Home and End go to the first and last item,
-and a typed letter jumps to the next item that starts with it. An item made
-with `submenu(label, items)` opens its submenu on hover after 150 ms, or on
-Right, Enter or click. A pointer moving from an open row toward its submenu
-keeps the submenu open while it stays inside the safe triangle between the
-pointer and the submenu. Left and Escape step back one level; Escape at the top
-level and Tab close the menu and return focus to the control that opened it.
+enabled items and skip separators; Home and End go to the first and last item.
+Left and Escape step back one level; Escape at the top level and Tab close the
+menu and return focus to the control that opened it.
+
+Every row of a menu answers the pointer: hover or keyboard focus highlights it.
+A disabled row is not lit, but it still counts as a move onto a sibling, so the
+pointer never crosses a dead zone. A panel with a tick (`MenuItem::checked`) or
+an icon on any row keeps one leading column for all its rows, so labels line
+up; radio groups are rows with a tick as well. An item made with
+`submenu(label, items)` opens its submenu on hover after 150 ms (at once when
+another submenu of the same menu is already open), on Right, Enter or Space, and
+on a click or a tap, and it opens to the left when there is no room on the
+right. Moving to another row closes it. A pointer moving from an open row toward
+its submenu keeps the submenu open while it stays inside the safe triangle
+between the pointer and the submenu, and a rest of 300 ms in the triangle ends
+it. The pointer and key rules are `shell/menu_nav.rs`, a pure state machine
+with an injected clock; `menu.rs` only draws it.
+
+**Type-ahead.** Typing while a menu, dropdown list or crumb folder list is open
+does not close it. The letters build a query that starts again after a second
+without typing; Backspace edits it. A small pill under the list (above it when
+there is no room) shows the query and how many rows match, and is announced to a
+screen reader as a polite status ("3 matches for fol"). A row matches when its
+label contains the query, ignoring case; a label that starts with it ranks first,
+then one with a word that starts with it, then any other substring. The best
+match takes the keyboard focus and the matched letters of every match are marked
+on the accent tint, while rows that do not match are dimmed (nothing is removed,
+so the list does not reflow). While a query is active, Down, Up, Tab, Shift+Tab,
+Ctrl+N and Ctrl+P walk through the matches only, wrapping at the ends, Enter
+picks the focused match, Space types a space (it picks as usual when there is no
+query), and Escape clears the query before a second Escape closes the list.
+Disabled rows and separators never match. The rules are `shell/menu_query.rs`
+(pure, with an injected clock); `shell/type_ahead.rs` has the window side. A
+list that keeps its own highlight uses `use_list_query`, `ListQuery::key`,
+`marked_label`, `dimmed` and `Panel::pill`; a closed dropdown still chooses the
+best match as you type. Escape is heard by the panel anywhere in the window, so
+a list's own key handler leaves it alone and gives the panel `Panel::on_escape`
+(`ListQuery::escape` clears the query, else the list closes).
+`search_highlight::highlighted_label(style, tokens, text, ranges)` draws a
+label with byte ranges marked, for any list of names.
+`MenuItem::shortcut("Ctrl+C")` shows a muted hint at the trailing edge; the app handles the keys. A menu panel with any hint is `Dim::MenuWide` (300 px) instead of `Dim::Menu` (220 px).
 
 Popups share one motion, all with an ease-out curve and all scaled by
 `tokens.motion(ms)`, so they are instant under `BINGUX_REDUCED_MOTION=1`.
@@ -248,31 +328,142 @@ choose(
 
 `ChooserRequest::open()`, `select_folder()`, `save(name)` and
 `save_files(names)` start a request; `title`, `accept_label`, `multiple`,
-`filter`, `current_filter`, `current_folder`, `current_file`, `choice` and
-`view(ViewMode::{Auto, List, Grid})` refine it. The answer, `Chosen`, holds
-absolute `paths`, the active `current_filter` and the `choices`. The dialog is
-a popup: a panel on a desktop window, a full sheet on a phone (Cancel, the
-accept button, `PopupFlags::FILL`). It has the places sidebar (Recent, Home,
-the XDG folders, volumes, bookmarks; a places menu on a phone), a path bar
-with typed-location entry and suggestions, a sortable list or a grid of
-thumbnails, hidden-file and sort options in the view menu, a name field for
-Save with a replace confirmation, and a file type filter. Folders always stay
-visible under a filter. A folder that cannot be read shows why (no permission,
-not found); an empty one, and the recent list, say so.
+`filter`, `filter_spec`, `filters`, `presets`, `current_filter`,
+`current_folder`, `current_file`, `choice` and `view(ViewMode::{Auto, List,
+Grid})` refine it. The answer, `Chosen`, holds absolute `paths`, the active
+`current_filter` and the `choices`. The dialog is a popup: a panel on a
+desktop window, a full sheet on a phone (Cancel, the accept button,
+`PopupFlags::FILL`).
 
-Keyboard: Tab walks the toolbar, list and footer. In the list the arrows, Home,
-End and Page keys move (Shift extends when several files are allowed), letters
-jump to a name, Ctrl+A selects all, Enter opens. Ctrl+L, or typing `/` or `~`,
-starts typing a path (`~`, `..` and `file://` work) and Enter goes there.
-Alt+Up is the parent folder, Alt+Left back, Ctrl+H toggles hidden files, and
-Escape cancels. On touch a tap opens a folder and selects a file.
+What the dialog has:
+
+| Part | Behaviour |
+| ---- | --------- |
+| Toolbar | Back, Forward, Parent folder (a folder with an arrow out of it), Refresh, the address bar, the file type dropdown, New folder, a list or thumbnails switch and the view menu (sort, hidden files). Every button follows the `Control` radius like any other button, and the view menu opens against its own button, not at the pointer. Refresh (also F5 and Ctrl+R) reads the folder again even when no change was seen, as a network or removable drive sends none; the selection, scroll position and filter stay, and the button shows a spinner of the same size while it reads. |
+| Address bar (`AddressBar`) | The path as crumbs, and the search box (see [Search](#search-in-the-file-views)). The field takes the `Control` radius and a 4 px padding, so each crumb inside it takes the `Inner` radius (12 less 4). Each crumb has a chevron that lists that folder's subfolders. A trail that does not fit keeps its first and last crumb and hides the middle behind one `…` menu. Click the empty end, press Ctrl+L, or type `/` or `~` to edit the path as text. Typing shows completions (folders first); Tab completes, Up and Down choose, Enter opens, Escape closes. Errors show inline: not found, not a folder, no permission, not responding. `~`, relative paths and `file://` work. |
+| Sidebar (`PlacesSidebar`) | Recent, Home and the user folders (with their own icons by path), Bookmarks, then Drives: Computer and every mount, each with a usage bar and "X free of Y". A drive that does not answer says "Not responding". There are no buttons on the rows: every row has a context menu (right click, long press, the Menu key or Shift+F10) of text items. A bookmark offers Open, Open in new window, Rename… and Remove from bookmarks; a drive Open, Unmount or Eject, Add to bookmarks, Copy path and Properties. The folders have their own icons: a folder with a page for Documents, a down arrow for Downloads, and so on. A phone gets `PlacesMenu`, a sheet with the same rows. |
+| File type filter | A dropdown in the toolbar on a desktop; on a phone a "File type" row at the bottom. The sidebar runs the dialog's full height: there is no footer under it, and the name field of Save, the request's choices and any problem sit in a strip at the bottom of the content pane. With no filters in the request it offers All files, Images, Audio, Video, Documents, Archives and Text. `presets(true)` adds those after the request's own. The list shows only matching files (folders always stay) and the status pill says how many the filter hides. The pill floats over the bottom-left corner of the list and takes no row; when the pointer reaches it, it moves to the other corner. |
+| New folder | The toolbar button, Ctrl+Shift+N and the empty-space menu make a folder and start renaming it in the list, with the name checked as you type. |
+| View | `FileView`: columns, zoom, rubber band selection and context menus. Each folder remembers its icon size and sort. |
+
+**The file view.** `FileView::new(listing, order, selection)` shows a folder as a list with columns or a grid of tiles, chosen by the zoom level. List columns: Name, Size, Type, Modified, Created, Accessed, Permissions, Owner (Location in Recent). Drag a column's left edge to resize it (double-click fits it), drag a heading to reorder, right-click the header to show or hide columns; widths, order and visibility are remembered in `$XDG_STATE_HOME/bingux/files/view.json`. A row is the sidebar's row (`LIST_ITEM`: the same radius, inset, fills and minimum height), held `LIST_EDGE` clear of the list's sides, and the header lines up with it. **Zoom** changes the icon and nothing else: the text, its size and the column widths never change. The level is an icon size in pixels from one ladder, `16, 20, 24, 32` (a list, and 16 px is the default in every folder) and `48, 64, 96, 128, 192` (a grid of tiles with the name under the icon in the same text size, each tile growing with its icon). Ctrl+wheel, Ctrl+plus and minus step one level, Ctrl+0 returns to 16 px in a list, a pinch picks the nearest level, and a badge shows the size and view for a moment. Choosing a list or a grid (toolbar, View as menu, Ctrl+1 and Ctrl+2) goes to the nearest level of that view. Nothing picks a larger level for you, neither the window size nor what the folder holds; the one limit is that a tile must fit twice across, so a narrow view stops at a smaller level. Images, and videos and documents that have a desktop thumbnail, show their picture, uncropped, at every grid level and in a list from 24 px; folders and everything else keep their icon. The level is remembered per folder in the same file (`icon_px`). Right-click gives a menu for a file, several files, empty space and the headers; Menu or Shift+F10 opens it from the keyboard. Rename in place with F2, rubber-band from blank space, drag files onto a folder (Ctrl copies), hover for a detail card. Rows are drawn only when in view, sizes and dates are asked of the loader only for those rows, and thumbnails load after a short rest in view and never on network drives. Keys: Space (Quick Look), Ctrl+A, Ctrl+Space, F2, Delete, Shift+Delete, Ctrl+C, X, V and Z, Ctrl+Shift+N, F5, Alt+Enter or Ctrl+I (properties), Ctrl+1 and 2 (list, grid), Ctrl+Alt+1 to 4 (sort) and Ctrl+Alt+R (reverse).
+
+**Context menus of the file view.** A menu is grouped by task and holds only what can apply: a row that can never apply in that place is left out, not greyed. The empty-space menu is, in order: New folder, New file (a submenu of Empty file and the files of the XDG Templates folder when that folder has any, otherwise one row); Paste (greyed until something is copied, left out in Recent) and, only when there is something to take back, a named Undo such as "Undo Rename" (there is no Redo); Select all and Invert selection (left out in an empty folder); one View submenu; then Refresh and Properties. View holds List and Grid, Icon size (the sizes of the view on show, from the zoom ladder), Sort by (Name, Size, Type and Modified; Ascending and Descending; Folders first) and Show hidden files. Choices are ticked rows in one leading column, so labels line up. The header menu's Sort by is the same submenu. Shortcuts show on the right.
+
+**Quick Look.** Space on the selected file opens a large card over a dimmed scrim, as macOS Quick Look and GNOME Sushi do; the context menu has Preview too. Space or Escape closes it; Left and Right (Up and Down too in a grid, and in a list they step one file) move the selection to the neighbouring file and update the card without closing it; Enter closes it and opens the file as a double click does; Alt+Enter or Ctrl+I closes it and shows Properties. Space only opens it when the file view itself has the keyboard: never while a rename field, the address bar or a filter has it, and not in the middle of a word typed to jump to a file. It works in the chooser dialog as well. What it shows depends on the type: a picture scaled to fit with its proportions kept; the first 64 KiB of a text, code, markup or JSON file in a monospace face, with a notice that says how much is shown when the file is longer; the largest thumbnail the desktop has made for a PDF, document, song or film, with the type's icon when there is none; a folder's item count and total size, counted while the card is open; an unknown type as text if it is text, else as its icon. The footer says the type, size, picture size or length and codec, and date. Everything loads off the UI thread. The stage is a fixed box and the type's icon is the placeholder at the size the content will have, so nothing moves when the content arrives, and stepping to another file drops the load of the last one (a folder count stops after its current entry).
+
+**Properties.** Alt+Enter, Ctrl+I or the menu's Properties row opens a dialog for the selection, or for the folder on show when nothing is selected. For one file: its picture or icon, name and type; type with its MIME type; size with the byte count (a folder or a selection is added up on a thread, with a Stop button, and the figure grows while it runs); location (press it to open that folder); where a link leads; for pictures the size in pixels and, for JPEG, the camera, lens, date taken and exposure from its EXIF; for audio and video the length and codecs (WAV, FLAC, Ogg Vorbis and Opus, MP4, M4A and MOV, Matroska and WebM; the length of an MP3 and the details of SVG, HEIF, AVIF, TIFF and JPEG XL are not read); created, modified and accessed times; owner and group; permissions as a grid of read, write and execute boxes for the owner, group and others, which the owner (and root) can change with chmod on a drive that is not read-only, with the numeric mode and "Allow executing as program"; the drive with its name, device, mount point and a free space bar; and, in a view that can open files with another application, the applications that open the type. Several items show their combined count, size and types, where they are, and the drive. Every row exists from the first frame, with "…" until its fact arrives and "—" when it has none, so nothing moves while facts load.
+
+**Moving, copying and removing safely.** The file operations are `bingux_files::ops`; the views call nothing else.
+
+| Operation | What it does | What it promises |
+| --------- | ------------ | ---------------- |
+| Rename, and a move on one drive | One `renameat2(RENAME_NOREPLACE)` | Atomic. Nothing is copied or written. A name that is taken is never replaced unless you chose Replace. |
+| Move between drives | Copy, flush, check, then remove the source | The source stays until the copy is durable and checked: every copy is as long as what was read, and nothing changed while it was read. A failure, a cancel, a full drive or a pulled cable leaves the source exactly as it was. Items you skipped are never removed. |
+| Copy | Reflink (`FICLONE`) where the file system has one, else `copy_file_range`, else a 4 MiB buffer | Holes stay holes (`SEEK_DATA`/`SEEK_HOLE`), so a sparse disk image stays sparse. A full drive fails at the start of a file, not at the end. Many small files are copied by up to 8 threads (4 on removable media and shares); a big file is copied alone. Mode, times and extended attributes are kept as far as the drive has them (FAT has no modes and says so, which is not an error). |
+| Any write | Data goes to `.bingux-*.part` beside the destination and is renamed into place | A half-written file never has its real name. A failed or cancelled copy removes its part files. Replacing swaps the new file in whole: the old one is intact until then. |
+| Delete, rename and new folder | A single call | On removable media the folder is written out before the call returns. |
+
+**Removable media.** A copy, move or delete on a USB stick, SD card, external disk, network share, or a FAT, exFAT or NTFS drive is only *done* when the data is on the device. The drive is recognised from the mount table, the device's `removable` flag and a USB bus in `/sys` (also under an encrypted layer). For those drives every file is `fsync`ed before it gets its name, then every folder that changed, then the whole drive is written out (`syncfs`). While that last step runs the status line says **Finishing… writing to <drive>** with a bar that keeps still and no Stop button; the line that follows says **Everything is written to <drive>.** An ordinary internal disk is not flushed: that is the kernel's job, and flushing would only make copies slower. **Eject** (and Unmount) in the sidebar write the drive out first, then unmount; if the drive is busy it says so in the tool's own words, and when it is ejected the toast says the drive is safe to remove. A drive that cannot be written out is not detached.
+
+**Removing.** Delete and *Move to Trash* put the item in the Trash: `$XDG_DATA_HOME/Trash` on the home drive, `$topdir/.Trash/$uid` or `$topdir/.Trash-$uid` on another drive. It is one rename, and Ctrl+Z or the toast's Undo puts it back. *Delete permanently* is **not** in the ordinary context menu. It appears when you open the menu with Shift held (Shift and right click), and Shift+Delete does it from the keyboard. Both open a question first: it names the item (or says "3 items"), says that it cannot be undone and will not go to the Trash, has a red **Delete permanently** button, and gives the focus to Cancel, so Enter keeps the files. Something the Trash cannot take (a drive with no Trash, a network share, a read-only drive, or something in the Trash already) is never deleted quietly: the same question opens, with the reason. **Empty Trash** (in the empty-space menu while a Trash folder is on show) asks too. Rename, move and Move to Trash can be undone; deleting for good cannot, and the question says so.
+
+A filter takes file extensions, globs and MIME types in one string:
+
+```rust
+ChooserRequest::open()
+    .filter_spec("Pictures", "png jpg image/webp")   // extensions and a MIME type
+    .filter_spec("Documents", "*.pdf *.odt")          // globs
+    .presets(true)                                     // and the built-in ones
+```
+
+Keyboard: Tab walks the toolbar, list and the strip under it. In the list the arrows, Home,
+End and Page keys move (Shift extends when several files are allowed), typing a
+name starts a search of the folder (see [Search](#search-in-the-file-views)),
+Ctrl+A selects all, Enter opens. Ctrl+L, or typing `/` or `~`,
+edits the path as text. Backspace or Alt+Up goes to the parent folder, Alt+Left
+back, Alt+Right forward, Alt+Home home, Ctrl+H toggles hidden files, and Escape
+cancels. On touch a tap opens a folder and selects a file.
+
+Folders at the XDG user directories (Documents, Downloads, Music and so on)
+get their own icon. It is decided by the path alone, as the person sees it:
+`~/Downloads` keeps the Downloads icon when it is a link to a share, and the
+share's own folder, reached by its real path, is a plain folder. No call
+touches the disk, so it costs nothing on a network mount.
+
+### Search in the file views
+
+The address bar is the search box. One text field takes a path or a search, and
+it decides from what is typed, without touching the disk:
+
+| Typed | Is |
+| ----- | -- |
+| starts with `/`, `~`, `./`, `../`, or a scheme such as `smb://` | a path |
+| the name of an entry in the folder (`Documents`, `Documents/Sub`) | a path |
+| anything else (`report`, `2024 invoice`) | a search |
+
+The bar has three states that share one frame and one height, so nothing moves
+when it changes: the **trail** of crumbs, the **path** field with folder
+completions (Ctrl+L), and the **search** field, which has the search glyph and
+a chip `in <Folder>` inside it. The chip's close button, or Escape, ends the
+search. Going to another folder ends it too.
+
+**Filter this folder.** Ctrl+F, or typing a letter on the list, focuses the bar
+in search mode (the list's jump-to-a-name is replaced by this). The loaded
+listing is filtered as each letter is typed; nothing is read from the disk.
+Matching ignores case and looks at names only, in this order: the exact name,
+a name that starts with the text, a word that starts with it, the text
+anywhere, every word of it in any order, and last the letters in order (`rpt`
+finds `my_report.txt`, for three letters or more). The list keeps your sort
+inside each of those groups. Matched letters are drawn on an accent tint, and
+the status pill reads "3 of 120 items match". Up and Down move the selected
+match without leaving the field, Enter opens it (a folder is entered, a file is
+opened or chosen; with no match it searches the subfolders), and Escape clears
+the text, shows the whole folder and gives back the selection you had before.
+Clicking a result keeps the filter until Escape.
+
+**Search the subfolders.** While there is text, the last row under the field is
+always *Search subfolders for "text"*; Ctrl+Enter or Shift+Enter does the same.
+Results stream into the list as a background walker finds them, shallow folders
+first, with a live count in the row and the status pill; the row says **Stop** and
+pressing it ends the walk (what was found stays). Changing the text, going to another folder or
+closing the dialog cancels the walk. Each result shows its name and, in a list,
+a **Location** column with its folder below the folder searched (a grid shows it
+on the detail card, and a phone's list on the second line). The walker:
+
+- reads one folder at a time on one thread, breadth first, and stops at
+  10,000 results and says so;
+- skips hidden folders and hidden files unless *Show hidden files* is on;
+- never follows a symbolic link, never enters another filesystem (a mounted
+  drive or network share, `/proc`) and never enters a folder twice;
+- looks in everything you could browse to, including `node_modules`, `target`
+  and `.git` (when hidden files show), because the view menu's **Search build and
+  dependency folders** switch is on by default. Turn it off to skip
+  `node_modules`, `.git`, `.hg`, `.svn`, `target`, `__pycache__`, `.venv`, `.tox`,
+  `.gradle` and `.cache`. The switch lasts for the dialog.
+
+The Bingux search service (`bingux-searchd`) is not used: it is a launcher
+search over a fixed set of roots, with results capped at the launcher's size,
+over a private socket; it cannot be limited to a folder or say which folders it
+covers. File **contents** are not searched, only names.
+
+The file type filter of a chooser is a separate thing. It stays on during a
+search, so searching a "Pictures" chooser finds only pictures (folders still
+appear). In the folder, its "hidden by filter" count is reported on its own; in
+the subfolders the walker applies the filter before it counts, so rejected files
+neither show nor use up the 10,000 results. In the model
+(`bingux_files::search`) a search is a `Query`; a filter is a `Filter`; the two
+never share a type. Apps build the same behaviour with
+`AddressBar::search(SearchLink::new(find, selection, folder)...)`,
+`FileView::search(..)` / `.on_search(..)` and `use_subfolder_search(..)`; the
+chooser is the reference.
 
 ### Layers
 
 | Layer | Where | Depends on |
 | ----- | ----- | ---------- |
-| Filesystem model: listing, MIME, places, bookmarks, recent files, filters, sort, inotify watching, selection, request and answer types, what accepting does | `packages/bingux-files` (crate `bingux-files`, `libc` only, unit tests) | nothing |
-| Views: `PlacesSidebar`, `PathBar`, `FileList`, `FileGrid`, `use_directory`, `use_places`, `empty_state`, `error_state` | `bingux_ui::files` | the model, bingux-ui controls |
+| Filesystem model: listing, MIME, places, bookmarks, recent files, filters, name search and the subfolder walker, sort, inotify watching, selection, request and answer types, what accepting does | `packages/bingux-files` (crate `bingux-files`, `libc` only, unit tests) | nothing |
+| Views: `PlacesSidebar`, `PlacesMenu`, `AddressBar`, `FileView`, `use_directory`, `use_places`, `empty_state`, `error_state` | `bingux_ui::files` | the model, bingux-ui controls |
 | The dialog: `choose` | `bingux_ui::files` (also in the prelude as `files`, `ChooserRequest`, `Chosen`) | the views |
 
 The model has no UI and no async runtime, so the future Files app, a command
@@ -285,10 +476,41 @@ and no dependency, and, like GIO's fast content type, looks at the name
 only, never at file contents. The list builds only the rows in view, so a
 hundred thousand files scroll as one hundred do, and the grid decodes each
 thumbnail only when its row scrolls in. The views are ordinary components:
-`PlacesSidebar::new(places, current, on_open)`, `PathBar::new(..)`,
-`FileList::new(listing, order, selection).sort(..).multiple(..).on_sort(..)
-.on_pick(..).on_activate(..)` and `FileGrid::new(..)`. A second user of them
-is the Files app.
+`PlacesSidebar::new(places, current, on_open)`,
+`AddressBar::new(location, home, editing, draft, on_open, on_file)` and
+`FileView::new(listing, order, selection).icon_px(level).sort(..).multiple(..)
+.on_pick(..).on_activate(..)`. A second user of them is the Files app.
+
+### Opening a folder fast, on any drive
+
+`bingux_files::loader::open` is how every view opens a folder. It never
+blocks the caller and sends events: `Kind`, `Cached`, `Batch`, `Done`, `Diff`,
+`Stats`, `Unresponsive`, `Failed`. A view applies each with
+`Listing::apply_event`, which returns true when it should select again, and
+asks `Load::want_stats(&listing, rows_in_view)` on every frame.
+
+| Step | What happens |
+| ---- | ------------ |
+| Cache | The folder's last listing is shown at once from `$XDG_CACHE_HOME/bingux/files/v1` (about 10 bytes an entry; 32 MiB and 512 folders at most, least recently used deleted first). One `statx` of the folder says whether it changed. If not, nothing else is read, locally or over NFS. If it did, only the difference arrives as `Diff`, so rows are patched and the scroll position and selection stay. |
+| Streaming | With no cache the first 50 entries arrive after about 2 ms and the rest in batches that grow, so a 20,000-entry folder is complete in about 50 to 90 ms. |
+| Drive kind | The kind (`Local`, `Removable`, `Network`, `Optical`, `Other`) comes from the folder's own device and the mount table, not its path: `~/Downloads` that links to an NFS share is `Network`. |
+| Network drives | Names and types only, one worker, no thumbnails, no reading of file content (`Listing::mount.thumbnails()` is false). Size and time come only for the rows in view, newest request first. |
+| Slow drives | A drive that stops answering gives `Unresponsive` after two to three seconds. The listing stays as it was and leaving the folder never waits. |
+| Changes | inotify on local disks; a stamp check every five seconds on network ones. Both end as a `Diff`. |
+
+Sorting and filtering 100,000 entries take tens of milliseconds
+(`Listing::select`, `select_counted` also returns how many entries the filter
+and the hidden setting left out). Filters are built from what an author writes:
+`Filter::parse("Pictures", "png jpg image/webp")`, or the presets
+(`Filter::images()`, `audio()`, `video()`, `documents()`, `archives()`,
+`text()`); `ChooserRequest::effective_filters()` is the list the menu shows.
+Drives, with size and free space, come from `bingux_files::mounts`
+(`list_mounts`, then `fill_space` on a worker, `watch_mounts` for changes).
+Which folders get the Documents, Downloads, ... icon is decided from the path
+text only (`places::special_folder`): no `stat`, no `readlink`, so it costs
+nothing on a network mount, and `~/Downloads` keeps its icon when it is a link
+while the target folder, reached by its real path, shows a plain folder.
+Timings: `packages/bingux-files/examples/bench.rs`.
 
 ### Portal mapping
 
@@ -303,7 +525,7 @@ backend (`org.freedesktop.impl.portal.FileChooser`) can host this dialog:
 | `accept_label`, `modal`, `multiple` | the same names |
 | `directory` | `Action::SelectFolder` |
 | `filters` `a(sa(us))` | `filters`; `Filter::from_portal`, `Filter::to_portal`; rule kind 0 is a glob, 1 a MIME type |
-| `current_filter` | an index into `filters` |
+| `current_filter` | an index into the effective filters: `filters`, or the presets when it is empty, or `filters` then the presets after `presets(true)` |
 | `choices` `a(ssa(ss)s)` | `choices`; no options means a yes/no choice with `"true"` or `"false"` |
 | `current_name`, `current_folder`, `current_file`, `files` | the same names |
 | response `uris` | `Chosen::paths` through `location::file_uri` |
@@ -329,7 +551,11 @@ dialog always works. The package is not built yet: it needs a D-Bus client
 
 Capture the dialog with `scripts/file-chooser-fixture.py DIR` and
 `HOME=DIR cargo run --example file_chooser --features testing -- OUT` (every
-mode at 1100x820 and 390x800).
+mode at 1100x820 and 390x800). Add `--link-downloads` to the fixture script
+to make `~/Downloads` a link to a folder outside the home. Set
+`BINGUX_FILES_STATE=FILE` to keep your own remembered views out of the
+captures. With `FILE_CHOOSER_LIVE=SCENARIO` the example opens a real window
+that reopens the chooser after every answer, for driving with real input.
 
 ## Charts
 
@@ -338,6 +564,13 @@ donuts. Each chart fills the width it is given and keeps a fixed height from
 its first frame, so data that arrives later never moves the layout. Before it
 has points it shows a muted baseline and "No data yet" at the same height.
 A single x value is centred with one tick at the value, not a -1 to 1 axis. A constant series sits in the middle of a window and labels its one value. Time axes span the data, not whole hours.
+
+A chart is free content, so it has no padding of its own: put it in a
+`boxed(tokens)` card, or on a group with `Group::content(chart)`, which keeps it
+16 px from the card's edge on every side like any free content. (`Group::row` is
+for rows, which sit flush against the card.) Inside the box, the y labels have
+12 px of air before the plot, the x labels 8 px under it, and a legend sits
+16 px under the x labels, lined up with the left edge of the plot.
 
 ```rust
 use bingux_ui::prelude::*;
@@ -351,9 +584,9 @@ line_chart([Series::new("Charge", points)])
 
 | Builder              | Use                                                                            |
 | -------------------- | ------------------------------------------------------------------------------ |
-| `sparkline(values)`  | A small trend with no axes. `colour`, `unit`, `area`, `label`.                 |
-| `line_chart(series)` | Several series over x. `y_unit`, `x_unit`, `curve`, `area`, `label`, `height`. |
-| `bar_chart(series)`  | Grouped bars, or `stacked()`. `categories`, `y_unit`, `label`, `height`.       |
+| `sparkline(values)`  | A small trend with no axes. `colour`, `unit`, `format`, `area`, `label`.       |
+| `line_chart(series)` | Several series over x. `y_unit`, `y_format`, `x_unit`, `curve`, `area`, `label`, `height`. |
+| `bar_chart(series)`  | Grouped bars, or `stacked()`. `categories`, `details`, `y_unit`, `y_format`, `label`, `height`. |
 | `ring(value)`        | A 0 to 1 gauge with a centre caption. `caption`, `colour`, `label`.            |
 | `donut(segments)`    | A share of a whole, with a legend. `unit`, `caption`, `label`.                 |
 | `timeline_chart(bars)` | Bars along a time axis, a limit line and a draggable range. |
@@ -379,8 +612,13 @@ A click zooms into a bar, Escape zooms out, and the view starts past the calls
 at the top that only call one thing. Down, Up, Left and Right walk the tree.
 
 `Unit` formats values: `Number`, `Percent` (values already in percent),
-`Bytes` (binary units), `Duration` (seconds as `2 h 15 min`) and
-`Clock { offset }` (Unix seconds in local time). `Curve` is `Linear`, `Step`
+`Bytes` (binary units, `3.2 GiB`), `DecimalBytes` (decimal units, `3.2 GB`,
+with ticks on round decimal numbers), `Duration` (seconds as `2 h 15 min`) and
+`Clock { offset }` (Unix seconds in local time). For anything else, `y_format(|value| ..)`
+on a line chart, bar chart or timeline (and `format` on a sparkline) writes the
+axis ticks and the tooltip values with your own function: `.y_format(|mbit| format!("{mbit:.1} Mbit/s"))`.
+It receives round numbers for ticks and the data as it is for tooltips, so it
+rounds for itself. `Curve` is `Linear`, `Step`
 or `Monotone` (the default, a smooth curve that never overshoots).
 
 Data handling: a `NaN` or infinite point breaks the line instead of joining
@@ -389,8 +627,21 @@ across it. Points are sorted by x, and a repeated x keeps its last value.
 Motion: lines draw in from left to right, bars grow from the baseline and
 rings sweep, over 700 ms. Under `BINGUX_REDUCED_MOTION=1` they appear at once.
 
+Hover: a line chart draws a crosshair and a dot on each series at the nearest
+x, and a bar chart fades the other bands, so the hovered bar stands out. A
+tooltip card (the popover surface, `Raised` elevation) lists the x label, then
+each series with its swatch, name and formatted value, and for stacked bars the
+total under a hairline. It sits beside the stop on the side with room, flips
+near an edge, and moves from stop to stop, never with the pointer, so it does
+not jitter; it goes when the pointer leaves the chart. A bar chart's axis labels
+thin to every few bands from the first, so they stay evenly spaced; give the
+tooltip a longer heading than the axis label with `details(names)`
+(`"14:00 - 15:00"` for a band the axis calls `"14:00"`). On touch, press and
+hold shows the tooltip and sliding the finger moves it; lifting hides it, and
+a swipe that scrolls the page over a chart shows nothing.
+
 Keyboard: a chart with points is focusable. Left and Right move between
-points, Home and End jump to the ends, and a tooltip follows the point.
+points, Home and End jump to the ends, and the tooltip follows the point.
 
 ## Typography
 
@@ -459,7 +710,9 @@ system is in `src/style/`:
   text colour children inherit) and `font(BODY)` (for a component that draws
   its own text).
 - `recipes.rs` holds the recipes: named lists of utilities such as `ROW`,
-  `CARD`, `GROUP`, `CONTROL`, `MENU_ITEM` and `NAV_ITEM`. It also holds the
+  `CARD`, `GROUP`, `CONTROL`, `MENU_ITEM`, `NAV_ITEM` and `LIST_ITEM` (the
+  shape of a selectable list item, shared by sidebar pages, places and file
+  rows, with `LIST_EDGE` keeping the list's sides clear). It also holds the
   spacing rhythm table, which sets the space between the page title,
   groups, cards and rows.
 

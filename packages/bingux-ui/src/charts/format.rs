@@ -1,6 +1,9 @@
 //! Formatting for axes and tooltips: numbers, percentages, bytes, durations,
 //! and Unix time in local time.
 
+use std::fmt;
+use std::rc::Rc;
+
 use super::scale::is_day_or_more;
 
 /// What a value means. It chooses how the value is written.
@@ -12,6 +15,10 @@ pub enum Unit {
     Percent,
     /// Bytes in binary units, written `3.2 GiB`.
     Bytes,
+    /// Bytes in decimal units, written `3.2 GB`: 1 GB is 1000 MB, as storage
+    /// vendors and network meters count. Axis ticks fall on round decimal
+    /// numbers (10 GB, 20 GB).
+    DecimalBytes,
     /// Seconds as a duration, written `2 h 15 min`.
     Duration,
     /// Unix seconds in local time. `offset` is the local offset from UTC in
@@ -22,6 +29,62 @@ pub enum Unit {
     Suffix(&'static str),
 }
 
+/// A value formatter the caller writes through `y_format`, for anything a
+/// [`Unit`] does not cover (a rate such as `4.2 Mbit/s`, a temperature, a
+/// currency). It gets the value and returns the text for an axis tick or a
+/// tooltip row.
+#[derive(Clone)]
+pub(crate) struct Formatter(Rc<dyn Fn(f64) -> String>);
+
+impl Formatter {
+    pub fn new(format: impl Fn(f64) -> String + 'static) -> Self {
+        Self(Rc::new(format))
+    }
+}
+
+impl PartialEq for Formatter {
+    /// Two formatters are equal when they are the same closure.
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl fmt::Debug for Formatter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Formatter(..)")
+    }
+}
+
+/// How one axis writes its values: the caller's formatter when there is
+/// one, else the unit.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ValueText {
+    pub unit: Unit,
+    pub custom: Option<Formatter>,
+}
+
+impl ValueText {
+    pub fn new(unit: Unit) -> Self {
+        Self { unit, custom: None }
+    }
+
+    /// The text of an axis tick. `step` is the spacing between ticks.
+    pub fn tick(&self, value: f64, step: f64) -> String {
+        match &self.custom {
+            Some(custom) => (custom.0)(value),
+            None => format_tick(value, self.unit, step),
+        }
+    }
+
+    /// The text of a value in a tooltip or a label.
+    pub fn value(&self, value: f64) -> String {
+        match &self.custom {
+            Some(custom) => (custom.0)(value),
+            None => format_value(value, self.unit),
+        }
+    }
+}
+
 /// The text of an axis tick. `step` is the spacing between ticks.
 pub(crate) fn format_tick(value: f64, unit: Unit, step: f64) -> String {
     match unit {
@@ -29,6 +92,7 @@ pub(crate) fn format_tick(value: f64, unit: Unit, step: f64) -> String {
         Unit::Clock { offset } => clock_time(value, offset as f64),
         Unit::Duration => duration(value),
         Unit::Bytes => bytes(value),
+        Unit::DecimalBytes => decimal_bytes(value),
         Unit::Percent => format!("{}%", fixed(value, decimals_for(step))),
         Unit::Suffix(suffix) => format!("{} {suffix}", fixed(value, decimals_for(step))),
         Unit::Number => fixed(value, decimals_for(step)),
@@ -46,6 +110,7 @@ pub(crate) fn format_value(value: f64, unit: Unit) -> String {
         Unit::Suffix(suffix) => format!("{} {suffix}", fixed(value, precision(value))),
         Unit::Number => fixed(value, precision(value)),
         Unit::Bytes => bytes(value),
+        Unit::DecimalBytes => decimal_bytes(value),
         Unit::Duration => duration(value),
     }
 }
@@ -76,23 +141,34 @@ fn fixed(value: f64, decimals: usize) -> String {
 
 /// Binary byte units: `512 B`, `1.5 KiB`, `3.2 GiB`.
 pub(crate) fn bytes(value: f64) -> String {
-    const UNITS: [&str; 6] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+    scaled_bytes(value, 1024.0, &["B", "KiB", "MiB", "GiB", "TiB", "PiB"])
+}
+
+/// Decimal byte units: `512 B`, `1.5 KB`, `3.2 GB`.
+pub(crate) fn decimal_bytes(value: f64) -> String {
+    scaled_bytes(value, 1000.0, &["B", "KB", "MB", "GB", "TB", "PB"])
+}
+
+/// `value` in the largest unit that keeps it at 1 or more, with a decimal
+/// only while it helps (under 10 and not whole).
+fn scaled_bytes(value: f64, base: f64, units: &[&str]) -> String {
     if !value.is_finite() {
         return "–".into();
     }
     let sign = if value < 0.0 { "-" } else { "" };
     let mut scaled = value.abs();
     let mut unit = 0;
-    while scaled >= 1024.0 && unit < UNITS.len() - 1 {
-        scaled /= 1024.0;
+    while scaled >= base && unit < units.len() - 1 {
+        scaled /= base;
         unit += 1;
     }
-    let decimals = if unit == 0 || scaled >= 10.0 || scaled.fract().abs() < 0.05 {
+    let tenths = (scaled * 10.0).round() / 10.0;
+    let decimals = if unit == 0 || tenths >= 10.0 || scaled.fract().abs() < 0.05 {
         0
     } else {
         1
     };
-    format!("{sign}{scaled:.decimals$} {}", UNITS[unit])
+    format!("{sign}{scaled:.decimals$} {}", units[unit])
 }
 
 /// A duration in its two largest units: `45 s`, `12 min`, `2 h 15 min`,
@@ -185,6 +261,28 @@ mod tests {
     }
 
     #[test]
+    fn decimal_bytes_use_decimal_units() {
+        assert_eq!(decimal_bytes(0.0), "0 B");
+        assert_eq!(decimal_bytes(144.0), "144 B");
+        assert_eq!(decimal_bytes(158_000.0), "158 KB");
+        assert_eq!(decimal_bytes(9.6e6), "9.6 MB");
+        assert_eq!(decimal_bytes(3.8e9), "3.8 GB");
+        assert_eq!(decimal_bytes(23.4e9), "23 GB");
+        // 9.96 rounds up to ten, which needs no decimal.
+        assert_eq!(decimal_bytes(9.96e9), "10 GB");
+    }
+
+    #[test]
+    fn a_callers_formatter_wins_over_the_unit() {
+        let plain = ValueText::new(Unit::Number);
+        assert_eq!(plain.tick(20.0, 10.0), "20");
+        let mut custom = plain.clone();
+        custom.custom = Some(Formatter::new(|value| format!("{value:.1} Mbit/s")));
+        assert_eq!(custom.tick(20.0, 10.0), "20.0 Mbit/s");
+        assert_eq!(custom.value(4.26), "4.3 Mbit/s");
+    }
+
+    #[test]
     fn durations_use_two_units() {
         assert_eq!(duration(45.0), "45 s");
         assert_eq!(duration(720.0), "12 min");
@@ -195,7 +293,7 @@ mod tests {
     #[test]
     fn clock_uses_local_time_and_date() {
         // 2026-10-23 14:05 UTC, shown at +01:00.
-        let seconds = 1_792_767_900.0;
+        let seconds = 1_792_764_300.0;
         assert_eq!(clock_time(seconds, 3600.0), "15:05");
         assert_eq!(date(seconds, 3600.0), "23 Oct");
     }

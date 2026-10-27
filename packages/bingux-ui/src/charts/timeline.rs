@@ -30,7 +30,7 @@ use std::rc::Rc;
 use bytes::Bytes;
 use freya::prelude::*;
 
-use super::format::{Unit, format_tick, format_value};
+use super::format::{Formatter, Unit, ValueText, format_tick, format_value};
 use super::geometry::*;
 use super::scale::{Linear, nice};
 use super::svg::{Svg, num, paint, stroke_line};
@@ -81,7 +81,7 @@ pub struct TimelineChart {
     x_range: Option<(f64, f64)>,
     y_max: Option<f64>,
     x_unit: Unit,
-    y_unit: Unit,
+    y: ValueText,
     limit: Option<(f64, String)>,
     value_name: String,
     selection: Option<(f64, f64)>,
@@ -97,7 +97,7 @@ pub fn timeline_chart(bars: impl IntoIterator<Item = Bar>) -> TimelineChart {
         x_range: None,
         y_max: None,
         x_unit: Unit::Number,
-        y_unit: Unit::Number,
+        y: ValueText::new(Unit::Number),
         limit: None,
         value_name: "Value".to_string(),
         selection: None,
@@ -128,7 +128,14 @@ impl TimelineChart {
     }
 
     pub fn y_unit(mut self, unit: Unit) -> Self {
-        self.y_unit = unit;
+        self.y.unit = unit;
+        self
+    }
+
+    /// Writes the y values with `format` instead of a unit, on the axis and
+    /// in the tooltip.
+    pub fn y_format(mut self, format: impl Fn(f64) -> String + 'static) -> Self {
+        self.y.custom = Some(Formatter::new(format));
         self
     }
 
@@ -212,6 +219,7 @@ impl Component for TimelineChart {
         let mut drag = use_state(|| None::<f32>);
         let mut preview = use_state(|| None::<(f64, f64)>);
         let mut anchor = use_state(|| None::<usize>);
+        let tip_content = use_state(|| 0.0f32);
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
         let focus_core = use_focus_core();
@@ -249,11 +257,11 @@ impl Component for TimelineChart {
         let limit_text = self
             .limit
             .as_ref()
-            .map(|(value, _)| format_value(*value, self.y_unit));
+            .map(|(value, _)| self.y.value(*value));
         let gutter = limit_text
             .as_ref()
             .map_or(0.0, |text| text_width(text, TextSize::Sm.px()) + GUTTER_GAP);
-        let gutter = gutter.max(gutter_for(&y_domain, self.y_unit));
+        let gutter = gutter.max(gutter_for(&y_domain, &self.y));
         let plot = Plot::new(width, height, gutter);
         let frame = Geometry {
             plot,
@@ -275,7 +283,7 @@ impl Component for TimelineChart {
             plot,
             &frame.y,
             &labelled,
-            self.y_unit,
+            &self.y,
             width,
         );
         let x_domain = nice(x_lo, x_hi, ticks_for(plot.width(), X_TICK_SPACING), false);
@@ -408,22 +416,25 @@ impl Component for TimelineChart {
                     Paint::Accent.color(&tokens)
                 },
                 name: self.value_name.clone(),
-                value: format_value(bar.value, self.y_unit),
+                value: self.y.value(bar.value),
             }];
             if let Some((value, name)) = &self.limit {
                 rows.push(super::view::TipRow {
                     colour: Paint::Muted.color(&tokens),
                     name: name.clone(),
-                    value: format_value(*value, self.y_unit),
+                    value: self.y.value(*value),
                 });
             }
             let tip = Tip {
                 anchor: frame.x.map(bar.at + bar.width / 2.0),
+                reach: (frame.x.map(bar.at + bar.width) - frame.x.map(bar.at)).max(MIN_BAR_WIDTH)
+                    / 2.0,
                 top: plot.top,
                 title: format_value(bar.at, self.x_unit),
                 rows,
+                total: None,
             };
-            tooltip(&tokens, &tip, width, height)
+            tooltip(&tokens, &tip, width, height, tip_content)
         });
         let outline = focus_outline(&tokens, focus_core, focus(), width, height);
 

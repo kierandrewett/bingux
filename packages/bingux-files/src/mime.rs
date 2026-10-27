@@ -14,7 +14,8 @@
 //! system database behind it without touching any caller.
 
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::hash::{BuildHasherDefault, Hasher};
+use std::sync::LazyLock;
 
 /// The coarse kind of a file, for icons and for "show only images".
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -226,15 +227,41 @@ const NAMES: &[(&str, &str, &str, Category)] = &[
     ("dockerfile", "text/x-dockerfile", "Dockerfile", Code),
 ];
 
+/// FNV-1a: short keys, no need for SipHash's protection against hostile
+/// ones (the keys are ours), and a lookup per listed file adds up.
+#[derive(Default)]
+struct Fnv(u64);
+
+impl Hasher for Fnv {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        let mut hash = if self.0 == 0 { 0xcbf2_9ce4_8422_2325 } else { self.0 };
+        for byte in bytes {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        self.0 = hash;
+    }
+}
+
+type Table = HashMap<&'static str, Type, BuildHasherDefault<Fnv>>;
+
 struct Index {
-    by_extension: HashMap<&'static str, Type>,
-    by_name: HashMap<&'static str, Type>,
+    by_extension: Table,
+    by_name: Table,
 }
 
 fn index() -> &'static Index {
-    static INDEX: OnceLock<Index> = OnceLock::new();
-    INDEX.get_or_init(|| {
-        let mut by_extension = HashMap::new();
+    static INDEX: LazyLock<Index> = LazyLock::new(build_index);
+    &INDEX
+}
+
+fn build_index() -> Index {
+    {
+        let mut by_extension = Table::default();
         for (extensions, mime, description, category) in TABLE {
             for extension in extensions.split(' ') {
                 by_extension.insert(
@@ -264,15 +291,28 @@ fn index() -> &'static Index {
             by_extension,
             by_name,
         }
-    })
+    }
 }
 
 /// The type of a file called `name`. Extensions match without regard to case;
 /// `archive.tar.gz` is a Gzip archive, as in shared-mime-info.
 pub fn for_name(name: &str) -> Type {
+    // Almost every name is short ASCII: lower-case it on the stack.
+    let mut buffer = [0u8; 96];
+    if name.is_ascii() && name.len() <= buffer.len() {
+        let lower = &mut buffer[..name.len()];
+        lower.copy_from_slice(name.as_bytes());
+        lower.make_ascii_lowercase();
+        if let Ok(lower) = std::str::from_utf8(lower) {
+            return for_lower_name(lower);
+        }
+    }
+    for_lower_name(&name.to_lowercase())
+}
+
+fn for_lower_name(lower: &str) -> Type {
     let index = index();
-    let lower = name.to_lowercase();
-    if let Some(found) = index.by_name.get(lower.as_str()) {
+    if let Some(found) = index.by_name.get(lower) {
         return *found;
     }
     match lower.rsplit_once('.') {

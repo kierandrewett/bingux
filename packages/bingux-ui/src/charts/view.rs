@@ -11,18 +11,19 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use super::data::{self, Point, Segment, Series, SeriesColour};
-use super::format::{Unit, format_tick, format_value};
+use super::format::{Formatter, Unit, ValueText, format_tick, format_value};
 use super::geometry::*;
 use super::palette;
 use super::path::{self, Pt};
 use super::scale::{Domain, Linear, lone, nice, time};
 use super::svg::{self, Svg, clip_rect, num, stroke_line};
+use crate::controls::press::{is_touch, use_press};
 use crate::focus::{FocusCore, use_focus_core};
 use crate::motion::wrap_focusable_with;
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
-use crate::typography::{self, CAPTION, Ink, TextStyle};
+use crate::typography::{self, CAPTION, EMPHASIS, Ink, TextStyle};
 use std::f32::consts::TAU;
 
 /// Width used before the chart has been measured.
@@ -30,6 +31,21 @@ const DEFAULT_WIDTH: f32 = 480.0;
 const EMPTY_TEXT: &str = "No data yet";
 /// The band behind the hovered bar.
 const BAND_OPACITY: f32 = 0.10;
+/// Bars other than the hovered one fade to this share of their colour.
+const BAR_DIM: f32 = 0.55;
+/// The tooltip's heading, a row's name and value, and the total.
+const TIP_TITLE: TextStyle = EMPHASIS;
+const TIP_NAME: TextStyle = CAPTION;
+const TIP_VALUE: TextStyle = TextStyle {
+    tabular: true,
+    ..CAPTION.in_ink(Ink::Text)
+};
+const TIP_TOTAL: TextStyle = TextStyle {
+    tabular: true,
+    ..EMPHASIS
+};
+/// The legend's names: readable, in the text colour.
+const LEGEND: TextStyle = CAPTION.in_ink(Ink::Text);
 /// Sparklines keep this much room at each side for their min and max marks.
 const SPARK_INSET: f32 = ACTIVE_RADIUS + 1.0;
 /// Sparklines keep this much room above and below the line for their marks.
@@ -58,7 +74,7 @@ pub enum Curve {
 pub struct Sparkline {
     values: Vec<f64>,
     colour: SeriesColour,
-    unit: Unit,
+    value: ValueText,
     area: bool,
     label: Option<String>,
 }
@@ -67,7 +83,7 @@ pub struct Sparkline {
 #[derive(Clone, Debug, PartialEq)]
 pub struct LineChart {
     series: Vec<Series>,
-    y_unit: Unit,
+    y: ValueText,
     x_unit: Unit,
     curve: Curve,
     area: bool,
@@ -80,8 +96,9 @@ pub struct LineChart {
 #[derive(Clone, Debug, PartialEq)]
 pub struct BarChart {
     series: Vec<Series>,
-    y_unit: Unit,
+    y: ValueText,
     categories: Vec<String>,
+    details: Vec<String>,
     stacked: bool,
     label: Option<String>,
     height: f32,
@@ -110,7 +127,7 @@ pub fn sparkline(values: impl IntoIterator<Item = f64>) -> Sparkline {
     Sparkline {
         values: values.into_iter().collect(),
         colour: SeriesColour::Auto,
-        unit: Unit::Number,
+        value: ValueText::new(Unit::Number),
         area: false,
         label: None,
     }
@@ -120,7 +137,7 @@ pub fn sparkline(values: impl IntoIterator<Item = f64>) -> Sparkline {
 pub fn line_chart(series: impl IntoIterator<Item = Series>) -> LineChart {
     LineChart {
         series: series.into_iter().collect(),
-        y_unit: Unit::Number,
+        y: ValueText::new(Unit::Number),
         x_unit: Unit::Number,
         curve: Curve::Monotone,
         area: false,
@@ -133,8 +150,9 @@ pub fn line_chart(series: impl IntoIterator<Item = Series>) -> LineChart {
 pub fn bar_chart(series: impl IntoIterator<Item = Series>) -> BarChart {
     BarChart {
         series: series.into_iter().collect(),
-        y_unit: Unit::Number,
+        y: ValueText::new(Unit::Number),
         categories: Vec::new(),
+        details: Vec::new(),
         stacked: false,
         label: None,
         height: DEFAULT_HEIGHT,
@@ -168,7 +186,13 @@ impl Sparkline {
     }
 
     pub fn unit(mut self, unit: Unit) -> Self {
-        self.unit = unit;
+        self.value.unit = unit;
+        self
+    }
+
+    /// Writes the values with `format` instead of a unit, in the tooltip.
+    pub fn format(mut self, format: impl Fn(f64) -> String + 'static) -> Self {
+        self.value.custom = Some(Formatter::new(format));
         self
     }
 
@@ -188,7 +212,15 @@ impl Sparkline {
 impl LineChart {
     /// How the y values are written on the axis and in tooltips.
     pub fn y_unit(mut self, unit: Unit) -> Self {
-        self.y_unit = unit;
+        self.y.unit = unit;
+        self
+    }
+
+    /// Writes the y values with `format` instead of a unit, on the axis and
+    /// in tooltips. It must round for itself: ticks pass round numbers, but
+    /// tooltips pass the data as it is.
+    pub fn y_format(mut self, format: impl Fn(f64) -> String + 'static) -> Self {
+        self.y.custom = Some(Formatter::new(format));
         self
     }
 
@@ -222,8 +254,25 @@ impl LineChart {
 }
 
 impl BarChart {
+    /// How the y values are written on the axis and in tooltips.
     pub fn y_unit(mut self, unit: Unit) -> Self {
-        self.y_unit = unit;
+        self.y.unit = unit;
+        self
+    }
+
+    /// Writes the y values with `format` instead of a unit, on the axis and
+    /// in tooltips. It must round for itself: ticks pass round numbers, but
+    /// tooltips pass the data as it is.
+    pub fn y_format(mut self, format: impl Fn(f64) -> String + 'static) -> Self {
+        self.y.custom = Some(Formatter::new(format));
+        self
+    }
+
+    /// Longer names for the tooltip heading, in the order of the categories:
+    /// "14:00 - 15:00" for a band that the axis calls "14:00". Bands without
+    /// one use their category.
+    pub fn details<S: Into<String>>(mut self, names: impl IntoIterator<Item = S>) -> Self {
+        self.details = names.into_iter().map(Into::into).collect();
         self
     }
 
@@ -388,6 +437,11 @@ impl Component for Chart {
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
         let focus_core = use_focus_core();
+        // A finger shows the tooltip only after a press and hold, so a swipe
+        // that scrolls the page over a chart does not flash it.
+        let mut holding = use_state(|| false);
+        let press = use_press();
+        let tip_content = use_state(|| 0.0f32);
         let draw = use_animation(|conf| {
             conf.on_creation(OnCreation::Run);
             AnimNum::new(0.0, 1.0)
@@ -420,19 +474,45 @@ impl Component for Chart {
         let count = scene.anchors.len();
         let anchors = scene.anchors.clone();
 
-        let on_move = move |event: Event<PointerEventData>| {
+        let pick = move |anchors: &[f32], window_x: f32, window_y: f32| {
             let (min_x, min_y) = {
                 let area = size.read();
                 (area.min_x(), area.min_y())
             };
-            let x = event.global_location().x as f32 - min_x;
-            let y = event.global_location().y as f32 - min_y;
+            let x = window_x - min_x;
+            let y = window_y - min_y;
             let inside = (0.0..=width).contains(&x) && (0.0..=height).contains(&y);
-            active.set_if_modified(if inside {
-                nearest_anchor(&anchors, x)
+            if inside {
+                nearest_anchor(anchors, x)
             } else {
                 None
-            });
+            }
+        };
+        let move_anchors = anchors.clone();
+        let on_move = move |event: Event<PointerEventData>| {
+            if is_touch(&event) {
+                press.moved(&event);
+                if !*holding.peek() {
+                    return;
+                }
+            }
+            let at = event.global_location();
+            active.set_if_modified(pick(&move_anchors, at.x as f32, at.y as f32));
+        };
+        let on_down = move |event: Event<PointerEventData>| {
+            let anchors = anchors.clone();
+            let hold = move |(x, y): (f32, f32)| {
+                holding.set(true);
+                active.set_if_modified(pick(&anchors, x, y));
+            };
+            press.begin(&event, Some(hold.into()));
+        };
+        let on_up = move |_: Event<PointerEventData>| {
+            press.release();
+            if *holding.peek() {
+                holding.set(false);
+                active.set(None);
+            }
         };
         let on_key = move |event: Event<KeyboardEventData>| {
             if count == 0 {
@@ -455,11 +535,12 @@ impl Component for Chart {
         };
 
         let alt = spec.alt();
-        let legend = (!scene.legend.is_empty()).then(|| legend_row(&tokens, &scene.legend));
+        let legend = (!scene.legend.is_empty())
+            .then(|| legend_row(&tokens, &scene.legend, scene.plot_left));
         let tip = scene
             .tip
             .as_ref()
-            .map(|tip| tooltip(&tokens, tip, width, height));
+            .map(|tip| tooltip(&tokens, tip, width, height, tip_content));
         let outline = interactive.then(|| focus_outline(&tokens, focus_core, focus(), width, height));
 
         let chart = drawing(scene, &tokens, width, height)
@@ -472,7 +553,9 @@ impl Component for Chart {
             .on_sized(move |event: Event<SizedEventData>| size.set(event.area))
             .maybe(interactive, |chart| {
                 chart
+                    .on_pointer_down(on_down)
                     .on_capture_global_pointer_move(on_move)
+                    .on_global_pointer_up(on_up)
                     .on_key_down(on_key)
             })
             .maybe_child(tip)
@@ -487,17 +570,15 @@ impl Component for Chart {
     }
 }
 
-/// Where a label sits. `Left`, `Centre` and `Right` name the edge at `x`.
+/// Where a label sits: `Centre` and `Right` name the edge at `x`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Align {
-    Left,
     Centre,
     Right,
 }
 
 fn text_align(align: Align) -> TextAlign {
     match align {
-        Align::Left => TextAlign::Left,
         Align::Centre => TextAlign::Center,
         Align::Right => TextAlign::Right,
     }
@@ -544,7 +625,6 @@ pub(super) fn anchored(
     bounds: f32,
 ) -> Text {
     let left = match align {
-        Align::Left => x,
         Align::Centre => x - width / 2.0,
         Align::Right => x - width,
     };
@@ -566,6 +646,7 @@ pub(super) fn text_element(tokens: &Tokens, text: Text) -> impl IntoElement {
         .child(
             text.style
                 .label(tokens, text.text)
+                .max_lines(1)
                 .text_align(text_align(text.align)),
         )
 }
@@ -579,14 +660,21 @@ struct Scene {
     anchors: Vec<f32>,
     tip: Option<Tip>,
     legend: Vec<(Color, String)>,
+    /// Where the plot starts, so the legend lines up with it.
+    plot_left: f32,
 }
 
 /// The tooltip for the hovered stop.
 pub(super) struct Tip {
+    /// The pixel x of the stop, and how far the highlighted mark reaches
+    /// either side of it. The card clears both.
     pub(super) anchor: f32,
+    pub(super) reach: f32,
     pub(super) top: f32,
     pub(super) title: String,
     pub(super) rows: Vec<TipRow>,
+    /// The sum of the rows, for stacked charts: its name and value.
+    pub(super) total: Option<(String, String)>,
 }
 
 pub(super) struct TipRow {
@@ -651,97 +739,170 @@ pub(super) fn focus_outline(
     .layer(Layer::Relative(TIP_LAYER))
 }
 
-/// The popover card that follows the hovered stop.
-pub(super) fn tooltip(tokens: &Tokens, tip: &Tip, width: f32, height: f32) -> Rect {
-    let card_height = TIP_PAD * 2.0 + TIP_ROW * (tip.rows.len() as f32 + 1.0);
-    let fits_right = tip.anchor + TIP_GAP + TIP_WIDTH <= width;
-    let left = if fits_right {
-        tip.anchor + TIP_GAP
-    } else {
-        tip.anchor - TIP_GAP - TIP_WIDTH
-    }
-    .clamp(0.0, (width - TIP_WIDTH).max(0.0));
+/// The popover card for the hovered stop. It sits beside the stop, on the
+/// side with room for it, and never moves with the pointer, only from stop
+/// to stop, so it cannot jitter.
+pub(super) fn tooltip(
+    tokens: &Tokens,
+    tip: &Tip,
+    width: f32,
+    height: f32,
+    mut content_width: State<f32>,
+) -> Rect {
+    let lines = tip.rows.len() + usize::from(tip.total.is_some());
+    let (card_width, card_height) = tip_size(tip, lines);
     let top = tip.top.clamp(0.0, (height - card_height).max(0.0));
-    let inner = TIP_WIDTH - TIP_PAD * 2.0;
+    let right_edge = tip.anchor + tip.reach + TIP_GAP;
+    let left_edge = tip.anchor - tip.reach - TIP_GAP;
+    let position = if right_edge + card_width <= width {
+        Position::new_absolute().top(top).left(right_edge)
+    } else if left_edge - card_width >= 0.0 {
+        Position::new_absolute().top(top).right(width - left_edge)
+    } else {
+        // No side has room, as on a phone: cover the stop, inside the chart.
+        Position::new_absolute()
+            .top(top)
+            .left((width - card_width).max(0.0))
+    };
 
-    let mut card = rect()
-        .position(Position::new_absolute().top(top).left(left))
-        .layer(Layer::Relative(TIP_LAYER))
-        .width(Size::px(TIP_WIDTH))
-        .height(Size::px(card_height))
-        .tw(tokens, TOOLTIP)
-        .tw(tokens, &[shadow(Elevation::Raised)])
-        .child(text_element(
-            tokens,
-            Text::new(
-                CAPTION.in_ink(Ink::Text),
-                tip.title.clone(),
-                TIP_PAD,
-                TIP_PAD,
-                inner,
-                Align::Left,
-            ),
-        ));
-    for (index, row) in tip.rows.iter().enumerate() {
-        let top = TIP_PAD + TIP_ROW * (index as f32 + 1.0);
-        card = card
-            .child(
-                palette::swatch(row.colour).position(
-                    Position::new_absolute()
-                        .top(top + (TIP_ROW - SWATCH) / 2.0)
-                        .left(TIP_PAD),
-                ),
-            )
-            .child(text_element(
-                tokens,
-                Text::new(
-                    CAPTION.in_ink(Ink::Muted),
-                    row.name.clone(),
-                    TIP_PAD + SWATCH + S2.px(),
-                    top,
-                    inner - SWATCH - S2.px(),
-                    Align::Left,
-                ),
-            ))
-            .child(text_element(
-                tokens,
-                Text::new(
-                    CAPTION.in_ink(Ink::Text),
-                    row.value.clone(),
-                    TIP_PAD,
-                    top,
-                    inner,
-                    Align::Right,
-                ),
-            ));
-    }
-    card
-}
-
-/// The legend under a multi-series chart.
-fn legend_row(tokens: &Tokens, entries: &[(Color, String)]) -> Rect {
-    let mut row = rect()
-        .width(Size::fill())
-        .height(Size::px(LABEL_HEIGHT))
-        .tw(
-            tokens,
-            &[flex_row(), gap(S4), items(crate::style::Align::Center)],
-        );
-    for (colour, name) in entries {
-        row = row.child(
+    let cell = |content: Element| {
+        rect()
+            .height(Size::px(TIP_ROW))
+            .tw(tokens, &[flex_row(), items(crate::style::Align::Center)])
+            .child(content)
+    };
+    // The hairline between the rows and the total is drawn over the body at
+    // the width the card's content measured last frame. A box cannot fill an
+    // auto-sized card, so the rule is placed, not laid out.
+    let rule_space = || {
+        rect()
+            .tw(tokens, &[py(S1)])
+            .child(rect().tw(tokens, &[h(Dim::Hairline)]))
+    };
+    let mut names = rect().tw(tokens, &[flex_col(), pr(S5)]);
+    let mut values = rect().tw(tokens, &[flex_col(), items(crate::style::Align::End)]);
+    for row in &tip.rows {
+        names = names.child(cell(
             rect()
                 .tw(
                     tokens,
-                    &[flex_row(), gap(S1), items(crate::style::Align::Center)],
+                    &[flex_row(), gap(S2), items(crate::style::Align::Center)],
+                )
+                .child(palette::swatch(row.colour))
+                .child(TIP_NAME.label(tokens, row.name.clone()))
+                .into(),
+        ));
+        values = values.child(cell(
+            TIP_VALUE.label(tokens, row.value.clone()).into_element(),
+        ));
+    }
+    if let Some((name, value)) = &tip.total {
+        names = names
+            .child(rule_space())
+            .child(cell(TIP_TOTAL.label(tokens, name.clone()).into_element()));
+        values = values
+            .child(rule_space())
+            .child(cell(TIP_TOTAL.label(tokens, value.clone()).into_element()));
+    }
+
+    let rule = tip.total.is_some().then(|| {
+        rect()
+            .position(
+                Position::new_absolute()
+                    .top(TIP_ROW * tip.rows.len() as f32 + S1.px())
+                    .left(0.0),
+            )
+            .width(Size::px(*content_width.read()))
+            .tw(tokens, &[h(Dim::Hairline), bg(Paint::Separator)])
+    });
+    rect()
+        .position(position)
+        .layer(Layer::Relative(TIP_LAYER))
+        .tw(tokens, MENU)
+        .tw(tokens, &[p(S3)])
+        .child(
+            rect()
+                .tw(tokens, &[flex_col(), gap(S1)])
+                .on_sized(move |event: Event<SizedEventData>| {
+                    content_width.set_if_modified(event.area.width());
+                })
+                .child(
+                    rect()
+                        .height(Size::px(TIP_TITLE_ROW))
+                        .tw(tokens, &[flex_row(), items(crate::style::Align::Center)])
+                        .child(TIP_TITLE.label(tokens, tip.title.clone())),
+                )
+                .child(
+                    rect()
+                        .tw(tokens, &[flex_row()])
+                        .child(names)
+                        .child(values)
+                        .maybe_child(rule),
+                ),
+        )
+}
+
+/// The estimated size of a tooltip card with `lines` rows, to decide which
+/// side of the stop it fits on. Text is estimated at the average glyph.
+fn tip_size(tip: &Tip, lines: usize) -> (f32, f32) {
+    let pad = S3.px();
+    let em = |text: &str, style: TextStyle| text_width(text, style.size.px());
+    let title = em(&tip.title, TIP_TITLE);
+    let widest = tip
+        .rows
+        .iter()
+        .map(|row| (&row.name, &row.value))
+        .chain(tip.total.as_ref().map(|(name, value)| (name, value)))
+        .map(|(name, value)| {
+            SWATCH + S2.px() + em(name, CAPTION) + S5.px() + em(value, TIP_VALUE)
+        })
+        .fold(0.0, f32::max);
+    // The title and the total are semibold, so a little wider than measured.
+    let width = pad * 2.0 + (title.max(widest) * SEMIBOLD_SLACK).max(TIP_MIN_WIDTH);
+    let rule = if tip.total.is_some() {
+        S1.px() * 2.0 + HAIRLINE
+    } else {
+        0.0
+    };
+    let height = pad * 2.0 + TIP_TITLE_ROW + S1.px() + TIP_ROW * lines as f32 + rule;
+    (width, height)
+}
+
+/// The legend under a multi-series chart: a swatch and a name for each
+/// series, starting under the left edge of the plot.
+fn legend_row(tokens: &Tokens, entries: &[(Color, String)], inset: f32) -> Rect {
+    let mut series = rect().tw(
+        tokens,
+        &[
+            flex_row(),
+            gap(S5),
+            crate::style::items(crate::style::Align::Center),
+        ],
+    );
+    for (colour, name) in entries {
+        series = series.child(
+            rect()
+                .tw(
+                    tokens,
+                    &[flex_row(), gap(S2), crate::style::items(crate::style::Align::Center)],
                 )
                 .child(palette::swatch(*colour))
-                .child(CAPTION.label(tokens, name.clone())),
+                .child(LEGEND.label(tokens, name.clone())),
         );
     }
     rect()
         .width(Size::fill())
         .child(rect().height(Size::px(LEGEND_GAP)))
-        .child(row)
+        .child(
+            rect()
+                .width(Size::fill())
+                .tw(
+                    tokens,
+                    &[flex_row(), crate::style::items(crate::style::Align::Center)],
+                )
+                .child(rect().width(Size::px(inset)))
+                .child(series),
+        )
 }
 
 /// A scene with a muted baseline and a note, at the chart's height.
@@ -784,11 +945,11 @@ fn series_colours(tokens: &Tokens, series: &[Series]) -> Vec<Color> {
 }
 
 /// The left gutter that fits the widest y label, and at least the minimum.
-pub(super) fn gutter_for(domain: &Domain, unit: Unit) -> f32 {
+pub(super) fn gutter_for(domain: &Domain, text: &ValueText) -> f32 {
     let widest = domain
         .ticks
         .iter()
-        .map(|&tick| text_width(&format_tick(tick, unit, domain.step), TextSize::Sm.px()))
+        .map(|&tick| text_width(&text.tick(tick, domain.step), TextSize::Sm.px()))
         .fold(0.0, f32::max);
     (widest + GUTTER_GAP).max(GUTTER_MIN)
 }
@@ -801,7 +962,7 @@ pub(super) fn y_grid(
     plot: Plot,
     y: &Linear,
     domain: &Domain,
-    unit: Unit,
+    text: &ValueText,
     width: f32,
 ) -> Vec<Text> {
     let grid = grid.with_af32(GRID_OPACITY);
@@ -818,7 +979,7 @@ pub(super) fn y_grid(
         ));
         texts.push(anchored(
             CAPTION,
-            format_tick(tick, unit, domain.step),
+            text.tick(tick, domain.step),
             plot.left - GUTTER_GAP,
             value - LABEL_HEIGHT / 2.0,
             plot.left - GUTTER_GAP,
@@ -1003,13 +1164,15 @@ fn sparkline_scene(
         ));
         Some(Tip {
             anchor: cx,
+            reach: ACTIVE_RADIUS,
             top: 0.0,
             title: format!("Point {} of {}", index + 1, points.len()),
             rows: vec![TipRow {
                 colour,
                 name: spark.label.clone().unwrap_or_else(|| "Value".to_string()),
-                value: format_value(point.y, spark.unit),
+                value: spark.value.value(point.y),
             }],
+            total: None,
         })
     });
 
@@ -1019,6 +1182,7 @@ fn sparkline_scene(
         anchors,
         tip,
         legend: Vec::new(),
+        plot_left: 0.0,
     }
 }
 
@@ -1060,7 +1224,7 @@ fn line_scene(
         _ if bounds.x_min == bounds.x_max => lone(bounds.x_min),
         _ => nice(bounds.x_min, bounds.x_max, x_target, false),
     };
-    let plot = Plot::new(width, height, gutter_for(&y_domain, chart.y_unit));
+    let plot = Plot::new(width, height, gutter_for(&y_domain, &chart.y));
     let x = Linear::new((x_domain.lo, x_domain.hi), (plot.left, plot.right));
     let y = Linear::new((y_domain.lo, y_domain.hi), (plot.bottom, plot.top));
 
@@ -1071,7 +1235,7 @@ fn line_scene(
         plot,
         &y,
         &y_domain,
-        chart.y_unit,
+        &chart.y,
         width,
     );
     baseline(&mut svg, tokens, plot, &y, &y_domain);
@@ -1141,7 +1305,7 @@ fn line_scene(
         let last = points.last().unwrap_or(first);
         texts.push(anchored(
             CAPTION,
-            format_value(first.y, chart.y_unit),
+            chart.y.value(first.y),
             x.map(last.x),
             y.map(first.y) - LABEL_HEIGHT - S1.px(),
             POINT_LABEL_WIDTH,
@@ -1178,14 +1342,16 @@ fn line_scene(
             rows.push(TipRow {
                 colour,
                 name: series.name.clone(),
-                value: format_value(reading, chart.y_unit),
+                value: chart.y.value(reading),
             });
         }
         Some(Tip {
             anchor: ax,
+            reach: ACTIVE_RADIUS,
             top: plot.top,
             title: format_value(value, chart.x_unit),
             rows,
+            total: None,
         })
     });
 
@@ -1207,6 +1373,7 @@ fn line_scene(
         anchors,
         tip,
         legend,
+        plot_left: plot.left,
     }
 }
 
@@ -1248,7 +1415,7 @@ fn bars_scene(
         ticks_for(height - PLOT_TOP - PLOT_BOTTOM, Y_TICK_SPACING),
         true,
     );
-    let plot = Plot::new(width, height, gutter_for(&y_domain, chart.y_unit));
+    let plot = Plot::new(width, height, gutter_for(&y_domain, &chart.y));
     let y = Linear::new((y_domain.lo, y_domain.hi), (plot.bottom, plot.top));
     let band = plot.width() / count as f32;
     let x_centre = |index: usize| plot.left + band * (index as f32 + 0.5);
@@ -1260,7 +1427,7 @@ fn bars_scene(
         plot,
         &y,
         &y_domain,
-        chart.y_unit,
+        &chart.y,
         width,
     );
     let base = baseline(&mut svg, tokens, plot, &y, &y_domain);
@@ -1292,6 +1459,15 @@ fn bars_scene(
         series_count * bar_width + (series_count - 1.0) * BAR_GAP
     };
 
+    // While a band is hovered the others fade, so the hovered bar reads as
+    // the one the tooltip speaks of.
+    let fade = |index: usize| {
+        if active.is_some_and(|hovered| hovered != index) {
+            BAR_DIM
+        } else {
+            1.0
+        }
+    };
     let reveal = |value: f32| base + (value - base) * progress;
     for (index, &value) in xs.iter().enumerate() {
         let cx = x_centre(index);
@@ -1319,7 +1495,7 @@ fn bars_scene(
                 if let Some(d) = segment {
                     svg.push(format!(
                         r#"<path d="{d}" {}/>"#,
-                        svg::paint("fill", colours[series])
+                        svg::paint("fill", colours[series].with_af32(fade(index)))
                     ));
                 }
             }
@@ -1340,7 +1516,7 @@ fn bars_scene(
                 if let Some(d) = segment {
                     svg.push(format!(
                         r#"<path d="{d}" {}/>"#,
-                        svg::paint("fill", colours[series])
+                        svg::paint("fill", colours[series].with_af32(fade(index)))
                     ));
                 }
             }
@@ -1354,7 +1530,7 @@ fn bars_scene(
                 continue;
             };
             let top = y.map(reading).min(base);
-            let label = format_value(reading, chart.y_unit);
+            let label = chart.y.value(reading);
             texts.push(anchored(
                 CAPTION.in_ink(Ink::Text),
                 label.clone(),
@@ -1379,7 +1555,15 @@ fn bars_scene(
             (x_centre(index), name)
         })
         .collect();
-    x_labels(&mut texts, plot, width, names.clone());
+    // Thin the labels to every few bands, from the first, so they stay
+    // evenly spaced and each sits under its own bar.
+    let widest = names
+        .iter()
+        .map(|(_, name)| text_width(name, TextSize::Sm.px()) + LABEL_PAD)
+        .fold(0.0, f32::max);
+    let stride = ((widest + LABEL_GAP) / band).ceil().max(1.0) as usize;
+    let shown: Vec<(f32, String)> = names.iter().step_by(stride).cloned().collect();
+    x_labels(&mut texts, plot, width, shown);
 
     let tip = active.filter(|&index| index < count).map(|index| {
         let value = xs[index];
@@ -1392,15 +1576,22 @@ fn bars_scene(
                 data::value_at(points, value).map(|reading| TipRow {
                     colour,
                     name: series.name.clone(),
-                    value: format_value(reading, chart.y_unit),
+                    value: chart.y.value(reading),
                 })
             })
             .collect();
         Tip {
             anchor: x_centre(index),
+            reach: band / 2.0,
             top: plot.top,
-            title: names[index].1.clone(),
+            title: chart
+                .details
+                .get(index)
+                .unwrap_or(&names[index].1)
+                .clone(),
             rows,
+            total: (chart.stacked && chart.series.len() > 1)
+                .then(|| ("Total".to_string(), chart.y.value(stacks[index]))),
         }
     });
 
@@ -1421,6 +1612,7 @@ fn bars_scene(
         anchors,
         tip,
         legend,
+        plot_left: plot.left,
     }
 }
 

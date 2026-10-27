@@ -70,6 +70,12 @@ pub const S12: Space = Space::new(48.0, 54.0);
 /// on a phone), so the icon sits in an even margin at both densities.
 pub const NAV_INSET: Space = Space::new(8.0, 16.0);
 
+/// The space between a list of selectable items and the edge of its
+/// container, on each side. A row's fill stops this far short of the edge, so
+/// its rounded ends show: sidebar pages, places and file rows all keep it, and
+/// a row's content then starts `LIST_EDGE + NAV_INSET` from the edge.
+pub const LIST_EDGE: Space = S2;
+
 /// The one horizontal inset inside a card, a header bar and the page edge
 /// on a phone: row text, hairlines and controls start this far in.
 pub const GUTTER: Space = S4;
@@ -255,6 +261,9 @@ pub enum Dim {
     FieldApps,
     /// A menu of actions: 220 px.
     Menu,
+    /// A menu with keyboard shortcut hints: 300 px, so a label and its
+    /// shortcut share a row.
+    MenuWide,
     /// A dialog card: 400 px.
     Dialog,
     /// A popup's width: 520 px.
@@ -428,6 +437,7 @@ impl Dim {
             Dim::FieldWide => (440.0, 168.0),
             Dim::FieldApps => (260.0, 168.0),
             Dim::Menu => same(220.0),
+            Dim::MenuWide => same(300.0),
             Dim::Dialog => same(400.0),
             Dim::PopupWidth => same(520.0),
             Dim::PopupHeight => same(600.0),

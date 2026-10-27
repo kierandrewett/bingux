@@ -20,7 +20,8 @@ The only changes are scroll feel for a desktop:
   `scrollview.rs` and `virtual_scrollview.rs`: an auto-hidden scrollbar stays
   for 3 s after the last scroll or pointer movement, then fades out over
   400 ms, and fades back in over 120 ms (upstream: it vanishes after 0.8 to
-  1.6 s with no fade). The idle check runs every 200 ms.
+  1.6 s with no fade). The idle check sleeps until the 3 s are up and runs
+  no timer while the bar is hidden.
 - `freya-components/src/scrollviews/shared.rs`, `scrollbar.rs`, `scrollview.rs`
   and `virtual_scrollview.rs`: `ScrollView::scrollbar_inset_bottom(px)` keeps
   a vertical bar `px` clear of the bottom edge, so a page that touches a
@@ -46,6 +47,19 @@ The only changes are scroll feel for a desktop:
   `stop_propagation()`. Freya cancels the global pointer down and up for a
   touch once a press is stopped, so the text field's global handlers could
   not hear a tap, long press or drag. Mouse presses still stop as upstream.
+- `freya-components/src/scrollviews/virtual_scrollview.rs`:
+  `VirtualScrollView::pass_ctrl_wheel(bool)`. When true and Ctrl is held, the
+  view neither scrolls on the wheel nor stops the event, so an ancestor's
+  `on_wheel` can use Ctrl+wheel to zoom. Ctrl is tracked from the global key
+  events like Shift; any other key press re-reads the modifiers it carries, so
+  a Ctrl released while the window had no focus does not stay stuck. The
+  default is false (upstream).
+
+- `freya-components/src/image_viewer.rs`: `ImageSource::load` drops the encoded
+  file once the image is a raster, instead of caching it with the decoded
+  image for the asset's age (an hour). A folder of wallpapers held every full
+  file in memory: about 500 MB for 31 pictures. At most two images decode at once
+  (upstream: four), which halves the peak while a large folder opens.
 
 Both crates are MIT licensed by the Freya authors. Tests and examples are not
 copied. Drop this directory and the patch entries when upstream exposes these

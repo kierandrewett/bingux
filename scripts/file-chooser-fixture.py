@@ -1,13 +1,34 @@
 #!/usr/bin/env python3
 """Builds the fixture home used for the file chooser captures."""
 import os, shutil, struct, zlib, math, sys, time
-root = sys.argv[1] if len(sys.argv) > 1 else "/tmp/bingux-files-home"
+args = [a for a in sys.argv[1:] if not a.startswith("--")]
+root = args[0] if args else "/tmp/bingux-files-home"
+# --link-downloads: ~/Downloads is a symlink to a folder outside the home, as
+# when it points at a network share. The chooser must still draw the Downloads
+# icon on the link, and a plain folder for the target reached by its real path.
+link_downloads = "--link-downloads" in sys.argv
 if os.path.isdir(root):
-    for dirpath, dirs, files in os.walk(root):
-        os.chmod(dirpath, 0o755)
+    # The no-permission folder cannot be walked until it is readable again.
+    if os.path.isdir(f"{root}/Private"):
+        os.chmod(f"{root}/Private", 0o755)
     shutil.rmtree(root)
-for d in ["Desktop","Documents","Downloads","Music","Pictures","Videos","Projects","Empty","Private","Documents/Taxes"]:
+for d in ["Desktop","Documents","Music","Pictures","Videos","Projects","Empty","Private","Documents/Taxes","Templates","Public"]:
     os.makedirs(f"{root}/{d}")
+if link_downloads:
+    target = root.rstrip("/") + "-shares/downloads"
+    shutil.rmtree(os.path.dirname(target), ignore_errors=True)
+    os.makedirs(target)
+    os.symlink(target, f"{root}/Downloads")
+else:
+    os.makedirs(f"{root}/Downloads")
+# Many sibling folders for the crumb dropdown, and a deep trail for the overflow.
+for i in range(1, 61):
+    os.makedirs(f"{root}/Projects/{['alpha','bravo','charlie','delta','echo','foxtrot'][i % 6]}-{i:02}")
+deep = root + "/Deep"
+for level in ["north-america", "united-states", "california", "san-francisco", "mission-district", "valencia-street", "apartment-files", "tenancy", "2026", "correspondence", "landlord", "repairs", "kitchen", "photos"]:
+    deep += "/" + level
+os.makedirs(deep)
+open(deep + "/Invoice with a very long name for the middle ellipsis 2026-10-24.pdf", "wb").write(b"\0" * 90_000)
 
 def png(path, w, h, fn):
     raw = b"".join(b"\0" + b"".join(bytes(fn(x, y, w, h)) for x in range(w)) for y in range(h))
@@ -48,9 +69,56 @@ for rel, (days, size) in files.items():
     stamp(f"{root}/{rel}", days, size)
 for i in range(1, 41):
     stamp(f"{root}/Documents/Scan {i:03}.pdf", 100 + i, 200_000 + i * 1000)
+
+# Real content for the files Quick Look shows as text, so previews are not
+# blocks of NUL bytes. Times are kept.
+def write_text(rel, body):
+    p = f"{root}/{rel}"
+    st = os.stat(p)
+    with open(p, "w") as f: f.write(body)
+    os.utime(p, (st.st_atime, st.st_mtime))
+write_text("Documents/Meeting notes.txt", "Meeting notes, 22 October\n\nAttendees: Ana, Bilal, Chen, Dara\n\n1. Roadmap\n   - The files app ships with Quick Look and a proper Properties dialog.\n   - Settings gets the new network pages next.\n\n2. Open questions\n   - Should Space also preview inside the file chooser? Yes: same view.\n   - How do we show a folder that holds a million files? Count it live.\n\nActions\n   Ana: write the docs\n   Bilal: check the phone layout\n   Chen: thumbnails for PDFs\n")
+write_text("Documents/todo.md", "# To do\n\n- [x] Quick Look on Space\n- [x] Properties with permissions\n- [ ] Rename inside Properties\n- [ ] Default application chooser\n\n## Later\n\nSee `docs/bingux-ui.md` for the keys.\n")
+write_text("Downloads/wg0.conf", "[Interface]\nPrivateKey = (not a real key)\nAddress = 10.0.0.2/32\nDNS = 10.0.0.1\n\n[Peer]\nPublicKey = (not a real key)\nEndpoint = vpn.example.org:51820\nAllowedIPs = 0.0.0.0/0\n")
+write_text("Projects/main.rs", "use std::collections::HashMap;\n\n/// Count how often each word appears.\nfn count(text: &str) -> HashMap<&str, usize> {\n    let mut counts = HashMap::new();\n    for word in text.split_whitespace() {\n        *counts.entry(word).or_insert(0) += 1;\n    }\n    counts\n}\n\nfn main() {\n    let counts = count(\"the quick brown fox jumps over the lazy dog the end\");\n    let mut words: Vec<_> = counts.into_iter().collect();\n    words.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));\n    for (word, n) in words {\n        println!(\"{n:>3} {word}\");\n    }\n}\n")
+write_text("Downloads/install.sh", "#!/bin/sh\nset -eu\necho \"Installing\"\n")
+os.chmod(f"{root}/Downloads/install.sh", 0o755)
+# A long log, to show the "first 64 KiB" notice, and some JSON.
+os.makedirs(f"{root}/Notes")
+with open(f"{root}/Notes/server.log", "w") as f:
+    for n in range(1, 6001):
+        f.write(f"2026-10-24T12:{n // 100 % 60:02}:{n % 60:02}Z INFO request {n} served in {n % 97} ms\n")
+with open(f"{root}/Notes/settings.json", "w") as f:
+    f.write('{\n  "theme": "dark",\n  "accent": "blue",\n  "files": {"view": "grid", "zoom": 96, "hidden": false},\n  "recent": ["Aurora.png", "Meeting notes.txt"]\n}\n')
+with open(f"{root}/Notes/firmware.dat", "wb") as f:
+    f.write(bytes((n * 37 + 11) % 256 for n in range(5000)))
+with open(f"{root}/Notes/README", "w") as f:
+    f.write("A file with no extension, still plain text.\nQuick Look reads the head of an unknown type and shows it as text.\n")
+# A photograph with EXIF, if Pillow is installed (the capture does not need it).
+try:
+    from PIL import Image
+    from PIL.TiffImagePlugin import IFDRational
+    img = Image.new("RGB", (1600, 1200))
+    px = img.load()
+    for y in range(1200):
+        for x in range(1600):
+            px[x, y] = (int(40 + 150 * x / 1600), int(90 + 100 * y / 1200), int(200 - 120 * x / 1600))
+    exif = img.getexif()
+    exif[0x010F] = "Canon"
+    exif[0x0110] = "Canon EOS R5"
+    exif[0x0112] = 1
+    sub = exif.get_ifd(0x8769)
+    sub[0x9003] = "2026:10:12 17:42:09"
+    sub[0x829A] = IFDRational(1, 250)
+    sub[0x829D] = IFDRational(28, 10)
+    sub[0x8827] = 200
+    sub[0xA434] = "RF24-70mm F2.8 L IS USM"
+    img.save(f"{root}/Pictures/Camera.jpg", "JPEG", quality=88, exif=exif)
+except ImportError:
+    pass
 os.makedirs(f"{root}/.config/gtk-3.0")
 open(f"{root}/.config/user-dirs.dirs", "w").write(
- f'XDG_DESKTOP_DIR="$HOME/Desktop"\nXDG_DOWNLOAD_DIR="$HOME/Downloads"\nXDG_DOCUMENTS_DIR="$HOME/Documents"\nXDG_MUSIC_DIR="$HOME/Music"\nXDG_PICTURES_DIR="$HOME/Pictures"\nXDG_VIDEOS_DIR="$HOME/Videos"\n')
+ f'XDG_DESKTOP_DIR="$HOME/Desktop"\nXDG_DOWNLOAD_DIR="$HOME/Downloads"\nXDG_DOCUMENTS_DIR="$HOME/Documents"\nXDG_MUSIC_DIR="$HOME/Music"\nXDG_PICTURES_DIR="$HOME/Pictures"\nXDG_VIDEOS_DIR="$HOME/Videos"\nXDG_TEMPLATES_DIR="$HOME/Templates"\nXDG_PUBLICSHARE_DIR="$HOME/Public"\n')
 open(f"{root}/.config/gtk-3.0/bookmarks", "w").write(f"file://{root}/Projects Work\n")
 os.makedirs(f"{root}/.local/share")
 iso = lambda d: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - d * 86400))

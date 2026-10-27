@@ -9,21 +9,27 @@ pub(crate) const DEFAULT_HEIGHT: f32 = 200.0;
 /// the x axis every this much width. Labels that still collide are dropped.
 pub(crate) const Y_TICK_SPACING: f32 = 40.0;
 pub(crate) const X_TICK_SPACING: f32 = 96.0;
-/// The margins round the plot. The bottom holds the x labels.
+/// The margins round the plot, inside the chart's box. The card around a
+/// chart owns the space between its edge and the chart; these keep the end
+/// labels and the last dot inside the box.
 pub(crate) const PLOT_TOP: f32 = S2.fixed_px();
-pub(crate) const PLOT_RIGHT: f32 = S4.fixed_px();
-pub(crate) const PLOT_BOTTOM: f32 = S8.fixed_px();
-/// The left gutter for y labels is at least this wide and leaves this gap.
+pub(crate) const PLOT_RIGHT: f32 = S2.fixed_px();
+/// The bottom holds the x labels: the gap above them, their line and a
+/// little air below.
+pub(crate) const PLOT_BOTTOM: f32 = LABEL_GAP + LABEL_HEIGHT + S1.fixed_px();
+/// The left gutter for y labels is at least this wide and leaves this gap
+/// between the labels and the plot.
 pub(crate) const GUTTER_MIN: f32 = S8.fixed_px();
-pub(crate) const GUTTER_GAP: f32 = S2.fixed_px();
+pub(crate) const GUTTER_GAP: f32 = S3.fixed_px();
 /// One line of caption text, and the gap above x labels and value labels.
-pub(crate) const LABEL_HEIGHT: f32 = 16.0;
-pub(crate) const LABEL_GAP: f32 = S1.fixed_px();
+pub(crate) const LABEL_HEIGHT: f32 = 19.0;
+pub(crate) const LABEL_GAP: f32 = S2.fixed_px();
 /// Horizontal room a thinned x label needs beside its text.
 pub(crate) const LABEL_PAD: f32 = S4.fixed_px();
-/// Average advance of a glyph in ems, for estimating text width. Set high
-/// enough that "100%" at caption size never wraps in its gutter.
-pub(crate) const GLYPH_EM: f32 = 0.85;
+/// Extra room on an estimated text width.
+pub(crate) const GLYPH_SLACK: f32 = 1.08;
+/// Extra room for semibold text over the same text measured as regular.
+pub(crate) const SEMIBOLD_SLACK: f32 = 1.06;
 /// Stroke of gridlines, axes and crosshairs. Half a pixel is added so they
 /// land on pixel centres and stay sharp.
 pub(crate) const HAIRLINE: f32 = 1.0;
@@ -36,8 +42,8 @@ pub(crate) const ACTIVE_RADIUS: f32 = 4.0;
 pub(crate) const DOT_LIMIT: usize = 16;
 /// Opacity of an area fill at its top edge (it fades to nothing at the base).
 pub(crate) const FILL_TOP: f32 = 0.28;
-pub(crate) const GRID_OPACITY: f32 = 0.35;
-pub(crate) const BASELINE_OPACITY: f32 = 0.5;
+pub(crate) const GRID_OPACITY: f32 = 0.3;
+pub(crate) const BASELINE_OPACITY: f32 = 0.55;
 pub(crate) const CROSSHAIR_OPACITY: f32 = 0.6;
 /// How long a chart takes to draw in when it first appears.
 pub(crate) const DRAW_MS: u64 = 700;
@@ -70,17 +76,19 @@ pub(crate) const POINT_LABEL_WIDTH: f32 = 72.0;
 pub(crate) const GAUGE_START: f32 = 1.25 * PI_F32;
 pub(crate) const GAUGE_SWEEP: f32 = 1.5 * PI_F32;
 const PI_F32: f32 = std::f32::consts::PI;
-/// Tooltips.
-pub(crate) const TIP_WIDTH: f32 = 176.0;
+/// Tooltips. The card is as wide as its text; these size it only to choose
+/// the side of the stop it fits on.
 pub(crate) const TIP_GAP: f32 = S3.fixed_px();
-pub(crate) const TIP_PAD: f32 = S3.fixed_px();
-pub(crate) const TIP_ROW: f32 = 20.0;
+pub(crate) const TIP_ROW: f32 = 22.0;
+pub(crate) const TIP_TITLE_ROW: f32 = 22.0;
+pub(crate) const TIP_MIN_WIDTH: f32 = 120.0;
 pub(crate) const TIP_LAYER: i16 = 1;
-pub(crate) const SWATCH: f32 = 8.0;
+/// The colour marker in the legend and the tooltip.
+pub(crate) const SWATCH: f32 = 10.0;
 /// A zero minimum width for a flex child that must be allowed to shrink.
 pub(crate) const NO_MIN: f32 = 0.0;
-/// Space between a chart and its legend.
-pub(crate) const LEGEND_GAP: f32 = S3.fixed_px();
+/// Space between the x labels and the legend.
+pub(crate) const LEGEND_GAP: f32 = S4.fixed_px();
 
 /// The plot rectangle, in the chart box's pixels.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -112,8 +120,24 @@ impl Plot {
 }
 
 /// Estimated width of `text` at `size`, for layout before it is measured.
+/// Each glyph is a class average in ems, a little over so a label never
+/// wraps in a box sized from it.
 pub(crate) fn text_width(text: &str, size: f32) -> f32 {
-    text.chars().count() as f32 * size * GLYPH_EM
+    let ems: f32 = text.chars().map(glyph_em).sum();
+    ems * size * GLYPH_SLACK
+}
+
+/// The average advance of a glyph, in ems.
+fn glyph_em(glyph: char) -> f32 {
+    match glyph {
+        '0'..='9' => 0.6,
+        '%' => 0.95,
+        ' ' | '.' | ',' | ':' | ';' | '\'' | '|' | '!' | 'i' | 'j' | 'l' | 'I' => 0.3,
+        '-' | '(' | ')' | 'f' | 'r' | 't' => 0.4,
+        'm' | 'w' | 'M' | 'W' => 0.9,
+        'A'..='Z' => 0.7,
+        _ => 0.57,
+    }
 }
 
 /// How many ticks an axis of `length` can carry at `spacing` each.

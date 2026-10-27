@@ -86,7 +86,12 @@ pub struct ChooserRequest {
     pub modal: bool,
     pub multiple: bool,
     pub filters: Vec<Filter>,
-    /// An index into [`ChooserRequest::filters`]; the first when `None`.
+    /// Also offer the built-in filters (Images, Audio, ...) after the
+    /// request's own. See [`ChooserRequest::effective_filters`].
+    pub presets: bool,
+    /// An index into [`ChooserRequest::effective_filters`] (which starts with
+    /// the request's own `filters`, so the portal's index is the same); the
+    /// first when `None`.
     pub current_filter: Option<usize>,
     /// The suggested name of the file to save.
     pub current_name: Option<String>,
@@ -109,6 +114,7 @@ impl ChooserRequest {
             modal: true,
             multiple: false,
             filters: Vec::new(),
+            presets: false,
             current_filter: None,
             current_name: None,
             current_folder: None,
@@ -170,6 +176,26 @@ impl ChooserRequest {
         self
     }
 
+    /// Add a filter from what an app author writes: file extensions, globs
+    /// and MIME types, such as `"png jpg image/webp"`. See [`Filter::parse`].
+    pub fn filter_spec(mut self, name: impl Into<String>, spec: &str) -> Self {
+        self.filters.push(Filter::parse(name, spec));
+        self
+    }
+
+    /// Replace the filters.
+    pub fn filters(mut self, filters: Vec<Filter>) -> Self {
+        self.filters = filters;
+        self
+    }
+
+    /// Offer the built-in filters (All files, Images, Audio, Video,
+    /// Documents, Archives, Text) after the request's own.
+    pub fn presets(mut self, on: bool) -> Self {
+        self.presets = on;
+        self
+    }
+
     pub fn current_filter(mut self, index: usize) -> Self {
         self.current_filter = Some(index);
         self
@@ -207,11 +233,40 @@ impl ChooserRequest {
         })
     }
 
-    /// The filter that starts active: `current_filter` if it is in range.
+    /// The filters the chooser's menu lists, in order.
+    ///
+    /// * No filters in the request: the presets, "All files" first.
+    /// * Filters, and `presets` off: the request's own.
+    /// * Filters, and `presets` on: the request's own, then every preset
+    ///   that is not the same as one of them (by name or by rules).
+    ///
+    /// [`ChooserRequest::current_filter`], [`ChooserRequest::initial_filter`]
+    /// and [`Chosen::current_filter`] all index this list.
+    pub fn effective_filters(&self) -> Vec<Filter> {
+        if self.filters.is_empty() {
+            return Filter::presets();
+        }
+        let mut all = self.filters.clone();
+        if self.presets {
+            for preset in Filter::presets() {
+                let known = self.filters.iter().any(|own| {
+                    own.name.eq_ignore_ascii_case(&preset.name) || own.rules == preset.rules
+                });
+                if !known {
+                    all.push(preset);
+                }
+            }
+        }
+        all
+    }
+
+    /// The filter that starts active: `current_filter` if it is in range of
+    /// [`ChooserRequest::effective_filters`], else the first.
     pub fn initial_filter(&self) -> Option<usize> {
+        let count = self.effective_filters().len();
         match self.current_filter {
-            Some(index) if index < self.filters.len() => Some(index),
-            _ if self.filters.is_empty() => None,
+            Some(index) if index < count => Some(index),
+            _ if count == 0 => None,
             _ => Some(0),
         }
     }
@@ -244,7 +299,8 @@ impl ChooserRequest {
 pub struct Chosen {
     /// The files or folders, absolute, in the order chosen. One for Save.
     pub paths: Vec<PathBuf>,
-    /// The filter that was active when the person accepted.
+    /// The filter that was active when the person accepted: an index into
+    /// [`ChooserRequest::effective_filters`].
     pub current_filter: Option<usize>,
     /// `(choice id, selected option id)` for every choice in the request.
     pub choices: Vec<(String, String)>,
@@ -265,8 +321,12 @@ pub enum Accept {
 
 /// Decide what accepting does. `folder` is the folder being shown, `home`
 /// the home folder (for `~` in a typed name), `selected` the selected
-/// entries and `name` the text of the name field (Save only). It stats the
-/// target paths, which is a few microseconds, so the UI thread may call it.
+/// entries and `name` the text of the name field (Save only). Save and Save
+/// files stat the target paths: microseconds on a local disk, but a network
+/// folder that has stopped answering holds the call, so run it on a worker
+/// (`spawn_blocking`) when `folder` is on a network mount
+/// (`mounts::kind_of(folder) == MountKind::Network`). Open and Select folder
+/// touch no disk.
 pub fn accept(
     request: &ChooserRequest,
     folder: &Path,
@@ -468,5 +528,25 @@ mod tests {
         assert_eq!(request.initial_folder(Path::new("/h")), Path::new("/x/y"));
         assert_eq!(request.initial_name(), "z.txt");
         assert_eq!(request.accept_text(), "Open");
+    }
+
+    #[test]
+    fn effective_filters_follow_the_request() {
+        let none = ChooserRequest::open();
+        assert_eq!(none.effective_filters()[0].name, "All files");
+        assert_eq!(none.effective_filters().len(), 7);
+        assert_eq!(none.initial_filter(), Some(0));
+
+        let own = ChooserRequest::open()
+            .filter_spec("Pictures", "png jpg")
+            .filter(Filter::new("All files"));
+        assert_eq!(own.effective_filters().len(), 2);
+        assert!(own.clone().presets(false).effective_filters().iter().all(|f| f.name != "Audio"));
+        let with_presets = own.clone().presets(true);
+        let names: Vec<String> = with_presets.effective_filters().into_iter().map(|f| f.name).collect();
+        // "All files" is not repeated; the rest follow the request's own.
+        assert_eq!(names, ["Pictures", "All files", "Images", "Audio", "Video", "Documents", "Archives", "Text"]);
+        assert_eq!(with_presets.clone().current_filter(3).initial_filter(), Some(3));
+        assert_eq!(with_presets.current_filter(99).initial_filter(), Some(0));
     }
 }

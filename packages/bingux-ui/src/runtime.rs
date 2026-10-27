@@ -191,12 +191,44 @@ fn cached_state<T: 'static>(key: &'static str) -> State<Option<T>> {
     cached_entry(key, || None)
 }
 
+/// How long a page's data counts as fresh after a load started. Opening a page
+/// inside this window shows what it holds and starts no new load, so flipping
+/// between pages does not run every page's commands again each time.
+const FRESH_FOR: Duration = Duration::from_secs(15);
+
+thread_local! {
+    /// When each key's latest load started. UI thread only.
+    static LOADED_AT: std::cell::RefCell<std::collections::HashMap<&'static str, Instant>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Whether `key` should load now: false while a load started less than
+/// [`FRESH_FOR`] ago. Answering true records the start.
+fn load_due(key: &'static str) -> bool {
+    LOADED_AT.with(|at| {
+        let mut at = at.borrow_mut();
+        let now = Instant::now();
+        match at.get(key) {
+            Some(start) if now.duration_since(*start) < FRESH_FOR => false,
+            _ => {
+                at.insert(key, now);
+                true
+            }
+        }
+    })
+}
+
 /// A page's data: the last value that was loaded, at once, and a quiet
-/// refresh in the background each time the page opens. `None` only before the
-/// very first load has finished. Call from a component's `render`.
+/// refresh in the background when the page opens, unless the last load is
+/// recent. `None` only before the very first load has finished. Call from a
+/// component's `render`.
 pub fn use_cached<T: Send + 'static>(key: &'static str, load: fn() -> T) -> State<Option<T>> {
     let state = cached_state::<T>(key);
-    use_hook(move || background(state, load));
+    use_hook(move || {
+        if load_due(key) {
+            background(state, load);
+        }
+    });
     state
 }
 
@@ -209,6 +241,7 @@ pub fn cached<T: 'static>(key: &'static str) -> State<Option<T>> {
 /// Start loading a page's data before the page is opened, so it is there
 /// when the user gets to it. Call once at start-up, from a hook.
 pub fn prefetch<T: Send + 'static>(key: &'static str, load: fn() -> T) {
+    load_due(key);
     background(cached_state::<T>(key), load);
 }
 
@@ -336,6 +369,7 @@ where
     T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
     E: Send + 'static,
 {
+    load_due(key);
     background(cached_persistent::<T, E>(key), move || {
         load_persistent(key, load)
     });
@@ -353,7 +387,9 @@ where
 {
     use_hook(move || {
         let state = cached_persistent::<T, E>(key);
-        background(state, move || load_persistent(key, load));
+        if load_due(key) {
+            background(state, move || load_persistent(key, load));
+        }
         state
     })
 }
@@ -375,7 +411,9 @@ where
 {
     use_hook(move || {
         let state = cached_entry(key, || read_saved::<T>(key));
-        background(state, move || load_saved(key, load));
+        if load_due(key) {
+            background(state, move || load_saved(key, load));
+        }
         state
     })
 }
@@ -386,6 +424,7 @@ pub fn prefetch_saved<T>(key: &'static str, load: fn() -> T)
 where
     T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
 {
+    load_due(key);
     background(cached_entry(key, || read_saved::<T>(key)), move || {
         load_saved(key, load)
     });
@@ -440,6 +479,127 @@ pub fn optimistic_then<T, E>(
             if let Some(overlays) = overlays {
                 overlays.toast(error.to_string());
             }
+        }
+    });
+}
+
+thread_local! {
+    /// The writes in flight, one lane per control that fires on every step of
+    /// a drag. UI thread only.
+    static LANES: std::cell::RefCell<std::collections::HashMap<String, Lane>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+#[derive(Default)]
+struct Lane {
+    /// A write for this lane is running on the pool.
+    busy: bool,
+    /// The newest write that arrived while one was running.
+    queued: Option<Box<dyn FnOnce()>>,
+}
+
+/// Show `value` at once and write it in the background, for a control that
+/// reports every step of a drag, such as a slider. At most one write per
+/// `lane` runs at a time and a write that arrives while one runs replaces the
+/// one waiting, so a drag costs a handful of commands, not one per pointer
+/// event, and the last value always wins. When the lane has gone quiet
+/// `resync` runs once, on the UI thread, to read the system back; if a write
+/// fails it toasts the error and resyncs, which restores what the system holds.
+pub fn optimistic_latest<T, E>(
+    lane: &str,
+    shown: State<T>,
+    overlays: Option<Overlays>,
+    value: T,
+    work: impl FnOnce() -> Result<(), E> + Send + 'static,
+    resync: impl FnOnce() + 'static,
+) where
+    T: 'static,
+    E: std::fmt::Display + Send + 'static,
+{
+    let mut shown = shown;
+    shown.set(value);
+    let start: Box<dyn FnOnce()> = {
+        let lane = lane.to_owned();
+        Box::new(move || write_lane(lane, overlays, work, resync))
+    };
+    let first = LANES.with(|lanes| {
+        let mut lanes = lanes.borrow_mut();
+        let slot = lanes.entry(lane.to_owned()).or_default();
+        if slot.busy {
+            slot.queued = Some(start);
+            None
+        } else {
+            slot.busy = true;
+            Some(start)
+        }
+    });
+    if let Some(start) = first {
+        start();
+    }
+}
+
+fn write_lane<E>(
+    lane: String,
+    overlays: Option<Overlays>,
+    work: impl FnOnce() -> Result<(), E> + Send + 'static,
+    resync: impl FnOnce() + 'static,
+) where
+    E: std::fmt::Display + Send + 'static,
+{
+    background_then(work, move |result| {
+        let next = LANES.with(|lanes| {
+            lanes
+                .borrow_mut()
+                .get_mut(&lane)
+                .and_then(|slot| slot.queued.take())
+        });
+        match (result, next) {
+            // The lane stays busy: the next write runs now.
+            (Ok(()), Some(next)) => next(),
+            (result, _) => {
+                LANES.with(|lanes| {
+                    if let Some(slot) = lanes.borrow_mut().get_mut(&lane) {
+                        slot.busy = false;
+                    }
+                });
+                if let (Err(error), Some(overlays)) = (&result, overlays) {
+                    overlays.toast(error.to_string());
+                }
+                resync();
+            }
+        }
+    });
+}
+
+/// Whether no write is running or waiting on any lane whose name starts with
+/// `prefix`.
+pub fn lanes_idle(prefix: &str) -> bool {
+    LANES.with(|lanes| {
+        lanes
+            .borrow()
+            .iter()
+            .all(|(name, slot)| !name.starts_with(prefix) || (!slot.busy && slot.queued.is_none()))
+    })
+}
+
+/// Whether the window has keyboard focus, as a state to `peek` in a polling
+/// loop: a page that refreshes itself on a timer skips the tick while this is
+/// false, so a window behind others, or on another workspace, costs no
+/// commands and no redraws. The next tick after focus returns catches up. Call
+/// from a hook or `render`, and move the state into the task.
+pub fn window_focus() -> State<bool> {
+    Platform::get().current_window().is_app_focused
+}
+
+/// Read a page's model again and show it, unless a write has started on a lane
+/// under `prefix` since: that write's value is newer than this read, and
+/// showing the read would snap the control back mid-drag.
+pub fn reload_when_idle<T: Send + 'static>(prefix: &str, state: State<Option<T>>, load: fn() -> T) {
+    let prefix = prefix.to_owned();
+    background_then(load, move |value| {
+        if lanes_idle(&prefix) {
+            let mut state = state;
+            state.set(Some(value));
         }
     });
 }

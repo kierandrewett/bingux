@@ -2,6 +2,9 @@
 //! split view, status pages, banners, dialogs and toasts.
 
 pub mod menu;
+pub(crate) mod menu_nav;
+pub(crate) mod menu_query;
+pub(crate) mod type_ahead;
 pub mod navigation;
 pub(crate) mod panel;
 pub mod overlays;
@@ -15,7 +18,8 @@ pub use navigation::{
     use_page_busy,
 };
 pub use overlays::{
-    Dialog, DialogResponse, OverlayHost, Overlays, ResponseKind, Toast, dialog, use_overlays,
+    Dialog, DialogFrame, DialogResponse, OverlayHost, Overlays, ResponseKind, Toast, dialog, framed_dialog,
+    use_overlays,
 };
 pub use status_page::{Banner, BannerKind, StatusPage, banner, status_page};
 pub use window::{HeaderBar, WindowControls, drag_on_pointer_down, with_window};
