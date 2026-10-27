@@ -167,6 +167,9 @@ pub(crate) struct State {
     pub gfx: Option<Gfx>,
     pub dpms_on: bool,
     pub frame_seq: u64,
+    /// Frame-pacing log (`BSM_LOG=bsm_frames=debug`): when the frame in flight began rendering and when the last one completed.
+    pub frame_started: Option<Instant>,
+    pub last_frame_done: Option<Instant>,
     pub needs_redraw: bool,
     pub awaiting: Option<Awaiting>,
     /// The first key since the last focus change has been logged.
@@ -653,6 +656,7 @@ impl State {
         // The plan may have changed what is foreground (failure, commit): fail closed on input.
         self.reconcile_input();
         self.last_plan = plan.clone();
+        self.frame_started = Some(Instant::now());
         let mut frames = Vec::new();
         let mut deferred = false;
         if self.dpms_on {
@@ -681,6 +685,20 @@ impl State {
     /// the transition phases are reported.
     pub fn complete_frame(&mut self, plan: crate::engine::Plan, now: u64) {
         self.after_render(&plan, now);
+        if tracing::enabled!(target: "bsm_frames", tracing::Level::DEBUG) {
+            let done = Instant::now();
+            let interval_us = self.last_frame_done.map(|t| done.duration_since(t).as_micros() as u64);
+            let render_to_done_us = self.frame_started.map(|t| done.duration_since(t).as_micros() as u64);
+            self.last_frame_done = Some(done);
+            tracing::debug!(
+                target: "bsm_frames",
+                "frame seq={} interval_us={} render_to_done_us={} transition={}",
+                self.frame_seq,
+                interval_us.map_or(-1, |v| v as i64),
+                render_to_done_us.map_or(-1, |v| v as i64),
+                self.engine.transition_running(),
+            );
+        }
         self.engine.frame_done();
         for e in self.engine.drain_events() {
             self.emit(e);
@@ -781,6 +799,8 @@ pub(crate) fn run(
         gfx: None,
         dpms_on: true,
         frame_seq: 0,
+        frame_started: None,
+        last_frame_done: None,
         needs_redraw: true,
         awaiting: None,
         key_logged: false,
