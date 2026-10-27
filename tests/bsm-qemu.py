@@ -333,8 +333,8 @@ def step_greeter(run):
     run.shot("greeter-a")
     # The two accounts share the default wallpaper, so the picture differs in the avatar and name.
     crop = lambda plane: plane[130:175, 120:200]  # noqa: E731  decimated rows 520..700, columns 480..800
-    differ = [similarity(crop(plane_a[0]), crop(plane_b[0]))]
-    run.check("selecting another account changes the avatar and name on the greeter", differ[0] < 0.99, f"similarity of the avatar area {differ}")
+    changed = int((np.abs(crop(plane_a[0]) - crop(plane_b[0])) > 30).sum())
+    run.check("selecting another account changes the avatar and name on the greeter", changed > 30, f"{changed} pixels of the avatar and name area differ")
     run.check("selecting an account starts no Gnoblin", not vm.pids("gnoblin"))
     events = vm.monitor_events()
     run.check("selecting an account changes no foreground session", not [e for _, e in events if e.get("event") == "foreground_changed" and e.get("session")])
@@ -729,11 +729,18 @@ def step_power(run):
     animating = vm.wait_monitor(lambda e: e.get("event") == "transition" and e.get("kind") == "power_fade" and e.get("phase") == "animating", 30, since=mark)
     run.check("bsm runs the power fade", animating is not None)
     if animating is not None:
+        # The fade lasts 4 s here; sample until it is over (the guest may already be going down).
+        while time.monotonic() < animating[0] + 5.0:
+            time.sleep(0.5)
         for head in range(HEAD_COUNT):
-            window = vm.sampler.window(head, animating[0] - 0.1, time.monotonic())
+            window = vm.sampler.window(head, animating[0] - 0.1, animating[0] + 5.0)
             levels = [float(s.plane.mean()) for s in window]
             run.csv(f"power-fade-display{head}", ["mean_luma"], [(v,) for v in levels])
-            run.check(f"display {head}: the cover darkens monotonically", len(levels) >= 3 and is_monotone(levels, decreasing=True), f"n {len(levels)}")
+            run.check(
+                f"display {head}: the cover darkens monotonically to the cover colour",
+                len(levels) >= 5 and is_monotone(levels, decreasing=True, slack=0.03) and levels[0] - levels[-1] > 10,
+                f"n {len(levels)}, {levels[0]:.1f} -> {levels[-1]:.1f}" if levels else "no samples",
+            )
     powered_off = vm.wait_shutdown(qmp_mark, 150)
     run.check("the guest powers off through logind", powered_off)
     if not powered_off and vm.alive():
@@ -798,16 +805,16 @@ def main():
         else:
             run.checks["serial shell"] = True
             vm.run("systemctl is-system-running --wait 2>&1 | head -1", 120)
+            # Account B exists before bsm starts: bsm lists accounts at start-up.
+            vm.run(f"id {USER_B[0]} >/dev/null 2>&1 || (useradd -m -G video,audio -s /bin/bash {USER_B[0]} && echo {USER_B[0]}:{USER_B[1]} | chpasswd)", 30)
             if not args.default_timings:
                 # The VNC capture delivers about 3 frames a second, so a 420 ms fade yields one
                 # frame. The test slows every transition to seconds; the default durations are
                 # asserted by the compositor's own trajectory tests (packages/bsm-compositor).
                 vm.run(f"mkdir -p /etc/bsm && printf '%s\\n' '[transitions]' {SLOW_TOML} > /etc/bsm/bsm.toml", 20)
                 run.dump("bsm-toml", vm.run("cat /etc/bsm/bsm.toml; systemctl is-active bsm", 20))
-                if vm.run("systemctl is-active bsm", 10).strip().endswith("active") and "inactive" not in vm.run("systemctl is-active bsm", 10):
+                if vm.run("systemctl is-active bsm", 10).strip().splitlines()[-1] == "active":
                     vm.run("systemctl restart bsm", 60)
-            # Account B exists before bsm starts: bsm lists accounts at start-up.
-            vm.run(f"id {USER_B[0]} >/dev/null 2>&1 || (useradd -m -G video,audio -s /bin/bash {USER_B[0]} && echo {USER_B[0]}:{USER_B[1]} | chpasswd)", 30)
             if args.inject:
                 run.log("injecting " + args.inject)
                 applied = vm.run("mkdir -p /mnt/bsm-inject && modprobe 9pnet_virtio; modprobe 9p; mount -t 9p -o trans=virtio,version=9p2000.L,ro bsminject /mnt/bsm-inject && sh /mnt/bsm-inject/apply.sh 2>&1 | tail -n 30", 600)
