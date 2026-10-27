@@ -20,8 +20,9 @@ QtObject {
 
     // The greeter-readable image cache bsm writes (bsm-proto GREETER_CACHE_DIR).
     readonly property string cacheDir: {
+        // Quickshell.env gives null for an unset variable, not "".
         const configured = Quickshell.env("BSM_GREETER_CACHE");
-        const dir = configured !== "" ? configured : "/var/lib/bingux/greeter";
+        const dir = typeof configured === "string" && configured !== "" ? configured : "/var/lib/bingux/greeter";
         return dir.endsWith("/") ? dir : dir + "/";
     }
 

@@ -20,7 +20,11 @@ import "greeter"
 ShellRoot {
     id: root
 
-    readonly property string controlSocket: Quickshell.env("BSM_CONTROL_SOCKET") !== "" ? Quickshell.env("BSM_CONTROL_SOCKET") : "/run/bsm/greeter-control.sock"
+    // Quickshell.env gives null for an unset variable, not "".
+    readonly property string controlSocket: {
+        const configured = Quickshell.env("BSM_CONTROL_SOCKET");
+        return typeof configured === "string" && configured !== "" ? configured : "/run/bsm/greeter-control.sock";
+    }
 
     Component.onCompleted: {
         Quickshell.watchFiles = false;

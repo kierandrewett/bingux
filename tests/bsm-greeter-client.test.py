@@ -30,9 +30,11 @@ def main():
             "HOME": str(home),
             "XDG_RUNTIME_DIR": str(home),
             "QT_QPA_PLATFORM": "offscreen",
-            "BSM_GREETER_CACHE": "/var/lib/bingux/greeter",
             "BINGUX_SOFTWARE_RENDERING": "1",
         }
+        # Unset on purpose: Quickshell.env gives null, and the default must apply.
+        environment.pop("BSM_GREETER_CACHE", None)
+        environment.pop("BSM_CONTROL_SOCKET", None)
         environment.pop("WAYLAND_DISPLAY", None)
         result = subprocess.run([QS, "-p", str(qml)], env=environment, capture_output=True, text=True, timeout=90)
     output = result.stdout + result.stderr

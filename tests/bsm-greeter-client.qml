@@ -118,6 +118,7 @@ ShellRoot {
             mode: "login"
         };
         const users = [user(1000, "alex", "not_signed_in"), user(1001, "sam", "not_signed_in"), user(1002, "robin", "running_locked"), user(1003, "dana", "unavailable")];
+        check("the cache directory defaults when its variable is unset", model.cacheDir === "/var/lib/bingux/greeter/");
         model.connected = true;
 
         // Snapshots: older ones are dropped, newer ones apply.
