@@ -34,6 +34,13 @@ pub struct SocketConfig {
     pub allowed_user: String,
     /// Overrides `allowed_user` (tests).
     pub allowed_uid: Option<u32>,
+    /// The connecting process must run this executable (`/proc/<pid>/exe`) ...
+    pub allowed_exe: String,
+    /// ... and its cgroup path must end in this unit name. Together they admit
+    /// the compositor and not the image converter or anything else that runs
+    /// as the `bsm` uid. An empty string disables that check (tests, and the
+    /// image's own helper test, which connects with a probe client).
+    pub allowed_cgroup: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -110,7 +117,11 @@ impl Default for Config {
 
 impl Default for SocketConfig {
     fn default() -> Self {
-        Self { path: PathBuf::from(paths::HELPER_SOCKET), allowed_user: paths::BSM_USER.into(), allowed_uid: None }
+        Self { path: PathBuf::from(paths::HELPER_SOCKET), allowed_user: paths::BSM_USER.into(),
+            allowed_uid: None,
+            allowed_exe: "/usr/bin/bsm".into(),
+            allowed_cgroup: "bsm.service".into(),
+        }
     }
 }
 

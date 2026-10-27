@@ -11,6 +11,7 @@
 //! bsm-helper-probe [--socket PATH] close SESSION GEN [GRACE_MS]
 //! bsm-helper-probe [--socket PATH] lock  SESSION GEN true|false
 //! bsm-helper-probe [--socket PATH] greeter GEN WAYLAND CONTROL         spawn, wait for $BSM_PROBE_HOLD seconds, kill
+//! bsm-helper-probe [--socket PATH] greeter-replace GEN1 GEN2 WAYLAND CONTROL   spawn GEN1, then GEN2 over it, kill GEN2
 //! bsm-helper-probe [--socket PATH] wait-exit SESSION                    until SessionExited
 //! ```
 
@@ -148,6 +149,19 @@ fn run() -> Result<(), String> {
                 HelperEvent::LockedHintResult { message, .. } => return Err(format!("SetLockedHint failed: {message}")),
                 _ => unreachable!(),
             }
+        }
+        "greeter-replace" => {
+            let (g1, g2) = (num(1)?, num(2)?);
+            c.send(&HelperRequest::SpawnGreeter { req_id: 1, generation: g1, wayland_socket: a(3)?, control_socket: a(4)? })?;
+            c.until(Duration::from_secs(30), |e| matches!(e, HelperEvent::GreeterSpawned { .. }))?;
+            std::thread::sleep(Duration::from_secs(2));
+            c.send(&HelperRequest::SpawnGreeter { req_id: 2, generation: g2, wayland_socket: a(3)?, control_socket: a(4)? })?;
+            c.until(Duration::from_secs(30), |e| matches!(e, HelperEvent::GreeterExited { generation, .. } if *generation == g1))?;
+            c.until(Duration::from_secs(30), |e| matches!(e, HelperEvent::GreeterSpawned { generation, .. } if *generation == g2))?;
+            let hold: u64 = std::env::var("BSM_PROBE_HOLD").ok().and_then(|h| h.parse().ok()).unwrap_or(5);
+            std::thread::sleep(Duration::from_secs(hold));
+            c.send(&HelperRequest::KillGreeter { generation: g2 })?;
+            c.until(Duration::from_secs(30), |e| matches!(e, HelperEvent::GreeterExited { .. }))?;
         }
         "greeter" => {
             let generation = num(1)?;

@@ -98,6 +98,25 @@ pub fn peer_cred(fd: RawFd) -> io::Result<(u32, u32, u32)> {
     Ok((cred.pid as u32, cred.uid, cred.gid))
 }
 
+const SO_PEERPIDFD: libc::c_int = 77;
+
+/// A pidfd for the peer of a connected unix socket (Linux 6.5), if the kernel has it.
+pub fn peer_pidfd(fd: RawFd) -> Option<OwnedFd> {
+    let mut pidfd: libc::c_int = -1;
+    let mut len = std::mem::size_of::<libc::c_int>() as libc::socklen_t;
+    let r = unsafe { libc::getsockopt(fd, libc::SOL_SOCKET, SO_PEERPIDFD, &mut pidfd as *mut _ as *mut libc::c_void, &mut len) };
+    if r != 0 || pidfd < 0 {
+        return None;
+    }
+    Some(unsafe { OwnedFd::from_raw_fd(pidfd) })
+}
+
+/// True when the process behind a pidfd has exited.
+pub fn pidfd_exited(pidfd: RawFd) -> bool {
+    let mut p = libc::pollfd { fd: pidfd, events: libc::POLLIN, revents: 0 };
+    unsafe { libc::poll(&mut p, 1, 0) > 0 && p.revents & libc::POLLIN != 0 }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Recv {
     /// One datagram of this many bytes is in the buffer.

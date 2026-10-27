@@ -539,7 +539,7 @@ fn user_processes_get_dev_null_and_no_inherited_descriptors() {
     let cfg = env.config().replace(
         "gnoblin = [\"/bin/sh\", \"-c\", \"env > ",
         &format!(
-            "gnoblin = [\"/bin/sh\", \"-c\", \"for f in /proc/$$/fd/*; do echo $(basename $f) $(readlink $f); done > {}/fds.txt; env > ",
+            "gnoblin = [\"/bin/sh\", \"-c\", \"ls -l /proc/$$/fd/ > {}/fds.txt; env > ",
             env.path("").display()
         ),
     );
@@ -547,15 +547,19 @@ fn user_processes_get_dev_null_and_no_inherited_descriptors() {
     let c = env.connect();
     let _o = open(&env, &mut h, &c, "s0000a010", 91);
     let text = wait_for_file(&env.path("fds.txt"));
+    let mut seen = Vec::new();
     for line in text.lines() {
-        let (fd, target) = line.split_once(' ').unwrap_or((line, ""));
-        let fd: i32 = fd.parse().unwrap();
+        // `ls -l` prints `... <fd> -> <target>`.
+        let Some((left, target)) = line.split_once(" -> ") else { continue };
+        let fd: i32 = left.rsplit(' ').next().unwrap().parse().unwrap();
+        seen.push(fd);
         if fd <= 2 {
             assert_eq!(target, "/dev/null", "fd {fd}");
         } else {
-            assert!(!target.contains("socket:") && !target.contains("anon_inode") && !target.contains("pipe:"), "inherited fd {fd} -> {target}");
+            panic!("inherited fd {fd} -> {target}");
         }
     }
+    assert_eq!(seen, [0, 1, 2], "{text}");
     c.send(&HelperRequest::CloseSession { session: "s0000a010".into(), generation: 91, grace_ms: 300 });
     c.until(|e| matches!(e, HelperEvent::SessionExited { .. }));
 }

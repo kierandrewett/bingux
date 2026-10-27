@@ -31,13 +31,16 @@ pub struct Env {
     pub dir: tempfile::TempDir,
     pub extra_config: String,
     pub allowed_uid: u32,
+    /// Peer process identity; empty means unchecked (see `SocketConfig`).
+    pub peer_exe: String,
+    pub peer_cgroup: String,
 }
 
 impl Env {
     pub fn new() -> Env {
         let pam = TestPam::new();
         let allowed_uid = pam.uid;
-        Env { pam, dir: tempfile::tempdir().unwrap(), extra_config: String::new(), allowed_uid }
+        Env { pam, dir: tempfile::tempdir().unwrap(), extra_config: String::new(), allowed_uid, peer_exe: String::new(), peer_cgroup: String::new() }
     }
 
     pub fn socket(&self) -> PathBuf {
@@ -66,6 +69,8 @@ state_dir = "{state}"
 [socket]
 path = "{sock}"
 allowed_uid = {uid}
+allowed_exe = "{peer_exe}"
+allowed_cgroup = "{peer_cgroup}"
 
 [pam]
 login_service = "bsm-test-login"
@@ -93,6 +98,8 @@ socket_root = "{d}/run"
             state = self.state_dir().display(),
             sock = self.socket().display(),
             uid = self.allowed_uid,
+            peer_exe = self.peer_exe,
+            peer_cgroup = self.peer_cgroup,
             pamdir = self.pam.path().display(),
             d = d.display(),
             sessions = self.session_socket_dir().display(),

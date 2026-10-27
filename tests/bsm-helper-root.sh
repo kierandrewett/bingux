@@ -67,6 +67,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$WORK" /etc/bsm /run/bsm/sessions
+chmod 1777 "$WORK"
 [ -f /etc/bsm/helper.toml ] && cp /etc/bsm/helper.toml /etc/bsm/helper.toml.bsm-test-orig
 systemd-sysusers 2>/dev/null
 id bsm >/dev/null 2>&1 || { echo "FAIL precondition: account bsm missing (sysusers)"; exit 1; }
@@ -82,8 +83,17 @@ U2=$(id -u bsmt2)
 mkdir -p /run/bsm/sessions
 chown bsm:bsm /run/bsm /run/bsm/sessions
 
-write_config() { # leader-command bridge-command
+write_config() { # leader-command bridge-command [allowed_exe]
     cat >/etc/bsm/helper.toml <<EOF
+# The probe stands in for bsm: it is admitted by executable. The unit check is
+# disabled here because the probe does not run in bsm.service.
+[socket]
+allowed_exe = "${3:-$PROBE}"
+allowed_cgroup = ""
+
+[pam]
+free_failures = 50
+
 [session]
 gnoblin = ["/bin/sh", "-c", "$1"]
 bridge = ["/bin/sh", "-c", "$2"]
@@ -92,7 +102,7 @@ start_timeout_secs = 60
 default_grace_ms = 2000
 
 [greeter]
-command = ["/usr/bin/sleep", "infinity"]
+command = ["/bin/sh", "-c", "setsid sleep 555 & exec sleep infinity"]
 EOF
 }
 LEADER='echo $$ > '$WORK'/leader-$BSM_SESSION_ID.pid; setsid sleep 987 & exec sleep infinity'
@@ -118,6 +128,14 @@ check "helper: running as root" test "$(stat -c %U /proc/$HPID)" = root
 info "helper pid $HPID: $(grep -E '^(Uid|CapEff|NoNewPrivs|Seccomp):' /proc/$HPID/status | tr '\n\t' '  ')"
 eq "helper: no seccomp filter inherited by users (Seccomp=0)" "Seccomp: 0" "$(grep ^Seccomp: /proc/$HPID/status | tr '\t' ' ')"
 eq "helper: no_new_privs off (setuid helpers work in desktops)" "NoNewPrivs: 0" "$(grep ^NoNewPrivs: /proc/$HPID/status | tr '\t' ' ')"
+
+# Review F10: another process of the bsm uid must not be served, only bsm itself.
+systemctl stop bsm-helper.service
+write_config "$LEADER" "$BRIDGE" /usr/bin/bsm
+check "connect: a bsm-uid process that is not /usr/bin/bsm is refused (F10)" sh -c "! runuser -u bsm -- $PROBE --socket $SOCK ping"
+systemctl stop bsm-helper.service
+write_config "$LEADER" "$BRIDGE"
+check "connect: the configured executable is served again" probe ping
 
 # ---- authentication and lockout policy ------------------------------------
 BSM_PROBE_PASSWORD=wrong-password probe login bsmt1 "$U1" 1 >"$WORK/bad1.out" 2>&1
@@ -194,6 +212,7 @@ for v in XDG_SEAT XDG_VTNR WAYLAND_DISPLAY DISPLAY; do
 done
 check "env: the brokered socket reaches the bridge" sh -c "printf '%s\n' '$BENV' | grep -qx 'BSM_HOST_SOCKET=/run/bsm/sessions/$S1-$G1.sock'"
 check "env: the brokered socket does NOT reach the leader" sh -c "! printf '%s\n' '$LENV' | grep -q '^BSM_HOST_SOCKET='"
+check "keyring: pam_gnome_keyring saw the password in auth and unlocked in session (F8, one handle)" sh -c "journalctl -u bsm-helper.service --no-pager | grep -q 'unlocked login keyring'"
 sleep 5
 check "pam: the session is still open five seconds after login (no premature pam_close_session)" sh -c "loginctl list-sessions --no-legend | awk '{print \$1}' | grep -qx '$LSESS'"
 info "sessions after one login: $(loginctl list-sessions --no-legend | tr '\n' ';')"
@@ -281,6 +300,33 @@ check "failure: no process of the failed login is left" sh -c "! pgrep -u bsmt1 
 systemctl stop bsm-helper.service
 write_config "$LEADER" "$BRIDGE"
 
+# ---- a respawning process cannot outlive the session (F6) -------------------
+systemctl stop bsm-helper.service
+printf '#!/bin/sh\nwhile :; do sleep 100 & sleep 0.02; done\n' >"$WORK/respawn.sh"
+chmod 755 "$WORK/respawn.sh"
+write_config 'echo $$ > '$WORK'/leader-$BSM_SESSION_ID.pid; setsid '$WORK'/respawn.sh & exec sleep infinity' "$BRIDGE"
+S5=s000000a5
+probe open bsmt1 "$U1" $S5 1005 /run/bsm/sessions/$S5-1005.sock >"$WORK/open5.out" 2>&1
+check "respawner: session opened" grep -q session_opened "$WORK/open5.out"
+sleep 2
+check "respawner: the user has many processes now" test "$(pgrep -u bsmt1 -c -f 'sleep 100')" -gt 5
+probe close $S5 1005 300 >/dev/null 2>&1
+sleep 1
+check "respawner: nothing of the user's survived cgroup.kill, respawner included" sh -c "! pgrep -u bsmt1 -f 'sleep 100'"
+check "respawner: no shell loop left either" sh -c "! pgrep -u bsmt1 -f 'while :'"
+systemctl stop bsm-helper.service
+write_config "$LEADER" "$BRIDGE"
+
+# ---- user processes get no inherited descriptors (F5) -----------------------
+S6=s000000a6
+write_config 'ls -l /proc/$$/fd/ > '$WORK'/fds-$BSM_SESSION_ID.txt; exec sleep infinity' "$BRIDGE"
+probe open bsmt1 "$U1" $S6 1006 /run/bsm/sessions/$S6-1006.sock >/dev/null 2>&1
+sleep 1
+check "fds: the leader has exactly 0, 1, 2 and they are /dev/null" sh -c "test \"\$(grep -c ' -> ' $WORK/fds-$S6.txt)\" = 3 && ! grep -v '/dev/null' $WORK/fds-$S6.txt | grep -q ' -> '"
+probe close $S6 1006 300 >/dev/null 2>&1
+systemctl stop bsm-helper.service
+write_config "$LEADER" "$BRIDGE"
+
 # ---- the greeter -----------------------------------------------------------
 GG=2001
 BSM_PROBE_HOLD=12 probe greeter $GG /run/bsm/greeter-wayland.sock /run/bsm/greeter-control.sock >"$WORK/greeter.out" 2>&1 &
@@ -303,6 +349,12 @@ if [ -n "$GPID" ]; then
     info "greeter groups: $(grep ^Groups: /proc/"$GPID"/status)"
 fi
 wait $GJOB
+check "greeter: its setsid child died with it" sh -c "! pgrep -u bingux-greeter -f 'sleep 555'"
+# Review F1: replacing a greeter leaves nothing of the old one and no root-chowned surprise.
+BSM_PROBE_HOLD=2 probe greeter-replace 2101 2102 /run/bsm/greeter-wayland.sock /run/bsm/greeter-control.sock >"$WORK/greeter2.out" 2>&1
+check "greeter: replacement reported the old exit and the new spawn" sh -c "grep -q greeter_exited $WORK/greeter2.out && grep -c greeter_spawned $WORK/greeter2.out | grep -qx 2"
+check "greeter: nothing of either generation is left" sh -c "! pgrep -u bingux-greeter ."
+check "greeter: no generation directory is left" sh -c "! ls /run/bsm-greeter/ | grep -q ."
 check "greeter: it was killed on request" sh -c "grep -q greeter_exited $WORK/greeter.out"
 check "greeter: its private directories are removed" sh -c "! test -e /run/bsm-greeter/$GG"
 [ -n "$GPID" ] && check "greeter: the process is gone" sh -c "! kill -0 $GPID 2>/dev/null"

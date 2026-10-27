@@ -554,3 +554,47 @@ fn too_many_children_still_ending_are_refused_with_busy() {
     }
     assert!(busy, "a flood of superseding AuthStarts must hit the bound");
 }
+
+#[test]
+fn only_the_compositor_process_is_served_not_every_process_of_its_uid() {
+    // Review F10: a squatter with the bsm uid (for example the image converter) must
+    // neither hold the single connection slot nor issue requests.
+    if skip_as_root() {
+        return;
+    }
+    let me = std::env::current_exe().unwrap().display().to_string();
+    let own_unit = std::fs::read_to_string("/proc/self/cgroup")
+        .ok()
+        .and_then(|t| bsm_helper::cgroup::parse_unified_path(&t))
+        .and_then(|p| p.rsplit('/').next().map(str::to_owned))
+        .unwrap_or_default();
+
+    // Right executable (and unit when it has a name): served.
+    let mut env = Env::new();
+    env.peer_exe = me.clone();
+    env.peer_cgroup = own_unit.clone();
+    let _h = env.start();
+    let c = env.connect();
+    c.send(&HelperRequest::Ping { nonce: 1 });
+    assert_eq!(c.recv(), HelperEvent::Pong { nonce: 1 });
+    drop(c);
+
+    // Same uid, wrong executable: closed without a byte read, and the slot stays free.
+    let mut env2 = Env::new();
+    env2.peer_exe = "/usr/bin/bsm".into();
+    let _h2 = env2.start();
+    let squatter = env2.connect_raw();
+    let _ = squatter.send_raw(&serde_json::to_vec(&HelperRequest::Ping { nonce: 2 }).unwrap());
+    assert!(squatter.closed_within(Duration::from_secs(3)), "a process that is not bsm must be refused");
+
+    // Right executable, wrong unit.
+    let mut env3 = Env::new();
+    env3.peer_exe = me;
+    env3.peer_cgroup = "bsm.service".into();
+    if own_unit != "bsm.service" {
+        let _h3 = env3.start();
+        let wrong_unit = env3.connect_raw();
+        let _ = wrong_unit.send_raw(&serde_json::to_vec(&HelperRequest::Ping { nonce: 3 }).unwrap());
+        assert!(wrong_unit.closed_within(Duration::from_secs(3)), "a process outside bsm.service must be refused");
+    }
+}

@@ -167,6 +167,33 @@ pub fn acquire_listener(cfg: &Config, allowed_uid: u32) -> io::Result<(OwnedFd, 
     Ok((fd, Some(cfg.socket.path.clone())))
 }
 
+/// Beyond the uid (review F10): the peer must be the compositor process itself, not
+/// another process of the same uid such as the image converter. The identity is
+/// the executable and the systemd unit's cgroup; a pidfd taken from the socket
+/// (Linux 6.5) proves the pid was not reused while these were read.
+pub fn verify_peer_process(cfg: &crate::config::SocketConfig, sock: RawFd, pid: u32) -> Result<(), String> {
+    let pidfd = sys::peer_pidfd(sock);
+    if !cfg.allowed_exe.is_empty() {
+        let exe = std::fs::read_link(format!("/proc/{pid}/exe")).map_err(|e| format!("cannot read the peer's executable: {e}"))?;
+        let exe = exe.to_string_lossy();
+        let exe = exe.strip_suffix(" (deleted)").unwrap_or(&exe);
+        if exe != cfg.allowed_exe {
+            return Err(format!("executable {exe} is not {}", cfg.allowed_exe));
+        }
+    }
+    if !cfg.allowed_cgroup.is_empty() {
+        let cg = cgroup::path_of(pid).map_err(|e| format!("cannot read the peer's cgroup: {e}"))?;
+        let unit = cg.rsplit('/').next().unwrap_or("");
+        if unit != cfg.allowed_cgroup {
+            return Err(format!("cgroup {cg} is not unit {}", cfg.allowed_cgroup));
+        }
+    }
+    if pidfd.as_ref().is_some_and(|f| sys::pidfd_exited(f.as_raw_fd())) {
+        return Err("the peer exited while it was being checked".into());
+    }
+    Ok(())
+}
+
 /// Resolve the uid allowed to connect.
 pub fn resolve_allowed_uid(cfg: &Config) -> Result<u32, String> {
     if let Some(uid) = cfg.socket.allowed_uid {
@@ -330,7 +357,12 @@ impl Server {
                 }
             };
             match sys::peer_cred(fd.as_raw_fd()) {
-                Ok((_, uid, _)) if uid == self.allowed_uid => {}
+                Ok((pid, uid, _)) if uid == self.allowed_uid => {
+                    if let Err(why) = verify_peer_process(&self.cfg.socket, fd.as_raw_fd(), pid) {
+                        eprintln!("bsm-helper: rejected connection from pid {pid}: {why}");
+                        continue;
+                    }
+                }
                 Ok((pid, uid, _)) => {
                     eprintln!("bsm-helper: rejected connection from pid {pid} uid {uid}");
                     continue;
