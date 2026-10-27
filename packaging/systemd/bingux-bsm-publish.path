@@ -1,0 +1,24 @@
+[Unit]
+Description=Republish the login-screen appearance when it changes
+PartOf=bingux.target
+ConditionUser=!greeter
+ConditionUser=!greetd
+ConditionUser=!bingux-greeter
+ConditionPathExists=/run/bsm/greeter-control.sock
+
+[Path]
+# The Bingux configuration (wallpaper, privacy.show_personal_images), the
+# dconf database that holds the GNOME colour scheme, accent, clock format,
+# animations and background, and the avatar. A dconf write that changes none of
+# them republishes the same values, which bsm leaves untouched.
+PathChanged=%E/bingux/bingux.toml
+PathChanged=%E/dconf/user
+PathChanged=%h/.face
+PathChanged=/var/lib/AccountsService/icons/%u
+Unit=bingux-bsm-publish.service
+# Settings pages write dconf in bursts.
+TriggerLimitIntervalSec=30
+TriggerLimitBurst=30
+
+[Install]
+WantedBy=bingux.target

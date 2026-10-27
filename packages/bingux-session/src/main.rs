@@ -13,18 +13,20 @@
 //! bingux-session greeter-background       Lua that paints the remembered account's wallpaper
 //! bingux-session wallpaper                the calling user's wallpaper from bingux-config
 //! bingux-session export                   publish the greeter snapshot and Gnoblin background
+//! bingux-session publish [--dry-run]      hand the login-screen appearance to bsm (bsmctl)
 //! bingux-session blur-wallpaper SOURCE TARGET  write a pre-blurred, dimmed copy (packaging)
 //! ```
 
 mod accounts;
 mod biometrics;
+mod publish;
 mod sessions;
 mod snapshot;
 mod state;
 
 use std::{env, io::Write, path::Path, process};
 
-const USAGE: &str = "usage: bingux-session users | sessions | biometrics USER SERVICE | remember USER SESSION | recall | greeter-background | wallpaper | export | blur-wallpaper SOURCE TARGET";
+const USAGE: &str = "usage: bingux-session users | sessions | biometrics USER SERVICE | remember USER SESSION | recall | greeter-background | wallpaper | export | publish [--dry-run] | blur-wallpaper SOURCE TARGET";
 
 fn main() {
     let arguments: Vec<String> = env::args().skip(1).collect();
@@ -66,9 +68,23 @@ fn main() {
         ["wallpaper"] => serde_json::to_string(
             &serde_json::json!({ "wallpaper": snapshot::configured_wallpaper() }),
         ),
+        ["publish"] => process::exit(publish::publish(&publish::resolve(&publish::System))),
+        ["publish", "--dry-run"] => {
+            let appearance = publish::resolve(&publish::System);
+            serde_json::to_string(&serde_json::json!({
+                "arguments": publish::bsmctl_arguments(&appearance),
+                "appearance": appearance,
+            }))
+        }
         ["export"] => match accounts::current_user_name() {
             Some(user) => {
-                let wallpaper = snapshot::configured_wallpaper();
+                // An account that keeps its pictures off the login screen
+                // (privacy.show_personal_images) exports no wallpaper.
+                let wallpaper = if snapshot::show_personal_images() {
+                    snapshot::configured_wallpaper()
+                } else {
+                    String::new()
+                };
                 // The export writes the blurred twin that the drop-in names, so it
                 // runs first. A failed export still leaves a drop-in for the last twin.
                 let exported = snapshot::export(&snapshot::root(), &user, &wallpaper);

@@ -29,6 +29,7 @@ const RENAMES: &[(&str, &str)] = &[
     ("file_roots", "fileRoots"),
     ("max_megabytes", "maxMegabytes"),
     ("public_ip_lookup", "publicIpLookup"),
+    ("show_personal_images", "showPersonalImages"),
 ];
 
 /// Keys whose immediate children are identifiers, not schema keys.
@@ -123,7 +124,7 @@ mod tests {
                 "control_layout": {"version": 1, "groups": {"controls-header": ["control_x"]}},
                 "control_centre": {"night_light": true}
             },
-            "privacy": {"public_ip_lookup": false}
+            "privacy": {"public_ip_lookup": false, "show_personal_images": true}
         });
         let camel = to_legacy(&snake);
         assert_eq!(camel["desktop"]["dockSize"], 60);
@@ -138,6 +139,7 @@ mod tests {
         assert_eq!(camel["desktop"]["controlCentre"]["nightLight"], true);
         assert_eq!(camel["desktop"]["layout"], Value::Null);
         assert_eq!(camel["privacy"]["publicIpLookup"], false);
+        assert_eq!(camel["privacy"]["showPersonalImages"], true);
         let back = from_legacy(&camel);
         assert_eq!(back["desktop"]["dock_size"], 60);
         assert_eq!(back["desktop"]["control_centre"]["night_light"], true);

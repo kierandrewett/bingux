@@ -13,7 +13,7 @@ After=graphical-session.target
 # screen or a lost login (5f53de8.iso: 6.5 s with the default, 0.4 s without,
 # on four busy CPUs). The helpers start in the background instead.
 DefaultDependencies=no
-Wants=bingux-searchd.service bingux-statusd.service xdg-desktop-portal-bingux.service bingux-global-shortcuts.service bingux-greeter-export.service bingux-greeter-export.path
+Wants=bingux-searchd.service bingux-statusd.service xdg-desktop-portal-bingux.service bingux-global-shortcuts.service bingux-greeter-export.service bingux-greeter-export.path bingux-bsm-publish.service bingux-bsm-publish.path
 
 [Install]
 WantedBy=gnoblin-session.target

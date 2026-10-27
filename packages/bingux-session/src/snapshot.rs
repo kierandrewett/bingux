@@ -61,6 +61,12 @@ pub fn configured_wallpaper() -> String {
         .unwrap_or_default()
 }
 
+/// `privacy.show_personal_images` in the user's Bingux configuration; on unless
+/// it says `false`.
+pub fn show_personal_images() -> bool {
+    command_stdout(&["get", "privacy.show_personal_images"]) != "false"
+}
+
 fn command_stdout(arguments: &[&str]) -> String {
     Command::new("bingux-config")
         .args(arguments)

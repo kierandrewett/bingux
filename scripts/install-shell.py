@@ -459,6 +459,8 @@ def integration_paths(prefix, managed=False):
         "bingux-lock.service",
         "bingux-greeter-export.service",
         "bingux-greeter-export.path",
+        "bingux-bsm-publish.service",
+        "bingux-bsm-publish.path",
         "xdg-desktop-portal-bingux.service",
         "bingux-global-shortcuts.service",
     )

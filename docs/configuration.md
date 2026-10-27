@@ -155,6 +155,7 @@ missing program when you ask the assistant a question.
 | Key                | Type | Default | Accepted values                                                             |
 | ------------------ | ---- | ------- | --------------------------------------------------------------------------- |
 | `public_ip_lookup` | bool | `false` | Let the Control Centre ask ipapi.co for the public address. Off by default. |
+| `show_personal_images` | bool | `true` | Show your avatar and wallpaper on the login screen before you sign in. Every local account can read the published copies, so turn this off for a private picture. With bsm the copies are removed at the next publish. |
 
 ## Where the shell reads it
 

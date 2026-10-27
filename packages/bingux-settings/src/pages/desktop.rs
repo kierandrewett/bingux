@@ -41,6 +41,7 @@ struct Model {
     dock_scroll_direction: String,
     tiles: [bool; 5],
     public_ip_lookup: bool,
+    show_personal_images: bool,
 }
 
 impl Model {
@@ -76,6 +77,11 @@ impl Model {
             dock_scroll_direction: text(desktop, "dockScrollDirection")?,
             tiles,
             public_ip_lookup: flag(privacy, "publicIpLookup")?,
+            // Absent in a dump from an older bingux-config: the default is on.
+            show_personal_images: privacy
+                .get("showPersonalImages")
+                .and_then(Json::as_bool)
+                .unwrap_or(true),
         })
     }
 }
@@ -389,12 +395,23 @@ impl Component for DesktopPage {
                 )),
             )
             .child(
-                Group::titled("Privacy").row(
-                    switch_row("Public IP lookup", m.public_ip_lookup, move |on: bool| {
-                        write(ctx, Change::Set("privacy.public_ip_lookup", on.to_string()))
-                    })
-                    .subtitle("Ask ipapi.co for the public address in the Control Centre."),
-                ),
+                Group::titled("Privacy")
+                    .row(
+                        switch_row("Public IP lookup", m.public_ip_lookup, move |on: bool| {
+                            write(ctx, Change::Set("privacy.public_ip_lookup", on.to_string()))
+                        })
+                        .subtitle("Ask ipapi.co for the public address in the Control Centre."),
+                    )
+                    .row(
+                        switch_row(
+                            "Personal images on the login screen",
+                            m.show_personal_images,
+                            move |on: bool| {
+                                write(ctx, Change::Set("privacy.show_personal_images", on.to_string()))
+                            },
+                        )
+                        .subtitle("Show your avatar and wallpaper before you sign in. Every local account can see them."),
+                    ),
             )
             .child(
                 Group::titled("Introduction").row(

@@ -202,9 +202,13 @@ class InstallTest(unittest.TestCase):
                     "bingux-global-shortcuts.service",
                     "bingux-greeter-export.service",
                     "bingux-greeter-export.path",
+                    "bingux-bsm-publish.service",
+                    "bingux-bsm-publish.path",
                 },
             )
             self.assertTrue((stage / "usr/lib/systemd/user/bingux-greeter-export.path").is_file())
+            self.assertTrue((stage / "usr/lib/systemd/user/bingux-bsm-publish.path").is_file())
+            self.assertTrue((stage / "usr/lib/systemd/user/bingux-bsm-publish.service").is_file())
             self.assertTrue((stage / "usr/lib/tmpfiles.d/bingux-greeter.conf").is_file())
             portal_unit = (stage / "usr/lib/systemd/user/xdg-desktop-portal-bingux.service").read_text()
             self.assertIn("ExecStart=/usr/libexec/bingux/xdg-desktop-portal-bingux", portal_unit)
