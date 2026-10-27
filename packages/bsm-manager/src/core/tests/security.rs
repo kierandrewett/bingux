@@ -670,7 +670,7 @@ fn a_recovered_session_that_never_reconnects_is_closed() {
     let rec = PersistedSession { id: "s0000beef".into(), generation: 55, uid: ALICE, user_name: "alice".into(), scope: "s.scope".into(), host_pid: 4242 };
     sim.feed(Input::Recovered(vec![RecoveredSession { session: rec, alive: true }]));
     let mark = sim.mark();
-    sim.advance(Duration::from_secs(31));
+    sim.advance(Duration::from_secs(121));
     assert!(sim.helper_reqs(mark).iter().any(|r| matches!(r, HelperRequest::CloseSession { session, .. } if session == "s0000beef")));
     assert!(sim.m.session("s0000beef").is_none());
 }
@@ -1185,4 +1185,24 @@ fn f17_unlock_needs_a_frame_newer_than_the_hidden_one() {
     sim.comp.hold_transitions = false;
     sim.authenticate(ALICE, AuthIntent::Unlock);
     assert_eq!(sim.state(&a), SessionState::Foreground);
+}
+
+/// F9: a persisted session whose bridge did not survive is closed, so no orphan keeps running.
+#[test]
+fn f9_a_persisted_session_without_a_bridge_is_closed_once_the_helper_is_up() {
+    let mut sim = Sim::new();
+    sim.feed(Input::Start { persisted: Persisted::default() });
+    sim.feed(Input::Accounts(accounts()));
+    // The recovery probe ran before the helper connected.
+    let dead = PersistedSession { id: "s0000dead".into(), generation: 56, uid: BOB, user_name: "bob".into(), scope: "x.scope".into(), host_pid: 1 };
+    sim.feed(Input::Recovered(vec![RecoveredSession { session: dead, alive: false }]));
+    assert!(sim.m.session("s0000dead").is_none());
+    assert!(sim.helper_reqs(0).is_empty(), "nothing can be sent yet");
+    sim.feed(Input::HelperConnected);
+    assert!(sim.helper_reqs(0).iter().any(|r| matches!(r, HelperRequest::CloseSession { session, generation: 56, .. } if session == "s0000dead")));
+    // Only once.
+    let mark = sim.mark();
+    sim.feed(Input::HelperLost);
+    sim.feed(Input::HelperConnected);
+    assert!(sim.helper_reqs(mark).iter().all(|r| !matches!(r, HelperRequest::CloseSession { .. })));
 }

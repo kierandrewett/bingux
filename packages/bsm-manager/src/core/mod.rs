@@ -108,6 +108,8 @@ pub struct Manager {
     switching_user: bool,
     /// Logouts of sessions that were not on screen: tracked without the operation slot (F2).
     bg_logouts: BTreeMap<(SessionId, Generation), OperationId>,
+    /// Persisted sessions whose bridge did not survive: closed once the helper is reachable (F9).
+    pending_closes: Vec<(SessionId, Generation)>,
 
     compositor_ready: bool,
     outputs: Vec<OutputInfo>,
@@ -154,6 +156,7 @@ impl Manager {
             retained_failure: None,
             switching_user: false,
             bg_logouts: BTreeMap::new(),
+            pending_closes: Vec::new(),
             compositor_ready: false,
             outputs: Vec::new(),
             outputs_epoch: 0,
@@ -328,7 +331,10 @@ impl Manager {
     fn on_recovered(&mut self, recovered: Vec<RecoveredSession>, fx: &mut Fx) {
         for r in recovered {
             if !r.alive {
-                Self::log(fx, LogLevel::Info, Some(&r.session.id), "recovered session is gone; dropped");
+                // Its bridge is gone. Whatever is left of the session (Gnoblin, apps) must not
+                // survive without a registry: ask the helper to end it (unknown ids are ignored).
+                Self::log(fx, LogLevel::Info, Some(&r.session.id), "recovered session has no bridge; closing it");
+                self.pending_closes.push((r.session.id.clone(), r.session.generation));
                 continue;
             }
             if self.sessions.contains_key(&r.session.id) || self.running_session(r.session.uid).is_some() {
@@ -404,6 +410,13 @@ impl Manager {
 
     fn on_helper_connected(&mut self, fx: &mut Fx) {
         self.helper_up = true;
+        for (session, generation) in std::mem::take(&mut self.pending_closes) {
+            fx.push(Effect::Helper(bsm_proto::helper::HelperRequest::CloseSession {
+                session,
+                generation,
+                grace_ms: self.policy.close_grace_ms,
+            }));
+        }
         if !self.greeter.wayland {
             self.greeter.generation = None;
             self.greeter.spawn_req = None;

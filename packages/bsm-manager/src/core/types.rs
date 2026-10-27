@@ -146,7 +146,7 @@ impl Default for Policy {
             close_grace_ms: 5000,
             close_timeout: Duration::from_secs(15),
             greeter_respawn_delay: Duration::from_secs(1),
-            recovery_reconnect: Duration::from_secs(30),
+            recovery_reconnect: Duration::from_secs(120),
             max_failures: 5,
             failure_cooldown: Duration::from_secs(30),
             publish_interval: Duration::from_millis(500),

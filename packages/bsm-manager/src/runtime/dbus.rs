@@ -109,7 +109,7 @@ use zbus::message::Header;
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{self, StructureBuilder, Value};
 
-use super::api::{DbusCall, RtInput};
+use super::api::{CallTx, DbusCall, RtInput};
 use crate::core::{
     Caller, DbusSignal, FdHandle, Method, OperationInfo, PublishRequest, Reply, SessionInfo, StatusInfo, UserInfo,
 };
@@ -516,9 +516,44 @@ async fn resolve_caller(conn: &Connection, hdr: &Header<'_>, budget: Duration) -
     Ok(Caller { uid, pid, bus_name, cgroup: read_cgroup(pid) })
 }
 
+/// Most calls one uid may have waiting for the manager at the same time (F7).
+pub const MAX_CALLS_PER_UID: u32 = 8;
+
+/// Counts one uid's call in flight and releases it when dropped.
+struct InFlight {
+    map: Arc<parking_lot::Mutex<HashMap<u32, u32>>>,
+    uid: u32,
+}
+
+impl InFlight {
+    fn take(map: &Arc<parking_lot::Mutex<HashMap<u32, u32>>>, uid: u32) -> Option<Self> {
+        let mut m = map.lock();
+        let n = m.entry(uid).or_insert(0);
+        if *n >= MAX_CALLS_PER_UID {
+            return None;
+        }
+        *n += 1;
+        Some(Self { map: map.clone(), uid })
+    }
+}
+
+impl Drop for InFlight {
+    fn drop(&mut self) {
+        let mut m = self.map.lock();
+        if let Some(n) = m.get_mut(&self.uid) {
+            *n -= 1;
+            if *n == 0 {
+                m.remove(&self.uid);
+            }
+        }
+    }
+}
+
 struct Service {
-    calls: SyncSender<RtInput>,
+    calls: CallTx,
     timeouts: Timeouts,
+    /// Calls in flight per uid (F7).
+    in_flight: Arc<parking_lot::Mutex<HashMap<u32, u32>>>,
 }
 
 impl Service {
@@ -531,20 +566,15 @@ impl Service {
     ) -> Result<Reply, BsmError> {
         let deadline = Instant::now() + limit;
         let caller = resolve_caller(conn, hdr, limit).await?;
+        // F7: no account can fill the driver's call queue; the rest of the seat is not slowed down by it.
+        let _slot = InFlight::take(&self.in_flight, caller.uid)
+            .ok_or_else(|| err(ErrorCode::Busy, "too many calls in flight for this account"))?;
         let (tx, rx) = async_channel::bounded(1);
-        let mut item = RtInput::Call(DbusCall { caller, method, reply: tx });
-        loop {
-            match self.calls.try_send(item) {
-                Ok(()) => break,
-                Err(TrySendError::Full(back)) => {
-                    if Instant::now() >= deadline {
-                        return Err(err(ErrorCode::Timeout, "manager queue is full"));
-                    }
-                    item = back;
-                    Timer::after(Duration::from_millis(5)).await;
-                }
-                Err(TrySendError::Disconnected(_)) => return Err(err(ErrorCode::Internal, "manager is not running")),
-            }
+        let item = RtInput::Call(DbusCall { caller, method, reply: tx });
+        match self.calls.try_send(item) {
+            Ok(()) => {}
+            Err(TrySendError::Full(_)) => return Err(err(ErrorCode::Busy, "the session manager is busy")),
+            Err(TrySendError::Disconnected(_)) => return Err(err(ErrorCode::Internal, "manager is not running")),
         }
         let left = deadline.saturating_duration_since(Instant::now());
         match with_timeout(left, rx.recv()).await {
@@ -1049,13 +1079,13 @@ impl Drop for DbusHandle {
 }
 
 /// Start the service with default timeouts and queue size.
-pub fn spawn(kind: BusKind, calls: SyncSender<RtInput>) -> Result<DbusHandle, BsmError> {
+pub fn spawn(kind: BusKind, calls: impl Into<CallTx>) -> Result<DbusHandle, BsmError> {
     spawn_with(kind, calls, Config::default())
 }
 
 /// Start the service. Returns once the name `org.bingux.Session1` is owned; fails when
 /// the bus is unreachable or the name is taken.
-pub fn spawn_with(kind: BusKind, calls: SyncSender<RtInput>, config: Config) -> Result<DbusHandle, BsmError> {
+pub fn spawn_with(kind: BusKind, calls: impl Into<CallTx>, config: Config) -> Result<DbusHandle, BsmError> {
     let (tx, rx) = async_channel::bounded(config.signal_queue.max(1));
     let shared = Arc::new(Shared {
         tx,
@@ -1064,6 +1094,7 @@ pub fn spawn_with(kind: BusKind, calls: SyncSender<RtInput>, config: Config) -> 
         failed: AtomicU64::new(0),
         owned: AtomicBool::new(false),
     });
+    let calls: CallTx = calls.into();
     let (ready_tx, ready_rx) = sync_channel::<Result<(), BsmError>>(1);
     let worker = shared.clone();
     let thread = std::thread::Builder::new()
@@ -1082,7 +1113,7 @@ pub fn spawn_with(kind: BusKind, calls: SyncSender<RtInput>, config: Config) -> 
 
 async fn serve(
     kind: BusKind,
-    calls: SyncSender<RtInput>,
+    calls: CallTx,
     timeouts: Timeouts,
     shared: Arc<Shared>,
     rx: async_channel::Receiver<DbusSignal>,
@@ -1120,12 +1151,12 @@ async fn serve(
     }
 }
 
-async fn connect_service(kind: &BusKind, calls: SyncSender<RtInput>, timeouts: Timeouts) -> Result<Connection, BsmError> {
+async fn connect_service(kind: &BusKind, calls: CallTx, timeouts: Timeouts) -> Result<Connection, BsmError> {
     use zbus::fdo::{RequestNameFlags, RequestNameReply};
     let bus = |e: zbus::Error| err(ErrorCode::Internal, format!("D-Bus: {e}"));
     let conn = builder(kind)
         .map_err(bus)?
-        .serve_at(BUS_PATH, Service { calls, timeouts })
+        .serve_at(BUS_PATH, Service { calls, timeouts, in_flight: Arc::default() })
         .map_err(bus)?
         .build()
         .await
@@ -1643,6 +1674,49 @@ mod tests {
         .unwrap_err();
         assert_eq!(error_name_of(&e), "org.bingux.Session1.Error.Timeout");
         assert!(start.elapsed() >= Duration::from_millis(550), "publish uses its own bound");
+    }
+
+    #[test]
+    fn f7_one_uid_cannot_have_more_than_the_cap_in_flight() {
+        let r = rig(Box::new(|_| None), Timeouts { call: Duration::from_secs(4), publish: Duration::from_secs(4) });
+        // Fill the cap with calls the driver never answers, from this process's uid.
+        let mut threads = Vec::new();
+        for _ in 0..MAX_CALLS_PER_UID {
+            let conn = r.conn.clone();
+            threads.push(std::thread::spawn(move || call::<_, u64>(&conn, "RequestReboot", &())));
+        }
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while r.driver.seen.lock().unwrap().len() < MAX_CALLS_PER_UID as usize {
+            assert!(Instant::now() < deadline, "the first calls never reached the driver");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let start = Instant::now();
+        let e = call::<_, u64>(&r.conn, "RequestReboot", &()).unwrap_err();
+        assert_eq!(error_name_of(&e), "org.bingux.Session1.Error.Busy");
+        assert!(start.elapsed() < Duration::from_secs(1), "Busy is immediate, not a wait");
+        for t in threads {
+            let _ = t.join();
+        }
+        // The slots are free again once the calls ended.
+        let e = call::<_, u64>(&r.conn, "RequestReboot", &()).unwrap_err();
+        assert_eq!(error_name_of(&e), "org.bingux.Session1.Error.Timeout");
+    }
+
+    #[test]
+    fn f7_a_full_call_queue_answers_busy_instead_of_waiting() {
+        let bus = PrivateBus::start();
+        // A queue of one that nobody reads.
+        let (tx, _rx) = sync_channel::<RtInput>(1);
+        let _handle = spawn_with(bus.kind(), tx, Config { timeouts: Timeouts { call: Duration::from_secs(3), publish: Duration::from_secs(3) }, signal_queue: 8 }).expect("spawn");
+        let conn = async_io::block_on(async { super::builder(&bus.kind()).unwrap().build().await.unwrap() });
+        let c2 = conn.clone();
+        let first = std::thread::spawn(move || call::<_, u64>(&c2, "RequestReboot", &()));
+        std::thread::sleep(Duration::from_millis(300));
+        let start = Instant::now();
+        let e = call::<_, u64>(&conn, "RequestReboot", &()).unwrap_err();
+        assert_eq!(error_name_of(&e), "org.bingux.Session1.Error.Busy");
+        assert!(start.elapsed() < Duration::from_secs(1));
+        let _ = first.join();
     }
 
     #[test]

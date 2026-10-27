@@ -252,6 +252,7 @@ pub fn run(s: Settings) -> Result<(), String> {
     policy.hostname = std::fs::read_to_string("/etc/hostname").map(|h| h.trim().to_owned()).unwrap_or_else(|_| "bingux".into());
 
     let (tx, rx) = runtime::channel();
+    let (call_tx, call_rx) = runtime::call_channel(&tx);
     spawn_signal_thread(tx.clone()).map_err(|e| format!("signal thread: {e}"))?;
 
     // The bus first: the name must be ours before anything is promised.
@@ -264,7 +265,7 @@ pub fn run(s: Settings) -> Result<(), String> {
                 DbusMode::Address(a) => BusKind::Address(a.clone()),
                 DbusMode::None => unreachable!(),
             };
-            Some(Arc::new(dbus::spawn(kind, tx.clone()).map_err(|e| format!("D-Bus service: {e}"))?))
+            Some(Arc::new(dbus::spawn(kind, call_tx).map_err(|e| format!("D-Bus service: {e}"))?))
         }
     };
     // polkit and logind always live on the system bus, wherever our own service is.
@@ -291,6 +292,7 @@ pub fn run(s: Settings) -> Result<(), String> {
         helper: HelperEndpoint::Path { path: s.helper_socket.clone(), peer_uid: (s.backend == BackendName::Drm).then_some(0) },
         accounts,
         appearance,
+        calls: call_rx,
         system,
         signals: Box::new(move |sig| {
             if let Some(h) = &signals_handle {

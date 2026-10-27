@@ -31,6 +31,9 @@ use crate::core::*;
 pub const CALL_DEADLINE: Duration = Duration::from_secs(30);
 const MAX_WORKERS: usize = 16;
 const QUEUE: usize = 1024;
+const CALL_QUEUE: usize = 64;
+/// Calls taken per round, so that system inputs keep being read between them.
+const CALLS_PER_ROUND: usize = 4;
 
 pub struct RuntimeConfig {
     pub policy: Policy,
@@ -39,6 +42,8 @@ pub struct RuntimeConfig {
     pub helper: HelperEndpoint,
     pub accounts: Arc<dyn AccountSource>,
     pub appearance: Arc<dyn AppearanceBackend>,
+    /// D-Bus calls, read after the system sources (F7).
+    pub calls: Receiver<RtInput>,
     pub system: Arc<dyn SystemServices>,
     /// Receives every D-Bus signal the core wants emitted.
     pub signals: Box<dyn Fn(DbusSignal) + Send>,
@@ -52,6 +57,13 @@ pub struct RuntimeConfig {
 /// sender before the runtime starts.
 pub fn channel() -> (DriverTx, Receiver<RtInput>) {
     sync_channel(QUEUE)
+}
+
+/// The separate, smaller queue of D-Bus calls (F7). `sys` is the sender returned by
+/// [`channel`]: it is only used to wake the driver.
+pub fn call_channel(sys: &DriverTx) -> (CallTx, Receiver<RtInput>) {
+    let (tx, rx) = sync_channel(CALL_QUEUE);
+    (CallTx::new(tx, sys.clone()), rx)
 }
 
 pub struct RuntimeHandle {
@@ -141,15 +153,7 @@ pub fn start(
     let greeter = GreeterServer::spawn(cfg.control.clone(), tx.clone())?;
     let helper = HelperClient::spawn(cfg.helper, tx.clone())?;
     let fwd_tx = tx.clone();
-    thread::Builder::new().name("bsm-scene-events".into()).spawn(move || {
-        for e in scene_events {
-            if fwd_tx.send(RtInput::Core(Input::Scene(e))).is_err() {
-                return;
-            }
-        }
-        // The compositor side hung up: bsm has nothing left to manage.
-        let _ = fwd_tx.send(RtInput::Shutdown);
-    })?;
+    thread::Builder::new().name("bsm-scene-events".into()).spawn(move || forward_scene_events(scene_events, fwd_tx))?;
     let ready = Arc::new((Mutex::new(false), Condvar::new()));
     let state = Arc::new(Mutex::new(SharedState::default()));
     let mut d = Driver {
@@ -172,20 +176,73 @@ pub fn start(
         state: state.clone(),
         compositor_gone: false,
     };
+    let calls = cfg.calls;
     let persisted = persist::load(&cfg.state_dir);
     let recovered = recovery::probe(&cfg.proc_root, persisted.sessions.clone());
     let join = thread::Builder::new().name("bsm-manager".into()).spawn(move || {
         d.queue.push_back(Input::Start { persisted });
         d.queue.push_back(Input::Recovered(recovered));
         d.drain();
-        d.run(rx);
+        d.run(rx, calls);
         let _ = std::fs::remove_file(d.greeter.path());
     })?;
     Ok(RuntimeHandle { tx, join: Some(join), ready, state })
 }
 
+/// Carries compositor events into the driver (F6). A hosted client can make the compositor emit a
+/// `SessionReport` for every request it sends, so reports are the one kind that may be thrown away:
+/// an exact repeat of the last report of that kind is dropped, and when the driver queue is full
+/// reports are dropped and counted instead of blocking the forwarder (which would let the
+/// compositor's unbounded channel grow). Every other event, and every `DesktopReady` (a
+/// freshness anchor), is delivered, waiting for room if it must.
+fn forward_scene_events(events: Receiver<SceneEvent>, tx: DriverTx) {
+    use bsm_proto::scene::HostReport;
+    use std::collections::HashMap;
+    use std::sync::mpsc::TrySendError;
+    let mut last: HashMap<(String, u64, u8, String), HostReport> = HashMap::new();
+    let mut dropped: u64 = 0;
+    for e in events {
+        if let SceneEvent::SessionReport { session, generation, report } = &e {
+            let (kind, output) = match report {
+                HostReport::GnoblinReady => (0, String::new()),
+                HostReport::OutputConfigured { output } => (1, output.clone()),
+                HostReport::BinguxLaunched => (2, String::new()),
+                HostReport::SurfacesMapped { output, .. } => (3, output.clone()),
+                HostReport::DesktopReady => (4, String::new()),
+            };
+            if kind != 4 {
+                let key = (session.clone(), *generation, kind, output);
+                if last.get(&key) == Some(report) {
+                    continue;
+                }
+                if last.len() > 1024 {
+                    last.clear();
+                }
+                last.insert(key, report.clone());
+            }
+            match tx.try_send(RtInput::Core(Input::Scene(e))) {
+                Ok(()) => {}
+                Err(TrySendError::Full(_)) => {
+                    dropped += 1;
+                    if dropped.is_power_of_two() {
+                        tracing::warn!(dropped, "session reports dropped: the manager queue is full");
+                    }
+                }
+                Err(TrySendError::Disconnected(_)) => return,
+            }
+            continue;
+        }
+        if tx.send(RtInput::Core(Input::Scene(e))).is_err() {
+            return;
+        }
+    }
+    // The compositor side hung up: bsm has nothing left to manage.
+    let _ = tx.send(RtInput::Shutdown);
+}
+
 impl Driver {
-    fn run(&mut self, rx: Receiver<RtInput>) {
+    fn run(&mut self, rx: Receiver<RtInput>, calls: Receiver<RtInput>) {
+        let mut backlog = false;
         loop {
             let now = Instant::now();
             let next_deadline = self
@@ -198,12 +255,38 @@ impl Driver {
                 Some(t) => t.saturating_duration_since(now).min(Duration::from_secs(1)),
                 None => Duration::from_secs(1),
             };
-            match rx.recv_timeout(wait) {
-                Ok(RtInput::Shutdown) => return,
-                Ok(RtInput::Core(i)) => self.queue.push_back(i),
-                Ok(RtInput::Call(c)) => self.accept_call(c),
-                Err(RecvTimeoutError::Timeout) => {}
-                Err(RecvTimeoutError::Disconnected) => return,
+            // System sources first, all of them, then a few calls (F7).
+            let mut first = true;
+            let wait = if backlog { Duration::ZERO } else { wait };
+            loop {
+                let got = if first { rx.recv_timeout(wait) } else { rx.try_recv().map_err(|e| match e {
+                    std::sync::mpsc::TryRecvError::Empty => RecvTimeoutError::Timeout,
+                    std::sync::mpsc::TryRecvError::Disconnected => RecvTimeoutError::Disconnected,
+                }) };
+                first = false;
+                match got {
+                    Ok(RtInput::Shutdown) => return,
+                    Ok(RtInput::Core(i)) => self.queue.push_back(i),
+                    Ok(RtInput::Call(c)) => self.accept_call(c),
+                    Ok(RtInput::Wake) => {}
+                    Err(RecvTimeoutError::Timeout) => break,
+                    Err(RecvTimeoutError::Disconnected) => return,
+                }
+                if self.queue.len() > 256 {
+                    break;
+                }
+            }
+            backlog = false;
+            for n in 0..CALLS_PER_ROUND {
+                match calls.try_recv() {
+                    Ok(RtInput::Call(c)) => {
+                        self.accept_call(c);
+                        // Probably more: do not sleep before the next round.
+                        backlog = n + 1 == CALLS_PER_ROUND;
+                    }
+                    Ok(_) => {}
+                    Err(_) => break,
+                }
             }
             self.fire_due();
             self.drain();
@@ -426,5 +509,64 @@ impl Driver {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod f6_tests {
+    use super::*;
+    use bsm_proto::scene::HostReport;
+    use std::sync::mpsc::channel;
+
+    fn report(sid: &str, r: HostReport) -> SceneEvent {
+        SceneEvent::SessionReport { session: sid.into(), generation: 1, report: r }
+    }
+
+    #[test]
+    fn a_flood_of_identical_reports_reaches_the_manager_once() {
+        let (evt_tx, evt_rx) = channel();
+        let (tx, rx) = sync_channel(1024);
+        for _ in 0..100_000 {
+            evt_tx.send(report("s1", HostReport::GnoblinReady)).unwrap();
+        }
+        evt_tx.send(report("s1", HostReport::OutputConfigured { output: "DP-1".into() })).unwrap();
+        evt_tx.send(report("s1", HostReport::OutputConfigured { output: "DP-1".into() })).unwrap();
+        evt_tx.send(report("s2", HostReport::GnoblinReady)).unwrap();
+        drop(evt_tx);
+        forward_scene_events(evt_rx, tx);
+        let got: Vec<_> = rx.try_iter().collect();
+        // Three distinct reports and the final shutdown.
+        assert_eq!(got.len(), 4, "{}", got.len());
+    }
+
+    #[test]
+    fn a_full_queue_drops_reports_but_never_other_events() {
+        let (evt_tx, evt_rx) = channel();
+        let (tx, rx) = sync_channel(4);
+        for n in 0..50u32 {
+            evt_tx.send(report("s1", HostReport::SurfacesMapped { output: "DP-1".into(), mapped: n, required: 99 })).unwrap();
+        }
+        drop(evt_tx);
+        // Nobody reads the queue: the forwarder must still finish (it does not block on reports).
+        let t = std::thread::spawn(move || forward_scene_events(evt_rx, tx));
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while !t.is_finished() && Instant::now() < deadline {
+            // The final Shutdown is a blocking send: drain one slot so it can go through.
+            std::thread::sleep(Duration::from_millis(20));
+            let _ = rx.try_recv();
+        }
+        assert!(t.is_finished());
+    }
+
+    #[test]
+    fn desktop_ready_is_never_deduplicated() {
+        let (evt_tx, evt_rx) = channel();
+        let (tx, rx) = sync_channel(64);
+        for _ in 0..3 {
+            evt_tx.send(report("s1", HostReport::DesktopReady)).unwrap();
+        }
+        drop(evt_tx);
+        forward_scene_events(evt_rx, tx);
+        assert_eq!(rx.try_iter().count(), 4);
     }
 }

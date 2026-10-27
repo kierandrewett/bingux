@@ -14,6 +14,6 @@ pub mod rng;
 pub mod system;
 
 pub use api::*;
-pub use driver::{CALL_DEADLINE, RuntimeConfig, RuntimeHandle, channel, start};
+pub use driver::{CALL_DEADLINE, RuntimeConfig, RuntimeHandle, call_channel, channel, start};
 pub use greeter_server::ControlConfig;
 pub use helper_client::HelperEndpoint;

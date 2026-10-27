@@ -308,6 +308,7 @@ type Job = Box<dyn FnOnce(&mut Client) + Send>;
 pub struct ClientThread {
     jobs: Option<Sender<Job>>,
     join: Option<JoinHandle<()>>,
+    stop: Arc<AtomicBool>,
 }
 
 impl ClientThread {
@@ -337,7 +338,29 @@ impl ClientThread {
             Ok(Err(e)) => panic!("client connect failed: {e}"),
             Err(_) => panic!("client setup timed out"),
         }
-        Self { jobs: Some(tx), join: Some(join) }
+        Self { jobs: Some(tx), join: Some(join), stop: Arc::default() }
+    }
+
+    /// Queue a job without waiting for it.
+    pub fn post(&self, f: impl FnOnce(&mut Client) + Send + 'static) {
+        if let Some(j) = &self.jobs {
+            let _ = j.send(Box::new(f));
+        }
+    }
+
+    /// A healthy Gnoblin keeps committing frames, also while it is hidden (throttled frame
+    /// callbacks): repaint every `every` until the client is closed.
+    pub fn repaint_every(&self, every: Duration, color: Rgba) {
+        let Some(jobs) = self.jobs.clone() else { return };
+        let stop = self.stop.clone();
+        thread::spawn(move || {
+            while !stop.load(Ordering::Relaxed) {
+                thread::sleep(every);
+                if jobs.send(Box::new(move |c: &mut Client| c.host_paint(&fill_of(color)))).is_err() {
+                    return;
+                }
+            }
+        });
     }
 
     pub fn run(&self, f: impl FnOnce(&mut Client) + Send + 'static) {
@@ -354,6 +377,7 @@ impl ClientThread {
     }
 
     pub fn close(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
         self.jobs = None;
         if let Some(j) = self.join.take() {
             let _ = j.join();
@@ -488,6 +512,7 @@ impl TestBridge {
         });
         let b = Self { ct, session: opened.session.clone(), color };
         b.script(generation, settle);
+        b.ct.repaint_every(Duration::from_millis(60), color);
         b
     }
 
@@ -606,6 +631,7 @@ impl Default for RigConfig {
 pub struct Rig {
     pub rt: Option<RuntimeHandle>,
     pub tx: DriverTx,
+    pub calls: runtime::CallTx,
     pub helper: FakeHelper,
     pub system: Arc<TestSystem>,
     pub frames: Arc<Mutex<FrameLog>>,
@@ -672,6 +698,7 @@ impl Rig {
             frame_dump_dir: None,
             seat_name: "seat-test".into(),
             drm_device: None,
+            ..Default::default()
         };
         let comp = thread::Builder::new().name("bsm-compositor".into()).spawn(move || bsm_compositor::run(config, cmd_rx, evt_tx)).unwrap();
 
@@ -716,6 +743,8 @@ impl Rig {
         policy.host_exe = common::my_exe();
 
         let (tx, rx) = runtime::channel();
+        let (call_tx, call_rx) = runtime::call_channel(&tx);
+        let call_tx_keep = call_tx;
         let rcfg = RuntimeConfig {
             policy,
             state_dir: state_dir.clone(),
@@ -723,6 +752,7 @@ impl Rig {
             helper: HelperEndpoint::Fd(helper_fd),
             accounts: Arc::new(Accounts),
             appearance: Arc::new(NoAppearance),
+            calls: call_rx,
             system: system.clone(),
             signals: Box::new(|_| {}),
             proc_root: PathBuf::from("/proc"),
@@ -733,6 +763,7 @@ impl Rig {
         Rig {
             rt: Some(rt),
             tx,
+            calls: call_tx_keep,
             helper,
             system,
             frames,
@@ -837,7 +868,7 @@ impl Rig {
 
     pub fn call(&self, caller: Caller, method: Method) -> Result<Reply, BsmError> {
         let (rtx, rrx) = async_channel::bounded(1);
-        self.tx.send(RtInput::Call(DbusCall { caller, method, reply: rtx })).expect("driver");
+        self.calls.try_send(RtInput::Call(DbusCall { caller, method, reply: rtx })).ok().expect("driver");
         rrx.recv_blocking().expect("a reply")
     }
 

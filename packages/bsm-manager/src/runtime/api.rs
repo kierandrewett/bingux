@@ -17,6 +17,9 @@ pub enum RtInput {
     /// A D-Bus method call. The reply goes back through `reply`; the D-Bus task bounds
     /// its own wait, the driver bounds it with `CALL_DEADLINE` as well.
     Call(DbusCall),
+    /// Something is waiting in the call channel. Sent best effort after every queued D-Bus call
+    /// so the driver wakes up for it; it carries no data.
+    Wake,
     /// Stop the driver (SIGTERM). Sessions are not closed: bsm restarting must not end them.
     Shutdown,
 }
@@ -56,4 +59,35 @@ pub trait SystemServices: Send + Sync {
     /// All sessions are protected: release the sleep delay inhibitor. The implementation
     /// takes a new one after the system resumed.
     fn sleep_ready(&self);
+}
+
+/// Entry of the D-Bus service into the driver (F7). System sources (compositor, helper,
+/// greeter, logind) use their own channel, which the driver always reads first; D-Bus calls
+/// queue here, bounded and separate, so a flood of calls can neither delay `Protected`
+/// acknowledgements nor `AuthDone`, nor grow without limit.
+#[derive(Clone)]
+pub struct CallTx {
+    calls: SyncSender<RtInput>,
+    wake: Option<SyncSender<RtInput>>,
+}
+
+impl CallTx {
+    pub fn new(calls: SyncSender<RtInput>, wake: SyncSender<RtInput>) -> Self {
+        Self { calls, wake: Some(wake) }
+    }
+
+    pub fn try_send(&self, item: RtInput) -> Result<(), std::sync::mpsc::TrySendError<RtInput>> {
+        self.calls.try_send(item)?;
+        if let Some(w) = &self.wake {
+            // A full system queue means the driver is busy and will look at the calls next.
+            let _ = w.try_send(RtInput::Wake);
+        }
+        Ok(())
+    }
+}
+
+impl From<SyncSender<RtInput>> for CallTx {
+    fn from(calls: SyncSender<RtInput>) -> Self {
+        Self { calls, wake: None }
+    }
 }
