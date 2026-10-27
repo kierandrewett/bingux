@@ -37,6 +37,29 @@ Cargo features: `backend-winit` and `backend-drm`, both on by default. The headl
 backend is always built. `--no-default-features` builds without libseat, libinput, udev
 and EGL, which is enough for the engine and the harness.
 
+## Configuration and watchdog knobs
+
+`Config` fields added by the security review and the boot handover: `request_pass_limit`
+(requests per client per loop pass, default 50 000), `heartbeat: Option<Heartbeat>`,
+`hold_first_scene: Option<Duration>` and `first_scene: FirstScene`.
+
+* `Heartbeat` is beaten once per pass of the compositor loop (at least every 250 ms while idle).
+  `bsm-notify` should send `WATCHDOG=1` only while `Heartbeat::age()` is small, so a wedged
+  compositor loop is restarted by systemd (review F3). Wiring it in `packages/bsm` is the
+  manager side.
+* `FirstScene` is set once; `wait(timeout)` returns `Presented`, `TimedOut`, `NotHeld` or `None`.
+
+## Client budgets (review F3, F4, F11)
+
+Each client has a budget (`roles::ClientBudget`): requests per loop pass, live surfaces (512),
+`bsm_session_host_v1` binds (4), a token bucket for control requests (`report`,
+`get_session_surface`, `ack_configure`, registry binds: 64 burst, 20 per second) and one for
+commits (2000 burst, 1000 per second). A client that exceeds any of them is disconnected; for a
+bridge the manager hears `SessionConnectionRejected` and `SessionGone`. Identical repeated
+reports are dropped before they reach the manager. A hidden session's commits do not wake the
+renderer. **tested** (`security.rs`: report flood, request flood with a lowered pass limit, surface
+cap, destroyed surface, evidence arming; `roles::budget_tests`).
+
 ## Connection and role model
 
 No shared socket exists. There are two kinds of listening socket and nothing else:
@@ -56,16 +79,27 @@ reason (at most 32 per session, to bound event floods).
 | ------------------------------------- | ------------------ | -------------------------------------------------------- |
 | uid equals the registered uid         | yes, at promotion  | yes, at accept (so a stranger is rejected before binding) |
 | pid equals the registered pid         | yes                | yes (`BindHost.host_pid`)                                |
-| `/proc/<pid>/cgroup` contains scope   | no                 | yes (`BindHost.scope`; a leading `/` makes it a path prefix, otherwise a path component) |
-| `/proc/<pid>/exe` equals `host_exe`   | no                 | **best effort**: a mismatch rejects, an unreadable link (another uid, no `CAP_SYS_PTRACE`) is skipped |
-| `SO_PEERPIDFD` (Linux 6.5+)           | used for the pid   | used for the pid and to detect a peer that exited during verification |
-| single use                            | one connection per generation | the socket file and listener are removed the moment the host is promoted; a rejected attempt does not burn the socket |
+| `/proc/<pid>/cgroup` contains scope   | no                 | yes (`BindHost.scope`; a leading `/` makes it a path prefix, otherwise a path component). A bare unit name is spoofable by a same-uid process that creates a cgroup of that name in its delegated subtree: the helper should report the absolute cgroup path (review F7) |
+| `/proc/<pid>/exe` equals `host_exe`   | no                 | **best effort, not effective across uids**: a mismatch rejects, but bsm has no capabilities so the link of any other uid is unreadable and skipped (review F7) |
+| `SO_PEERPIDFD` (Linux 6.5+)           | **required**; used for the pid | **required**; used for the pid and to detect a peer that exited during verification. A peer that cannot be pinned (older kernel) is refused (review F8) |
+| single use                            | one connection per generation | one concurrent connection: the socket file and listener are removed the moment the host is promoted and re-armed (same path, same checks) when that connection closes, so a restarted bridge or a bridge of a restarted bsm can reconnect. A rejected attempt does not burn the socket |
 
 Two-step registration (agreed with the manager): `RegisterSession` (scope `""`,
 `host_pid` 0) creates the socket and answers `SessionSocketReady`; a connection that
-arrives before `BindHost` is uid-checked and then **held outside the display** (at most
-4, 10 s) and verified when `BindHost` arrives. The greeter is handled the same way when
-it connects before `RegisterGreeter`.
+arrives before `BindHost` is uid-checked and then **held outside the display** (10 s) and
+verified when `BindHost` arrives. Held connections are one per peer process (a newer one
+from the same pid replaces the older), peers that already exited free their slot, and
+when 32 are held the oldest is evicted, never the newest (review F9; a same-uid attacker
+with more than 32 processes inside the window can still push the real bridge out, which
+is a self-inflicted login failure). The greeter is handled the same way when it connects
+before `RegisterGreeter`.
+
+Recovery after a restart of bsm: the socket path is a pure function of session id and
+generation (`<dir>/<id>-<generation>.sock`; the name is not secret, only the uid, pid and
+scope checks are authoritative, review F13). `RegisterSession` for the same id and
+generation unlinks and re-binds a socket left by the dead process, `BindHost` may bind a
+registration that has no connection (a restarted bridge has a new pid), and a bridge
+reconnects with backoff.
 
 Disconnects: a greeter that vanishes emits `GreeterGone` and is deregistered (a new
 generation must be registered for the next one); a hosted bridge that vanishes emits
@@ -164,8 +198,20 @@ This is deliberately stricter than per-output composition.
 * removes the session from the scene at once (the scene becomes the cover),
 * revokes its input immediately (owner becomes `None`, keyboard leave, `input_state(0)`,
   `InputOwnerChanged(None)`),
-* replies `Protected` only after a frame was planned and composed without it. On DRM that
-  means after the page flip completed (the engine is told at vblank).
+* replies `Protected` only after a frame that was **planned after the protection** was shown
+  on every output. The engine keeps a protection queued until the next plan, so a flip that
+  was already in flight when `Protect` arrived (and still shows the session) cannot release
+  the reply (review F1a); a pending protect keeps asking for a redraw (F1b). On DRM "shown"
+  means every queued page flip completed.
+* a frame that did not reach every output (a render or queue error, an output that was
+  skipped, a flip that never came within 500 ms) acknowledges nothing: the protection stays
+  owed, the scene is composed again after a 100 ms back-off, and after 5 failures in a row the
+  running transition is given up with `Failed` (cover plus greeter). The compositor never
+  invents an acknowledgement; liveness of the state machine is the manager's timeout
+  (F1c, F1d). While the seat is paused (VT switched away) nothing is acknowledged either.
+* DPMS off puts the cover on the scanout buffers first and switches the displays off after
+  that flip, so `Protect` while blanked and the wake-up never expose the old desktop; the first
+  frame after wake is the current scene (F1e; the order on real hardware is unverified).
 
 An unknown session is protected trivially and still answered after a frame. A stale
 generation is dropped.
@@ -274,10 +320,17 @@ run: the development host owns its seat. It is meant to be exercised in the QEMU
 (`tests/distro_vm.py`). Structural properties built in:
 
 * The scene engine hears about a frame (`Protected`, transition phases, frame callbacks)
-  only when all queued page flips completed (`State::awaiting`, `drm_vblank`). A 500 ms
-  watchdog releases it if a flip never arrives, so a broken output cannot freeze the
-  state machine.
-* Pause (VT switched away): rendering and libinput stop, the awaited frame is released.
+  only when all queued page flips completed (`State::awaiting`, `drm_vblank`). If a flip
+  never arrives within 500 ms (or an output failed) the frame is a *failed* frame: nothing
+  is acknowledged and it is retried (see above).
+* Boot handover: the DRM device is opened without disabling any CRTC, an active CRTC keeps
+  its mode, only heads bsm does not drive are switched off. With `Config::hold_first_scene`
+  and at least one lit CRTC at start, nothing is presented until the plan has a greeter or
+  session layer (or the hold ends and a cover is presented). `FirstScene` fires `Presented`
+  after the flip of the first scene frame, `TimedOut`, or `NotHeld` (headless, winit, no
+  hold, no lit CRTC), and the compositor logs `first scene presented (reason) after N ms`.
+  The hold decision and `FirstScene` are unit tested; the path itself is for the QEMU run.
+* Pause (VT switched away): rendering and libinput stop; the frame in flight is dropped and its protections are owed again.
   Resume: libinput and the DRM device are reactivated, every compositor is reset, connectors
   are re-scanned and everything is redrawn from the plan, never from an old buffer.
 * Hotplug: udev `Changed` re-scans connectors; outputs appear and disappear through
@@ -288,7 +341,7 @@ run: the development host owns its seat. It is meant to be exercised in the QEMU
 Not known until run on real or virtual hardware: connector/crtc assignment on exotic
 topologies, multi-GPU (only the primary GPU is used), DPMS through the legacy `DPMS`
 property on atomic drivers, direct scanout and overlay-plane behaviour, VT switch
-latency, whether `frame_submitted` timing matches the 500 ms watchdog on virtio-gpu.
+latency, whether `frame_submitted` timing matches the 500 ms flip timeout on virtio-gpu.
 The zero-copy question is open: nothing here claims it, and the cost of a session frame
 is measured by the bridge side (shm copy today).
 
@@ -297,7 +350,7 @@ is measured by the bridge side (shm copy today).
 Run in `packages/bsm-compositor` (`CARGO_TARGET_DIR=/tmp/bsm-target/bsm-compositor`):
 
 ```text
-cargo test        # 50 tests: 21 unit, 4 extras, 12 frames, 13 security
+cargo test        # 82 tests: 32 unit, 6 extras, 22 frames, 22 security (plus doc tests)
 ```
 
 All passed, repeatedly (six consecutive runs without a failure). Artifacts are written to
@@ -325,8 +378,17 @@ and a real second process (`sleep`) stands in for "another process".
 
 ## Open issues
 
-* `SO_PEERPIDFD` only protects against pid reuse on Linux 6.5+. Older kernels fall back to
-  the `SO_PEERCRED` pid, which can name a recycled number in a narrow window.
+* Hosted identity is uid plus pid (plus cgroup scope, which only separates other uids when the
+  helper reports an absolute path, and an exe check that is inert across uids). Spec section 3
+  prefers a socketpair created by the helper and inherited by the bridge; that would remove the
+  path, the pending list and these guesses in one step and is not implemented.
+* Request flood protection covers the interfaces bsm dispatches through its own wrappers
+  (surfaces, regions, subsurfaces, shm, seat, output, xdg, viewporter, fractional scale,
+  presentation, the session protocol, registry binds). Requests handled inside
+  `wayland-backend` itself (`wl_display.sync`, `get_registry`) and layer-shell/dmabuf
+  requests are not counted; per-client buffer and dmabuf-import quotas do not exist.
+* `evt_tx` is an unbounded `std::sync::mpsc` sender. Report and evidence events are bounded by
+  the per-client budgets above rather than by a bounded channel.
 * The greeter's `Overlay` layer surfaces draw above the whole greeter fade (they are part
   of the greeter group), which is intended; popups of layer surfaces are not composed.
 * Output scale: sessions are always 1:1 in pixels; the greeter uses fractional scale.
