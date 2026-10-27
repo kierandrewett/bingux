@@ -51,7 +51,7 @@ pub trait AppearanceBackend: Send + Sync {
 /// Authorisation and system actions: polkit, logind inhibitors, logind power calls.
 pub trait SystemServices: Send + Sync {
     /// polkit `CheckAuthorization` for the D-Bus caller, no interaction.
-    fn polkit_check(&self, caller: &Caller, action_id: &str) -> Result<bool, BsmError>;
+    fn polkit_check(&self, caller: &Caller, logind_session: Option<&str>, action_id: &str) -> Result<bool, BsmError>;
     /// logind `ListInhibitors`.
     fn list_inhibitors(&self) -> Result<Vec<Inhibitor>, BsmError>;
     /// logind `Suspend`, `Reboot` or `PowerOff` (non-interactive). Returns on acceptance.

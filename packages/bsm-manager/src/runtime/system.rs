@@ -4,7 +4,9 @@
 //! What is implemented
 //! -------------------
 //! * `polkit_check`: `org.freedesktop.PolicyKit1.Authority.CheckAuthorization` with the
-//!   subject `("system-bus-name", {"name": <caller.bus_name>})`, the action id, empty
+//!   subject `("unix-session", {"session-id": <logind session>})` when the manager knows the
+//!   caller's hosted session (it survives a one-shot caller that has disconnected), else
+//!   `("system-bus-name", {"name": <caller.bus_name>})`, the action id, empty
 //!   details, flags 0 (no user interaction) and an empty cancellation id. Only
 //!   `is_authorized` counts; a challenge (`is_challenge`) is **not** authorisation.
 //! * `list_inhibitors`: `org.freedesktop.login1.Manager.ListInhibitors` (`a(ssssuu)`:
@@ -290,9 +292,14 @@ impl Drop for LogindSystem {
 }
 
 impl SystemServices for LogindSystem {
-    fn polkit_check(&self, caller: &Caller, action_id: &str) -> Result<bool, BsmError> {
-        let subject: (&str, HashMap<&str, Value<'_>>) =
-            ("system-bus-name", HashMap::from([("name", Value::from(caller.bus_name.as_str()))]));
+    fn polkit_check(&self, caller: &Caller, logind_session: Option<&str>, action_id: &str) -> Result<bool, BsmError> {
+        // A one-shot caller (`bsmctl reboot`) is gone by the time the check runs, and a
+        // `system-bus-name` subject of a vanished name fails with NameHasNoOwner. The caller's
+        // logind session, taken from the manager's own registry, outlives it.
+        let subject: (&str, HashMap<&str, Value<'_>>) = match logind_session {
+            Some(id) => ("unix-session", HashMap::from([("session-id", Value::from(id))])),
+            None => ("system-bus-name", HashMap::from([("name", Value::from(caller.bus_name.as_str()))])),
+        };
         let details: HashMap<&str, &str> = HashMap::new();
         let (result,): ((bool, bool, HashMap<String, String>),) = self.call(
             "CheckAuthorization",
@@ -537,7 +544,12 @@ mod tests {
             flags: u32,
             cancellation_id: &str,
         ) -> zbus::fdo::Result<((bool, bool, HashMap<String, String>),)> {
-            let name = subject.1.get("name").and_then(|v| v.downcast_ref::<String>().ok()).unwrap_or_default();
+            let name = subject
+                .1
+                .get("name")
+                .or_else(|| subject.1.get("session-id"))
+                .and_then(|v| v.downcast_ref::<String>().ok())
+                .unwrap_or_default();
             self.0.lock().unwrap().polkit_seen.push((
                 subject.0.clone(),
                 name,
@@ -682,11 +694,11 @@ mod tests {
     fn polkit_subject_and_results() {
         let r = rig();
         let sys = r.start(quick());
-        assert!(sys.polkit_check(&caller(), "org.freedesktop.login1.reboot").unwrap());
+        assert!(sys.polkit_check(&caller(), None, "org.freedesktop.login1.reboot").unwrap());
         // A challenge is not an authorisation.
-        assert!(!sys.polkit_check(&caller(), "org.freedesktop.login1.suspend").unwrap());
-        assert!(!sys.polkit_check(&caller(), "org.freedesktop.login1.power-off").unwrap());
-        let e = sys.polkit_check(&caller(), "something.else").unwrap_err();
+        assert!(!sys.polkit_check(&caller(), None, "org.freedesktop.login1.suspend").unwrap());
+        assert!(!sys.polkit_check(&caller(), None, "org.freedesktop.login1.power-off").unwrap());
+        let e = sys.polkit_check(&caller(), None, "something.else").unwrap_err();
         assert_eq!(e.code, ErrorCode::LogindFailure);
         assert!(e.message.contains("polkit is unhappy"), "{e}");
         let seen = r.fake.lock().unwrap().polkit_seen.clone();
@@ -694,6 +706,15 @@ mod tests {
         for s in seen {
             assert_eq!(s, ("system-bus-name".into(), ":1.99".into(), 0, "".into(), 0));
         }
+    }
+
+    #[test]
+    fn a_known_hosted_session_is_checked_as_a_unix_session_that_outlives_the_caller() {
+        let r = rig();
+        let sys = r.start(quick());
+        assert!(sys.polkit_check(&caller(), Some("c7"), "org.freedesktop.login1.reboot").unwrap());
+        let seen = r.fake.lock().unwrap().polkit_seen.clone();
+        assert_eq!(seen, vec![("unix-session".into(), "c7".into(), 0, "".into(), 0)]);
     }
 
     #[test]
@@ -725,7 +746,7 @@ mod tests {
         let r = rig();
         let sys = r.start(quick());
         let start = Instant::now();
-        let e = sys.polkit_check(&caller(), "hang").unwrap_err();
+        let e = sys.polkit_check(&caller(), None, "hang").unwrap_err();
         assert_eq!(e.code, ErrorCode::Timeout);
         assert!(start.elapsed() < Duration::from_secs(3));
     }

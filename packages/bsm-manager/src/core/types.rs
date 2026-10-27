@@ -457,8 +457,11 @@ pub enum Effect {
     LoadAccounts,
     /// Validate, convert and publish; answered with `Input::AppearancePublished`.
     PublishAppearance { call: Option<CallId>, uid: u32, request: PublishRequest },
-    /// polkit `CheckAuthorization` for `caller`; answered with `Input::PolkitResult`.
-    Polkit { operation: OperationId, action_id: String, caller: Caller },
+    /// polkit `CheckAuthorization` for `caller`; answered with `Input::PolkitResult`. When the
+    /// caller's hosted session has a logind session, the subject is that session (`unix-session`),
+    /// which stays valid after a one-shot caller such as `bsmctl` has disconnected; the id comes
+    /// from the manager's registry, never from the caller.
+    Polkit { operation: OperationId, action_id: String, caller: Caller, logind_session: Option<String> },
     /// `ListInhibitors`; answered with `Input::InhibitorsResult`.
     QueryInhibitors { operation: OperationId, action: PowerAction },
     /// Call logind. Answered with `Input::PowerResult`.

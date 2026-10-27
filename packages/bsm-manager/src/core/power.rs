@@ -79,7 +79,11 @@ impl Manager {
         if needs_polkit {
             let c = caller.expect("checked above");
             let action_id = self.action_id(action, Some(&c));
-            fx.push(Effect::Polkit { operation: id, action_id, caller: c });
+            let logind_session = match &self.op.as_ref().map(|o| o.requester.clone()) {
+                Some(Requester::Session(sid)) => self.sessions.get(sid).and_then(|s| s.logind.clone()),
+                _ => None,
+            };
+            fx.push(Effect::Polkit { operation: id, action_id, caller: c, logind_session });
         }
         fx.push(Effect::QueryInhibitors { operation: id, action });
         fx.push(Effect::SetTimer { id: TimerId::Checks(id), after: self.policy.check_timeout });

@@ -298,7 +298,10 @@ not count.
   broadcast `SessionLaunchProgress` signal (code and stage only); the control socket carries it. Broadcast
   signals still carry session ids and states; per-recipient signals are not implemented. It never
   exposes window titles, surfaces or anything from inside a session.
-* Power requests from a session need polkit: `CheckAuthorization` for the caller's bus name with
+* Power requests from a session need polkit: `CheckAuthorization` with the subject `unix-session` of the caller's
+  logind session (taken from the manager's own registry, so it still exists after a one-shot `bsmctl reboot`
+  has exited; a `system-bus-name` subject of a vanished caller fails with `NameHasNoOwner`), or the caller's bus
+  name when the helper reported no logind session, with
   `org.freedesktop.login1.{suspend,reboot,power-off}`, or the `-multiple-sessions` variant when another
   uid has a running session; a challenge is a refusal. The inhibitor query follows: a logind `block`
   inhibitor that covers `shutdown` (or `sleep`) fails the request with `inhibited`. Root skips polkit only.

@@ -174,7 +174,7 @@ pub fn init_logging() {
 struct NoSystemBus;
 
 impl SystemServices for NoSystemBus {
-    fn polkit_check(&self, _: &Caller, _: &str) -> Result<bool, BsmError> {
+    fn polkit_check(&self, _: &Caller, _: Option<&str>, _: &str) -> Result<bool, BsmError> {
         Err(BsmError::new(ErrorCode::NotSupported, "polkit is not available without a bus"))
     }
     fn list_inhibitors(&self) -> Result<Vec<Inhibitor>, BsmError> {

@@ -283,7 +283,7 @@ impl TestSystem {
 }
 
 impl SystemServices for TestSystem {
-    fn polkit_check(&self, _: &Caller, action_id: &str) -> Result<bool, BsmError> {
+    fn polkit_check(&self, _: &Caller, _: Option<&str>, action_id: &str) -> Result<bool, BsmError> {
         self.polkit_asked.lock().push(action_id.to_owned());
         Ok(self.polkit.load(Ordering::SeqCst))
     }

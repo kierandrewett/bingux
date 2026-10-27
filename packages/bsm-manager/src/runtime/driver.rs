@@ -456,12 +456,12 @@ impl Driver {
                     },
                 );
             }
-            Effect::Polkit { operation, action_id, caller } => {
+            Effect::Polkit { operation, action_id, caller, logind_session } => {
                 let (sys, tx, tx2) = (self.system.clone(), self.tx.clone(), self.tx.clone());
                 self.spawn_job(
                     "polkit",
                     move || {
-                        let authorised = match sys.polkit_check(&caller, &action_id) {
+                        let authorised = match sys.polkit_check(&caller, logind_session.as_deref(), &action_id) {
                             Ok(a) => a,
                             Err(e) => {
                                 tracing::warn!("polkit check failed: {e}");

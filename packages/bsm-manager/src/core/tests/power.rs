@@ -306,3 +306,18 @@ fn sleep_preparation_cannot_block_sleep_forever() {
     assert!(sim.since(mark).iter().any(|e| matches!(e, Effect::SleepReady)));
     assert!(sim.scene_cmds(mark).contains(&SceneCommand::ShowGreeterOnly));
 }
+
+#[test]
+fn a_session_power_request_is_checked_against_its_logind_session_not_the_callers_bus_name() {
+    let mut sim = Sim::new();
+    sim.boot();
+    let a = sim.login(ALICE);
+    let mark = sim.mark();
+    sim.call(sim.session_caller(&a), Method::RequestReboot).unwrap();
+    let subject = sim.since(mark).iter().find_map(|e| match e {
+        Effect::Polkit { logind_session, .. } => Some(logind_session.clone()),
+        _ => None,
+    });
+    // The test helper reports logind session "c1": the manager's own registry supplies it.
+    assert_eq!(subject, Some(Some("c1".to_string())));
+}
