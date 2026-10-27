@@ -6,6 +6,11 @@ Description=Publish this account's wallpaper for the Bingux login screen
 PartOf=bingux.target
 ConditionUser=!greeter
 ConditionUser=!greetd
+# Under bsm the login-screen cache belongs to bsm (PublishAppearance) and this
+# account cannot write it, so the export would fail and restart forever. The
+# bridge creates %t/bsm/ready.sock before Bingux starts in a hosted session;
+# the user manager does not see BSM_SESSION_ID, so test for that socket.
+ConditionPathExists=!%t/bsm/ready.sock
 After=graphical-session.target
 
 [Service]
