@@ -88,6 +88,27 @@ QtObject {
     readonly property bool promptOpen: phase === "prompting" && (promptKind === "secret" || promptKind === "visible")
     readonly property bool busy: phase === "verifying" || phase === "signing_in" || phase === "waiting"
 
+    // True when nothing on the greeter should animate any more: bsm is moving
+    // it (or has moved it away) after our sign-in, or the selected account's
+    // session is already the foreground one. The greeter is then usually hidden
+    // beneath a desktop, and continuous animation would burn CPU for nothing.
+    property bool handedOver: false
+    property bool signingInSettled: false
+    readonly property bool quiet: handedOver || (signingIn && signingInSettled) || (selectedUser !== null && selectedUser.availability === "running_foreground")
+    onSigningInChanged: {
+        signingInSettled = false;
+        if (signingIn)
+            settleTimer.restart();
+        else
+            settleTimer.stop();
+    }
+    // The ring tells the user bsm is working; after a few seconds it stops
+    // turning and stays as a still mark.
+    property Timer settleTimer: Timer {
+        interval: 4000
+        onTriggered: root.signingInSettled = true
+    }
+
     // Power and other operations.
     property string powerAction: ""
     property real operationId: 0
@@ -274,8 +295,10 @@ QtObject {
         hostname = typeof raw.hostname === "string" ? raw.hostname : "";
         reduceMotion = raw.reduce_motion === true;
         synced = true;
-        if (accountChanged)
+        if (accountChanged) {
+            handedOver = false;
             resetConversation();
+        }
 
         // Progress: take bsm's model unless it is the launch already shown and
         // not newer. A snapshot without progress ends the launch view.
@@ -318,6 +341,10 @@ QtObject {
         operationKind = kind;
         operationPhase = opPhase;
         operationReason = reason || "";
+        if (kind === "new_login_fade" || kind === "unlock_slide_up")
+            handedOver = opPhase === "animating" || opPhase === "committed" || opPhase === "completed";
+        else if (opPhase === "requested")
+            handedOver = false;
         if (powerAction === "" && opPhase === "failed" && signingIn) {
             phase = "idle";
             statusText = "Signing in did not complete" + (reason ? ": " + reasonText(reason) : "");

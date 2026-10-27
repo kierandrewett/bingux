@@ -42,6 +42,7 @@ Item {
     property bool echoVisible: false
     property bool canSubmit: false
     property bool busy: false
+    property bool spinning: true
     property string submitLabel: "Unlock"
     property bool showRetry: false
     property string retryText: "Try again"
@@ -158,6 +159,7 @@ Item {
         echoVisible: root.echoVisible
         canSubmit: root.canSubmit
         busy: root.busy
+        spinning: root.spinning
         submitLabel: root.submitLabel
         showRetry: root.showRetry
         retryText: root.retryText

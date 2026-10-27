@@ -301,6 +301,21 @@ ShellRoot {
         check("a second busy is shown, not retried", !client.busyWait.running && model.statusLineIsError && model.statusLine === "bsm is busy, try again");
         client.handle(snapshot(22, 1001, login, users));
 
+        // Nothing keeps animating once bsm has taken the greeter over.
+        check("the greeter animates while it waits for bsm", !model.quiet);
+        model.phase = "signing_in";
+        model.signingInSettled = true;
+        check("a long sign-in settles to a still ring", model.quiet);
+        model.phase = "idle";
+        model.signingInSettled = false;
+        client.handle({ type: "operation", operation_id: 90, kind: "new_login_fade", phase: "committed", reason: null });
+        check("a committed reveal quiets the greeter", model.quiet);
+        client.handle({ type: "operation", operation_id: 91, kind: "lock", phase: "requested", reason: null });
+        check("a new operation wakes it", !model.quiet);
+        client.handle(snapshot(23, 1002, login, users.map(u => u.uid === 1002 ? Object.assign({}, u, { availability: "running_foreground" }) : u)));
+        check("a foreground session quiets it", model.selectedUid === 1002 && model.quiet);
+        client.handle(snapshot(24, 1001, login, users));
+
         // Server-supplied text is never rich text.
         const hostile = ["<img src=\"http://x/y\">", "<b>x</b>"];
         card.displayName = hostile[0];

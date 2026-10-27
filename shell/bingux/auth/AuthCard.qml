@@ -29,6 +29,9 @@ ColumnLayout {
     property bool echoVisible: false
     property bool canSubmit: false
     property bool busy: false
+    // False freezes the activity ring: a hidden greeter must not keep the GPU
+    // or CPU busy drawing it.
+    property bool spinning: true
     property string submitLabel: "Unlock"
     property bool showRetry: false
     property string retryText: "Try again"
@@ -139,7 +142,7 @@ ColumnLayout {
                 to: 360
                 duration: 900
                 loops: Animation.Infinite
-                running: spinner.visible && !root.theme.reduceMotion
+                running: spinner.visible && root.spinning && !root.theme.reduceMotion
             }
         }
     }

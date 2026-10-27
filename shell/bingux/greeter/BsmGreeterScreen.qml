@@ -96,6 +96,7 @@ Item {
         echoVisible: root.model.promptKind === "visible"
         canSubmit: root.interactive && root.model.canSubmit
         busy: root.model.busy && root.model.connected && !root.model.showProgress
+        spinning: !root.model.quiet
         submitLabel: root.model.intent === "unlock" ? "Unlock" : "Sign in"
         showRetry: root.model.canRetry
         onSubmitted: text => root.client.respond(text)
