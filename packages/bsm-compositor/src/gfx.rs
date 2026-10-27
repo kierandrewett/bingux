@@ -35,16 +35,64 @@ pub(crate) enum Gfx {
     Drm(DrmGfx),
 }
 
+/// What became of one composed frame. The scene engine acknowledges a frame (`Protected`,
+/// transition phases) only for `Shown`, or for `Queued` once every queued flip completed.
+#[derive(Debug)]
+pub(crate) enum Outcome {
+    /// On the screen (or there is no screen to wait for, or the screen is blanked over a cover).
+    Shown,
+    /// Handed to the display; completion arrives later. `failed`: some output could not be
+    /// composed or queued, so the frame must not be acknowledged when the rest completes.
+    Queued { failed: bool },
+    /// Nothing reached any output.
+    Failed(String),
+}
+
 impl Gfx {
-    /// Compose one frame on every output. The flag is true when the frame was queued for a
-    /// page flip: the scene engine then learns of it only when the flip completes.
-    pub fn render(&mut self, state: &State, plan: &Plan, now_ms: u64) -> Result<(Vec<CapturedFrame>, bool)> {
-        match self {
-            Gfx::Headless(g) => g.render(state, plan, now_ms).map(|f| (f, false)),
+    /// Compose one frame on every output.
+    pub fn render(&mut self, state: &State, plan: &Plan, now_ms: u64) -> (Vec<CapturedFrame>, Outcome) {
+        let r = match self {
+            Gfx::Headless(g) => g.render(state, plan, now_ms),
             #[cfg(feature = "backend-winit")]
-            Gfx::Winit(g) => g.render(state, plan, now_ms).map(|f| (f, false)),
+            Gfx::Winit(g) => g.render(state, plan, now_ms).map(|f| (f, Outcome::Shown)),
             #[cfg(feature = "backend-drm")]
             Gfx::Drm(g) => g.render(state, plan, now_ms),
+        };
+        match r {
+            Ok(v) => v,
+            Err(e) => (Vec::new(), Outcome::Failed(format!("{e:#}"))),
+        }
+    }
+
+    /// False while the seat is paused (VT switched away).
+    pub fn active(&self) -> bool {
+        match self {
+            #[cfg(feature = "backend-drm")]
+            Gfx::Drm(g) => g.active,
+            _ => true,
+        }
+    }
+
+    /// A frame failed or its flip never came: forget in-flight state so the next frame is
+    /// composed and queued from scratch.
+    pub fn frame_lost(&mut self) {
+        match self {
+            Gfx::Headless(_) => {}
+            #[cfg(feature = "backend-winit")]
+            Gfx::Winit(_) => {}
+            #[cfg(feature = "backend-drm")]
+            Gfx::Drm(g) => g.frame_lost(),
+        }
+    }
+
+    /// What is on the screen after the last frame, for the harness while blanked.
+    pub fn scanout(&self) -> Vec<CapturedFrame> {
+        match self {
+            Gfx::Headless(g) => g.scanout.clone(),
+            #[cfg(feature = "backend-winit")]
+            Gfx::Winit(_) => Vec::new(),
+            #[cfg(feature = "backend-drm")]
+            Gfx::Drm(_) => Vec::new(),
         }
     }
 
@@ -105,6 +153,14 @@ pub(crate) struct HeadlessGfx {
     renderer: PixmanRenderer,
     outs: HashMap<String, HeadOut>,
     cursor: Option<MemoryRenderBuffer>,
+    /// Test hook: behave like a page-flipping backend (frames complete on `CompleteFlip`).
+    pub fake_flips: bool,
+    /// Test hook: the next N renders fail.
+    pub fail_renders: u32,
+    /// Test hook: with fake flips, the next frame fails on the last output only.
+    pub partial_failure: bool,
+    /// The frames last shown (what a monitor would display now).
+    pub scanout: Vec<CapturedFrame>,
 }
 
 impl HeadlessGfx {
@@ -132,7 +188,11 @@ impl HeadlessGfx {
         );
     }
 
-    fn render(&mut self, state: &State, plan: &Plan, now_ms: u64) -> Result<Vec<CapturedFrame>> {
+    fn render(&mut self, state: &State, plan: &Plan, now_ms: u64) -> Result<(Vec<CapturedFrame>, Outcome)> {
+        if self.fail_renders > 0 {
+            self.fail_renders -= 1;
+            return Ok((Vec::new(), Outcome::Failed("injected render failure".into())));
+        }
         let mut frames = Vec::new();
         self.outs.retain(|name, _| state.outputs.iter().any(|o| &o.info.name == name));
         for rec in &state.outputs {
@@ -177,7 +237,15 @@ impl HeadlessGfx {
             }
             frames.push(frame);
         }
-        Ok(frames)
+        let outcome = if self.fake_flips {
+            Outcome::Queued { failed: std::mem::take(&mut self.partial_failure) }
+        } else {
+            Outcome::Shown
+        };
+        if !self.fake_flips {
+            self.scanout = frames.clone();
+        }
+        Ok((frames, outcome))
     }
 }
 
@@ -193,6 +261,10 @@ pub(crate) fn init_headless(
         renderer,
         outs: HashMap::new(),
         cursor: draw_cursor.then(default_cursor_buffer),
+        fake_flips: false,
+        fail_renders: 0,
+        partial_failure: false,
+        scanout: Vec::new(),
     }));
     state.set_outputs(outputs);
     match drive {
@@ -268,6 +340,26 @@ impl State {
                 };
                 let _ = tx.send(snap);
             }
+            HarnessCmd::FakeFlips(on) => {
+                if let Some(Gfx::Headless(g)) = self.gfx.as_mut() {
+                    g.fake_flips = on;
+                }
+            }
+            HarnessCmd::NeedsRedraw(tx) => {
+                let _ = tx.send(self.needs_redraw);
+            }
+            HarnessCmd::CompleteFlip => self.complete_awaiting(),
+            HarnessCmd::ExpireFlip => self.flip_watchdog(true),
+            HarnessCmd::FailRenders(n) => {
+                if let Some(Gfx::Headless(g)) = self.gfx.as_mut() {
+                    g.fail_renders = n;
+                }
+            }
+            HarnessCmd::PartialFailure => {
+                if let Some(Gfx::Headless(g)) = self.gfx.as_mut() {
+                    g.partial_failure = true;
+                }
+            }
             HarnessCmd::Stop => self.stopped = true,
         }
     }
@@ -281,17 +373,16 @@ impl State {
     }
 
     pub(crate) fn loop_timeout(&self) -> Option<Duration> {
-        Some(Duration::from_millis(250))
+        let tick = Duration::from_millis(250);
+        match self.retry_at {
+            Some(t) => Some(t.saturating_duration_since(std::time::Instant::now()).min(tick)),
+            None => Some(tick),
+        }
     }
 
     pub(crate) fn after_dispatch(&mut self) {
         self.expire_pending();
-        if let Some(a) = &self.awaiting {
-            if a.since.elapsed() > Duration::from_millis(500) {
-                tracing::warn!("page flip did not complete in 500 ms; releasing the scene engine");
-                self.complete_awaiting();
-            }
-        }
+        self.flip_watchdog(false);
         if self.backend == crate::Backend::Drm && self.needs_redraw && self.awaiting.is_none() {
             self.render_frame();
         }

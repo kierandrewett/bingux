@@ -101,7 +101,19 @@ pub(crate) struct Awaiting {
     pub plan: crate::engine::Plan,
     pub now_ms: u64,
     pub since: Instant,
+    /// Some output could not be composed or queued for this plan: when the rest completes,
+    /// the frame is a failure, never an acknowledgement.
+    pub failed: bool,
+    /// The cover frame that precedes switching the displays off (not a scene frame).
+    pub blank: bool,
+    /// The frames that will be on screen once the flips complete (headless test hook).
+    pub frames: Vec<crate::harness::CapturedFrame>,
 }
+
+/// After this many failed frames in a row the running transition is given up (`Failed`).
+const MAX_FRAME_FAILURES: u32 = 5;
+const FRAME_RETRY: std::time::Duration = std::time::Duration::from_millis(100);
+pub(crate) const FLIP_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(500);
 
 pub(crate) enum Clock {
     Wall(Instant),
@@ -172,6 +184,12 @@ pub(crate) struct State {
     pub last_frame_done: Option<Instant>,
     pub needs_redraw: bool,
     pub awaiting: Option<Awaiting>,
+    /// Consecutive frames that did not (fully) reach the screen.
+    pub frame_failures: u32,
+    /// Do not try to compose again before this instant (failed frame back-off).
+    pub retry_at: Option<Instant>,
+    /// The displays are to be switched off once a cover frame is on the scanout buffers.
+    pub blanking: bool,
     /// The first key since the last focus change has been logged.
     pub key_logged: bool,
     pub harness_frames: Vec<crate::harness::CapturedFrame>,
@@ -636,15 +654,52 @@ impl State {
         }
     }
 
-    /// One composed frame: plan, render, answer, advance the engine. On hardware the
-    /// answer waits for the page flip (see [`State::complete_frame`]).
+    fn run_gfx(&mut self, plan: &crate::engine::Plan, now: u64) -> (Vec<crate::harness::CapturedFrame>, crate::gfx::Outcome) {
+        match self.gfx.take() {
+            Some(mut g) => {
+                let r = g.render(self, plan, now);
+                self.gfx = Some(g);
+                r
+            }
+            None => (Vec::new(), crate::gfx::Outcome::Failed("no renderer".into())),
+        }
+    }
+
+    /// One composed frame: plan, render, answer, advance the engine. A frame is
+    /// acknowledged (`Protected`, transition phases) only when it is known to be on the
+    /// screen: immediately where there is nothing to wait for, otherwise when every queued
+    /// page flip completed. A frame that did not reach every output acknowledges nothing and
+    /// is retried.
     pub fn render_frame(&mut self) {
+        // Input follows the scene even while a frame is in flight (review F5).
+        self.reconcile_input();
         if self.awaiting.is_some() {
             // The previous frame has not reached the screen yet: one plan in flight at a time.
             return;
         }
-        self.apply_pending_owner();
+        if !self.gfx.as_ref().is_none_or(|g| g.active()) {
+            // The seat is paused (VT switched away): nothing can be shown, nothing is acked.
+            return;
+        }
+        if let Some(t) = self.retry_at {
+            if Instant::now() < t {
+                return;
+            }
+            self.retry_at = None;
+        }
         let now = self.now_ms();
+        if self.blanking {
+            // Switching the displays off: the scanout buffers get the cover first, so the
+            // panel never holds a desktop or a lock screen while off (review F1e).
+            let plan = crate::engine::Plan::empty();
+            let (frames, outcome) = self.run_gfx(&plan, now);
+            self.frame_seq += 1;
+            self.harness_frames = frames.clone();
+            self.needs_redraw = false;
+            self.settle(plan, now, frames, outcome, true);
+            return;
+        }
+        self.apply_pending_owner();
         let plan = {
             let probe = ProbeView {
                 greeter_connected: self.greeter.connected.is_some(),
@@ -656,33 +711,81 @@ impl State {
         // The plan may have changed what is foreground (failure, commit): fail closed on input.
         self.reconcile_input();
         self.last_plan = plan.clone();
+        self.needs_redraw = false;
         self.frame_started = Some(Instant::now());
-        let mut frames = Vec::new();
-        let mut deferred = false;
-        if self.dpms_on {
-            if let Some(mut gfx) = self.gfx.take() {
-                match gfx.render(self, &plan, now) {
-                    Ok((f, d)) => {
-                        frames = f;
-                        deferred = d;
-                    }
-                    Err(e) => tracing::error!("render failed: {e:#}"),
-                }
-                self.gfx = Some(gfx);
+        let (frames, outcome) = if self.dpms_on {
+            self.run_gfx(&plan, now)
+        } else {
+            // Displays are off over a cover (see above): nothing to show, nothing to wait for.
+            let shown = self.gfx.as_ref().map(|g| g.scanout()).unwrap_or_default();
+            (shown, crate::gfx::Outcome::Shown)
+        };
+        self.frame_seq += 1;
+        self.harness_frames = frames.clone();
+        self.settle(plan, now, frames, outcome, false);
+    }
+
+    fn settle(&mut self, plan: crate::engine::Plan, now: u64, frames: Vec<crate::harness::CapturedFrame>, outcome: crate::gfx::Outcome, blank: bool) {
+        use crate::gfx::Outcome;
+        match outcome {
+            Outcome::Shown => self.frame_shown(plan, now, frames, blank),
+            Outcome::Queued { failed } => {
+                self.awaiting = Some(Awaiting { plan, now_ms: now, since: Instant::now(), failed, blank, frames });
+            }
+            Outcome::Failed(why) => self.frame_failed(&why, blank),
+        }
+    }
+
+    fn frame_shown(&mut self, plan: crate::engine::Plan, now: u64, frames: Vec<crate::harness::CapturedFrame>, blank: bool) {
+        self.frame_failures = 0;
+        if let Some(crate::gfx::Gfx::Headless(g)) = self.gfx.as_mut() {
+            if !frames.is_empty() {
+                g.scanout = frames;
             }
         }
-        self.frame_seq += 1;
-        self.harness_frames = frames;
-        if deferred {
-            self.awaiting = Some(Awaiting { plan, now_ms: now, since: Instant::now() });
+        if blank {
+            if self.blanking {
+                self.finish_blank();
+            }
         } else {
             self.complete_frame(plan, now);
         }
     }
 
-    /// The frame reached the screen (or there is no screen to wait for): send what
-    /// clients are waiting for and let the engine advance, which is when `Protected` and
-    /// the transition phases are reported.
+    fn finish_blank(&mut self) {
+        self.blanking = false;
+        self.dpms_on = false;
+        if let Some(g) = self.gfx.as_mut() {
+            g.set_dpms(false);
+        }
+    }
+
+    /// The frame did not reach the screen (render error, an output skipped, a flip that
+    /// never came). Nothing is acknowledged; the scene is composed and queued again after a
+    /// short back-off, and a transition that cannot be shown is given up.
+    pub fn frame_failed(&mut self, why: &str, blank: bool) {
+        self.frame_failures += 1;
+        tracing::warn!("frame {} did not reach the screen ({why}); failure {} in a row", self.frame_seq, self.frame_failures);
+        if let Some(g) = self.gfx.as_mut() {
+            g.frame_lost();
+        }
+        if !blank {
+            self.engine.frame_failed();
+            if self.frame_failures >= MAX_FRAME_FAILURES {
+                self.engine.abort_transition();
+                for e in self.engine.drain_events() {
+                    self.emit(e);
+                }
+            }
+        }
+        self.needs_redraw = true;
+        if !matches!(self.clock, Clock::Manual(_)) {
+            self.retry_at = Some(Instant::now() + FRAME_RETRY);
+        }
+    }
+
+    /// The frame reached the screen: send what clients are waiting for and let the engine
+    /// advance, which is when `Protected` and the transition phases are reported.
     pub fn complete_frame(&mut self, plan: crate::engine::Plan, now: u64) {
         self.after_render(&plan, now);
         if tracing::enabled!(target: "bsm_frames", tracing::Level::DEBUG) {
@@ -703,13 +806,29 @@ impl State {
         for e in self.engine.drain_events() {
             self.emit(e);
         }
-        self.needs_redraw = self.engine.transition_running();
+        // Commands and commits that arrived while the frame was in flight keep their request;
+        // a protection that is still owed a frame, or a running transition, asks for more.
+        self.needs_redraw |= self.engine.transition_running() || self.engine.has_queued_protect();
     }
 
     /// Page flips of the awaited frame completed.
     pub fn complete_awaiting(&mut self) {
-        if let Some(a) = self.awaiting.take() {
-            self.complete_frame(a.plan, a.now_ms);
+        let Some(a) = self.awaiting.take() else { return };
+        if a.failed {
+            self.frame_failed("an output could not be composed or queued", a.blank);
+            return;
+        }
+        self.frame_shown(a.plan, a.now_ms, a.frames, a.blank);
+    }
+
+    /// The awaited flip did not complete in time. It is a failed frame, never a shown one.
+    pub fn flip_watchdog(&mut self, force: bool) {
+        if let Some(a) = &self.awaiting {
+            if force || a.since.elapsed() > FLIP_TIMEOUT {
+                let blank = a.blank;
+                self.awaiting = None;
+                self.frame_failed("page flip did not complete in time", blank);
+            }
         }
     }
 
@@ -803,6 +922,9 @@ pub(crate) fn run(
         last_frame_done: None,
         needs_redraw: true,
         awaiting: None,
+        frame_failures: 0,
+        retry_at: None,
+        blanking: false,
         key_logged: false,
         harness_frames: Vec::new(),
         dump_dir: config.frame_dump_dir.clone(),

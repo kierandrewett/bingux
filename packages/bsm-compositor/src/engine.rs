@@ -130,7 +130,10 @@ pub struct Engine {
     running: Option<Running>,
     held: Option<Held>,
     /// Sessions protected since the last composed frame.
-    pending_protected: Vec<SessionKey>,
+    /// Protected after the frame in flight was planned: released by a later frame only.
+    queued_protect: Vec<SessionKey>,
+    /// Protected before the frame in flight was planned: released when that frame is shown.
+    in_flight_protect: Vec<SessionKey>,
     out: Vec<SceneEvent>,
 }
 
@@ -173,7 +176,8 @@ impl Engine {
             protected: HashSet::new(),
             running: None,
             held: None,
-            pending_protected: Vec::new(),
+            queued_protect: Vec::new(),
+            in_flight_protect: Vec::new(),
             out: Vec::new(),
         }
     }
@@ -231,14 +235,15 @@ impl Engine {
         if self.base == Base::Session(key.clone()) {
             self.base = Base::Cover;
         }
-        if !self.pending_protected.contains(key) {
-            self.pending_protected.push(key.clone());
+        if !self.queued_protect.contains(key) && !self.in_flight_protect.contains(key) {
+            self.queued_protect.push(key.clone());
         }
     }
 
     pub fn unregister_session(&mut self, key: &SessionKey) {
         self.protected.remove(key);
-        self.pending_protected.retain(|k| k != key);
+        self.queued_protect.retain(|k| k != key);
+        self.in_flight_protect.retain(|k| k != key);
         if self.base == Base::Session(key.clone()) {
             self.base = Base::Cover;
         }
@@ -438,6 +443,9 @@ impl Engine {
 
     /// The plan for the frame about to be composed at monotonic time `now_ms`.
     pub fn plan(&mut self, now_ms: u64, probe: &dyn Probe) -> Plan {
+        // Only a protection that existed when this plan was made can be proven by this frame.
+        let queued = std::mem::take(&mut self.queued_protect);
+        self.in_flight_protect.extend(queued);
         let Some(mut r) = self.running.take() else {
             return self.base_plan(probe);
         };
@@ -501,8 +509,42 @@ impl Engine {
 
     /// The frame returned by the last [`Engine::plan`] was composed (and, on hardware,
     /// the flip completed). Releases `Protected` replies and advances transition phases.
+    pub fn frame_failed(&mut self) {
+        // The frame never (fully) reached the screen: nothing may be acknowledged and the
+        // protections it was meant to prove go back to the queue for the retry.
+        let mut again = std::mem::take(&mut self.in_flight_protect);
+        again.extend(std::mem::take(&mut self.queued_protect));
+        self.queued_protect = again;
+    }
+
+    /// A `Protect` still waits for a frame that proves it.
+    pub fn has_queued_protect(&self) -> bool {
+        !self.queued_protect.is_empty() || !self.in_flight_protect.is_empty()
+    }
+
+    /// True when the greeter scene is what the screen is showing or fading to. Only then
+    /// may the greeter own the keyboard.
+    pub fn greeter_owns_scene(&self) -> bool {
+        match &self.running {
+            Some(r) if r.kind != TransitionKind::PowerFade => true,
+            _ => self.base == Base::Greeter,
+        }
+    }
+
+    /// Give up the running transition because frames cannot be shown: `Failed`, safe scene.
+    pub fn abort_transition(&mut self) {
+        if let Some(r) = self.running.take() {
+            if r.phase != RunPhase::Settling {
+                self.phase_event(r.op, TransitionPhaseEvent::Failed);
+                self.fail_safe(&r);
+            } else {
+                self.phase_event(r.op, TransitionPhaseEvent::Completed);
+            }
+        }
+    }
+
     pub fn frame_done(&mut self) {
-        for k in std::mem::take(&mut self.pending_protected) {
+        for k in std::mem::take(&mut self.in_flight_protect) {
             self.out.push(SceneEvent::Protected { session: k.0, generation: k.1 });
         }
         let Some(mut r) = self.running.take() else { return };
@@ -714,6 +756,63 @@ mod tests {
             e.drain_events(),
             vec![SceneEvent::Protected { session: k.0.clone(), generation: k.1 }]
         );
+    }
+
+    #[test]
+    fn a_protect_during_a_frame_in_flight_is_not_acknowledged_by_that_frame() {
+        // Review F1a: frame N (with the session) is in flight when Protect arrives.
+        let p = Fake::new(true);
+        let k = key(1);
+        p.add(&k, true);
+        let mut e = Engine::new();
+        e.show_greeter_only();
+        e.begin(&p, 1, TransitionKind::NewLoginFade, None, Some(k.clone()), 0, true, None);
+        run_to_end(&mut e, &p, 16, 10);
+        e.drain_events();
+        let n = e.plan(100, &p);
+        assert!(n.session.is_some());
+        e.protect(&k);
+        assert!(e.has_queued_protect());
+        e.frame_done(); // flip of frame N completes
+        assert!(e.drain_events().is_empty(), "frame N still showed the session");
+        assert!(e.has_queued_protect(), "a frame is still owed");
+        let next = e.plan(116, &p);
+        assert!(next.session.is_none());
+        e.frame_done();
+        assert_eq!(e.drain_events(), vec![SceneEvent::Protected { session: k.0.clone(), generation: 1 }]);
+        assert!(!e.has_queued_protect());
+    }
+
+    #[test]
+    fn a_failed_frame_acknowledges_nothing_and_the_retry_does() {
+        let p = Fake::new(true);
+        let k = key(1);
+        p.add(&k, true);
+        let mut e = Engine::new();
+        e.show_greeter_only();
+        e.begin(&p, 1, TransitionKind::NewLoginFade, None, Some(k.clone()), 0, true, None);
+        run_to_end(&mut e, &p, 16, 10);
+        e.drain_events();
+        e.protect(&k);
+        e.plan(0, &p);
+        e.frame_failed();
+        assert!(e.drain_events().is_empty());
+        e.plan(16, &p);
+        e.frame_done();
+        assert_eq!(e.drain_events().len(), 1);
+    }
+
+    #[test]
+    fn greeter_owns_the_scene_only_when_it_is_shown() {
+        let p = Fake::new(true);
+        let mut e = Engine::new();
+        assert!(!e.greeter_owns_scene(), "a fresh engine shows the cover");
+        e.show_greeter_only();
+        assert!(e.greeter_owns_scene());
+        e.begin(&p, 4, TransitionKind::PowerFade, None, None, 360, false, Some(PowerAction::Reboot));
+        assert!(e.greeter_owns_scene(), "power fade over the greeter");
+        run_to_end(&mut e, &p, 40, 100);
+        assert!(!e.greeter_owns_scene(), "covered");
     }
 
     #[test]

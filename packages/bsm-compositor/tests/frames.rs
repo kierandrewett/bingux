@@ -586,3 +586,108 @@ fn greeter_keyboard_works_whatever_order_owner_and_connection_arrive_in() {
         assert!(c.app.kb.contains(&KbEvent::Key(30, true)), "{mode:?}: key reached the greeter: {:?}", c.app.kb);
     }
 }
+
+// ---- review F1: acknowledgement is tied to a frame composed after the change ----
+
+fn protected_events(r: &mut Rig) -> usize {
+    r.h.sync();
+    r.h.events().iter().filter(|e| matches!(e, SceneEvent::Protected { .. })).count()
+}
+
+#[test]
+fn f1a_a_flip_queued_before_protect_does_not_acknowledge_it() {
+    let mut r = Rig::new("f1a", 2, solid(SESSION));
+    r.make_foreground();
+    r.h.take_events();
+    r.h.fake_flips(true);
+    let n = r.step(16); // frame N, with the session, in flight
+    assert_all(frame_of(&n, "Virtual-1"), SESSION, "frame N shows the session");
+    r.h.send(SceneCommand::Protect { session: SID.into(), generation: GEN });
+    r.h.sync();
+    r.h.complete_flip(); // the flip of frame N lands: the screen shows the session
+    assert_eq!(protected_events(&mut r), 0, "frame N proves nothing about the protect");
+    assert!(r.h.needs_redraw(), "the frame that does prove it is still owed (review F1b)");
+    let cover = r.step(16);
+    for out in &cover {
+        assert_all(out, COVER, "the frame composed after the protect");
+    }
+    assert_eq!(protected_events(&mut r), 0, "composed is not shown yet");
+    r.h.complete_flip();
+    assert_eq!(protected_events(&mut r), 1, "acknowledged by the flip of the cover frame");
+}
+
+#[test]
+fn f1c_a_lost_flip_acknowledges_nothing_and_is_retried() {
+    let mut r = Rig::new("f1c", 1, solid(SESSION));
+    r.make_foreground();
+    r.h.take_events();
+    r.h.fake_flips(true);
+    r.h.send(SceneCommand::Protect { session: SID.into(), generation: GEN });
+    r.step(16);
+    r.h.expire_flip(); // the 500 ms watchdog
+    assert_eq!(protected_events(&mut r), 0, "a flip that never happened is not an acknowledgement");
+    assert!(r.h.needs_redraw());
+    r.step(16);
+    r.h.complete_flip();
+    assert_eq!(protected_events(&mut r), 1);
+}
+
+#[test]
+fn f1d_render_errors_and_partial_failures_are_not_success() {
+    let mut r = Rig::new("f1d", 2, solid(SESSION));
+    r.make_foreground();
+    r.h.take_events();
+    r.h.send(SceneCommand::Protect { session: SID.into(), generation: GEN });
+    r.h.fail_renders(2);
+    r.step(16);
+    r.step(16);
+    assert_eq!(protected_events(&mut r), 0, "failed renders acknowledge nothing");
+    r.step(16);
+    assert_eq!(protected_events(&mut r), 1, "the retry that reached the screen does");
+
+    // One output fails while the other flips.
+    let mut r = Rig::new("f1d_partial", 2, solid(SESSION));
+    r.make_foreground();
+    r.h.take_events();
+    r.h.fake_flips(true);
+    r.h.send(SceneCommand::Protect { session: SID.into(), generation: GEN });
+    r.h.partial_failure();
+    r.step(16);
+    r.h.complete_flip();
+    assert_eq!(protected_events(&mut r), 0, "output B still shows the session");
+    r.step(16);
+    r.h.complete_flip();
+    assert_eq!(protected_events(&mut r), 1);
+}
+
+#[test]
+fn f1d_a_transition_that_cannot_be_shown_is_given_up_with_failed() {
+    let mut r = Rig::new("f1d_abort", 1, solid(SESSION));
+    r.show_greeter();
+    r.h.take_events();
+    let op = r.begin(TransitionKind::NewLoginFade, false, true, 420, false);
+    r.h.fail_renders(5);
+    for _ in 0..5 {
+        r.step(16);
+    }
+    assert_eq!(r.phases(op).last(), Some(&TransitionPhaseEvent::Failed));
+    assert!(!r.phases(op).contains(&TransitionPhaseEvent::Committed), "nothing was committed on failed frames");
+}
+
+#[test]
+fn f1e_dpms_off_leaves_the_cover_on_the_scanout_and_protect_while_off_is_safe() {
+    let mut r = Rig::new("f1e", 1, solid(SESSION));
+    r.make_foreground();
+    r.h.take_events();
+    r.h.send(SceneCommand::SetDpms { on: false });
+    let blank = r.step(16);
+    assert_all(frame_of(&blank, "Virtual-1"), COVER, "the scanout buffer holds the cover when the panel is switched off");
+    r.h.send(SceneCommand::Protect { session: SID.into(), generation: GEN });
+    let f = r.step(16);
+    assert_all(frame_of(&f, "Virtual-1"), COVER, "still the cover");
+    assert_eq!(protected_events(&mut r), 1, "nothing but the cover can be on the scanout buffer");
+    // Wake: the first frame is the scene, which no longer contains the protected session.
+    r.h.send(SceneCommand::SetDpms { on: true });
+    let f = r.step(16);
+    assert_all(frame_of(&f, "Virtual-1"), COVER, "waking never shows the old desktop");
+}

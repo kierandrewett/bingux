@@ -31,6 +31,16 @@ pub enum HarnessCmd {
     PointerTo { x: f64, y: f64 },
     PointerButton { code: u32, pressed: bool },
     Focus(mpsc::Sender<FocusSnapshot>),
+    /// Behave like a page-flipping backend: a frame is acknowledged only after `CompleteFlip`.
+    NeedsRedraw(mpsc::Sender<bool>),
+    FakeFlips(bool),
+    CompleteFlip,
+    /// Act as if the 500 ms flip watchdog fired.
+    ExpireFlip,
+    /// The next N renders fail.
+    FailRenders(u32),
+    /// With fake flips, the next frame fails on one output while the others are queued.
+    PartialFailure,
     Stop,
 }
 
@@ -210,6 +220,36 @@ impl Harness {
 
     pub fn pointer_button(&self, code: u32, pressed: bool) {
         self.ctl.send(HarnessCmd::PointerButton { code, pressed }).expect("compositor thread is gone");
+    }
+
+    /// Test hooks for the page-flip path (see `HarnessCmd`).
+    pub fn fake_flips(&self, on: bool) {
+        self.ctl.send(HarnessCmd::FakeFlips(on)).expect("compositor thread is gone");
+    }
+
+    /// Does the compositor want another frame?
+    pub fn needs_redraw(&self) -> bool {
+        let (tx, rx) = mpsc::channel();
+        self.ctl.send(HarnessCmd::NeedsRedraw(tx)).expect("compositor thread is gone");
+        rx.recv_timeout(Duration::from_secs(10)).expect("compositor did not answer")
+    }
+
+    pub fn complete_flip(&self) {
+        self.ctl.send(HarnessCmd::CompleteFlip).expect("compositor thread is gone");
+        self.sync();
+    }
+
+    pub fn expire_flip(&self) {
+        self.ctl.send(HarnessCmd::ExpireFlip).expect("compositor thread is gone");
+        self.sync();
+    }
+
+    pub fn fail_renders(&self, n: u32) {
+        self.ctl.send(HarnessCmd::FailRenders(n)).expect("compositor thread is gone");
+    }
+
+    pub fn partial_failure(&self) {
+        self.ctl.send(HarnessCmd::PartialFailure).expect("compositor thread is gone");
     }
 
     pub fn focus(&self) -> FocusSnapshot {

@@ -14,6 +14,13 @@ impl State {
             SceneCommand::BindHost { session, generation, scope, host_pid } => {
                 self.bind_host(&session, generation, scope, host_pid)
             }
+            SceneCommand::RequestEvidence { session, generation } => {
+                if let Some(rec) = self.sessions.get_mut(&session).filter(|r| r.generation == generation) {
+                    for hs in rec.surfaces.values_mut() {
+                        hs.evidence_pending = true;
+                    }
+                }
+            }
             SceneCommand::UnregisterSession { session, generation } => {
                 self.unregister_session(&session, generation)
             }
@@ -54,13 +61,24 @@ impl State {
             }
             SceneCommand::CancelTransition { operation } => self.engine.cancel(operation),
             SceneCommand::SetCoverColor(c) => self.cover = c,
-            SceneCommand::SetDpms { on } => {
-                self.dpms_on = on;
-                if let Some(g) = self.gfx.as_mut() {
-                    g.set_dpms(on);
+            SceneCommand::SetDpms { on: false } => {
+                // Cover first, then off: the scanout buffers never keep a desktop (review F1e).
+                if self.dpms_on {
+                    self.blanking = true;
+                }
+            }
+            SceneCommand::SetDpms { on: true } => {
+                self.blanking = false;
+                if !self.dpms_on {
+                    self.dpms_on = true;
+                    if let Some(g) = self.gfx.as_mut() {
+                        g.set_dpms(true);
+                    }
                 }
             }
         }
+        // Whatever the command changed (protection, scene), input follows at once (review F5).
+        self.reconcile_input();
         for e in self.engine.drain_events() {
             self.emit(e);
         }

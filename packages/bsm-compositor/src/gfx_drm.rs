@@ -40,7 +40,7 @@ use smithay::reexports::rustix::fs::OFlags;
 use smithay::utils::{DeviceFd, Scale, Transform};
 
 use crate::engine::Plan;
-use crate::gfx::Gfx;
+use crate::gfx::{Gfx, Outcome};
 use crate::harness::CapturedFrame;
 use crate::render::{build_elements, default_cursor_buffer};
 use crate::state::State;
@@ -69,7 +69,7 @@ pub(crate) struct DrmGfx {
     renderer: GlesRenderer,
     outputs: HashMap<crtc::Handle, DrmOutput>,
     cursor: MemoryRenderBuffer,
-    active: bool,
+    pub active: bool,
     #[allow(dead_code)]
     device_id: libc::dev_t,
     #[allow(dead_code)]
@@ -122,17 +122,21 @@ impl DrmGfx {
         }
     }
 
-    pub fn render(&mut self, state: &State, plan: &Plan, _now_ms: u64) -> Result<(Vec<CapturedFrame>, bool)> {
+    pub fn render(&mut self, state: &State, plan: &Plan, _now_ms: u64) -> Result<(Vec<CapturedFrame>, Outcome)> {
         if !self.active {
-            return Ok((Vec::new(), false));
+            return Ok((Vec::new(), Outcome::Failed("session inactive".into())));
         }
         let mut queued = false;
+        let mut failed: Option<String> = None;
         let c = state.cover;
         for rec in &state.outputs {
             let Some((_, out)) = self.outputs.iter_mut().find(|(_, o)| o.info.name == rec.info.name) else {
+                failed = Some(format!("no display for output {}", rec.info.name));
                 continue;
             };
             if out.pending_flip {
+                // Never composed on top of a flip in flight: that frame is not ours to ack.
+                failed = Some(format!("{} still has a flip in flight", out.info.name));
                 continue;
             }
             let elements = build_elements(state, &mut self.renderer, rec, plan, Some(&self.cursor), state.frame_seq);
@@ -143,20 +147,47 @@ impl DrmGfx {
                 FrameFlags::DEFAULT,
             ) {
                 Ok(res) => {
-                    if !res.is_empty {
-                        match out.compositor.queue_frame(()) {
-                            Ok(()) => {
-                                out.pending_flip = true;
-                                queued = true;
-                            }
-                            Err(e) => tracing::warn!("queue_frame on {}: {e:?}", out.info.name),
+                    if res.is_empty {
+                        // Nothing changed against the buffer that is already on screen.
+                        continue;
+                    }
+                    match out.compositor.queue_frame(()) {
+                        Ok(()) => {
+                            out.pending_flip = true;
+                            queued = true;
+                        }
+                        Err(e) => {
+                            let _ = out.compositor.reset_state();
+                            failed = Some(format!("queue_frame on {}: {e:?}", out.info.name));
                         }
                     }
                 }
-                Err(e) => tracing::warn!("render_frame on {}: {e:?}", out.info.name),
+                Err(e) => {
+                    let _ = out.compositor.reset_state();
+                    failed = Some(format!("render_frame on {}: {e:?}", out.info.name));
+                }
             }
         }
-        Ok((Vec::new(), queued))
+        let outcome = match (queued, failed) {
+            (true, f) => {
+                if let Some(f) = &f {
+                    tracing::warn!("{f}");
+                }
+                Outcome::Queued { failed: f.is_some() }
+            }
+            (false, Some(f)) => Outcome::Failed(f),
+            (false, None) => Outcome::Shown,
+        };
+        Ok((Vec::new(), outcome))
+    }
+
+    /// A frame failed or its flips never came: forget the pending flips and rebuild the
+    /// compositor state so the next frame is a complete one.
+    pub fn frame_lost(&mut self) {
+        for o in self.outputs.values_mut() {
+            o.pending_flip = false;
+            let _ = o.compositor.reset_state();
+        }
     }
 
     fn scan(&self) -> Result<Vec<(OutputInfo, connector::Handle, crtc::Handle, control::Mode)>> {
@@ -321,8 +352,11 @@ impl State {
                         o.pending_flip = false;
                     }
                 });
-                // Nothing will flip while paused: do not hold the engine hostage.
-                self.complete_awaiting();
+                // Nothing will flip while paused. The frame in flight is not acknowledged: it
+                // is dropped and its protections are owed again on resume.
+                if self.awaiting.take().is_some() {
+                    self.engine.frame_failed();
+                }
             }
             SessionEvent::ActivateSession => {
                 tracing::info!("session activated");
