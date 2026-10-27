@@ -22,6 +22,9 @@ OPTIONS:
                                      `none` refuses every power action: development and tests only)
     --outputs <WxH[,WxH...]>         Headless backend: fake outputs side by side (default: 1280x720)
     --frame-dump <DIR>               Headless backend: write every composed frame as a PNG
+    --hold-first-scene <MS>          DRM backend: keep what is on a lit display (the boot splash) until
+                                     the greeter is ready, at most MS milliseconds (default: 0 = off,
+                                     or `[boot] hold_first_scene_ms` in the config)
     --print-config                   Print the resolved settings and exit
     --version                        Print the version and exit
     --help                           Print this text and exit
@@ -49,6 +52,7 @@ pub struct Cli {
     pub system_services: Option<String>,
     pub outputs: Option<Vec<(u32, u32)>>,
     pub frame_dump: Option<PathBuf>,
+    pub hold_first_scene_ms: Option<u64>,
     pub print_config: bool,
 }
 
@@ -133,6 +137,11 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Parsed, String> 
             }
             "--outputs" => cli.outputs = Some(parse_outputs(&value("a list like 1280x720")?)?),
             "--frame-dump" => cli.frame_dump = Some(value("a directory")?.into()),
+            "--hold-first-scene" => {
+                let v = value("milliseconds")?;
+                cli.hold_first_scene_ms =
+                    Some(v.parse().map_err(|_| format!("--hold-first-scene needs milliseconds, not {v:?}"))?);
+            }
             other => return Err(format!("unknown option {other:?}; try --help")),
         }
     }
@@ -153,6 +162,16 @@ mod tests {
         assert_eq!(c.backend.as_deref(), Some("headless"));
         assert_eq!(c.outputs, Some(vec![(800, 600), (1024, 768)]));
         assert_eq!(c.dbus.as_deref(), Some("none"));
+    }
+
+    #[test]
+    fn hold_first_scene_takes_milliseconds() {
+        let Parsed::Run(c) = p(&["--backend", "drm", "--hold-first-scene", "20000"]).unwrap() else { panic!() };
+        assert_eq!(c.hold_first_scene_ms, Some(20000));
+        let Parsed::Run(c) = p(&["--hold-first-scene=0"]).unwrap() else { panic!() };
+        assert_eq!(c.hold_first_scene_ms, Some(0));
+        assert!(p(&["--hold-first-scene", "soon"]).unwrap_err().contains("milliseconds"));
+        assert!(p(&["--hold-first-scene"]).unwrap_err().contains("needs"));
     }
 
     #[test]

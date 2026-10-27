@@ -35,6 +35,9 @@ pub struct Settings {
     pub logind: bool,
     pub outputs: Vec<(u32, u32)>,
     pub frame_dump: Option<PathBuf>,
+    /// DRM: keep a lit display (the boot splash) until the greeter is on screen, at most this
+    /// long. `None`: the first frame replaces whatever is there.
+    pub hold_first_scene: Option<Duration>,
     pub hidden_users: Vec<String>,
     pub file: FileConfig,
     pub config_path: PathBuf,
@@ -96,6 +99,11 @@ pub fn resolve(cli: Cli) -> Result<Settings, String> {
         logind: services == "logind",
         outputs: cli.outputs.clone().unwrap_or_else(|| vec![(1280, 720)]),
         frame_dump: cli.frame_dump.clone(),
+        hold_first_scene: cli
+            .hold_first_scene_ms
+            .or(file.boot.hold_first_scene_ms)
+            .filter(|ms| *ms > 0)
+            .map(Duration::from_millis),
         hidden_users: file.hidden_users.clone(),
         file,
         config_path,
@@ -105,13 +113,14 @@ pub fn resolve(cli: Cli) -> Result<Settings, String> {
 impl Settings {
     pub fn describe(&self) -> String {
         format!(
-            "backend = {:?}\nruntime_dir = {}\nstate_dir = {}\nhelper_socket = {}\ngreeter_user = {}\nbus = {:?}\nconfig = {}\n",
+            "backend = {:?}\nruntime_dir = {}\nstate_dir = {}\nhelper_socket = {}\ngreeter_user = {}\nbus = {:?}\nhold_first_scene = {:?}\nconfig = {}\n",
             self.backend,
             self.runtime_dir.display(),
             self.state_dir.display(),
             self.helper_socket.display(),
             self.greeter_user,
             self.dbus,
+            self.hold_first_scene,
             self.config_path.display()
         )
     }
@@ -307,9 +316,18 @@ pub fn run(s: Settings) -> Result<(), String> {
     let handle = Arc::new(handle);
 
     // Readiness and watchdog.
+    //
+    // With a boot splash on a lit display `READY=1` means the greeter is on the screen, not just
+    // that the compositor started: systemd then ends the start job and `ExecStartPost=` withdraws
+    // the splash, so the splash stays up until the greeter replaces it (docs/bsm/boot.md). The
+    // wait is bounded: a greeter that never shows must not hold the unit's start for ever.
+    let first_scene = bsm_compositor::FirstScene::new();
+    let heartbeat = bsm_compositor::Heartbeat::new();
     let alive = Arc::new(AtomicBool::new(true));
     {
         let (handle, dbus_handle, alive) = (handle.clone(), dbus_handle.clone(), alive.clone());
+        let (first_scene, heartbeat) = (first_scene.clone(), heartbeat.clone());
+        let hold = s.hold_first_scene;
         std::thread::Builder::new()
             .name("bsm-notify".into())
             .spawn(move || {
@@ -322,6 +340,14 @@ pub fn run(s: Settings) -> Result<(), String> {
                         d.name_acquired()
                     });
                 if ready {
+                    let limit = hold.unwrap_or_default() + Duration::from_secs(10);
+                    let waited = std::time::Instant::now();
+                    match first_scene.wait(limit) {
+                        Some(reason) => {
+                            tracing::info!(?reason, waited_ms = waited.elapsed().as_millis() as u64, "first scene");
+                        }
+                        None => tracing::warn!(limit_ms = limit.as_millis() as u64, "no first scene in time; reporting ready anyway"),
+                    }
                     tracing::info!("ready");
                     notify::notify("READY=1\nSTATUS=ready");
                 } else {
@@ -329,7 +355,13 @@ pub fn run(s: Settings) -> Result<(), String> {
                 }
                 if let Some(every) = notify::watchdog_interval() {
                     while alive.load(Ordering::Relaxed) && !handle.is_finished() {
-                        notify::notify("WATCHDOG=1");
+                        // A compositor loop that stopped beating is wedged: let systemd's
+                        // watchdog fire instead of vouching for it.
+                        if heartbeat.age() < Duration::from_secs(10) {
+                            notify::notify("WATCHDOG=1");
+                        } else {
+                            tracing::error!(age_ms = heartbeat.age().as_millis() as u64, "the compositor loop is not beating; no watchdog ping");
+                        }
                         std::thread::sleep(every);
                     }
                 }
@@ -337,7 +369,7 @@ pub fn run(s: Settings) -> Result<(), String> {
             .map_err(|e| format!("notify thread: {e}"))?;
     }
 
-    let result = run_compositor(&s, cmd_rx, evt_tx);
+    let result = run_compositor(&s, cmd_rx, evt_tx, first_scene, heartbeat);
     alive.store(false, Ordering::Relaxed);
     match Arc::try_unwrap(handle) {
         Ok(h) => h.shutdown(),
@@ -352,6 +384,8 @@ fn run_compositor(
     s: &Settings,
     cmd_rx: bsm_compositor::calloop::channel::Channel<SceneCommand>,
     evt_tx: std::sync::mpsc::Sender<bsm_proto::scene::SceneEvent>,
+    first_scene: bsm_compositor::FirstScene,
+    heartbeat: bsm_compositor::Heartbeat,
 ) -> Result<(), String> {
     let mut config = bsm_compositor::Config {
         backend: s.backend.backend(),
@@ -362,6 +396,9 @@ fn run_compositor(
         session_socket_dir: s.session_dir(),
         cover: s.cover,
         frame_dump_dir: s.frame_dump.clone(),
+        hold_first_scene: s.hold_first_scene,
+        first_scene,
+        heartbeat: Some(heartbeat),
         ..Default::default()
     };
     if s.backend == BackendName::Headless {

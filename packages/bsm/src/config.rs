@@ -36,6 +36,11 @@
 //! lock_ms = 240
 //! logout_ms = 320
 //! power_ms = 360
+//!
+//! [boot]
+//! hold_first_scene_ms = 0            # DRM: keep a lit display (the boot splash) until the greeter is
+//!                                    # ready, at most this long; 0 = off (the unit passes the command
+//!                                    # line flag instead)
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -67,6 +72,13 @@ pub struct FileConfig {
     pub greeter_power_with_sessions: Option<GreeterPowerBusyFile>,
     pub timeouts: Timeouts,
     pub transitions: Transitions,
+    pub boot: Boot,
+}
+
+#[derive(Debug, Default, Clone, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct Boot {
+    pub hold_first_scene_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -233,6 +245,8 @@ suspend = false
 stage = 30
 [transitions]
 unlock_ms = 600
+[boot]
+hold_first_scene_ms = 20000
 "##;
         let c = FileConfig::parse(text, Path::new("t")).unwrap();
         assert_eq!(c.socket_mode().unwrap(), 0o660);
@@ -243,12 +257,14 @@ unlock_ms = 600
         assert_eq!(p.duration_ms(TransitionKind::NewLoginFade), 420);
         let cover = c.cover_color().unwrap().unwrap();
         assert!((cover.r - 13.0 / 255.0).abs() < 1e-6);
+        assert_eq!(c.boot.hold_first_scene_ms, Some(20000));
     }
 
     #[test]
     fn a_typo_is_an_error_not_a_silent_default() {
         assert!(FileConfig::parse("bakend = \"drm\"", Path::new("t")).is_err());
         assert!(FileConfig::parse("[timeouts]\nstages = 3", Path::new("t")).is_err());
+        assert!(FileConfig::parse("[boot]\nhold_first_scene = 3", Path::new("t")).is_err());
     }
 
     #[test]
