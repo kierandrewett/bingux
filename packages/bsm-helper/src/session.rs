@@ -55,6 +55,44 @@ pub fn adopt_socket_path(state_dir: &Path, session: &str, generation: Generation
     state_dir.join("sessions").join(format!("{session}-{generation}.sock"))
 }
 
+/// Create (or verify) the adoption directory: owned by this process's euid, mode
+/// 0700, not a symlink (review F4). The directory's parent is created normally.
+pub fn ensure_private_dir(dir: &Path) -> io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+    if let Some(parent) = dir.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    match std::fs::DirBuilder::new().mode(0o700).create(dir) {
+        Ok(()) => {}
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(e) => return Err(e),
+    }
+    let fd = sys::open_dir_nofollow(dir)?;
+    let mut st: libc::stat = unsafe { std::mem::zeroed() };
+    sys::cvt(unsafe { libc::fstat(fd.as_raw_fd(), &mut st) })?;
+    if st.st_uid != sys::euid() {
+        return Err(io::Error::new(io::ErrorKind::PermissionDenied, "directory has another owner"));
+    }
+    sys::cvt(unsafe { libc::fchmod(fd.as_raw_fd(), 0o700) })?;
+    Ok(())
+}
+
+/// Whether a directory and a socket file in it may be trusted as a supervisor's
+/// adoption socket: both owned by `euid`, the directory closed to others, the
+/// socket mode 0600 and a real socket, none of it reached through a symlink.
+pub fn adoption_files_trusted(dir: &Path, sock: &Path, euid: u32) -> Result<(), String> {
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+    let d = std::fs::symlink_metadata(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    if !d.file_type().is_dir() || d.uid() != euid || d.mode() & 0o077 != 0 {
+        return Err(format!("{} must be a directory owned by uid {euid} with mode 0700", dir.display()));
+    }
+    let m = std::fs::symlink_metadata(sock).map_err(|e| format!("{}: {e}", sock.display()))?;
+    if !m.file_type().is_socket() || m.uid() != euid || m.mode() & 0o777 != 0o600 {
+        return Err(format!("{} is not a socket owned by uid {euid} with mode 0600", sock.display()));
+    }
+    Ok(())
+}
+
 /// A session id is `s` plus hex in practice; everything that ends up in a
 /// path or an environment variable is limited to a conservative alphabet.
 pub fn valid_session_id(id: &str) -> bool {
@@ -167,11 +205,18 @@ pub(crate) fn spawn_as_user(
             unsafe {
                 let devnull = libc::open(c"/dev/null".as_ptr(), libc::O_RDWR);
                 if devnull >= 0 {
+                    // Review F5: no inherited stdout or stderr (the helper's journal
+                    // stream) for a user process.
                     libc::dup2(devnull, 0);
+                    libc::dup2(devnull, 1);
+                    libc::dup2(devnull, 2);
                     if devnull > 2 {
                         libc::close(devnull);
                     }
                 }
+                // Nothing else the helper or a PAM module left open either; the exec
+                // error pipe is close-on-exec and must stay until then.
+                sys::close_fds_except(&[wr.as_raw_fd()]);
                 if libc::chdir(home.as_ptr()) != 0 {
                     libc::chdir(c"/".as_ptr());
                 }
@@ -281,6 +326,12 @@ impl Supervisor {
             let _ = pam.delete_credentials();
             return self.fail(ErrorCode::PamFailure, format!("pam_open_session: {e}"));
         }
+        // Review F3: the session phase must still be for the account we run as.
+        if let Err(m) = crate::auth::check_user(&pam, self.p.pw.uid) {
+            let _ = pam.close_session();
+            let _ = pam.delete_credentials();
+            return self.fail(ErrorCode::PamFailure, m);
+        }
 
         // From here on the PAM session is open and must be closed on every exit path.
         let outcome = self.after_open(&mut pam, &inputs, &sigfd);
@@ -364,8 +415,10 @@ impl Supervisor {
         // The adoption socket exists before the parent hears about the session,
         // so a helper that restarts right now can still find it.
         let path = adopt_socket_path(&self.p.state_dir, &self.p.session, self.p.generation);
-        if let Some(dir) = path.parent() {
-            let _ = std::fs::create_dir_all(dir);
+        if let Some(dir) = path.parent()
+            && let Err(e) = ensure_private_dir(dir)
+        {
+            eprintln!("bsm-helper: adoption directory unusable: {e}");
         }
         match sys::listen_seqpacket(&path, 0o600) {
             Ok(l) => {
@@ -539,5 +592,42 @@ mod tests {
     fn adoption_socket_path_is_inside_the_state_dir() {
         let p = adopt_socket_path(Path::new("/run/bsm-helper"), "s1", 7);
         assert_eq!(p, PathBuf::from("/run/bsm-helper/sessions/s1-7.sock"));
+    }
+
+    #[test]
+    fn adoption_trusts_only_private_directories_and_own_sockets() {
+        use std::os::unix::fs::PermissionsExt;
+        let me = sys::euid();
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("sessions");
+        ensure_private_dir(&dir).unwrap();
+        assert_eq!(std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777, 0o700);
+        let sock = dir.join("s-1.sock");
+        let _l = sys::listen_seqpacket(&sock, 0o600).unwrap();
+        assert!(adoption_files_trusted(&dir, &sock, me).is_ok());
+        // Another uid expected: owner mismatch.
+        assert!(adoption_files_trusted(&dir, &sock, me + 1).is_err());
+        // A directory others can write to (the wrong-umask case).
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(adoption_files_trusted(&dir, &sock, me).is_err());
+        // ensure_private_dir repairs a loose mode it owns.
+        ensure_private_dir(&dir).unwrap();
+        assert!(adoption_files_trusted(&dir, &sock, me).is_ok());
+        // A wider socket mode, a regular file and a symlink are refused.
+        std::fs::set_permissions(&sock, std::fs::Permissions::from_mode(0o666)).unwrap();
+        assert!(adoption_files_trusted(&dir, &sock, me).is_err());
+        std::fs::set_permissions(&sock, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let file = dir.join("plain.sock");
+        std::fs::write(&file, "x").unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(adoption_files_trusted(&dir, &file, me).is_err());
+        let link = dir.join("link.sock");
+        std::os::unix::fs::symlink(&sock, &link).unwrap();
+        assert!(adoption_files_trusted(&dir, &link, me).is_err());
+        // The directory itself as a symlink is refused too.
+        let linkdir = tmp.path().join("linkdir");
+        std::os::unix::fs::symlink(&dir, &linkdir).unwrap();
+        assert!(ensure_private_dir(&linkdir).is_err());
+        assert!(adoption_files_trusted(&linkdir, &sock, me).is_err());
     }
 }

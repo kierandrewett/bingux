@@ -6,7 +6,7 @@
 
 use std::collections::BTreeMap;
 use std::io;
-use std::os::unix::fs::{PermissionsExt, chown};
+use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::path::{Component, Path, PathBuf};
 
 use bsm_proto::paths;
@@ -30,14 +30,30 @@ pub fn path_within(root: &Path, path: &str) -> bool {
         && p.components().all(|c| !matches!(c, Component::ParentDir | Component::CurDir))
 }
 
-fn private_dir(path: &Path, pw: &Passwd) -> io::Result<()> {
-    std::fs::create_dir(path)?;
-    chown(path, Some(pw.uid), Some(pw.gid))?;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
+/// Create a directory owned by root (mode 0700) and, when `give_to` is set, hand
+/// it over through a descriptor opened with `O_NOFOLLOW`. Nothing here resolves a
+/// path twice: after `mkdir`, only the descriptor is used.
+fn private_dir(path: &Path, give_to: Option<&Passwd>) -> io::Result<()> {
+    use std::os::fd::AsRawFd;
+    std::fs::DirBuilder::new().mode(0o700).create(path)?;
+    let fd = crate::sys::open_dir_nofollow(path)?;
+    // mkdir applied the umask; make the mode exact.
+    crate::sys::cvt(unsafe { libc::fchmod(fd.as_raw_fd(), 0o700) })?;
+    if let Some(pw) = give_to {
+        crate::sys::cvt(unsafe { libc::fchown(fd.as_raw_fd(), pw.uid, pw.gid) })?;
+    }
+    Ok(())
 }
 
 /// Create `<root>/<generation>/{rt,home}` owned by the greeter account, mode 0700.
 /// `root` itself is created 0755 and stays owned by whoever runs the helper.
+///
+/// Order matters (review F1): the generation directory is created root-owned and
+/// 0700, so nobody else can enter it while its children are made; the children
+/// are created inside it and handed over through descriptors that do not follow
+/// symlinks; the generation directory itself is handed over last. A greeter
+/// process that survived from an earlier generation can therefore never place a
+/// symlink where root is about to `chown`.
 pub fn prepare_dirs(root: &Path, generation: u64, pw: &Passwd) -> io::Result<GreeterRun> {
     std::fs::create_dir_all(root)?;
     std::fs::set_permissions(root, std::fs::Permissions::from_mode(0o755))?;
@@ -47,11 +63,15 @@ pub fn prepare_dirs(root: &Path, generation: u64, pw: &Passwd) -> io::Result<Gre
         Err(e) if e.kind() == io::ErrorKind::NotFound => {}
         Err(e) => return Err(e),
     }
-    private_dir(&dir, pw)?;
+    private_dir(&dir, None)?;
     let runtime = dir.join("rt");
     let home = dir.join("home");
-    private_dir(&runtime, pw)?;
-    private_dir(&home, pw)?;
+    private_dir(&runtime, Some(pw))?;
+    private_dir(&home, Some(pw))?;
+    // Last: from here the greeter account can enter and change `dir`.
+    let fd = crate::sys::open_dir_nofollow(&dir)?;
+    use std::os::fd::AsRawFd;
+    crate::sys::cvt(unsafe { libc::fchown(fd.as_raw_fd(), pw.uid, pw.gid) })?;
     Ok(GreeterRun { dir, runtime, home })
 }
 
@@ -177,5 +197,35 @@ mod tests {
         assert!(!env.contains_key("DBUS_SESSION_BUS_ADDRESS"));
         assert!(!env.contains_key("BSM_HOST_SOCKET"));
         assert_eq!(env["QT_LOGGING_RULES"], "a=false");
+    }
+
+    #[test]
+    fn a_planted_symlink_is_never_followed_by_the_root_chown() {
+        // Review F1: a process of the previous greeter owns the generation directory's
+        // old incarnation and can plant a symlink where root creates a child.
+        let tmp = tempfile::tempdir().unwrap();
+        let target = tmp.path().join("victim");
+        std::fs::write(&target, "root file").unwrap();
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let planted = tmp.path().join("rt");
+        std::os::unix::fs::symlink(&target, &planted).unwrap();
+        assert!(private_dir(&planted, Some(&pw())).is_err(), "must not create through an existing entry");
+        assert!(crate::sys::open_dir_nofollow(&planted).is_err(), "must not open through a symlink");
+        assert_eq!(std::fs::metadata(&target).unwrap().permissions().mode() & 0o777, 0o644, "target untouched");
+    }
+
+    #[test]
+    fn the_generation_directory_is_root_only_until_its_children_exist() {
+        // The directory is created 0700 and handed over last, so while the children are
+        // made nobody else can enter it. Checked through the final state and the order
+        // of operations in `prepare_dirs`: children are owned before the parent's owner changes.
+        let tmp = tempfile::tempdir().unwrap();
+        let p = pw();
+        let run = prepare_dirs(tmp.path(), 3, &p).unwrap();
+        use std::os::unix::fs::MetadataExt;
+        for d in [&run.dir, &run.runtime, &run.home] {
+            let m = std::fs::metadata(d).unwrap();
+            assert_eq!((m.uid(), m.mode() & 0o777), (p.uid, 0o700), "{}", d.display());
+        }
     }
 }

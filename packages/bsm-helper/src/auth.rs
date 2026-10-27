@@ -29,6 +29,8 @@ use crate::sys;
 pub struct AuthParams {
     pub service: String,
     pub user: String,
+    /// The uid `user` must still resolve to after every PAM phase.
+    pub uid: u32,
     pub confdir: Option<PathBuf>,
     /// How long the user may take to answer one prompt.
     pub prompt_timeout: Duration,
@@ -107,6 +109,12 @@ pub fn run_conversation(sock: RawFd, params: &AuthParams) -> (AuthChildEvent, Op
         }
     };
     let result = pam.authenticate().and_then(|()| pam.acct_mgmt());
+    // Review F3: a module may have rewritten PAM_USER. The session is opened for the
+    // account the helper resolved, so a handle that now means someone else is refused.
+    let result = result.and_then(|()| match check_user(&pam, params.uid) {
+        Ok(()) => Ok(()),
+        Err(m) => Err(crate::pam::PamError { code: crate::pam::PAM_PERM_DENIED, message: m }),
+    });
     match result {
         Ok(()) => (AuthChildEvent::Done { ok: true, code: None, message: String::new() }, Some(Authenticated { pam, session_phase })),
         Err(e) => {
@@ -117,6 +125,16 @@ pub fn run_conversation(sock: RawFd, params: &AuthParams) -> (AuthChildEvent, Op
             };
             (AuthChildEvent::Done { ok: false, code: Some(code), message }, None)
         }
+    }
+}
+
+/// `PAM_USER` must still name the account (by uid) the helper is acting for.
+pub fn check_user(pam: &Pam, expected_uid: u32) -> Result<(), String> {
+    let Some(name) = pam.user() else { return Err("PAM has no user name".into()) };
+    match sys::getpwnam(&name) {
+        Ok(Some(pw)) if pw.uid == expected_uid => Ok(()),
+        Ok(_) => Err("a PAM module changed the user to another account".into()),
+        Err(_) => Err("cannot resolve the user PAM ended with".into()),
     }
 }
 
@@ -157,6 +175,7 @@ mod tests {
         AuthParams {
             service: service.to_owned(),
             user: pam.user.clone(),
+            uid: pam.uid,
             confdir: Some(pam.dir.path().to_path_buf()),
             prompt_timeout: Duration::from_secs(5),
         }
@@ -247,5 +266,20 @@ mod tests {
     #[test]
     fn pam_conv_error_codes_are_exported() {
         assert_eq!(crate::pam::PAM_CONV_ERR, 19);
+    }
+
+    #[test]
+    fn a_module_that_rewrites_pam_user_fails_the_check() {
+        let pam = TestPam::new();
+        let (parent, child) = sys::seqpacket_pair().unwrap();
+        drop(parent);
+        let relay = Relay { sock: child.as_raw_fd(), timeout: Duration::from_secs(1), slot: Default::default(), session_phase: Rc::new(Cell::new(true)) };
+        let mut h = Pam::start("bsm-test-deny", &pam.user, Some(pam.dir.path()), Box::new(relay)).unwrap();
+        assert!(check_user(&h, pam.uid).is_ok());
+        assert!(check_user(&h, pam.uid + 1).is_err(), "another uid must not match");
+        h.set_user("root");
+        assert!(check_user(&h, pam.uid).is_err(), "PAM_USER changed to another account");
+        h.set_user("no-such-account-bsm-test");
+        assert!(check_user(&h, pam.uid).is_err());
     }
 }

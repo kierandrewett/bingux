@@ -495,3 +495,67 @@ fn a_session_that_ends_while_bsm_is_disconnected_is_reported_to_the_next_connect
         other => panic!("{other:?}"),
     }
 }
+
+#[test]
+fn a_loose_adoption_directory_means_nothing_is_adopted() {
+    // Review F4: the directory is only trusted when root-only; a wrong umask must
+    // not let another user's socket be adopted as a session.
+    if skip_as_root() {
+        return;
+    }
+    use std::os::unix::fs::PermissionsExt;
+    let env = Env::new();
+    let mut h = env.start();
+    let c = env.connect();
+    let o = open(&env, &mut h, &c, "s0000a00f", 81);
+    let dir = env.state_dir().join("sessions");
+    assert_eq!(std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777, 0o700, "created private");
+    h.kill9();
+    drop(c);
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let h2 = env.start();
+    let c2 = env.connect();
+    c2.send(&HelperRequest::CloseSession { session: "s0000a00f".into(), generation: 81, grace_ms: 200 });
+    c2.assert_silent(Duration::from_millis(800));
+    assert!(alive(o.leader_pid), "an untrusted directory must not be adopted");
+    // Restoring the mode makes it adoptable again.
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+    drop(c2);
+    h2.kill9_boxed();
+    let mut h3 = env.start();
+    let c3 = env.connect();
+    c3.send(&HelperRequest::CloseSession { session: "s0000a00f".into(), generation: 81, grace_ms: 200 });
+    c3.until(|e| matches!(e, HelperEvent::SessionExited { .. }));
+    h3.guard_session(o.leader_pid);
+}
+
+#[test]
+fn user_processes_get_dev_null_and_no_inherited_descriptors() {
+    // Review F5.
+    if skip_as_root() {
+        return;
+    }
+    let env = Env::new();
+    let cfg = env.config().replace(
+        "gnoblin = [\"/bin/sh\", \"-c\", \"env > ",
+        &format!(
+            "gnoblin = [\"/bin/sh\", \"-c\", \"for f in /proc/$$/fd/*; do echo $(basename $f) $(readlink $f); done > {}/fds.txt; env > ",
+            env.path("").display()
+        ),
+    );
+    let mut h = env.start_with(&cfg);
+    let c = env.connect();
+    let _o = open(&env, &mut h, &c, "s0000a010", 91);
+    let text = wait_for_file(&env.path("fds.txt"));
+    for line in text.lines() {
+        let (fd, target) = line.split_once(' ').unwrap_or((line, ""));
+        let fd: i32 = fd.parse().unwrap();
+        if fd <= 2 {
+            assert_eq!(target, "/dev/null", "fd {fd}");
+        } else {
+            assert!(!target.contains("socket:") && !target.contains("anon_inode") && !target.contains("pipe:"), "inherited fd {fd} -> {target}");
+        }
+    }
+    c.send(&HelperRequest::CloseSession { session: "s0000a010".into(), generation: 91, grace_ms: 300 });
+    c.until(|e| matches!(e, HelperEvent::SessionExited { .. }));
+}

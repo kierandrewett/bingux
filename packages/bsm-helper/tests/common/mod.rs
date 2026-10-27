@@ -170,6 +170,10 @@ pub struct HelperProc {
 }
 
 impl HelperProc {
+    pub fn kill9_boxed(mut self) {
+        self.kill9();
+    }
+
     pub fn pid(&self) -> u32 {
         self.child.as_ref().unwrap().id()
     }

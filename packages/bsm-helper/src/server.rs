@@ -206,6 +206,10 @@ impl Server {
             if path.extension().and_then(|e| e.to_str()) != Some("sock") {
                 continue;
             }
+            if let Err(m) = session::adoption_files_trusted(&dir, &path, sys::euid()) {
+                eprintln!("bsm-helper: not adopting: {m}");
+                continue;
+            }
             let fd = match session::connect_adopt(&path) {
                 Ok(Some(fd)) => fd,
                 Ok(None) => {
@@ -217,6 +221,12 @@ impl Server {
                     continue;
                 }
             };
+            // The listener must be a process of ours (same euid), not whatever
+            // bound a socket file there (review F4).
+            if !sys::peer_cred(fd.as_raw_fd()).map(|(_, uid, _)| uid == sys::euid()).unwrap_or(false) {
+                eprintln!("bsm-helper: not adopting {}: the listener is another uid", path.display());
+                continue;
+            }
             // The supervisor answers with its `Opened` description. Waiting here
             // keeps adoption complete before the first request can arrive.
             let hello = match sys::wait_readable(fd.as_raw_fd(), Duration::from_secs(2)) {
@@ -492,6 +502,7 @@ impl Server {
         let params = AuthParams {
             service,
             user: pw.name.clone(),
+            uid: pw.uid,
             confdir: self.cfg.pam.confdir.clone(),
             prompt_timeout: Duration::from_secs(self.cfg.pam.prompt_timeout_secs),
         };
@@ -802,9 +813,20 @@ impl Server {
         if pw.uid == 0 {
             return fail(self, "refusing to run the greeter as root");
         }
-        // A previous greeter is replaced, never run alongside.
-        if let Some(old) = self.greeter.take() {
+        // A previous greeter is replaced, never run alongside, and nothing of it may
+        // still run when its successor's directories are made (review F1).
+        let old = self.greeter.take();
+        if let Some(old) = &old {
             sys::kill_group(old.pid, libc::SIGKILL);
+        }
+        let leader = old.as_ref().map(|o| o.pid);
+        if !sys::retire_user_processes(pw.uid, leader, Duration::from_secs(5)) {
+            if let Some(old) = &old {
+                self.emit(HelperEvent::GreeterExited { generation: old.generation, status: -libc::SIGKILL });
+            }
+            return fail(self, "processes of the previous greeter would not die");
+        }
+        if let Some(old) = old {
             greeter::remove_dirs(&old.run.dir);
             self.emit(HelperEvent::GreeterExited { generation: old.generation, status: -libc::SIGKILL });
         }

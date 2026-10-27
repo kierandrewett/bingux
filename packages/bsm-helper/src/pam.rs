@@ -34,6 +34,7 @@ pub const PAM_ABORT: c_int = 26;
 const PAM_ESTABLISH_CRED: c_int = 0x0002;
 const PAM_DELETE_CRED: c_int = 0x0004;
 const PAM_SILENT: c_int = 0x8000;
+const PAM_USER: c_int = 2;
 
 const PAM_PROMPT_ECHO_OFF: c_int = 1;
 const PAM_PROMPT_ECHO_ON: c_int = 2;
@@ -85,6 +86,9 @@ unsafe extern "C" {
     fn pam_putenv(pamh: *mut PamHandle, name_value: *const c_char) -> c_int;
     fn pam_getenv(pamh: *mut PamHandle, name: *const c_char) -> *const c_char;
     fn pam_getenvlist(pamh: *mut PamHandle) -> *mut *mut c_char;
+    fn pam_get_item(pamh: *const PamHandle, item_type: c_int, item: *mut *const c_void) -> c_int;
+    #[cfg(test)]
+    fn pam_set_item(pamh: *mut PamHandle, item_type: c_int, item: *const c_void) -> c_int;
     fn pam_strerror(pamh: *mut PamHandle, errnum: c_int) -> *const c_char;
 }
 
@@ -267,6 +271,24 @@ impl Pam {
     pub fn close_session(&mut self) -> Result<(), PamError> {
         let rc = unsafe { pam_close_session(self.handle, PAM_SILENT) };
         self.check(rc)
+    }
+
+    /// The user name PAM currently has (`PAM_USER`). Modules may change it.
+    pub fn user(&self) -> Option<String> {
+        let mut item: *const c_void = std::ptr::null();
+        let rc = unsafe { pam_get_item(self.handle, PAM_USER, &mut item) };
+        if rc != PAM_SUCCESS || item.is_null() {
+            return None;
+        }
+        Some(unsafe { CStr::from_ptr(item as *const c_char) }.to_string_lossy().into_owned())
+    }
+
+    /// Set `PAM_USER` (tests simulate a module that rewrites the user).
+    #[cfg(test)]
+    pub fn set_user(&mut self, name: &str) {
+        let c = CString::new(name).unwrap();
+        let rc = unsafe { pam_set_item(self.handle, PAM_USER, c.as_ptr() as *const c_void) };
+        assert_eq!(rc, PAM_SUCCESS);
     }
 
     /// `NAME=value` into the PAM environment, which modules such as `pam_systemd` read.

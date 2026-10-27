@@ -184,6 +184,13 @@ pub fn random_u64() -> io::Result<u64> {
     Ok(u64::from_ne_bytes(buf))
 }
 
+/// Open a directory without following a symlink in the last component.
+pub fn open_dir_nofollow(path: &Path) -> io::Result<OwnedFd> {
+    let c = path_cstr(path)?;
+    let fd = cvt(unsafe { libc::open(c.as_ptr(), libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC) })?;
+    Ok(unsafe { OwnedFd::from_raw_fd(fd) })
+}
+
 pub fn path_cstr(path: &Path) -> io::Result<CString> {
     CString::new(path.as_os_str().as_bytes())
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "path contains NUL"))
@@ -369,6 +376,64 @@ pub fn wait_pid_timeout(pid: libc::pid_t, timeout: Duration) -> Option<i32> {
     }
 }
 
+/// Pids whose real uid is `uid`, from /proc.
+fn pids_of_uid(uid: u32) -> Vec<libc::pid_t> {
+    let mut out = Vec::new();
+    let Ok(rd) = std::fs::read_dir("/proc") else { return out };
+    for e in rd.flatten() {
+        let Some(pid) = e.file_name().to_str().and_then(|n| n.parse::<libc::pid_t>().ok()) else { continue };
+        let Ok(status) = std::fs::read_to_string(format!("/proc/{pid}/status")) else { continue };
+        let real = status
+            .lines()
+            .find_map(|l| l.strip_prefix("Uid:"))
+            .and_then(|l| l.split_whitespace().next())
+            .and_then(|v| v.parse::<u32>().ok());
+        if real == Some(uid) {
+            out.push(pid);
+        }
+    }
+    out
+}
+
+/// Make sure nothing of the dedicated service account `uid` is left (greeter
+/// processes may `setsid` out of the process group). `leader` is a child of ours
+/// that is reaped here. As an unprivileged process (tests) only `leader` is
+/// waited for: the account is then the caller's own and must not be swept.
+/// Returns false when something survived SIGKILL for `timeout`.
+pub fn retire_user_processes(uid: u32, leader: Option<libc::pid_t>, timeout: Duration) -> bool {
+    let deadline = std::time::Instant::now() + timeout;
+    let sweep = unsafe { libc::geteuid() } == 0 && uid != 0;
+    loop {
+        if let Some(l) = leader {
+            let mut st = 0;
+            unsafe { libc::waitpid(l, &mut st, libc::WNOHANG) };
+        }
+        let mut alive = false;
+        if sweep {
+            for pid in pids_of_uid(uid) {
+                // A zombie that we have not reaped yet does not count.
+                let zombie = std::fs::read_to_string(format!("/proc/{pid}/stat"))
+                    .ok()
+                    .and_then(|s| s.rsplit_once(')').and_then(|(_, r)| r.split_whitespace().next().map(|c| c == "Z")))
+                    .unwrap_or(false);
+                if !zombie {
+                    alive = true;
+                    unsafe { libc::kill(pid, libc::SIGKILL) };
+                }
+            }
+        } else if let Some(l) = leader {
+            alive = unsafe { libc::kill(-l, 0) } == 0;
+        }
+        if !alive {
+            return true;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
 pub fn kill(pid: libc::pid_t, sig: libc::c_int) {
     if pid > 0 {
         unsafe { libc::kill(pid, sig) };
@@ -493,5 +558,25 @@ mod tests {
         other.uid += 1;
         assert!(assume_identity(&other).is_err());
         assert!(assume_identity(&me).is_ok());
+    }
+
+    #[test]
+    fn retire_waits_for_the_group_leader_and_everything_in_its_group() {
+        use std::os::unix::process::CommandExt;
+        let mut cmd = std::process::Command::new("/bin/sh");
+        cmd.arg("-c").arg("sleep 30 & sleep 30");
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::setsid();
+                Ok(())
+            });
+        }
+        let child = cmd.spawn().unwrap();
+        let pid = child.id() as libc::pid_t;
+        std::mem::forget(child);
+        std::thread::sleep(Duration::from_millis(200));
+        kill_group(pid, libc::SIGKILL);
+        assert!(retire_user_processes(unsafe { libc::getuid() }, Some(pid), Duration::from_secs(5)));
+        assert!(unsafe { libc::kill(-pid, 0) } != 0, "the group must be empty");
     }
 }
