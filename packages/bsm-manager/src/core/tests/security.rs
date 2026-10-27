@@ -1206,3 +1206,19 @@ fn f9_a_persisted_session_without_a_bridge_is_closed_once_the_helper_is_up() {
     sim.feed(Input::HelperConnected);
     assert!(sim.helper_reqs(mark).iter().all(|r| !matches!(r, HelperRequest::CloseSession { .. })));
 }
+
+/// A late InputOwnerChanged about a grant that was revoked since cannot make the manager
+/// believe a protected session owns the keyboard; the compositor is corrected.
+#[test]
+fn a_stale_input_owner_report_is_not_adopted() {
+    let mut sim = Sim::new();
+    sim.boot();
+    let a = sim.login(ALICE);
+    sim.call(Sim::session_caller(&sim, &a), Method::RequestLock { session: None }).unwrap();
+    assert_eq!(sim.input_owner(), InputOwner::Greeter);
+    let mark = sim.mark();
+    sim.feed(Input::Scene(SceneEvent::InputOwnerChanged(InputOwner::Session(a.clone()))));
+    assert_eq!(sim.input_owner(), InputOwner::Greeter);
+    assert_eq!(sim.set_input_owner_cmds(mark), vec![InputOwner::Greeter]);
+    assert!(sim.m.check_invariants().is_ok());
+}

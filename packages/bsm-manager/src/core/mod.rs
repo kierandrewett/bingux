@@ -391,7 +391,22 @@ impl Manager {
             SceneEvent::InputOwnerChanged(owner) => {
                 // The compositor may refuse a SetInputOwner (protected or not presentable). The
                 // manager records the actual owner; it never assumes its request was honoured.
-                self.input_owner = owner;
+                // An owner that contradicts the manager's state (a late event about a grant that
+                // was revoked since) is not adopted: the compositor is told what the manager wants.
+                let legit = match &owner {
+                    InputOwner::Session(s) => {
+                        self.foreground.as_ref() == Some(s)
+                            && self.sessions.get(s).is_some_and(|x| x.state == SessionState::Foreground)
+                            && !self.protected.contains(s)
+                    }
+                    _ => true,
+                };
+                if legit {
+                    self.input_owner = owner;
+                } else {
+                    Self::log(fx, LogLevel::Warn, None, "a stale input owner report ignored; the compositor is corrected");
+                    fx.push(Effect::Scene(SceneCommand::SetInputOwner(self.input_owner.clone())));
+                }
             }
             SceneEvent::TransitionPhase { operation, phase } => self.on_transition_phase(operation, phase, fx),
         }

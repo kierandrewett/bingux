@@ -204,7 +204,7 @@ scenario!(switch_a_to_b_and_back_resumes_a_without_relaunch, {
     rig.wait_state(&a, SessionState::LockedGreeterForeground);
     rig.g().send(ClientMessage::SelectUser { uid: BOB });
     rig.wait_state(&a, SessionState::LockedBackground);
-    assert!(matches!(rig.g().snapshot().mode, GreeterMode::Login));
+    rig.wait("the greeter to show the picker again", Duration::from_secs(5), |r| r.greeter.as_ref().is_some_and(|g| matches!(g.snapshot().mode, GreeterMode::Login)));
 
     // B logs in for the first time: real progress again, A stays running and protected.
     let gm = rig.g().mark();
@@ -431,5 +431,148 @@ scenario!(the_second_user_cannot_be_unlocked_with_the_first_users_password, {
     let sid = rig.login(BOB, SESSION_B, "bobs secret");
     rig.wait_seen(Seen::B);
     assert_eq!(rig.session_state(&sid), Some(SessionState::Foreground));
+    rig.stop();
+});
+
+/// A fake `/proc` with the bridge's process: owned by `uid`, in the scope the helper reports.
+fn fake_proc(dir: &std::path::Path, uid: u32) -> std::path::PathBuf {
+    let pid = std::process::id();
+    let p = dir.join(pid.to_string());
+    std::fs::create_dir_all(&p).unwrap();
+    std::fs::write(p.join("cgroup"), format!("0::{}\n", support::scope_path())).unwrap();
+    std::os::unix::fs::chown(&p, Some(uid), None).unwrap();
+    dir.to_path_buf()
+}
+
+fn restart_config(proc_root: std::path::PathBuf, recovery: Option<Duration>) -> RigConfig {
+    let mut cfg = RigConfig::default();
+    cfg.proc_root = proc_root;
+    if let Some(r) = recovery {
+        cfg.policy.recovery_reconnect = r;
+    }
+    cfg
+}
+
+scenario!(bsm_restart_reattaches_a_live_bridge_protected_and_the_session_is_not_relaunched, {
+    let procs = tempfile::tempdir().unwrap();
+    let proc_root = fake_proc(procs.path(), ALICE);
+    let mut rig = Rig::start(restart_config(proc_root.clone(), None));
+    rig.attach_greeter();
+    let a = rig.login(ALICE, SESSION_A, PASSWORD);
+    let generation = rig.helper.opened()[0].generation;
+    rig.root_call(Method::RequestLock { session: Some(a.clone()) }).unwrap();
+    rig.wait_state(&a, SessionState::LockedGreeterForeground);
+    rig.wait("the registry on disk", Duration::from_secs(5), |r| {
+        bsm_manager::runtime::persist::load(&r.state_dir).sessions.iter().any(|s| s.id == a)
+    });
+
+    // bsm dies and starts again in the same directories.
+    let dir = rig.stop_keeping_dir();
+    let mut rig = Rig::start_in(restart_config(proc_root, None), Some(dir));
+    let fm = rig.frame_mark();
+    rig.attach_greeter();
+
+    // The session is back, protected, and nothing of it is shown: only the greeter or the cover.
+    assert_eq!(rig.session_state(&a), Some(SessionState::LockedBackground));
+    let snap = rig.g().snapshot();
+    let alice = snap.users.iter().find(|u| u.uid == ALICE).unwrap();
+    assert_eq!(alice.session.as_deref(), Some(a.as_str()));
+    assert_eq!(alice.availability, bsm_proto::state::SessionAvailability::RunningLocked);
+    for f in rig.all_frames_since(fm) {
+        assert!(f.plan.session.is_none(), "frame {} composed a recovered session", f.seq);
+        assert_ne!(f.seen(), Seen::A);
+    }
+    rig.wait_focus(InputOwner::Greeter);
+    assert!(rig.helper.opened().is_empty(), "nothing was launched again");
+
+    // The bridge reconnects to the same socket (the real one does so with backoff).
+    let path = rig.dir.path().join("sessions").join(format!("{a}-{generation}.sock"));
+    rig.wait("the session socket", Duration::from_secs(10), |_| path.exists());
+    let bridge = ClientThread::spawn(ALICE, path, |c| {
+        c.host_bind();
+        c.host_create_surfaces();
+        c.host_paint(&fill_of(SESSION_A));
+    });
+    bridge.repaint_every(Duration::from_millis(60), SESSION_A);
+    rig.wait("the bridge to be connected again", Duration::from_secs(10), |r| {
+        r.rt.as_ref().unwrap().snapshot().sessions.iter().any(|s| s.id == a)
+    });
+
+    // Authentication unlocks the very same session: the slide-up, no OpenSession.
+    let gm = rig.g().mark();
+    rig.g().login(ALICE, AuthIntent::Switch, PASSWORD);
+    rig.wait_operation(gm, OperationPhase::Completed, Some(TransitionKind::UnlockSlideUp));
+    rig.wait_seen(Seen::A);
+    rig.wait_focus(InputOwner::Session(a.clone()));
+    assert_eq!(rig.session_state(&a), Some(SessionState::Foreground));
+    assert!(rig.helper.opened().is_empty());
+    assert!(rig.helper.closed().is_empty());
+    drop(bridge);
+    rig.stop();
+});
+
+scenario!(a_session_whose_bridge_does_not_return_is_closed_not_orphaned, {
+    let procs = tempfile::tempdir().unwrap();
+    let proc_root = fake_proc(procs.path(), ALICE);
+    let mut rig = Rig::start(restart_config(proc_root.clone(), None));
+    rig.attach_greeter();
+    let a = rig.login(ALICE, SESSION_A, PASSWORD);
+    rig.wait("the registry on disk", Duration::from_secs(5), |r| {
+        bsm_manager::runtime::persist::load(&r.state_dir).sessions.iter().any(|s| s.id == a)
+    });
+    let dir = rig.stop_keeping_dir();
+    // The bridge pid is gone with the restart: an empty /proc.
+    let empty = tempfile::tempdir().unwrap();
+    let rig = Rig::start_in(restart_config(empty.path().to_path_buf(), None), Some(dir));
+    rig.wait("the helper to be asked to close the orphan", Duration::from_secs(10), |r| r.helper.closed().contains(&a));
+    assert!(rig.helper.opened().is_empty());
+    rig.stop();
+
+    // And one whose bridge process is alive but never connects again within the window.
+    let procs = tempfile::tempdir().unwrap();
+    let proc_root = fake_proc(procs.path(), ALICE);
+    let mut rig = Rig::start(restart_config(proc_root.clone(), None));
+    rig.attach_greeter();
+    let a = rig.login(ALICE, SESSION_A, PASSWORD);
+    rig.wait("the registry on disk", Duration::from_secs(5), |r| {
+        bsm_manager::runtime::persist::load(&r.state_dir).sessions.iter().any(|s| s.id == a)
+    });
+    let dir = rig.stop_keeping_dir();
+    let mut rig = Rig::start_in(restart_config(proc_root, Some(Duration::from_secs(8))), Some(dir));
+    rig.attach_greeter();
+    assert_eq!(rig.session_state(&a), Some(SessionState::LockedBackground));
+    rig.wait("the session to be closed after the window", Duration::from_secs(10), |r| r.helper.closed().contains(&a));
+    rig.wait("the session to be gone", Duration::from_secs(10), |r| r.session_state(&a).is_none());
+    rig.wait_seen(Seen::Greeter);
+    rig.stop();
+});
+
+scenario!(a_hung_gnoblin_cannot_be_revealed_by_unlocking, {
+    let mut cfg = RigConfig::default();
+    cfg.policy.frames_timeout = Duration::from_millis(1500);
+    let mut rig = Rig::start(cfg);
+    rig.attach_greeter();
+    let a = rig.login(ALICE, SESSION_A, PASSWORD);
+    let gm = rig.g().mark();
+    rig.root_call(Method::RequestLock { session: Some(a.clone()) }).unwrap();
+    rig.wait_operation(gm, OperationPhase::Completed, Some(TransitionKind::Lock));
+    // Gnoblin hangs: it stops committing frames (the repaint ticker stops, the connection stays).
+    rig.bridge(&a).ct.stop_ticker();
+    let fm = rig.frame_mark();
+    let gm = rig.g().mark();
+    rig.g().login(ALICE, AuthIntent::Unlock, PASSWORD);
+    rig.g().wait_after(gm, Duration::from_secs(10), "the unlock to fail visibly", |m| {
+        matches!(m, ServerMessage::Operation { phase: OperationPhase::Failed, reason: Some(ErrorCode::OutputNotReady), .. })
+    });
+    for f in rig.all_frames_since(fm) {
+        assert!(f.plan.session.is_none(), "a hung session was composed");
+    }
+    assert_eq!(rig.session_state(&a), Some(SessionState::LockedGreeterForeground));
+    // It comes back to life: the next attempt works.
+    rig.bridge(&a).ct.repaint_every(Duration::from_millis(60), SESSION_A);
+    let gm = rig.g().mark();
+    rig.g().login(ALICE, AuthIntent::Unlock, PASSWORD);
+    rig.wait_operation(gm, OperationPhase::Completed, Some(TransitionKind::UnlockSlideUp));
+    rig.wait_seen(Seen::A);
     rig.stop();
 });

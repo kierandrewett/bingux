@@ -97,6 +97,10 @@ At most one operation is in flight. Each has an id, a requester and a phase
 
 Rules that apply to all of them:
 
+* A request from a hosted session never cancels or supersedes a running operation (`Busy`); only root
+  and the greeter may (F1). A session's power request that still waits for polkit yields to the greeter's
+  `BeginAuth`. Logging out a session that is not on screen takes no operation slot: it is tracked on its own
+  and finishes when the helper reports the exit, so it cannot make the foreground user's lock return `Busy` (F2).
 * An operation that has begun a compositor transition, has committed, or is a lock is never
   interrupted by a new request (`Busy`). Earlier phases (authentication, launching, power checks)
   are cancelled at once by a new request; a launch in flight is closed.
@@ -126,7 +130,8 @@ for `Login` and `Switch` (the helper rejects any other pairing).
   the greeter). Events of the helper for any other request id are dropped.
 * Success never reveals anything. It lets the operation continue to its own gated transition. A new
   login creates the session record and asks the compositor for the brokered socket; `OpenSession` follows.
-* After `max_failures` (5) consecutive failures of one account, further attempts of that account are
+* A guess is charged when the answer is submitted and refunded on success (F3), so cancelling after
+  submitting does not dodge the limit; a count older than `failure_cooldown` starts again. After `max_failures` (5) charged guesses of one account, further attempts of that account are
   refused with `Busy` for `failure_cooldown` (30 s). This sits in front of PAM's own lockout policy and
   never replaces it.
 * Secrets: `ClientMessage::AuthResponse` is forwarded to the helper and nowhere else. `Debug` of
@@ -156,6 +161,10 @@ user goes back (`CancelOperation`) or retries (a new `BeginAuth`). The failed se
 (`CloseSession`) and removed once the helper reports its exit (or after `close_timeout`). A change of the
 outputs after `OutputsConfigured` fails the launch with `output_not_ready`.
 
+For a hidden session that is resumed or unlocked, authorisation records its presented-frame counts and asks the
+compositor for a newer frame (`RequestEvidence`); the reveal needs it, so a hung Gnoblin cannot be revealed and
+the wait ends in `output_not_ready` after `frames_timeout` (F17).
+
 The reveal itself (`try_reveal`) additionally requires: the right session and generation, a revealable
 state, the greeter connected (so there is something underneath), the greeter authoritative, and an
 acknowledged, presented frame on every current output. If the greeter is gone it waits; `frames_timeout`
@@ -173,10 +182,16 @@ reports `Committed`, so the keystrokes that authenticated stay with the greeter.
 * bsm restart: the registry (id, generation, uid, scope, bridge pid) is persisted atomically in
   `state.json`. At start each entry is probed (`runtime/recovery.rs`): it is alive only if its bridge
   process still exists **and** is still inside the recorded scope. Live entries come back as
-  `LockedBackground` and protected, never foreground; the compositor is asked to register them and bind
-  the recorded pid so that a reconnecting bridge can attach. If the bridge does not reconnect within
-  `recovery_reconnect` (30 s) the session is closed. Whether `bsm-host` reconnects to the same brokered
-  socket path after bsm restarts is the bridge's behaviour and is **unverified** here.
+  `LockedBackground` and protected, never foreground. The brokered socket path is a pure function of id and
+  generation (`<dir>/<id>-<generation>.sock`): the compositor re-registers the same path, binds the recorded
+  scope and pid and protects the session, and `bsm-host` reconnects to it with backoff (it no longer exits
+  when bsm goes away). If the bridge does not return within `recovery_reconnect` (120 s) the session is
+  closed. A persisted entry whose bridge did not survive, or that fails validation, never becomes a session:
+  its id is sent to the helper as `CloseSession` once the helper is connected (unknown ids are ignored there),
+  so no orphan keeps running without a registry (F9). Records are validated before use: id charset and length,
+  scope, generation, uid, and the bridge pid must belong to the session's uid (F15). **Tested** end to end in
+  the flows with the real compositor and a bridge that reconnects (fake `/proc` tree for the probe); **not**
+  tested with the real `bsm-host` here.
 * Helper loss: a conversation in flight and any launch waiting on the helper fail visibly; the client
   reconnects with backoff and the greeter is respawned when needed.
 
@@ -269,7 +284,7 @@ not count.
 
 | Method                              | root          | greeter account | own hosted session        | other local user |
 | ----------------------------------- | ------------- | --------------- | ------------------------- | ---------------- |
-| `Get*` (read only)                  | yes           | yes             | yes                       | yes              |
+| `Get*` (read only)                  | all           | all             | own uid only             | own uid only     |
 | `SelectGreeterUser`                 | yes           | yes             | no                        | no               |
 | `RequestLock(session)`              | any session   | no              | itself only               | no               |
 | `RequestSwitchUser`                 | foreground    | no              | itself only               | no               |
@@ -278,14 +293,18 @@ not count.
 | `CancelOperation(id)`               | any           | its own         | its own                   | no               |
 | `PublishAppearance(...)`            | no            | no              | its own uid               | its own uid      |
 
-* `Get*` exposes session ids, states and account names, the same as `loginctl list-sessions`. It never
+* `Get*` (F10): root and the greeter see the seat; any other caller gets only its own uid's entries (users,
+  sessions, selection, foreground, status, transitions). The free text of a launch failure is not in the
+  broadcast `SessionLaunchProgress` signal (code and stage only); the control socket carries it. Broadcast
+  signals still carry session ids and states; per-recipient signals are not implemented. It never
   exposes window titles, surfaces or anything from inside a session.
 * Power requests from a session need polkit: `CheckAuthorization` for the caller's bus name with
   `org.freedesktop.login1.{suspend,reboot,power-off}`, or the `-multiple-sessions` variant when another
   uid has a running session; a challenge is a refusal. The inhibitor query follows: a logind `block`
   inhibitor that covers `shutdown` (or `sleep`) fails the request with `inhibited`. Root skips polkit only.
   The greeter's own power requests come over the control socket and are gated by `[greeter_power]` in
-  `bsm.toml`, and only while the greeter is active. bsm then calls logind as the `bsm` account; the
+  `bsm.toml`, and only while the greeter is active. While any account has a running session the stricter
+  `[greeter_power_with_sessions]` applies (default: suspend only, F4), since a reboot would end other people's work. bsm then calls logind as the `bsm` account; the
   `bsm.rules` polkit file must allow that account the six `login1` actions.
 * There is no method that unlocks a session, reveals a desktop or acts on behalf of another account.
   Unlocking needs the control socket, a PAM result from the helper and the gated transition.
@@ -362,6 +381,11 @@ suspend = true
 reboot = true
 poweroff = true
 
+[greeter_power_with_sessions]      # the same while any account has a running session (F4)
+suspend = true                     # unset keys are off here, except suspend
+reboot = false
+poweroff = false
+
 [timeouts]                         # seconds
 stage = 120
 gnoblin_ready = 120
@@ -401,11 +425,11 @@ All commands run from the package directory with a private target directory, for
 
 | What                                   | Command                                                                       | Result on the development host        |
 | -------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------- |
-| Core, tables, runtime, D-Bus, logind   | `cd packages/bsm-manager && cargo test`                                       | 115 passed                            |
+| Core, tables, runtime, D-Bus, logind   | `cd packages/bsm-manager && cargo test`                                       | 134 passed                            |
 | Longer randomised invariant run        | `BSM_FUZZ_SEEDS=300000 cargo test --release randomised`                        | passed (300000 seeds, 250 steps each) |
 | CLI, config, bsmctl                    | `cd packages/bsm && cargo test --no-default-features --lib`                    | 14 passed                             |
 | Real `bsm` and `bsmctl` processes      | `cargo test --no-default-features --test binary`                               | 3 passed                              |
-| Multi user flows, real compositor      | `cargo test --no-default-features --test headless_flows`                       | 7 passed (repeated three times)       |
+| Multi user flows, real compositor      | `cargo test --no-default-features --test headless_flows`                       | 10 passed (repeated)                  |
 
 `--no-default-features` skips the winit and DRM backends, whose system libraries are only needed on the
 installed system; the headless backend is always built.
@@ -463,8 +487,10 @@ Frames of the last run are written as PNG under `$BSM_TEST_ARTIFACTS` (default `
   follows the documented contract, the bridge is a test client. End to end with the real ones is the VM
   test of the packaging slice.
 * **`LockedHint`** is set through the helper (`SetLockedHint`) for sessions that report a logind session.
-* **bsm restart with reconnecting bridges** is tested in the core (protected, never foreground, closed after
-  the window) but not with a real bridge.
+* **bsm restart** is tested with the real compositor and a reconnecting test bridge, not with the real `bsm-host`
+  and a real helper (the VM test of the packaging slice covers `systemctl restart bsm`).
+* **F5** (polkit refusing `CheckAuthorization` for another uid's subject) is not decided here: it needs a real polkitd.
+* **F13** (reveal gate's required surfaces come from the reporter) and F8 (QML text format) belong to the bridge and the greeter.
 * **Backends:** the default-feature build (winit and DRM) compiles. `bsm --backend winit` was smoke-run
   under the host's Wayland desktop for a few seconds (the nested window opened, EGL initialised, SIGTERM
   stopped it); the DRM backend was not run by this slice.

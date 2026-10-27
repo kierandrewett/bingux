@@ -363,6 +363,13 @@ impl ClientThread {
         });
     }
 
+    /// Stop the repaint ticker of a client that stays connected (a hung Gnoblin).
+    pub fn stop_ticker(&self) {
+        self.stop.store(true, Ordering::Relaxed);
+        thread::sleep(Duration::from_millis(150));
+        self.stop.store(false, Ordering::Relaxed);
+    }
+
     pub fn run(&self, f: impl FnOnce(&mut Client) + Send + 'static) {
         let (done_tx, done_rx) = mpsc::channel();
         self.jobs
@@ -620,11 +627,13 @@ pub struct RigConfig {
     pub policy: Policy,
     pub users: Vec<(&'static str, &'static str)>,
     pub outputs: usize,
+    /// Where the recovery probe looks for processes (a fake tree in the restart tests).
+    pub proc_root: PathBuf,
 }
 
 impl Default for RigConfig {
     fn default() -> Self {
-        Self { policy: Policy::default(), users: vec![("alice", PASSWORD), ("bob", PASSWORD)], outputs: 2 }
+        Self { policy: Policy::default(), users: vec![("alice", PASSWORD), ("bob", PASSWORD)], outputs: 2, proc_root: PathBuf::from("/proc") }
     }
 }
 
@@ -659,10 +668,15 @@ impl Rng for FixedRng {
 
 impl Rig {
     pub fn start(cfg: RigConfig) -> Rig {
+        Self::start_in(cfg, None)
+    }
+
+    /// Start in an existing directory (a restart of bsm keeps its runtime and state directories).
+    pub fn start_in(cfg: RigConfig, dir: Option<tempfile::TempDir>) -> Rig {
         if std::env::var_os("BSM_LOG").is_some() {
             let _ = tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_env("BSM_LOG")).with_test_writer().try_init();
         }
-        let dir = tempfile::Builder::new().prefix("bsm-rig").tempdir().unwrap();
+        let dir = dir.unwrap_or_else(|| tempfile::Builder::new().prefix("bsm-rig").tempdir().unwrap());
         std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
         let greeter_socket = dir.path().join("greeter-wayland.sock");
         let control_socket = dir.path().join("greeter-control.sock");
@@ -755,7 +769,7 @@ impl Rig {
             calls: call_rx,
             system: system.clone(),
             signals: Box::new(|_| {}),
-            proc_root: PathBuf::from("/proc"),
+            proc_root: cfg.proc_root.clone(),
             rng: Some(Box::new(FixedRng(7))),
         };
         let rt = runtime::start(rcfg, tx.clone(), rx, Box::new(move |c| cmd_tx.send(c).is_ok()), evt_rx).expect("runtime");
@@ -916,13 +930,20 @@ impl Rig {
         self.bridges.iter_mut().find(|b| b.session == sid).expect("bridge")
     }
 
-    pub fn stop(mut self) {
+    pub fn stop(self) {
+        let _ = self.stop_keeping_dir();
+    }
+
+    /// Stop everything the way a dying bsm does, but keep the runtime and state directories.
+    pub fn stop_keeping_dir(mut self) -> tempfile::TempDir {
         self.stop.store(true, Ordering::Relaxed);
-        self.greeter = None;
-        self.bridges.clear();
+        // The manager stops first, like on SIGTERM: clients that lose their connection afterwards
+        // must not make it forget the sessions (a dying bsm does not see its bridges leave).
         if let Some(rt) = self.rt.take() {
             rt.shutdown();
         }
+        self.greeter = None;
+        self.bridges.clear();
         if let Some(s) = self.stepper.take() {
             let _ = s.join();
         }
@@ -930,6 +951,7 @@ impl Rig {
         if let Some(c) = self.comp.take() {
             let _ = c.join();
         }
+        self.dir
     }
 }
 
