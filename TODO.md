@@ -365,23 +365,26 @@ Ticked means shippable: built, run, and the result recorded.
       frames on both heads (`tests/bsm-qemu.py --smoke`).
 - [ ] `systemd-analyze verify` of the units is clean on an Arch system (verified on a staged tree
       on Fedora only; `bsm-seatd.service` references a man page the host lacks).
-- [ ] `makepkg` builds `distro/packages/bsm` in the Arch container. Blocked: `packages/bsm` has no
-      `Cargo.toml` yet. `bsm-helper`, `bsm-host` and `bsm-appearance` build on the host
-      (`bsm-host` needs the system libclang, not an exported `LIBCLANG_PATH` of another toolchain).
+- [x] `makepkg` builds `distro/packages/bsm` in the Arch container (three runs; the package is in
+      the 2026.10.27 image). Open: the binaries embed `$srcdir` panic paths (makepkg warning).
 - [ ] sysusers and tmpfiles apply cleanly on Arch (`systemd-sysusers`, `systemd-tmpfiles --create`).
-- [ ] polkitd evaluates `50-bsm.rules` and `pkcheck` agrees per action for a seatless `bsm-login`
-      session (the rule's logic was only run with a stub engine).
-- [ ] Boot the image with `bingux.bsm`: bsm starts, greetd stays off; without it greetd starts
-      and bsm stays off. Needs the image rebuild.
-- [ ] `bsm-fallback.service` starts greetd when bsm fails for good (kill bsm three times in a minute).
+- [x] polkitd evaluates `50-bsm.rules` and `pkcheck` agrees per action for a seatless `bsm-login`
+      session (docs/bsm/packaging.md, Polkit and logind).
+- [x] Boot the image with `bingux.bsm`: bsm starts and greetd is skipped. Still to do: boot
+      without the parameter and see greetd (the menu entries are bypassed by the harness).
+- [x] `bsm-fallback.service` starts greetd when bsm fails for good (seen in the VM with a broken
+      bsm: start limit, fallback, greetd and its greeter running). Not repeated with the real bsm.
 - [ ] `bsm-set-display-manager enable` and `disable` round trip on an installed system, including
       refusing to replace a foreign display-manager alias.
 - [ ] Plymouth handover to bsm without a blank frame (today bsm waits for `plymouth-quit-wait`).
 - [ ] `Ctrl+Alt+F3` text console works with bsm running (seatd VT binding).
-- [ ] Acceptance walkthrough (`tests/bsm-qemu.py`) passes end to end on an image with bsm and hosted
-      Gnoblin: persistent pid, real PAM login, progress, fade over the greeter, lock, slide-up
-      unlock, switch and back, logout of one user, greeter kill, denied and real power off.
+- [x] Acceptance walkthrough (`tests/bsm-qemu.py`) passes end to end on the rebuilt 2026.10.27
+      image without injection: 10 steps, 135 checks (persistent pid, real PAM login, progress
+      milestones in order, fade over the greeter, lock, slide-up unlock, switch and back, logout of
+      one user, greeter kill, denied and real power off), two displays, transitions slowed to 3 to
+      4 s for sampling. Artifacts: distro/out/bsm-test/.
 - [ ] `tests/bsm-headless-e2e.py` runs (needs `bsm --backend headless` and the test helper).
-- [ ] Hot injection into an older image works (`tests/bsm-vm-inject.py stage` and
-      `tests/bsm-qemu.py --inject`), including the guest `ldd` check.
+- [x] Hot injection into an image works (`tests/bsm-vm-inject.py stage` and
+      `tests/bsm-qemu.py --inject`), including the guest `ldd` check; the walkthrough passed
+      with injected builds before the final image.
 - [ ] Measurements of frame stalls, CPU and GPU use, and switch latency (spec phase 9).

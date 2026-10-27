@@ -237,14 +237,27 @@ package and hostname changes. A direct `systemctl reboot` by a hosted user is
 allowed like on any local desktop but bypasses bsm's cover; the cover only exists
 for requests that go through bsm.
 
-Verified: the rule's logic was run in a JavaScript engine against subjects and
-actions (granted: the `bsm` account's power actions, a `bsm-login` session's
-whitelist; not granted: `-ignore-inhibit`, `-system`, a session of another
-service, a subject without a session). **Not verified**: polkitd evaluating the
-file, `loginctl show-session` output for a seatless session, polkit's `active`
-for it, `pkcheck` per action, PipeWire and camera access for seatless sessions
-(hosted users get the `audio` and `video` groups instead of seat ACLs). These
-need the booted image; the checklist is in [Status](#status).
+Verified in the QEMU image (2026.10.27, user `live` signed in through bsm; `pkcheck
+--process` on that session's Gnoblin):
+
+| Action                                           | Result      |
+| ------------------------------------------------ | ----------- |
+| `login1.reboot`, `reboot-multiple-sessions`, `power-off` | yes         |
+| `udisks2.filesystem-mount`                       | yes         |
+| `NetworkManager.network-control`                 | yes         |
+| `color-manager.create-device`                    | yes         |
+| `udisks2.filesystem-mount-system`                | auth_admin  |
+| `login1.halt`                                    | auth_admin_keep |
+
+`loginctl show-session` of the hosted login: `Type=wayland`, `Class=user`,
+`Service=bsm-login`, `Remote=no`, `Active=yes`, `State=active`, `Seat=` (empty),
+`VTNr=0`, `Desktop=gnoblin`, `LockedHint=no` while unlocked and `yes` while bsm
+shows the lock scene (checked in the walkthrough). `systemctl --user` for the
+user is `running`; `loginctl show-user` shows a second session of class `manager`
+(the user manager). PipeWire and WirePlumber run as user services and the
+bridge is a PipeWire client. Not verified: audio output and camera access
+(the VM has no sound or camera device), the `bsm` account's own logind calls
+for suspend, and `pkcheck` for a session of another service name.
 
 ## Testing
 
@@ -333,28 +346,57 @@ accounts, reloads D-Bus and polkit, stops greetd and starts bsm. Limits:
 
 ## Status
 
-Values as in architecture.md. Items under "Image rebuild" must be picked up by the
-next `distro/build.sh` run; it has not been started.
+Values as in architecture.md.
 
 | Item                                                    | Status                  | Evidence |
 | ------------------------------------------------------- | ----------------------- | -------- |
 | Units verify                                            | implemented and tested  | `systemd-analyze verify --root` on a staged tree: `bsm`, `bsm-seatd`, `bsm-helper` (service and socket), `bsm-fallback` load without error (the seatd man page is missing on the Fedora host only). |
 | D-Bus policy                                            | implemented and tested  | `xmllint --noout`; a `dbus-daemon` started with the file in its include directory parses it (its only complaint is that user `bsm` does not exist on the Fedora host). Per-caller behaviour on a real system bus: unverified. |
-| Polkit rules                                            | implemented but unverified | Logic run in Node with a stub `polkit`; not evaluated by polkitd. |
+| Polkit rules                                            | implemented and tested  | Evaluated by polkitd in the VM: `pkcheck` results in the table under Polkit and logind. |
 | sysusers, tmpfiles                                      | implemented and tested (parsing) | `systemd-sysusers --root` on a scratch root creates both accounts and the `render` membership; `systemd-tmpfiles --root --create` creates every directory (the chown needs root, so ownership and modes are unverified). In the injected VM run the accounts were created on Arch. |
-| PKGBUILD, `bsm.install`                                 | implemented but unverified | `bash -n`; not built with `makepkg` (no Arch toolchain on the host; the image build runs it). `packages/bsm` has no `Cargo.toml` yet; `cargo build --release` of `bsm-helper`, `bsm-host` and `bsm-appearance` succeeds on the host. |
-| Boot entries and image drop-ins                         | implemented but unverified | Entry text follows the existing entries; the SMBIOS `kernel-cmdline-extra` path puts `bingux.bsm` on the command line (tested). Drop-ins not booted. |
-| Two-display QEMU harness                                | implemented and tested  | Smoke run against the 2026.10.24 image: two connected connectors, two frame streams. |
-| Acceptance walkthrough                                  | implemented but unverified | Steps run only to "blocked": the image has no bsm. |
+| PKGBUILD, `bsm.install`                                 | implemented and tested (build) | `makepkg` ran in the Arch container three times (`distro/build.sh --step package:bsm`); the package installs into the image and runs. `bsm.install` hooks, and `Package contains reference to $srcdir` (panic paths in the binaries), are not addressed. |
+| Boot entries and image drop-ins                         | implemented and tested (drop-ins) | The walkthrough boots the image with `bingux.bsm` (SMBIOS command line extra): bsm starts, greetd is skipped (`unmet condition check ConditionKernelCommandLine=!bingux.bsm`). The menu entries themselves are not booted: the harness bypasses the menu. Booting without the parameter is covered by the earlier smoke run only for greetd. |
+| Two-display QEMU harness                                | implemented and tested  | Two connected connectors and two frame streams (`boot` step). |
+| Acceptance walkthrough                                  | implemented and tested  | `python3 tests/bsm-qemu.py` on the rebuilt 2026.10.27 image, no injection: 10 of 10 steps, 135 checks pass, two displays, two real accounts, real PAM, real hosted Gnoblin and Bingux (`distro/out/bsm-test/`, about 6 minutes). Transitions run at 3 to 4 s in this test, see below. |
 | Frame measurements                                      | implemented and tested  | `tests/bsm-frames.test.py`, 10 tests. |
 | Hot injection                                           | implemented and tested (mechanics) | Against the 2026.10.24 image: 9p mount, tree copied, accounts created, units loaded, `ldd` clean for the helper. bsm itself could not run: `packages/bsm` is not built yet and the image has no seatd. |
 | `OnFailure=` fallback                                   | implemented and tested  | Injected units with a bsm that exits 127: three starts, start limit hit, `bsm-fallback.service` ran and greetd with its greeter was running again. |
 | Plymouth handover without a blank frame                 | not yet implemented     | bsm waits for `plymouth-quit-wait`, as greetd does. |
 | VT switching away from bsm (`Ctrl+Alt+F3`)              | not yet implemented     | Depends on seatd's VT binding; untested. |
-| `bsm.rules` against a booted seatless session           | not yet implemented     | Needs the image. |
 
-The image rebuild is `distro/build.sh --gnoblin ~/dev/gnoblin-bsm-wt` (the Gnoblin worktree on `feat/bsm-hosted`, committed; the Bingux checkout must be committed too, `BINGUX_ARCHIVE_FROM_HEAD=1` otherwise). It must pick up: the `bsm` package (all five crates, `packages/bsm`
-needs its `Cargo.toml` and lock files), `packaging/bsm/image/` (copied by
-`build_iso`), the three boot entries, `bsm` and `seatd` in `packages.x86_64`, a
-Gnoblin build with `--hosted`, and the `bingux` package with the greeter QML and
-`bingux-bsm-greeter`.
+### Image build and walkthrough
+
+```sh
+distro/build.sh --gnoblin ~/dev/gnoblin-bsm-wt --step package:gnoblin   # Gnoblin on feat/bsm-hosted, committed
+BINGUX_ARCHIVE_FROM_HEAD=1 distro/build.sh --step package:bingux        # archives Bingux HEAD
+BINGUX_ARCHIVE_FROM_HEAD=1 distro/build.sh --step package:bsm
+distro/build.sh --step iso
+python3 tests/bsm-qemu.py                                               # newest ISO, writes distro/out/bsm-test/
+```
+
+The Gnoblin worktree needs its submodules (`git submodule update --init`, and
+`git fetch --tags` inside `subprojects/xdg-desktop-portal-gnome`) or the source
+bundle step fails. The bsm package builds in about 10 minutes, the image in 13
+minutes after the packages.
+
+### What the walkthrough proves, and what it does not
+
+Slowed transitions. The VNC capture of the guest delivers a new picture about every
+0.3 s, so a default 420 ms fade would give one sample. `tests/bsm-qemu.py` writes
+`/etc/bsm/bsm.toml` with 3 to 4 s transitions (`--default-timings` keeps the defaults)
+and measures those. The default durations and the exact curves are asserted by the
+compositor's own trajectory tests (`packages/bsm-compositor`), not by the VM.
+
+Measured at 4 s: opacity of the new desktop over the greeter rises monotonically from
+0 to at least 0.8, the greeter stays visible under it (blend residual under 6 luma
+levels), no frame is black, both displays cross 50 % within 1 s; the unlock slide moves
+from 0 to the full height, monotonically, shows the existing desktop underneath, and
+covers most of the distance in its first quarter (ease-out); the logout fade ends on
+the greeter; killing the greeter shows no frame of the desktop's top bar and no black
+frame; the power fade darkens to the cover colour; a denied reboot (blocking
+inhibitor) ends as `failed: inhibited` and restores the scene; a real power off ends
+with QEMU's `SHUTDOWN` event.
+
+Not proven: behaviour with default timings in the VM, real GPU drivers (the guest
+has virgl only), real monitors, suspend, DPMS, hotplug, multi-session-per-user, and
+frame stalls and CPU or GPU cost (spec phase 9).
