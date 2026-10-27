@@ -194,7 +194,7 @@ impl Snapshot {
 }
 
 impl UsageScope {
-    fn query(&self) -> Scope {
+    pub(super) fn query(&self) -> Scope {
         match self {
             Self::All => Scope::All,
             Self::Interface(name) => Scope::Interface(name.clone()),

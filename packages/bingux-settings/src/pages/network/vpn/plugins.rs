@@ -156,11 +156,6 @@ pub fn short_of_service(service: &str) -> &str {
     service.strip_prefix(SERVICE_PREFIX).unwrap_or(service)
 }
 
-/// What a profile of `service` is called on screen.
-pub fn label_of_service(service: &str) -> String {
-    display_name(short_of_service(service))
-}
-
 /// The file kinds `nmcli connection import` reads for a plugin, as the
 /// extensions to look for. A plugin not listed reads its own format from any file.
 pub fn import_extensions(short: &str) -> &'static [&'static str] {
@@ -540,7 +535,7 @@ mod tests {
     fn unknown_plugins_get_a_capitalised_name() {
         assert_eq!(display_name("wibble"), "Wibble");
         assert_eq!(
-            label_of_service("org.freedesktop.NetworkManager.vpnc"),
+            display_name(short_of_service("org.freedesktop.NetworkManager.vpnc")),
             "VPNC"
         );
         assert_eq!(short_of_service("com.example.thing"), "com.example.thing");

@@ -1809,10 +1809,13 @@ fn use_sound_model() -> ModelState {
     let model = use_hook(|| system::cached_persistent::<Model, CommandError>("sound"));
     use_hook(move || {
         reload(model);
+        let focus = system::window_focus();
         spawn(async move {
             loop {
                 timer(POLL).await;
-                reload(model);
+                if *focus.peek() {
+                    reload(model);
+                }
             }
         });
     });

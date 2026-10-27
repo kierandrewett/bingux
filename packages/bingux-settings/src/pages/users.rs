@@ -16,7 +16,7 @@ use crate::system::{
 use crate::theme::Tokens;
 use crate::ui::{
     Group, Overlays, PageHead, PopupAction, PopupActions, Status, Window, action_button, avatar,
-    caption, form_row, heading, menu_item, page_column, popup, popup_column, row, skeleton_shape,
+    caption, form_row, heading, menu_item, page_column, popup, popup_column, row, skeleton_rows, skeleton_shape,
     status, text_field, use_overlays, use_popup_actions, use_tokens, use_window,
 };
 use bingux_ui::style::*;
@@ -223,7 +223,7 @@ impl Component for UsersPage {
         let Some(loaded) = model.read().clone() else {
             return page_column()
                 .child(PageHead::new())
-                .child(skeleton_shape(&[1]));
+                .child(skeleton_rows(&["="]));
         };
         let accounts = match loaded {
             Ok(accounts) => accounts,

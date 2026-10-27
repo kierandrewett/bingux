@@ -153,23 +153,44 @@ struct Now {
     weekday: String,
 }
 
+unsafe extern "C" {
+    /// Re-read the `TZ` variable and `/etc/localtime` (POSIX; glibc's header
+    /// has it, the `libc` crate does not bind it).
+    fn tzset();
+}
+
 fn read_now() -> Result<Now, String> {
+    // The C library's local time, read in this process: the page asks once a
+    // second, and a `date` process per tick is a fork and exec for nothing.
+    // `tzset` picks up a zone changed since the last tick.
     let failed = || "The time could not be read.".to_string();
-    let text = backend::run("date", &["+%Y %m %d %H %M %S %A"]).map_err(|e| e.0)?;
-    let parts: Vec<&str> = text.split_whitespace().collect();
-    let &[year, month, day, hour, minute, second, weekday] = parts.as_slice() else {
-        return Err(failed());
-    };
-    let number = |text: &str| text.parse::<i64>().map_err(|_| failed());
-    Ok(Now {
-        year: number(year)?,
-        month: number(month)?,
-        day: number(day)?,
-        hour: number(hour)?,
-        minute: number(minute)?,
-        second: number(second)?,
-        weekday: weekday.to_string(),
-    })
+    // SAFETY: `time` accepts a null pointer, `localtime_r` and `strftime` write
+    // only into the zeroed `tm` and the 64-byte buffer owned here, and the
+    // buffer is NUL-terminated by `strftime` before it is read.
+    unsafe {
+        tzset();
+        let seconds = libc::time(std::ptr::null_mut());
+        let mut local: libc::tm = std::mem::zeroed();
+        if libc::localtime_r(&seconds, &mut local).is_null() {
+            return Err(failed());
+        }
+        let mut name = [0 as libc::c_char; 64];
+        let written = libc::strftime(name.as_mut_ptr(), name.len(), c"%A".as_ptr(), &local);
+        if written == 0 {
+            return Err(failed());
+        }
+        Ok(Now {
+            year: i64::from(local.tm_year) + 1900,
+            month: i64::from(local.tm_mon) + 1,
+            day: i64::from(local.tm_mday),
+            hour: i64::from(local.tm_hour),
+            minute: i64::from(local.tm_min),
+            second: i64::from(local.tm_sec),
+            weekday: std::ffi::CStr::from_ptr(name.as_ptr())
+                .to_string_lossy()
+                .into_owned(),
+        })
+    }
 }
 
 /// The clock face: `09:05` in 24-hour form, `9:05 AM` in 12-hour form.
@@ -504,6 +525,34 @@ impl Component for DateBody {
     }
 }
 
+/// The live clock card. It reads the clock itself, so a tick renders only
+/// this and not the page around it.
+#[derive(PartialEq)]
+struct ClockFace {
+    now: State<Option<Result<Now, String>>>,
+    twelve_hour: bool,
+    seconds: bool,
+}
+
+impl Component for ClockFace {
+    fn render(&self) -> impl IntoElement {
+        let (clock, date) = match self.now.read().clone() {
+            Some(Ok(reading)) => (
+                clock_text(&reading, self.twelve_hour, self.seconds),
+                date_text(&reading),
+            ),
+            Some(Err(message)) => (message, String::new()),
+            None => ("Reading the clock.".to_string(), String::new()),
+        };
+        // Free content in the card: the card body's 16 px on every side.
+        rect()
+            .tw_layout(BOX_BODY)
+            .tw_layout(&[gap(S1)])
+            .child(styled_label(typography::HERO, clock))
+            .child(caption(date))
+    }
+}
+
 #[derive(PartialEq)]
 pub struct DateTimePage;
 
@@ -527,10 +576,13 @@ impl Component for DateTimePage {
         use_hook(move || {
             reload(ctx);
             background(now, read_now);
+            let focus = system::window_focus();
             spawn(async move {
                 loop {
                     timer(Duration::from_secs(1)).await;
-                    background(now, read_now);
+                    if *focus.peek() {
+                        background(now, read_now);
+                    }
                 }
             });
         });
@@ -550,21 +602,13 @@ impl Component for DateTimePage {
             }
         };
 
-        let seconds = model_data.clock_seconds.unwrap_or(false);
-        let (clock, date) = match now.read().clone() {
-            Some(Ok(reading)) => (
-                clock_text(&reading, model_data.clock_format == "12h", seconds),
-                date_text(&reading),
-            ),
-            Some(Err(message)) => (message, String::new()),
-            None => ("Reading the clock.".to_string(), String::new()),
+        // The clock ticks in its own component, so the rest of the page does
+        // not render again every second.
+        let clock_face = ClockFace {
+            now,
+            twelve_hour: model_data.clock_format == "12h",
+            seconds: model_data.clock_seconds.unwrap_or(false),
         };
-        // Free content in the card: the card body's 16 px on every side.
-        let clock_face = rect()
-            .tw_layout(BOX_BODY)
-            .tw_layout(&[gap(S1)])
-            .child(styled_label(typography::HERO, clock))
-            .child(caption(date));
 
         let ntp = model_data.ntp;
         let twelve_hour = model_data.clock_format == "12h";

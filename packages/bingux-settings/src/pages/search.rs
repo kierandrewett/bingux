@@ -10,13 +10,14 @@ use freya::prelude::*;
 
 use crate::icons::Icon;
 use crate::pages::bingux_config;
+use crate::pages::loading::veiled;
 use crate::system::{
     self, CommandError, CommandResult, background, background_then, optimistic_then,
 };
 use crate::ui::{
     Group, Overlays, PageHead, PopupAction, PopupActions, ResponseKind, Row, Status, Window,
     caption, choice_row, dialog, form_row, icon_button, page_column, popup, popup_column,
-    primary_button, row, skeleton_shape, slider_row, status, switch, switch_row, text_field,
+    primary_button, row, slider_row, status, switch, switch_row, text_field,
     use_overlays, use_popup_actions, use_tokens, use_window,
 };
 use bingux_ui::shell::menu_item;
@@ -626,13 +627,9 @@ impl Component for SearchPage {
             }
         });
 
-        let Some(loaded) = model.read().clone() else {
-            return page_column()
-                .child(PageHead::new())
-                .child(skeleton_shape(&[7, 3, 3, 3, 1]))
-                .into_element();
-        };
-
+        let loaded = model.read().clone();
+        let loading = loaded.is_none();
+        let loaded = loaded.unwrap_or_else(|| Ok(placeholder()));
         let data = match loaded {
             Ok(data) => data,
             Err(e) => {
@@ -651,7 +648,33 @@ impl Component for SearchPage {
             .child(previews_group(&data, ctx))
             .child(assistant_group(&data, ctx));
 
-        page.into_element()
+        veiled(page, loading).into_element()
+    }
+}
+
+/// The page with the shipped defaults, drawn under the veil while the first
+/// read runs: the default engine, no listed folders and the assistant row.
+fn placeholder() -> Model {
+    Model {
+        disabled_providers: Vec::new(),
+        default_engine: "duckduckgo".to_string(),
+        engines: vec![Engine {
+            id: "duckduckgo".to_string(),
+            name: "DuckDuckGo".to_string(),
+            shortcut: "ddg".to_string(),
+            url: "https://duckduckgo.com/?q={query}".to_string(),
+            enabled: true,
+        }],
+        ai: Some(Ai {
+            harness: "none".to_string(),
+            model: String::new(),
+            executable: None,
+        }),
+        file_roots: None,
+        previews_enabled: true,
+        prewarm: false,
+        max_megabytes: 20,
+        recursive_search: None,
     }
 }
 

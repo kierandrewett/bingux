@@ -28,3 +28,19 @@ libc = "0.2"
 [patch.crates-io]
 freya-winit = { path = "../vendor/freya-winit" }
 freya-components = { path = "../vendor/freya-components" }
+
+# A debug build runs Freya's layout, Skia glue and the UI controls unoptimised,
+# which makes scrolling and page changes visibly slow. Optimise every
+# dependency and bingux-ui; bingux-settings itself stays at opt-level 0 so a
+# rebuild after an edit stays quick. Debug assertions are off for them too:
+# freya-core's `debug-integrity` walk of the whole scope and node trees runs
+# after every update when they are on, about a tenth of the UI thread's time.
+[profile.dev.package."*"]
+opt-level = 2
+debug-assertions = false
+overflow-checks = false
+
+[profile.dev.package.bingux-ui]
+opt-level = 2
+debug-assertions = false
+overflow-checks = false

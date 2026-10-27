@@ -10,7 +10,7 @@ mod page;
 mod summary;
 
 pub use page::UsagePage;
-pub use summary::usage_row;
+pub use summary::{connection_usage_row, scope_usage_row, usage_row};
 
 /// What a data usage page is about.
 #[derive(Clone, Debug, PartialEq, Eq)]

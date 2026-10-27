@@ -61,6 +61,13 @@ node --test tests/desktop-layout.test.mjs tests/control-layout.test.mjs
 For the packaged Gnoblin autostart integration, see
 [`tests/bingux-autostart-config.md`](tests/bingux-autostart-config.md).
 
+A change to a Bingux Settings page must keep its layout still while its data
+loads. Build `packages/bingux-settings` with `--features snapshot`, then run
+`python3 scripts/layout-stability.py`: it fails when a row separator or card
+border moves between the loading and the loaded frames, at desktop and phone
+size. `bingux-config` must be built beside the binary (or named by
+`BINGUX_CONFIG_BIN`). See "Loading contract" in `docs/settings.md`.
+
 ## Packaging
 
 Builds use `packaging/rpm/bingux.spec` and the source archive produced by

@@ -28,7 +28,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use freya::prelude::*;
 
 use super::model::{self, CONNECT, NetCtx, Overview, QUICK, nmcli, use_net_ctx};
-use super::usage::UsageScope;
+use super::usage::{UsagePage, UsageScope, scope_usage_row};
 use crate::pages::loading::veiled;
 use crate::routes::Route;
 use crate::system::{self, CommandError, background_then};
@@ -86,10 +86,11 @@ pub fn use_modem(watch: bool) -> ModemState {
     wanted.set(watch);
     let state = use_hook(move || {
         let state = system::cached::<Result<Option<Modem>, CommandError>>("mobile-modem");
+        let focus = system::window_focus();
         spawn(async move {
             loop {
                 timer(POLL).await;
-                if wanted.get() && now_ms().saturating_sub(LAST_READ.load(Ordering::SeqCst)) >= 8000
+                if *focus.peek() && wanted.get() && now_ms().saturating_sub(LAST_READ.load(Ordering::SeqCst)) >= 8000
                 {
                     reload_modem(state);
                 }
@@ -287,60 +288,11 @@ impl Component for MobilePage {
         let modem_state = use_modem(true);
         let profiles = apn::use_profiles();
         let roaming_shown = use_state(|| None::<bool>);
-        let modes_shown = use_state(|| None::<String>);
 
-        let overview = ctx.overview.read().clone();
-        let ov = match overview {
-            Some(Ok(ov)) => Some(ov),
-            Some(Err(error)) => {
-                return veiled(
-                    page_column().child(PageHead::new()).child(
-                        status(Status::Error(error.0)).action("Try again", move |_| ctx.reload()),
-                    ),
-                    false,
-                );
-            }
-            None => None,
+        let (modem, link, loading) = match read_mobile(ctx, modem_state) {
+            Ok(read) => read,
+            Err(page) => return page,
         };
-        let link = ov.as_ref().map(Link::of);
-        // Every way out of this function draws through `veiled`, so the
-        // number of hooks does not depend on what has been read.
-        let empty = || {
-            veiled(
-                page_column()
-                    .child(PageHead::new())
-                    .child(status(Status::Empty("No mobile broadband device.".into()))),
-                false,
-            )
-        };
-        let loaded = modem_state.read().clone();
-        let (modem, loading) = match (loaded, &link) {
-            (Some(Ok(Some(modem))), _) => (modem, false),
-            (Some(Ok(None)), _) => return empty(),
-            (Some(Err(error)), Some(link)) if link.present => {
-                return veiled(
-                    page_column().child(PageHead::new()).child(
-                        status(Status::Error(error.0))
-                            .action("Try again", move |_| reload_modem(modem_state)),
-                    ),
-                    false,
-                );
-            }
-            (Some(Err(_)), _) => return empty(),
-            // NetworkManager has said there is no modem; no need to wait for
-            // ModemManager to say it too.
-            (None, Some(link)) if !link.present => return empty(),
-            (None, _) => (Modem::placeholder(), true),
-        };
-        let link = link.unwrap_or(Link {
-            present: true,
-            airplane: false,
-            radio: true,
-            blocked: false,
-            device: None,
-            connected: false,
-            connection: String::new(),
-        });
         let list: Vec<Profile> = profiles
             .read()
             .clone()
@@ -370,13 +322,14 @@ impl Component for MobilePage {
                         .map(Element::from),
                 ),
                 loading,
-            );
+            )
+            .into();
         }
         if modem.no_sim() {
             page = page.child(Group::new(None::<String>).row(Element::from(status(
                 Status::Empty("No SIM card. Insert one to use mobile data.".into()),
             ))));
-            return veiled(page.child(modem_group(&modem)), loading);
+            return veiled(page.child(modem_group(&modem)), loading).into();
         }
         let off = !link.radio || modem.off();
         if !link.airplane {
@@ -399,7 +352,120 @@ impl Component for MobilePage {
             roaming_shown,
         ));
         if !off && !link.airplane {
+            page = page.child(usage_group(ctx, &link, &modem));
+        }
+        veiled(page.child(advanced_row(ctx)), loading).into()
+    }
+}
+
+/// What the Mobile pages read: the modem, how NetworkManager sees it, and whether the modem has
+/// been read yet (`true` while the modem is a blank). `Err` is a finished page for a computer
+/// with no modem or one that cannot be read. Every way out draws through `veiled`, so the number
+/// of hooks does not depend on what has been read.
+fn read_mobile(ctx: NetCtx, modem_state: ModemState) -> Result<(Modem, Link, bool), Element> {
+    let overview = ctx.overview.read().clone();
+    let ov = match overview {
+        Some(Ok(ov)) => Some(ov),
+        Some(Err(error)) => {
+            return Err(veiled(
+                page_column().child(PageHead::new()).child(
+                    status(Status::Error(error.0)).action("Try again", move |_| ctx.reload()),
+                ),
+                false,
+            )
+            .into());
+        }
+        None => None,
+    };
+    let link = ov.as_ref().map(Link::of);
+    let empty = || {
+        Err(veiled(
+            page_column()
+                .child(PageHead::new())
+                .child(status(Status::Empty("No mobile broadband device.".into()))),
+            false,
+        )
+        .into())
+    };
+    let loaded = modem_state.read().clone();
+    let (modem, loading) = match (loaded, &link) {
+        (Some(Ok(Some(modem))), _) => (modem, false),
+        (Some(Ok(None)), _) => return empty(),
+        (Some(Err(error)), Some(link)) if link.present => {
+            return Err(veiled(
+                page_column().child(PageHead::new()).child(
+                    status(Status::Error(error.0))
+                        .action("Try again", move |_| reload_modem(modem_state)),
+                ),
+                false,
+            )
+            .into());
+        }
+        (Some(Err(_)), _) => return empty(),
+        // NetworkManager has said there is no modem; no need to wait for
+        // ModemManager to say it too.
+        (None, Some(link)) if !link.present => return empty(),
+        (None, _) => (Modem::placeholder(), true),
+    };
+    let link = link.unwrap_or(Link {
+        present: true,
+        airplane: false,
+        radio: true,
+        blocked: false,
+        device: None,
+        connected: false,
+        connection: String::new(),
+    });
+    Ok((modem, link, loading))
+}
+
+/// The one row to everything else on the Mobile page.
+fn advanced_row(ctx: NetCtx) -> Group {
+    Group::new(None::<String>).row(
+        row("Advanced")
+            .subtitle("Network, access points, SIM and modem")
+            .navigates()
+            .on_press(move |_| ctx.navigator.push(Route::MobileAdvanced)),
+    )
+}
+
+/// The Advanced page of the mobile network: carrier, preferred network type and access point
+/// names, the SIM, and what the modem is.
+#[derive(PartialEq)]
+pub struct MobileAdvancedPage;
+
+impl Component for MobileAdvancedPage {
+    fn render(&self) -> impl IntoElement {
+        let ctx = use_net_ctx();
+        let modem_state = use_modem(true);
+        let profiles = apn::use_profiles();
+        let modes_shown = use_state(|| None::<String>);
+        let (modem, link, loading) = match read_mobile(ctx, modem_state) {
+            Ok(read) => read,
+            Err(page) => return page,
+        };
+        let list: Vec<Profile> = profiles
+            .read()
+            .clone()
+            .and_then(Result::ok)
+            .unwrap_or_default();
+        let head = PageHead::new();
+        let mut page = page_column().child(head);
+        if modem.locked() {
+            return veiled(
+                page.children(
+                    unlock_groups(ctx, modem_state, &modem)
+                        .into_iter()
+                        .map(Element::from),
+                ),
+                loading,
+            )
+            .into();
+        }
+        let off = !link.radio || modem.off();
+        if !off && !link.airplane {
             page = page
+                .child(registration_group(&modem))
                 .child(network_group(
                     ctx,
                     &link,
@@ -408,10 +474,27 @@ impl Component for MobilePage {
                     modem_state,
                     modes_shown,
                 ))
-                .child(sim_group(ctx, modem_state, &modem))
-                .child(usage_group(ctx, &link, &modem));
+                .child(sim_group(ctx, modem_state, &modem));
         }
-        veiled(page.child(modem_group(&modem)), loading)
+        veiled(page.child(modem_group(&modem)), loading).into()
+    }
+}
+
+/// The data usage of the mobile network, below the Mobile page.
+#[derive(PartialEq)]
+pub struct MobileUsagePage;
+
+impl Component for MobileUsagePage {
+    fn render(&self) -> impl IntoElement {
+        let ctx = use_net_ctx();
+        let modem_state = use_modem(true);
+        match read_mobile(ctx, modem_state) {
+            Ok((modem, link, _)) => UsagePage {
+                scope: usage_scope(&link, &modem),
+            }
+            .into(),
+            Err(page) => page,
+        }
     }
 }
 
@@ -420,7 +503,7 @@ fn status_group(modem: &Modem) -> Group {
         Some(percent) => format!("{} · {percent}%", modem.signal_label()),
         None => "—".to_string(),
     };
-    Group::titled("Status")
+    Group::new(None::<String>)
         .row(
             property_row("Carrier", modem.carrier().unwrap_or_else(|| "—".into()))
                 .leading_signal(modem.bars(), false),
@@ -430,6 +513,11 @@ fn status_group(modem: &Modem) -> Group {
             modem.technology().unwrap_or("—"),
         ))
         .row(property_row("Signal", signal))
+}
+
+/// Whether the modem is registered and roaming.
+fn registration_group(modem: &Modem) -> Group {
+    Group::titled("Registration")
         .row(property_row("Registration", modem.registration_label()))
         .row(property_row(
             "Roaming",
@@ -650,18 +738,22 @@ fn unlock_groups(ctx: NetCtx, modem_state: ModemState, modem: &Modem) -> Vec<Gro
     ]
 }
 
-fn usage_group(ctx: NetCtx, link: &Link, modem: &Modem) -> Group {
+/// What the mobile network's usage is counted for: its interface, else everything.
+fn usage_scope(link: &Link, modem: &Modem) -> UsageScope {
     let interface = modem.interface_or(link.device.as_deref().unwrap_or_default());
-    let scope = if interface.is_empty() {
+    if interface.is_empty() {
         UsageScope::All
     } else {
         UsageScope::Interface(interface)
-    };
-    Group::new(None::<String>).row(row("Data usage").navigates().on_press(move |_| {
-        ctx.navigator.push(Route::Usage {
-            scope: scope.clone(),
-        })
-    }))
+    }
+}
+
+fn usage_group(ctx: NetCtx, link: &Link, modem: &Modem) -> Group {
+    Group::new(None::<String>).row(scope_usage_row(
+        ctx,
+        usage_scope(link, modem),
+        Route::MobileUsage,
+    ))
 }
 
 /// What the modem is.

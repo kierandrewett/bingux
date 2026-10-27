@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use freya::prelude::*;
 
@@ -160,12 +160,19 @@ enum Update {
     FileTypes(Result<Vec<FileType>, CommandError>),
 }
 
+/// When the latest load started. A page that opens within [`FRESH_FOR`] of it
+/// shows what is loaded: a load runs a `gio mime` process for every content
+/// type, so flipping between the application pages must not repeat it.
+static LAST_LOAD: std::sync::Mutex<Option<Instant>> = std::sync::Mutex::new(None);
+const FRESH_FOR: Duration = Duration::from_secs(15);
+
 /// Counts loads. A load that has been superseded stops writing to the page.
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 
 /// Load the applications in the background and show each step as it lands.
 /// The last model stays on screen until the new one has something to show.
 fn start_load(mut model: ModelState) {
+    *LAST_LOAD.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
     let generation = GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
     let mut current = model.read().clone().unwrap_or_default();
     let (sender, receiver) = mpsc::channel();
@@ -323,7 +330,15 @@ fn set_limit(mut limit: State<usize>, value: usize) {
 /// started the first time a page using it renders. Call from `render`.
 fn use_apps() -> ModelState {
     let model = system::cached::<Model>("applications");
-    use_hook(move || start_load(model));
+    use_hook(move || {
+        let fresh = LAST_LOAD
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some_and(|at| at.elapsed() < FRESH_FOR);
+        if !fresh {
+            start_load(model);
+        }
+    });
     model
 }
 
@@ -672,6 +687,11 @@ impl Component for ApplicationsPage {
             .map(browser_default)
             .unwrap_or_default();
         let loaded = model.read().clone();
+        // The search field opens between the Installed header and its card.
+        let search = reveal(
+            *searching.read(),
+            search_field(query, move |_| set_limit(limit, PAGE)).fill_width(),
+        );
         let list = match loaded {
             None => Group::titled("Installed")
                 .trailing(installed_tools(
@@ -683,6 +703,7 @@ impl Component for ApplicationsPage {
                     *sort.read(),
                     *source.read(),
                 ))
+                .below_title(search)
                 .rows((0..PLACEHOLDER_ROWS).map(|_| skeleton_row())),
             Some(data) => {
                 let needle = query.read().trim().to_lowercase();
@@ -726,9 +747,11 @@ impl Component for ApplicationsPage {
                         ),
                     ));
                 }
-                let group = Group::titled("Installed").trailing(installed_tools(
-                    searching, query, sort, source, limit, order, filter,
-                ));
+                let group = Group::titled("Installed")
+                    .trailing(installed_tools(
+                        searching, query, sort, source, limit, order, filter,
+                    ))
+                    .below_title(search);
                 if rows.is_empty() {
                     group.row(status(Status::Empty("No applications match.".to_string())))
                 } else {
@@ -747,10 +770,6 @@ impl Component for ApplicationsPage {
                         .on_press(move |_| navigator.push(Route::DefaultApps)),
                 ),
             )
-            .child(reveal(
-                *searching.read(),
-                search_field(query, move |_| set_limit(limit, PAGE)).fill_width(),
-            ))
             .child(list)
     }
 }

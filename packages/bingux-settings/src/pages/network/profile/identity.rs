@@ -318,15 +318,18 @@ impl Component for IdentityBody {
     }
 }
 
-/// After a wired profile is renamed its address has changed: open the page again under the new name.
+/// After a wired profile is renamed its address has changed, unless the page is the device's own:
+/// open the page again under the new name.
 fn open_renamed(page: &Page, renamed: Option<String>) {
-    let (Some(profile), Owner::Wired { device, .. }) = (renamed, &page.owner) else {
+    let (Some(profile), Owner::Wired { device, in_use: false, .. }) = (renamed, &page.owner)
+    else {
         return;
     };
     page.ctx.navigator.push(Route::Section {
         owner: Owner::Wired {
             device: device.clone(),
             profile,
+            in_use: false,
         },
         section: Section::Identity,
     });

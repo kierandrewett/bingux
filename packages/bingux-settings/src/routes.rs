@@ -68,12 +68,17 @@ pub enum Route {
     /// The saved Wi-Fi networks.
     WifiSaved,
     /// Turning this computer into a Wi-Fi hotspot.
-    WifiHotspot,
-    /// One Wi-Fi network's settings, by name.
-    WifiNetwork { ssid: String },
-    /// One wired network device, by interface name, with its connection name for the header.
+    Hotspot,
+    /// One Wi-Fi network, by name. `saved_list` says it was opened from the
+    /// Saved networks list, which Back returns to.
+    WifiNetwork { ssid: String, saved_list: bool },
+    /// One wired network device, by interface name, with its connection name
+    /// for the header. The page is the connection page of the profile the
+    /// device uses.
     Ethernet { device: String, name: String },
-    /// One wired profile of a device, by profile name.
+    /// The profiles of a wired device that has more than one.
+    EthernetProfiles { device: String },
+    /// One wired profile of a device that is not the one in use, by profile name.
     Profile { device: String, name: String },
     /// One VPN profile, by connection name.
     Vpn { name: String },
@@ -84,6 +89,10 @@ pub enum Route {
     Section { owner: Owner, section: Section },
     /// The mobile network (modem) screen.
     Mobile,
+    /// The mobile network's advanced settings: carrier, access points, SIM, modem.
+    MobileAdvanced,
+    /// The mobile network's data usage.
+    MobileUsage,
     /// Choosing the mobile carrier.
     MobileNetwork,
     /// The access point names.
@@ -94,7 +103,8 @@ pub enum Route {
     Proxy,
     /// Data usage, for everything, one interface or one connection.
     Usage { scope: UsageScope },
-    /// A connection's live addresses, gateway, DNS and routes.
+    /// An old address: a connection's details. It opens the Advanced page of
+    /// the connection, where the technical details are.
     Details { connection: String },
     /// One user account, by account path, with its full name for the header.
     Account { path: String, name: String },
@@ -120,15 +130,20 @@ fn network_root() -> Address {
     PageId::Network.address()
 }
 
-/// `address` with an old-style first segment rewritten to its place under
-/// `network/`, so every address that ever opened a Network screen still does:
-/// `wifi`, `wifi/saved`, `wifi/network/<ssid>`, `wired/<device>`,
-/// `wired/vpn/<name>`, `ethernet/<device>`, `vpn/<name>`, `mobile`, `wwan`,
-/// `cellular`, `proxy`, `usage`. Other addresses come back unchanged.
+/// `address` with an old-style address rewritten to where it lives now, so
+/// every address that ever opened a Network screen still does.
+///
+/// First segments: `wifi`, `wifi/saved`, `wifi/network/<ssid>`,
+/// `wired/<device>`, `wired/vpn/<name>`, `ethernet/<device>`, `vpn/<name>`,
+/// `mobile`, `wwan`, `cellular`, `proxy` and `usage` are below `network/`.
+/// Then `network/wifi/hotspot` is `network/hotspot`, the mobile carrier and
+/// access point pages are below `network/mobile/advanced`, and a connection's
+/// `ipv4`, `ipv6`, `dns`, `security`, `identity` and `proxy` pages are below
+/// its `advanced` page. Other addresses come back unchanged.
 pub fn canonical_address(address: &Address) -> Address {
     let segments: Vec<&str> = address.segments().iter().map(String::as_str).collect();
-    let mapped: Vec<&str> = match segments.as_slice() {
-        ["network", ..] => return address.clone(),
+    let under_network: Vec<&str> = match segments.as_slice() {
+        ["network", ..] => segments.clone(),
         ["wifi" | "wi-fi", rest @ ..] => ["network", "wifi"]
             .into_iter()
             .chain(rest.iter().copied())
@@ -148,6 +163,10 @@ pub fn canonical_address(address: &Address) -> Address {
             .collect(),
         _ => return address.clone(),
     };
+    let mapped = upgrade_network_address(under_network);
+    if mapped == segments {
+        return address.clone();
+    }
     let mut canonical = Address::new(address.scheme());
     for segment in mapped {
         canonical = canonical.join(segment);
@@ -155,14 +174,53 @@ pub fn canonical_address(address: &Address) -> Address {
     canonical
 }
 
+/// The editors that were pages of their own below a connection before
+/// Advanced held them.
+const EDITORS: [&str; 6] = ["ipv4", "ipv6", "dns", "security", "identity", "proxy"];
+
+/// Moves an address below `network/` to where its page is now.
+fn upgrade_network_address(segments: Vec<&str>) -> Vec<&str> {
+    let at = |index: usize| index.min(segments.len());
+    match segments.as_slice() {
+        ["network", "wifi", "hotspot"] => vec!["network", "hotspot"],
+        ["network", "mobile", "network" | "apn" | "apn-add", ..] => {
+            let mut mapped = segments[..at(2)].to_vec();
+            mapped.push("advanced");
+            mapped.extend_from_slice(&segments[at(2)..]);
+            mapped
+        }
+        ["network", "wifi", "network" | "saved", _, editor]
+        | ["network", "ethernet", _, "profile", _, editor]
+        | ["network", "vpn", _, editor]
+            if EDITORS.contains(editor) =>
+        {
+            let mut mapped = segments[..segments.len() - 1].to_vec();
+            mapped.push("advanced");
+            mapped.push(editor);
+            mapped
+        }
+        _ => segments,
+    }
+}
+
 impl Route {
     /// The route for a connection's own address plus the segments below it:
-    /// the connection's screen, or one of its sections.
+    /// the connection's page, or one of the pages below it.
     fn owner_route(owner: Owner, rest: &[&str]) -> Option<Self> {
         if rest.is_empty() {
             return Some(match owner {
-                Owner::Wifi { ssid } => Self::WifiNetwork { ssid },
-                Owner::Wired { device, profile } => Self::Profile {
+                Owner::Wifi { ssid, saved_list } => Self::WifiNetwork { ssid, saved_list },
+                Owner::Wired {
+                    device,
+                    in_use: true,
+                    ..
+                } => Self::Ethernet {
+                    name: device.clone(),
+                    device,
+                },
+                Owner::Wired {
+                    device, profile, ..
+                } => Self::Profile {
                     device,
                     name: profile,
                 },
@@ -184,16 +242,19 @@ impl Route {
             Self::Device { name, .. } => name.clone(),
             Self::Wifi => "Wi-Fi".to_string(),
             Self::WifiSaved => "Saved networks".to_string(),
-            Self::WifiHotspot => "Wi-Fi hotspot".to_string(),
-            Self::WifiNetwork { ssid } => ssid.clone(),
+            Self::Hotspot => "Wi-Fi hotspot".to_string(),
+            Self::WifiNetwork { ssid, .. } => ssid.clone(),
             Self::Ethernet { device, name } => {
                 network::cached_ethernet_title(device).unwrap_or_else(|| name.clone())
             }
+            Self::EthernetProfiles { .. } => "Profiles".to_string(),
             Self::Profile { name, .. } => name.clone(),
             Self::Vpn { name } => name.clone(),
             Self::AddVpn { kind } => network::add_vpn_title(kind.as_deref()),
             Self::Section { section, .. } => section.title(),
             Self::Mobile => "Mobile network".to_string(),
+            Self::MobileAdvanced => "Advanced".to_string(),
+            Self::MobileUsage => "Data usage".to_string(),
             Self::MobileNetwork => "Network".to_string(),
             Self::MobileApns => "Access point names".to_string(),
             Self::MobileApn { name } => name.clone().unwrap_or_else(|| "New access point".into()),
@@ -223,12 +284,21 @@ impl Route {
             Self::Device { mac, .. } => PageId::Bluetooth.address().join(mac),
             Self::Wifi => network_root().join("wifi"),
             Self::WifiSaved => network_root().join("wifi").join("saved"),
-            Self::WifiHotspot => network_root().join("wifi").join("hotspot"),
-            Self::WifiNetwork { ssid } => Owner::Wifi { ssid: ssid.clone() }.address(),
+            Self::Hotspot => network_root().join("hotspot"),
+            Self::WifiNetwork { ssid, saved_list } => Owner::Wifi {
+                ssid: ssid.clone(),
+                saved_list: *saved_list,
+            }
+            .address(),
             Self::Ethernet { device, .. } => network_root().join("ethernet").join(device),
+            Self::EthernetProfiles { device } => network_root()
+                .join("ethernet")
+                .join(device)
+                .join("profile"),
             Self::Profile { device, name } => Owner::Wired {
                 device: device.clone(),
                 profile: name.clone(),
+                in_use: false,
             }
             .address(),
             Self::Vpn { name } => Owner::Vpn { name: name.clone() }.address(),
@@ -238,11 +308,23 @@ impl Route {
             },
             Self::Section { owner, section } => section.address(owner.address()),
             Self::Mobile => network_root().join("mobile"),
-            Self::MobileNetwork => network_root().join("mobile").join("network"),
-            Self::MobileApns => network_root().join("mobile").join("apn"),
+            Self::MobileAdvanced => network_root().join("mobile").join("advanced"),
+            Self::MobileUsage => network_root().join("mobile").join("usage"),
+            Self::MobileNetwork => network_root()
+                .join("mobile")
+                .join("advanced")
+                .join("network"),
+            Self::MobileApns => network_root().join("mobile").join("advanced").join("apn"),
             Self::MobileApn { name } => match name {
-                Some(name) => network_root().join("mobile").join("apn").join(name),
-                None => network_root().join("mobile").join("apn-add"),
+                Some(name) => network_root()
+                    .join("mobile")
+                    .join("advanced")
+                    .join("apn")
+                    .join(name),
+                None => network_root()
+                    .join("mobile")
+                    .join("advanced")
+                    .join("apn-add"),
             },
             Self::Proxy => network_root().join("proxy"),
             Self::Usage { scope } => scope.address(network_root().join("usage")),
@@ -294,24 +376,39 @@ impl Route {
             },
             ["network", "wifi"] => Self::Wifi,
             ["network", "wifi", "saved"] => Self::WifiSaved,
-            ["network", "wifi", "hotspot"] => Self::WifiHotspot,
-            ["network", "ethernet", device] => Self::Ethernet {
+            ["network", "hotspot"] => Self::Hotspot,
+            ["network", "ethernet", device, "profile"] => Self::EthernetProfiles {
                 device: device.to_string(),
-                name: title_or(address, device.to_string()),
             },
             ["network", "ethernet", device, "profile", name, rest @ ..] => Self::owner_route(
                 Owner::Wired {
                     device: device.to_string(),
                     profile: name.to_string(),
+                    in_use: false,
                 },
                 rest,
             )?,
-            ["network", "wifi", "network", ssid, rest @ ..] => Self::owner_route(
-                Owner::Wifi {
-                    ssid: ssid.to_string(),
+            ["network", "ethernet", device] => Self::Ethernet {
+                device: device.to_string(),
+                name: title_or(address, device.to_string()),
+            },
+            ["network", "ethernet", device, rest @ ..] => Self::owner_route(
+                Owner::Wired {
+                    device: device.to_string(),
+                    profile: String::new(),
+                    in_use: true,
                 },
                 rest,
             )?,
+            ["network", "wifi", kind @ ("network" | "saved"), ssid, rest @ ..] => {
+                Self::owner_route(
+                    Owner::Wifi {
+                        ssid: ssid.to_string(),
+                        saved_list: *kind == "saved",
+                    },
+                    rest,
+                )?
+            }
             ["network", "vpn", name, rest @ ..] => Self::owner_route(
                 Owner::Vpn {
                     name: name.to_string(),
@@ -323,10 +420,12 @@ impl Route {
                 kind: Some(kind.to_string()),
             },
             ["network", "mobile"] => Self::Mobile,
-            ["network", "mobile", "network"] => Self::MobileNetwork,
-            ["network", "mobile", "apn"] => Self::MobileApns,
-            ["network", "mobile", "apn-add"] => Self::MobileApn { name: None },
-            ["network", "mobile", "apn", name] => Self::MobileApn {
+            ["network", "mobile", "advanced"] => Self::MobileAdvanced,
+            ["network", "mobile", "usage"] => Self::MobileUsage,
+            ["network", "mobile", "advanced", "network"] => Self::MobileNetwork,
+            ["network", "mobile", "advanced", "apn"] => Self::MobileApns,
+            ["network", "mobile", "advanced", "apn-add"] => Self::MobileApn { name: None },
+            ["network", "mobile", "advanced", "apn", name] => Self::MobileApn {
                 name: Some(name.to_string()),
             },
             ["network", "proxy"] => Self::Proxy,
@@ -371,13 +470,18 @@ impl Route {
             Self::Device { mac, .. } => bluetooth::BluetoothDevicePage { mac: mac.clone() }.into(),
             Self::Wifi => network::wifi::WifiPage.into(),
             Self::WifiSaved => network::wifi::SavedNetworksPage.into(),
-            Self::WifiHotspot => network::wifi::HotspotPage.into(),
-            Self::WifiNetwork { ssid } => {
-                network::wifi::WifiNetworkPage { ssid: ssid.clone() }.into()
+            Self::Hotspot => network::wifi::HotspotPage.into(),
+            Self::WifiNetwork { ssid, saved_list } => network::wifi::WifiNetworkPage {
+                ssid: ssid.clone(),
+                saved_list: *saved_list,
             }
+            .into(),
             Self::Ethernet { device, .. } => network::ethernet::EthernetPage {
                 device: device.clone(),
-                name: self.title(),
+            }
+            .into(),
+            Self::EthernetProfiles { device } => network::ethernet::ProfilesPage {
+                device: device.clone(),
             }
             .into(),
             Self::Profile { device, name } => network::ethernet::ProfilePage {
@@ -387,23 +491,36 @@ impl Route {
             .into(),
             Self::Vpn { name } => network::vpn::VpnPage { name: name.clone() }.into(),
             Self::AddVpn { kind } => network::vpn_add::AddVpnPage { kind: kind.clone() }.into(),
-            Self::Section { owner, section } => match section {
-                Section::Tunnel => network::vpn_tunnel::TunnelPage {
+            Self::Section { owner, section } => match (section, owner) {
+                (Section::Tunnel, _) => network::vpn_tunnel::TunnelPage {
                     owner: owner.clone(),
                 }
                 .into(),
-                Section::Peer(index) => network::vpn_tunnel::PeerPage {
+                (Section::Peer(index), _) => network::vpn_tunnel::PeerPage {
                     owner: owner.clone(),
                     index: *index,
                 }
                 .into(),
-                other => network::profile::SectionPage {
+                // A wired connection may have to work out which profile it is first.
+                (other, Owner::Wired { .. }) => network::ethernet::WiredSection {
                     owner: owner.clone(),
                     section: other.clone(),
                 }
                 .into(),
+                (Section::Usage, _) => network::usage::UsagePage {
+                    scope: UsageScope::Connection(owner.connection_name().to_string()),
+                }
+                .into(),
+                (other, _) => network::profile::SectionPage {
+                    owner: owner.clone(),
+                    section: other.clone(),
+                    extra: None,
+                }
+                .into(),
             },
             Self::Mobile => network::mobile::MobilePage.into(),
+            Self::MobileAdvanced => network::mobile::MobileAdvancedPage.into(),
+            Self::MobileUsage => network::mobile::MobileUsagePage.into(),
             Self::MobileNetwork => network::mobile::MobileNetworkPage.into(),
             Self::MobileApns => network::mobile::ApnListPage.into(),
             Self::MobileApn { name } => network::mobile::ApnPage { name: name.clone() }.into(),
@@ -449,19 +566,9 @@ impl Navigator {
         let Some(current) = current_address() else {
             return;
         };
-        // An old-style address goes back to where its canonical form does.
-        let mut parent = canonical_address(&current).parent();
-        let target = loop {
-            match parent {
-                Some(address) if Route::from_address(&address).is_some() => break address,
-                Some(address) => parent = address.parent(),
-                None => match page_of(&current) {
-                    Some(page) => break page.address(),
-                    None => return,
-                },
-            }
-        };
-        navigate(target);
+        if let Some(target) = back_target(&current) {
+            navigate(target);
+        }
     }
 
     /// Opens sidebar page `target` at its top level, as if the sidebar chose it.
@@ -473,4 +580,161 @@ impl Navigator {
 /// The navigator. It holds no state: the window's address is the state.
 pub fn use_navigator() -> Navigator {
     Navigator
+}
+
+/// Where Back goes from `current`: the nearest parent address that is a page, else the top of the
+/// sidebar page it is on. An old-style address goes back to where its canonical form does.
+pub fn back_target(current: &Address) -> Option<Address> {
+    let mut parent = canonical_address(current).parent();
+    loop {
+        match parent {
+            Some(address) if Route::from_address(&address).is_some() => return Some(address),
+            Some(address) => parent = address.parent(),
+            None => return page_of(current).map(PageId::address),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn address(text: &str) -> Address {
+        Address::parse(&format!("{SCHEME}://{text}")).unwrap()
+    }
+
+    fn canonical(text: &str) -> String {
+        canonical_address(&address(text)).segments().join("/")
+    }
+
+    fn back(text: &str) -> String {
+        back_target(&address(text)).unwrap().segments().join("/")
+    }
+
+    #[test]
+    fn old_editor_addresses_move_below_advanced() {
+        assert_eq!(
+            canonical("network/ethernet/enp42s0/profile/Office/ipv4"),
+            "network/ethernet/enp42s0/profile/Office/advanced/ipv4"
+        );
+        assert_eq!(
+            canonical("network/wifi/network/Home/security"),
+            "network/wifi/network/Home/advanced/security"
+        );
+        assert_eq!(
+            canonical("network/vpn/Work/dns"),
+            "network/vpn/Work/advanced/dns"
+        );
+        assert_eq!(
+            canonical("wifi/network/Home/proxy"),
+            "network/wifi/network/Home/advanced/proxy"
+        );
+        // Not an editor of a connection: unchanged.
+        assert_eq!(canonical("network/vpn/Work/tunnel"), "network/vpn/Work/tunnel");
+        assert_eq!(
+            canonical("network/wifi/network/Home/advanced"),
+            "network/wifi/network/Home/advanced"
+        );
+    }
+
+    #[test]
+    fn old_pages_move_to_where_they_are_now() {
+        assert_eq!(canonical("network/wifi/hotspot"), "network/hotspot");
+        assert_eq!(canonical("wifi/hotspot"), "network/hotspot");
+        assert_eq!(
+            canonical("mobile/apn/Vodafone"),
+            "network/mobile/advanced/apn/Vodafone"
+        );
+        assert_eq!(canonical("cellular/network"), "network/mobile/advanced/network");
+        assert_eq!(canonical("network/mobile"), "network/mobile");
+        assert_eq!(canonical("wired/enp42s0"), "network/ethernet/enp42s0");
+    }
+
+    #[test]
+    fn every_network_address_names_a_page() {
+        for text in [
+            "network/wifi",
+            "network/wifi/saved",
+            "network/wifi/saved/Home",
+            "network/wifi/network/Home",
+            "network/wifi/network/Home/advanced",
+            "network/wifi/network/Home/advanced/ipv4",
+            "network/wifi/network/Home/usage",
+            "network/hotspot",
+            "network/ethernet/enp42s0",
+            "network/ethernet/enp42s0/advanced",
+            "network/ethernet/enp42s0/advanced/identity",
+            "network/ethernet/enp42s0/usage",
+            "network/ethernet/enp42s0/profile",
+            "network/ethernet/enp42s0/profile/Office",
+            "network/ethernet/enp42s0/profile/Office/advanced/options",
+            "network/vpn/Work",
+            "network/vpn/Work/tunnel",
+            "network/vpn/Work/tunnel/peer/1",
+            "network/vpn/Work/advanced",
+            "network/add-vpn/wireguard",
+            "network/mobile",
+            "network/mobile/advanced",
+            "network/mobile/advanced/apn/Vodafone",
+            "network/mobile/usage",
+            "network/proxy",
+            "network/usage/connection/Home",
+            "network/details/Home",
+        ] {
+            assert!(
+                Route::from_address(&address(text)).is_some(),
+                "{text} names no page"
+            );
+        }
+    }
+
+    #[test]
+    fn a_page_opens_at_the_address_it_was_made_from() {
+        for text in [
+            "network/wifi/saved/Home/advanced/dns",
+            "network/ethernet/enp42s0/advanced/ipv6",
+            "network/ethernet/enp42s0/profile/Office/usage",
+            "network/vpn/Work/usage",
+            "network/mobile/advanced/apn-add",
+            "network/hotspot",
+        ] {
+            let route = Route::from_address(&address(text)).unwrap();
+            assert_eq!(route.address().segments().join("/"), text);
+        }
+    }
+
+    #[test]
+    fn back_always_goes_to_the_page_that_holds_the_row() {
+        // Network > Ethernet > Advanced > IPv4, and back out of it.
+        assert_eq!(
+            back("network/ethernet/enp42s0/advanced/ipv4"),
+            "network/ethernet/enp42s0/advanced"
+        );
+        assert_eq!(
+            back("network/ethernet/enp42s0/advanced"),
+            "network/ethernet/enp42s0"
+        );
+        assert_eq!(back("network/ethernet/enp42s0"), "network");
+        // A profile opens from the list of profiles, which sits below the device.
+        assert_eq!(
+            back("network/ethernet/enp42s0/profile/Office"),
+            "network/ethernet/enp42s0/profile"
+        );
+        assert_eq!(
+            back("network/ethernet/enp42s0/profile"),
+            "network/ethernet/enp42s0"
+        );
+        // A Wi-Fi network opens from Wi-Fi, or from Saved networks.
+        assert_eq!(back("network/wifi/network/Home"), "network/wifi");
+        assert_eq!(back("network/wifi/saved/Home"), "network/wifi/saved");
+        assert_eq!(back("network/wifi"), "network");
+        // The data usage of one connection returns to the connection.
+        assert_eq!(back("network/vpn/Work/usage"), "network/vpn/Work");
+        assert_eq!(back("network/vpn/Work/tunnel/peer/0"), "network/vpn/Work/tunnel");
+        assert_eq!(back("network/hotspot"), "network");
+        assert_eq!(back("network/mobile/advanced/apn/Vodafone"), "network/mobile/advanced/apn");
+        // An old address goes back to where its new one does.
+        assert_eq!(back("network/wifi/hotspot"), "network");
+        assert_eq!(back("wifi/network/Home/ipv4"), "network/wifi/network/Home/advanced");
+    }
 }

@@ -65,18 +65,24 @@ fn usage() -> String {
          Subpages:\n\
          \x20 network/wifi                     Wi-Fi networks (also: wifi)\n\
          \x20 network/wifi/saved               saved Wi-Fi networks\n\
-         \x20 network/wifi/hotspot             Wi-Fi hotspot\n\
-         \x20 network/wifi/network/<ssid>      one Wi-Fi network\n\
-         \x20 network/ethernet/<device>        one wired device (also: wired/<device>)\n\
+         \x20 network/wifi/network/<ssid>      one Wi-Fi network (below saved/<ssid> from the saved list)\n\
+         \x20 network/hotspot                  Wi-Fi hotspot\n\
+         \x20 network/ethernet/<device>        one wired device and the profile it uses (also: wired/<device>)\n\
+         \x20 network/ethernet/<device>/profile\n\
+         \x20                                  the profiles of a wired device\n\
          \x20 network/ethernet/<device>/profile/<name>\n\
-         \x20                                  one wired profile\n\
+         \x20                                  a wired profile that is not in use\n\
          \x20 network/vpn/<name>               one VPN (also: wired/vpn/<name>)\n\
          \x20 network/add-vpn[/<kind>]         add a VPN\n\
          \x20 network/mobile                   mobile network (also: mobile, wwan, cellular)\n\
+         \x20 network/mobile/advanced          carrier, access points, SIM and modem\n\
          \x20 network/proxy                    proxy\n\
          \x20 network/usage                    data usage\n\
-         \x20 network/details/<connection>     a connection's addresses and routes\n\
-         \x20 <connection screen>/<section>    ipv4, ipv6, dns, security, identity, proxy, advanced, tunnel\n\
+         \x20 network/details/<connection>     opens the connection's advanced page\n\
+         \x20 <connection page>/advanced       the connection's editors and technical details\n\
+         \x20 <connection page>/advanced/<s>   ipv4, ipv6, dns, security, identity, proxy, options\n\
+         \x20 <connection page>/usage          the connection's data usage\n\
+         \x20 <vpn page>/tunnel                a VPN's tunnel\n\
          \x20 bluetooth/<mac>                  one Bluetooth device\n\
          \x20 display/<index>                  one display, from 0\n\
          \x20 keyboard/shortcuts               keyboard shortcuts\n\

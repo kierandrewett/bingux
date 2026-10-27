@@ -26,8 +26,15 @@ Panels: `network`, `bluetooth`, `background` (Appearance), `desktop`,
 `users`, `applications`, `accessibility`, `about`. An unknown or omitted panel opens the
 first page. An address names a page or a subpage. The old Network addresses
 still work: `wifi`, `wifi/saved`, `wifi/network/<ssid>`, `wired`, `wired/<device>`
-and `wired/vpn/<name>` open the matching screen below `network/`, and the shell's
-`network`, `ethernet` and `vpn` open the Network page. The scheme and the
+and `wired/vpn/<name>` open the matching page below `network/`, and the shell's
+`network`, `ethernet` and `vpn` open the Network page. Addresses that moved when
+the Network flow was tidied still open the page that took their place: a
+connection's `ipv4`, `ipv6`, `dns`, `security`, `identity` and `proxy` are
+below its `advanced` page, `network/wifi/hotspot` is `network/hotspot`,
+`network/mobile/network`, `network/mobile/apn` and `network/mobile/apn-add` are
+below `network/mobile/advanced`, `network/details/<connection>` opens the
+connection's Advanced page, and a wired profile that is the one in use opens
+the device's page. The scheme and the
 `bingux-settings://` prefix may be left off on the command line:
 
 | Address                       | Opens                                                                |
@@ -35,17 +42,24 @@ and `wired/vpn/<name>` open the matching screen below `network/`, and the shell'
 | `network`                     | The Network page (Wi-Fi, Ethernet, mobile, VPN)                      |
 | `network/wifi`                | Wi-Fi networks                                                       |
 | `network/wifi/saved`          | Saved networks                                                       |
-| `network/wifi/hotspot`        | Wi-Fi hotspot                                                        |
-| `network/wifi/network/<ssid>` | A Wi-Fi network's details and settings                               |
-| `network/ethernet/<device>`   | A wired device                                                       |
-| `network/ethernet/<device>/profile/<name>` | One wired connection profile                            |
-| `network/vpn/<name>`          | A VPN's details and settings                                         |
+| `network/wifi/saved/<name>`   | A saved network's page, with Back returning to Saved networks        |
+| `network/wifi/network/<ssid>` | A Wi-Fi network's page                                               |
+| `network/hotspot`             | Wi-Fi hotspot                                                        |
+| `network/ethernet/<device>`   | A wired device: the page of the profile it uses                      |
+| `network/ethernet/<device>/profile` | The profiles of a wired device                                 |
+| `network/ethernet/<device>/profile/<name>` | A wired profile that is not in use                      |
+| `network/vpn/<name>`          | A VPN's page                                                         |
 | `network/add-vpn`             | Add a VPN (`/wireguard`, `/openvpn`, `/import`, or a plugin's name)  |
 | `network/mobile`              | Mobile network (also `mobile`, `wwan`, `cellular`)                   |
+| `network/mobile/advanced`     | Mobile carrier, access points (`/apn`, `/apn/<name>`, `/apn-add`), SIM and modem |
+| `network/mobile/usage`        | The mobile network's data usage                                      |
 | `network/proxy`               | System proxy                                                         |
 | `network/usage`               | Data usage (`/interface/<name>`, `/connection/<name>`)              |
-| `<connection screen>/<section>` | A connection's section: `ipv4`, `ipv6`, `dns`, `security`, `identity`, `proxy`, `advanced`, and for a VPN `tunnel` and `tunnel/peer/<n>`, for example `network/ethernet/enp42s0/profile/Wired%20connection%201/ipv4` |
-| `network/details/<connection>` | A connection's addresses, DNS and routes                            |
+| `<connection page>/advanced`  | A connection's Advanced page: its editors and technical details. For example `network/ethernet/enp42s0/advanced` |
+| `<connection page>/advanced/<editor>` | One editor: `ipv4`, `ipv6`, `dns`, `security`, `identity`, `proxy` or `options`, for example `network/wifi/network/Home/advanced/ipv4` |
+| `<connection page>/usage`     | That connection's data usage                                         |
+| `<vpn page>/tunnel`           | A VPN's tunnel, and `tunnel/peer/<n>` for one WireGuard peer        |
+| `network/details/<connection>` | Opens that connection's Advanced page (old address)                 |
 | `bluetooth/<mac>`             | A Bluetooth device's details                                         |
 | `applications/default`        | Default applications                                                 |
 | `applications/default/<kind>` | One default application kind, such as `applications/default/browser` |
@@ -189,53 +203,122 @@ On Network, Bluetooth and Displays, each item (a Wi-Fi network, a wired connecti
 ## Network
 
 One Network page covers Wi-Fi, wired Ethernet, mobile broadband, VPNs, the
-proxy and data usage. It is a summary and a list of connections; each
-connection opens its own screen, and nothing is edited in a popup. Popups stay
-only for short prompts: a Wi-Fi password, a hidden network's name, the Wi-Fi
-share code, a SIM PIN, and Forget or Delete confirmations.
+proxy and data usage. The first page holds what matters most, each connection
+has one page, and the editors are one level further down, below Advanced. Nothing is
+edited in a popup. Popups stay only for short prompts: a Wi-Fi password, a
+hidden network's name, the Wi-Fi share code, a new wired profile's name, a SIM PIN, and
+Forget or Delete confirmations.
 
-### The page
+The rules of the flow:
 
-- **Summary.** The title's sentence says what you are online through (for
-  example "Online through Ethernet", "Offline", "Sign-in required", "Airplane
-  mode"). The first group shows the active connection with its internet state,
-  the IP address, gateway and DNS, and a Data usage row with today's totals.
+- At most three levels below Network: the connection, its Advanced page, one editor.
+- Back always goes to the page that holds the row you pressed, which is the
+  parent in the address. A page's title says where you are, and the line under
+  the title of an Advanced page or an editor says which connection it belongs to.
+- A fact appears on one page. Every page has one way in, apart from search
+  results and the old addresses.
+- Inside a page: state and the main action, then everyday facts, then everyday
+  settings, then one Advanced row.
+
+```mermaid
+flowchart TD
+    N[Network] --> W[Wi-Fi]
+    N --> E["Ethernet connection"]
+    N --> M[Mobile network]
+    N --> V["VPN connection"]
+    N --> AV[Add VPN]
+    N --> U[Data usage]
+    N --> H[Wi-Fi hotspot]
+    N --> P[Proxy]
+    W --> WN[Wi-Fi network] --> A[Advanced]
+    W --> WS[Saved networks] --> WN2[Wi-Fi network]
+    E --> A
+    V --> A
+    V --> T[Tunnel and peers]
+    M --> MA[Mobile advanced]
+    E --> PR["Profiles (more than one)"] --> E2[Profile]
+    A --> ED["IPv4, IPv6, DNS, Security, Identity, Proxy, Other options"]
+```
+
+### The first page
+
+- **Status.** The title's sentence says what you are online through: "Online
+  through Wi-Fi (Home)", "Online through Ethernet", "Offline", "Sign-in
+  required" or "Offline (airplane mode)". There is no table of addresses here.
+- **The active connection.** The first group has one row for it ("Connected ·
+  192.168.0.72", with "Limited" or "No internet" when the check says so), which opens its page,
+  and a Data usage row with today's totals, which opens the Data usage page.
   When NetworkManager reports a captive portal, a Sign-in required row opens
   the sign-in page in the browser.
-- **Airplane mode** blocks every radio (`rfkill`). While it is on, the Wi-Fi and
-  Mobile rows say "Off in airplane mode" and their switches are disabled.
 - **Connections.** One row per Wi-Fi radio, per wired device and, when a modem
   exists, for mobile broadband. Each row shows its state (for example
   "Connected to Home · 5 GHz", "Connected · 1 Gbit/s · 192.168.0.72", "Cable
   unplugged", "Carrier · 5G"), has a switch where the connection has one, and
-  opens its screen. A computer with no Wi-Fi hardware or no modem has no row for it.
+  opens its page. A wired device is named by its profile, or "Ethernet (enp42s0)"
+  when nothing runs on it, and by the interface too when two devices run
+  profiles of one name. Unplugged adapters with no profile fold into one muted
+  row, "2 other wired adapters", that expands to them. A computer with no Wi-Fi
+  hardware or no modem has no row for it.
 - **VPN.** One row per VPN with a switch (a failed connect shows "Failed:" and
   the reason until the next try) and an Add VPN row.
-- **More.** Proxy and Wi-Fi hotspot.
+- **More.** Airplane mode, Wi-Fi hotspot and Proxy. Airplane mode blocks every
+  radio (`rfkill`); while it is on, the Wi-Fi and Mobile rows say "Off in airplane
+  mode" and their switches are disabled.
 
 If NetworkManager cannot be asked, the page shows the error with Try again.
 
 ### Wi-Fi
 
-`network/wifi` lists the connected network first, then the networks in range
-(sorted by name, so rows do not move while you read), then Saved networks,
-Connect to hidden network and Wi-Fi hotspot. The header switch is the Wi-Fi
-radio. Pressing a new secured network asks for its password in a small popup that
-stays open while it connects and shows a wrong password there; saved and open
-networks connect at once. A network's screen shows signal, band, security, speed,
-BSSID and IP, then Connect or Disconnect, Share and Forget. Share shows a QR
-code (`WIFI:T:WPA;S:name;P:password;;`), the name, and the password with
-Show and Copy. The hotspot is a subpage (name, password of 8 or more
-characters, band) with Turn on, Share and Turn off.
+`network/wifi` has the header switch for the Wi-Fi radio, the connected network
+(one row that opens its page), the networks in range (sorted by name, so rows do
+not move while you read), and below them Saved networks and Connect to hidden
+network. There is no action bar and no gear on the rows. Pressing a network that
+is not saved joins it: a secured one asks for its password in a small popup that
+stays open while it connects and shows a wrong password there; an open one
+connects at once. A saved network says "Saved" and opens its page, where Connect
+is. The hotspot is only under Network, More.
 
-### Connection settings
+### A connection's page
 
-Every connection screen (a Wi-Fi network, a wired profile, a VPN) shows its
-state, then a General group that applies at once: Connect automatically,
-Priority, Available to other users and Metered connection. Below it, rows open
-subpages for the larger sections, each a normal page:
+A Wi-Fi network, a wired device, a VPN and the mobile network use one template:
 
-| Subpage  | Holds                                                                                   |
+1. The icon, the name and the state ("Connected · 1 Gbit/s").
+2. Actions: Connect or Disconnect, Share (Wi-Fi), Forget (Wi-Fi) or Delete (a VPN, an
+   extra wired profile).
+3. The everyday facts: the IP address, the signal or the speed, and Data usage
+   with this connection's totals for today, which opens that connection's usage.
+   A network that is not saved has no Advanced page, so its security, band and
+   access point are listed here.
+4. The everyday settings, applied at once: Connect automatically, Metered
+   connection, a Wi-Fi network's password (Show and Copy), a VPN's Tunnel row.
+5. One Advanced row. Its line says what is not at its default, for example
+   "Manual IPv4, Custom DNS".
+
+Share shows a QR code (`WIFI:T:WPA;S:name;P:password;;`), the name, and the
+password with Show and Copy. Changing a Wi-Fi password is in Advanced, Security.
+
+A wired device's page is the page of the profile the device uses: the one it
+runs, else the first. When the device has more than one profile, a Profile
+dropdown below the actions chooses which runs, and Manage profiles opens the list
+(`network/ethernet/<device>/profile`). The list marks the profile in use and opens
+each other one as the same kind of page, with Use this profile and Delete. Add
+profile is in Advanced, and in the list.
+
+### Advanced
+
+A connection's Advanced page holds, in order:
+
+| Group      | Holds                                                                                   |
+| ---------- | --------------------------------------------------------------------------------------- |
+| Addressing | IPv4, IPv6 and DNS, each a row with its value that opens its editor                     |
+| (untitled) | Security (Wi-Fi key type, 802.1X), Identity (MAC, MTU, Wake on LAN) and Proxy           |
+| Behaviour  | Priority, Available to other users, and Other options                                  |
+| Wired only | Add profile                                                                             |
+| Technical details | Read-only and selectable: device, type, UUID, MAC address, MTU, Wi-Fi band, channel, access point and security, then the gateway, DNS servers, search domains and routes of IPv4 and IPv6, with the saved configuration when the connection is not active. Read again every few seconds |
+
+The editors:
+
+| Editor   | Holds                                                                                   |
 | -------- | --------------------------------------------------------------------------------------- |
 | IPv4     | Automatic (DHCP) first; Manual shows addresses, gateway and routes; Link-local, Shared, Disabled |
 | IPv6     | The same, plus Ignore and privacy extensions                                            |
@@ -243,7 +326,7 @@ subpages for the larger sections, each a normal page:
 | Security | Wi-Fi key type and password; 802.1X (EAP method, identity, certificates) for wired and Wi-Fi Enterprise |
 | Identity | Name, MAC address (preserve, random, stable, custom), MTU, Wake on LAN                  |
 | Proxy    | The connection's own proxy: none or a PAC URL                                           |
-| Advanced | DHCP hostname and client ID, route metric, may-fail, mDNS and LLMNR, retries            |
+| Other options | DHCP hostname and client ID, route metric, may-fail, mDNS and LLMNR, retries       |
 
 Switches and dropdowns write with `nmcli connection modify` as you change
 them and go back with a toast if that fails. Fields that must apply together
@@ -251,17 +334,13 @@ them and go back with a toast if that fails. Fields that must apply together
 Unsaved changes bar with Revert and Apply, only while something differs; Apply is
 disabled while any field is invalid, and invalid text is never written. After a
 change to a running connection, Settings runs `nmcli device reapply`; if
-NetworkManager refuses, a toast offers Reconnect. A wired device's screen
-lists every profile for it (the active one is marked), and Add profile creates one.
-Each connection also has a Connection details row (addresses, gateway, DNS,
-routes, MAC, MTU, speed, and Wi-Fi facts; read-only, with the saved configuration
-when it is not active) and a Data usage row.
+NetworkManager refuses, a toast offers Reconnect.
 
 ### VPN
 
-A VPN's screen has Connect or Disconnect, Delete (with a confirmation), its
-status (type, device, assigned IP, last error), a Tunnel subpage, and the
-General group and subpages above. Types are found at run time: WireGuard is built in, and
+A VPN's page has Connect or Disconnect and Delete (with a confirmation), where
+it connects to, its tunnel address, its Data usage, Connect automatically,
+Metered connection, a Tunnel row and the Advanced row. Types are found at run time: WireGuard is built in, and
 every NetworkManager VPN plugin whose `.name` file is in
 `/usr/lib/NetworkManager/VPN` or `/etc/NetworkManager/VPN` (OpenVPN, OpenConnect,
 VPNC, SSH...) is offered; a plugin that is not installed is not listed.
@@ -282,12 +361,13 @@ VPNC, SSH...) is offered; a plugin that is not installed is not listed.
 ### Mobile network
 
 `network/mobile` (also `mobile`, `wwan`, `cellular`) uses ModemManager (`mmcli`)
-and NetworkManager. It shows carrier, technology (2G to 5G), signal, registration and
-roaming state, then Mobile data, Data roaming, Network (Automatic, or choose a
+and NetworkManager. It shows carrier, technology (2G to 5G) and signal, then Mobile
+data and Data roaming, the Data usage row, and the Advanced row. Advanced
+(`network/mobile/advanced`) holds Registration and Roaming, Network (Automatic, or choose a
 carrier from a scan), Preferred network type (from the modem's supported modes),
 Access point names (a list; each APN is a subpage with name, APN, user name,
 password, authentication and IP type), SIM (Lock SIM with PIN, Change PIN, Unlock
-with PIN or PUK, attempts left), Data usage, and the modem's manufacturer, model,
+with PIN or PUK, attempts left), and the modem's manufacturer, model,
 firmware, IMEI and number. Without a modem the address shows "No mobile broadband
 device." and the page has no Mobile row. A locked SIM shows only the unlock entry.
 
@@ -309,6 +389,8 @@ start day, a monthly limit with a unit, and the percentage to warn at; a warning
 error line shows on the page and as a badge on the Network page's Data usage row.
 A connection page can override the limit. Usage per application is not available:
 this system has no per-process network accounting, and the page says so.
+A connection's Data usage row opens `<connection page>/usage`, so Back returns to
+the connection.
 
 History comes from a recorder inside `bingux-statusd`, which samples
 `/sys/class/net/<interface>/statistics/{rx,tx}_bytes` every 60 seconds for
@@ -321,9 +403,14 @@ traffic is not counted twice. See `packages/bingux-data-usage/README.md` for the
 schema and the reader API. If no sample is recent, the page says "The data usage
 recorder is not running."
 
-Check the page with `BINGUX_SETTINGS_FAKE_NETWORK=<online|wifi-off|wifi-only|airplane|no-wifi|offline|portal|modem>`
+Check the pages with `BINGUX_SETTINGS_FAKE_NETWORK=<online|wifi-off|wifi-only|airplane|no-wifi|offline|portal|modem>`
 and `BINGUX_SETTINGS_FAKE_MODEM=<ok|no-sim|locked|roaming|none|puk|pin-lock>` on a
-`--features snapshot` build; they replace what `nmcli` and `mmcli` report and change nothing.
+`--features snapshot` build; they replace what `nmcli` and `mmcli` report. The fake
+network also has its own profiles for the Wi-Fi networks (`Home`, `Office`), the
+wired profile `Wired connection 1` and the VPNs, so their pages open, and a change to
+one is kept in memory for the run. A fake network runs no command that connects,
+disconnects, adds, changes or deletes. `BINGUX_SETTINGS_FAKE_WIRED=many` gives
+`enp42s0` a second profile and adds two unplugged adapters with no profile.
 
 ## Search
 
@@ -509,6 +596,36 @@ then reads the system again in the background and saves the new result, so
 values do not fill in while the page loads. A page with no saved file yet
 shows its loading state until the first read finishes. A failed read saves
 nothing, so the last good values stay on disk.
+
+A page opened within 15 seconds of its last read starts no new read, so
+flipping between pages does not run every page's commands again. Polling
+pages (Network, Wi-Fi, Bluetooth, Sound, data usage, the clock) skip their
+ticks while the window has no focus.
+
+A slider that writes a setting (pointer speed, double-click speed, key repeat
+delay and speed, blink speed) shows every step at once but runs one write at a
+time with only the newest value waiting, and reads the page back once after the
+last write (`runtime::optimistic_latest`).
+
+## Loading contract
+
+A page draws its final layout on the first frame: real groups and rows from a
+placeholder model behind a veil (`pages/loading.rs`), with the same row count
+and row heights as the loaded page, so only values change when data lands. A
+slider row reserves its value text and its mark label from the first frame.
+
+`scripts/layout-stability.py` holds the pages to this. It opens each page and a
+few subpages at desktop and 390x800 size with no saved values and every
+background result held back 1.5 seconds (`BINGUX_UI_RESULT_DELAY_MS`, testing
+builds), records every frame and fails when a row separator or card border
+moves by 4 px or more between frames. Build with `--features snapshot` first.
+
+## Profiling
+
+`BINGUX_PERF_LOG=FILE` appends the unix time and duration in milliseconds of
+every frame. `BINGUX_PERF_FOLDED=FILE` samples the UI thread's stack; touch
+`FILE.dump` and the next frame writes folded stacks to `FILE`. Both work with
+no inspector window, so they suit a headless session.
 
 ## Development
 

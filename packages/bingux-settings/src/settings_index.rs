@@ -59,8 +59,28 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
     ),
     (
         PageId::Network,
-        "Connection details",
-        "ip address gateway dns routes mac mtu speed",
+        "Technical details",
+        "connection details ip address gateway dns routes mac mtu speed uuid device advanced",
+    ),
+    (
+        PageId::Network,
+        "Connect automatically",
+        "autoconnect join startup network connection",
+    ),
+    (
+        PageId::Network,
+        "Wi-Fi password",
+        "show reveal copy saved key passphrase network",
+    ),
+    (
+        PageId::Network,
+        "Priority",
+        "autoconnect order higher first available other users permissions advanced",
+    ),
+    (
+        PageId::Network,
+        "Wired profiles",
+        "ethernet profile switch add manage delete connection",
     ),
     (
         PageId::Network,

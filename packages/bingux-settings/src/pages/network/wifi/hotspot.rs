@@ -246,15 +246,7 @@ impl Component for HotspotPage {
             );
         }
 
-        let subtitle = match (&running, radio) {
-            (Some(ap), _) => format!("On: {}", ap.ssid),
-            (None, Radio::Missing) => "No Wi-Fi hardware".to_string(),
-            (None, Radio::Airplane) => "Off in airplane mode".to_string(),
-            (None, Radio::Blocked) => "Wi-Fi hardware is disabled".to_string(),
-            (None, Radio::Off) => "Needs Wi-Fi".to_string(),
-            (None, Radio::On) => "Off".to_string(),
-        };
-        let head = PageHead::new().subtitle(if loading { "—".to_string() } else { subtitle });
+        let head = PageHead::new();
         let mut blocks: Vec<Element> = Vec::new();
 
         if let Some(ap) = running {
@@ -302,7 +294,7 @@ impl Component for HotspotPage {
                 Radio::Off => blocks.push(Element::from(
                     Group::new(None::<String>).row(Element::from(
                         status(Status::Info(
-                            "Wi-Fi is off. A hotspot needs the Wi-Fi radio.".into(),
+                            "Wi-Fi is off.".into(),
                         ))
                         .action("Turn on Wi-Fi", move |_| {
                             model::toggle_link(ui.ctx, "wifi".to_string(), true, || {
@@ -401,16 +393,19 @@ impl Component for RunningGroup {
         use_hook(move || {
             let (uuid, key_mgmt) = (ap.uuid.clone(), ap.key_mgmt.clone());
             background(secret, move || nm::saved_secret(&uuid, &key_mgmt));
+            let focus = system::window_focus();
             spawn(async move {
                 loop {
-                    let device = device.clone();
-                    background_then(
-                        move || read_clients(&device),
-                        move |count| {
-                            let mut clients = clients;
-                            clients.set(count);
-                        },
-                    );
+                    if *focus.peek() {
+                        let device = device.clone();
+                        background_then(
+                            move || read_clients(&device),
+                            move |count| {
+                                let mut clients = clients;
+                                clients.set(count);
+                            },
+                        );
+                    }
                     timer(CLIENTS_EVERY).await;
                 }
             });

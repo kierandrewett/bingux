@@ -14,6 +14,7 @@ use super::model::{self, Breakdown, Period, Request, Snapshot};
 use crate::icons::Icon;
 use crate::pages::loading::veiled;
 use crate::routes::{Route, use_navigator};
+use crate::system;
 use crate::ui::{
     Group, Row, Status, Tone, form_field, page_column, property_row, row, segmented, status,
 };
@@ -154,20 +155,23 @@ fn totals_rows(
     rows
 }
 
-fn chart_rows(snapshot: &Snapshot, period: Period, custom_missing: bool) -> Element {
+fn chart_group(snapshot: &Snapshot, period: Period, custom_missing: bool) -> Group {
+    let group = Group::titled(chart_title(period));
     if custom_missing {
-        return Element::from(status(Status::Empty(
+        return group.row(Element::from(status(Status::Empty(
             "Enter a start and end date to see that range.".into(),
-        )));
+        ))));
     }
     match &snapshot.series {
-        Err(why) => Element::from(status(Status::Info(format!("{why}.")))),
+        Err(why) => group.row(Element::from(status(Status::Info(format!("{why}."))))),
         Ok(buckets) if !chart::has_traffic(buckets) => {
-            Element::from(status(Status::Empty(if snapshot.source.is_none() {
-                "Nothing has been recorded yet.".into()
-            } else {
-                "Nothing was received or sent in this period.".into()
-            })))
+            group.row(Element::from(status(Status::Empty(
+                if snapshot.source.is_none() {
+                    "Nothing has been recorded yet.".into()
+                } else {
+                    "Nothing was received or sent in this period.".into()
+                },
+            ))))
         }
         Ok(buckets) => {
             let data = chart::chart_data(buckets, period.granularity(), period, snapshot.zone);
@@ -183,7 +187,7 @@ fn chart_rows(snapshot: &Snapshot, period: Period, custom_missing: bool) -> Elem
                 format::bytes(total.rx),
                 format::bytes(total.tx)
             );
-            chart::chart(&data, label)
+            group.content(chart::chart(&data, label))
         }
     }
 }
@@ -207,10 +211,13 @@ impl Component for UsagePage {
         };
         let resource = use_resource(request.clone(), model::load);
         use_hook(move || {
+            let focus = system::window_focus();
             spawn(async move {
                 loop {
                     timer(POLL).await;
-                    resource.refresh();
+                    if *focus.peek() {
+                        resource.refresh();
+                    }
                 }
             })
         });
@@ -283,11 +290,7 @@ impl Component for UsagePage {
 
         // Chart.
         let custom_missing = current == Period::Custom && request.custom.is_none();
-        page = page.child(Group::titled(chart_title(current)).row(chart_rows(
-            &snapshot,
-            current,
-            custom_missing,
-        )));
+        page = page.child(chart_group(&snapshot, current, custom_missing));
 
         // Breakdowns, for the whole computer only.
         if scope == UsageScope::All {

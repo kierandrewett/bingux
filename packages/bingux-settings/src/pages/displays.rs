@@ -15,7 +15,7 @@ use crate::system::{self, CommandError, CommandResult, background, background_th
 use crate::ui::{
     Group, Icon, Overlays, PageHead, ResponseKind, Status, Tokens, action_row, caption, choice_row,
     dialog, icon, menu_item, menu_separator, page_column, primary_button, row, row_button,
-    skeleton, status, switch_row, typography, use_overlays, use_tokens,
+    skeleton, skeleton_rows, status, switch_row, typography, use_overlays, use_tokens,
 };
 use bingux_ui::controls::slider;
 use bingux_ui::runtime::optimistic;
@@ -2195,7 +2195,13 @@ impl Component for DisplaysPage {
 
         let mut page = page_column().child(PageHead::new());
         let Some(loaded) = model.read().clone() else {
-            return page.child(skeleton());
+            // One display, the arrangement canvas over its list, then the
+            // night light group, as a typical machine shows them.
+            return page.child(skeleton_rows(&[
+                "~Each box is one display, placed as it is on the desktop.|#",
+                "~Choose a display to change its resolution, scale and orientation.|=",
+                "-=---",
+            ]));
         };
 
         page = match loaded.displays {

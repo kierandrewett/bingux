@@ -639,7 +639,7 @@ fn history_group(battery: &Battery) -> Option<Group> {
         .curve(Curve::Monotone)
         .area()
         .label("Battery charge over the last 24 hours");
-    Some(Group::titled("Last 24 hours").row(chart))
+    Some(Group::titled("Last 24 hours").content(chart))
 }
 
 /// Snapshot builds only: `BINGUX_SETTINGS_FAKE_BATTERY` swaps in a charging

@@ -19,15 +19,15 @@ use freya::prelude::*;
 
 use super::model::{self, NetCtx, Overview, use_net_ctx};
 use super::profile::ProfileSettings;
-use super::{Owner, UsageScope};
+use super::usage::connection_usage_row;
+use super::{Owner, Section};
 use crate::icons::{self, Icon};
 use crate::pages::loading::veiled;
 use crate::routes::Route;
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
     Group, PageHead, ResponseKind, SpinnerSize, Status, Tokens, action_button, action_strip,
-    caption, dialog, icon_button, page_column, row, spinner, status, strip_action, use_page_busy,
-    use_tokens,
+    caption, dialog, page_column, row, spinner, status, strip_action, use_page_busy, use_tokens,
 };
 use bingux_ui::layout::hstack;
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
@@ -36,6 +36,7 @@ use bingux_ui::style::*;
 use nm::{Model, Network, Saved, Security};
 
 pub use hotspot::HotspotPage;
+pub use share::secret_row;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(5);
 
@@ -369,10 +370,13 @@ pub fn use_row_refresh() {
             }
         };
         refresh();
+        let focus = system::window_focus();
         spawn(async move {
             loop {
                 timer(POLL_INTERVAL).await;
-                refresh();
+                if *focus.peek() {
+                    refresh();
+                }
             }
         });
     });
@@ -382,10 +386,13 @@ pub fn use_row_refresh() {
 fn use_polling(ui: Ui, scan: bool) {
     use_hook(move || {
         ui.refresh(scan);
+        let focus = system::window_focus();
         spawn(async move {
             loop {
                 timer(POLL_INTERVAL).await;
-                ui.refresh(scan);
+                if *focus.peek() {
+                    ui.refresh(scan);
+                }
             }
         });
     });
@@ -436,15 +443,6 @@ fn signal_icon(signal: u8) -> Icon {
     }
 }
 
-/// The small lock shown on a secured network.
-fn lock_icon(tokens: Tokens) -> Element {
-    Element::from(icons::icon(
-        Icon::NetworkWirelessEncrypted,
-        IconSize::Control,
-        Paint::Muted.color(&tokens),
-    ))
-}
-
 /// The text of a value, or a dash when the network does not report one.
 fn or_dash(text: &str) -> String {
     if text.is_empty() {
@@ -461,20 +459,6 @@ fn network_count(count: usize) -> String {
     } else {
         format!("{count} networks nearby")
     }
-}
-
-/// The right-hand column of a network row. Every row has one, so the icons
-/// sit in the same place whether or not a row has them.
-fn action_slot(action: Option<Element>) -> Element {
-    rect()
-        .tw_layout(&[
-            w(Dim::Box24),
-            flex_row(),
-            justify(Align::End),
-            items(Align::Center),
-        ])
-        .maybe_child(action)
-        .into()
 }
 
 /// A screen that could not ask NetworkManager: the reason and Try again.
@@ -521,10 +505,11 @@ fn network_menu(ui: Ui, model: &Model, network: &Network) -> Vec<MenuItem> {
     items.push(menu_separator());
     let key = profile.map_or_else(|| network.ssid.clone(), |saved| saved.name.clone());
     items.push(
-        menu_item("Network details", move |_| {
-            ui.ctx
-                .navigator
-                .push(Route::WifiNetwork { ssid: key.clone() })
+        menu_item("Open", move |_| {
+            ui.ctx.navigator.push(Route::WifiNetwork {
+                ssid: key.clone(),
+                saved_list: false,
+            })
         })
         .icon(Icon::PreferencesSystem),
     );
@@ -619,22 +604,22 @@ fn radio_status(ui: Ui, radio: Radio) -> Option<Element> {
     ))
 }
 
-/// The connected network, pinned at the top: its row, and Disconnect, Share
-/// and Details under it.
+/// The connected network, pinned at the top: one row that opens its page, where Disconnect,
+/// Share and the rest are.
 fn connected_block(ui: Ui, model: &Model) -> Option<Element> {
     let (network, profile) = model.current()?;
     let ssid = network
         .map(|n| n.ssid.clone())
         .or_else(|| profile.map(|p| p.ssid.clone()))?;
     let key = profile.map_or_else(|| ssid.clone(), |saved| saved.name.clone());
-    let open = key.clone();
     let mut hero = row(ssid.clone())
         .subtitle(link_line(network))
         .navigates()
         .on_press(move |_| {
-            ui.ctx
-                .navigator
-                .push(Route::WifiNetwork { ssid: open.clone() })
+            ui.ctx.navigator.push(Route::WifiNetwork {
+                ssid: key.clone(),
+                saved_list: false,
+            })
         });
     hero = match network {
         Some(network) => {
@@ -642,37 +627,7 @@ fn connected_block(ui: Ui, model: &Model) -> Option<Element> {
         }
         None => hero.leading(Icon::NetworkWirelessSignalExcellent),
     };
-    let disconnect = profile.map(|saved| saved.uuid.clone());
-    let share_target = profile.filter(|saved| shareable(saved)).map(share_saved);
-    let details = key;
-    let strip = action_strip(vec![
-        strip_action(Icon::WindowClose, "Disconnect", move |_| {
-            if let Some(uuid) = &disconnect {
-                ui.disconnect(uuid.clone());
-            }
-        })
-        .enabled(profile.is_some()),
-        strip_action(Icon::SendTo, "Share", {
-            let target = share_target.clone();
-            move |_| {
-                if let Some(target) = &target {
-                    ui.share(target.clone());
-                }
-            }
-        })
-        .enabled(share_target.is_some()),
-        strip_action(Icon::PreferencesSystem, "Details", move |_| {
-            ui.ctx.navigator.push(Route::WifiNetwork {
-                ssid: details.clone(),
-            })
-        }),
-    ]);
-    Some(Element::from(
-        rect()
-            .tw_layout(&[flex_col(), w_full(), gap(S2)])
-            .child(Group::titled("Connected network").row(hero))
-            .child(strip),
-    ))
+    Some(Element::from(Group::titled("Connected network").row(hero)))
 }
 
 /// Whether NetworkManager is bringing `ssid` up now: this screen started it,
@@ -687,8 +642,9 @@ fn connecting_to(ui: Ui, ov: &Overview, ssid: &str, profile: Option<&Saved>) -> 
 }
 
 /// One row per network in range, the connected one left to its own group.
-/// The signal icon leads; a lock marks a secured network; a caption says
-/// "Saved"; a spinner shows while it connects; a gear opens its screen.
+/// The signal icon leads, with a lock on a secured network. Pressing a
+/// network that is not saved joins it; a saved one says "Saved" and opens its
+/// page. A spinner shows while a network connects.
 fn network_rows(ui: Ui, data: &Data, tokens: Tokens) -> Vec<Element> {
     data.model
         .networks
@@ -702,35 +658,35 @@ fn network_rows(ui: Ui, data: &Data, tokens: Tokens) -> Vec<Element> {
             let connecting = connecting_to(ui, &data.ov, &network.ssid, profile);
             let key = profile.map_or_else(|| network.ssid.clone(), |saved| saved.name.clone());
 
-            let mut cluster = rect().tw_layout(&[flex_row(), gap(S2), items(Align::Center)]);
+            let mut trailing = hstack(S2);
             if connecting {
-                cluster = cluster.child(Element::from(spinner(SpinnerSize::Small)));
+                trailing = trailing.child(Element::from(spinner(SpinnerSize::Small)));
             }
             if network.security.secured() {
-                cluster = cluster.child(lock_icon(tokens));
+                trailing = trailing.child(Element::from(icons::icon(
+                    Icon::NetworkWirelessEncrypted,
+                    IconSize::Control,
+                    Paint::Muted.color(&tokens),
+                )));
             }
-            cluster = cluster.child(Element::from(
-                icon_button(Icon::PreferencesSystem, move |_| {
-                    ui.ctx
-                        .navigator
-                        .push(Route::WifiNetwork { ssid: key.clone() })
-                })
-                .tooltip("Network details"),
-            ));
-            let slot = action_slot(Some(Element::from(cluster)));
-            let trailing = if profile.is_some() {
-                Element::from(hstack(S2).child(caption("Saved")).child(slot))
-            } else {
-                slot
-            };
+            if profile.is_some() {
+                trailing = trailing.child(caption("Saved"));
+            }
             let target = join_target(&data.model, network);
-            Element::from(
-                row(network.ssid.clone())
-                    .leading_signal(nm::signal_level(network.signal), network.security.secured())
-                    .on_press(move |_| ui.join(&target))
-                    .trailing(trailing)
-                    .context_menu(network_menu(ui, &data.model, network)),
-            )
+            let line = row(network.ssid.clone())
+                .leading_signal(nm::signal_level(network.signal), network.security.secured())
+                .trailing(trailing)
+                .context_menu(network_menu(ui, &data.model, network));
+            Element::from(if profile.is_some() {
+                line.navigates().on_press(move |_| {
+                    ui.ctx.navigator.push(Route::WifiNetwork {
+                        ssid: key.clone(),
+                        saved_list: false,
+                    })
+                })
+            } else {
+                line.on_press(move |_| ui.join(&target))
+            })
         })
         .collect()
 }
@@ -777,14 +733,13 @@ fn available_group(ui: Ui, data: &Data, tokens: Tokens) -> Element {
     )
 }
 
-/// Saved networks, the hidden network popup and the hotspot.
+/// Saved networks and the hidden network popup.
 fn manage_group(ui: Ui, data: &Data, radio: Radio) -> Element {
     let saved = data.model.joinable().count();
-    let hotspot = data.model.hotspot().map(|ap| format!("On: {}", ap.ssid));
     let window = ui.ctx.window;
     let navigator = ui.ctx.navigator;
     Element::from(
-        Group::titled("Manage")
+        Group::new(None::<String>)
             .row(
                 row("Saved networks")
                     .value(if saved == 0 {
@@ -800,12 +755,6 @@ fn manage_group(ui: Ui, data: &Data, radio: Radio) -> Element {
                     .navigates()
                     .enabled(radio == Radio::On)
                     .on_press(move |_| join::open_hidden(window)),
-            )
-            .row(
-                row("Wi-Fi hotspot")
-                    .value(hotspot.unwrap_or_default())
-                    .navigates()
-                    .on_press(move |_| navigator.push(Route::WifiHotspot)),
             ),
     )
 }
@@ -872,13 +821,7 @@ impl Component for SavedNetworksPage {
         let data = data(ui);
         let radio = radio_of(&data.ov);
         let count = data.model.joinable().count();
-        let head = PageHead::new().subtitle(if data.loading {
-            "—".to_string()
-        } else if count == 1 {
-            "1 saved network".to_string()
-        } else {
-            format!("{count} saved networks")
-        });
+        let head = PageHead::new();
         if let Some(error) = data.error.clone() {
             return failure(ui, error, Some(head));
         }
@@ -935,9 +878,10 @@ impl Component for SavedNetworksPage {
                     .subtitle(parts.join(" · "))
                     .navigates()
                     .on_press(move |_| {
-                        ui.ctx
-                            .navigator
-                            .push(Route::WifiNetwork { ssid: key.clone() })
+                        ui.ctx.navigator.push(Route::WifiNetwork {
+                            ssid: key.clone(),
+                            saved_list: true,
+                        })
                     })
                     .context_menu(menu),
             )
@@ -956,26 +900,8 @@ impl Component for SavedNetworksPage {
 #[derive(PartialEq)]
 pub struct WifiNetworkPage {
     pub ssid: String,
-}
-
-/// Words for what NetworkManager's connectivity check found.
-fn internet_words(connectivity: &str) -> Option<&'static str> {
-    match connectivity {
-        "full" => Some("Yes"),
-        "limited" => Some("Limited"),
-        "portal" => Some("Sign-in required"),
-        "none" => Some("No"),
-        _ => None,
-    }
-}
-
-/// "Automatic", "Yes" or "No" for a profile's metered setting.
-fn metered_words(metered: &str) -> &'static str {
-    match metered {
-        "yes" | "guess-yes" => "Yes",
-        "no" | "guess-no" => "No",
-        _ => "Automatic",
-    }
+    /// Opened from the Saved networks list, which Back returns to.
+    pub saved_list: bool,
 }
 
 impl Component for WifiNetworkPage {
@@ -1117,63 +1043,50 @@ impl Component for WifiNetworkPage {
             ));
         }
 
-        // Five facts always show, with a dash for any the network does not
-        // report, so the group keeps its place as the network comes and goes.
-        let mut details = Group::titled("Details");
-        details = match network {
-            Some(network) => details
-                .row(row("Signal strength").value(format!(
-                    "{} ({}%)",
-                    nm::signal_words(network.signal),
-                    network.signal
-                )))
-                .row(row("Frequency").value(or_dash(&network.band)))
-                .row(row("Security").value(network.security.label()))
-                .row(row("Speed").value(or_dash(&network.rate)))
-                .row(row("Access point").mono_value(or_dash(&network.bssid))),
-            None => details
-                .row(row("Signal strength").value("—"))
-                .row(row("Frequency").value("—"))
-                .row(row("Security").value(profile.map_or("—", |saved| saved.security().label())))
-                .row(row("Speed").value("—"))
-                .row(row("Access point").value("—")),
-        };
+        // The everyday facts: the address, the signal and the speed, then this network's data
+        // usage. A network that is not saved has no Advanced page, so its security, band and
+        // access point are here.
+        let mut info = Group::new(None::<String>);
         if connected
             && let Some(device) = data.ov.wifi_device()
             && !device.address4().is_empty()
         {
-            details = details.row(row("IP address").mono_value(device.address4()));
+            info = info.row(row("IP address").mono_value(device.address4()));
         }
-        if connected && let Some(words) = internet_words(&data.ov.connectivity) {
-            details = details.row(row("Internet access").value(words));
-        }
-        if let Some(saved) = profile {
-            details = details.row(row("Metered connection").value(metered_words(&saved.metered)));
-        }
-        blocks.push(Element::from(details));
-
-        if let Some(saved) = profile {
-            blocks.push(Element::from(ProfileSettings {
-                owner: Owner::Wifi {
-                    ssid: saved.name.clone(),
-                },
-            }));
-            let name = saved.name.clone();
-            let usage = saved.name.clone();
-            let mut more = Group::new(None::<String>);
-            if connected {
-                more = more.row(row("Connection details").navigates().on_press(move |_| {
-                    ui.ctx.navigator.push(Route::Details {
-                        connection: name.clone(),
-                    })
-                }));
+        if let Some(network) = network {
+            info = info.row(row("Signal strength").value(format!(
+                "{} ({}%)",
+                nm::signal_words(network.signal),
+                network.signal
+            )));
+            if !network.rate.is_empty() {
+                info = info.row(row("Speed").value(network.rate.clone()));
             }
-            more = more.row(row("Data usage").navigates().on_press(move |_| {
-                ui.ctx.navigator.push(Route::Usage {
-                    scope: UsageScope::Connection(usage.clone()),
-                })
-            }));
-            blocks.push(Element::from(more));
+            if profile.is_none() {
+                info = info
+                    .row(row("Security").value(network.security.label()))
+                    .row(row("Frequency").value(or_dash(&network.band)))
+                    .row(row("Access point").mono_value(or_dash(&network.bssid)));
+            }
+        }
+        let owner = profile.map(|saved| Owner::Wifi {
+            ssid: saved.name.clone(),
+            saved_list: self.saved_list,
+        });
+        if let Some(owner) = &owner {
+            info = info.row(connection_usage_row(
+                ui.ctx,
+                owner.connection_name().to_string(),
+                Route::Section {
+                    owner: owner.clone(),
+                    section: Section::Usage,
+                },
+            ));
+        }
+        blocks.push(Element::from(info));
+
+        if let Some(owner) = owner {
+            blocks.push(Element::from(ProfileSettings { owner }));
         }
         veiled(page_column().children(blocks), data.loading)
     }
@@ -1280,7 +1193,7 @@ pub fn hotspot_row(ctx: NetCtx, ov: &Overview) -> Option<Element> {
             row("Wi-Fi hotspot")
                 .value(running.unwrap_or_default())
                 .navigates()
-                .on_press(move |_| ctx.navigator.push(Route::WifiHotspot)),
+                .on_press(move |_| ctx.navigator.push(Route::Hotspot)),
         )
     })
 }

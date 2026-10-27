@@ -632,9 +632,7 @@ impl Component for ApnListPage {
 
         let mut page =
             page_column()
-                .child(PageHead::new().subtitle(
-                    "The settings the carrier needs to give your phone internet access.",
-                ));
+                .child(PageHead::new());
         if list.is_empty() {
             page = page.child(Group::new(None::<String>).row(Element::from(status(
                 Status::Empty("No access point names yet.".into()),

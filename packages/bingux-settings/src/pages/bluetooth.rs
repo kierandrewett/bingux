@@ -402,17 +402,6 @@ fn power_job(on: bool) -> Job {
     }
 }
 
-fn visibility_job(on: bool) -> Job {
-    let word = if on { "on" } else { "off" };
-    Job {
-        mac: String::new(),
-        busy: "Changing visibility…".to_string(),
-        steps: vec![step(&["discoverable", word], TIMEOUT)],
-        done: String::new(),
-        failed: "Could not change visibility.".to_string(),
-    }
-}
-
 /// Set the device's Alias over D-Bus; `bluetoothctl` has no rename command.
 /// An empty alias makes BlueZ show the device's own name again.
 fn rename_job(device: &Device, alias: &str) -> Job {
@@ -543,9 +532,23 @@ impl Scanner {
         };
         let scanner = self.clone();
         std::thread::spawn(move || scanner.run_rounds(generation));
+        // A computer other devices can pair with has to be visible. It is
+        // visible exactly while this page scans: BlueZ's own three minute
+        // limit would end it while the page is still open, so it is lifted
+        // here and visibility is switched off again in `stop`.
+        std::thread::spawn(|| {
+            let _ = bluetoothctl(&["discoverable-timeout", "0"], TIMEOUT);
+            let _ = bluetoothctl(&["discoverable", "on"], TIMEOUT);
+        });
     }
 
     fn stop(&self) {
+        let was_running = self.lock().running;
+        if was_running {
+            std::thread::spawn(|| {
+                let _ = bluetoothctl(&["discoverable", "off"], TIMEOUT);
+            });
+        }
         let child = {
             let mut slot = self.lock();
             slot.running = false;
@@ -628,7 +631,7 @@ fn header_subtitle(model: &Loaded) -> Option<String> {
         Some(Ok(Model {
             adapter: Some(Adapter { powered: true, .. }),
             ..
-        })) => Some("Not visible to other devices".to_string()),
+        })) => None,
         Some(Ok(Model {
             adapter: Some(_), ..
         })) => Some("Off".to_string()),
@@ -806,6 +809,7 @@ fn device_row(
 fn use_polling(model: State<Loaded>, scanner: Option<Scanner>) {
     use_hook(move || {
         refresh(model);
+        let focus = system::window_focus();
         spawn(async move {
             loop {
                 let wait = match &scanner {
@@ -813,7 +817,9 @@ fn use_polling(model: State<Loaded>, scanner: Option<Scanner>) {
                     _ => POLL_IDLE,
                 };
                 timer(wait).await;
-                refresh(model);
+                if *focus.peek() {
+                    refresh(model);
+                }
             }
         });
     });
@@ -830,7 +836,6 @@ impl Component for BluetoothPage {
         let model = system::use_cached_persistent("bluetooth", load);
         let busy_state = use_state::<Option<Busy>>(|| None);
         let power_pending = use_state::<Option<bool>>(|| None);
-        let visible_pending = use_state::<Option<bool>>(|| None);
         let scanner = use_hook(Scanner::new);
         use_polling(model, Some(scanner.clone()));
 
@@ -917,14 +922,6 @@ impl Component for BluetoothPage {
         };
 
         let mut page = page_column().child(head);
-        if adapter.powered {
-            page = page.child(Group::new(None::<String>).row(switch_row(
-                "Make this computer visible to other devices",
-                (*visible_pending.read()).unwrap_or(adapter.discoverable),
-                move |next: bool| set_switch_job(ctx, visible_pending, visibility_job(next), next),
-            )));
-        }
-
         if !adapter.powered {
             return page.child(
                 status_page(Icon::Bluetooth, "Bluetooth is off")

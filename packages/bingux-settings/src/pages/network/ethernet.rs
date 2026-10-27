@@ -1,4 +1,9 @@
-//! Wired Ethernet: the device screen, its profiles, and one profile's settings screen.
+//! Wired Ethernet: the device's page, its profiles, and the pages below them.
+//!
+//! A wired device has one page, and it is the connection page of the profile the device uses (see
+//! [`Owner::Wired`] with `in_use`). A device with more than one profile adds a Profile dropdown and
+//! a Manage profiles row that opens the list. A profile that is not in use has the same page below
+//! that list; the one in use opens the device's page instead.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -9,37 +14,47 @@ use super::model::{
     CONNECT, NetCtx, Overview, QUICK, capitalise, hero, nmcli, pending_for, split_terse,
     toggle_link, use_net_ctx,
 };
-use super::profile::{ProfileSettings, speed_text};
-use super::{Device, Owner, UsageScope, device_icon, failure_page};
+use super::profile::{ProfileSettings, SectionPage, speed_text};
+use super::usage::{UsagePage, connection_usage_row};
+use super::{Device, Owner, Section, UsageScope, device_icon, failure_page};
 use crate::icons::Icon;
 use crate::pages::loading::veiled;
 use crate::routes::Route;
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
-    Group, MenuItem, PopupAction, PopupActions, PopupFlags, ResponseKind, Status, StripAction,
-    Window, WindowLike, WindowParent, action_strip, dialog, form_field, menu_item, menu_separator,
-    page_column, popup, popup_column, row, row_button, status, strip_action, switch,
-    use_popup_actions, use_tokens, use_window,
+    Group, MenuItem, PageHead, PopupAction, PopupActions, PopupFlags, ResponseKind, Status,
+    StripAction, Window, WindowLike, WindowParent, action_strip, choice_row, dialog, expander_row,
+    form_field, menu_item, menu_separator, page_column, popup, popup_column, row, row_button,
+    status, strip_action, switch, use_popup_actions, use_tokens, use_window,
 };
 use bingux_ui::controls::form::validate::Check;
 
-/// The title of a wired device's row and screen: its connection, or `Ethernet`.
-fn device_title(device: &Device) -> String {
-    if device.has_connection() {
-        device.connection.clone()
+/// The title of a wired device's row and page: its profile's name, or `Ethernet (enp42s0)`. A
+/// profile name that two devices share gets the interface too, so no two rows read alike.
+pub fn title_of(ov: &Overview, device: &Device) -> String {
+    if !device.has_connection() {
+        return format!("Ethernet ({})", device.name);
+    }
+    let shared = ov
+        .ethernet_devices()
+        .filter(|other| other.connection == device.connection)
+        .count()
+        > 1;
+    if shared {
+        format!("{} ({})", device.connection, device.name)
     } else {
-        "Ethernet".to_string()
+        device.connection.clone()
     }
 }
 
 /// The header title of the wired device `device` from the overview loaded at
-/// start-up, so a screen opened by address shows the title its row shows.
+/// start-up, so a page opened by address shows the title its row shows.
 pub fn cached_ethernet_title(device: &str) -> Option<String> {
     let model = system::cached_persistent::<Overview, system::CommandError>("network-overview");
     let loaded = model.read();
     let ov = loaded.as_ref()?.as_ref().ok()?;
     let found = ov.ethernet_devices().find(|known| known.name == device)?;
-    Some(device_title(found))
+    Some(title_of(ov, found))
 }
 
 /// Whether no cable is plugged into the device.
@@ -113,36 +128,84 @@ fn set_link(ctx: NetCtx, device: String, on: bool) {
     });
 }
 
-/// One row per wired device, for the Connections group.
-pub fn ethernet_rows(ctx: NetCtx, ov: &Overview) -> Vec<Element> {
-    ov.ethernet_devices()
-        .map(|device| {
-            let title = device_title(device);
-            let route = Route::Ethernet {
-                device: device.name.clone(),
-                name: title.clone(),
-            };
-            let name = device.name.clone();
-            let on = shown_connected(device);
-            let usable = !unplugged(device);
-            let open = route.clone();
-            Element::from(
-                row(title)
-                    .leading(device_icon(device.kind))
-                    .subtitle(row_subtitle(device))
-                    .trailing(
-                        switch(on, {
-                            let name = name.clone();
-                            move |next: bool| set_link(ctx, name.clone(), next)
-                        })
-                        .enabled(usable),
-                    )
-                    .navigates()
-                    .on_press(move |_| ctx.navigator.push(open.clone()))
-                    .context_menu(device_menu(ctx, device, route)),
+/// A wired device row of the Connections group.
+fn device_row(ctx: NetCtx, ov: &Overview, device: &Device) -> Element {
+    let title = title_of(ov, device);
+    let route = Route::Ethernet {
+        device: device.name.clone(),
+        name: title.clone(),
+    };
+    let name = device.name.clone();
+    let on = shown_connected(device);
+    let usable = !unplugged(device);
+    let open = route.clone();
+    Element::from(
+        row(title)
+            .leading(device_icon(device.kind))
+            .subtitle(row_subtitle(device))
+            .trailing(
+                switch(on, {
+                    let name = name.clone();
+                    move |next: bool| set_link(ctx, name.clone(), next)
+                })
+                .enabled(usable),
             )
-        })
-        .collect()
+            .navigates()
+            .on_press(move |_| ctx.navigator.push(open.clone()))
+            .context_menu(device_menu(ctx, device, route)),
+    )
+}
+
+/// The rows of the Connections group for wired devices: one per device that is plugged in or has
+/// a profile, and one muted row that holds the unplugged adapters nothing is set up on.
+pub fn ethernet_rows(ctx: NetCtx, ov: &Overview) -> Vec<Element> {
+    // Whether a device has a profile is read once for each device that could be spare.
+    let candidates: Vec<(String, String)> = ov
+        .ethernet_devices()
+        .filter(|device| unplugged(device) && !device.has_connection())
+        .map(|device| (device.name.clone(), device.hwaddr.clone()))
+        .collect();
+    use_side_effect_with_deps(&candidates, |candidates| {
+        for (name, hwaddr) in candidates {
+            reload_profiles(name, hwaddr);
+        }
+    });
+    let mut shown = Vec::new();
+    let mut spare: Vec<&Device> = Vec::new();
+    for device in ov.ethernet_devices() {
+        let unused = unplugged(device)
+            && !device.has_connection()
+            && matches!(&*list_state(&device.name).read(), Some(Ok(list)) if list.is_empty());
+        if unused {
+            spare.push(device);
+        } else {
+            shown.push(device_row(ctx, ov, device));
+        }
+    }
+    if !spare.is_empty() {
+        let plural = if spare.len() == 1 { "" } else { "s" };
+        let children: Vec<Element> = spare
+            .iter()
+            .map(|device| {
+                let route = Route::Ethernet {
+                    device: device.name.clone(),
+                    name: title_of(ov, device),
+                };
+                Element::from(
+                    row(title_of(ov, device))
+                        .leading(device_icon(device.kind))
+                        .subtitle("Cable unplugged")
+                        .navigates()
+                        .on_press(move |_| ctx.navigator.push(route.clone())),
+                )
+            })
+            .collect();
+        shown.push(Element::from(
+            expander_row(format!("{} other wired adapter{plural}", spare.len()), children)
+                .subtitle("Cable unplugged"),
+        ));
+    }
+    shown
 }
 
 /// The right-click menu of a wired device: connect or disconnect, and its settings.
@@ -228,8 +291,38 @@ fn fits(interface: &str, mac: &str, running_on: &str, device: &str, hwaddr: &str
         && (running_on.is_empty() || running_on == device)
 }
 
+/// Snapshot builds only: the profiles of the fake wired devices. `enp42s0` has the profile the
+/// fake network runs; `BINGUX_SETTINGS_FAKE_WIRED=many` gives it a second one and the fake network
+/// two unplugged adapters, which have no profiles.
+#[cfg(feature = "snapshot")]
+fn fake_profiles(device: &str) -> Option<Vec<WiredProfile>> {
+    let scenario = super::model::fake_scenario()?;
+    let up = !matches!(scenario.as_str(), "offline" | "airplane" | "wifi-only");
+    let mut profiles = Vec::new();
+    if device == "enp42s0" {
+        profiles.push(WiredProfile {
+            name: "Wired connection 1".to_string(),
+            uuid: "fake-wired-1".to_string(),
+            active: up,
+        });
+        if std::env::var("BINGUX_SETTINGS_FAKE_WIRED").as_deref() == Ok("many") {
+            profiles.push(WiredProfile {
+                name: "Office desk".to_string(),
+                uuid: "fake-wired-2".to_string(),
+                active: false,
+            });
+        }
+    }
+    Some(profiles)
+}
+
 /// Every wired profile that can run on `device`, by name.
 fn load_profiles(device: &str, hwaddr: &str) -> Result<Vec<WiredProfile>, CommandError> {
+    #[cfg(feature = "snapshot")]
+    if let Some(mut profiles) = fake_profiles(device) {
+        profiles.sort_by_key(|profile| profile.name.to_lowercase());
+        return Ok(profiles);
+    }
     let listed = nmcli(
         &[
             "-t",
@@ -294,6 +387,16 @@ fn reload_profiles(device: &str, hwaddr: &str) {
     );
 }
 
+/// The profile a device uses, which is the page of the device: the one it runs, else the one the
+/// list marks as running, else the first.
+fn in_use_profile<'a>(device: &Device, profiles: &'a [WiredProfile]) -> Option<&'a WiredProfile> {
+    profiles
+        .iter()
+        .find(|profile| device.connected() && profile.name == device.connection)
+        .or_else(|| profiles.iter().find(|profile| profile.active))
+        .or_else(|| profiles.first())
+}
+
 /// What the screens of one device read: the device as the overview last read it, or why not.
 enum Found {
     Loading(Device),
@@ -323,6 +426,79 @@ fn use_pop_when_gone(ctx: NetCtx, device: &str) {
             ctx.navigator.pop();
         }
     });
+}
+
+/// What every page of one wired device reads.
+struct Wired {
+    device: Device,
+    /// The overview has not been read yet, so `device` is a blank.
+    loading: bool,
+    /// The profiles that can run on the device, once read.
+    list: Option<Result<Vec<WiredProfile>, CommandError>>,
+    /// The title the device's row has.
+    title: String,
+}
+
+/// The device and its profiles, read again whenever what the device runs changes. `Err` is a
+/// finished page for a device that is gone or an overview that failed. Call from `render`, before
+/// anything that returns.
+fn use_wired(ctx: NetCtx, name: &str) -> Result<Wired, Element> {
+    use_pop_when_gone(ctx, name);
+    let found = find_device(ctx, name);
+    let (device, loading) = match &found {
+        Found::Loading(device) => (Some(device.clone()), true),
+        Found::Device(device) => (Some(device.clone()), false),
+        _ => (None, false),
+    };
+    let deps = (
+        name.to_string(),
+        device.as_ref().map(|device| device.hwaddr.clone()),
+        device.as_ref().map(|device| device.connection.clone()),
+        device.as_ref().map(|device| device.state.clone()),
+        loading,
+    );
+    use_side_effect_with_deps(&deps, |(name, hwaddr, _, _, loading)| {
+        if let (Some(hwaddr), false) = (hwaddr, loading) {
+            reload_profiles(name, hwaddr);
+        }
+    });
+    let list = list_state(name).read().clone();
+    match (found, device) {
+        (Found::Failed(error), _) => Err(failure_page(error, move || ctx.reload())),
+        (_, Some(device)) => {
+            let title = match &*ctx.overview.read() {
+                Some(Ok(ov)) => title_of(ov, &device),
+                _ => device.name.clone(),
+            };
+            Ok(Wired {
+                device,
+                loading,
+                list,
+                title,
+            })
+        }
+        _ => Err(page_column().into()),
+    }
+}
+
+/// A page drawn blank under the veil while the device's profiles are read.
+fn loading_page(tokens: crate::ui::Tokens, wired: &Wired) -> Element {
+    veiled(
+        page_column()
+            .child(hero(
+                tokens,
+                Icon::NetworkWired,
+                "—".to_string(),
+                link_state(&wired.device),
+            ))
+            .child(
+                Group::new(None::<String>)
+                    .row(row("IP address").mono_value("—"))
+                    .row(row("Speed").value("—")),
+            ),
+        true,
+    )
+    .into()
 }
 
 /// Run `work` and read the overview and the device's profiles again, with the error in a toast.
@@ -387,144 +563,188 @@ fn use_profile_now(ctx: NetCtx, device: &Device, kind: &'static str, target: Str
     );
 }
 
-/// The Status group: the facts of the link from the overview.
-fn status_group(device: &Device) -> Element {
-    let link = link_word(device, pending_for(&link_key(&device.name)));
-    let mut group = Group::titled("Status").row(row("Link").value(link));
-    let facts = [
-        ("Speed", device.speed.map(speed_text).unwrap_or_default()),
-        ("IPv4", device.ipv4.join(", ")),
-        ("IPv6", device.ipv6.join(", ")),
-        ("MAC address", device.hwaddr.clone()),
-        ("Gateway", device.gateway4.clone()),
-        ("DNS", device.dns.join(", ")),
-        (
-            "MTU",
-            device.mtu.map(|mtu| mtu.to_string()).unwrap_or_default(),
-        ),
-    ];
-    for (label, value) in facts {
-        if !value.is_empty() {
-            group = group.row(row(label).mono_value(value));
+/// The facts of the link on the device's page: the address and the speed, then this
+/// connection's data usage today.
+fn facts_group(ctx: NetCtx, device: &Device, owner: Owner) -> Group {
+    let mut group = Group::new(None::<String>);
+    if device.connected() && !unplugged(device) {
+        let address = device.address4();
+        if !address.is_empty() {
+            group = group.row(row("IP address").mono_value(address));
+        }
+        if let Some(speed) = device.speed {
+            group = group.row(row("Speed").value(speed_text(speed)));
         }
     }
-    group.into()
+    let connection = owner.connection_name().to_string();
+    let open = Route::Section {
+        owner,
+        section: Section::Usage,
+    };
+    group.row(connection_usage_row(ctx, connection, open))
 }
 
-/// The first Connect or Disconnect action of a device's strip.
-fn link_action(ctx: NetCtx, device: &Device) -> StripAction {
-    let name = device.name.clone();
-    if shown_connected(device) {
-        strip_action(Icon::WindowClose, "Disconnect", move |_| {
-            set_link(ctx, name.clone(), false)
-        })
-    } else {
-        strip_action(Icon::NetworkWired, "Connect", move |_| {
-            set_link(ctx, name.clone(), true)
-        })
-        .enabled(!unplugged(device))
-    }
-}
-
-/// The wired device screen: its link, the profiles it can run, and where its details and usage are.
+/// The wired device's page: the connection page of the profile the device uses.
 #[derive(PartialEq)]
 pub struct EthernetPage {
     pub device: String,
-    pub name: String,
 }
 
 impl Component for EthernetPage {
     fn render(&self) -> impl IntoElement {
         let ctx = use_net_ctx();
         let tokens = use_tokens();
-        use_pop_when_gone(ctx, &self.device);
-        let new_name = use_state(String::new);
-        let new_error = use_state(|| None::<String>);
-        let (device, loading) = match find_device(ctx, &self.device) {
-            Found::Loading(device) => (device, true),
-            Found::Device(device) => (device, false),
-            Found::Missing => return page_column().into(),
-            Found::Failed(error) => return failure_page(error, move || ctx.reload()),
+        let wired = match use_wired(ctx, &self.device) {
+            Ok(wired) => wired,
+            Err(page) => return page,
         };
-        // The list is read again whenever what the device runs changes.
-        let deps = (
-            device.name.clone(),
-            device.hwaddr.clone(),
-            device.connection.clone(),
-            device.state.clone(),
-        );
-        use_side_effect_with_deps(&deps, |(name, hwaddr, _, _)| reload_profiles(name, hwaddr));
-
-        let list = list_state(&device.name).read().clone();
-        let profiles = match &list {
+        let device = wired.device.clone();
+        let profiles = match &wired.list {
+            None => return loading_page(tokens, &wired),
+            Some(Err(error)) => {
+                let error = error.clone();
+                let (name, hwaddr) = (device.name.clone(), device.hwaddr.clone());
+                return failure_page(error, move || reload_profiles(&name, &hwaddr));
+            }
             Some(Ok(profiles)) => profiles.clone(),
-            _ => Vec::new(),
         };
-        let mut profile_rows: Vec<Element> = profiles
-            .iter()
-            .map(|profile| profile_row(ctx, &device, profile))
-            .collect();
-        if let Some(Err(error)) = &list {
-            profile_rows.push(Element::from(status(Status::Error(error.0.clone()))));
-        }
-        let taken: Vec<String> = profiles
-            .iter()
-            .map(|profile| profile.name.clone())
-            .collect();
-        {
-            let device = device.clone();
-            profile_rows.push(Element::from(
-                row("Add profile…")
-                    .leading(Icon::ListAdd)
-                    .on_press(move |_| {
-                        open_new_profile(ctx, &device, taken.clone(), new_name, new_error)
-                    }),
-            ));
+        let Some(current) = in_use_profile(&device, &profiles).cloned() else {
+            return unconfigured_page(ctx, tokens, &wired);
+        };
+        let owner = Owner::Wired {
+            device: device.name.clone(),
+            profile: current.name.clone(),
+            in_use: true,
+        };
+        let usable = !unplugged(&device);
+
+        let link = {
+            let name = device.name.clone();
+            if shown_connected(&device) {
+                strip_action(Icon::WindowClose, "Disconnect", move |_| {
+                    set_link(ctx, name.clone(), false)
+                })
+            } else {
+                let (device, uuid) = (device.clone(), current.uuid.clone());
+                strip_action(Icon::NetworkWired, "Connect", move |_| {
+                    use_profile_now(ctx, &device, "uuid", uuid.clone())
+                })
+                .enabled(usable)
+            }
+        };
+        let mut actions: Vec<StripAction> = vec![link];
+        if profiles.len() > 1 {
+            let (device, name, uuid) = (
+                device.clone(),
+                current.name.clone(),
+                current.uuid.clone(),
+            );
+            actions.push(strip_action(Icon::UserTrash, "Delete", move |_| {
+                confirm_delete(ctx, device.clone(), name.clone(), Some(uuid.clone()), false)
+            }));
         }
 
         let mut blocks = vec![
             hero(
                 tokens,
                 Icon::NetworkWired,
-                device_title(&device),
+                current.name.clone(),
                 link_state(&device),
             ),
-            Element::from(action_strip(vec![link_action(ctx, &device)])),
-            status_group(&device),
-            Element::from(Group::titled("Profiles").rows(profile_rows)),
+            Element::from(action_strip(actions)),
         ];
-        if device.has_connection() {
-            let details = Route::Details {
-                connection: device.connection.clone(),
-            };
-            let usage = Route::Usage {
-                scope: UsageScope::Connection(device.connection.clone()),
-            };
-            blocks.push(Element::from(
-                Group::new(None::<String>)
-                    .row(
-                        row("Connection details")
-                            .navigates()
-                            .on_press(move |_| ctx.navigator.push(details.clone())),
-                    )
-                    .row(
-                        row("Data usage")
-                            .navigates()
-                            .on_press(move |_| ctx.navigator.push(usage.clone())),
-                    ),
-            ));
+        if profiles.len() > 1 {
+            blocks.push(profile_group(ctx, &device, &profiles, &current));
         }
-        veiled(page_column().children(blocks), loading).into()
+        blocks.push(Element::from(facts_group(ctx, &device, owner.clone())));
+        veiled(
+            page_column()
+                .children(blocks)
+                .child(ProfileSettings { owner }),
+            wired.loading,
+        )
+        .into()
     }
 }
 
-/// One profile of the device: marked while it runs, opens its settings, and has the actions of a menu.
-fn profile_row(ctx: NetCtx, device: &Device, profile: &WiredProfile) -> Element {
+/// The Profile dropdown that chooses what the device runs, and the row that opens the list.
+fn profile_group(
+    ctx: NetCtx,
+    device: &Device,
+    profiles: &[WiredProfile],
+    current: &WiredProfile,
+) -> Element {
+    let options: Vec<(String, String)> = profiles
+        .iter()
+        .map(|profile| (profile.name.clone(), profile.name.clone()))
+        .collect();
+    let choose = {
+        let (device, profiles) = (device.clone(), profiles.to_vec());
+        move |name: String| {
+            if let Some(profile) = profiles.iter().find(|profile| profile.name == name) {
+                use_profile_now(ctx, &device, "uuid", profile.uuid.clone());
+            }
+        }
+    };
+    let list = Route::EthernetProfiles {
+        device: device.name.clone(),
+    };
+    Element::from(
+        Group::new(None::<String>)
+            .row(choice_row("Profile", options, &current.name, choose).enabled(!unplugged(device)))
+            .row(
+                row("Manage profiles")
+                    .navigates()
+                    .on_press(move |_| ctx.navigator.push(list.clone())),
+            ),
+    )
+}
+
+/// The page of a device nothing is set up on: its state, and the way to set it up.
+fn unconfigured_page(ctx: NetCtx, tokens: crate::ui::Tokens, wired: &Wired) -> Element {
+    let device = wired.device.clone();
+    let connect = {
+        let name = device.name.clone();
+        strip_action(Icon::NetworkWired, "Connect", move |_| {
+            set_link(ctx, name.clone(), true)
+        })
+        .enabled(!unplugged(&device) && !shown_connected(&device))
+    };
+    let mut facts = Group::new(None::<String>);
+    if device.connected() {
+        let address = device.address4();
+        if !address.is_empty() {
+            facts = facts.row(row("IP address").mono_value(address));
+        }
+        if let Some(speed) = device.speed {
+            facts = facts.row(row("Speed").value(speed_text(speed)));
+        }
+    }
+    let mut page = page_column()
+        .child(hero(
+            tokens,
+            Icon::NetworkWired,
+            wired.title.clone(),
+            link_state(&device),
+        ))
+        .child(action_strip(vec![connect]));
+    if device.connected() {
+        page = page.child(facts);
+    }
+    page.child(Group::new(None::<String>).row(Element::from(AddProfileRow {
+        device: device.name.clone(),
+    })))
+    .into()
+}
+
+/// One profile of the device in the list: marked while it runs, opens its page, and has the
+/// actions of a menu. The one in use is the device's page, which this list is below, so it only
+/// says so.
+fn profile_row(ctx: NetCtx, device: &Device, profile: &WiredProfile, in_use: bool) -> Element {
     let route = Route::Profile {
         device: device.name.clone(),
         name: profile.name.clone(),
     };
-    let running = profile.active && device.connected();
     let usable = !unplugged(device);
     let connect = {
         let (device, uuid) = (device.clone(), profile.uuid.clone());
@@ -532,7 +752,7 @@ fn profile_row(ctx: NetCtx, device: &Device, profile: &WiredProfile) -> Element 
     };
     let menu = {
         let mut items = Vec::new();
-        if !running {
+        if !in_use {
             items.push(
                 menu_item("Use this profile", {
                     let connect = connect.clone();
@@ -540,13 +760,13 @@ fn profile_row(ctx: NetCtx, device: &Device, profile: &WiredProfile) -> Element 
                 })
                 .icon(Icon::NetworkWired),
             );
+            let open = route.clone();
+            items.push(
+                menu_item("Open", move |_| ctx.navigator.push(open.clone()))
+                    .icon(Icon::PreferencesSystem),
+            );
+            items.push(menu_separator());
         }
-        let open = route.clone();
-        items.push(
-            menu_item("Edit", move |_| ctx.navigator.push(open.clone()))
-                .icon(Icon::PreferencesSystem),
-        );
-        items.push(menu_separator());
         let (device, name, uuid) = (device.clone(), profile.name.clone(), profile.uuid.clone());
         items.push(
             menu_item("Delete", move |_| {
@@ -559,15 +779,98 @@ fn profile_row(ctx: NetCtx, device: &Device, profile: &WiredProfile) -> Element 
     };
     let mut line = row(profile.name.clone())
         .leading(Icon::NetworkWired)
-        .subtitle(if running { "In use" } else { "" })
-        .selected(running)
-        .navigates()
-        .on_press(move |_| ctx.navigator.push(route.clone()))
+        .selected(in_use)
         .context_menu(menu);
-    if !running && usable {
-        line = line.trailing(row_button("Connect", connect));
+    if in_use {
+        line = line.subtitle("In use");
+    } else {
+        line = line
+            .navigates()
+            .on_press(move |_| ctx.navigator.push(route.clone()));
+        if usable {
+            line = line.trailing(row_button("Use", connect));
+        }
     }
     line.into()
+}
+
+/// The profiles of a device that has more than one: which one is in use, and the way to the page of
+/// each other one.
+#[derive(PartialEq)]
+pub struct ProfilesPage {
+    pub device: String,
+}
+
+impl Component for ProfilesPage {
+    fn render(&self) -> impl IntoElement {
+        let ctx = use_net_ctx();
+        let wired = match use_wired(ctx, &self.device) {
+            Ok(wired) => wired,
+            Err(page) => return page,
+        };
+        let device = wired.device.clone();
+        let head = PageHead::new().subtitle(wired.title.clone());
+        let profiles = match &wired.list {
+            None => {
+                return veiled(page_column().child(head), true).into();
+            }
+            Some(Err(error)) => {
+                return page_column()
+                    .child(head)
+                    .child(status(Status::Error(error.0.clone())))
+                    .into();
+            }
+            Some(Ok(profiles)) => profiles.clone(),
+        };
+        let current = in_use_profile(&device, &profiles).map(|profile| profile.name.clone());
+        let rows: Vec<Element> = profiles
+            .iter()
+            .map(|profile| {
+                profile_row(
+                    ctx,
+                    &device,
+                    profile,
+                    current.as_deref() == Some(profile.name.as_str()),
+                )
+            })
+            .collect();
+        veiled(
+            page_column()
+                .child(head)
+                .child(Group::new(None::<String>).rows(rows))
+                .child(Group::new(None::<String>).row(Element::from(AddProfileRow {
+                    device: device.name.clone(),
+                }))),
+            wired.loading,
+        )
+        .into()
+    }
+}
+
+/// The Add profile row. It asks for a name in a small popup, creates the profile and opens it.
+#[derive(PartialEq)]
+struct AddProfileRow {
+    device: String,
+}
+
+impl Component for AddProfileRow {
+    fn render(&self) -> impl IntoElement {
+        let ctx = use_net_ctx();
+        let new_name = use_state(String::new);
+        let new_error = use_state(|| None::<String>);
+        let found = find_device(ctx, &self.device);
+        let taken: Vec<String> = match list_state(&self.device).read().clone() {
+            Some(Ok(profiles)) => profiles.iter().map(|profile| profile.name.clone()).collect(),
+            _ => Vec::new(),
+        };
+        let device = match found {
+            Found::Device(device) | Found::Loading(device) => device,
+            _ => placeholder_device(&self.device),
+        };
+        row("Add profile…")
+            .leading(Icon::ListAdd)
+            .on_press(move |_| open_new_profile(ctx, &device, taken.clone(), new_name, new_error))
+    }
 }
 
 /// The small popup that asks for the name of a new profile.
@@ -606,7 +909,7 @@ struct NewProfileBody {
 }
 
 impl NewProfileBody {
-    /// Create the profile and open its settings, or say why not in the field.
+    /// Create the profile and open its page, or say why not in the field.
     fn add(&self, window: Window) {
         let name = self.name.read().trim().to_string();
         let mut error = self.error;
@@ -684,7 +987,8 @@ fn name_check(text: &str) -> Check {
     }
 }
 
-/// One wired profile: whether it runs, what you can do with it, and its settings.
+/// One wired profile that is not the one in use: its state, what you can do with it and its
+/// settings. The profile in use is the device's page, which this opens instead.
 #[derive(PartialEq)]
 pub struct ProfilePage {
     pub device: String,
@@ -695,63 +999,150 @@ impl Component for ProfilePage {
     fn render(&self) -> impl IntoElement {
         let ctx = use_net_ctx();
         let tokens = use_tokens();
-        use_pop_when_gone(ctx, &self.device);
-        let (device, loading) = match find_device(ctx, &self.device) {
-            Found::Loading(device) => (device, true),
-            Found::Device(device) => (device, false),
-            Found::Missing => return page_column().into(),
-            Found::Failed(error) => return failure_page(error, move || ctx.reload()),
+        let wired = match use_wired(ctx, &self.device) {
+            Ok(wired) => wired,
+            Err(page) => return page,
         };
-        let running = device.connection == self.name && device.connected();
-        let state = if running {
-            link_state(&device)
-        } else if unplugged(&device) {
-            "Cable unplugged".to_string()
-        } else {
-            "Not in use".to_string()
+        let device = wired.device.clone();
+        let profiles = match &wired.list {
+            Some(Ok(profiles)) => Some(profiles.clone()),
+            _ => None,
         };
-
         let name = self.name.clone();
+        let current = profiles
+            .as_deref()
+            .and_then(|profiles| in_use_profile(&device, profiles))
+            .map(|profile| profile.name.clone());
+        let uuid = profiles
+            .as_deref()
+            .and_then(|profiles| profiles.iter().find(|profile| profile.name == name))
+            .map(|profile| profile.uuid.clone());
+        // The profile in use is the device's page.
+        let redirect = (!wired.loading && current.as_deref() == Some(name.as_str()))
+            .then(|| device.name.clone());
+        use_side_effect_with_deps(&redirect, move |redirect| {
+            if let Some(device) = redirect {
+                ctx.navigator.push(Route::Ethernet {
+                    device: device.clone(),
+                    name: device.clone(),
+                });
+            }
+        });
+        if redirect.is_some() || profiles.is_none() {
+            return loading_page(tokens, &wired);
+        }
+
         let usable = !unplugged(&device);
         let use_action = {
             let (device, name) = (device.clone(), name.clone());
             strip_action(Icon::NetworkWired, "Use this profile", move |_| {
                 use_profile_now(ctx, &device, "id", name.clone())
             })
-            .enabled(!running && usable)
-        };
-        let disconnect = {
-            let (device, name) = (device.clone(), name.clone());
-            strip_action(Icon::WindowClose, "Disconnect", move |_| {
-                act(
-                    ctx,
-                    &device,
-                    {
-                        let name = name.clone();
-                        move || nmcli(&["connection", "down", "id", &name], CONNECT)
-                    },
-                    || {},
-                )
-            })
-            .enabled(running)
+            .enabled(usable)
         };
         let delete = {
-            let (device, name) = (device.clone(), name.clone());
+            let (device, name, uuid) = (device.clone(), name.clone(), uuid.clone());
             strip_action(Icon::UserTrash, "Delete", move |_| {
-                confirm_delete(ctx, device.clone(), name.clone(), None, true)
+                confirm_delete(ctx, device.clone(), name.clone(), uuid.clone(), true)
             })
         };
         let owner = Owner::Wired {
             device: self.device.clone(),
-            profile: self.name.clone(),
+            profile: name.clone(),
+            in_use: false,
+        };
+        let state = if usable {
+            "Not in use".to_string()
+        } else {
+            "Cable unplugged".to_string()
+        };
+        let open = Route::Section {
+            owner: owner.clone(),
+            section: Section::Usage,
         };
         veiled(
             page_column()
-                .child(hero(tokens, Icon::NetworkWired, self.name.clone(), state))
-                .child(action_strip(vec![use_action, disconnect, delete]))
+                .child(hero(tokens, Icon::NetworkWired, name.clone(), state))
+                .child(action_strip(vec![use_action, delete]))
+                .child(Group::new(None::<String>).row(connection_usage_row(ctx, name, open)))
                 .child(ProfileSettings { owner }),
-            loading,
+            wired.loading,
         )
+        .into()
+    }
+}
+
+/// A page below a wired connection, which may have to work out which profile it is first: the
+/// device's own pages name no profile, and a profile's pages move to the device's when the profile
+/// turns out to be the one in use.
+#[derive(PartialEq)]
+pub struct WiredSection {
+    pub owner: Owner,
+    pub section: Section,
+}
+
+impl Component for WiredSection {
+    fn render(&self) -> impl IntoElement {
+        let ctx = use_net_ctx();
+        let tokens = use_tokens();
+        let Owner::Wired {
+            device,
+            profile,
+            in_use,
+        } = self.owner.clone()
+        else {
+            return page_column().into();
+        };
+        let wired = match use_wired(ctx, &device) {
+            Ok(wired) => wired,
+            Err(page) => return page,
+        };
+        let list = match &wired.list {
+            Some(Ok(list)) => Some(list.clone()),
+            _ => None,
+        };
+        let current = list
+            .as_deref()
+            .and_then(|list| in_use_profile(&wired.device, list))
+            .map(|profile| profile.name.clone());
+        let section = self.section.clone();
+        let moves = (!in_use && !wired.loading && current.as_deref() == Some(profile.as_str()))
+            .then(|| (device.clone(), section.clone()));
+        use_side_effect_with_deps(&moves, move |moves| {
+            if let Some((device, section)) = moves {
+                ctx.navigator.push(Route::Section {
+                    owner: Owner::Wired {
+                        device: device.clone(),
+                        profile: String::new(),
+                        in_use: true,
+                    },
+                    section: section.clone(),
+                });
+            }
+        });
+        let resolved = if in_use { current } else { Some(profile) };
+        let (true, Some(name), false) = (list.is_some(), resolved, moves.is_some()) else {
+            return loading_page(tokens, &wired);
+        };
+        let owner = Owner::Wired {
+            device: device.clone(),
+            profile: name.clone(),
+            in_use,
+        };
+        if section == Section::Usage {
+            return UsagePage {
+                scope: UsageScope::Connection(name),
+            }
+            .into();
+        }
+        let extra = (section == Section::Advanced).then(|| {
+            Element::from(Group::titled("Profiles").row(Element::from(AddProfileRow { device })))
+        });
+        SectionPage {
+            owner,
+            section,
+            extra,
+        }
         .into()
     }
 }
@@ -854,5 +1245,61 @@ Spare:cccc:802-3-ethernet::no
             "AA:BB:CC:DD:EE:FF"
         ));
         assert!(!fits("", "", "enp2s0f0u1", "enp42s0", "AA:BB:CC:DD:EE:FF"));
+    }
+
+    fn profile(name: &str, active: bool) -> WiredProfile {
+        WiredProfile {
+            name: name.to_string(),
+            uuid: format!("uuid-{name}"),
+            active,
+        }
+    }
+
+    #[test]
+    fn the_device_uses_the_profile_it_runs_else_the_first() {
+        let profiles = vec![profile("Home", false), profile("Office", true)];
+        let mut running = device("connected", true);
+        running.connection = "Home".to_string();
+        assert_eq!(in_use_profile(&running, &profiles).unwrap().name, "Home");
+        let mut idle = device("disconnected", true);
+        idle.connection = String::new();
+        assert_eq!(in_use_profile(&idle, &profiles).unwrap().name, "Office");
+        let none = vec![profile("Home", false), profile("Spare", false)];
+        assert_eq!(in_use_profile(&idle, &none).unwrap().name, "Home");
+        assert!(in_use_profile(&idle, &[]).is_none());
+    }
+
+    fn overview_of(devices: Vec<Device>) -> Overview {
+        Overview {
+            state: "connected".to_string(),
+            connectivity: "full".to_string(),
+            wifi_hw: "missing".to_string(),
+            wifi_on: false,
+            wwan_hw: "missing".to_string(),
+            wwan_on: false,
+            airplane: false,
+            devices,
+            vpns: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn every_wired_device_has_its_own_name() {
+        let named = |name: &str, connection: &str| Device {
+            name: name.to_string(),
+            connection: connection.to_string(),
+            ..placeholder_device(name)
+        };
+        let ov = overview_of(vec![
+            named("enp1s0", "Wired connection 1"),
+            named("enp2s0", "Wired connection 1"),
+            named("enp3s0", "Office"),
+            named("enp4s0", ""),
+        ]);
+        let title = |index: usize| title_of(&ov, &ov.devices[index]);
+        assert_eq!(title(0), "Wired connection 1 (enp1s0)");
+        assert_eq!(title(1), "Wired connection 1 (enp2s0)");
+        assert_eq!(title(2), "Office");
+        assert_eq!(title(3), "Ethernet (enp4s0)");
     }
 }

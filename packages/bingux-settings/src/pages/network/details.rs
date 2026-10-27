@@ -9,10 +9,11 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use super::model::{DeviceKind, nmcli, split_terse, unescape};
-use super::{Owner, Section, UsageScope};
+use super::{Owner, Section};
 use crate::routes::{Route, use_navigator};
-use crate::system::{CommandError, background_then};
+use crate::system::{self, CommandError, background_then};
 use crate::ui::{Group, PageHead, Status, page_column, row, status};
+use bingux_ui::style::*;
 
 const QUICK: Duration = Duration::from_secs(5);
 /// How often the facts are read again while the page is open.
@@ -85,12 +86,9 @@ impl Family {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 struct WifiFacts {
-    ssid: String,
     bssid: String,
     band: String,
     channel: String,
-    signal: String,
-    rate: String,
     security: String,
 }
 
@@ -103,19 +101,14 @@ enum Live {
 
 #[derive(Clone, PartialEq, Debug)]
 struct Details {
-    name: String,
     uuid: String,
-    kind: String,
     kind_label: String,
     state: Live,
     device: String,
-    autoconnect: bool,
-    metered: String,
     v4: Family,
     v6: Family,
     mac: String,
     mtu: String,
-    speed: String,
     wifi: Option<WifiFacts>,
     owner: Option<Owner>,
 }
@@ -250,14 +243,6 @@ fn kind_label(kind: &str, service: &str) -> String {
     }
 }
 
-fn metered_label(value: &str) -> &'static str {
-    match value {
-        "yes" | "guess-yes" => "Yes",
-        "no" | "guess-no" => "No",
-        _ => "Not set",
-    }
-}
-
 /// Wi-Fi frequency in MHz as a band name.
 fn band_of(frequency: &str) -> String {
     let mhz: u32 = frequency
@@ -273,15 +258,17 @@ fn band_of(frequency: &str) -> String {
     }
 }
 
-/// The screen that edits a connection of `kind`, when it has one.
+/// The page that edits a connection of `kind`, when it has one.
 fn owner_for(kind: &str, name: &str, wired_device: &str) -> Option<Owner> {
     match kind {
         "802-11-wireless" => Some(Owner::Wifi {
             ssid: name.to_string(),
+            saved_list: false,
         }),
         "802-3-ethernet" if !wired_device.is_empty() => Some(Owner::Wired {
             device: wired_device.to_string(),
             profile: name.to_string(),
+            in_use: false,
         }),
         "vpn" | "wireguard" => Some(Owner::Vpn {
             name: name.to_string(),
@@ -308,7 +295,7 @@ fn read_wifi(device: &str) -> Option<WifiFacts> {
         &[
             "-t",
             "-f",
-            "IN-USE,SSID,BSSID,CHAN,FREQ,RATE,SIGNAL,SECURITY",
+            "IN-USE,BSSID,CHAN,FREQ,SECURITY",
             "device",
             "wifi",
             "list",
@@ -324,26 +311,23 @@ fn read_wifi(device: &str) -> Option<WifiFacts> {
         let fields = split_terse(line);
         let field = |index: usize| fields.get(index).cloned().unwrap_or_default();
         (field(0) == "*").then(|| WifiFacts {
-            ssid: field(1),
-            bssid: field(2),
-            channel: field(3),
-            band: band_of(&field(4)),
-            rate: field(5),
-            signal: if field(6).is_empty() {
-                String::new()
-            } else {
-                format!("{}%", field(6))
-            },
-            security: if field(7).is_empty() {
+            bssid: field(1),
+            channel: field(2),
+            band: band_of(&field(3)),
+            security: if field(4).is_empty() {
                 "Open".into()
             } else {
-                field(7)
+                field(4)
             },
         })
     })
 }
 
 fn read(name: &str) -> Result<Details, CommandError> {
+    #[cfg(feature = "snapshot")]
+    if let Some(details) = fake::details(name) {
+        return Ok(details);
+    }
     let pairs = Pairs::parse(&nmcli(&["-t", "connection", "show", "id", name], QUICK)?);
     let general = pairs.get("GENERAL.STATE");
     let state = match general.as_str() {
@@ -359,12 +343,9 @@ fn read(name: &str) -> Result<Details, CommandError> {
         .unwrap_or_default();
     let live = state != Live::Saved;
     let mut details = Details {
-        name: name.to_string(),
         uuid: pairs.get("connection.uuid"),
         kind_label: kind_label(&kind, &pairs.get("vpn.service-type")),
         state,
-        autoconnect: pairs.get("connection.autoconnect") == "yes",
-        metered: metered_label(&pairs.get("connection.metered")).to_string(),
         v4: if live {
             live_family(&pairs, "IP4")
         } else {
@@ -378,10 +359,8 @@ fn read(name: &str) -> Result<Details, CommandError> {
         device: device.clone(),
         mac: pairs.get("802-3-ethernet.mac-address"),
         mtu: String::new(),
-        speed: String::new(),
         wifi: None,
         owner: None,
-        kind: kind.clone(),
     };
     let mut wired_device = if live { device.clone() } else { String::new() };
     if wired_device.is_empty() {
@@ -396,12 +375,98 @@ fn read(name: &str) -> Result<Details, CommandError> {
         let facts = Pairs::parse(&nmcli(&["-t", "device", "show", &device], QUICK)?);
         details.mac = facts.get("GENERAL.HWADDR");
         details.mtu = facts.get("GENERAL.MTU");
-        details.speed = facts.get("CAPABILITIES.SPEED").replace("Mb/s", "Mbit/s");
         if super::model::DeviceKind::Wifi == device_kind(&facts.get("GENERAL.TYPE")) {
             details.wifi = read_wifi(&device);
         }
     }
     Ok(details)
+}
+
+/// Stand-in details for the fake network of snapshot builds: the fake connections have no
+/// profile in NetworkManager, and the wired one is the real machine's name, so it is faked too.
+#[cfg(feature = "snapshot")]
+mod fake {
+    use super::*;
+
+    fn family(live: bool, addresses: &[&str], gateway: &str, dns: &[&str]) -> Family {
+        let strings = |list: &[&str]| list.iter().map(|item| item.to_string()).collect();
+        Family {
+            method: if live { "" } else { "Automatic (DHCP)" }.to_string(),
+            addresses: strings(addresses),
+            gateway: gateway.to_string(),
+            dns: strings(dns),
+            domains: if live { strings(&["home.arpa"]) } else { Vec::new() },
+            routes: if live && !gateway.is_empty() {
+                strings(&[
+                    "192.168.0.0/24 direct, metric 100",
+                    "0.0.0.0/0 via 192.168.0.1, metric 100",
+                ])
+            } else {
+                Vec::new()
+            },
+        }
+    }
+
+    pub fn details(name: &str) -> Option<Details> {
+        super::super::model::fake_scenario()?;
+        let (kind_label, device, live, wifi) = match name {
+            "Home" => (
+                "Wi-Fi",
+                "wlo1",
+                true,
+                Some(WifiFacts {
+                    bssid: "A4:2B:B0:11:22:52".to_string(),
+                    band: "5 GHz".to_string(),
+                    channel: "36".to_string(),
+                    security: "WPA2".to_string(),
+                }),
+            ),
+            "Office" | "Old flat" => ("Wi-Fi", "", false, None),
+            "Wired connection 1" => ("Ethernet", "enp42s0", true, None),
+            "Office desk" => ("Ethernet", "", false, None),
+            "Work WireGuard" => ("WireGuard", "wg0", true, None),
+            "Office OpenVPN" => ("OpenVPN", "", false, None),
+            _ => return None,
+        };
+        let vpn = kind_label == "WireGuard" || kind_label == "OpenVPN";
+        let addresses: &[&str] = match name {
+            "Home" => &["192.168.0.41/24"],
+            "Wired connection 1" => &["192.168.0.72/24"],
+            "Work WireGuard" => &["10.8.0.2/32"],
+            _ => &[],
+        };
+        let owner = Some(match kind_label {
+            "Wi-Fi" => Owner::Wifi {
+                ssid: name.to_string(),
+                saved_list: false,
+            },
+            "Ethernet" => Owner::Wired {
+                device: "enp42s0".to_string(),
+                profile: name.to_string(),
+                in_use: false,
+            },
+            _ => Owner::Vpn {
+                name: name.to_string(),
+            },
+        });
+        Some(Details {
+            uuid: format!("00000000-0000-4000-8000-{:012}", name.len()),
+            kind_label: kind_label.to_string(),
+            state: if live { Live::Active } else { Live::Saved },
+            device: device.to_string(),
+            v4: family(
+                live,
+                if live && !vpn { addresses } else { &[] },
+                if live && !vpn { "192.168.0.1" } else { "" },
+                if live && !vpn { &["1.1.1.1", "9.9.9.9"] } else { &[] },
+            ),
+            v6: Family::default(),
+            mac: if vpn { "" } else { "3C:52:82:11:9A:F0" }.to_string(),
+            mtu: if vpn { "1420" } else { "1500" }.to_string(),
+            wifi,
+            owner,
+        })
+    }
 }
 
 fn device_kind(kind: &str) -> DeviceKind {
@@ -458,13 +523,17 @@ fn list_facts(rows: &mut Vec<Element>, title: &str, items: &[String], mono: bool
     }
 }
 
-fn family_group(title: &str, family: &Family) -> Option<Element> {
+/// The routing facts of one address family. The live IPv4 address is on the connection's page, so
+/// `with_addresses` leaves it out there.
+fn family_group(title: &str, family: &Family, with_addresses: bool) -> Option<Element> {
     if family.is_empty() {
         return None;
     }
     let mut rows: Vec<Element> = Vec::new();
     rows.extend(fact("Method", &family.method, false));
-    list_facts(&mut rows, "Address", &family.addresses, true);
+    if with_addresses {
+        list_facts(&mut rows, "Address", &family.addresses, true);
+    }
     rows.extend(fact("Gateway", &family.gateway, true));
     list_facts(&mut rows, "DNS server", &family.dns, true);
     list_facts(&mut rows, "Search domain", &family.domains, false);
@@ -473,10 +542,15 @@ fn family_group(title: &str, family: &Family) -> Option<Element> {
         let (destination, how) = route.split_once(' ').unwrap_or((route, ""));
         rows.extend(fact(format!("Route to {destination}"), how, true));
     }
+    if rows.is_empty() {
+        return None;
+    }
     Some(Group::titled(title).rows(rows).into())
 }
 
-fn view(details: &Details, navigator: crate::routes::Navigator) -> Vec<Element> {
+/// The groups of technical details. What a connection's page already says (its state, its IP
+/// address, its speed and signal, whether it connects by itself) is left out.
+fn view(details: &Details) -> Vec<Element> {
     let mut blocks: Vec<Element> = Vec::new();
     if details.state == Live::Saved {
         blocks.push(
@@ -488,90 +562,65 @@ fn view(details: &Details, navigator: crate::routes::Navigator) -> Vec<Element> 
         );
     }
 
-    let state = match details.state {
-        Live::Active => "Connected",
-        Live::Activating => "Connecting",
-        Live::Saved => "Not connected",
-    };
     let mut general: Vec<Element> = Vec::new();
-    general.extend(fact("State", state, false));
     general.extend(fact("Device", &details.device, false));
     general.extend(fact("Type", &details.kind_label, false));
     general.extend(fact("UUID", &details.uuid, true));
-    general.extend(fact(
-        "Connect automatically",
-        if details.autoconnect { "Yes" } else { "No" },
-        false,
-    ));
-    general.extend(fact("Metered", &details.metered, false));
-    blocks.push(Group::titled("Status").rows(general).into());
-
-    blocks.extend(family_group("IPv4", &details.v4));
-    blocks.extend(family_group("IPv6", &details.v6));
-
-    let mut link: Vec<Element> = Vec::new();
-    link.extend(fact("MAC address", &details.mac, true));
-    link.extend(fact("MTU", &details.mtu, false));
-    link.extend(fact("Speed", &details.speed, false));
-    if !link.is_empty() {
-        blocks.push(Group::titled("Link").rows(link).into());
-    }
-
+    general.extend(fact("MAC address", &details.mac, true));
+    general.extend(fact("MTU", &details.mtu, false));
     if let Some(wifi) = &details.wifi {
-        let mut rows: Vec<Element> = Vec::new();
-        rows.extend(fact("Network name", &wifi.ssid, false));
-        rows.extend(fact("Access point", &wifi.bssid, true));
-        rows.extend(fact("Band", &wifi.band, false));
-        rows.extend(fact("Channel", &wifi.channel, false));
-        rows.extend(fact("Signal", &wifi.signal, false));
-        rows.extend(fact("Speed", &wifi.rate, false));
-        rows.extend(fact("Security", &wifi.security, false));
-        blocks.push(Group::titled("Wi-Fi").rows(rows).into());
+        general.extend(fact("Access point", &wifi.bssid, true));
+        general.extend(fact("Band", &wifi.band, false));
+        general.extend(fact("Channel", &wifi.channel, false));
+        general.extend(fact("Security", &wifi.security, false));
     }
+    blocks.push(Group::titled("Technical details").rows(general).into());
 
-    let mut settings: Vec<Element> = Vec::new();
-    if let Some(owner) = details.owner.clone() {
-        let edit = match &owner {
-            Owner::Wifi { ssid } => Route::WifiNetwork { ssid: ssid.clone() },
-            Owner::Wired { device, profile } => Route::Profile {
-                device: device.clone(),
-                name: profile.clone(),
-            },
-            Owner::Vpn { name } => Route::Vpn { name: name.clone() },
-        };
-        settings.push(
-            row("Edit connection settings")
-                .navigates()
-                .on_press(move |_| navigator.push(edit.clone()))
-                .into(),
-        );
-        settings.push(
-            row("DNS servers")
-                .navigates()
-                .on_press(move |_| {
-                    navigator.push(Route::Section {
-                        owner: owner.clone(),
-                        section: Section::Dns,
-                    })
-                })
-                .into(),
-        );
-    }
-    let usage = details.name.clone();
-    settings.push(
-        row("Data usage")
-            .navigates()
-            .on_press(move |_| {
-                navigator.push(Route::Usage {
-                    scope: UsageScope::Connection(usage.clone()),
-                })
-            })
-            .into(),
-    );
-    blocks.push(Group::titled("Settings").rows(settings).into());
+    blocks.extend(family_group("IPv4", &details.v4, details.state == Live::Saved));
+    blocks.extend(family_group("IPv6", &details.v6, true));
     blocks
 }
 
+/// The read-only technical details of one connection, read again every few seconds while it is
+/// on screen. The Advanced page ends with it.
+#[derive(PartialEq)]
+pub struct TechnicalDetails {
+    pub connection: String,
+}
+
+impl Component for TechnicalDetails {
+    fn render(&self) -> impl IntoElement {
+        let loaded: Loaded = use_state(|| None);
+        use_hook({
+            let name = self.connection.clone();
+            move || {
+                reload(loaded, name.clone());
+                let focus = system::window_focus();
+                spawn(async move {
+                    loop {
+                        timer(POLL).await;
+                        if *focus.peek() {
+                            reload(loaded, name.clone());
+                        }
+                    }
+                });
+            }
+        });
+
+        let column = rect().tw_layout(&[flex_col(), w_full(), gap(S6)]);
+        match loaded.read().clone() {
+            None => column.child(status(Status::Loading("Reading connection.".into()))),
+            Some(Err(error)) => column.child(status(Status::Error(error.0)).action("Try again", {
+                let name = self.connection.clone();
+                move |_| reload(loaded, name.clone())
+            })),
+            Some(Ok(details)) => column.children(view(&details)),
+        }
+    }
+}
+
+/// An old address, `network/details/<connection>`: it opens the Advanced page of the connection,
+/// where its details are now. A connection with no page of settings shows its details here.
 #[derive(PartialEq)]
 pub struct DetailsPage {
     pub connection: String,
@@ -580,29 +629,38 @@ pub struct DetailsPage {
 impl Component for DetailsPage {
     fn render(&self) -> impl IntoElement {
         let navigator = use_navigator();
-        let loaded: Loaded = use_state(|| None);
-        let name = self.connection.clone();
+        let owner = use_state(|| None::<Result<Option<Owner>, CommandError>>);
         use_hook({
-            let name = name.clone();
+            let name = self.connection.clone();
             move || {
-                reload(loaded, name.clone());
-                spawn(async move {
-                    loop {
-                        timer(POLL).await;
-                        reload(loaded, name.clone());
-                    }
+                background_then(
+                    move || read(&name).map(|details| details.owner),
+                    move |result| {
+                        let mut owner = owner;
+                        owner.set(Some(result));
+                    },
+                );
+            }
+        });
+        let found = owner.read().clone();
+        use_side_effect_with_deps(&found, move |found| {
+            if let Some(Ok(Some(owner))) = found {
+                navigator.push(Route::Section {
+                    owner: owner.clone(),
+                    section: Section::Advanced,
                 });
             }
         });
 
         let page = page_column().child(PageHead::new());
-        match loaded.read().clone() {
-            None => page.child(status(Status::Loading("Reading connection.".into()))),
-            Some(Err(error)) => page.child(status(Status::Error(error.0)).action("Try again", {
-                let name = self.connection.clone();
-                move |_| reload(loaded, name.clone())
-            })),
-            Some(Ok(details)) => page.children(view(&details, navigator)),
+        match found {
+            None | Some(Ok(Some(_))) => {
+                page.child(status(Status::Loading("Reading connection.".into())))
+            }
+            Some(Err(error)) => page.child(status(Status::Error(error.0))),
+            Some(Ok(None)) => page.child(TechnicalDetails {
+                connection: self.connection.clone(),
+            }),
         }
     }
 }
@@ -700,14 +758,16 @@ mod tests {
         assert_eq!(
             owner_for("802-11-wireless", "Home", ""),
             Some(Owner::Wifi {
-                ssid: "Home".into()
+                ssid: "Home".into(),
+                saved_list: false
             })
         );
         assert_eq!(
             owner_for("802-3-ethernet", "Wired", "enp1s0"),
             Some(Owner::Wired {
                 device: "enp1s0".into(),
-                profile: "Wired".into()
+                profile: "Wired".into(),
+                in_use: false
             })
         );
         assert_eq!(owner_for("802-3-ethernet", "Wired", ""), None);

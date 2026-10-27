@@ -1,8 +1,9 @@
-//! The Data usage row of the Network page: today's traffic and a limit badge.
+//! The Data usage rows of the Network pages: today's traffic and a limit badge. The Network page
+//! has one for everything; a connection's page has one for that connection.
 
 use std::time::Duration;
 
-use bingux_data_usage::{Scope, Totals, open_best, unix_now};
+use bingux_data_usage::{Totals, open_best, unix_now};
 use freya::prelude::*;
 
 use super::UsageScope;
@@ -12,7 +13,7 @@ use super::model;
 use crate::pages::network::model::NetCtx;
 use crate::routes::Route;
 use crate::system;
-use crate::ui::row;
+use crate::ui::{Row, row};
 use bingux_ui::style::is_compact;
 
 /// How often the row reads the totals again while it is on screen.
@@ -31,10 +32,10 @@ pub struct Summary {
     level: Option<Level>,
 }
 
-/// Reads today's totals and the limit state. Blocks: not for the UI thread.
+/// Reads today's totals and the limit state of `scope`. Blocks: not for the UI thread.
 /// A failure reads as "nothing recorded", because the row has no room for an
 /// error; the page behind it shows the real message.
-fn load() -> Summary {
+fn load_for(scope: &UsageScope) -> Summary {
     let none = Summary {
         today: None,
         level: None,
@@ -42,20 +43,22 @@ fn load() -> Summary {
     let Ok(source) = open_best() else {
         return none;
     };
-    let Ok((settings, _)) = model::read_settings(None) else {
+    let Ok((settings, _)) = model::read_settings(scope.connection()) else {
         return none;
     };
     let periods = bingux_data_usage::Periods::at(source.zone(), unix_now(), settings.billing_day);
-    let totals = |span: (i64, i64)| {
-        source
-            .totals(&Scope::All, span.0, span.1)
-            .unwrap_or_default()
-    };
+    let query = scope.query();
+    let totals = |span: (i64, i64)| source.totals(&query, span.0, span.1).unwrap_or_default();
     let today = totals(periods.today);
     Summary {
         today: Some((today.rx, today.tx)),
         level: limits::level(totals(periods.cycle).total(), &settings),
     }
+}
+
+/// The summary of everything, for the Network page.
+fn load() -> Summary {
+    load_for(&UsageScope::All)
 }
 
 /// The row's value for a summary.
@@ -70,9 +73,41 @@ fn value(summary: Option<&Summary>) -> String {
     }
 }
 
-/// The Data usage row of the summary group.
+/// The row for `summary`, which opens `open`.
+fn entry(ctx: NetCtx, summary: Option<&Summary>, open: Route) -> Row {
+    let badge = match summary.and_then(|summary| summary.level) {
+        Some(Level::Warn) => "Near limit",
+        Some(Level::Over) => "Over limit",
+        None => "",
+    };
+    // A phone has no room for the numbers beside the title, so they go
+    // under it; a wider row keeps them on the right.
+    let text = value(summary);
+    let entry = row("Data usage").badge(badge);
+    let entry = if is_compact() {
+        entry.subtitle(text)
+    } else {
+        entry.value(text)
+    };
+    entry
+        .navigates()
+        .on_press(move |_| ctx.navigator.push(open.clone()))
+}
+
+/// The Data usage row of the Network page: everything, today.
 pub fn usage_row(ctx: NetCtx) -> Element {
     Element::from(UsageRow { ctx })
+}
+
+/// The Data usage row of a connection's page: that connection, today. It opens `open`, the
+/// connection's own usage page, so Back returns to the connection.
+pub fn connection_usage_row(ctx: NetCtx, connection: String, open: Route) -> Element {
+    scope_usage_row(ctx, UsageScope::Connection(connection), open)
+}
+
+/// A Data usage row for any `scope`, today. It opens `open`.
+pub fn scope_usage_row(ctx: NetCtx, scope: UsageScope, open: Route) -> Element {
+    Element::from(ScopedUsageRow { ctx, scope, open })
 }
 
 #[derive(PartialEq)]
@@ -82,36 +117,58 @@ struct UsageRow {
 
 impl Component for UsageRow {
     fn render(&self) -> impl IntoElement {
-        let ctx = self.ctx;
         let summary = system::use_cached_saved(CACHE, load);
         use_hook(move || {
+            let focus = system::window_focus();
             spawn(async move {
                 loop {
                     timer(POLL).await;
-                    system::background(summary, || system::load_saved(CACHE, load));
+                    if *focus.peek() {
+                        system::background(summary, || system::load_saved(CACHE, load));
+                    }
                 }
             })
         });
         let summary = summary.read().clone();
-        let badge = match summary.as_ref().and_then(|summary| summary.level) {
-            Some(Level::Warn) => "Near limit",
-            Some(Level::Over) => "Over limit",
-            None => "",
-        };
-        // A phone has no room for the numbers beside the title, so they go
-        // under it; a wider row keeps them on the right.
-        let text = value(summary.as_ref());
-        let entry = row("Data usage").badge(badge);
-        let entry = if is_compact() {
-            entry.subtitle(text)
-        } else {
-            entry.value(text)
-        };
-        entry.navigates().on_press(move |_| {
-            ctx.navigator.push(Route::Usage {
+        entry(
+            self.ctx,
+            summary.as_ref(),
+            Route::Usage {
                 scope: UsageScope::All,
+            },
+        )
+    }
+}
+
+#[derive(PartialEq)]
+struct ScopedUsageRow {
+    ctx: NetCtx,
+    scope: UsageScope,
+    open: Route,
+}
+
+impl Component for ScopedUsageRow {
+    fn render(&self) -> impl IntoElement {
+        let summary = use_state(|| None::<Summary>);
+        let scope = self.scope.clone();
+        use_hook(move || {
+            system::background(summary, {
+                let scope = scope.clone();
+                move || load_for(&scope)
+            });
+            let focus = system::window_focus();
+            spawn(async move {
+                loop {
+                    timer(POLL).await;
+                    if *focus.peek() {
+                        let scope = scope.clone();
+                        system::background(summary, move || load_for(&scope));
+                    }
+                }
             })
-        })
+        });
+        let summary = summary.read().clone();
+        entry(self.ctx, summary.as_ref(), self.open.clone())
     }
 }
 

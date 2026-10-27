@@ -246,6 +246,34 @@ fn commit(
     );
 }
 
+/// As [`commit`], for a slider that reports every step of a drag. The page
+/// shows each step at once, `lane` keeps one write running at a time with the
+/// newest value waiting, and the model is read back once, after the last
+/// write, so a drag neither starts a command nor a page reload per step.
+fn commit_level(
+    lane: &str,
+    loaded: State<Option<Result<Model, CommandError>>>,
+    overlays: Overlays,
+    change: impl FnOnce(&mut Model),
+    work: impl FnOnce() -> CommandResult + Send + 'static,
+) {
+    let Some(Ok(mut value)) = loaded.read().clone() else {
+        return;
+    };
+    change(&mut value);
+    system::optimistic_latest(
+        &format!("{LANES}{lane}"),
+        loaded,
+        Some(overlays),
+        Some(Ok(value)),
+        move || work().map(|_| ()),
+        move || system::reload_when_idle(LANES, loaded, refresh),
+    );
+}
+
+/// Prefix of this page's write lanes.
+const LANES: &str = "keyboard/";
+
 /// Shows an XKB options list at once and writes it in the background.
 fn commit_xkb(
     loaded: State<Option<Result<Model, CommandError>>>,
@@ -645,7 +673,8 @@ impl Component for KeyboardPage {
                     to_percent(model.delay_ms, DELAY_RANGE),
                     move |percent: f64| {
                         let ms = from_percent(percent, DELAY_RANGE);
-                        commit(
+                        commit_level(
+                            "delay",
                             loaded,
                             overlays,
                             move |current| current.delay_ms = f64::from(ms),
@@ -666,7 +695,8 @@ impl Component for KeyboardPage {
                     100.0 - to_percent(model.interval_ms, INTERVAL_RANGE),
                     move |percent: f64| {
                         let ms = from_percent(100.0 - percent, INTERVAL_RANGE);
-                        commit(
+                        commit_level(
+                            "repeat-interval",
                             loaded,
                             overlays,
                             move |current| current.interval_ms = f64::from(ms),
@@ -807,7 +837,8 @@ impl Component for KeyboardPage {
                 to_percent(model.cursor_blink_time, BLINK_TIME_RANGE),
                 move |percent: f64| {
                     let ms = from_percent(percent, BLINK_TIME_RANGE);
-                    commit(
+                    commit_level(
+                        "cursor-blink-time",
                         loaded,
                         overlays,
                         move |current| current.cursor_blink_time = f64::from(ms),

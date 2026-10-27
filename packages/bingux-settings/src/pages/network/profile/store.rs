@@ -35,6 +35,10 @@ fn profile_state(name: &str) -> ProfileState {
 
 /// Read one profile, secrets included.
 fn load(name: &str) -> Result<ProfileData, CommandError> {
+    #[cfg(feature = "snapshot")]
+    if let Some(data) = fake::profile(name) {
+        return Ok(data);
+    }
     let args = read_args(name);
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let output = nmcli(&refs, QUICK)?;
@@ -66,11 +70,16 @@ pub fn use_profile(owner: &Owner) -> ProfileState {
 /// The device the owner's connection is running on, from the overview, when it is active.
 fn active_device<'a>(ov: &'a Overview, owner: &Owner) -> Option<&'a Device> {
     match owner {
-        Owner::Wifi { ssid } => ov.devices.iter().find(|device| {
+        Owner::Wifi { ssid, .. } => ov.devices.iter().find(|device| {
             device.kind == DeviceKind::Wifi && device.connection == *ssid && device.connected()
         }),
-        Owner::Wired { profile, .. } => ov.devices.iter().find(|device| {
+        Owner::Wired {
+            device: interface,
+            profile,
+            ..
+        } => ov.devices.iter().find(|device| {
             device.kind == DeviceKind::Ethernet
+                && device.name == *interface
                 && device.connection == *profile
                 && device.connected()
         }),
@@ -91,6 +100,10 @@ pub fn device_of(ctx: NetCtx, owner: &Owner) -> Option<Device> {
 /// Run `changes` on `name`, then push them into the running connection. `Ok(true)` means the profile
 /// is saved but NetworkManager would not apply it to the live connection: only a reconnect does.
 fn write(name: &str, device: Option<&str>, changes: &Changes) -> Result<bool, CommandError> {
+    #[cfg(feature = "snapshot")]
+    if fake::write(name, changes) {
+        return Ok(false);
+    }
     for command in changes.commands(name) {
         let refs: Vec<&str> = command.iter().map(String::as_str).collect();
         nmcli(&refs, APPLY)?;
@@ -99,6 +112,68 @@ fn write(name: &str, device: Option<&str>, changes: &Changes) -> Result<bool, Co
         return Ok(false);
     };
     Ok(nmcli(&["device", "reapply", device], APPLY).is_err())
+}
+
+/// Stand-in profiles for the fake network of snapshot builds, so the settings of a fake Wi-Fi
+/// network, wired profile or VPN can be drawn and changed without NetworkManager. A change is
+/// kept in memory for the run. A name the fakes do not know is read from `nmcli` as usual.
+#[cfg(feature = "snapshot")]
+mod fake {
+    use std::collections::HashMap;
+    use std::sync::{LazyLock, Mutex};
+
+    use super::*;
+
+    static EDITS: LazyLock<Mutex<HashMap<String, ProfileData>>> =
+        LazyLock::new(|| Mutex::new(HashMap::new()));
+
+    fn edits() -> &'static Mutex<HashMap<String, ProfileData>> {
+        &EDITS
+    }
+
+    fn active() -> bool {
+        crate::pages::network::model::fake_scenario().is_some()
+            || std::env::var_os("BINGUX_SETTINGS_FAKE_WIFI").is_some()
+    }
+
+    fn base(name: &str) -> Option<ProfileData> {
+        let common = "connection.autoconnect:yes\nconnection.metered:unknown\nipv4.method:auto\nipv6.method:auto\nproxy.method:none\n";
+        let text = match name {
+            "Home" | "Office" | "Old flat" | "Hotspot" => format!(
+                "connection.type:802-11-wireless\nconnection.id:{name}\n802-11-wireless.ssid:{name}\n\
+                 802-11-wireless-security.key-mgmt:wpa-psk\n802-11-wireless-security.psk:correct-horse-battery\n\
+                 802-11-wireless.mtu:auto\n{common}"
+            ),
+            "Wired connection 1" | "Office desk" => format!(
+                "connection.type:802-3-ethernet\nconnection.id:{name}\n802-3-ethernet.mtu:auto\n{common}"
+            ),
+            "Work WireGuard" => format!("connection.type:wireguard\nconnection.id:{name}\n{common}"),
+            "Office OpenVPN" => format!("connection.type:vpn\nconnection.id:{name}\n{common}"),
+            _ => return None,
+        };
+        Some(ProfileData::parse(&text))
+    }
+
+    /// The fake profile `name`, with the changes made to it so far.
+    pub fn profile(name: &str) -> Option<ProfileData> {
+        if !active() {
+            return None;
+        }
+        let base = base(name)?;
+        let edited = edits().lock().ok()?.get(name).cloned();
+        Some(edited.unwrap_or(base))
+    }
+
+    /// Keep `changes` to the fake profile `name`. False when `name` is not a fake.
+    pub fn write(name: &str, changes: &Changes) -> bool {
+        let Some(current) = profile(name) else {
+            return false;
+        };
+        if let Ok(mut edits) = edits().lock() {
+            edits.insert(name.to_string(), current.with(changes));
+        }
+        true
+    }
 }
 
 /// Tell the person that a saved change waits for a reconnect, and offer it.
@@ -256,7 +331,8 @@ mod tests {
         let name = |owner: &Owner| active_device(&ov, owner).map(|device| device.name.clone());
         assert_eq!(
             name(&Owner::Wifi {
-                ssid: "Home".into()
+                ssid: "Home".into(),
+                saved_list: false
             })
             .as_deref(),
             Some("wlo1")
@@ -264,7 +340,8 @@ mod tests {
         assert_eq!(
             name(&Owner::Wired {
                 device: "enp42s0".into(),
-                profile: "Office".into()
+                profile: "Office".into(),
+                in_use: true
             })
             .as_deref(),
             Some("enp42s0")
@@ -285,7 +362,8 @@ mod tests {
             active_device(
                 &ov,
                 &Owner::Wifi {
-                    ssid: "Cafe".into()
+                    ssid: "Cafe".into(),
+                    saved_list: false
                 }
             )
             .is_none()
@@ -295,7 +373,8 @@ mod tests {
                 &ov,
                 &Owner::Wired {
                     device: "enp2s0f0u1".into(),
-                    profile: "Spare".into()
+                    profile: "Spare".into(),
+                    in_use: false
                 }
             )
             .is_none()

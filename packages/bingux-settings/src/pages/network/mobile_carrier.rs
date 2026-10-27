@@ -157,13 +157,8 @@ impl Component for MobileNetworkPage {
             .subtitle("Connect to the carrier of your SIM, or to its partners when abroad.")
         };
 
-        let subtitle = if manual_now {
-            modem.carrier().unwrap_or_else(|| "Manual".to_string())
-        } else {
-            "Automatic".to_string()
-        };
         let mut page = page_column()
-            .child(PageHead::new().subtitle(subtitle))
+            .child(PageHead::new())
             .child(Group::new(None::<String>).row(automatic));
 
         if manual_now {

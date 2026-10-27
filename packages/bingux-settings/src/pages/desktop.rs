@@ -7,17 +7,19 @@ use std::time::Duration;
 
 use crate::ui::{
     Group, Icon, Overlays, PageHead, Row, Status, dropdown, level_row, page_column, row, segmented,
-    skeleton_shape, status, switch_row, use_overlays, use_tokens,
+    status, switch_row, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
 use freya::prelude::*;
+
+use super::loading::veiled;
 
 use crate::pages::bingux_config;
 use crate::system::{self, CommandError, background, background_then, optimistic_then};
 
 pub(crate) mod preview;
 
-use preview::{desktop_preview, framed};
+use preview::{desktop_preview};
 
 /// Control Centre tiles: the camelCase key in `dump`, its label and its icon.
 const TILES: [(&str, &str, Icon); 5] = [
@@ -446,21 +448,10 @@ impl Component for DesktopPage {
         let tokens = use_tokens();
         let searching = bingux_ui::search_highlight::current().is_some();
 
-        let Some(loaded) = model.read().clone() else {
-            return page_column()
-                .child(PageHead::new())
-                .child(framed(
-                    &tokens,
-                    Element::from(rect().tw(
-                        &tokens,
-                        &[w_full(), h(Dim::ArrangementHeight), bg(Paint::Control)],
-                    )),
-                ))
-                .child(skeleton_shape(&[3, 2, 4, 2, 5, 3, 4]));
-        };
-        let m = match loaded {
-            Ok(model_value) => model_value,
-            Err(failure) => {
+        let (m, loading) = match model.read().clone() {
+            None => (placeholder(), true),
+            Some(Ok(model_value)) => (model_value, false),
+            Some(Err(failure)) => {
                 return page_column().child(PageHead::new()).child(
                     status(Status::Error(failure.0))
                         .action("Try again", move |_| background(model, refresh)),
@@ -511,7 +502,7 @@ impl Component for DesktopPage {
         if !searching {
             page = page.child(desktop_preview(&tokens, ctx, &m));
         }
-        page.child(dock)
+        let page = page.child(dock)
             .child(
                 Group::titled("Dock mouse actions")
                     .description("Click and scroll actions for app icons in the dock.")
@@ -591,7 +582,36 @@ impl Component for DesktopPage {
                     })),
             )
             .maybe_child(m.gnome.as_ref().map(|gnome| media_group(ctx, gnome)))
-            .child(privacy_group(ctx, m.public_ip_lookup, m.gnome.as_ref()))
+            .child(privacy_group(ctx, m.public_ip_lookup, m.gnome.as_ref()));
+        veiled(page, loading)
+    }
+}
+
+/// The page's shape with the shell's defaults, drawn under the veil while the
+/// first read runs, so every group and row is already in place.
+fn placeholder() -> Model {
+    Model {
+        dock: true,
+        sidebar: true,
+        sidebar_edge: None,
+        wallpaper: String::new(),
+        metrics: false,
+        clock_seconds: false,
+        dock_size: 56,
+        dock_alignment: "center".to_string(),
+        dock_click: "default".to_string(),
+        dock_middle_click: "default".to_string(),
+        dock_scroll: "default".to_string(),
+        dock_scroll_direction: "default".to_string(),
+        tiles: TILE_DEFAULTS,
+        public_ip_lookup: false,
+        gnome: Some(Gnome {
+            automount: true,
+            automount_open: false,
+            autorun: false,
+            remember_recent: true,
+            recent_max_age: 30,
+        }),
     }
 }
 

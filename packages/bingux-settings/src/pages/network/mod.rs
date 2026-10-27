@@ -1,10 +1,12 @@
 //! Network: one page for Wi-Fi, wired Ethernet, mobile broadband and VPNs.
 //!
-//! The page is a summary and a list of connections. Each connection opens its
-//! own screen, where its state and its settings live; the heavy settings
-//! (IPv4, DNS, Security...) are subpages of that screen. Everything comes from
-//! NetworkManager (`nmcli`), ModemManager (`mmcli`) and gsettings, on
-//! background threads. See `docs/settings.md`, "Network".
+//! The first page is a status header and four groups: the active connection
+//! with today's data, the connections, the VPNs and a few more things. Each
+//! connection opens one page, built from one template (state and actions, the
+//! everyday facts, the everyday settings, one Advanced row). Advanced is one
+//! level down and holds the editors and the technical details. Everything
+//! comes from NetworkManager (`nmcli`), ModemManager (`mmcli`) and gsettings,
+//! on background threads. See `docs/settings.md`, "Network".
 
 pub mod details;
 pub mod ethernet;
@@ -32,14 +34,22 @@ pub use model::{Device, DeviceKind, NetCtx, Overview, QUICK, prefetch, use_net_c
 pub use usage::UsageScope;
 pub use vpn_add::add_vpn_title;
 
-/// Whose connection a section of settings belongs to. The owner names the
-/// NetworkManager profile and the address of the screen the section is below.
+/// Whose connection a page of settings belongs to. The owner names the
+/// NetworkManager profile and the address of the page the settings are below.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Owner {
-    /// A saved Wi-Fi network, by name (its profile has the same name).
-    Wifi { ssid: String },
-    /// One profile of a wired device.
-    Wired { device: String, profile: String },
+    /// A saved Wi-Fi network, by profile name. `saved_list` says the page was
+    /// opened from the Saved networks list, so Back returns there.
+    Wifi { ssid: String, saved_list: bool },
+    /// One profile of a wired device. `in_use` makes it the device's own page:
+    /// whichever profile the device uses (`profile` is empty until the page has
+    /// worked that out). Otherwise it is a profile page below the device's
+    /// list of profiles.
+    Wired {
+        device: String,
+        profile: String,
+        in_use: bool,
+    },
     /// A VPN profile.
     Vpn { name: String },
 }
@@ -48,18 +58,29 @@ impl Owner {
     /// The NetworkManager profile id.
     pub fn connection_name(&self) -> &str {
         match self {
-            Self::Wifi { ssid } => ssid,
+            Self::Wifi { ssid, .. } => ssid,
             Self::Wired { profile, .. } => profile,
             Self::Vpn { name } => name,
         }
     }
 
-    /// The address of the screen that shows this connection's settings.
+    /// The address of the page that shows this connection.
     pub fn address(&self) -> Address {
         let root = crate::pages::PageId::Network.address();
         match self {
-            Self::Wifi { ssid } => root.join("wifi").join("network").join(ssid),
-            Self::Wired { device, profile } => root
+            Self::Wifi {
+                ssid,
+                saved_list: true,
+            } => root.join("wifi").join("saved").join(ssid),
+            Self::Wifi { ssid, .. } => root.join("wifi").join("network").join(ssid),
+            Self::Wired {
+                device,
+                in_use: true,
+                ..
+            } => root.join("ethernet").join(device),
+            Self::Wired {
+                device, profile, ..
+            } => root
                 .join("ethernet")
                 .join(device)
                 .join("profile")
@@ -69,9 +90,11 @@ impl Owner {
     }
 }
 
-/// One section of a connection's settings, a subpage of its screen.
+/// One page below a connection's page.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Section {
+    /// The Advanced page: every editor, and the technical details.
+    Advanced,
     Ipv4,
     Ipv6,
     Dns,
@@ -81,7 +104,10 @@ pub enum Section {
     Identity,
     /// The connection's own proxy: none or a PAC URL.
     Proxy,
-    Advanced,
+    /// DHCP, retries, route metrics and the rest of the lesser options.
+    Options,
+    /// The connection's data usage.
+    Usage,
     /// A VPN's tunnel: WireGuard interface and peers, or a plugin's gateway and authentication.
     Tunnel,
     /// One WireGuard peer, by place in the list, below the tunnel.
@@ -91,43 +117,50 @@ pub enum Section {
 impl Section {
     pub fn title(&self) -> String {
         match self {
+            Self::Advanced => "Advanced".to_string(),
             Self::Ipv4 => "IPv4".to_string(),
             Self::Ipv6 => "IPv6".to_string(),
             Self::Dns => "DNS".to_string(),
             Self::Security => "Security".to_string(),
             Self::Identity => "Identity".to_string(),
             Self::Proxy => "Proxy".to_string(),
-            Self::Advanced => "Advanced".to_string(),
+            Self::Options => "Other options".to_string(),
+            Self::Usage => "Data usage".to_string(),
             Self::Tunnel => "Tunnel".to_string(),
             Self::Peer(index) => format!("Peer {}", index + 1),
         }
     }
 
-    /// The address of this section below the connection screen at `base`.
+    /// The address of this page below the connection page at `base`. The
+    /// editors sit one level down, below Advanced.
     pub fn address(&self, base: Address) -> Address {
         match self {
-            Self::Ipv4 => base.join("ipv4"),
-            Self::Ipv6 => base.join("ipv6"),
-            Self::Dns => base.join("dns"),
-            Self::Security => base.join("security"),
-            Self::Identity => base.join("identity"),
-            Self::Proxy => base.join("proxy"),
             Self::Advanced => base.join("advanced"),
+            Self::Ipv4 => base.join("advanced").join("ipv4"),
+            Self::Ipv6 => base.join("advanced").join("ipv6"),
+            Self::Dns => base.join("advanced").join("dns"),
+            Self::Security => base.join("advanced").join("security"),
+            Self::Identity => base.join("advanced").join("identity"),
+            Self::Proxy => base.join("advanced").join("proxy"),
+            Self::Options => base.join("advanced").join("options"),
+            Self::Usage => base.join("usage"),
             Self::Tunnel => base.join("tunnel"),
             Self::Peer(index) => base.join("tunnel").join("peer").join(index.to_string()),
         }
     }
 
-    /// The section named by the address segments below a connection screen.
+    /// The page named by the address segments below a connection page.
     pub fn parse(segments: &[&str]) -> Option<Self> {
         Some(match segments {
-            ["ipv4"] => Self::Ipv4,
-            ["ipv6"] => Self::Ipv6,
-            ["dns"] => Self::Dns,
-            ["security"] => Self::Security,
-            ["identity"] => Self::Identity,
-            ["proxy"] => Self::Proxy,
             ["advanced"] => Self::Advanced,
+            ["advanced", "ipv4"] => Self::Ipv4,
+            ["advanced", "ipv6"] => Self::Ipv6,
+            ["advanced", "dns"] => Self::Dns,
+            ["advanced", "security"] => Self::Security,
+            ["advanced", "identity"] => Self::Identity,
+            ["advanced", "proxy"] => Self::Proxy,
+            ["advanced", "options"] => Self::Options,
+            ["usage"] => Self::Usage,
             ["tunnel"] => Self::Tunnel,
             ["tunnel", "peer", index] => Self::Peer(index.parse().ok()?),
             _ => return None,
@@ -138,14 +171,14 @@ impl Section {
 /// The one-line status under the page title.
 fn summary(ov: &Overview, airplane: bool) -> String {
     if airplane {
-        return "Airplane mode".to_string();
+        return "Offline (airplane mode)".to_string();
     }
     if ov.connectivity == "portal" {
         return "Sign-in required".to_string();
     }
     match ov.primary() {
         Some(device) => match device.kind {
-            DeviceKind::Wifi => format!("Online through Wi-Fi · {}", device.connection),
+            DeviceKind::Wifi => format!("Online through Wi-Fi ({})", device.connection),
             DeviceKind::Modem => "Online through the mobile network".to_string(),
             _ => "Online through Ethernet".to_string(),
         },
@@ -238,46 +271,49 @@ fn open_portal(ctx: NetCtx) {
     );
 }
 
-/// The summary group: what the computer is online through, its addresses,
-/// the sign-in hint for a captive portal, and the data usage.
+/// Where the active connection's row leads: the page of that connection.
+fn connection_route(ov: &Overview, device: &Device) -> Route {
+    match device.kind {
+        DeviceKind::Wifi => Route::WifiNetwork {
+            ssid: device.connection.clone(),
+            saved_list: false,
+        },
+        DeviceKind::Modem => Route::Mobile,
+        _ => Route::Ethernet {
+            device: device.name.clone(),
+            name: ethernet::title_of(ov, device),
+        },
+    }
+}
+
+/// The first group: the active connection, then its data usage today. A
+/// captive portal's sign-in row follows when one is needed.
 fn status_group(ctx: NetCtx, ov: &Overview, airplane: bool) -> Element {
     let mut group = Group::new(None::<String>);
     match (ov.primary(), airplane) {
         (Some(device), false) => {
-            let connection = device.connection.clone();
+            let route = connection_route(ov, device);
             let internet = match ov.connectivity.as_str() {
-                "full" => "Internet",
                 "limited" => "Limited",
                 "portal" => "Sign-in required",
                 "none" => "No internet",
                 _ => "",
             };
-            let kind = match device.kind {
-                DeviceKind::Wifi => "Wi-Fi",
-                DeviceKind::Modem => "Mobile network",
-                _ => "Ethernet",
-            };
-            group = group.row(
-                row(device.connection.clone())
-                    .leading(device_icon(device.kind))
-                    .subtitle(format!("{kind} · {}", device.name))
-                    .value(internet)
-                    .navigates()
-                    .on_press(move |_| {
-                        ctx.navigator.push(Route::Details {
-                            connection: connection.clone(),
-                        })
-                    }),
-            );
-            if !device.ipv4.is_empty() {
-                group = group.row(row("IP address").value(device.address4()));
+            let address = device.address4();
+            let mut line = row(device.connection.clone())
+                .leading(device_icon(device.kind))
+                .subtitle(if address.is_empty() {
+                    "Connected".to_string()
+                } else {
+                    format!("Connected · {address}")
+                })
+                .value(internet)
+                .navigates()
+                .on_press(move |_| ctx.navigator.push(route.clone()));
+            if internet.is_empty() {
+                line = line.leading_tone(crate::ui::Tone::Accent);
             }
-            if !device.gateway4.is_empty() {
-                group = group.row(row("Gateway").value(device.gateway4.clone()));
-            }
-            if !device.dns.is_empty() {
-                group = group.row(row("DNS").value(device.dns.join(", ")));
-            }
+            group = group.row(line);
             if ov.connectivity == "portal" {
                 group = group.row(
                     row("Sign-in required")
@@ -329,15 +365,6 @@ impl Component for NetworkPage {
         });
 
         let mut blocks: Vec<Element> = vec![status_group(ctx, &ov, airplane)];
-        blocks.push(Element::from(Group::new(None::<String>).row(switch_row(
-            "Airplane mode",
-            airplane,
-            move |on: bool| {
-                model::toggle_link(ctx, "airplane".to_string(), on, move || {
-                    model::set_airplane_mode(on)
-                })
-            },
-        ))));
 
         let mut connections: Vec<Element> = Vec::new();
         connections.extend(wifi::wifi_row(ctx, &ov, airplane));
@@ -353,8 +380,17 @@ impl Component for NetworkPage {
         blocks.push(Element::from(connections));
         blocks.push(vpn::vpn_group(ctx, &ov));
 
-        let mut more: Vec<Element> = vec![proxy::proxy_row(ctx)];
+        let mut more: Vec<Element> = vec![Element::from(switch_row(
+            "Airplane mode",
+            airplane,
+            move |on: bool| {
+                model::toggle_link(ctx, "airplane".to_string(), on, move || {
+                    model::set_airplane_mode(on)
+                })
+            },
+        ))];
         more.extend(wifi::hotspot_row(ctx, &ov));
+        more.push(proxy::proxy_row(ctx));
         blocks.push(Element::from(Group::titled("More").rows(more)));
 
         veiled(page_column().child(head).children(blocks), loading)

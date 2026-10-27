@@ -7,27 +7,15 @@ use freya::prelude::Element;
 use super::format;
 use super::model::Period;
 
-/// The bars as the chart takes them: one name per band, and both series in
-/// one unit.
+/// The bars as the chart takes them: one name per band, a longer name for
+/// its tooltip, and both series in bytes.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ChartData {
     pub names: Vec<String>,
+    /// What a band is called in the tooltip: the hour as a span, or the day.
+    pub details: Vec<String>,
     pub received: Vec<f64>,
     pub sent: Vec<f64>,
-    /// The unit of the values and of the axis: `B`, `KB`, `MB` or `GB`.
-    pub unit: &'static str,
-}
-
-/// The unit that keeps the biggest bar between 1 and 1000, and what one unit
-/// is in bytes. The chart's own byte unit is binary, so the page scales the
-/// values itself to stay decimal like every other number on it.
-pub fn scale(largest: u64) -> (f64, &'static str) {
-    match largest {
-        1_000_000_000.. => (1e9, "GB"),
-        1_000_000.. => (1e6, "MB"),
-        1_000.. => (1e3, "KB"),
-        _ => (1.0, "B"),
-    }
 }
 
 /// What a band is called, on the axis and in the tooltip.
@@ -47,6 +35,18 @@ fn band_name(bucket: &Bucket, granularity: Granularity, period: Period, zone: Zo
     }
 }
 
+/// What a band is called in the tooltip: an hour as the span it covers, a
+/// day as its name.
+fn band_detail(bucket: &Bucket, granularity: Granularity, name: &str, zone: Zone) -> String {
+    match granularity {
+        Granularity::Day => name.to_string(),
+        Granularity::Hour | Granularity::Minute => {
+            let hour = format::local_hour(zone, bucket.start);
+            format!("{hour:02}:00 - {:02}:00", (hour + 1) % 24)
+        }
+    }
+}
+
 /// Turns the source's zero-filled buckets into chart data.
 pub fn chart_data(
     buckets: &[Bucket],
@@ -54,26 +54,20 @@ pub fn chart_data(
     period: Period,
     zone: Zone,
 ) -> ChartData {
-    let largest = buckets
+    let names: Vec<String> = buckets
         .iter()
-        .map(|bucket| bucket.rx.max(bucket.tx))
-        .max()
-        .unwrap_or(0);
-    let (divisor, unit) = scale(largest);
+        .map(|bucket| band_name(bucket, granularity, period, zone))
+        .collect();
+    let details = buckets
+        .iter()
+        .zip(&names)
+        .map(|(bucket, name)| band_detail(bucket, granularity, name, zone))
+        .collect();
     ChartData {
-        names: buckets
-            .iter()
-            .map(|bucket| band_name(bucket, granularity, period, zone))
-            .collect(),
-        received: buckets
-            .iter()
-            .map(|bucket| bucket.rx as f64 / divisor)
-            .collect(),
-        sent: buckets
-            .iter()
-            .map(|bucket| bucket.tx as f64 / divisor)
-            .collect(),
-        unit,
+        names,
+        details,
+        received: buckets.iter().map(|bucket| bucket.rx as f64).collect(),
+        sent: buckets.iter().map(|bucket| bucket.tx as f64).collect(),
     }
 }
 
@@ -91,7 +85,8 @@ pub fn chart(data: &ChartData, label: String) -> Element {
         Series::values("Sent", data.sent.iter().copied()),
     ])
     .categories(data.names.iter().cloned())
-    .y_unit(Unit::Suffix(data.unit))
+    .details(data.details.iter().cloned())
+    .y_unit(Unit::DecimalBytes)
     .stacked()
     .label(label)
     .into()
@@ -103,16 +98,6 @@ mod tests {
 
     fn bucket(start: i64, rx: u64, tx: u64) -> Bucket {
         Bucket { start, rx, tx }
-    }
-
-    #[test]
-    fn the_unit_follows_the_biggest_bar() {
-        assert_eq!(scale(0), (1.0, "B"));
-        assert_eq!(scale(999), (1.0, "B"));
-        assert_eq!(scale(1_000), (1e3, "KB"));
-        assert_eq!(scale(999_999), (1e3, "KB"));
-        assert_eq!(scale(80_000_000), (1e6, "MB"));
-        assert_eq!(scale(2_500_000_000), (1e9, "GB"));
     }
 
     #[test]
@@ -131,9 +116,20 @@ mod tests {
             Zone::Fixed(3600),
         );
         assert_eq!(data.names, ["01:00", "02:00", "03:00"]);
-        assert_eq!(data.unit, "MB");
-        assert_eq!(data.received, [0.5, 0.0, 0.0]);
-        assert_eq!(data.sent, [0.0, 2.0, 0.0]);
+        assert_eq!(
+            data.details,
+            ["01:00 - 02:00", "02:00 - 03:00", "03:00 - 04:00"]
+        );
+        assert_eq!(data.received, [500_000.0, 0.0, 0.0]);
+        assert_eq!(data.sent, [0.0, 2_000_000.0, 0.0]);
+    }
+
+    #[test]
+    fn the_last_hour_of_the_day_ends_at_midnight() {
+        let day = 1_792_972_800;
+        let buckets = [bucket(day + 23 * 3600, 1, 1)];
+        let data = chart_data(&buckets, Granularity::Hour, Period::Today, Zone::Fixed(0));
+        assert_eq!(data.details, ["23:00 - 00:00"]);
     }
 
     #[test]
@@ -144,7 +140,7 @@ mod tests {
         assert_eq!(week.names, ["Mon 26 Oct", "Tue 27 Oct"]);
         let month = chart_data(&buckets, Granularity::Day, Period::Month, Zone::Fixed(0));
         assert_eq!(month.names, ["26 Oct", "27 Oct"]);
-        assert_eq!(month.unit, "B");
+        assert_eq!(month.details, month.names);
         assert_eq!(month.received, [10.0, 30.0]);
     }
 

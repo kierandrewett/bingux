@@ -21,8 +21,30 @@ pub const CONNECT: Duration = Duration::from_secs(60);
 /// How often the overview is read again while a Network screen is open.
 const POLL: Duration = Duration::from_secs(5);
 
-/// Run `nmcli` with `args`.
+/// Run `nmcli` with `args`. A snapshot build running a fake network changes nothing: the fake
+/// devices and profiles share names with real ones, so a command that connects, disconnects,
+/// adds, changes or deletes is not run.
 pub fn nmcli(args: &[&str], timeout: Duration) -> Result<String, CommandError> {
+    #[cfg(feature = "snapshot")]
+    if fake_scenario().is_some()
+        && args.iter().any(|arg| {
+            matches!(
+                *arg,
+                "connect"
+                    | "disconnect"
+                    | "up"
+                    | "down"
+                    | "delete"
+                    | "add"
+                    | "modify"
+                    | "reapply"
+                    | "clone"
+                    | "import"
+            )
+        })
+    {
+        return Ok(String::new());
+    }
     system::run("nmcli", args, timeout)
 }
 
@@ -337,6 +359,16 @@ fn parse_devices(output: &str) -> Vec<Device> {
     // Loopback, bridges, veth pairs and the like are not connections a person
     // manages here.
     devices.retain(|device| device.kind != DeviceKind::Other);
+    // Container and VM links (veth pairs and the like) are Ethernet to
+    // NetworkManager, but they have no hardware behind them: the kernel gives
+    // a physical adapter a `device` link and a virtual one none.
+    devices.retain(|device| {
+        device.kind != DeviceKind::Ethernet
+            || std::path::Path::new("/sys/class/net")
+                .join(&device.name)
+                .join("device")
+                .exists()
+    });
     devices
 }
 
@@ -452,6 +484,16 @@ fn fake_overview(scenario: &str) -> Overview {
         if wired_up { "Wired connection 1" } else { "" },
         if wired_up { "192.168.0.72" } else { "" },
     ));
+    // Two adapters with no cable and nothing set up, to see them folded away.
+    if std::env::var("BINGUX_SETTINGS_FAKE_WIRED").as_deref() == Ok("many") {
+        for name in ["enp3s0", "enp4s0"] {
+            let mut spare = device(name, DeviceKind::Ethernet, "", "");
+            spare.state = "unavailable".into();
+            spare.carrier = false;
+            spare.speed = None;
+            devices.push(spare);
+        }
+    }
     if scenario == "modem" {
         devices.push(device("wwan0", DeviceKind::Modem, "Vodafone", "10.64.12.7"));
     }
@@ -587,10 +629,13 @@ pub fn use_overview() -> State<Option<Result<Overview, CommandError>>> {
     use_hook(|| {
         let state = system::cached_persistent::<Overview, CommandError>("network-overview");
         reload_overview(state);
+        let focus = system::window_focus();
         spawn(async move {
             loop {
                 timer(POLL).await;
-                if now_ms().saturating_sub(LAST_READ.load(Ordering::SeqCst)) >= 4000 {
+                if *focus.peek()
+                    && now_ms().saturating_sub(LAST_READ.load(Ordering::SeqCst)) >= 4000
+                {
                     reload_overview(state);
                 }
             }

@@ -202,6 +202,34 @@ fn commit(
     );
 }
 
+/// As [`commit`], for a slider that reports every step of a drag. The page
+/// shows each step at once, `lane` keeps one write running at a time with the
+/// newest value waiting, and the model is read back once, after the last
+/// write, so a drag neither starts a command nor a page reload per step.
+fn commit_level(
+    lane: &str,
+    loaded: State<Option<Result<Model, CommandError>>>,
+    overlays: Overlays,
+    change: impl FnOnce(&mut Model),
+    work: impl FnOnce() -> CommandResult + Send + 'static,
+) {
+    let Some(Ok(mut value)) = loaded.read().clone() else {
+        return;
+    };
+    change(&mut value);
+    system::optimistic_latest(
+        &format!("{LANES}{lane}"),
+        loaded,
+        Some(overlays),
+        Some(Ok(value)),
+        move || work().map(|_| ()),
+        move || system::reload_when_idle(LANES, loaded, refresh),
+    );
+}
+
+/// Prefix of this page's write lanes.
+const LANES: &str = "mouse/";
+
 /// Writes several touchpad keys in order, stopping at the first failure.
 fn set_touchpad(writes: &[(&str, &str)]) -> CommandResult {
     for (key, value) in writes {
@@ -324,7 +352,8 @@ impl Setting<'_> {
                 let (schema, loaded, overlays) = (self.schema, self.loaded, self.overlays);
                 level_row(self.title, speed_percent(speed), move |percent: f64| {
                     let next = speed_from_percent(percent);
-                    commit(
+                    commit_level(
+                        &format!("{schema}.speed"),
                         loaded,
                         overlays,
                         move |model| apply(model, next),
@@ -348,7 +377,8 @@ impl Setting<'_> {
                 let (loaded, overlays) = (self.loaded, self.overlays);
                 level_row(self.title, double_click_percent(ms), move |percent: f64| {
                     let next = double_click_from_percent(percent);
-                    commit(
+                    commit_level(
+                        "double-click",
                         loaded,
                         overlays,
                         move |model| apply(model, next),

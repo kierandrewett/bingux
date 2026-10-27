@@ -17,9 +17,9 @@ use std::sync::Mutex;
 
 use freya::prelude::*;
 
-use super::model::{self, NetCtx, Overview, Vpn, VpnKind};
+use super::model::{self, NetCtx, Overview, Vpn};
 use super::profile::ProfileSettings;
-use super::{Owner, UsageScope};
+use super::{Owner, Section, usage};
 use crate::icons::Icon;
 use crate::pages::loading::veiled;
 use crate::routes::Route;
@@ -113,16 +113,6 @@ impl Link {
             Self::Connecting => "Connecting...".to_string(),
             Self::Failed(reason) => format!("Failed: {reason}"),
             Self::Off => "Not connected".to_string(),
-        }
-    }
-
-    /// The state as one word, for a row that has the details beside it.
-    pub fn word(&self) -> &'static str {
-        match self {
-            Self::Connected(_) => "Connected",
-            Self::Connecting => "Connecting...",
-            Self::Failed(_) => "Failed",
-            Self::Off => "Not connected",
         }
     }
 
@@ -306,14 +296,6 @@ pub fn load_profile(name: &str) -> Result<Profile, String> {
     }
 }
 
-/// The type of VPN `profile` is, as a person reads it.
-pub fn type_label(profile: &Profile) -> String {
-    match profile {
-        Profile::Wireguard(_) => "WireGuard".to_string(),
-        Profile::Plugin(plugin) => plugins::label_of_service(&plugin.service),
-    }
-}
-
 /// Where the VPN connects to: a WireGuard peer's endpoint, or a plugin's
 /// server address.
 pub fn gateway_of(profile: &Profile) -> String {
@@ -345,33 +327,6 @@ pub fn gateway_of(profile: &Profile) -> String {
                 .to_string()
         }
     }
-}
-
-/// The user name a plugin VPN signs in with.
-pub fn user_of(plugin: &PluginProfile) -> String {
-    let short = plugins::short_of_service(&plugin.service);
-    let stored = plugins::fields(short)
-        .iter()
-        .find(|field| field.label == "User name")
-        .map(|field| match field.store {
-            plugins::Store::UserName => plugin.user_name.as_str(),
-            plugins::Store::Data(key) => data::get(&plugin.data, key).unwrap_or_default(),
-        })
-        .unwrap_or_default();
-    if stored.is_empty() {
-        plugin.user_name.clone()
-    } else {
-        stored.to_string()
-    }
-}
-
-/// Whether any peer sends all traffic through the tunnel.
-pub fn routes_all_traffic(peers: &[wireguard::Peer]) -> bool {
-    peers.iter().any(|peer| {
-        peer.allowed_ips
-            .iter()
-            .any(|ip| ip == "0.0.0.0/0" || ip == "::/0")
-    })
 }
 
 fn dash(text: String) -> String {
@@ -461,92 +416,43 @@ impl Component for VpnPage {
             confirm_delete(ctx, delete.clone())
         }));
 
-        let kind = match (&loaded, &vpn.kind) {
-            (Some(Ok(profile)), _) => type_label(profile),
-            (_, VpnKind::WireGuard) => "WireGuard".to_string(),
-            (_, VpnKind::Plugin(service)) => plugins::label_of_service(service),
-        };
-        let mut state = Group::titled("Status")
-            .row(row("State").value(link.word()))
-            .row(row("Type").value(kind));
-        if link.on() && !vpn.device.is_empty() {
-            state = state.row(row("Device").value(vpn.device.clone()));
-            if let Link::Connected(address) = &link
-                && !address.is_empty()
-            {
-                state = state.row(row("IP address").mono_value(address.clone()));
-            }
-        }
-        if let Link::Failed(reason) = &link {
-            state = state.row(row("Last error").subtitle(reason.clone()));
-        }
-
-        let summary = match &loaded {
+        // The everyday facts: where it connects to, the tunnel's address and this VPN's data
+        // usage. A failed attempt says why in the line under the name.
+        let mut info = Group::new(None::<String>);
+        match &loaded {
             Some(Err(message)) => {
                 let retry = name.clone();
-                Group::titled("Connection").row(Element::from(
+                info = info.row(Element::from(
                     status(Status::Error(message.clone())).action("Try again", move |_| {
                         let mut shown = profile;
                         shown.set(None);
                         fetch(retry.clone(), profile)
                     }),
-                ))
+                ));
             }
             other => {
-                let profile = other.as_ref().and_then(|loaded| loaded.as_ref().ok());
-                let mut group = Group::titled("Connection");
-                match profile {
-                    Some(Profile::Wireguard(wg)) => {
-                        group = group
-                            .row(
-                                row("Endpoint")
-                                    .mono_value(dash(gateway_of(&Profile::Wireguard(wg.clone())))),
-                            )
-                            .row(
-                                row("Tunnel address")
-                                    .mono_value(dash(wg.interface.addresses.join(", "))),
-                            )
-                            .row(row("Route all traffic").value(
-                                if routes_all_traffic(&wg.peers) {
-                                    "Yes"
-                                } else {
-                                    "No"
-                                },
-                            ));
-                    }
-                    Some(Profile::Plugin(plugin)) => {
-                        group =
-                            group
-                                .row(row("Gateway").mono_value(dash(gateway_of(
-                                    &Profile::Plugin(plugin.clone()),
-                                ))));
-                        let user = user_of(plugin);
-                        if !user.is_empty() {
-                            group = group.row(row("User name").value(user));
-                        }
-                    }
-                    None => {
-                        group = group.row(row("Endpoint").value("—"));
-                    }
-                }
-                group
+                let server = other
+                    .as_ref()
+                    .and_then(|loaded| loaded.as_ref().ok())
+                    .map(gateway_of)
+                    .unwrap_or_default();
+                info = info.row(row("Server").mono_value(dash(server)));
             }
-        };
-
+        }
+        if let Link::Connected(address) = &link
+            && !address.is_empty()
+        {
+            info = info.row(row("IP address").mono_value(address.clone()));
+        }
         let owner = Owner::Vpn { name: name.clone() };
-        let details = name.clone();
-        let usage = name.clone();
-        let more = Group::new(None::<String>)
-            .row(row("Connection details").navigates().on_press(move |_| {
-                ctx.navigator.push(Route::Details {
-                    connection: details.clone(),
-                })
-            }))
-            .row(row("Data usage").navigates().on_press(move |_| {
-                ctx.navigator.push(Route::Usage {
-                    scope: UsageScope::Connection(usage.clone()),
-                })
-            }));
+        info = info.row(usage::connection_usage_row(
+            ctx,
+            name.clone(),
+            Route::Section {
+                owner: owner.clone(),
+                section: Section::Usage,
+            },
+        ));
 
         veiled(
             page_column()
@@ -557,10 +463,8 @@ impl Component for VpnPage {
                     link.line(),
                 ))
                 .child(action_strip(actions))
-                .child(state)
-                .child(summary)
-                .child(ProfileSettings { owner })
-                .child(more),
+                .child(info)
+                .child(ProfileSettings { owner }),
             loading,
         )
     }
@@ -623,7 +527,7 @@ mod fake {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pages::network::model::{Device, DeviceKind};
+    use crate::pages::network::model::{Device, DeviceKind, VpnKind};
 
     fn overview(vpns: Vec<Vpn>, devices: Vec<Device>) -> Overview {
         Overview {
@@ -694,9 +598,6 @@ mod tests {
         let idle = link_from(&ov, &ov.vpns[0], None, None);
         let busy = link_from(&ov, &ov.vpns[1], None, None);
         assert_eq!(idle.line(), "Not connected");
-        assert_eq!(idle.word(), "Not connected");
-        assert_eq!(Link::Failed("No.".into()).word(), "Failed");
-        assert_eq!(Link::Connected("10.0.0.2".into()).word(), "Connected");
         assert_eq!(busy.line(), "Connecting...");
         assert!(busy.on());
         assert!(!idle.on());
@@ -768,35 +669,5 @@ mod tests {
             ..PluginProfile::default()
         });
         assert_eq!(gateway_of(&plugin), "10.0.0.1");
-    }
-
-    #[test]
-    fn the_user_name_is_found_where_the_plugin_keeps_it() {
-        let ssh = PluginProfile {
-            service: "org.freedesktop.NetworkManager.ssh".into(),
-            data: data::parse("remote = h, remote-username = alice"),
-            ..PluginProfile::default()
-        };
-        assert_eq!(user_of(&ssh), "alice");
-        let openconnect = PluginProfile {
-            service: "org.freedesktop.NetworkManager.openconnect".into(),
-            user_name: "bob".into(),
-            ..PluginProfile::default()
-        };
-        assert_eq!(user_of(&openconnect), "bob");
-    }
-
-    #[test]
-    fn all_traffic_is_a_default_route_in_any_peer() {
-        let all = wireguard::Peer {
-            allowed_ips: vec!["10.0.0.0/8".into(), "::/0".into()],
-            ..wireguard::Peer::default()
-        };
-        let some = wireguard::Peer {
-            allowed_ips: vec!["10.0.0.0/8".into()],
-            ..wireguard::Peer::default()
-        };
-        assert!(routes_all_traffic(&[some.clone(), all]));
-        assert!(!routes_all_traffic(&[some]));
     }
 }
