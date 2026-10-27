@@ -765,16 +765,34 @@ fn the_greeter_account_cannot_drive_sessions_over_dbus() {
 }
 
 #[test]
-fn read_only_methods_expose_state_but_never_secrets() {
-    let (mut sim, a, _b) = two_users_locked();
-    let u = sim.call(Sim::plain_user(CAROL), Method::GetSessions).unwrap();
-    let Reply::Sessions(list) = u else { panic!() };
+fn f10_reads_are_limited_to_the_callers_own_uid() {
+    let (mut sim, a, b) = two_users_locked();
+    // An unrelated account sees nothing of the seat.
+    let carol = Sim::plain_user(CAROL);
+    let Reply::Sessions(list) = sim.call(carol.clone(), Method::GetSessions).unwrap() else { panic!() };
+    assert!(list.is_empty());
+    let Reply::Foreground(f) = sim.call(carol.clone(), Method::GetForegroundSession).unwrap() else { panic!() };
+    assert!(f.is_none());
+    let Reply::Users(users) = sim.call(carol.clone(), Method::GetUsers).unwrap() else { panic!() };
+    assert_eq!(users.iter().map(|u| u.uid).collect::<Vec<_>>(), vec![CAROL]);
+    let Reply::Selected(sel) = sim.call(carol.clone(), Method::GetSelectedUser).unwrap() else { panic!() };
+    assert_eq!(sel, None);
+    let Reply::Status(st) = sim.call(carol.clone(), Method::GetStatus).unwrap() else { panic!() };
+    assert!(st.foreground.is_none() && st.selected_uid.is_none() && st.last_used_uid.is_none());
+    let Reply::Transitions(t) = sim.call(carol, Method::GetTransitions).unwrap() else { panic!() };
+    assert!(t.is_empty());
+    // A hosted session sees itself and no other account.
+    let Reply::Sessions(list) = sim.call(sim.session_caller(&a), Method::GetSessions).unwrap() else { panic!() };
+    assert_eq!(list.iter().map(|s| s.id.clone()).collect::<Vec<_>>(), vec![a.clone()]);
+    let Reply::Users(users) = sim.call(sim.session_caller(&a), Method::GetUsers).unwrap() else { panic!() };
+    assert_eq!(users.iter().map(|u| u.uid).collect::<Vec<_>>(), vec![ALICE]);
+    // Root and the greeter see everything.
+    let Reply::Sessions(list) = sim.call(Sim::root(), Method::GetSessions).unwrap() else { panic!() };
     assert_eq!(list.len(), 2);
-    assert!(list.iter().all(|s| s.locked));
-    let Reply::Foreground(f) = sim.call(Sim::plain_user(CAROL), Method::GetForegroundSession).unwrap() else { panic!() };
-    assert!(f.is_some());
-    let Reply::Users(users) = sim.call(Sim::plain_user(CAROL), Method::GetUsers).unwrap() else { panic!() };
-    assert!(users.iter().any(|u| u.session.as_deref() == Some(a.as_str())));
+    let g = Caller { uid: GREETER_UID, pid: 777, bus_name: ":1.7".into(), cgroup: None };
+    let Reply::Users(users) = sim.call(g, Method::GetUsers).unwrap() else { panic!() };
+    assert_eq!(users.len(), 3);
+    let _ = b;
 }
 
 #[test]
@@ -1142,4 +1160,29 @@ fn f4_the_greeter_cannot_power_off_over_a_running_session() {
     // Suspend is allowed: it protects and locks everything.
     sim.greeter(ClientMessage::Power { request_id: 9, action: bsm_proto::state::PowerAction::Suspend });
     assert!(sim.m.operation().is_some());
+}
+
+/// F17: a hung hidden session (no new frame) cannot be revealed; a healthy one can.
+#[test]
+fn f17_unlock_needs_a_frame_newer_than_the_hidden_one() {
+    let mut sim = Sim::new();
+    sim.boot();
+    let a = sim.login(ALICE);
+    sim.call(Sim::session_caller(&sim, &a), Method::RequestLock { session: None }).unwrap();
+    sim.comp.auto_evidence = false; // Gnoblin is hung: it never commits again
+    sim.hold();
+    let mark = sim.mark();
+    sim.authenticate(ALICE, AuthIntent::Unlock);
+    assert!(sim.scene_cmds(mark).iter().any(|c| matches!(c, SceneCommand::RequestEvidence { session, .. } if session == &a)));
+    assert!(sim.begin_transitions(mark).is_empty(), "the old frame is not evidence");
+    // The gate gives up visibly instead of waiting for ever.
+    sim.advance(Duration::from_secs(11));
+    assert!(sim.m.operation().is_none());
+    assert_eq!(sim.m.history().last().unwrap().reason, Some(ErrorCode::OutputNotReady));
+    assert_eq!(sim.state(&a), SessionState::LockedGreeterForeground);
+    // It recovers and commits: the next unlock works.
+    sim.comp.auto_evidence = true;
+    sim.comp.hold_transitions = false;
+    sim.authenticate(ALICE, AuthIntent::Unlock);
+    assert_eq!(sim.state(&a), SessionState::Foreground);
 }

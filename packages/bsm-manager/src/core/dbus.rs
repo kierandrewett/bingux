@@ -8,7 +8,7 @@
 //!
 //! | method                 | root | greeter | own session | other local user |
 //! | ---------------------- | ---- | ------- | ----------- | ---------------- |
-//! | Get* (read only)       | yes  | yes     | yes         | yes              |
+//! | Get* (read only)       | all  | all     | own uid     | own uid          |
 //! | SelectGreeterUser      | yes  | yes     | no          | no               |
 //! | RequestLock            | any  | no      | own         | no               |
 //! | RequestSwitchUser      | fg   | no      | own         | no               |
@@ -75,27 +75,51 @@ impl Manager {
         fx: &mut Fx,
     ) -> Option<Result<Reply, BsmError>> {
         Some(match method {
-            Method::GetUsers => Ok(Reply::Users(self.user_infos())),
-            Method::GetSessions => Ok(Reply::Sessions(self.session_infos())),
-            Method::GetSelectedUser => Ok(Reply::Selected(self.selected_uid)),
-            Method::GetForegroundSession => Ok(Reply::Foreground(
-                self.foreground.as_ref().and_then(|f| self.sessions.get(f)).map(|s| (s.id.clone(), s.generation)),
-            )),
-            Method::GetStatus => Ok(Reply::Status(StatusInfo {
-                seat: self.seat,
-                selected_uid: self.selected_uid,
-                last_used_uid: self.last_used_uid,
-                foreground: self.foreground.clone(),
-                revision: self.revision,
-                operation: self.operation(),
-                greeter_connected: self.greeter_control_connected(),
-                helper_connected: self.helper_up,
-                outputs: self.outputs.len(),
-            })),
+            // F10: root and the greeter see the seat; every other caller sees only its own uid.
+            Method::GetUsers => {
+                let own = self.restricted_uid(who);
+                Ok(Reply::Users(self.user_infos().into_iter().filter(|u| own.is_none_or(|o| u.uid == o)).collect()))
+            }
+            Method::GetSessions => {
+                let own = self.restricted_uid(who);
+                Ok(Reply::Sessions(self.session_infos().into_iter().filter(|s| own.is_none_or(|o| s.uid == o)).collect()))
+            }
+            Method::GetSelectedUser => {
+                let own = self.restricted_uid(who);
+                Ok(Reply::Selected(self.selected_uid.filter(|u| own.is_none_or(|o| *u == o))))
+            }
+            Method::GetForegroundSession => {
+                let own = self.restricted_uid(who);
+                Ok(Reply::Foreground(
+                    self.foreground
+                        .as_ref()
+                        .and_then(|f| self.sessions.get(f))
+                        .filter(|s| own.is_none_or(|o| s.uid == o))
+                        .map(|s| (s.id.clone(), s.generation)),
+                ))
+            }
+            Method::GetStatus => {
+                let own = self.restricted_uid(who);
+                let fg = self.foreground.as_ref().and_then(|f| self.sessions.get(f)).filter(|s| own.is_none_or(|o| s.uid == o));
+                Ok(Reply::Status(StatusInfo {
+                    seat: self.seat,
+                    selected_uid: self.selected_uid.filter(|u| own.is_none_or(|o| *u == o)),
+                    last_used_uid: self.last_used_uid.filter(|u| own.is_none_or(|o| *u == o)),
+                    foreground: fg.map(|s| s.id.clone()),
+                    revision: self.revision,
+                    operation: self.operation().filter(|o| own.is_none() || self.op_is_of(o, own)),
+                    greeter_connected: self.greeter_control_connected(),
+                    helper_connected: self.helper_up,
+                    outputs: self.outputs.len(),
+                }))
+            }
             Method::GetOutputs => Ok(Reply::Outputs(self.outputs.clone())),
             Method::GetTransitions => {
+                let own = self.restricted_uid(who);
                 let mut v: Vec<OperationInfo> = self.op.iter().map(|o| o.info()).collect();
                 v.extend(self.history.iter().rev().cloned());
+                // Operations of an account that cannot be tied to the caller's uid are not shown to it.
+                v.retain(|o| own.is_none() || self.op_is_of(o, own));
                 Ok(Reply::Transitions(v))
             }
             Method::SelectGreeterUser { uid } => match who {
@@ -230,6 +254,25 @@ impl Manager {
         };
         if let Some(call) = call {
             fx.push(Effect::DbusReply { call, result: reply });
+        }
+    }
+
+    /// The uid a caller is limited to: `None` for root and the greeter.
+    fn restricted_uid(&self, who: &Principal) -> Option<u32> {
+        match who {
+            Principal::Root | Principal::Greeter => None,
+            Principal::User(u) => Some(*u),
+            Principal::Session(s) => self.sessions.get(s).map(|s| s.uid).or(Some(u32::MAX)),
+        }
+    }
+
+    /// Does the operation concern a session of `own`? Operations with no session (power) are
+    /// not attributed to anybody.
+    fn op_is_of(&self, o: &OperationInfo, own: Option<u32>) -> bool {
+        match (&o.session, own) {
+            (_, None) => true,
+            (Some(s), Some(u)) => self.sessions.get(s).is_some_and(|x| x.uid == u),
+            (None, Some(_)) => false,
         }
     }
 

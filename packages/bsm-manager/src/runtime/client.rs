@@ -791,7 +791,7 @@ mod tests {
         model.count(Stage::OutputsConfigured, 1, 2);
         let mut failed = ProgressModel::new("s0000000b".into(), 10);
         failed.reach(Stage::AuthAccepted);
-        failed.fail(ProgressFailure { stage: Stage::PamSession, code: ErrorCode::PamFailure, message: "boom".into() });
+        failed.fail(ProgressFailure { stage: Stage::PamSession, code: ErrorCode::PamFailure, message: String::new() });
         let sent = vec![
             DbusSignal::SessionsChanged { revision: 3 },
             DbusSignal::SelectedUserChanged { revision: 4, uid: Some(1000) },

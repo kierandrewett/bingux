@@ -48,6 +48,9 @@ pub struct Session {
     pub fg_seq: u64,
     pub(crate) recovered: bool,
     pub(crate) armed_stage: Option<Stage>,
+    /// Presented-frame counts per output when an unlock or resume was authorised: the reveal of
+    /// a hidden session needs a newer frame than these (F17).
+    pub(crate) evidence_base: Option<BTreeMap<String, u64>>,
 }
 
 impl Session {
@@ -116,6 +119,7 @@ impl Manager {
                 fg_seq: 0,
                 recovered: false,
                 armed_stage: None,
+                evidence_base: None,
             },
         );
         fx.push(Effect::Scene(SceneCommand::RegisterSession {
@@ -155,6 +159,7 @@ impl Manager {
                 fg_seq: 0,
                 recovered: true,
                 armed_stage: None,
+                evidence_base: None,
             },
         );
         self.protected.insert(p.id.clone());
@@ -664,7 +669,13 @@ impl Manager {
 
     /// True when every current output has an acknowledged surface with a presented frame.
     pub(super) fn surfaces_ready(&self, s: &Session) -> bool {
-        s.host_connected
+        let fresh = s.evidence_base.as_ref().is_none_or(|base| {
+            self.outputs.iter().all(|o| {
+                s.surfaces.iter().find(|e| e.output == o.name).is_some_and(|e| e.presented_frames > base.get(&o.name).copied().unwrap_or(0))
+            })
+        });
+        fresh
+            && s.host_connected
             && !self.outputs.is_empty()
             && self.outputs.iter().all(|o| s.surfaces.iter().any(|e| e.output == o.name && e.acked && e.presented_frames >= 1))
     }

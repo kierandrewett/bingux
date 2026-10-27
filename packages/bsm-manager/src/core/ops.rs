@@ -555,11 +555,18 @@ impl Manager {
             Plan::Existing { session, generation } => {
                 let first_login = self.sessions.get(&session).is_some_and(|s| s.state == SessionState::ReadyBackground);
                 if let Some(op) = self.op.as_mut() {
-                    op.session = Some((session, generation));
+                    op.session = Some((session.clone(), generation));
                     op.new_login = first_login;
                     op.transition = if first_login { TransitionKind::NewLoginFade } else { TransitionKind::UnlockSlideUp };
                 }
                 self.op_set(Some(OperationPhase::Preparing), Some(TransitionState::WaitingForFrames), fx);
+                if !first_login {
+                    // F17: a hidden session must show a frame newer than the one it had.
+                    if let Some(s) = self.sessions.get_mut(&session) {
+                        s.evidence_base = Some(s.surfaces.iter().map(|e| (e.output.clone(), e.presented_frames)).collect());
+                        fx.push(Effect::Scene(SceneCommand::RequestEvidence { session: session.clone(), generation }));
+                    }
+                }
                 self.try_reveal(fx);
             }
         }

@@ -37,6 +37,8 @@ pub struct Comp {
     pub hold_transitions: bool,
     /// Do not acknowledge `Protect`.
     pub withhold_protect: bool,
+    /// Answer `RequestEvidence` with a fresh frame on every output.
+    pub auto_evidence: bool,
 }
 
 #[derive(Default)]
@@ -84,7 +86,7 @@ impl Sim {
             t: Duration::ZERO,
             timers: BTreeMap::new(),
             all: Vec::new(),
-            comp: Comp { auto: true, ..Default::default() },
+            comp: Comp { auto: true, auto_evidence: true, ..Default::default() },
             helper: Hlp { auto: true, ..Default::default() },
             replies: BTreeMap::new(),
             next_call: 1,
@@ -170,6 +172,31 @@ impl Sim {
                     self.transitions.push((*operation, p));
                     q.push_back(Input::Scene(SceneEvent::TransitionPhase { operation: *operation, phase: p }));
                 }
+            }
+            SceneCommand::RequestEvidence { session, .. } if self.comp.auto_evidence => {
+                // A hidden, healthy Gnoblin commits a new frame when asked.
+                for o in self.outputs.clone() {
+                    if self.acked.get(&(session.clone(), o.name.clone())).copied().unwrap_or(false) {
+                        *self.frames.entry((session.clone(), o.name)).or_insert(0) += 1;
+                    }
+                }
+                q.push_back(Input::Scene(SceneEvent::SessionSurfaces {
+                    session: session.clone(),
+                    generation: self.bridges.get(session).map_or(0, |b| b.0),
+                    surfaces: self
+                        .outputs
+                        .iter()
+                        .filter_map(|o| {
+                            let key = (session.clone(), o.name.clone());
+                            self.acked.get(&key).map(|acked| SurfaceEvidence {
+                                output: o.name.clone(),
+                                configure_serial: 1,
+                                acked: *acked,
+                                presented_frames: self.frames.get(&key).copied().unwrap_or(0),
+                            })
+                        })
+                        .collect(),
+                }));
             }
             SceneCommand::CancelTransition { operation } if !self.comp.hold_transitions => {
                 q.push_back(Input::Scene(SceneEvent::TransitionPhase {

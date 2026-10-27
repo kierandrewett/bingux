@@ -968,7 +968,8 @@ async fn emit_signal(emitter: &SignalEmitter<'_>, sig: &DbusSignal) -> zbus::Res
 
 async fn emit_progress(emitter: &SignalEmitter<'_>, m: &ProgressModel) -> zbus::Result<()> {
     let (fs, fc, fm) = match &m.failure {
-        Some(f) => (name_of(&f.stage), f.code.as_str().to_owned(), f.message.clone()),
+        // The free text stays on the control socket: a broadcast signal is heard by every account (F10).
+        Some(f) => (name_of(&f.stage), f.code.as_str().to_owned(), String::new()),
         None => (String::new(), String::new(), String::new()),
     };
     Service::session_launch_progress(
@@ -1764,7 +1765,7 @@ mod tests {
             )
         );
         let p: Progress = body(5).deserialize().unwrap();
-        assert_eq!((p.9.as_str(), p.10.as_str(), p.11.as_str()), ("outputs_configured", "output_not_ready", "slow"));
+        assert_eq!((p.9.as_str(), p.10.as_str(), p.11.as_str()), ("outputs_configured", "output_not_ready", ""));
         assert_eq!(body(6).deserialize::<(String, u64, bool)>().unwrap(), ("s0000000a".into(), 77, true));
         assert_eq!(body(7).deserialize::<(bool, String, u64)>().unwrap(), (true, "s0000000a".into(), 77));
         assert_eq!(body(8).deserialize::<(bool, String, u64)>().unwrap(), (false, "".into(), 0));
