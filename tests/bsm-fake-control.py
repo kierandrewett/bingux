@@ -304,9 +304,9 @@ class Server:
                 self.send({"type": "error", "request_id": message.get("request_id"), "code": "invalid_account", "message": "no such account"})
                 return
             if uid != self.selected:
-                # Like the real manager, begin_auth selects the account itself.
-                self.selected = uid
-                self.push_snapshot()
+                # Like the real manager: begin_auth must name the selected account.
+                self.send({"type": "error", "request_id": message.get("request_id"), "code": "stale_generation", "message": "not the selected account"})
+                return
             if self.progress is not None and self.progress["failure"] is not None:
                 # Signing in again after a failed launch starts from a clean slate.
                 self.progress = None
@@ -417,6 +417,16 @@ class Server:
         if name == "snapshot":
             self.push_snapshot()
         elif name == "select":
+            # Like the real manager: an external selection first cancels the
+            # open conversation (result and operation events), and the snapshot
+            # that names the new account follows a moment later.
+            if self.challenge is not None:
+                self.result(False, "cancelled", "cancelled")
+                self.operation = self.next_operation
+                self.next_operation += 1
+                self.operation_event("new_login_fade", "cancelled", "cancelled")
+                await self.writer.drain()
+                await asyncio.sleep(0.03)
             self.selected = c["uid"]
             self.push_snapshot()
         elif name == "mode":

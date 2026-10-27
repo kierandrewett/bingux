@@ -33,6 +33,13 @@ QtObject {
     // while the first is unanswered makes the two fight over the selection:
     // each snapshot would trigger another begin_auth. At most one is in flight.
     property bool awaitingFirstPrompt: false
+    // True after bsm cancelled our conversation. bsm cancels it because it is
+    // changing the selection (an external select-user, a lock or switch fade):
+    // the cancel and its operation events can arrive before the snapshot that
+    // names the new account, and starting over for the account we still hold
+    // would make bsm select it again and undo the change. Wait for the next
+    // snapshot (the server's selection wins), or a short while if none comes.
+    property bool holdForSnapshot: false
     property real powerRequest: 0
     property real selectRequest: 0
     // Responses submitted since the conversation began; decides whether a
@@ -114,7 +121,7 @@ QtObject {
         const model = root.model;
         // Wait for bsm's answer to the begin_auth in flight; the answer (or the
         // timeout) reconciles again against the latest snapshot.
-        if (awaitingFirstPrompt)
+        if (awaitingFirstPrompt || holdForSnapshot)
             return;
         if (model.phase !== "idle" && model.authUid !== model.selectedUid) {
             cancelConversation();
@@ -187,6 +194,8 @@ QtObject {
         const model = root.model;
         switch (message.type) {
         case "snapshot":
+            holdForSnapshot = false;
+            snapshotWait.stop();
             {
                 // The snapshot is the message itself: serde flattens the
                 // struct next to the `type` tag.
@@ -234,6 +243,14 @@ QtObject {
             return;
         awaitingFirstPrompt = false;
         Qt.callLater(reconcile);
+    }
+
+    property Timer snapshotWait: Timer {
+        interval: 400
+        onTriggered: {
+            root.holdForSnapshot = false;
+            root.reconcile();
+        }
     }
 
     property Timer answerTimeout: Timer {
@@ -291,6 +308,8 @@ QtObject {
         }
         if (message.code === "cancelled") {
             model.phase = "idle";
+            holdForSnapshot = true;
+            snapshotWait.restart();
             return;
         }
         model.phase = "idle";
@@ -312,8 +331,21 @@ QtObject {
         const model = root.model;
         const id = message.request_id;
         const code = String(message.code || "");
-        if (code === "stale_generation" || code === "cancelled")
+        if (code === "stale_generation" || code === "cancelled") {
+            // bsm refused our begin_auth because the selection is no longer the
+            // account it named: drop it, do not resend, and follow the next
+            // snapshot (or the short wait) to the account bsm selected.
+            if (id === authRequest && authRequest !== 0) {
+                authRequest = 0;
+                answerTimeout.stop();
+                awaitingFirstPrompt = false;
+                model.phase = "idle";
+                model.challengeId = 0;
+                holdForSnapshot = true;
+                snapshotWait.restart();
+            }
             return;
+        }
         if (code === "not_supported") {
             model.fatalError = "This greeter does not match the session manager";
             return;
@@ -380,6 +412,7 @@ QtObject {
                 root.model.disconnected();
                 root.authRequest = 0;
                 root.awaitingFirstPrompt = false;
+                root.holdForSnapshot = false;
                 root.powerRequest = 0;
                 root.selectRequest = 0;
                 reconnect.restart();

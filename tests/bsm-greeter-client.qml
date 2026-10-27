@@ -255,6 +255,15 @@ ShellRoot {
         client.handle({ type: "error", request_id: 9999, code: "unauthorised", message: "stale" });
         check("an error for another request changes nothing", model.statusLine.indexOf("blocking") >= 0);
 
+        // bsm refuses a begin_auth for an account it no longer has selected.
+        client.handle(snapshot(19, 1001, login, users));
+        const stale = last("begin_auth");
+        const beginsBefore = out.filter(m => m.type === "begin_auth").length;
+        client.handle({ type: "error", request_id: stale.request_id, code: "stale_generation", message: "not selected" });
+        check("a stale begin_auth is dropped, not resent", !client.awaitingFirstPrompt && model.phase === "idle" && out.filter(m => m.type === "begin_auth").length === beginsBefore);
+        client.handle(snapshot(20, 1000, login, users));
+        check("the next snapshot's account gets the conversation", last("begin_auth").uid === 1000 && model.selectedUid === 1000);
+
         // Hostile or broken lines do not throw or change state.
         const revision = model.revision;
         client.parse("not json");

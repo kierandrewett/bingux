@@ -372,6 +372,26 @@ def fight_scenario():
         rig.close()
 
 
+def external_select_scenario():
+    """An external select-user while a conversation is open: bsm cancels the
+    conversation, then publishes the new selection. The greeter must follow the
+    server and never begin again for the old account."""
+    rig = Rig(["--mode", "login"])
+    try:
+        check("external select: the first prompt is open", rig.wait_for("begin_auth", uid=1000, timeout=20))
+        time.sleep(1.0)
+        before = rig.shot("external-select-before", settle=0.2)
+        rig.drive(cmd="select", uid=1001)
+        check("external select: a conversation begins for the new account", rig.wait_for("begin_auth", uid=1001, intent="login"))
+        time.sleep(3)
+        check("external select: it never began again for the old account", rig.count("begin_auth", uid=1000) == 1, str(rig.count("begin_auth", uid=1000)))
+        after = rig.shot("external-select-after", settle=0.2)
+        check("external select: the picture changed and stayed", changed(before, after, (0, 0, 400, 300)) > 12)
+        return "".join(rig.output)
+    finally:
+        rig.close()
+
+
 def main():
     for tool in ("sway", "grim", "wtype", "swaymsg"):
         if shutil.which(tool) is None:
@@ -383,6 +403,8 @@ def main():
     login_records, login_output = login_scenario()
     unlock_records, unlock_output = unlock_scenario()
     fight_output = fight_scenario()
+    external_output = external_select_scenario()
+    check("external select: no QML errors", "ERROR" not in external_output.replace("ERROR: ", "ERROR_"))
     check("selection: no QML errors", "ERROR" not in fight_output.replace("ERROR: ", "ERROR_"))
     for name, output in (("login", login_output), ("unlock", unlock_output)):
         check(f"{name}: no QML errors", "ERROR" not in output.replace("ERROR: ", "ERROR_"), output[-800:] if "ERROR" in output else "")
