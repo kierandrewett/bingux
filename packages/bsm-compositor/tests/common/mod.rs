@@ -98,6 +98,8 @@ pub struct App {
     pub presented: Vec<(u32, u32)>, // (surface proto id, seq)
     pub closed: bool,
     pub releases: u32,
+    /// Keys listed by each wl_keyboard.enter, in order.
+    pub enter_keys: Vec<Vec<u32>>,
     pub xdg_configures: u32,
     pub layer_closed: u32,
     seat: Option<WlSeat>,
@@ -149,7 +151,10 @@ impl Dispatch<WlSeat, ()> for App {
 impl Dispatch<WlKeyboard, ()> for App {
     fn event(app: &mut Self, _: &WlKeyboard, ev: wl_keyboard::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {
         match ev {
-            wl_keyboard::Event::Enter { .. } => app.kb.push(KbEvent::Enter),
+            wl_keyboard::Event::Enter { keys, .. } => {
+                app.enter_keys.push(keys.chunks_exact(4).map(|c| u32::from_ne_bytes([c[0], c[1], c[2], c[3]])).collect());
+                app.kb.push(KbEvent::Enter)
+            }
             wl_keyboard::Event::Leave { .. } => app.kb.push(KbEvent::Leave),
             wl_keyboard::Event::Key { key, state, .. } => {
                 app.kb.push(KbEvent::Key(key, matches!(state, WEnum::Value(wl_keyboard::KeyState::Pressed))))

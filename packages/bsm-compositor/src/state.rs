@@ -190,6 +190,14 @@ pub(crate) struct State {
     pub retry_at: Option<Instant>,
     /// The displays are to be switched off once a cover frame is on the scanout buffers.
     pub blanking: bool,
+    /// The greeter asked for the keyboard before the scene was the greeter's.
+    pub wanted_greeter: bool,
+    /// A session lost input only because an output has no proven frame yet.
+    pub suspended_owner: Option<InputOwner>,
+    /// Keys and buttons released at an owner change; their physical release is swallowed.
+    pub handoff_keys: std::collections::HashSet<u32>,
+    pub handoff_buttons: std::collections::HashSet<u32>,
+    pub buttons_down: std::collections::HashSet<u32>,
     /// The first key since the last focus change has been logged.
     pub key_logged: bool,
     pub harness_frames: Vec<crate::harness::CapturedFrame>,
@@ -925,6 +933,11 @@ pub(crate) fn run(
         frame_failures: 0,
         retry_at: None,
         blanking: false,
+        wanted_greeter: false,
+        suspended_owner: None,
+        handoff_keys: Default::default(),
+        handoff_buttons: Default::default(),
+        buttons_down: Default::default(),
         key_logged: false,
         harness_frames: Vec::new(),
         dump_dir: config.frame_dump_dir.clone(),

@@ -691,3 +691,111 @@ fn f1e_dpms_off_leaves_the_cover_on_the_scanout_and_protect_while_off_is_safe() 
     let f = r.step(16);
     assert_all(frame_of(&f, "Virtual-1"), COVER, "waking never shows the old desktop");
 }
+
+// ---- review F2, F5, F6, F12: input follows the scene and nothing leaks across a hand-off ----
+
+#[test]
+fn f2_a_pointer_grab_does_not_survive_protect() {
+    let mut r = Rig::new("f2", 1, solid(SESSION));
+    r.make_foreground();
+    r.h.pointer_to(10.0, 10.0);
+    r.h.pointer_button(0x110, true); // implicit grab in the session
+    r.h.sync();
+    r.host().roundtrip().unwrap();
+    assert!(r.host().app.ptr.contains(&PtrEvent::Button(0x110, true)));
+    r.h.send(SceneCommand::Protect { session: SID.into(), generation: GEN });
+    r.h.sync();
+    r.host().roundtrip().unwrap();
+    let before = r.host().app.ptr.len();
+    r.h.pointer_to(20.0, 20.0);
+    r.h.pointer_to(30.0, 25.0);
+    r.h.pointer_button(0x110, false);
+    r.h.sync();
+    r.host().roundtrip().unwrap();
+    let after: Vec<_> = r.host().app.ptr[before..].to_vec();
+    assert!(!after.contains(&PtrEvent::Motion), "no motion after protect: {after:?}");
+    assert!(!after.contains(&PtrEvent::Button(0x110, false)), "the physical release is swallowed: {after:?}");
+    let releases = r.host().app.ptr.iter().filter(|e| **e == PtrEvent::Button(0x110, false)).count();
+    assert_eq!(releases, 1, "the session got exactly one release, at the hand-off");
+    assert!(r.host().app.ptr.contains(&PtrEvent::Leave));
+}
+
+#[test]
+fn f12_keys_held_at_hand_off_are_released_not_listed_in_enter() {
+    let mut r = Rig::new("f12", 1, solid(SESSION));
+    r.show_greeter();
+    r.h.send(SceneCommand::SetInputOwner(InputOwner::Greeter));
+    r.step(16);
+    r.h.key(28, true); // Return, still down when the desktop is revealed
+    r.h.sync();
+    let op = r.begin(TransitionKind::NewLoginFade, false, true, 0, true);
+    r.step(16);
+    r.step(16);
+    assert_eq!(r.phases(op).last(), Some(&TransitionPhaseEvent::Completed));
+    r.h.send(SceneCommand::SetInputOwner(InputOwner::Session(SID.into())));
+    r.step(16);
+    r.h.key(28, false); // the physical release arrives after the hand-off
+    r.h.key(30, true);
+    r.h.sync();
+    r.greeter().roundtrip().unwrap();
+    r.host().roundtrip().unwrap();
+    assert!(r.greeter().app.kb.contains(&KbEvent::Key(28, false)), "the greeter got the release of its key");
+    let enters = r.host().app.enter_keys.clone();
+    assert_eq!(enters.len(), 1);
+    assert!(enters[0].is_empty(), "no held key in the new owner's enter: {enters:?}");
+    assert!(!r.host().app.kb.contains(&KbEvent::Key(28, false)), "a release without a press is swallowed");
+    assert!(r.host().app.kb.contains(&KbEvent::Key(30, true)));
+}
+
+#[test]
+fn f5_a_lock_revokes_input_at_once_not_a_frame_later() {
+    let mut r = Rig::new("f5", 1, solid(SESSION));
+    r.make_foreground();
+    r.h.fake_flips(true);
+    r.step(16); // a frame is in flight
+    // Lock without a separate Protect: the engine protects, input must follow immediately.
+    let _ = r.begin(TransitionKind::Lock, true, false, 240, false);
+    r.h.sync();
+    assert_eq!(r.h.focus().owner, InputOwner::None);
+    assert_eq!(r.h.focus().keyboard, None);
+}
+
+#[test]
+fn f6_the_greeter_gets_input_only_when_it_is_what_is_shown() {
+    let mut r = Rig::new("f6", 1, solid(SESSION));
+    r.make_foreground();
+    r.h.take_events();
+    // The desktop is the foreground: a (replayed or buggy) greeter hand-over is refused.
+    r.h.send(SceneCommand::SetInputOwner(InputOwner::Greeter));
+    r.step(16);
+    assert_eq!(r.h.focus().owner, InputOwner::Session(SID.into()));
+    r.h.key(30, true);
+    r.h.sync();
+    r.greeter().roundtrip().unwrap();
+    assert!(r.greeter().app.kb.is_empty(), "the greeter saw no keystroke of the user's desktop");
+
+    // A request that only came early is granted once the scene is the greeter's.
+    r.h.send(SceneCommand::Protect { session: SID.into(), generation: GEN });
+    r.h.send(SceneCommand::SetInputOwner(InputOwner::Greeter));
+    r.h.sync();
+    assert_eq!(r.h.focus().owner, InputOwner::None, "the cover is shown, nobody types");
+    r.h.send(SceneCommand::ShowGreeterOnly);
+    r.h.sync();
+    assert_eq!(r.h.focus().owner, InputOwner::Greeter, "kept request granted when the greeter is shown");
+}
+
+#[test]
+fn f6_a_session_with_an_unproven_output_loses_input_and_gets_it_back_when_proven() {
+    let mut r = Rig::new("f6_unproven", 1, solid(SESSION));
+    r.make_foreground();
+    let mut outs = r.h.outputs.clone();
+    outs.push(bsm_proto::scene::OutputInfo { name: "Virtual-2".into(), x: 64, y: 0, width: W, height: H, scale_120: 120, refresh_mhz: 60_000, transform: 0 });
+    r.h.set_outputs(outs);
+    r.step(16);
+    assert_eq!(r.h.focus().owner, InputOwner::None, "the cover is shown: no typing into an unseen desktop");
+    r.host().roundtrip().unwrap();
+    r.host().host_add_surface("Virtual-2");
+    r.host().host_paint(&solid(SESSION));
+    r.step(16);
+    assert_eq!(r.h.focus().owner, InputOwner::Session(SID.into()), "restored when the desktop is on screen again");
+}

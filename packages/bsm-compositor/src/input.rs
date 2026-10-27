@@ -14,6 +14,7 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, SERIAL_COUNTER};
 use smithay::wayland::shell::wlr_layer::Layer;
 
+use crate::engine::Probe;
 use crate::state::State;
 
 /// The surface under a point plus the global location of that surface's origin.
@@ -27,25 +28,40 @@ impl State {
         }
     }
 
-    /// May `o` receive input right now?
+    /// May `o` receive input right now? A session needs to be the committed, unprotected
+    /// foreground and presentable (what it types into must be what is on the screen); the
+    /// greeter must be what the scene is showing (review F6).
     fn owner_allowed(&self, o: &InputOwner) -> bool {
         match o {
-            InputOwner::None | InputOwner::Greeter => true,
+            InputOwner::None => true,
+            InputOwner::Greeter => self.engine.greeter_owns_scene(),
             InputOwner::Session(sid) => {
                 let Some(rec) = self.sessions.get(sid) else { return false };
-                // Only the committed, visible, unprotected foreground session may type.
-                self.engine.foreground_session() == Some(&(sid.clone(), rec.generation))
+                let key = (sid.clone(), rec.generation);
+                self.engine.foreground_session() == Some(&key) && self.probe_view().session_presentable(&key)
             }
         }
     }
 
+    fn probe_view(&self) -> crate::state::ProbeView<'_> {
+        crate::state::ProbeView {
+            greeter_connected: self.greeter.connected.is_some(),
+            outputs: &self.outputs,
+            sessions: &self.sessions,
+        }
+    }
+
     /// `SceneCommand::SetInputOwner`: queued for the next frame boundary, refused at once
-    /// when the target is not allowed (the reply then names the owner that stays).
+    /// when the target is not allowed (the reply then names the owner that stays). A request
+    /// for the greeter that only waits for the scene (the greeter is not shown yet) is kept
+    /// and granted as soon as the scene is the greeter's.
     pub(crate) fn request_owner(&mut self, o: InputOwner) {
+        self.wanted_greeter = false;
         if self.owner_allowed(&o) {
             self.pending_owner = Some(o);
         } else {
             tracing::warn!("input owner {o:?} refused: not the committed foreground");
+            self.wanted_greeter = o == InputOwner::Greeter;
             self.emit(SceneEvent::InputOwnerChanged(self.owner.clone()));
         }
     }
@@ -61,14 +77,16 @@ impl State {
         }
     }
 
-    /// Switch the owner immediately: clear both focuses first, then focus the new owner,
-    /// so no event can reach two principals.
+    /// Switch the owner immediately: release what the old owner holds, clear both focuses,
+    /// then focus the new owner, so no event can reach two principals.
     pub(crate) fn set_owner_now(&mut self, o: InputOwner) {
         let changed = self.owner != o;
         if changed {
             tracing::info!("input owner {:?} -> {o:?}", self.owner);
         }
         self.pending_owner = None;
+        self.wanted_greeter = false;
+        self.suspended_owner = None;
         let old_session = self.owner_session().cloned();
         self.owner = o;
         self.clear_focus();
@@ -90,31 +108,74 @@ impl State {
         if self.pending_owner == Some(InputOwner::Session(session.clone())) {
             self.pending_owner = None;
         }
+        if self.suspended_owner == Some(InputOwner::Session(session.clone())) {
+            self.suspended_owner = None;
+        }
         if self.owner_session() == Some(session) {
             self.set_owner_now(InputOwner::None);
         }
     }
 
-    /// Fail closed each frame: an owner session that is no longer the committed
-    /// foreground (crashed, unregistered, scene changed) loses input.
+    /// Fail closed whenever the scene or a command changed it: an owner that is no longer
+    /// allowed (protected, crashed, unregistered, not on screen, greeter no longer shown)
+    /// loses input at once. A session that merely stopped being presentable (an output
+    /// appeared and has no frame yet) gets input back when it is proven again.
     pub(crate) fn reconcile_input(&mut self) {
-        if let Some(sid) = self.owner_session().cloned() {
-            if !self.owner_allowed(&InputOwner::Session(sid)) {
+        if !self.owner_allowed(&self.owner.clone()) {
+            let was = self.owner.clone();
+            // A hand-over that is already queued survives the loss of the old owner.
+            let queued = self.pending_owner.clone();
+            let wanted = self.wanted_greeter;
+            if let InputOwner::Session(sid) = &was {
+                let unproven = self.sessions.get(sid).is_some_and(|rec| {
+                    self.engine.foreground_session() == Some(&(sid.clone(), rec.generation))
+                });
                 self.set_owner_now(InputOwner::None);
+                if unproven {
+                    self.suspended_owner = Some(was.clone());
+                }
+            } else {
+                self.set_owner_now(InputOwner::None);
+            }
+            self.pending_owner = queued;
+            self.wanted_greeter = wanted && was != InputOwner::Greeter;
+            return;
+        }
+        if self.owner == InputOwner::None {
+            if let Some(o) = self.suspended_owner.clone() {
+                if self.owner_allowed(&o) {
+                    self.set_owner_now(o);
+                    return;
+                }
+            }
+            if self.wanted_greeter && self.owner_allowed(&InputOwner::Greeter) {
+                self.set_owner_now(InputOwner::Greeter);
             }
         }
     }
 
+    /// Release what the old owner holds and detach every focus and grab. Keys and buttons
+    /// still down at the hand-off get their release now, so the new owner never sees them in
+    /// `wl_keyboard.enter`, and the physical release that follows is swallowed (review F2, F12).
     fn clear_focus(&mut self) {
         let kb = self.keyboard.clone();
         let ptr = self.pointer.clone();
+        let time = self.now_ms() as u32;
+        for code in kb.pressed_keys() {
+            let serial = SERIAL_COUNTER.next_serial();
+            let _: Option<()> = kb.input(self, code, KeyState::Released, serial, time, |_, _, _| FilterResult::Forward);
+            self.handoff_keys.insert(code.raw());
+        }
+        for button in std::mem::take(&mut self.buttons_down) {
+            let serial = SERIAL_COUNTER.next_serial();
+            ptr.button(self, &ButtonEvent { serial, time, button, state: ButtonState::Released });
+            self.handoff_buttons.insert(button);
+        }
         let serial = SERIAL_COUNTER.next_serial();
+        // An implicit grab would keep the old surface as pointer focus whatever we pass.
+        ptr.unset_grab(self, serial, time);
         kb.set_focus(self, None, serial);
-        ptr.motion(
-            self,
-            None,
-            &MotionEvent { location: self.pointer_pos, serial, time: 0 },
-        );
+        ptr.motion(self, None, &MotionEvent { location: self.pointer_pos, serial, time: 0 });
         ptr.frame(self);
     }
 
@@ -264,6 +325,14 @@ impl State {
     }
 
     pub fn pointer_button(&mut self, button: u32, pressed: bool, time: u32) {
+        if !pressed && self.handoff_buttons.remove(&button) {
+            return;
+        }
+        if pressed {
+            self.buttons_down.insert(button);
+        } else {
+            self.buttons_down.remove(&button);
+        }
         let ptr = self.pointer.clone();
         let serial = SERIAL_COUNTER.next_serial();
         if pressed && self.owner == InputOwner::Greeter {
@@ -314,6 +383,10 @@ impl State {
     where
         F: FnOnce(&mut State, &smithay::input::keyboard::ModifiersState, smithay::input::keyboard::KeysymHandle<'_>) -> FilterResult<T>,
     {
+        if !pressed && self.handoff_keys.remove(&code.raw()) {
+            // Already released to the previous owner at the hand-off.
+            return None;
+        }
         let kb = self.keyboard.clone();
         let serial = SERIAL_COUNTER.next_serial();
         if !self.key_logged && pressed {
