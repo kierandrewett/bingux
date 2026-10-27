@@ -106,7 +106,8 @@ The uid is not in the record. The caller passes it to `publish` from the D-Bus p
 <cache>/<uid>/avatar          PNG, square, at most 512x512
 <cache>/<uid>/wallpaper       JPEG, fitted into 3840x2400, never upscaled
 <cache>/<uid>/wallpaper-blur  JPEG, blurred and dimmed, at most 960x600
-<cache>/<uid>/profile.json    revisions, content hashes, validated appearance
+<cache>/<uid>/profile.json    revisions, hashes of the PUBLISHED files, validated appearance (0644)
+<cache>/<uid>/.private.json   hashes of the private SOURCE images, for change detection (0600)
 <cache>/<uid>/.lock           flock target
 ```
 
@@ -158,6 +159,13 @@ stored in `profile.json` and are monotonic:
 
 * they increase by exactly one when the published content changes, including when an image is
   added or removed;
+* the world-readable `profile.json` holds only hashes of the *published* (re-encoded) files, which
+  anyone can compute from those files. The SHA-256 of the user's private *original* is kept in
+  `.private.json`, mode 0600 and owned by the publisher, because a hash of a private file lets any
+  local user confirm a guess of it (a leaked photo, a known document). Each entry is bound to the
+  hash of the published file it produced, so a sidecar that does not match `profile.json` (a crash
+  between the two writes, a deleted or hand-edited file) is ignored and costs one reconversion.
+  Old `profile.json` files that still carry `source_sha256` lose it on the next publish.
 * they do not change when the same pixels are published again, when only the appearance
   changes, or when the source bytes are identical (the converter is skipped by source SHA-256,
   and an identical result is not installed);

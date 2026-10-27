@@ -43,6 +43,10 @@ pub const WALLPAPER_FILE: &str = "wallpaper";
 pub const WALLPAPER_BLUR_FILE: &str = "wallpaper-blur";
 pub const PROFILE_FILE: &str = "profile.json";
 const LOCK_FILE: &str = ".lock";
+/// Mode 0600, readable by the publisher only: hashes of the users' private original images.
+/// `profile.json` is world readable and must not carry anything derived from a private file
+/// that an observer could use to confirm a guess of it.
+const PRIVATE_FILE: &str = ".private.json";
 const STATE_VERSION: u32 = 1;
 /// The most we read back from a file the converter wrote, or from `profile.json`.
 const MAX_READBACK_BYTES: u64 = 64 * 1024 * 1024;
@@ -193,7 +197,9 @@ pub enum Origin {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct ImageState {
     origin: Origin,
-    /// SHA-256 of the source bytes, to skip an unchanged source.
+    /// SHA-256 of the source bytes, to skip an unchanged source. Never written to the world
+    /// readable `profile.json`; it lives in the 0600 `.private.json` (see `PrivateState`).
+    #[serde(skip)]
     source_sha256: String,
     /// SHA-256 of the published file.
     sha256: String,
@@ -214,6 +220,42 @@ struct State {
     wallpaper_rev: u64,
     avatar: Option<ImageState>,
     wallpaper: Option<ImageState>,
+}
+
+/// The 0600 sidecar. Each hash is bound to the published file's hash, so a sidecar that does not
+/// match `profile.json` (a crash between the two writes) is ignored and costs one reconversion.
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct PrivateState {
+    avatar: Option<PrivateImage>,
+    wallpaper: Option<PrivateImage>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PrivateImage {
+    published_sha256: String,
+    source_sha256: String,
+}
+
+impl PrivateState {
+    fn of(state: &State) -> Self {
+        let image = |image: &Option<ImageState>| {
+            image.as_ref().filter(|image| !image.source_sha256.is_empty()).map(|image| PrivateImage {
+                published_sha256: image.sha256.clone(),
+                source_sha256: image.source_sha256.clone(),
+            })
+        };
+        Self { avatar: image(&state.avatar), wallpaper: image(&state.wallpaper) }
+    }
+
+    fn apply(self, state: &mut State) {
+        for (slot, private) in [(&mut state.avatar, self.avatar), (&mut state.wallpaper, self.wallpaper)] {
+            if let (Some(image), Some(private)) = (slot.as_mut(), private)
+                && image.sha256 == private.published_sha256
+            {
+                image.source_sha256 = private.source_sha256;
+            }
+        }
+    }
 }
 
 impl State {
@@ -241,9 +283,13 @@ struct Staged {
 
 impl Staged {
     fn new(dir: RawFd, base: &str) -> Result<Self, PublishError> {
+        Self::with_mode(dir, base, 0o644)
+    }
+
+    fn with_mode(dir: RawFd, base: &str, mode: u32) -> Result<Self, PublishError> {
         let counter = STAGING_COUNTER.fetch_add(1, Ordering::Relaxed);
         let name = format!(".{base}.tmp.{}.{counter}", std::process::id());
-        let file = sys::create_exclusive_at(dir, &name).map_err(PublishError::io("creating a temporary file"))?;
+        let file = sys::create_exclusive_mode_at(dir, &name, mode).map_err(PublishError::io("creating a temporary file"))?;
         Ok(Self { dir, name, file, placed: false })
     }
 
@@ -394,6 +440,20 @@ impl Publisher {
     }
 
     fn load_state(&self, dir: RawFd, uid: u32) -> Result<State, PublishError> {
+        let mut state = self.load_public_state(dir, uid)?;
+        if let Ok(file) = sys::open_file_at(dir, PRIVATE_FILE)
+            && sys::fstat(file.as_raw_fd()).is_ok_and(|stat| sys::is_regular(stat.mode) && stat.uid == sys::effective_uid())
+        {
+            let mut bytes = Vec::new();
+            let read = io::Read::read_to_end(&mut io::Read::take(&file, MAX_STATE_BYTES + 1), &mut bytes);
+            if let Ok(Ok(private)) = read.map(|_| serde_json::from_slice::<PrivateState>(&bytes)) {
+                private.apply(&mut state);
+            }
+        }
+        Ok(state)
+    }
+
+    fn load_public_state(&self, dir: RawFd, uid: u32) -> Result<State, PublishError> {
         let any_image = [AVATAR_FILE, WALLPAPER_FILE, WALLPAPER_BLUR_FILE]
             .iter()
             .any(|name| sys::open_file_at(dir, name).is_ok());
@@ -420,6 +480,13 @@ impl Publisher {
         text.push('\n');
         let staged = Staged::new(dir, PROFILE_FILE)?;
         io::Write::write_all(&mut &staged.file, text.as_bytes()).map_err(PublishError::io("writing profile.json"))?;
+        // The private sidecar first: if we die between the two, the published hashes do not match
+        // and the sidecar is ignored (one reconversion), never trusted wrongly.
+        let mut private = serde_json::to_string(&PrivateState::of(state)).expect("private state serialises");
+        private.push('\n');
+        let sidecar = Staged::with_mode(dir, PRIVATE_FILE, 0o600)?;
+        io::Write::write_all(&mut &sidecar.file, private.as_bytes()).map_err(PublishError::io("writing the private state"))?;
+        sidecar.place(PRIVATE_FILE)?;
         staged.place(PROFILE_FILE)?;
         sys::fsync(dir).map_err(PublishError::io("syncing the account directory"))
     }

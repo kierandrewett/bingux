@@ -65,8 +65,8 @@ pub fn open_file_at(dir: RawFd, name: &str) -> io::Result<File> {
     Ok(File::from(fd))
 }
 
-/// Creates a new file `name` below `dir`, failing if it exists, mode 0644 before umask.
-pub fn create_exclusive_at(dir: RawFd, name: &str) -> io::Result<File> {
+/// Creates a new file `name` below `dir`, failing if it exists, with exactly `mode` whatever the umask.
+pub fn create_exclusive_mode_at(dir: RawFd, name: &str, mode: u32) -> io::Result<File> {
     let name = cstring(name.as_bytes())?;
     // SAFETY: as above.
     let fd = owned(unsafe {
@@ -74,13 +74,13 @@ pub fn create_exclusive_at(dir: RawFd, name: &str) -> io::Result<File> {
             dir,
             name.as_ptr(),
             libc::O_RDWR | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NOCTTY,
-            0o644 as libc::c_uint,
+            0o600 as libc::c_uint,
         )
     })?;
     let file = File::from(fd);
-    // Umask must not make the greeter's copy unreadable or the file group writable.
+    // The umask must not change the mode: a greeter copy stays readable, a private file private.
     // SAFETY: `file` owns a valid descriptor.
-    check(unsafe { libc::fchmod(file.as_raw_fd(), 0o644) })?;
+    check(unsafe { libc::fchmod(file.as_raw_fd(), mode as libc::mode_t) })?;
     Ok(file)
 }
 

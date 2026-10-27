@@ -122,6 +122,7 @@ fn first_publish_writes_sanitised_copies() {
     for name in ["avatar", "wallpaper", "wallpaper-blur", "profile.json"] {
         assert_eq!(fs::metadata(dir.join(name)).unwrap().permissions().mode() & 0o777, 0o644, "{name}");
     }
+    assert_eq!(fs::metadata(dir.join(".private.json")).unwrap().permissions().mode() & 0o777, 0o600);
     assert!(leftovers(&dir).is_empty(), "{:?}", leftovers(&dir));
     assert_eq!(published.appearance.accent, "#3584e4");
 }
@@ -620,4 +621,49 @@ fn greeter_profiles_point_only_at_published_files() {
     let mut stolen = profile.clone();
     stolen.avatar_path = Some(env.cache().join("1").join("avatar").to_string_lossy().into_owned());
     assert!(matches!(validate_user_profile(&stolen, &env.cache()), Err(ProfileError::Path { .. })));
+}
+
+#[test]
+fn nothing_derived_from_a_private_original_is_world_readable() {
+    use sha2::{Digest, Sha256};
+    let env = Env::new();
+    let source = png_bytes(300, 300, 11);
+    let wallpaper = jpeg_bytes(800, 600, 12);
+    let hex = |bytes: &[u8]| Sha256::digest(bytes).iter().map(|byte| format!("{byte:02x}")).collect::<String>();
+    let (avatar_hash, wallpaper_hash) = (hex(&source), hex(&wallpaper));
+    let published = env.publish(&record(), ImageUpdate::Set(env.file("f.png", &source)), ImageUpdate::Set(env.file("w.jpg", &wallpaper)));
+    assert!(published.warnings.is_empty());
+    // Every file the greeter account can read, whatever its name, must not hold a source hash.
+    for entry in fs::read_dir(env.user_dir()).unwrap() {
+        let path = entry.unwrap().path();
+        let mode = fs::metadata(&path).unwrap().permissions().mode();
+        if mode & 0o004 == 0 {
+            continue; // not world readable
+        }
+        let text = String::from_utf8_lossy(&fs::read(&path).unwrap()).into_owned();
+        assert!(!text.contains(&avatar_hash) && !text.contains(&wallpaper_hash), "{path:?} leaks a source hash");
+        assert!(!text.contains("source_sha256"), "{path:?}");
+    }
+    let private = fs::read_to_string(env.user_dir().join(".private.json")).unwrap();
+    assert!(private.contains(&avatar_hash) && private.contains(&wallpaper_hash), "the change detection still has its hashes");
+
+    // Change detection still works from the private sidecar: after a restart the converter is
+    // handed the hash of the earlier source (a recording stand-in shows what it was given).
+    let args_file = env.root.path().join("args.txt");
+    let script = write_file(env.root.path(), "recorder", format!("#!/bin/sh\necho \"$@\" > {}\nexit 1\n", args_file.display()).as_bytes());
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    let mut config = env.publisher.config().clone();
+    config.converter = bsm_appearance::convert::Converter::new(script);
+    let restarted = Publisher::new(config);
+    let again = restarted
+        .publish(UID, &record(), Sources { avatar: ImageUpdate::Set(env.file("f2.png", &source)), wallpaper: ImageUpdate::Keep })
+        .unwrap();
+    let args = fs::read_to_string(&args_file).unwrap();
+    assert!(args.contains(&format!("--if-unchanged {avatar_hash}")), "{args}");
+    assert_eq!(again.avatar_rev, 1);
+
+    // A sidecar that disagrees with profile.json is ignored, not trusted.
+    fs::write(env.user_dir().join(".private.json"), b"{\"avatar\":{\"published_sha256\":\"x\",\"source_sha256\":\"y\"},\"wallpaper\":null}").unwrap();
+    let after = env.publish(&record(), ImageUpdate::Set(env.file("f3.png", &source)), ImageUpdate::Keep);
+    assert_eq!(after.avatar_rev, 1, "reconverted to identical pixels: still no revision change");
 }
