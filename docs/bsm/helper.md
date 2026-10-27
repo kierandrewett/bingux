@@ -179,7 +179,13 @@ then:
 6. Creates the adoption socket, then reports `SessionOpened{host_pid,
    leader_pid, scope, logind_session}`. `host_pid` is the exact pid of the
    bridge, which is the process that connects to the brokered socket. `scope`
-   is `session-<id>.scope`; `logind_session` is `XDG_SESSION_ID`.
+   is the **absolute cgroup path** of the session scope, read from the supervisor's
+   `/proc/<pid>/cgroup` after `pam_systemd`
+   (`/user.slice/user-1000.slice/session-5.scope`; the unit name is its last component).
+   Before reporting, the helper verifies that the leader and the bridge are in exactly
+   that cgroup and fails the login otherwise, so the compositor can compare
+   `/proc/<host_pid>/cgroup` with the whole path: a bare unit name could be satisfied by any
+   same-uid process that names it. `logind_session` is `XDG_SESSION_ID`.
 
 Commands (`session.gnoblin`, `session.bridge`, in `/etc/bsm/helper.toml`) take
 placeholders `{wayland_display}` (`bsm-<session>`), `{session_id}`,
@@ -222,7 +228,7 @@ session scope. The helper uses the **logind session scope** that
   not know the second.
 * No D-Bus call is needed for it, so the root helper stays free of a bus client
   on the hot path.
-* The compositor's cgroup check (`/proc/<pid>/cgroup` contains `scope`)
+* The compositor's cgroup check (`/proc/<pid>/cgroup` equals the reported absolute path)
   compares against this name.
 
 Cost: when `pam_systemd` is missing from the stack there is no scope.

@@ -93,6 +93,18 @@ pub fn adoption_files_trusted(dir: &Path, sock: &Path, euid: u32) -> Result<(), 
     Ok(())
 }
 
+/// Every `(name, pid)` must be in the cgroup `expected` (absolute path).
+pub fn verify_in_cgroup(procs: &[(&str, u32)], expected: &str) -> Result<(), String> {
+    for (name, pid) in procs {
+        match cgroup::path_of(*pid) {
+            Ok(p) if p == expected => {}
+            Ok(p) => return Err(format!("the {name} (pid {pid}) is in cgroup {p}, not in the session's {expected}")),
+            Err(e) => return Err(format!("cannot read the cgroup of the {name} (pid {pid}): {e}")),
+        }
+    }
+    Ok(())
+}
+
 /// A session id is `s` plus hex in practice; everything that ends up in a
 /// path or an environment variable is limited to a conservative alphabet.
 pub fn valid_session_id(id: &str) -> bool {
@@ -366,9 +378,9 @@ impl Supervisor {
             ));
         }
         let scope_cgroup = own_scope.map(|_| my_cgroup.clone());
-        let scope_name = own_scope
-            .map(str::to_owned)
-            .unwrap_or_else(|| my_cgroup.rsplit('/').next().unwrap_or("").to_owned());
+        // Reported as the ABSOLUTE cgroup path (`/user.slice/user-1000.slice/session-5.scope`):
+        // a bare unit name could be satisfied by any same-uid process that merely names it.
+        let scope_name = my_cgroup.clone();
 
         if self.p.cfg.require_user_runtime {
             let deadline = Instant::now() + Duration::from_secs(self.p.cfg.runtime_wait_secs);
@@ -411,6 +423,13 @@ impl Supervisor {
             }
         };
         let mut ch = Children { leader: Spawned { pid: leader, status: None }, bridge: Spawned { pid: bridge, status: None } };
+
+        // Never report a host_pid that is not in the cgroup being reported: the
+        // compositor trusts the pair when it checks the bridge's connection.
+        if let Err(m) = verify_in_cgroup(&[("leader", leader as u32), ("bridge", bridge as u32)], &my_cgroup) {
+            self.terminate(&mut ch, scope_cgroup.as_deref(), 1000);
+            return Err((ErrorCode::LogindFailure, m));
+        }
 
         // The adoption socket exists before the parent hears about the session,
         // so a helper that restarts right now can still find it.
@@ -663,5 +682,15 @@ mod tests {
         std::os::unix::fs::symlink(&dir, &linkdir).unwrap();
         assert!(ensure_private_dir(&linkdir).is_err());
         assert!(adoption_files_trusted(&linkdir, &sock, me).is_err());
+    }
+
+    #[test]
+    fn verify_in_cgroup_accepts_members_and_names_the_offender() {
+        let me = std::process::id();
+        let mine = cgroup::path_of(me).unwrap();
+        assert!(verify_in_cgroup(&[("self", me)], &mine).is_ok());
+        let e = verify_in_cgroup(&[("self", me)], "/user.slice/other.scope").unwrap_err();
+        assert!(e.contains("self") && e.contains("other.scope"), "{e}");
+        assert!(verify_in_cgroup(&[("gone", u32::MAX - 1)], &mine).is_err());
     }
 }

@@ -184,12 +184,14 @@ if [ -n "$LSESS" ] && [ "$LSESS" != null ]; then
     check "logind: no seat (the Seat property is empty or absent)" sh -c "! grep -q '^Seat=.' $WORK/session1.show"
     eq "logind: Active=yes without a seat" "Active=yes" "$(grep ^Active= "$WORK/session1.show")"
     eq "logind: owned by the user" "Name=bsmt1" "$(grep ^Name= "$WORK/session1.show")"
-    eq "logind: scope matches SessionOpened.scope" "Scope=$SCOPE" "$(grep ^Scope= "$WORK/session1.show")"
-    eq "logind: scope is session-N.scope" "session-$LSESS.scope" "$SCOPE"
+    eq "logind: scope unit is the last component of SessionOpened.scope" "Scope=$(basename "$SCOPE")" "$(grep ^Scope= "$WORK/session1.show")"
+    eq "scope: SessionOpened.scope is the absolute cgroup path" "/user.slice/user-$U1.slice/session-$LSESS.scope" "$SCOPE"
     eq "logind: Desktop=gnoblin" "Desktop=gnoblin" "$(grep ^Desktop= "$WORK/session1.show")"
     eq "logind: LockedHint starts as no" "LockedHint=no" "$(grep ^LockedHint= "$WORK/session1.show")"
     info "logind State: $(grep ^State= "$WORK/session1.show") Remote: $(grep ^Remote= "$WORK/session1.show") Service: $(grep ^Service= "$WORK/session1.show") Leader: $(grep ^Leader= "$WORK/session1.show")"
 fi
+eq "scope: leader's cgroup is exactly SessionOpened.scope" "0::$SCOPE" "$(grep '^0::' /proc/"$LEAD"/cgroup)"
+eq "scope: bridge's cgroup is exactly SessionOpened.scope" "0::$SCOPE" "$(grep '^0::' /proc/"$HOST"/cgroup)"
 check "scope: leader is in the session scope" grep -q "$SCOPE" /proc/"$LEAD"/cgroup
 check "scope: bridge (host_pid) is in the session scope" grep -q "$SCOPE" /proc/"$HOST"/cgroup
 SUP=$(awk '{print $4}' /proc/"$LEAD"/stat)
@@ -250,7 +252,7 @@ check "second user: OpenSession" grep -q session_opened "$WORK/open2.out"
 L2=$(loginctl list-sessions --no-legend | awk '$3 == "bsmt2" {print $1}' | head -n 1)
 info "sessions with two users: $(loginctl list-sessions --no-legend | tr '\n' ';')"
 check "second user: its logind session is Active too" sh -c "loginctl show-session $L2 -p Active | grep -qx Active=yes"
-check "second user: a different scope" test "$(loginctl show-session "$L2" -p Scope --value)" != "$SCOPE"
+check "second user: a different scope" test "$(loginctl show-session "$L2" -p Scope --value)" != "$(basename "$SCOPE")"
 LEAD2=$(field "$WORK/open2.out" leader_pid)
 
 # ---- close only one session ------------------------------------------------

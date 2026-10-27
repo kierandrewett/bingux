@@ -135,7 +135,10 @@ pub enum HelperEvent {
         host_pid: u32,
         /// Pid of the session leader (the Gnoblin runtime).
         leader_pid: u32,
-        /// systemd scope that holds the session processes; bsm verifies connections against it.
+        /// Absolute cgroup path of the session scope (`/user.slice/user-1000.slice/session-5.scope`,
+        /// read from `/proc/<pid>/cgroup` after `pam_systemd`); the unit name is its last
+        /// component. The helper has verified that the leader and the bridge (`host_pid`) are in it.
+        /// bsm compares `/proc/<peer>/cgroup` with the whole path, never with a bare unit name.
         scope: String,
         logind_session: Option<String>,
     },

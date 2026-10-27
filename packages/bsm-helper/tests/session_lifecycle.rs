@@ -58,7 +58,10 @@ fn the_pam_session_stays_open_for_the_desktop_lifetime_and_closes_on_close_sessi
     let o = open(&env, &mut h, &c, "s0000a001", 11);
     assert!(alive(o.leader_pid) && alive(o.host_pid));
     assert_ne!(o.leader_pid, o.host_pid);
-    assert!(!o.scope.is_empty());
+    // The scope is the absolute cgroup path, and both processes really are in it.
+    assert!(o.scope.starts_with('/'), "{}", o.scope);
+    assert_eq!(bsm_helper::cgroup::path_of(o.leader_pid).unwrap(), o.scope);
+    assert_eq!(bsm_helper::cgroup::path_of(o.host_pid).unwrap(), o.scope);
 
     // Authentication succeeded long ago; the PAM session must still be open.
     std::thread::sleep(Duration::from_millis(500));
