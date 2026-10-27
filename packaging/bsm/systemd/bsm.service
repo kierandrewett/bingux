@@ -39,11 +39,14 @@ NotifyAccess=main
 # bsm sends WATCHDOG=1 at half of WATCHDOG_USEC.
 WatchdogSec=30
 # --hold-first-scene: a display that is already lit (the boot splash) keeps its picture
-# until the greeter is on screen, at most 30 s; then the flat cover is shown (docs/bsm/boot.md).
-ExecStart=/usr/bin/bsm --backend drm --hold-first-scene 30000
+# until the greeter is on screen, at most 60 s; then the flat cover is shown (docs/bsm/boot.md).
+# 30 s was too short in QEMU on a host at load average 50: the greeter needed 57 s from the
+# compositor's start to its first frame there.
+ExecStart=/usr/bin/bsm --backend drm --hold-first-scene 60000
 Restart=on-failure
 RestartSec=1
-TimeoutStartSec=90
+# READY=1 waits for the greeter (hold + 10 s at most) after the compositor started.
+TimeoutStartSec=150
 User=bsm
 Group=bsm
 # seatd hands out the DRM and input devices; render is for the GPU render node

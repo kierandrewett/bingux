@@ -356,13 +356,10 @@ def analyse_handover(ctx, vm, events, offset, unit_times, journal):
     ctx.check("bsm scanned out its own framebuffer before Plymouth exited", first is not None and gone is not None and first <= gone + 0.05, f"bsm first flip {first}, splash gone {gone}", handover=True)
     ctx.check("the VT stays in seatd's process mode after Plymouth exits (VT switching keeps working)", bool(summary["vt_modes"]) and summary["vt_modes"][-1][1] == "process", str(summary["vt_modes"][-3:]), handover=True)
     head0 = summaries.get(0)
-    if head0 is not None and gone is not None:
-        ctx.check(
-            "Plymouth was withdrawn only after the greeter was on the screen (VNC lag 0.5 s)",
-            to_host(gone) + 0.5 >= head0["content_first"],
-            f"splash gone {to_host(gone):.2f} s, greeter frame {head0['content_first']:.2f} s",
-            handover=True,
-        )
+    if head0 is not None and first is not None:
+        # The VNC server delivers a frame well after the flip (2.2 s on a host at load 50), so the frame
+        # time is not used to order events: the tracer's flip time is.
+        ctx.number("VNC lag: the greeter frame reached the recorder this long after bsm's first flip (s)", round(head0["content_first"] - to_host(first), 2))
     # systemd and the journal.
     bsm_up = unit_times.get("bsm")
     quit_up = unit_times.get("plymouth-quit")
@@ -500,7 +497,7 @@ R=/tmp/pkgroot; rm -rf $R; mkdir -p $R/usr/lib/systemd/system
 cp /usr/lib/systemd/system/bsm.service /usr/lib/systemd/system/bsm-seatd.service /usr/lib/systemd/system/bsm-helper.service /usr/lib/systemd/system/bsm-helper.socket /usr/lib/systemd/system/bsm-fallback.service $R/usr/lib/systemd/system/
 echo "p.root_bsm=$(systemctl --root=$R is-enabled bsm.service 2>&1 | tail -1)"
 echo "p.root_alias=$(ls $R/etc/systemd/system/display-manager.service 2>&1 | grep -c 'No such')"
-echo "p.pacman_alias=$(pacman -Ql bsm 2>/dev/null | grep -c display-manager)"
+echo "p.pacman_alias=$(pacman -Ql bsm 2>/dev/null | grep -c 'display-manager.service')"
 echo "--- 1 enable (greetd -> bsm)"
 $TOOL enable; echo "rc1=$?"
 snap s1
