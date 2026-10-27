@@ -55,11 +55,11 @@ bsm-helper.socket -------------------------+          |  Type=notify, WatchdogSe
 * `bsm.service` is `WantedBy=graphical.target` and `Before=graphical.target`:
   bsm takes the display-manager role and does not replace `graphical.target`.
   It `Conflicts=` and orders after `getty@tty1.service`, like greetd and GDM.
-* `After=plymouth-quit-wait.service` is the ordering greetd already has in this
-  repository (`greetd-plymouth.conf`): the splash releases the display before bsm
-  asks for DRM master. Taking the display over *without* a blank frame (keeping
-  the splash until the greeter has rendered) is not done; it is listed under
-  [Status](#status).
+* bsm is ordered after `plymouth-start.service` only. It starts while the splash still has the
+  display, `ExecStartPre=` runs `plymouth deactivate`, and `ExecStartPost=` runs
+  `plymouth quit --retain-splash` once `READY=1` (greeter on screen) was sent;
+  `plymouth-quit.service` is ordered after bsm by a drop-in. Measurements, limits and rollback:
+  [boot.md](boot.md).
 * `bsm-seatd.service` is bsm's own seatd, socket group `bsm`. seatd 0.9.3 has no
   option for the socket path (it listens on `/run/seatd.sock`; setting
   `SEATD_SOCK` for the server was tried and ignored), so the unit
@@ -151,12 +151,12 @@ To try bsm from the default entry, edit the boot entry and append `bingux.bsm`
 
 ## Recovery
 
-* **Blank or frozen screen.** `Ctrl+Alt+F3` for a text console. bsm uses
-  seatd's VT binding, so VT switching is meant to work; this is not verified
-  yet (see [Status](#status)). A root shell is also on the serial console
-  (`ttyS0`) in the live image.
-* **bsm does not start.** After three failed starts in a minute,
-  `bsm-fallback.service` starts greetd, so a login screen appears anyway.
+* **Blank or frozen screen.** `Ctrl+Alt+F3` for a text console (measured in QEMU: `chvt 3` and
+  `Ctrl+Alt+F3` work, the greeter returns intact with input; see [boot.md](boot.md)). A root
+  shell is also on the serial console (`ttyS0`) in the live image.
+* **bsm does not start.** After three failed starts in a minute (the start limit),
+  `bsm-fallback.service` starts greetd, so a login screen appears anyway. It waits for that
+  outcome; it does not start greetd at the first failed attempt.
   `systemctl status bsm` shows why.
 * **Boot straight to a text login.** Add `systemd.unit=multi-user.target` to the
   kernel command line, then `bsm-set-display-manager disable`.
@@ -369,8 +369,8 @@ Values as in architecture.md.
 | Frame measurements                                      | implemented and tested  | `tests/bsm-frames.test.py`, 10 tests. |
 | Hot injection                                           | implemented and tested (mechanics) | Against the 2026.10.24 image: 9p mount, tree copied, accounts created, units loaded, `ldd` clean for the helper. bsm itself could not run: `packages/bsm` is not built yet and the image has no seatd. |
 | `OnFailure=` fallback                                   | implemented and tested  | Injected units with a bsm that exits 127: three starts, start limit hit, `bsm-fallback.service` ran and greetd with its greeter was running again. |
-| Plymouth handover without a blank frame                 | not yet implemented     | bsm waits for `plymouth-quit-wait`, as greetd does. |
-| VT switching away from bsm (`Ctrl+Alt+F3`)              | not yet implemented     | Depends on seatd's VT binding; untested. |
+| Plymouth handover without a blank frame                 | implemented and tested (QEMU, staged boot) | 0 frames between splash and greeter, no CRTC disabled, no modeset after the splash, no fbcon restore (`distro/out/bsm-test/boot/`, boot.md). Hard colour cut, real hardware untested. Needs an image rebuild to ship. |
+| VT switching away from bsm (`Ctrl+Alt+F3`)              | implemented and tested (QEMU) | `chvt` and Ctrl+Alt+F3 round trips, greeter intact, input back (boot.md). |
 
 ### Image build and walkthrough
 

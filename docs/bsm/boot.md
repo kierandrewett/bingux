@@ -24,18 +24,19 @@ Measured on the image as shipped (`bingux.bsm`, kernel `drm.debug`, tracer
 | 97.38 to 97.74 | bsm's first commits enable both CRTCs again: two real modesets. |
 | 98 to 140      | cover colour (13,15,23), then the greeter.                                                    |
 
-On the screen: splash, black from the quit until bsm's first frame, cover colour, greeter.
-The VNC recorder saw 2 black frames and no frame for 29.7 s (152.76 s to 182.42 s host time);
-the numbers are inflated by a host at load average 50 (EGL and virgl start-up took 20 s here,
-normally a second or two), the structure is not. Between the splash and bsm's first frame
-there were 4 modeset events and one fbcon takeover.
+On the screen (baseline run, `distro/out/bsm-test/boot/baseline/`, host load 12): splash, one black
+frame (0.8 s), a frame the classifier calls content at 29.1 s (probably the kernel console,
+[INFERENCE: not inspected]), the flat cover (33.2 s) and then the greeter (43.5 s). The kernel log of the same boot has
+6 modeset events after the splash's own (both CRTCs disabled at 16.01, both enabled again at 20.5)
+and one fbcon restore (15.08, right after Plymouth's last close). Earlier baseline boots on a host
+at load average 50 showed the same structure with longer stalls (a 29.7 s gap with 2 black frames).
+Frames are sampled when the picture changes; flashes shorter than the update interval are not seen.
 
-`plymouth quit --retain-splash` was tested and does **not** by itself cure this, in a way
-that matters: with `--retain-splash` the picture stayed on screen through plymouthd's exit and
-fbcon's takeover (the planes changed owner to `[fbcon]` and the VNC stream saw no change), but
-greetd's Gnoblin then still blanked the display when it took over (black frame 2.8 s before its
-greeter in that boot). What decides whether there is a flash is who touches the CRTC next,
-not the flag. The measured facts that the design rests on:
+`plymouth quit --retain-splash` as a way to avoid this was **not** shown to work on its own. In a
+greetd boot with a timer running `deactivate`, `reactivate`, `deactivate` and
+`quit --retain-splash`, the picture stayed on screen through the quit and the VNC stream showed a
+black frame later, when greetd's compositor took the display (cause not isolated). The measured
+facts the design rests on:
 
 * `plymouth deactivate` only drops DRM master (`clients` shows `plymouthd:191:-`) and sets the
   VT to `auto`. The CRTC, the planes and Plymouth's framebuffers stay as they are, the splash
@@ -52,7 +53,7 @@ not the flag. The measured facts that the design rests on:
 plymouth-start --------------------------------+
 bsm-seatd, bsm-helper.socket, logind, dbus ----+--> bsm.service  (does not wait for plymouth-quit*)
                                                     ExecStartPre   bsm-plymouth-handover deactivate
-                                                    ExecStart      bsm --backend drm --hold-first-scene 30000
+                                                    ExecStart      bsm --backend drm --hold-first-scene 60000
                                                     (READY=1 after the first scene is on screen)
                                                     ExecStartPost  bsm-plymouth-handover retain
                                                     ExecStopPost   bsm-plymouth-handover failed
@@ -139,10 +140,40 @@ How each thing is measured, and the floor of each method:
 
 ## Results
 
-Filled from the runs under `distro/out/bsm-test/boot/`. See the end of this file for what was
-actually run and what was not.
+Artifacts: `distro/out/bsm-test/boot/` (`baseline/` is the image as shipped, the rest is the staged
+boot; `report-run2.txt` and `report-run3.txt` are the raw logs, `report-run4-fallback.txt` and `fallback/` the fallback phase, run on an unloaded host).
+Host load average at the start of each run is in the report (12 for the baseline, 38 to 43 for the
+staged runs, which ran before the global VM lock existed or while others used the host).
 
-(see "Results of the runs" below)
+| Measurement (QEMU, 2 heads, 1280x800)                         | Image as shipped            | Staged handover (this change)      |
+| ------------------------------------------------------------- | --------------------------- | ---------------------------------- |
+| Frames between the last splash frame and the first greeter frame | 1 black (0.8 s), then a console-like frame, cover (about 10 s) | **0** on both heads (splash, then greeter) |
+| CRTCs disabled after the splash (tracer)                      | 2                           | 0                                  |
+| Planes off or owned by fbcon after the splash                 | 4 off, 2 fbcon              | 0                                  |
+| Modesets after the splash's own (kernel `drm.debug`)          | 6 (disable x2, set mode x2, enable x2) | 0                       |
+| fbcon restore after Plymouth's last close                     | 1                           | 0                                  |
+| DRM master holder chain                                       | plymouthd, nobody, seatd    | plymouthd, nobody (after `deactivate`), seatd; Plymouth exits later |
+| bsm's first scanout of its own framebuffer vs Plymouth exit   | 4.9 s after                 | 0.4 s before (flip 62.52 s, quit 62.94 s guest) |
+| First scene                                                   | n/a                         | `Presented` (greeter flipped, 20.6 s after the compositor started) |
+
+Not seamless, and not claimed to be:
+
+* The splash (flat near-black with the mark) is replaced by the greeter (blue gradient) in one flip,
+  with no crossfade. That is a hard cut of colour, not a flash to black.
+* The hold is bounded (60 s). A first staged run with 30 s timed out on a host at load 50
+  (`first scene presented (TimedOut) after 46086 ms`, flat cover for 10.8 s, then the greeter): the
+  cover replaced the splash and the greeter followed. A hold timeout is a visible step by design.
+* VNC reports a picture when it changes, with a lag of seconds on a loaded host: the frame
+  analysis cannot order events within that lag, so ordering claims use the tracer and the journal.
+* Real hardware (a GPU whose firmware framebuffer is not the driver's, panel timing, multiple GPUs,
+  efifb/simpledrm handover before the real driver loads) is not tested. In QEMU the real driver
+  (virtio_gpu) was already bound when Plymouth started.
+
+greetd boot, `bingux.bsm` absent (`greetd/`): greetd is the display manager, bsm, bsm-seatd and
+bsm-helper.socket do not run, `display-manager.service` still points at greetd, `plymouth-quit`
+ran and plymouthd is gone with the ordering drop-in installed, greetd's greeter is on the screen
+(`greetd/greetd-greeter.png`). The greetd handover itself has black frames (4 black frames, about
+30 s of black on a loaded host): it is the baseline, not something this change touches.
 
 ## Display-manager role
 
@@ -197,15 +228,20 @@ still up. Nothing touches the enabled units, so the next boot tries bsm again.
   (installed system), or `systemd.mask=bsm.service` for one boot. To boot to a text console:
   `systemd.unit=multi-user.target`.
 
-## Restart of bsm
+## Restart of bsm and VT recovery
 
-Architecture invariant 9: a bsm restart does not reopen user sessions as foreground; recovery brings
-them back protected and the user authenticates. The `session` phase logs two users in
-(A locked, B foreground), runs `systemctl restart bsm` and records what survives (Gnoblin pids,
-logind sessions), what is on both displays (no frame may resemble B's desktop) and what authenticating
-does. Whether `bsm-host` reconnects to the brokered socket after a restart is the bridge's behaviour
-and was unverified before this phase.
+Measured (`session/`, staged boot, bsm pid 898, two displays):
 
-## Results of the runs
+* `chvt 3` and `Ctrl+Alt+F3` (QEMU monitor key) each reached VT 3 with a working root shell, and
+  `chvt 1` / `Ctrl+Alt+F1` returned. After returning, every frame of head 0 was the greeter (no
+  black frame, similarity to the picture before 0.9999 and 0.992), typed keys reached the greeter
+  again (54 pixels changed), bsm kept its pid, and the journal has `session paused (VT switched
+  away)` and `session activated`.
 
-See the section appended below by the last run.
+**Not verified: `systemctl restart bsm` with users logged in.** The `session` phase needs two
+logins first; in the only run (`report-run3.txt`) the login of the first account did not reach the
+reveal within 240 s (`no new_login_fade completion`), so the restart checks were `blocked`, not
+passed. Not investigated here (host load 38, the walkthrough passes on an unloaded host according
+to docs/bsm/packaging.md). What the design says (architecture invariant 9: recovered sessions come
+back protected and the user authenticates) and what bsm-manager unit tests cover are in manager.md;
+the VM behaviour is open. Rerun: `flock /tmp/bsm-vm.lock python3 tests/bsm-boot.py --stage DIR --only session`.
