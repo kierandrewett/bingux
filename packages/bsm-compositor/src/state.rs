@@ -388,7 +388,10 @@ impl CompositorHandler for State {
             self.host_surface_commit(&root);
             return;
         }
-        self.needs_redraw = true;
+        // A greeter that is fully covered by a session cannot change the screen.
+        if !self.greeter_covered() {
+            self.needs_redraw = true;
+        }
         self.greeter_surface_commit(&root);
     }
 }

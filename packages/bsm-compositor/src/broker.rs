@@ -518,13 +518,20 @@ impl State {
         self.refresh_focus();
     }
 
+    /// The greeter is covered when a session is composed and the greeter is not in the plan.
+    /// It then neither needs frame callbacks at the output rate nor wakes the renderer.
+    pub(crate) fn greeter_covered(&self) -> bool {
+        self.last_plan.greeter.is_none() && self.last_plan.session.is_some()
+    }
+
     pub(crate) fn greeter_after_render(&mut self, time: Duration) {
+        let throttle = if self.greeter_covered() { Duration::from_millis(250) } else { Duration::ZERO };
         let mono = smithay::utils::Clock::<smithay::utils::Monotonic>::new().now();
         for rec in &self.outputs {
             let map = layer_map_for_output(&rec.output);
             let mut feedback = OutputPresentationFeedback::new(&rec.output);
             for l in map.layers() {
-                l.send_frame(&rec.output, time, Some(Duration::ZERO), |_, _| Some(rec.output.clone()));
+                l.send_frame(&rec.output, time, Some(throttle), |_, _| Some(rec.output.clone()));
                 l.take_presentation_feedback(
                     &mut feedback,
                     |_, _| Some(rec.output.clone()),

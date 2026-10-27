@@ -57,7 +57,9 @@ Each client has a budget (`roles::ClientBudget`): requests per loop pass, live s
 commits (2000 burst, 1000 per second). A client that exceeds any of them is disconnected; for a
 bridge the manager hears `SessionConnectionRejected` and `SessionGone`. Identical repeated
 reports are dropped before they reach the manager. A hidden session's commits do not wake the
-renderer. **tested** (`security.rs`: report flood, request flood with a lowered pass limit, surface
+renderer; a greeter that is fully covered by a composed session gets frame callbacks at most every
+250 ms and its commits do not wake the renderer either (found by BsmMeasure: a hidden greeter
+burned CPU). Untested at the pixel level: the covered case is only reasoned from the plan. **tested** (`security.rs`: report flood, request flood with a lowered pass limit, surface
 cap, destroyed surface, evidence arming; `roles::budget_tests`).
 
 ## Connection and role model
