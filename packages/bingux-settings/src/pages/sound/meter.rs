@@ -91,6 +91,7 @@ impl Feed {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
+        bingux_ui::runtime::die_with_parent(&mut command);
         let Ok(mut child) = command.spawn() else {
             return;
         };

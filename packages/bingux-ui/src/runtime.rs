@@ -655,3 +655,21 @@ pub fn locate(program: &str) -> String {
         .map(|path| path.to_string_lossy().into_owned())
         .unwrap_or_else(|| program.to_string())
 }
+
+/// Makes `command`'s child die with this process: the kernel sends it
+/// SIGTERM when the thread that spawns it ends. Every long-lived helper
+/// (a monitor, a recorder, a scan) must use this, so a process that exits
+/// without running destructors (a test run, a crash) leaves nothing behind
+/// holding a session bus connection. Spawn from a thread that lives as long
+/// as the child.
+pub fn die_with_parent(command: &mut Command) -> &mut Command {
+    use std::os::unix::process::CommandExt;
+    // SAFETY: the closure only calls prctl, which is async-signal-safe.
+    unsafe {
+        command.pre_exec(|| {
+            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM);
+            Ok(())
+        });
+    }
+    command
+}

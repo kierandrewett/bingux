@@ -571,12 +571,14 @@ impl Scanner {
                 if slot.generation != generation {
                     return;
                 }
-                let spawned = Command::new("bluetoothctl")
+                let mut command = Command::new("bluetoothctl");
+                command
                     .args(["--timeout", SCAN_SECONDS, "scan", "on"])
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn();
+                    .stderr(Stdio::null());
+                bingux_ui::runtime::die_with_parent(&mut command);
+                let spawned = command.spawn();
                 match spawned {
                     Ok(child) => slot.child = Some(child),
                     Err(_) => {

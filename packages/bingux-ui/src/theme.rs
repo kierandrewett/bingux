@@ -447,42 +447,120 @@ pub fn freya_theme(tokens: &Tokens) -> Theme {
     theme
 }
 
+/// Whether a real `gsettings monitor` may be started. Test processes and the
+/// headless snapshot build never start one: a test process that exits
+/// without running destructors would leave the child, and its session bus
+/// connection, behind. `BINGUX_APPEARANCE_MONITOR=1` forces it on (for a test
+/// about the monitor itself) and `=0` forces it off.
+fn appearance_monitor_enabled() -> bool {
+    match std::env::var("BINGUX_APPEARANCE_MONITOR").as_deref() {
+        Ok("1") => true,
+        Ok("0") => false,
+        _ => !(cfg!(test) || cfg!(feature = "testing")),
+    }
+}
+
+/// Owns the `gsettings monitor` child of [`watch_appearance`]. Dropping the
+/// last clone (the window root unmounts, the window closes) kills and reaps
+/// the child. The child also carries `PR_SET_PDEATHSIG(SIGTERM)`, so it dies
+/// with this process even when no destructor runs.
+#[derive(Clone)]
+pub struct AppearanceMonitor(std::sync::Arc<MonitorInner>);
+
+struct MonitorInner {
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    child: std::sync::Arc<std::sync::Mutex<Option<std::process::Child>>>,
+}
+
+impl Drop for MonitorInner {
+    fn drop(&mut self) {
+        self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
+        let child = self
+            .child
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .take();
+        if let Some(mut child) = child {
+            let _ = child.kill();
+            // Reaping waits for the child, so it runs off the UI thread.
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+        }
+    }
+}
+
 /// Follows `gsettings monitor org.gnome.desktop.interface` and updates the
 /// shared tokens when the accent or colour scheme changes elsewhere, for
 /// example in the shell's Control Centre.
 ///
-/// The monitor runs on a background thread for the life of the window; a
-/// missing `gsettings` leaves the tokens unchanged.
-pub fn watch_appearance(mut tokens: State<Tokens>) {
+/// The monitor runs on a background thread for as long as the returned
+/// guard lives; a missing `gsettings` leaves the tokens unchanged. Keep the
+/// guard in a hook so it drops with the window. Nothing is started when
+/// [`appearance_monitor_enabled`] says no.
+pub fn watch_appearance(mut tokens: State<Tokens>) -> AppearanceMonitor {
     use std::io::{BufRead, BufReader};
     use std::process::{Command, Stdio};
-    use std::sync::mpsc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex, mpsc};
     use std::time::Duration;
 
     let (sender, receiver) = mpsc::channel::<(String, String)>();
+    let stop = Arc::new(AtomicBool::new(false));
+    let slot: Arc<Mutex<Option<std::process::Child>>> = Arc::default();
+    let guard = AppearanceMonitor(Arc::new(MonitorInner {
+        stop: Arc::clone(&stop),
+        child: Arc::clone(&slot),
+    }));
+    if !appearance_monitor_enabled() {
+        return guard;
+    }
     std::thread::spawn(move || {
-        let Ok(mut child) = Command::new("gsettings")
+        let mut command = Command::new("gsettings");
+        command
             .args(["monitor", "org.gnome.desktop.interface"])
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-        else {
+            .stderr(Stdio::null());
+        // The child dies with the thread that spawned it (see the helper):
+        // that thread lives as long as the child.
+        crate::runtime::die_with_parent(&mut command);
+        let Ok(mut child) = command.spawn() else {
             return;
         };
-        let Some(stdout) = child.stdout.take() else {
-            return;
-        };
-        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-            if let Some((key, value)) = line.split_once(':')
-                && sender
-                    .send((key.trim().to_string(), value.trim().to_string()))
-                    .is_err()
-            {
-                break;
+        let stdout = child.stdout.take();
+        // The guard may already be gone: then nobody will kill the child.
+        {
+            let mut held = slot.lock().unwrap_or_else(|poison| poison.into_inner());
+            if stop.load(Ordering::SeqCst) {
+                let _ = child.kill();
+                let _ = child.wait();
+                return;
+            }
+            *held = Some(child);
+        }
+        if let Some(stdout) = stdout {
+            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                if stop.load(Ordering::SeqCst) {
+                    break;
+                }
+                if let Some((key, value)) = line.split_once(':')
+                    && sender
+                        .send((key.trim().to_string(), value.trim().to_string()))
+                        .is_err()
+                {
+                    break;
+                }
             }
         }
-        let _ = child.kill();
+        let child = slot
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .take();
+        if let Some(mut child) = child {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     });
     spawn(async move {
         loop {
@@ -509,6 +587,7 @@ pub fn watch_appearance(mut tokens: State<Tokens>) {
             }
         }
     });
+    guard
 }
 
 /// The interface font, read once. It is `appearance.font_family` from
