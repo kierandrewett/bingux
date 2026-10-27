@@ -442,3 +442,127 @@ fn a_report_makes_each_surface_publish_one_post_report_evidence_event() {
     c.host_paint(&solid([9, 9, 9, 255]));
     assert!(count(&mut h).is_empty());
 }
+
+// ---- review F3, F4, F10, F11 ----
+
+fn gone_or_rejected(h: &mut Harness) -> bool {
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionGone { .. })).is_some()
+        && h.events().iter().any(|e| matches!(e, SceneEvent::SessionConnectionRejected { .. }))
+}
+
+#[test]
+fn f4_identical_reports_are_dropped_and_a_report_flood_disconnects_the_bridge() {
+    let mut h = harness(1);
+    let mut c = bring_up_session(&mut h, "s00000050", 2, solid([9, 9, 9, 255]));
+    h.take_events();
+    let host = c.host.clone().unwrap();
+    for _ in 0..3 {
+        host.report(common::bsm::bsm_session_host_v1::ReportKind::GnoblinReady, None, 0, 0, "2".into());
+    }
+    host.report(common::bsm::bsm_session_host_v1::ReportKind::BinguxLaunched, None, 0, 0, "2".into());
+    c.roundtrip().unwrap();
+    h.sync();
+    let n = h.events().iter().filter(|e| matches!(e, SceneEvent::SessionReport { .. })).count();
+    assert_eq!(n, 2, "repeats of an accepted report are not forwarded");
+
+    for i in 0..400u32 {
+        host.report(common::bsm::bsm_session_host_v1::ReportKind::SurfacesMapped, Some("Virtual-1".into()), i % 3, 5, "2".into());
+        if i % 50 == 0 {
+            let _ = c.conn.flush();
+        }
+    }
+    let _ = c.conn.flush();
+    assert!(c.roundtrip().is_err(), "a bridge that floods reports is disconnected");
+    assert!(gone_or_rejected(&mut h), "the manager hears SessionGone and the reason");
+    let reports = h.events().iter().filter(|e| matches!(e, SceneEvent::SessionReport { .. })).count();
+    assert!(reports < 100, "the flood was cut off early: {reports} reports reached the manager");
+}
+
+#[test]
+fn f3_a_request_flood_is_cut_off_and_the_loop_keeps_serving_others() {
+    // A pass limit far below the default makes "faster than the compositor parses"
+    // reproducible: 2000 requests arrive in one flush.
+    let mut cfg = HarnessConfig::with_outputs(1, 64, 48);
+    cfg.request_pass_limit = 500;
+    let mut h = Harness::start(cfg).expect("harness");
+    let mut greeter = connect_greeter(&mut h, 1, solid([1, 2, 3, 255]));
+    let mut host = bring_up_session(&mut h, "s00000051", 1, solid([9, 9, 9, 255]));
+    let surface = host.surfaces[0].1.clone();
+    let started = std::time::Instant::now();
+    for i in 0..6_000u32 {
+        surface.damage_buffer(0, 0, 1, 1);
+        if i % 2000 == 1999 && host.conn.flush().is_err() {
+            break;
+        }
+    }
+    let _ = host.conn.flush();
+    h.sync();
+    assert!(gone_or_rejected(&mut h), "the flooding bridge was disconnected");
+    assert!(started.elapsed() < Duration::from_secs(20));
+    // Everyone else is unaffected.
+    assert!(greeter.roundtrip().is_ok());
+    h.send(SceneCommand::ShowGreeterOnly);
+    let f = h.step(Duration::from_millis(16));
+    assert_eq!(f[0].pixel(1, 1), [1, 2, 3, 255]);
+}
+
+#[test]
+fn f11_a_client_cannot_create_unbounded_surfaces() {
+    let mut h = harness(1);
+    let mut c = connect_greeter(&mut h, 1, solid([1, 2, 3, 255]));
+    let comp = c.compositor.clone().unwrap();
+    let qh = c.qh.clone();
+    let mut keep = Vec::new();
+    for i in 0..700 {
+        keep.push(comp.create_surface(&qh, ()));
+        if i % 100 == 0 {
+            let _ = c.conn.flush();
+        }
+    }
+    let _ = c.conn.flush();
+    assert!(c.roundtrip().is_err(), "past the surface cap the connection is closed");
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::GreeterGone { .. })).expect("GreeterGone");
+}
+
+#[test]
+fn f10_a_destroyed_hosted_surface_makes_the_session_unpresentable() {
+    let mut h = harness(1);
+    let mut c = bring_up_session(&mut h, "s00000052", 1, solid([9, 9, 9, 255]));
+    h.sync();
+    let before = {
+        let evs = h.events();
+        evs.iter().rev().find_map(|e| match e {
+            SceneEvent::SessionSurfaces { surfaces, .. } => Some(surfaces.len()),
+            _ => None,
+        })
+    };
+    assert_eq!(before, Some(1));
+    c.surfaces[0].1.destroy();
+    c.roundtrip().unwrap();
+    h.sync();
+    let after = h.events().iter().rev().find_map(|e| match e {
+        SceneEvent::SessionSurfaces { surfaces, .. } => Some(surfaces.len()),
+        _ => None,
+    });
+    assert_eq!(after, Some(0), "no surface evidence is left for the destroyed wl_surface");
+}
+
+#[test]
+fn request_evidence_arms_every_surface_like_a_report() {
+    let mut h = harness(2);
+    let mut c = bring_up_session(&mut h, "s00000053", 1, solid([9, 9, 9, 255]));
+    h.take_events();
+    h.send(SceneCommand::RequestEvidence { session: "s00000053".into(), generation: 1 });
+    h.sync();
+    assert!(!h.events().iter().any(|e| matches!(e, SceneEvent::SessionSurfaces { .. })));
+    c.host_paint(&solid([9, 9, 9, 255]));
+    h.sync();
+    let n = h.events().iter().filter(|e| matches!(e, SceneEvent::SessionSurfaces { .. })).count();
+    assert_eq!(n, 2, "one event per output frame");
+    // A stale generation arms nothing.
+    h.take_events();
+    h.send(SceneCommand::RequestEvidence { session: "s00000053".into(), generation: 99 });
+    c.host_paint(&solid([9, 9, 9, 255]));
+    h.sync();
+    assert!(!h.events().iter().any(|e| matches!(e, SceneEvent::SessionSurfaces { .. })));
+}

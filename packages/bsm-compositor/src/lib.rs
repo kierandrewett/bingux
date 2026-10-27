@@ -36,6 +36,44 @@ use bsm_proto::scene::{CoverColor, OutputInfo, SceneCommand, SceneEvent};
 pub use harness::{CapturedFrame, FocusSnapshot, FocusTarget, Harness, HarnessCmd, HarnessConfig};
 pub use smithay::reexports::calloop;
 
+/// Liveness of the compositor thread, for the service watchdog (review F3). The compositor
+/// beats once per pass of its event loop (at least every 250 ms while idle); a wedged loop
+/// stops beating, and whoever sends `WATCHDOG=1` can see it through [`Heartbeat::age`].
+#[derive(Clone)]
+pub struct Heartbeat(std::sync::Arc<HeartbeatInner>);
+
+struct HeartbeatInner {
+    base: std::time::Instant,
+    last_ms: std::sync::atomic::AtomicU64,
+}
+
+impl Heartbeat {
+    pub fn new() -> Self {
+        Self(std::sync::Arc::new(HeartbeatInner {
+            base: std::time::Instant::now(),
+            last_ms: std::sync::atomic::AtomicU64::new(0),
+        }))
+    }
+
+    /// Called by the compositor thread.
+    pub(crate) fn beat(&self) {
+        let ms = self.0.base.elapsed().as_millis() as u64;
+        self.0.last_ms.store(ms, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Time since the last beat (since creation if it never beat).
+    pub fn age(&self) -> std::time::Duration {
+        let last = self.0.last_ms.load(std::sync::atomic::Ordering::Relaxed);
+        self.0.base.elapsed().saturating_sub(std::time::Duration::from_millis(last))
+    }
+}
+
+impl Default for Heartbeat {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Which display backend `run` drives.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
@@ -104,6 +142,11 @@ pub struct Config {
     pub seat_name: String,
     /// Explicit primary DRM node (DRM backend). Default: the seat's boot GPU.
     pub drm_device: Option<PathBuf>,
+    /// Requests one client may have handled in one pass of the event loop before it is
+    /// disconnected (default `roles::MAX_REQUESTS_PER_PASS`).
+    pub request_pass_limit: u64,
+    /// Beaten by the compositor thread; hand a clone to the watchdog.
+    pub heartbeat: Option<Heartbeat>,
 }
 
 impl Default for Config {
@@ -120,6 +163,8 @@ impl Default for Config {
             frame_dump_dir: None,
             seat_name: "seat0".into(),
             drm_device: None,
+            request_pass_limit: roles::MAX_REQUESTS_PER_PASS,
+            heartbeat: None,
         }
     }
 }

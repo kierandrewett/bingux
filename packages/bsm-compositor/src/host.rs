@@ -50,7 +50,8 @@ impl HostedSurface {
     /// True when this output has a frame that may be composed: acknowledged, sized
     /// exactly like the output, and presented at least once since.
     pub fn ready(&self, info: &OutputInfo) -> bool {
-        self.acked
+        self.surface.is_alive()
+            && self.acked
             && self.valid
             && self.presented_frames >= 1
             && self.width == info.width
@@ -74,6 +75,8 @@ pub(crate) struct SessionRec {
     pub hosts: Vec<BsmSessionHostV1>,
     pub surfaces: HashMap<String, HostedSurface>,
     pub rejections: u32,
+    /// The last report accepted for each (kind, output): repeats are dropped (review F4).
+    pub last_reports: HashMap<String, HostReport>,
     pub next_serial: u32,
     pub last_input_active: bool,
 }
@@ -126,6 +129,11 @@ impl GlobalDispatch<BsmSessionHostV1, ()> for State {
             res.closed();
             return;
         };
+        if rec.hosts.len() >= crate::roles::MAX_HOST_BINDS {
+            tracing::warn!("session {session}: too many bsm_session_host_v1 binds");
+            res.closed();
+            return;
+        }
         res.identity(session.clone(), generation.to_string(), uid);
         for o in &state.outputs {
             send_output(&res, &o.info, false);
@@ -163,6 +171,11 @@ impl Dispatch<BsmSessionHostV1, HostData> for State {
         _dh: &DisplayHandle,
         data_init: &mut DataInit<'_, State>,
     ) {
+        let cost = match &request {
+            bsm_session_host_v1::Request::Destroy => crate::roles::Cost::Pass,
+            _ => crate::roles::Cost::Control,
+        };
+        state.charge(client, cost);
         // The role is re-read from the connection on every request: the resource data was
         // set by bsm, but nothing here trusts what the client says about itself.
         let current = match role_of(client) {
@@ -279,16 +292,21 @@ impl Dispatch<BsmSessionHostV1, HostData> for State {
                         return;
                     }
                 };
+                let key = format!("{}/{}", kind_name(&report), output_of(&report));
+                let Some(rec) = state.sessions.get_mut(&data.session) else { return };
+                if rec.last_reports.get(&key) == Some(&report) {
+                    // Identical to the last accepted report: nothing new for the manager.
+                    return;
+                }
+                rec.last_reports.insert(key, report.clone());
+                for hs in rec.surfaces.values_mut() {
+                    hs.evidence_pending = true;
+                }
                 state.emit(SceneEvent::SessionReport {
                     session: data.session.clone(),
                     generation: data.generation,
                     report,
                 });
-                if let Some(rec) = state.sessions.get_mut(&data.session) {
-                    for hs in rec.surfaces.values_mut() {
-                        hs.evidence_pending = true;
-                    }
-                }
             }
         }
     }
@@ -297,13 +315,14 @@ impl Dispatch<BsmSessionHostV1, HostData> for State {
 impl Dispatch<BsmSessionSurfaceV1, SurfData> for State {
     fn request(
         state: &mut State,
-        _client: &Client,
+        client: &Client,
         _resource: &BsmSessionSurfaceV1,
         request: bsm_session_surface_v1::Request,
         data: &SurfData,
         _dh: &DisplayHandle,
         _data_init: &mut DataInit<'_, State>,
     ) {
+        state.charge(client, crate::roles::Cost::Control);
         match request {
             bsm_session_surface_v1::Request::AckConfigure { serial } => {
                 let Some(rec) = state.sessions.get_mut(&data.session).filter(|r| r.generation == data.generation)
@@ -388,7 +407,11 @@ impl State {
         if report {
             self.report_evidence(&sid);
         }
-        self.needs_redraw = true;
+        // A hidden session that is not being proven cannot change the screen: its commits
+        // do not wake the renderer (review F11).
+        if visible || report {
+            self.needs_redraw = true;
+        }
     }
 
     /// After a frame was composed: frame callbacks and `presented` events for what was
@@ -503,6 +526,23 @@ impl State {
                 false
             }
         }
+    }
+}
+
+fn kind_name(r: &HostReport) -> &'static str {
+    match r {
+        HostReport::GnoblinReady => "gnoblin_ready",
+        HostReport::OutputConfigured { .. } => "output_configured",
+        HostReport::BinguxLaunched => "bingux_launched",
+        HostReport::SurfacesMapped { .. } => "surfaces_mapped",
+        HostReport::DesktopReady => "desktop_ready",
+    }
+}
+
+fn output_of(r: &HostReport) -> &str {
+    match r {
+        HostReport::OutputConfigured { output } | HostReport::SurfacesMapped { output, .. } => output,
+        _ => "",
     }
 }
 

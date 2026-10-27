@@ -97,6 +97,9 @@ pub struct HarnessConfig {
     pub frame_dump_dir: Option<PathBuf>,
     /// Compose the pointer. Off by default so whole-frame comparisons are exact.
     pub draw_cursor: bool,
+    /// See `Config::request_pass_limit`.
+    pub request_pass_limit: u64,
+    pub heartbeat: Option<crate::Heartbeat>,
 }
 
 impl HarnessConfig {
@@ -114,7 +117,7 @@ impl HarnessConfig {
                 transform: 0,
             })
             .collect();
-        Self { outputs, cover: CoverColor { r: 0.0, g: 0.0, b: 0.0 }, frame_dump_dir: None, draw_cursor: false }
+        Self { outputs, cover: CoverColor { r: 0.0, g: 0.0, b: 0.0 }, frame_dump_dir: None, draw_cursor: false, request_pass_limit: crate::roles::MAX_REQUESTS_PER_PASS, heartbeat: None }
     }
 }
 
@@ -152,6 +155,8 @@ impl Harness {
             frame_dump_dir: cfg.frame_dump_dir,
             seat_name: "seat-test".into(),
             drm_device: None,
+            request_pass_limit: cfg.request_pass_limit,
+            heartbeat: cfg.heartbeat,
         };
         let thread = std::thread::Builder::new()
             .name("bsm-compositor".into())

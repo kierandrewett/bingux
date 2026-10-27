@@ -111,3 +111,16 @@ fn frame_callbacks_and_presented_events_reach_a_visible_session() {
     assert!(seqs.windows(2).all(|w| w[1] > w[0]), "sequence numbers increase: {seqs:?}");
     let _ = OutputInfo { name: String::new(), x: 0, y: 0, width: 0, height: 0, scale_120: 120, refresh_mhz: 0, transform: 0 };
 }
+
+#[test]
+fn the_heartbeat_follows_the_compositor_loop() {
+    let hb = bsm_compositor::Heartbeat::new();
+    let mut cfg = HarnessConfig::with_outputs(1, 64, 48);
+    cfg.heartbeat = Some(hb.clone());
+    let h = Harness::start(cfg).unwrap();
+    std::thread::sleep(Duration::from_millis(900));
+    assert!(hb.age() < Duration::from_millis(500), "an idle compositor still beats: {:?}", hb.age());
+    drop(h);
+    std::thread::sleep(Duration::from_millis(600));
+    assert!(hb.age() >= Duration::from_millis(500), "a stopped loop stops beating: {:?}", hb.age());
+}

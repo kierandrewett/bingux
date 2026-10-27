@@ -36,7 +36,7 @@ use smithay::reexports::wayland_server::protocol::wl_shm::WlShm;
 use smithay::reexports::wayland_server::protocol::wl_subcompositor::WlSubcompositor;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{
-    Client, DataInit, Display, DisplayHandle, GlobalDispatch, New,
+    Client, DataInit, Dispatch, Display, DisplayHandle, GlobalDispatch, New,
 };
 use smithay::utils::{Logical, Point, Transform};
 use smithay::wayland::buffer::BufferHandler;
@@ -198,6 +198,7 @@ pub(crate) struct State {
     pub handoff_keys: std::collections::HashSet<u32>,
     pub handoff_buttons: std::collections::HashSet<u32>,
     pub buttons_down: std::collections::HashSet<u32>,
+    pub budgets: Vec<std::sync::Arc<crate::roles::ClientBudget>>,
     /// The first key since the last focus change has been logged.
     pub key_logged: bool,
     pub harness_frames: Vec<crate::harness::CapturedFrame>,
@@ -219,6 +220,7 @@ macro_rules! gated_global {
                 global_data: &$udata,
                 data_init: &mut DataInit<'_, State>,
             ) {
+                state.charge(client, crate::roles::Cost::Control);
                 <$to as GlobalDispatch<$iface, $udata, State>>::bind(
                     state, dh, client, resource, global_data, data_init,
                 )
@@ -247,6 +249,35 @@ gated_global!(
 gated_global!(WpPresentation, u32, PresentationState, GlobalKind::Presentation);
 
 use smithay::reexports::wayland_server::delegate_dispatch;
+use smithay::reexports::wayland_server::backend::ClientId as BackendClientId;
+use crate::roles::{Cost, budget_of};
+use smithay::reexports::wayland_server::Resource;
+
+/// `Dispatch` for a Smithay-handled interface that first charges the client's budget.
+/// The request is always forwarded (a handler that must create an object cannot be
+/// skipped); an over-budget client is disconnected afterwards (review F3, F11).
+macro_rules! budgeted_dispatch {
+    ($iface:ty, $udata:ty, $to:ty) => {
+        impl Dispatch<$iface, $udata> for State {
+            fn request(
+                state: &mut State,
+                client: &Client,
+                resource: &$iface,
+                request: <$iface as smithay::reexports::wayland_server::Resource>::Request,
+                data: &$udata,
+                dh: &DisplayHandle,
+                data_init: &mut DataInit<'_, State>,
+            ) {
+                state.charge(client, Cost::Pass);
+                <$to as Dispatch<$iface, $udata, State>>::request(state, client, resource, request, data, dh, data_init)
+            }
+
+            fn destroyed(state: &mut State, client: BackendClientId, resource: &$iface, data: &$udata) {
+                <$to as Dispatch<$iface, $udata, State>>::destroyed(state, client, resource, data)
+            }
+        }
+    };
+}
 use smithay::reexports::wayland_server::protocol::{wl_region, wl_shm_pool, wl_subsurface, wl_callback, wl_pointer, wl_keyboard, wl_touch};
 use smithay::wayland::compositor::{RegionUserData, SubsurfaceUserData, SurfaceUserData};
 use smithay::wayland::shm::{ShmBufferUserData, ShmPoolUserData};
@@ -267,34 +298,34 @@ use smithay::reexports::wayland_protocols::wp::presentation_time::server::wp_pre
 use smithay::reexports::wayland_server::Weak;
 use smithay::wayland::presentation::PresentationFeedbackState;
 
-delegate_dispatch!(State: [WlCompositor: ()] => CompositorState);
-delegate_dispatch!(State: [WlSurface: SurfaceUserData] => CompositorState);
-delegate_dispatch!(State: [wl_region::WlRegion: RegionUserData] => CompositorState);
+budgeted_dispatch!(WlCompositor, (), CompositorState);
+budgeted_dispatch!(WlSurface, SurfaceUserData, CompositorState);
+budgeted_dispatch!(wl_region::WlRegion, RegionUserData, CompositorState);
 delegate_dispatch!(State: [wl_callback::WlCallback: ()] => CompositorState);
-delegate_dispatch!(State: [WlSubcompositor: ()] => CompositorState);
-delegate_dispatch!(State: [wl_subsurface::WlSubsurface: SubsurfaceUserData] => CompositorState);
-delegate_dispatch!(State: [WlShm: ()] => ShmState);
-delegate_dispatch!(State: [wl_shm_pool::WlShmPool: ShmPoolUserData] => ShmState);
+budgeted_dispatch!(WlSubcompositor, (), CompositorState);
+budgeted_dispatch!(wl_subsurface::WlSubsurface, SubsurfaceUserData, CompositorState);
+budgeted_dispatch!(WlShm, (), ShmState);
+budgeted_dispatch!(wl_shm_pool::WlShmPool, ShmPoolUserData, ShmState);
 delegate_dispatch!(State: [WlBuffer: ShmBufferUserData] => ShmState);
-delegate_dispatch!(State: [WlSeat: smithay::wayland::seat::SeatUserData<State>] => SeatState<State>);
-delegate_dispatch!(State: [wl_pointer::WlPointer: smithay::wayland::seat::PointerUserData<State>] => SeatState<State>);
-delegate_dispatch!(State: [wl_keyboard::WlKeyboard: smithay::wayland::seat::KeyboardUserData<State>] => SeatState<State>);
-delegate_dispatch!(State: [wl_touch::WlTouch: smithay::wayland::seat::TouchUserData<State>] => SeatState<State>);
-delegate_dispatch!(State: [WlOutput: OutputUserData] => OutputManagerState);
-delegate_dispatch!(State: [ZxdgOutputManagerV1: ()] => OutputManagerState);
-delegate_dispatch!(State: [ZxdgOutputV1: XdgOutputUserData] => OutputManagerState);
-delegate_dispatch!(State: [WpViewporter: ()] => ViewporterState);
-delegate_dispatch!(State: [WpViewport: ViewportState] => ViewportState);
-delegate_dispatch!(State: [WpFractionalScaleManagerV1: ()] => FractionalScaleManagerState);
-delegate_dispatch!(State: [WpFractionalScaleV1: Weak<WlSurface>] => FractionalScaleManagerState);
-delegate_dispatch!(State: [WpPresentation: u32] => PresentationState);
-delegate_dispatch!(State: [WpPresentationFeedback: ()] => PresentationFeedbackState);
+budgeted_dispatch!(WlSeat, smithay::wayland::seat::SeatUserData<State>, SeatState<State>);
+budgeted_dispatch!(wl_pointer::WlPointer, smithay::wayland::seat::PointerUserData<State>, SeatState<State>);
+budgeted_dispatch!(wl_keyboard::WlKeyboard, smithay::wayland::seat::KeyboardUserData<State>, SeatState<State>);
+budgeted_dispatch!(wl_touch::WlTouch, smithay::wayland::seat::TouchUserData<State>, SeatState<State>);
+budgeted_dispatch!(WlOutput, OutputUserData, OutputManagerState);
+budgeted_dispatch!(ZxdgOutputManagerV1, (), OutputManagerState);
+budgeted_dispatch!(ZxdgOutputV1, XdgOutputUserData, OutputManagerState);
+budgeted_dispatch!(WpViewporter, (), ViewporterState);
+budgeted_dispatch!(WpViewport, ViewportState, ViewportState);
+budgeted_dispatch!(WpFractionalScaleManagerV1, (), FractionalScaleManagerState);
+budgeted_dispatch!(WpFractionalScaleV1, Weak<WlSurface>, FractionalScaleManagerState);
+budgeted_dispatch!(WpPresentation, u32, PresentationState);
+budgeted_dispatch!(WpPresentationFeedback, (), PresentationFeedbackState);
 delegate_layer_shell!(State);
-delegate_dispatch!(State: [XdgWmBase: XdgWmBaseUserData] => XdgShellState);
-delegate_dispatch!(State: [XdgPositioner: XdgPositionerUserData] => XdgShellState);
-delegate_dispatch!(State: [XdgPopup: XdgShellSurfaceUserData] => XdgShellState);
-delegate_dispatch!(State: [XdgSurface: XdgSurfaceUserData] => XdgShellState);
-delegate_dispatch!(State: [XdgToplevel: XdgShellSurfaceUserData] => XdgShellState);
+budgeted_dispatch!(XdgWmBase, XdgWmBaseUserData, XdgShellState);
+budgeted_dispatch!(XdgPositioner, XdgPositionerUserData, XdgShellState);
+budgeted_dispatch!(XdgPopup, XdgShellSurfaceUserData, XdgShellState);
+budgeted_dispatch!(XdgSurface, XdgSurfaceUserData, XdgShellState);
+budgeted_dispatch!(XdgToplevel, XdgShellSurfaceUserData, XdgShellState);
 delegate_dmabuf!(State);
 
 // ---------------------------------------------------------------------------------
@@ -312,9 +343,39 @@ impl CompositorHandler for State {
             .compositor
     }
 
-    fn commit(&mut self, surface: &WlSurface) {
-        on_commit_buffer_handler::<State>(surface);
+    fn new_surface(&mut self, surface: &WlSurface) {
+        if let Some(c) = surface.client() {
+            if let Some(b) = budget_of(&c) {
+                if !b.surface_created() {
+                    tracing::warn!("client {:?} has too many surfaces", c.id());
+                    self.disconnect_over_budget(&c);
+                }
+            }
+        }
+    }
+
+    fn destroyed(&mut self, surface: &WlSurface) {
+        if let Some(c) = surface.client() {
+            if let Some(b) = budget_of(&c) {
+                b.surface_destroyed();
+            }
+        }
+        // A hosted surface that goes away makes the session non-presentable (review F10).
+        if let Some((sid, out)) = self.surface_index.get(surface).cloned() {
+            let generation = self.sessions.get(&sid).map(|r| r.generation);
+            if let Some(g) = generation {
+                self.drop_hosted_surface(&sid, g, &out);
+            }
+            self.surface_index.remove(surface);
+        }
         self.needs_redraw = true;
+    }
+
+    fn commit(&mut self, surface: &WlSurface) {
+        if let Some(c) = surface.client() {
+            self.charge(&c, Cost::Commit);
+        }
+        on_commit_buffer_handler::<State>(surface);
         let mut root = surface.clone();
         while let Some(parent) = get_parent(&root) {
             root = parent;
@@ -323,6 +384,7 @@ impl CompositorHandler for State {
             self.host_surface_commit(&root);
             return;
         }
+        self.needs_redraw = true;
         self.greeter_surface_commit(&root);
     }
 }
@@ -555,6 +617,31 @@ impl State {
         match self.surface_index.get(&root) {
             Some((sid, out)) => format!("session {sid} ({out})"),
             None => "greeter".into(),
+        }
+    }
+
+    /// Charge one request to the client's budget; an over-budget client is disconnected.
+    pub fn charge(&mut self, client: &Client, cost: Cost) {
+        let Some(b) = budget_of(client) else { return };
+        if !b.charge(cost) {
+            self.disconnect_over_budget(client);
+        }
+    }
+
+    fn disconnect_over_budget(&mut self, client: &Client) {
+        use smithay::reexports::wayland_server::backend::DisconnectReason;
+        tracing::warn!("client {:?} exceeded its request budget and is disconnected", client.id());
+        if let Some(Role::HostedUser { session, .. }) = crate::roles::role_of(client) {
+            self.reject_session(&session, "request budget exceeded".into());
+        }
+        self.dh.backend_handle().kill_client(client.id(), DisconnectReason::ConnectionClosed);
+    }
+
+    /// A new pass of the event loop: every client gets its per-pass allowance back.
+    pub fn new_pass(&mut self) {
+        self.budgets.retain(|b| std::sync::Arc::strong_count(b) > 1);
+        for b in &self.budgets {
+            b.new_pass();
         }
     }
 
@@ -938,6 +1025,7 @@ pub(crate) fn run(
         handoff_keys: Default::default(),
         handoff_buttons: Default::default(),
         buttons_down: Default::default(),
+        budgets: Vec::new(),
         key_logged: false,
         harness_frames: Vec::new(),
         dump_dir: config.frame_dump_dir.clone(),
@@ -946,8 +1034,11 @@ pub(crate) fn run(
     // Wayland clients.
     handle
         .insert_source(Generic::new(display, Interest::READ, PollMode::Level), |_, display, state| {
+            state.new_pass();
             // SAFETY: the display is not dropped while the source lives.
-            unsafe { display.get_mut().dispatch_clients(state).expect("dispatch clients") };
+            if let Err(e) = unsafe { display.get_mut().dispatch_clients(state) } {
+                tracing::error!("dispatching clients failed: {e}");
+            }
             Ok(PostAction::Continue)
         })
         .map_err(|e| anyhow::anyhow!("insert display source: {e}"))?;

@@ -29,6 +29,7 @@ backend-drm = [
 bsm-proto = { path = "../bsm-proto" }
 anyhow = "1"
 tracing = "0.1"
+parking_lot = "0.12"
 libc = "0.2"
 rustix = { version = "1", features = ["net", "fs", "process"] }
 png = "0.17"

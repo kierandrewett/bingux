@@ -40,6 +40,8 @@ pub(crate) struct RuntimeCfg {
     pub greeter_socket_mode: u32,
     pub greeter_socket_gid: Option<u32>,
     pub session_socket_dir: PathBuf,
+    pub request_pass_limit: u64,
+    pub heartbeat: Option<crate::Heartbeat>,
 }
 
 impl RuntimeCfg {
@@ -49,6 +51,8 @@ impl RuntimeCfg {
             greeter_socket_mode: c.greeter_socket_mode,
             greeter_socket_gid: c.greeter_socket_gid,
             session_socket_dir: c.session_socket_dir.clone(),
+            request_pass_limit: c.request_pass_limit,
+            heartbeat: c.heartbeat.clone(),
         }
     }
 }
@@ -105,8 +109,11 @@ impl State {
     /// Insert a verified stream as a Wayland client with exactly this role.
     pub(crate) fn insert_role_client(&mut self, stream: UnixStream, role: Role) -> std::io::Result<Client> {
         let tx = self.internal_tx.clone();
+        let budget = std::sync::Arc::new(crate::roles::ClientBudget::new(self.cfg.request_pass_limit));
+        self.budgets.push(budget.clone());
         let data = ClientState {
             role,
+            budget,
             compositor: CompositorClientState::default(),
             on_disconnect: Box::new(move |id, role| {
                 let _ = tx.send(Internal::ClientGone { id, role: role.clone() });
@@ -278,6 +285,7 @@ impl State {
                 hosts: Vec::new(),
                 surfaces: HashMap::new(),
                 rejections: 0,
+                last_reports: HashMap::new(),
                 next_serial: 0,
                 last_input_active: false,
             },
@@ -355,7 +363,7 @@ impl State {
         }
     }
 
-    fn reject_session(&mut self, session: &SessionId, reason: String) {
+    pub(crate) fn reject_session(&mut self, session: &SessionId, reason: String) {
         let Some(rec) = self.sessions.get_mut(session) else { return };
         rec.rejections += 1;
         tracing::warn!("session {session}: connection rejected: {reason}");

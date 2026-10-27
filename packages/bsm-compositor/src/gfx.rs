@@ -381,6 +381,9 @@ impl State {
     }
 
     pub(crate) fn after_dispatch(&mut self) {
+        if let Some(h) = &self.cfg.heartbeat {
+            h.beat();
+        }
         self.expire_pending();
         self.flip_watchdog(false);
         if self.backend == crate::Backend::Drm && self.needs_redraw && self.awaiting.is_none() {
