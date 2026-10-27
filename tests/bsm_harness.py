@@ -293,10 +293,14 @@ class BsmVm(Vm):
                 events.append((when, event))
         return events
 
-    def wait_monitor(self, predicate, timeout, poll=1.0):
-        """First (time, event) matching predicate(event), or None after `timeout`."""
+    def event_count(self):
+        """Number of monitor events so far: pass it as `since` to wait only for newer ones."""
+        return len(self.monitor_events())
+
+    def wait_monitor(self, predicate, timeout, poll=1.0, since=0):
+        """First (time, event) matching predicate(event) among events with index >= since, or None after `timeout`."""
         deadline = time.monotonic() + timeout
-        seen = 0
+        seen = since
         while True:
             events = self.monitor_events()
             for when, event in events[seen:]:

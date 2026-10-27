@@ -27,7 +27,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--inject")
     parser.add_argument("--iso")
-    parser.add_argument("--keys", default="")
+    parser.add_argument("--keys", default="", help="key presses; a backslash-n in the text is Enter")
+    parser.add_argument("--after", type=float, default=0, help="seconds to wait after the keys, before the commands")
     parser.add_argument("--wait", type=float, default=25)
     parser.add_argument("--shot")
     parser.add_argument("--user", action="append", default=[], help="create this account (password = name) before bsm starts")
@@ -54,10 +55,10 @@ def main():
                 )
             )
         time.sleep(args.wait)
-        for char in args.keys:
-            vm.key({" ": "spc"}.get(char, char))
+        for char in args.keys.replace("\\n", "\n"):
+            vm.key({" ": "spc", "\n": "ret"}.get(char, char))
             time.sleep(0.3)
-        time.sleep(1.5)
+        time.sleep(1.5 + args.after)
         if args.shot:
             from PIL import Image
 

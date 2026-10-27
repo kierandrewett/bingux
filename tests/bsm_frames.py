@@ -33,9 +33,26 @@ def luma_plane(frame):
     return small[..., 0] * 0.299 + small[..., 1] * 0.587 + small[..., 2] * 0.114
 
 
-def discriminating_mask(under_luma, over_luma, threshold=24.0):
-    """Pixels where the two scenes differ enough for a blend ratio to be measurable."""
-    return np.abs(over_luma - under_luma) >= threshold
+MIN_MASK_PIXELS = 1500
+
+
+def discriminating_mask(under_luma, over_luma, threshold=None):
+    """Pixels where the two scenes differ enough for a blend ratio to be measurable.
+
+    Without a `threshold`, the strictest of 24, 12 and 6 luma levels that still
+    leaves MIN_MASK_PIXELS pixels is used, so a second monitor that shows only a
+    wallpaper (greeter tint against desktop wallpaper) is measured on its small
+    but real difference. If even 6 leaves too few pixels the mask is returned
+    anyway and `fade_alpha` reports None.
+    """
+    difference = np.abs(over_luma - under_luma)
+    if threshold is not None:
+        return difference >= threshold
+    for level in (24.0, 12.0, 6.0):
+        mask = difference >= level
+        if int(mask.sum()) >= MIN_MASK_PIXELS:
+            return mask
+    return difference >= 6.0
 
 
 def fade_alpha(frame, under, over, *, under_luma=None, over_luma=None, mask=None):
@@ -49,7 +66,7 @@ def fade_alpha(frame, under, over, *, under_luma=None, over_luma=None, mask=None
     u = luma_plane(under) if under_luma is None else under_luma
     o = luma_plane(over) if over_luma is None else over_luma
     m = discriminating_mask(u, o) if mask is None else mask
-    if int(m.sum()) < 200:
+    if int(m.sum()) < MIN_MASK_PIXELS:
         return None
     f = luma_plane(frame)
     ratio = (f[m] - u[m]) / (o[m] - u[m])

@@ -63,6 +63,7 @@ GREETER_USER = "bingux-greeter"
 BSM_BINARIES = ["/usr/bin/bsm", "/usr/bin/bsmctl", "/usr/libexec/bsm/bsm-helper", "/usr/libexec/bsm/bsm-host"]
 # A fade or slide needs at least this many intermediate samples to count as continuous motion.
 MIN_INTERMEDIATE = 3
+SLOW_TOML = " ".join(f"'{k} = {v}'" for k, v in (("new_login_ms", 4000), ("unlock_ms", 4000), ("lock_ms", 3000), ("logout_ms", 4000), ("power_ms", 4000)))
 STAGE_ORDER = [
     "auth_accepted",
     "pam_session",
@@ -276,6 +277,11 @@ def step_greeter(run):
             break
         time.sleep(2)
     run.dump("bsmctl-status-greeter", _text)
+    for _ in range(60):
+        plane = run.reference(0)
+        if plane is not None and coverage(plane) > 0.2:
+            break
+        time.sleep(2)
     run.check("the greeter is connected to bsm", isinstance(status, dict) and bool(status.get("greeter_connected")), _text[:160])
     run.check("exactly one bsm process", len(pids) == 1, str(pids))
     comm = vm.run(f"cat /proc/{pids[0]}/comm", 10).strip().splitlines()[-1]
@@ -345,7 +351,7 @@ def login_and_reveal(run, who, uid_key):
     run.settle(2.5)
     greeter = {h: run.reference(h) for h in range(HEAD_COUNT)}
     started = run.stamp(f"login {user}")
-    before_events = len(vm.monitor_events())
+    before_events = vm.event_count()
     # The greeter starts the PAM conversation when an account is shown; its password field
     # takes keys once the first prompt has arrived.
     run.settle(3.0)
@@ -353,7 +359,7 @@ def login_and_reveal(run, who, uid_key):
     run.type_password(password)
     run.settle(1.0)
     run.shot(f"after-password-{user}")
-    done = vm.wait_monitor(lambda e: e.get("event") == "transition" and e.get("kind") == "new_login_fade" and e.get("phase") in ("completed", "committed"), 240)
+    done = vm.wait_monitor(lambda e: e.get("event") == "transition" and e.get("kind") == "new_login_fade" and e.get("phase") in ("completed", "committed"), 240, since=before_events)
     events = vm.monitor_events()[before_events:]
     run.check("the reveal transition completed", done is not None)
     if done is None:
@@ -388,7 +394,7 @@ def check_progress(run, ev):
     run.csv("progress-" + ev["user"], ["stage", "host_time_s"], [(s, arrival[s] - run.vm.t0) for s in STAGE_ORDER if s in arrival])
     clock = run.vm._offset
     started = run.vm.run(
-        f"for p in $(pgrep -u {ev['user']} -x gnoblin) $(pgrep -u {ev['user']} -f bingux-shell); do "
+        f"for p in $(pgrep -u {ev['user']} -x gnoblin) $(pgrep -u {ev['user']} -x bingux); do "
         "awk -v b=$(awk '/btime/{print $2}' /proc/stat) -v h=$(getconf CLK_TCK) '{print $1, b + $22/h}' /proc/$p/stat; done", 20
     )
     run.dump("process-starts-" + ev["user"], started)
@@ -446,7 +452,7 @@ def step_login_a(run):
     run.shot("desktop-a")
     run.state["gnoblin_a"] = run.gnoblin_pid(USER_A[0])
     run.check("Gnoblin of A runs as A", run.state["gnoblin_a"] is not None)
-    run.check("the Bingux shell runs as A", bool(run.vm.run(f"pgrep -u {USER_A[0]} -f bingux-shell", 10).strip()))
+    run.check("the Bingux shell runs as A", bool(run.vm.run(f"pgrep -u {USER_A[0]} -x bingux", 10).strip()))
     run.check("no Gnoblin of A's runs as root or the greeter", not [p for p in run.vm.processes() if p[3] == "gnoblin" and p[2] in ("root", GREETER_USER, "bsm")])
     out = run.vm.run(f"loginctl list-sessions --no-legend | grep -w {USER_A[0]}", 20)
     run.dump("loginctl-a", out)
@@ -464,9 +470,10 @@ def step_lock_a(run):
     desktop = {h: run.reference(h) for h in range(HEAD_COUNT)}
     run.state["desktop_a"] = desktop
     run.stamp("lock requested")
+    mark = vm.event_count()
     out, text = vm.bsmctl_json(f"lock {run.state['session_a']}")
     run.dump("bsmctl-lock", text)
-    locked = vm.wait_monitor(lambda e: e.get("event") == "lock_state_changed" and e.get("locked") is True, 30)
+    locked = vm.wait_monitor(lambda e: e.get("event") == "lock_state_changed" and e.get("locked") is True, 30, since=mark)
     run.check("bsm reports the session locked", locked is not None)
     run.settle(2.5)
     run.state["lock_scene"] = {h: run.reference(h) for h in range(HEAD_COUNT)}
@@ -497,12 +504,16 @@ def slide_checks(run, label, scene, below, start, end):
         run.check(f"display {head}: the slide has at least {MIN_INTERMEDIATE} intermediate frames", len(middle) >= MIN_INTERMEDIATE, f"{len(middle)} frames")
         worst = max((e for _, _, e in middle), default=None)
         run.check(f"display {head}: what the slide reveals is the existing desktop", worst is not None and worst < 8.0, f"max fit error {worst}")
-        # Easing: ease-out. Early velocity must exceed late velocity.
-        if len(middle) >= 4:
-            half = len(middle) // 2
-            first = (middle[half - 1][1] - middle[0][1]) / max(middle[half - 1][0] - middle[0][0], 1e-3)
-            second = (middle[-1][1] - middle[half][1]) / max(middle[-1][0] - middle[half][0], 1e-3)
-            run.check(f"display {head}: the slide eases out (fast then slow)", first > second, f"{first:.0f} vs {second:.0f} px/s")
+        # Easing: the curve is ease-out, so the first quarter of the animation covers more
+        # distance than the last quarter (interpolated between the samples).
+        if len(series) >= 4 and events_end > events_start:
+            times = np.array([t for t, _, _ in series])
+            values = np.array(offsets, dtype=float)
+            quarter = (events_end - events_start) / 4.0
+            at = lambda moment: float(np.interp(moment, times, values))  # noqa: E731
+            first = at(events_start + quarter) - at(events_start)
+            last = at(events_end) - at(events_end - quarter)
+            run.check(f"display {head}: the slide eases out (far in the first quarter, little in the last)", first > last + 0.1 * height, f"{first:.0f} px then {last:.0f} px")
 
 
 def unlock(run, who, uid_key, scene, desktop, label, expect_progress):
@@ -510,10 +521,10 @@ def unlock(run, who, uid_key, scene, desktop, label, expect_progress):
     user, password = who
     vm.bsmctl_json(f"select-user {run.state[uid_key]}")
     run.settle(2.0)
-    before = len(vm.monitor_events())
+    before = vm.event_count()
     run.stamp(f"unlock {user}")
     run.type_password(password)
-    done = vm.wait_monitor(lambda e: e.get("event") == "transition" and e.get("kind") == "unlock_slide_up" and e.get("phase") in ("completed", "committed"), 90)
+    done = vm.wait_monitor(lambda e: e.get("event") == "transition" and e.get("kind") == "unlock_slide_up" and e.get("phase") in ("completed", "committed"), 90, since=before)
     run.check("the unlock transition completed", done is not None)
     events = vm.monitor_events()
     animating, completed = transition_times(events, "unlock_slide_up")
@@ -545,8 +556,9 @@ def step_switch_b(run):
         raise Blocked("no session of A")
     vm = run.vm
     run.state["desktop_a"] = {h: run.reference(h) for h in range(HEAD_COUNT)}
+    mark = vm.event_count()
     vm.bsmctl_json(f"lock {run.state['session_a']}")
-    vm.wait_monitor(lambda e: e.get("event") == "lock_state_changed" and e.get("locked") is True, 30)
+    vm.wait_monitor(lambda e: e.get("event") == "lock_state_changed" and e.get("locked") is True, 30, since=mark)
     run.settle(2.5)
     run.state["lock_scene"] = {h: run.reference(h) for h in range(HEAD_COUNT)}
     sessions = run.sessions()
@@ -574,8 +586,9 @@ def step_back_to_a(run):
     vm = run.vm
     pid_a = run.gnoblin_pid(USER_A[0])
     run.state["desktop_b"] = {h: run.reference(h) for h in range(HEAD_COUNT)}
+    mark = vm.event_count()
     vm.bsmctl_json(f"lock {run.state['session_b']}")
-    vm.wait_monitor(lambda e: e.get("event") == "lock_state_changed" and e.get("locked") is True, 30)
+    vm.wait_monitor(lambda e: e.get("event") == "lock_state_changed" and e.get("locked") is True, 30, since=mark)
     run.settle(2.5)
     vm.bsmctl_json(f"select-user {run.state['uid_a']}")
     run.settle(2.5)
@@ -597,16 +610,17 @@ def step_logout_a(run):
     greeter = run.state["lock_scene"]
     before = len(vm.monitor_events())
     run.stamp("logout requested")
+    mark = vm.event_count()
     out, text = vm.bsmctl_json(f"logout {run.state['session_a']}")
     run.dump("bsmctl-logout", text)
-    done = vm.wait_monitor(lambda e: e.get("event") == "operation_finished", 60)
+    done = vm.wait_monitor(lambda e: e.get("event") == "operation_finished", 60, since=mark)
     run.check("the logout operation finished successfully", done is not None and done[1].get("success") is True)
     events = vm.monitor_events()
     animating, completed = transition_times(events, "logout_fade")
     run.check("bsm ran a logout fade", animating is not None)
     run.settle(3.0)
     run.shot("logged-out-a")
-    run.check("A's session is gone", not vm.pids("gnoblin", USER_A[0]) and not vm.run(f"pgrep -u {USER_A[0]} -f bingux-shell", 10).strip())
+    run.check("A's session is gone", not vm.pids("gnoblin", USER_A[0]) and not vm.run(f"pgrep -u {USER_A[0]} -x bingux", 10).strip())
     run.check("B's Gnoblin survives A's logout", run.gnoblin_pid(USER_B[0]) == run.state["gnoblin_b"])
     run.assert_same_bsm("after the logout")
     after_planes = {}
@@ -628,8 +642,9 @@ def step_greeter_kill(run):
     if not run.state.get("session_b"):
         raise Blocked("no session of B")
     vm = run.vm
+    mark = vm.event_count()
     vm.bsmctl_json(f"lock {run.state['session_b']}")
-    vm.wait_monitor(lambda e: e.get("event") == "lock_state_changed" and e.get("locked") is True, 30)
+    vm.wait_monitor(lambda e: e.get("event") == "lock_state_changed" and e.get("locked") is True, 30, since=mark)
     run.settle(2.5)
     scene = {h: run.reference(h) for h in range(HEAD_COUNT)}
     desktop = run.state["desktop_b"]
@@ -684,9 +699,10 @@ def step_power(run):
     scene = {h: run.reference(h) for h in range(HEAD_COUNT)}
     before = len(vm.monitor_events())
     run.stamp("denied power requested")
+    mark = vm.event_count()
     out, text = vm.bsmctl_json("reboot")
     run.dump("bsmctl-reboot-denied", text)
-    finished = vm.wait_monitor(lambda e: e.get("event") == "operation_finished", 60)
+    finished = vm.wait_monitor(lambda e: e.get("event") == "operation_finished", 60, since=mark)
     run.check("the denied reboot finished as a failure", finished is not None and finished[1].get("success") is False, str(finished[1] if finished else None))
     run.check("the failure carries the inhibited reason", finished is not None and finished[1].get("reason") in ("inhibited", "shutdown_rejected", "unauthorised"), str(finished[1].get("reason") if finished else None))
     run.settle(4.0)
@@ -699,9 +715,10 @@ def step_power(run):
     time.sleep(1.0)
     mark = vm.event_mark()
     run.stamp("power off requested")
+    mark = vm.event_count()
     vm.bsmctl_json("poweroff")
     started = time.monotonic()
-    animating = vm.wait_monitor(lambda e: e.get("event") == "transition" and e.get("kind") == "power_fade" and e.get("phase") == "animating", 30)
+    animating = vm.wait_monitor(lambda e: e.get("event") == "transition" and e.get("kind") == "power_fade" and e.get("phase") == "animating", 30, since=mark)
     run.check("bsm runs the power fade", animating is not None)
     if animating is not None:
         for head in range(HEAD_COUNT):
@@ -734,6 +751,7 @@ def main():
     parser.add_argument("--out", default=os.environ.get("BINGUX_DISTRO_OUT", str(ROOT / "distro/out/bsm-test")))
     parser.add_argument("--only", help="comma separated step names")
     parser.add_argument("--no-bsm-param", action="store_true", help="boot without bingux.bsm")
+    parser.add_argument("--default-timings", action="store_true", help="keep the 200-520 ms transition durations (the frame sampler sees too few frames to measure them)")
     parser.add_argument("--smoke", action="store_true", help="only boot and greeter")
     parser.add_argument("--keep-work", action="store_true")
     args = parser.parse_args()
@@ -767,6 +785,14 @@ def main():
         else:
             run.checks["serial shell"] = True
             vm.run("systemctl is-system-running --wait 2>&1 | head -1", 120)
+            if not args.default_timings:
+                # The VNC capture delivers about 3 frames a second, so a 420 ms fade yields one
+                # frame. The test slows every transition to seconds; the default durations are
+                # asserted by the compositor's own trajectory tests (packages/bsm-compositor).
+                vm.run(f"mkdir -p /etc/bsm && printf '%s\\n' '[transitions]' {SLOW_TOML} > /etc/bsm/bsm.toml", 20)
+                run.dump("bsm-toml", vm.run("cat /etc/bsm/bsm.toml; systemctl is-active bsm", 20))
+                if vm.run("systemctl is-active bsm", 10).strip().endswith("active") and "inactive" not in vm.run("systemctl is-active bsm", 10):
+                    vm.run("systemctl restart bsm", 60)
             # Account B exists before bsm starts: bsm lists accounts at start-up.
             vm.run(f"id {USER_B[0]} >/dev/null 2>&1 || (useradd -m -G video,audio -s /bin/bash {USER_B[0]} && echo {USER_B[0]}:{USER_B[1]} | chpasswd)", 30)
             if args.inject:
