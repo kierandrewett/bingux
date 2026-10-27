@@ -71,6 +71,14 @@ pub enum SceneCommand {
         scope: String,
         host_pid: u32,
     },
+    /// Arm the evidence of every surface of the session: the next valid, acknowledged commit of
+    /// each surface emits exactly one `SessionSurfaces` with the incremented `presented_frames`
+    /// (the same mechanism a forwarded `report` triggers). The manager uses it before revealing an
+    /// existing, hidden session, to require a frame newer than the one it had at `Protect`.
+    RequestEvidence {
+        session: SessionId,
+        generation: Generation,
+    },
     /// Drop the session: remove its socket, scene node and buffers. Safe cover until the
     /// next command changes the scene.
     UnregisterSession {
