@@ -34,13 +34,14 @@ pub struct Env {
     /// Peer process identity; empty means unchecked (see `SocketConfig`).
     pub peer_exe: String,
     pub peer_cgroup: String,
+    pub login_service: String,
 }
 
 impl Env {
     pub fn new() -> Env {
         let pam = TestPam::new();
         let allowed_uid = pam.uid;
-        Env { pam, dir: tempfile::tempdir().unwrap(), extra_config: String::new(), allowed_uid, peer_exe: String::new(), peer_cgroup: String::new() }
+        Env { pam, dir: tempfile::tempdir().unwrap(), extra_config: String::new(), allowed_uid, peer_exe: String::new(), peer_cgroup: String::new(), login_service: "bsm-test-login".into() }
     }
 
     pub fn socket(&self) -> PathBuf {
@@ -73,7 +74,7 @@ allowed_exe = "{peer_exe}"
 allowed_cgroup = "{peer_cgroup}"
 
 [pam]
-login_service = "bsm-test-login"
+login_service = "{login_service}"
 unlock_service = "bsm-test-password"
 confdir = "{pamdir}"
 ticket_ttl_secs = 30
@@ -100,6 +101,7 @@ socket_root = "{d}/run"
             uid = self.allowed_uid,
             peer_exe = self.peer_exe,
             peer_cgroup = self.peer_cgroup,
+            login_service = self.login_service,
             pamdir = self.pam.path().display(),
             d = d.display(),
             sessions = self.session_socket_dir().display(),
@@ -319,7 +321,7 @@ impl Client {
 
     pub fn auth_start(&self, env: &Env, req_id: u64, generation: u64, intent: AuthIntent) {
         let service = match intent {
-            AuthIntent::Login | AuthIntent::Switch => "bsm-test-login",
+            AuthIntent::Login | AuthIntent::Switch => env.login_service.as_str(),
             AuthIntent::Unlock => "bsm-test-password",
         };
         self.send(&HelperRequest::AuthStart {

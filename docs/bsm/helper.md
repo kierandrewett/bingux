@@ -101,6 +101,13 @@ Rules:
 * **Abort.** `AuthAbort` tells the child, reports `cancelled`, and kills the
   child after one second if it is still busy. Its result is never used, even if
   it authenticated in the meantime.
+* **No failed login from an abort.** When a conversation is cancelled (`AuthAbort`, a new
+  `AuthStart`, bsm gone) or a prompt times out, the child sends its verdict and `_exit`s inside the
+  conversation callback. Returning an error instead makes `pam_unix` fail and the stack reach
+  `pam_faillock authfail`, which records a failed login nobody attempted (three account switches
+  or three idle minutes at the lock screen locked the account for ten minutes: found by the VM
+  security scenario 4). Real wrong passwords are still recorded by the stack and counted by the
+  helper's own back-off.
 * **Timeouts.** `pam.prompt_timeout_secs` (60 s) bounds one answer, measured
   in the child. `pam.conversation_timeout_secs` (120 s) bounds the whole
   conversation and kills the child. Both report `timeout`.

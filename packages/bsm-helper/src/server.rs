@@ -556,6 +556,7 @@ impl Server {
             service,
             user: pw.name.clone(),
             uid: pw.uid,
+            exit_on_interrupt: true,
             confdir: self.cfg.pam.confdir.clone(),
             prompt_timeout: Duration::from_secs(self.cfg.pam.prompt_timeout_secs),
         };

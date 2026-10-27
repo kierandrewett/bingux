@@ -147,6 +147,15 @@ check "auth: a wrong password is refused" grep -q "authentication failed" "$WORK
 check "auth: the correct password is accepted by the real PAM stack" probe login bsmt1 "$U1" 2
 if command -v faillock >/dev/null 2>&1 && grep -q pam_faillock /etc/pam.d/system-auth; then
     faillock --user bsmt1 --reset
+    # An aborted conversation (account switch in the greeter, idle lock screen) is not a
+    # failed login: three of them must leave no record and must not lock the account.
+    for unit in login unlock; do
+        probe abort bsmt1 "$U1" 4 $unit >"$WORK/abort-$unit.out" 2>&1
+        check "faillock: four aborted $unit conversations complete as cancelled" test $? -eq 0
+    done
+    eq "faillock: aborted conversations left no failure record" "0" "$(faillock --user bsmt1 | grep -c -E 'bsm-(login|unlock)')"
+    check "faillock: the correct password still works after the aborts" probe login bsmt1 "$U1" 25
+    faillock --user bsmt1 --reset
     for i in 1 2 3 4 5 6; do BSM_PROBE_PASSWORD=wrong-password probe login bsmt1 "$U1" "1$i" >/dev/null 2>&1; done
     if probe login bsmt1 "$U1" 20 >"$WORK/locked.out" 2>&1; then
         fail "faillock: the distro lockout applies to bsm logins" "login succeeded after 6 failures"

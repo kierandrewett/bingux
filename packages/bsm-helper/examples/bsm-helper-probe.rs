@@ -7,6 +7,7 @@
 //! ```text
 //! bsm-helper-probe [--socket PATH] ping
 //! bsm-helper-probe [--socket PATH] login USER UID GEN [login|unlock]   password from $BSM_PROBE_PASSWORD
+//! bsm-helper-probe [--socket PATH] abort USER UID N [login|unlock]  N times: start, wait for the prompt, AuthAbort
 //! bsm-helper-probe [--socket PATH] open  USER UID SESSION GEN SOCKET   login + OpenSession
 //! bsm-helper-probe [--socket PATH] close SESSION GEN [GRACE_MS]
 //! bsm-helper-probe [--socket PATH] lock  SESSION GEN true|false
@@ -112,6 +113,25 @@ fn run() -> Result<(), String> {
                 _ => AuthIntent::Login,
             };
             c.login(&a(1)?, num(2)? as u32, num(3)?, intent)?;
+        }
+        "abort" => {
+            let (user, uid, n) = (a(1)?, num(2)? as u32, num(3)?);
+            let (intent, service) = match args.get(4).map(String::as_str) {
+                Some("unlock") => (AuthIntent::Unlock, "bsm-unlock"),
+                _ => (AuthIntent::Login, "bsm-login"),
+            };
+            for i in 0..n {
+                let req_id = 100 + i;
+                c.send(&HelperRequest::AuthStart { req_id, user: user.clone(), uid, intent, generation: 1, service: service.to_owned() })?;
+                c.until(Duration::from_secs(60), |e| {
+                    matches!(e, HelperEvent::AuthPrompt { kind: PamPromptKind::EchoOff | PamPromptKind::EchoOn, .. })
+                })?;
+                c.send(&HelperRequest::AuthAbort { req_id })?;
+                match c.until(Duration::from_secs(30), |e| matches!(e, HelperEvent::AuthDone { .. }))? {
+                    HelperEvent::AuthDone { ok: false, code: Some(bsm_proto::error::ErrorCode::Cancelled), .. } => {}
+                    other => return Err(format!("expected a cancelled conversation, got {other:?}")),
+                }
+            }
         }
         "open" => {
             let (user, uid, session, generation, socket_path) = (a(1)?, num(2)? as u32, a(3)?, num(4)?, a(5)?);

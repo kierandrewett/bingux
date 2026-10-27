@@ -598,3 +598,56 @@ fn only_the_compositor_process_is_served_not_every_process_of_its_uid() {
         assert!(wrong_unit.closed_within(Duration::from_secs(3)), "a process outside bsm.service must be refused");
     }
 }
+
+fn record_config(env: &Env, extra: &str) -> String {
+    env.config().replace("ticket_ttl_secs = 30", &format!("ticket_ttl_secs = 30\n{extra}"))
+}
+
+fn wait_for_records(env: &Env, at_least: usize, within: Duration) -> usize {
+    let end = std::time::Instant::now() + within;
+    while std::time::Instant::now() < end {
+        if env.pam.failure_records() >= at_least {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    env.pam.failure_records()
+}
+
+#[test]
+fn cancelled_and_timed_out_conversations_leave_no_failed_login_record() {
+    // The lockout module (pam_faillock) records a failure when the stack fails. An abort,
+    // a switch of account or an idle prompt is not a failed login and must not count.
+    if skip_as_root() {
+        return;
+    }
+    let mut env = Env::new();
+    env.login_service = "bsm-test-record".into();
+    let _h = env.start_with(&record_config(&env, "prompt_timeout_secs = 1"));
+    let c = env.connect();
+    // Positive control: a wrong password IS recorded.
+    answer_wrong(&c, &env, 1, "wrong-password");
+    assert!(matches!(c.until(done), HelperEvent::AuthDone { req_id: 1, ok: false, .. }));
+    assert_eq!(wait_for_records(&env, 1, Duration::from_secs(5)), 1, "a wrong password must be recorded");
+
+    // AuthAbort at the prompt.
+    c.auth_start(&env, 2, 1, AuthIntent::Login);
+    c.until(|e| matches!(e, HelperEvent::AuthPrompt { kind: PamPromptKind::EchoOff, .. }));
+    c.send(&HelperRequest::AuthAbort { req_id: 2 });
+    assert!(matches!(c.until(done), HelperEvent::AuthDone { req_id: 2, code: Some(ErrorCode::Cancelled), .. }));
+    // Switching account: a new AuthStart supersedes the unanswered conversation.
+    c.auth_start(&env, 3, 1, AuthIntent::Login);
+    c.until(|e| matches!(e, HelperEvent::AuthPrompt { req_id: 3, kind: PamPromptKind::EchoOff, .. }));
+    c.auth_start(&env, 4, 1, AuthIntent::Login);
+    assert!(matches!(c.until(done), HelperEvent::AuthDone { req_id: 3, code: Some(ErrorCode::Cancelled), .. }));
+    // An unanswered prompt times out (1 s here).
+    c.until(|e| matches!(e, HelperEvent::AuthPrompt { req_id: 4, kind: PamPromptKind::EchoOff, .. }));
+    assert!(matches!(c.until(done), HelperEvent::AuthDone { req_id: 4, code: Some(ErrorCode::Timeout), .. }));
+    // bsm going away mid-conversation.
+    c.auth_start(&env, 5, 1, AuthIntent::Login);
+    c.until(|e| matches!(e, HelperEvent::AuthPrompt { req_id: 5, kind: PamPromptKind::EchoOff, .. }));
+    drop(c);
+    // Give every child time to finish; none may have added a record.
+    std::thread::sleep(Duration::from_millis(1500));
+    assert_eq!(env.pam.failure_records(), 1, "only the wrong password may be recorded");
+}

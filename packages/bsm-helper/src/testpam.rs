@@ -61,12 +61,27 @@ impl TestPam {
             ),
             0o644,
         );
+        // Models `pam_faillock`: on any failure of the first module (a wrong password or a
+        // conversation error) a later module records a failed login; success skips it.
+        write(&d.join("record-fail.sh"), &format!("#!/bin/sh\n[ \"$PAM_TYPE\" = auth ] && echo fail >> {}/failures.log\nexit 0\n", d.display()), 0o755);
+        write(
+            &d.join("bsm-test-record"),
+            &format!(
+                "auth [success=2 default=ignore] pam_exec.so expose_authtok quiet {d}/check.sh\nauth optional pam_exec.so quiet {d}/record-fail.sh\nauth requisite pam_deny.so\nauth required pam_permit.so\naccount required pam_permit.so\nsession required pam_permit.so\n",
+                d = d.display()
+            ),
+            0o644,
+        );
         write(&d.join("bsm-test-deny"), "auth required pam_deny.so\naccount required pam_permit.so\n", 0o644);
         TestPam { dir, user, uid }
     }
 
     pub fn path(&self) -> &Path {
         self.dir.path()
+    }
+
+    pub fn failure_records(&self) -> usize {
+        std::fs::read_to_string(self.dir.path().join("failures.log")).map(|t| t.lines().count()).unwrap_or(0)
     }
 
     pub fn session_log(&self) -> PathBuf {

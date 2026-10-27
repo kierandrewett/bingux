@@ -34,6 +34,14 @@ pub struct AuthParams {
     pub confdir: Option<PathBuf>,
     /// How long the user may take to answer one prompt.
     pub prompt_timeout: Duration,
+    /// End the process inside the conversation when it is cancelled or times out
+    /// (the forked child; tests that run the child as a thread set this false).
+    ///
+    /// Returning an error from the conversation makes `pam_unix` fail and the stack
+    /// then reaches `pam_faillock authfail`, which records a failed login nobody
+    /// attempted: three account switches or three idle minutes would lock the account.
+    /// A child that exits before PAM sees any failure leaves no record.
+    pub exit_on_interrupt: bool,
 }
 
 /// Conversation that relays prompts over the child's socket to the helper.
@@ -44,11 +52,21 @@ struct Relay {
     timeout: Duration,
     slot: InterruptSlot,
     session_phase: Rc<Cell<bool>>,
+    exit_on_interrupt: bool,
 }
 
 impl Relay {
     fn interrupt(&self, why: Interrupt) -> Interrupt {
         self.slot.set(Some(why));
+        if self.exit_on_interrupt {
+            let (code, message) = match why {
+                Interrupt::Cancelled => (ErrorCode::Cancelled, "authentication cancelled"),
+                Interrupt::TimedOut => (ErrorCode::Timeout, "authentication timed out"),
+            };
+            let _ = ipc::send_msg(self.sock, &AuthChildEvent::Done { ok: false, code: Some(code), message: message.to_owned() });
+            // No destructors: libpam must not run the rest of the failing stack.
+            unsafe { libc::_exit(1) };
+        }
         why
     }
 }
@@ -101,7 +119,7 @@ pub struct Authenticated {
 pub fn run_conversation(sock: RawFd, params: &AuthParams) -> (AuthChildEvent, Option<Authenticated>) {
     let slot: InterruptSlot = Default::default();
     let session_phase = Rc::new(Cell::new(false));
-    let relay = Relay { sock, timeout: params.prompt_timeout, slot: slot.clone(), session_phase: session_phase.clone() };
+    let relay = Relay { sock, timeout: params.prompt_timeout, slot: slot.clone(), session_phase: session_phase.clone(), exit_on_interrupt: params.exit_on_interrupt };
     let mut pam = match Pam::start(&params.service, &params.user, params.confdir.as_deref(), Box::new(relay)) {
         Ok(p) => p,
         Err(e) => {
@@ -176,6 +194,7 @@ mod tests {
             service: service.to_owned(),
             user: pam.user.clone(),
             uid: pam.uid,
+            exit_on_interrupt: false,
             confdir: Some(pam.dir.path().to_path_buf()),
             prompt_timeout: Duration::from_secs(5),
         }
@@ -273,7 +292,7 @@ mod tests {
         let pam = TestPam::new();
         let (parent, child) = sys::seqpacket_pair().unwrap();
         drop(parent);
-        let relay = Relay { sock: child.as_raw_fd(), timeout: Duration::from_secs(1), slot: Default::default(), session_phase: Rc::new(Cell::new(true)) };
+        let relay = Relay { sock: child.as_raw_fd(), timeout: Duration::from_secs(1), slot: Default::default(), session_phase: Rc::new(Cell::new(true)), exit_on_interrupt: false };
         let mut h = Pam::start("bsm-test-deny", &pam.user, Some(pam.dir.path()), Box::new(relay)).unwrap();
         assert!(check_user(&h, pam.uid).is_ok());
         assert!(check_user(&h, pam.uid + 1).is_err(), "another uid must not match");
