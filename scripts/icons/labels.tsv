@@ -1,15 +1,15 @@
 # file | where the user sees it (label, surface) | the conventional metaphor | chat fork glyph + weight, or custom
 # Read by sheets.py (labelled mapping sheet) and by map-fork.py (writes the <fork/> sources). Names are Adwaita file names without -symbolic.svg.
-network-wireless | Wi-Fi (sidebar), top-bar wireless | Wi-Fi fan | custom: WifiMedium bold scaled 1.5 to fill the box
-network-wireless-signal-none | Wi-Fi list row: no signal | empty fan | custom: WifiNone bold scaled 1.5 to fill the box
-network-wireless-signal-weak | Wi-Fi list row: weak | dot lit | custom: WifiLow bold scaled 1.5 to fill the box
-network-wireless-signal-ok | Wi-Fi list row: ok | one arc lit | custom: WifiMedium bold scaled 1.5 to fill the box
-network-wireless-signal-good | Wi-Fi list row: good | two arcs, partly lit | custom: WifiMedium bold scaled 1.5 to fill the box
-network-wireless-signal-excellent | Wi-Fi list row, hero, top bar: full | full fan | custom: WifiMedium bold scaled 1.5 to fill the box
-network-wireless-disabled | Wi-Fi off | fan with slash | custom: WifiMedium bold + slash
+network-wireless | Wi-Fi (sidebar), top-bar wireless | Wi-Fi fan | custom: two arcs and a dot
+network-wireless-signal-none | Wi-Fi list row: no signal | dot only | custom: a dot, centre (8, 12.5)
+network-wireless-signal-weak | Wi-Fi list row: weak | one arc | custom: one arc and a dot
+network-wireless-signal-ok | Wi-Fi list row: ok | two arcs | custom: two arcs and a dot
+network-wireless-signal-good | Wi-Fi list row: good | two arcs | custom: two arcs and a dot
+network-wireless-signal-excellent | Wi-Fi list row, hero, top bar: full | full fan | custom: two arcs and a dot
+network-wireless-disabled | Wi-Fi off | fan with slash | custom: two arcs and a dot, plus a slash
 network-wireless-encrypted | Wi-Fi list row: secured network | padlock | LockKey fill
 network-wireless-hotspot | Hotspot | broadcasting dot with arcs | Broadcast bold
-network-offline | top bar: no network | fan with x | custom: WifiMedium bold + x
+network-offline | top bar: no network | fan with x | custom: two arcs and an x where the dot is
 network-error | top bar: network problem | network with x | NetworkX bold
 network-wired | Network (sidebar), wired connection row, top-bar wired | wired network | Network bold
 network-vpn | VPN (rows, Control Centre) | shield | Shield fill
@@ -28,7 +28,7 @@ audio-card | Sound card device (Sound page) | audio device / waveform | Waveform
 media-playback-pause | Pause (inspector toolbar) | two bars | Pause fill
 preferences-system-notifications | Notifications (top bar) | bell | Bell fill
 notifications-disabled | Do not disturb (top bar, Control Centre) | bell with slash | BellSlash fill
-view-app-grid | Applications (sidebar), top-bar launcher | grid of nine dots | DotsNine fill
+view-app-grid | Applications (sidebar), top-bar launcher | grid of nine dots | DotsNine bold
 system-shutdown | Power (top bar, power menu) | power symbol | Power bold
 battery-level-100 | Power (sidebar), battery full | horizontal battery | BatteryFull bold
 battery-level-50 | battery half | horizontal battery | BatteryMedium bold
@@ -62,12 +62,12 @@ night-light | Night light | moon and stars | MoonStars fill
 weather-clear-night | Dark style | moon | Moon fill
 preferences-desktop-accessibility | Accessibility (sidebar) | person in circle | PersonSimpleCircle fill
 applications-graphics | Appearance (sidebar) | palette | Palette fill
-preferences-desktop-wallpaper | Desktop (sidebar), wallpaper | landscape picture | ImageSquare fill
+preferences-desktop-wallpaper | Desktop (sidebar), wallpaper | landscape picture | ImageSquare bold
 video-display | Displays (sidebar), display device | monitor | Monitor fill
 system-search | Search (sidebar, search fields) | magnifier | MagnifyingGlass bold
-input-keyboard | Keyboard (sidebar, device) | keyboard | Keyboard fill
-preferences-desktop-keyboard-shortcuts | Keyboard shortcuts row | keyboard | Keyboard fill
-input-mouse | Mouse (sidebar, device) | mouse | Mouse fill
+input-keyboard | Keyboard (sidebar, device) | keyboard | Keyboard bold
+preferences-desktop-keyboard-shortcuts | Keyboard shortcuts row | keyboard | Keyboard bold
+input-mouse | Mouse (sidebar, device) | mouse | Mouse bold
 preferences-system-time | Date & time (sidebar) | clock | Clock fill
 system-users | Users (sidebar) | two people | Users fill
 help-about | About (sidebar) | circled i | Info fill
