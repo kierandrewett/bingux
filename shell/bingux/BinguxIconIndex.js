@@ -74,6 +74,7 @@ var names = {
     "folder-videos-symbolic": true,
     "go-next-symbolic": true,
     "go-previous-symbolic": true,
+    "go-up-symbolic": true,
     "help-about-symbolic": true,
     "help-browser-symbolic": true,
     "image-generic-symbolic": true,

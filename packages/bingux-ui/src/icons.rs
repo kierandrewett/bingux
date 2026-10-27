@@ -145,11 +145,12 @@ pub enum Icon {
     FolderPublicshare,
     FolderDesktop,
     WindowNew,
+    GoUp,
 }
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 132] = [
+    pub const ALL: [Icon; 133] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -282,6 +283,7 @@ impl Icon {
         Self::FolderPublicshare,
         Self::FolderDesktop,
         Self::WindowNew,
+        Self::GoUp,
     ];
 
     /// The embedded SVG source for this icon.
@@ -456,6 +458,7 @@ impl Icon {
             Self::FolderPublicshare => include_bytes!("../icons/folder-publicshare-symbolic.svg"),
             Self::FolderDesktop => include_bytes!("../icons/folder-desktop-symbolic.svg"),
             Self::WindowNew => include_bytes!("../icons/window-new-symbolic.svg"),
+            Self::GoUp => include_bytes!("../icons/go-up-symbolic.svg"),
         }
     }
 }

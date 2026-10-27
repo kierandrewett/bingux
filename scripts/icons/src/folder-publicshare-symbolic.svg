@@ -1,3 +1,5 @@
 <svg viewBox="0 0 16 16">
-  <fork name="ShareNetwork" weight="bold" mode="exact"/>
+  <fork name="Folder" weight="fill" mode="exact"/>
+  <circle cx="8" cy="7.5" r="1.5" fill="black" data-op="cut"/>
+  <rect x="5" y="10" width="6" height="2" rx="1" fill="black" data-op="cut"/>
 </svg>

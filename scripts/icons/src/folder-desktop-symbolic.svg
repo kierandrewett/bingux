@@ -1,3 +1,5 @@
 <svg viewBox="0 0 16 16">
-  <fork name="Desktop" weight="fill" mode="exact"/>
+  <fork name="Folder" weight="fill" mode="exact"/>
+  <rect x="4.5" y="6.5" width="7" height="4" stroke="black" stroke-width="1" data-op="cut"/>
+  <line x1="6" y1="12.5" x2="10" y2="12.5" stroke="black" stroke-width="1" stroke-linecap="butt" data-op="cut"/>
 </svg>
