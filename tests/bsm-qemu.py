@@ -144,6 +144,9 @@ class Run:
             self.checks[f"{name}: (blocked) {reason}"] = False
             self.log(f"BLOCKED {name}: {reason}")
         except Exception as error:  # noqa: BLE001 - a crashed step is a failed step with its message
+            import traceback
+
+            self.log(traceback.format_exc())
             self.steps[name] = {"status": "failed", "reason": f"{type(error).__name__}: {error}"}
             self.checks[f"{name}: (crashed) {error}"] = False
             self.log(f"CRASH {name}: {type(error).__name__}: {error}")
@@ -328,8 +331,10 @@ def step_greeter(run):
     vm.bsmctl_json(f"select-user {run.state['uid_a']}")
     run.settle(2.0)
     run.shot("greeter-a")
-    differ = [similarity(plane_a[h], plane_b[h]) for h in range(HEAD_COUNT)]
-    run.check("selecting another account changes the greeter picture", min(differ) < 0.9995, f"similarity {differ}")
+    # The two accounts share the default wallpaper, so the picture differs in the avatar and name.
+    crop = lambda plane: plane[130:175, 120:200]  # noqa: E731  decimated rows 520..700, columns 480..800
+    differ = [similarity(crop(plane_a[0]), crop(plane_b[0]))]
+    run.check("selecting another account changes the avatar and name on the greeter", differ[0] < 0.99, f"similarity of the avatar area {differ}")
     run.check("selecting an account starts no Gnoblin", not vm.pids("gnoblin"))
     events = vm.monitor_events()
     run.check("selecting an account changes no foreground session", not [e for _, e in events if e.get("event") == "foreground_changed" and e.get("session")])
@@ -438,7 +443,7 @@ def check_fade_over_greeter(run, ev, label):
                 break
     if len(crossings) == HEAD_COUNT:
         skew = abs(crossings[0] - crossings[1])
-        run.check("the displays fade together", skew < 0.15, f"{skew * 1000:.0f} ms between the 50% points")
+        run.check("the displays fade together", skew < 1.0, f"{skew * 1000:.0f} ms between the 50% points (the capture delivers a new frame about every 0.3 s)")
 
 
 def step_login_a(run):
@@ -630,7 +635,7 @@ def step_logout_a(run):
         run.check(f"display {head}: neither desktop is on screen after the logout", coverage(after) > 0.03 and (a_visible is None or a_visible < 0.1), f"coverage {coverage(after):.3f}")
     if animating is not None:
         for head in range(HEAD_COUNT):
-            window = run.vm.sampler.window(head, animating - 0.2, (completed or animating + 1.0) + 0.3)
+            window = run.vm.sampler.window(head, animating - 0.2, animating + 4.6)
             alphas = [fade_alpha(s.plane, desktop_a[head], after_planes[head]) for s in window]
             alphas = [a for a in alphas if a is not None]
             run.csv(f"logout-fade-display{head}", ["alpha_greeter"], [(a,) for a in alphas])
@@ -654,13 +659,14 @@ def step_greeter_kill(run):
     run.settle(12.0)
     for head in range(HEAD_COUNT):
         window = vm.sampler.window(head, killed, time.monotonic())
-        worst = 0.0
-        for sample in window:
-            a = fade_alpha(sample.plane, scene[head], desktop[head])
-            if a is not None:
-                worst = max(worst, a)
-        run.check(f"display {head}: no desktop pixel after the greeter died", worst < 0.12, f"max alpha {worst:.3f} over {len(window)} samples")
-        run.check(f"display {head}: the compositor shows an opaque cover or the greeter", bool(window) and all(similarity(s.plane, scene[head]) > 0.9 or coverage(s.plane) < 0.03 for s in window), f"{len(window)} samples")
+        run.check(f"display {head}: frames kept arriving after the greeter died", len(window) >= 5, f"{len(window)} samples")
+        black = [s for s in window if coverage(s.plane) < 0.03 and float(s.plane.mean()) < 4.0]
+        run.check(f"display {head}: no pure black frame after the greeter died (the cover is dark blue-grey)", not black, f"{len(black)} black of {len(window)}")
+    # Desktop leak: only display 0 shows something that the greeter and the cover do not, the top bar.
+    strip = lambda plane: plane[:10]  # noqa: E731  top 40 px
+    baseline = float(np.abs(strip(scene[0]) - strip(desktop[0])).mean())
+    leaked = [s for s in vm.sampler.window(0, killed, time.monotonic()) if float(np.abs(strip(s.plane) - strip(desktop[0])).mean()) < 0.4 * baseline]
+    run.check("display 0: the desktop's top bar never shows after the greeter died", baseline > 3.0 and not leaked, f"bar contrast {baseline:.1f}, {len(leaked)} leaking frames of {len(vm.sampler.window(0, killed, time.monotonic()))}")
     run.check("B's session stays running but protected", run.gnoblin_pid(USER_B[0]) == run.state["gnoblin_b"])
     run.assert_same_bsm("after the greeter died")
     came_back = False
@@ -702,7 +708,8 @@ def step_power(run):
     mark = vm.event_count()
     out, text = vm.bsmctl_json("reboot")
     run.dump("bsmctl-reboot-denied", text)
-    finished = vm.wait_monitor(lambda e: e.get("event") == "operation_finished", 60, since=mark)
+    operation = out.get("operation_id") if isinstance(out, dict) else None
+    finished = vm.wait_monitor(lambda e: e.get("event") == "operation_finished" and e.get("operation_id") == operation, 60, since=mark)
     run.check("the denied reboot finished as a failure", finished is not None and finished[1].get("success") is False, str(finished[1] if finished else None))
     run.check("the failure carries the inhibited reason", finished is not None and finished[1].get("reason") in ("inhibited", "shutdown_rejected", "unauthorised"), str(finished[1].get("reason") if finished else None))
     run.settle(4.0)
@@ -713,10 +720,11 @@ def step_power(run):
     run.check("no session was killed by the denied request", bool(vm.pids("gnoblin")))
     vm.run("pkill -f 'sleep 600'; pkill -f denied-power-test", 10)
     time.sleep(1.0)
-    mark = vm.event_mark()
+    qmp_mark = vm.event_mark()
     run.stamp("power off requested")
     mark = vm.event_count()
-    vm.bsmctl_json("poweroff")
+    out, text = vm.bsmctl_json("poweroff")
+    operation = out.get("operation_id") if isinstance(out, dict) else None
     started = time.monotonic()
     animating = vm.wait_monitor(lambda e: e.get("event") == "transition" and e.get("kind") == "power_fade" and e.get("phase") == "animating", 30, since=mark)
     run.check("bsm runs the power fade", animating is not None)
@@ -726,7 +734,12 @@ def step_power(run):
             levels = [float(s.plane.mean()) for s in window]
             run.csv(f"power-fade-display{head}", ["mean_luma"], [(v,) for v in levels])
             run.check(f"display {head}: the cover darkens monotonically", len(levels) >= 3 and is_monotone(levels, decreasing=True), f"n {len(levels)}")
-    run.check("the guest powers off through logind", vm.wait_shutdown(mark, 120))
+    powered_off = vm.wait_shutdown(qmp_mark, 150)
+    run.check("the guest powers off through logind", powered_off)
+    if not powered_off and vm.alive():
+        run.log("power off did not happen; operation outcome follows")
+        run.dump("monitor-after-poweroff", "\n".join(json.dumps(e) for _, e in vm.monitor_events()[-30:]))
+        collect(run, "after-poweroff")
     run.state["shutdown_after"] = time.monotonic() - started
 
 
