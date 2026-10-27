@@ -430,6 +430,7 @@ Stated plainly so nobody assumes more than was verified:
 * Scroll, touch and `axis_stop` forwarding are implemented and covered by the
   protocol-level input log, but were not exercised against a real client in the
   hosted session (pointer buttons, motion and keys were).
+* One failure of `resizing_and_removing_outputs_rebuilds_the_virtual_monitors` against the staged Gnoblin (a stand-in protocol violation, text not captured) did not repeat in 7 reruns; it may be a race around rebuilds and is not understood.
 * The keymap of bsm is ignored (see Input).
 * One bridge serves one session. After a reconnect the same socket path is used again; bsm must re-arm the registration (BsmManager and BsmCompositor do).
 * bsm-restart recovery is verified against the stand-in compositor and a real hosted Mutter session (frames, the same client, input and no monitor rebuild); it is not verified with the real bsm in a VM. A bsm that accepts the connection but never answers the registry roundtrip would block the reconnect attempt.
