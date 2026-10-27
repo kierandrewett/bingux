@@ -46,6 +46,7 @@ services. Environment:
 | `BSM_HOST_RECOVERY_SECS`   | no       | How long to keep reconnecting after bsm went away (default 120; `--recovery-window SECS` overrides). |
 | `BSM_HOST_READY_PEERS`     | no       | Comma list of executable names allowed on `ready.sock` (default `quickshell,qs,bingux,bingux-wallpaper`; `*` allows all, used by the tests). |
 | `BSM_HOST_READY_IDLE_SECS` | no       | A `ready.sock` connection that sends no valid line in this time is closed (default 10). |
+| `BSM_HOST_HANDSHAKE_SECS`  | no       | How long the registry roundtrip of a reconnect may take before the attempt is abandoned (default 10). |
 | `RUST_LOG`                 | no       | `info` by default. `debug` logs reports, ready lines and frame statistics every 5 s.                         |
 
 Option: `--background-fps N` (default 10): frame rate while the session is not
@@ -297,6 +298,18 @@ PipeWire stream itself is not paused: pausing it would stop Mutter's frame
 clock and therefore every client's frame callbacks. Becoming active passes the
 next frame immediately.
 
+## Fixed race: `gnoblin_ready` before `identity`
+
+A 30-run loop of the rebuild test against the staged Gnoblin caught one failure
+with the stand-in's text `stale generation  in report ... kind: 1, generation: ""`:
+when Gnoblin was ready before bsm's `identity` event was dispatched, the bridge
+sent `gnoblin_ready` with an empty generation, and the identity handler then
+replaced the readiness state, losing what it had learned. Now nothing is sent
+before the identity; the identity handler keeps the known facts (Gnoblin ready,
+outputs) and reports them with the real generation. Regression test:
+`gnoblin_ready_before_bsms_identity_is_reported_once_with_the_real_generation`
+(a stand-in that delays `identity` by 1.5 s; it fails without the fix).
+
 ## Failure modes
 
 | Situation                                           | Behaviour                                                                                                |
@@ -430,10 +443,9 @@ Stated plainly so nobody assumes more than was verified:
 * Scroll, touch and `axis_stop` forwarding are implemented and covered by the
   protocol-level input log, but were not exercised against a real client in the
   hosted session (pointer buttons, motion and keys were).
-* One failure of `resizing_and_removing_outputs_rebuilds_the_virtual_monitors` against the staged Gnoblin (a stand-in protocol violation, text not captured) did not repeat in 7 reruns; it may be a race around rebuilds and is not understood.
 * The keymap of bsm is ignored (see Input).
 * One bridge serves one session. After a reconnect the same socket path is used again; bsm must re-arm the registration (BsmManager and BsmCompositor do).
-* bsm-restart recovery is verified against the stand-in compositor and a real hosted Mutter session (frames, the same client, input and no monitor rebuild); it is not verified with the real bsm in a VM. A bsm that accepts the connection but never answers the registry roundtrip would block the reconnect attempt.
+* bsm-restart recovery is verified against the stand-in compositor and a real hosted Mutter session (frames, the same client, input and no monitor rebuild); it is not verified with the real bsm in a VM. A bsm that accepts the connection but never answers is abandoned after 10 s (`BSM_HOST_HANDSHAKE_SECS`) and retried (tested with a peer that never answers).
 * Not verified in a QEMU image or with the real bsm compositor: the bridge was
   tested against its own stand-in and the real hosted Gnoblin. The stand-in
   follows the protocol text, not bsm's implementation.

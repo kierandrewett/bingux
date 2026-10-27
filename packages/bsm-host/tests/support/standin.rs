@@ -159,6 +159,9 @@ struct State {
     touches: Vec<wl_touch::WlTouch>,
     serial: u32,
     input_active: bool,
+    /// Test hook: send `identity` this long after the bind (a slow bsm).
+    identity_delay: Option<Duration>,
+    identity_at: Option<Instant>,
 }
 
 impl State {
@@ -167,8 +170,22 @@ impl State {
         self.serial
     }
     fn violation(&self, s: String) {
+        eprintln!("STANDIN VIOLATION: {s}");
         self.shared.lock().unwrap().violations.push(s);
     }
+    /// identity, then every output, then the input state: what bsm sends on bind.
+    fn send_identity(&mut self) {
+        let Some(host) = self.host.clone() else { return };
+        // SAFETY: getuid never fails.
+        host.identity("standin-session".into(), self.generation.clone(), unsafe { libc::getuid() });
+        let names: Vec<String> = self.outputs.keys().cloned().collect();
+        for n in names {
+            self.send_output_added(&n);
+        }
+        host.input_state(self.input_active as u32);
+        self.identity_at = None;
+    }
+
     fn send_output_added(&self, name: &str) {
         if let (Some(host), Some(o)) = (&self.host, self.outputs.get(name)) {
             let s = o.spec;
@@ -223,15 +240,11 @@ impl GlobalDispatch<BsmSessionHostV1, ()> for State {
             sh.client_connected = true;
             sh.bound_globals.push("bsm_session_host_v1".into());
         }
-        // SAFETY: getuid never fails.
-        host.identity("standin-session".into(), state.generation.clone(), unsafe { libc::getuid() });
         state.host = Some(host);
-        let names: Vec<String> = state.outputs.keys().cloned().collect();
-        for n in names {
-            state.send_output_added(&n);
+        match state.identity_delay {
+            Some(d) => state.identity_at = Some(Instant::now() + d),
+            None => state.send_identity(),
         }
-        let active = state.input_active as u32;
-        state.host.as_ref().unwrap().input_state(active);
     }
 }
 
@@ -466,6 +479,11 @@ pub struct Standin {
 
 impl Standin {
     pub fn start(dir: &Path, generation: &str) -> Standin {
+        Self::start_with(dir, generation, None)
+    }
+
+    /// `identity_delay`: send `identity` and the outputs only this long after the bind.
+    pub fn start_with(dir: &Path, generation: &str, identity_delay: Option<Duration>) -> Standin {
         let socket = dir.join("bsm-session.sock");
         let _ = std::fs::remove_file(&socket);
         let listener = ListeningSocket::bind_absolute(socket.clone()).expect("bind stand-in socket");
@@ -473,7 +491,7 @@ impl Standin {
         let (tx, rx) = mpsc::channel::<Control>();
         let sh = shared.clone();
         let generation = generation.to_owned();
-        let join = std::thread::spawn(move || serve(listener, rx, sh, generation));
+        let join = std::thread::spawn(move || serve(listener, rx, sh, generation, identity_delay));
         Standin { socket, shared, tx, join: Some(join) }
     }
 
@@ -524,7 +542,7 @@ impl Drop for Standin {
     }
 }
 
-fn serve(listener: ListeningSocket, rx: Receiver<Control>, shared: Arc<Mutex<Shared>>, generation: String) {
+fn serve(listener: ListeningSocket, rx: Receiver<Control>, shared: Arc<Mutex<Shared>>, generation: String, identity_delay: Option<Duration>) {
     let mut display: Display<State> = Display::new().unwrap();
     let dh = display.handle();
     dh.create_global::<State, wl_compositor::WlCompositor, _>(6, ());
@@ -542,6 +560,8 @@ fn serve(listener: ListeningSocket, rx: Receiver<Control>, shared: Arc<Mutex<Sha
         touches: vec![],
         serial: 100,
         input_active: false,
+        identity_delay,
+        identity_at: None,
     };
     let mut clients = Vec::new();
     loop {
@@ -553,6 +573,9 @@ fn serve(listener: ListeningSocket, rx: Receiver<Control>, shared: Arc<Mutex<Sha
                 Control::Shutdown => return,
                 other => handle_control(&mut state, other),
             }
+        }
+        if state.identity_at.is_some_and(|t| Instant::now() >= t) {
+            state.send_identity();
         }
         if display.dispatch_clients(&mut state).is_err() {
             break;

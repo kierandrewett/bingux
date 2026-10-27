@@ -152,6 +152,13 @@ impl Readiness {
         }
     }
 
+    /// The generation bsm assigned (its `identity` event). Facts learned
+    /// before it (Gnoblin ready, outputs) are kept; call [`resync`](Self::resync)
+    /// afterwards to report them.
+    pub fn set_generation(&mut self, generation: &str) {
+        self.generation = generation.to_owned();
+    }
+
     /// Whether the user's Bingux configuration enables the dock. Required
     /// roles come from here and from Gnoblin's layer list, never from the
     /// reporter alone.
@@ -524,6 +531,22 @@ mod tests {
         assert!(!reports.contains(&Report::DesktopReady { a: 1, b: 1 }));
         let reports = r.set_layers(all_layers("Meta-0"));
         assert_eq!(reports.last(), Some(&Report::DesktopReady { a: 1, b: 1 }));
+    }
+
+    #[test]
+    fn facts_before_the_identity_are_kept_and_reported_with_the_real_generation() {
+        let mut r = Readiness::new("");
+        r.output_added("A");
+        // Gnoblin is ready before bsm's identity arrives.
+        r.set_gnoblin_ready(true);
+        r.set_generation("9");
+        assert_eq!(r.generation(), "9");
+        let reports = r.resync();
+        assert_eq!(reports, vec![Report::GnoblinReady]);
+        assert_eq!(
+            r.output_configured("A", "Meta-0"),
+            vec![Report::OutputConfigured { output: "A".into(), a: 1, b: 1 }]
+        );
     }
 
     #[test]

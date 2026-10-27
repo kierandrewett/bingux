@@ -534,7 +534,9 @@ impl Bridge {
     /// capped (see `report_queue.rs`). Nothing is sent while bsm is away; the
     /// current state is reported again after the reconnect.
     fn send_reports(&mut self, reports: Vec<Report>) {
-        if !self.connected {
+        // Before bsm's `identity` there is no generation to report with; the
+        // state is reported when it arrives (`on_identity`).
+        if !self.connected || self.generation.is_empty() {
             return;
         }
         let now = Instant::now();
@@ -1432,8 +1434,12 @@ impl Bridge {
         self.session_id = session_id;
         self.generation = generation.clone();
         self.uid = uid;
-        self.readiness = Readiness::new(&generation);
+        // Gnoblin may have been ready (and outputs known) before this event:
+        // keep those facts and report them now, with the real generation.
+        self.readiness.set_generation(&generation);
         self.readiness.set_dock_enabled(self.cfg.dock_enabled);
+        let reports = self.readiness.resync();
+        self.send_reports(reports);
         if self.is_test() {
             self.gnoblin_ready = true;
             let reports = self.readiness.set_gnoblin_ready(true);

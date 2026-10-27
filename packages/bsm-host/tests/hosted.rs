@@ -725,3 +725,24 @@ fn a_bsm_restart_keeps_the_session_and_the_virtual_monitors() {
     assert!(log.contains("reconnected to bsm"), "{log}");
     let _ = &mut env;
 }
+
+#[test]
+fn gnoblin_ready_before_bsms_identity_is_reported_once_with_the_real_generation() {
+    if let Err(why) = available() {
+        eprintln!("SKIP: {why}");
+        return;
+    }
+    let env = HostedEnv::start("slowidentity");
+    // A slow bsm: Gnoblin (the Hosted1 stub) is ready long before `identity` arrives.
+    let standin = Standin::start_with(&env.dir, "18", Some(Duration::from_millis(1500)));
+    standin.add_output("DP-1", OutputSpec::new(0, 0, 800, 600));
+    let mut bridge = spawn_bridge(&env, &standin, "18");
+    with_logs(&env, &mut bridge, || {
+        standin.wait_for("output_configured", T, |s| s.reports.iter().any(|r| r.kind == OUTPUT_CONFIGURED));
+        standin.wait_for("a real frame", T, |s| !s.frames.is_empty());
+        let s = standin.shared.lock().unwrap();
+        assert!(s.violations.is_empty(), "{:?}", s.violations);
+        assert_eq!(s.reports.iter().filter(|r| r.kind == 1).count(), 1, "gnoblin_ready once");
+        assert!(s.reports.iter().all(|r| r.generation == "18"));
+    });
+}
