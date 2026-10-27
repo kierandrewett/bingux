@@ -58,8 +58,9 @@ LimitCORE=0
 
 # Hardening that leaves DRM, libinput and seatd alone. Not set, on purpose:
 # PrivateDevices (the render node), MemoryDenyWriteExecute (GPU drivers JIT
-# shaders), SystemCallFilter and RestrictNamespaces (the image converter
-# sandbox and the GPU stack have not been profiled; see docs/bsm/packaging.md).
+# shaders), SystemCallFilter (the GPU stack has not been profiled) and
+# ProtectProc (bsm reads /proc/PID/cgroup of D-Bus callers); see
+# docs/bsm/packaging.md.
 NoNewPrivileges=yes
 CapabilityBoundingSet=
 AmbientCapabilities=
@@ -73,14 +74,23 @@ ProtectHome=yes
 ProtectHostname=yes
 ProtectClock=yes
 ProtectKernelModules=yes
+ProtectKernelTunables=yes
 ProtectKernelLogs=yes
 ProtectControlGroups=yes
 RestrictAddressFamilies=AF_UNIX AF_NETLINK
+# The image converter unshares a network namespace (user, net); nothing else needs one.
+RestrictNamespaces=user net
 RestrictSUIDSGID=yes
 RestrictRealtime=yes
 LockPersonality=yes
 SystemCallArchitectures=native
 UMask=0077
+# seatd opens the seat's devices and passes the descriptors; bsm itself opens the
+# render node for buffer import. Other GPU stacks bring their own nodes.
+DevicePolicy=closed
+DeviceAllow=char-drm rw
+DeviceAllow=char-nvidia* rw
+
 
 [Install]
 WantedBy=graphical.target

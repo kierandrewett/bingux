@@ -42,13 +42,15 @@ var BSM_ACCOUNT = "bsm";
 //    CreateSession only from root). Every other action keeps its default.
 var HOSTED_SERVICE = "bsm-login";
 var HOSTED_ACTIONS = [
-    // reboot, power off and suspend, as on a local seat
+    // reboot, power off and suspend while this is the only session. The
+    // `-multiple-sessions` variants are deliberately NOT here: they keep the stock
+    // administrator authentication, so a standard user cannot take the machine down
+    // while others are signed in. bsm asks polkit for the `-multiple-sessions`
+    // action when another account has a running session and treats an answer
+    // that needs authentication as a refusal.
     "org.freedesktop.login1.power-off",
-    "org.freedesktop.login1.power-off-multiple-sessions",
     "org.freedesktop.login1.reboot",
-    "org.freedesktop.login1.reboot-multiple-sessions",
     "org.freedesktop.login1.suspend",
-    "org.freedesktop.login1.suspend-multiple-sessions",
     // the user's own devices: mounting removable media, unlocking own volumes
     "org.freedesktop.udisks2.filesystem-mount",
     "org.freedesktop.udisks2.encrypted-unlock",
@@ -92,18 +94,38 @@ function hostedAction(id) {
     return false;
 }
 
+// Answers per logind session id. A session's Service, Remote and Class cannot
+// change for its lifetime and ids are not reused within a boot, so one `loginctl`
+// fork per session is enough; polkit evaluates rules on one thread and a fork per
+// authorisation check would serialise every desktop component behind logind.
+// The cache is dropped when it grows past 256 entries, and with the rules cache
+// when polkitd reloads its rules.
+var hostedCache = {};
+var hostedCacheSize = 0;
+
 // True when logind says the subject's session was opened through the "bsm-login"
-// PAM service and belongs to no remote login. Any failure counts as "no".
+// PAM service and belongs to no remote login. Any failure counts as "no" and is not cached.
 function hostedSession(subject) {
     if (!subject.session || !subject.active) {
         return false;
     }
+    var id = String(subject.session);
+    if (hostedCache.hasOwnProperty(id)) {
+        return hostedCache[id];
+    }
     try {
-        var out = polkit.spawn(["/usr/bin/loginctl", "show-session", subject.session,
+        var out = polkit.spawn(["/usr/bin/loginctl", "show-session", id,
                                 "--property=Service", "--property=Remote", "--property=Class"]);
-        return out.indexOf("Service=" + HOSTED_SERVICE + "\n") >= 0 &&
-               out.indexOf("Remote=no\n") >= 0 &&
-               out.indexOf("Class=user\n") >= 0;
+        var hosted = out.indexOf("Service=" + HOSTED_SERVICE + "\n") >= 0 &&
+                     out.indexOf("Remote=no\n") >= 0 &&
+                     out.indexOf("Class=user\n") >= 0;
+        if (hostedCacheSize >= 256) {
+            hostedCache = {};
+            hostedCacheSize = 0;
+        }
+        hostedCache[id] = hosted;
+        hostedCacheSize++;
+        return hosted;
     } catch (e) {
         return false;
     }

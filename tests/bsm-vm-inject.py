@@ -102,6 +102,9 @@ echo "INJECT-LIBS-OK=$((1 - missing))"
 if [ "${1:-}" != "--no-start" ]; then
     # The cutover the image does with a kernel parameter: greetd off, bsm on.
     systemctl stop greetd.service 2>/dev/null || true
+    # unit changes of seatd apply only when it restarts; bsm holds it, so stop bsm first
+    systemctl stop bsm.service 2>/dev/null || true
+    systemctl restart bsm-seatd.service
     systemctl reset-failed bsm.service bsm-seatd.service 2>/dev/null || true
     systemctl start bsm-helper.socket
     # restart: on an image that already boots bsm the old binary is still running.

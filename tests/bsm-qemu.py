@@ -242,6 +242,39 @@ def transition_times(events, kind):
 # ---- steps ---------------------------------------------------------------------
 
 
+def probe_power(run, user, label):
+    """`bsmctl reboot` as `user` from inside that user's logind session scope, with a blocking inhibitor.
+
+    Whatever polkit answers, the inhibitor stops the reboot: `inhibited` means polkit allowed the
+    request and bsm reached the inhibitor check; any other failure reason is a polkit or policy refusal.
+    Returns (reason, output) and saves the polkit journal as polkit-<label>.txt.
+    """
+    vm = run.vm
+    uid = run.user_uid(user)
+    session = vm.run(f"loginctl list-sessions --no-legend | awk '$2==\"{uid}\" && $6==\"user\"{{print $1; exit}}'", 20).strip().splitlines()[-1]
+    scope = f"/sys/fs/cgroup/user.slice/user-{uid}.slice/session-{session}.scope/cgroup.procs"
+    vm.run("nohup systemd-inhibit --what=shutdown --mode=block --who=bsm-test --why=probe sleep 120 >/dev/null 2>&1 &", 10)
+    time.sleep(1.5)
+    since = vm.run("date '+%Y-%m-%d %H:%M:%S'", 10).strip().splitlines()[-1]
+    out = vm.run(
+        f"sh -c 'echo $$ > {scope} && exec runuser -u {user} -- env XDG_RUNTIME_DIR=/run/user/{uid} bsmctl reboot --wait --json' 2>&1",
+        90,
+    )
+    run.dump(f"bsmctl-power-probe-{label}", out)
+    journal = vm.run(f"journalctl -u polkit --since '{since}' --no-pager -o cat | cut -c1-300", 30)
+    run.dump(f"polkit-{label}", journal)
+    vm.run("pkill -f 'probe' ; pkill -f 'sleep 120'", 10)
+    reason = None
+    for line in reversed(out.strip().splitlines()):
+        try:
+            data = json.loads(line)
+        except ValueError:
+            continue
+        reason = data.get("reason") or data.get("error")
+        break
+    return reason, out
+
+
 def step_boot(run):
     vm = run.vm
     cmdline = vm.run("cat /proc/cmdline", 10)
@@ -464,7 +497,14 @@ def step_login_a(run):
     run.check("A has a real logind session", bool(out.strip()), out.strip()[:100])
     run.state["session_a"] = run.session_id_of(run.state["uid_a"])
     run.check("bsm lists A's session", run.state["session_a"] is not None)
+    reason, out = probe_power(run, USER_A[0], "single-session")
+    run.check("one session: polkit lets the hosted user's reboot through to the inhibitor check", reason == "inhibited", f"{reason}: {out.strip()[-160:]}")
+    run.check("the probe rebooted nothing", vm_alive_and_bsm(run))
     run.assert_same_bsm("after the login")
+
+
+def vm_alive_and_bsm(run):
+    return bool(run.bsm_pids())
 
 
 def step_lock_a(run):
@@ -603,6 +643,13 @@ def step_back_to_a(run):
     run.settle(2.0)
     run.check("A's original Gnoblin is back, not relaunched", run.gnoblin_pid(USER_A[0]) == pid_a == run.state["gnoblin_a"], f"{pid_a} -> {run.gnoblin_pid(USER_A[0])}")
     run.check("B keeps running", run.gnoblin_pid(USER_B[0]) == run.state["gnoblin_b"])
+    reason, out = probe_power(run, USER_A[0], "two-sessions")
+    run.check(
+        "two sessions: a standard user's reboot needs the administrator (polkit `-multiple-sessions`), not the inhibitor",
+        reason is not None and reason != "inhibited",
+        f"{reason}: {out.strip()[-160:]}",
+    )
+    run.check("the probe rebooted nothing (two sessions)", vm_alive_and_bsm(run))
     run.assert_same_bsm("after switching back")
 
 
@@ -811,6 +858,13 @@ def main():
             vm.run("systemctl is-system-running --wait 2>&1 | head -1", 120)
             # Account B exists before bsm starts: bsm lists accounts at start-up.
             vm.run(f"id {USER_B[0]} >/dev/null 2>&1 || (useradd -m -G video,audio -s /bin/bash {USER_B[0]} && echo {USER_B[0]}:{USER_B[1]} | chpasswd)", 30)
+            if args.inject:
+                run.log("injecting " + args.inject)
+                applied = vm.run("mkdir -p /mnt/bsm-inject && modprobe 9pnet_virtio; modprobe 9p; mount -t 9p -o trans=virtio,version=9p2000.L,ro bsminject /mnt/bsm-inject && sh /mnt/bsm-inject/apply.sh 2>&1 | tail -n 30", 600)
+                run.dump("inject", applied)
+                run.checks["inject applied"] = "INJECT-DONE" in applied
+                run.log(applied)
+                time.sleep(8)
             if not args.default_timings:
                 # The VNC capture delivers about 3 frames a second, so a 420 ms fade yields one
                 # frame. The test slows every transition to seconds; the default durations are
@@ -819,13 +873,6 @@ def main():
                 run.dump("bsm-toml", vm.run("cat /etc/bsm/bsm.toml; systemctl is-active bsm", 20))
                 if vm.run("systemctl is-active bsm", 10).strip().splitlines()[-1] == "active":
                     vm.run("systemctl restart bsm", 60)
-            if args.inject:
-                run.log("injecting " + args.inject)
-                applied = vm.run("mkdir -p /mnt/bsm-inject && modprobe 9pnet_virtio; modprobe 9p; mount -t 9p -o trans=virtio,version=9p2000.L,ro bsminject /mnt/bsm-inject && sh /mnt/bsm-inject/apply.sh 2>&1 | tail -n 30", 600)
-                run.dump("inject", applied)
-                run.checks["inject applied"] = "INJECT-DONE" in applied
-                run.log(applied)
-                time.sleep(8)
             for name, function in STEPS:
                 if name in wanted:
                     run.step(name, function)

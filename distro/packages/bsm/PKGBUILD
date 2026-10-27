@@ -25,6 +25,7 @@ depends=('bingux' 'gnoblin' 'seatd' 'polkit' 'dbus' 'pam' 'systemd' 'libinput' '
 # bsm-fallback.service starts it when bsm cannot be kept running.
 optdepends=('greetd: login screen that bsm-fallback.service starts when bsm fails')
 options=('!debug' '!lto')
+backup=('etc/bsm/bsm.toml')
 install=bsm.install
 source=("bingux-$pkgver.tar.xz" 'bsm.install')
 sha256sums=('SKIP' 'SKIP')
@@ -87,7 +88,9 @@ package() {
         install -Dm644 "$unit" "$pkgdir/etc/pam.d/$(basename "$unit")"
     done
 
+    install -Dm644 packaging/bsm/config/bsm.toml "$pkgdir/etc/bsm/bsm.toml"
     install -Dm644 docs/bsm/packaging.md "$pkgdir/usr/share/doc/bsm/packaging.md"
+    install -Dm644 docs/bsm/manager.md "$pkgdir/usr/share/doc/bsm/manager.md"
     install -Dm644 docs/bsm/architecture.md "$pkgdir/usr/share/doc/bsm/architecture.md"
     install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
     install -Dm644 packages/bsm/protocol/bsm-session-host-v1.xml \

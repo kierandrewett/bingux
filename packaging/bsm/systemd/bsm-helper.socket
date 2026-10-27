@@ -11,7 +11,7 @@ ListenSequentialPacket=/run/bsm-helper/helper.sock
 SocketMode=0600
 SocketUser=bsm
 SocketGroup=bsm
-DirectoryMode=0755
+DirectoryMode=0711
 # Remove the socket file when this unit stops.
 RemoveOnStop=yes
 

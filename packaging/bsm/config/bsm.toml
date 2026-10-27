@@ -1,0 +1,15 @@
+# /etc/bsm/bsm.toml: configuration of bsm, the Bingux Session Manager.
+#
+# Every key is optional and unknown keys are an error, so a typo never leaves a
+# policy at its default. Only what is set here differs from the built-in values;
+# the full list of keys is in /usr/share/doc/bsm/manager.md.
+#
+# What the login screen may do while nobody is signed in. bsm applies these
+# before it asks logind, and ignores reboot and power off from the greeter while
+# any account has a running session (those sessions would be lost): a signed-in
+# user has to request it, which polkit then checks. Set a value to false to hide
+# the action for a kiosk or a shared machine.
+[greeter_power]
+suspend = true
+reboot = true
+poweroff = true
