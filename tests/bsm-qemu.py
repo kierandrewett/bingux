@@ -43,6 +43,7 @@ The video and working files stay under /tmp/bsm-vm.
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import sys
@@ -242,6 +243,31 @@ def transition_times(events, kind):
 # ---- steps ---------------------------------------------------------------------
 
 
+OSC = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
+JSON_OBJECT = re.compile(r"\{[^{}]*\}")
+
+
+def power_reason(output):
+    """The failure reason in the last JSON object of `bsmctl ... --wait --json` output, or None.
+
+    The guest shell's output carries terminal escape sequences (systemd's OSC 3008 context
+    markers, which end in `;pidfdid=...`): they are stripped, and the JSON is searched for
+    inside each line instead of being required to be the whole line. An object without a
+    reason or error (a success) gives None.
+    """
+    text = OSC.sub("", output)
+    text = re.sub(r"\x1b\][^\n]*", "", text)
+    for line in reversed(text.splitlines()):
+        for match in reversed(JSON_OBJECT.findall(line)):
+            try:
+                data = json.loads(match)
+            except ValueError:
+                continue
+            if isinstance(data, dict) and ("reason" in data or "error" in data or "success" in data):
+                return data.get("reason") or data.get("error")
+    return None
+
+
 def probe_power(run, user, label):
     """`bsmctl reboot` as `user` from inside that user's logind session scope, with a blocking inhibitor.
 
@@ -264,15 +290,7 @@ def probe_power(run, user, label):
     journal = vm.run(f"journalctl -u polkit --since '{since}' --no-pager -o cat | cut -c1-300", 30)
     run.dump(f"polkit-{label}", journal)
     vm.run("pkill -f 'probe' ; pkill -f 'sleep 120'", 10)
-    reason = None
-    for line in reversed(out.strip().splitlines()):
-        try:
-            data = json.loads(line)
-        except ValueError:
-            continue
-        reason = data.get("reason") or data.get("error")
-        break
-    return reason, out
+    return power_reason(out), out
 
 
 def step_boot(run):
