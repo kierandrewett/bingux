@@ -64,6 +64,24 @@ impl Gfx {
         }
     }
 
+    /// A boot-splash hold is active: the renderer wants a tick even with nothing to draw.
+    pub fn holding(&self) -> bool {
+        match self {
+            #[cfg(feature = "backend-drm")]
+            Gfx::Drm(g) => g.holding(),
+            _ => false,
+        }
+    }
+
+    /// The hold gave up and presented a cover (taken once).
+    pub fn take_hold_expired(&mut self) -> bool {
+        match self {
+            #[cfg(feature = "backend-drm")]
+            Gfx::Drm(g) => std::mem::take(&mut g.hold_expired),
+            _ => false,
+        }
+    }
+
     /// False while the seat is paused (VT switched away).
     pub fn active(&self) -> bool {
         match self {
@@ -386,7 +404,7 @@ impl State {
         }
         self.expire_pending();
         self.flip_watchdog(false);
-        if self.backend == crate::Backend::Drm && self.needs_redraw && self.awaiting.is_none() {
+        if self.backend == crate::Backend::Drm && (self.needs_redraw || self.gfx.as_ref().is_some_and(|g| g.holding())) && self.awaiting.is_none() {
             self.render_frame();
         }
         self.flush();

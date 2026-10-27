@@ -190,6 +190,10 @@ pub(crate) struct State {
     pub retry_at: Option<Instant>,
     /// The displays are to be switched off once a cover frame is on the scanout buffers.
     pub blanking: bool,
+    pub first_scene: crate::FirstScene,
+    /// A hold is active and the first scene has not been presented yet.
+    pub first_scene_pending: bool,
+    pub boot_started: Instant,
     /// The greeter asked for the keyboard before the scene was the greeter's.
     pub wanted_greeter: bool,
     /// A session lost input only because an output has no proven frame yet.
@@ -817,6 +821,9 @@ impl State {
         };
         self.frame_seq += 1;
         self.harness_frames = frames.clone();
+        if self.gfx.as_mut().is_some_and(|g| g.take_hold_expired()) {
+            self.fire_first_scene(crate::FirstSceneReason::TimedOut);
+        }
         self.settle(plan, now, frames, outcome, false);
     }
 
@@ -843,8 +850,23 @@ impl State {
                 self.finish_blank();
             }
         } else {
+            if self.first_scene_pending && (plan.greeter.is_some() || plan.session.is_some()) {
+                // The flip of a frame with a real scene completed (Shown arrives from the flip).
+                self.fire_first_scene(crate::FirstSceneReason::Presented);
+            }
             self.complete_frame(plan, now);
         }
+    }
+
+    /// First call wins; logs how long the screen waited.
+    pub fn fire_first_scene(&mut self, reason: crate::FirstSceneReason) {
+        if self.first_scene.fire(reason) {
+            tracing::info!(
+                "first scene presented ({reason:?}) after {} ms",
+                self.boot_started.elapsed().as_millis()
+            );
+        }
+        self.first_scene_pending = false;
     }
 
     fn finish_blank(&mut self) {
@@ -1020,6 +1042,9 @@ pub(crate) fn run(
         frame_failures: 0,
         retry_at: None,
         blanking: false,
+        first_scene: config.first_scene.clone(),
+        first_scene_pending: false,
+        boot_started: Instant::now(),
         wanted_greeter: false,
         suspended_owner: None,
         handoff_keys: Default::default(),
@@ -1079,12 +1104,15 @@ pub(crate) fn run(
         }
         Backend::Drm => {
             #[cfg(feature = "backend-drm")]
-            crate::gfx::init_drm(&mut state, config.drm_device.clone())?;
+            crate::gfx::init_drm(&mut state, config.drm_device.clone(), config.hold_first_scene)?;
             #[cfg(not(feature = "backend-drm"))]
             anyhow::bail!("built without the backend-drm feature");
         }
     }
     let _ = ctl;
+    if backend != Backend::Drm {
+        state.fire_first_scene(crate::FirstSceneReason::NotHeld);
+    }
 
     crate::broker::start_greeter_listener(&mut state)?;
     state.create_dmabuf_global();

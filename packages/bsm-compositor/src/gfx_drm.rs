@@ -70,10 +70,54 @@ pub(crate) struct DrmGfx {
     outputs: HashMap<crtc::Handle, DrmOutput>,
     cursor: MemoryRenderBuffer,
     pub active: bool,
+    /// Present nothing before this instant unless the plan has a greeter or session layer.
+    pub hold: Option<std::time::Instant>,
+    /// The hold ended with a cover instead of a scene (reported as `TimedOut`).
+    pub hold_expired: bool,
     #[allow(dead_code)]
     device_id: libc::dev_t,
     #[allow(dead_code)]
     tokens: Vec<RegistrationToken>,
+}
+
+/// What a render does while the previous owner's picture is held.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum HoldAction {
+    /// Present nothing: the splash stays.
+    Keep,
+    /// The plan has a greeter or session layer: present it and end the hold.
+    PresentScene,
+    /// The deadline passed with only a cover to show: present it and end the hold.
+    PresentCover,
+}
+
+pub(crate) fn hold_decision(deadline_passed: bool, plan_has_scene: bool) -> HoldAction {
+    match (plan_has_scene, deadline_passed) {
+        (true, _) => HoldAction::PresentScene,
+        (false, false) => HoldAction::Keep,
+        (false, true) => HoldAction::PresentCover,
+    }
+}
+
+#[cfg(test)]
+mod hold_tests {
+    use super::*;
+
+    #[test]
+    fn a_bare_cover_is_never_presented_while_the_hold_runs() {
+        assert_eq!(hold_decision(false, false), HoldAction::Keep);
+    }
+
+    #[test]
+    fn a_scene_ends_the_hold_at_once() {
+        assert_eq!(hold_decision(false, true), HoldAction::PresentScene);
+        assert_eq!(hold_decision(true, true), HoldAction::PresentScene);
+    }
+
+    #[test]
+    fn the_deadline_presents_a_cover_so_a_broken_greeter_cannot_hold_the_screen() {
+        assert_eq!(hold_decision(true, false), HoldAction::PresentCover);
+    }
 }
 
 fn connector_name(info: &connector::Info) -> String {
@@ -125,6 +169,19 @@ impl DrmGfx {
     pub fn render(&mut self, state: &State, plan: &Plan, _now_ms: u64) -> Result<(Vec<CapturedFrame>, Outcome)> {
         if !self.active {
             return Ok((Vec::new(), Outcome::Failed("session inactive".into())));
+        }
+        if let Some(deadline) = self.hold {
+            let has_scene = plan.greeter.is_some() || plan.session.is_some();
+            match hold_decision(std::time::Instant::now() >= deadline, has_scene) {
+                // Keep the previous owner's picture (the boot splash): a bare cover would
+                // blank the screen between the splash and the greeter.
+                HoldAction::Keep => return Ok((Vec::new(), Outcome::Shown)),
+                HoldAction::PresentScene => self.hold = None,
+                HoldAction::PresentCover => {
+                    self.hold = None;
+                    self.hold_expired = true;
+                }
+            }
         }
         let mut queued = false;
         let mut failed: Option<String> = None;
@@ -190,6 +247,33 @@ impl DrmGfx {
         }
     }
 
+    /// CRTCs that have a mode set right now (somebody before us lit them).
+    fn lit_crtcs(&self) -> Vec<crtc::Handle> {
+        let Ok(res) = self.device.resource_handles() else { return Vec::new() };
+        res.crtcs()
+            .iter()
+            .copied()
+            .filter(|c| self.device.get_crtc(*c).ok().and_then(|i| i.mode()).is_some())
+            .collect()
+    }
+
+    /// Switch off the heads we do not drive, so they do not keep showing the previous owner's
+    /// picture. The ones we drive are left untouched.
+    fn disable_undriven_crtcs(&mut self) {
+        let mut lit = self.lit_crtcs();
+        lit.retain(|c| !self.outputs.contains_key(c));
+        for c in lit {
+            if let Err(e) = self.device.set_crtc(c, None, (0, 0), &[], None) {
+                tracing::warn!("cannot disable unused CRTC {c:?}: {e}");
+            }
+        }
+    }
+
+    /// True while the hold is active.
+    pub fn holding(&self) -> bool {
+        self.hold.is_some()
+    }
+
     fn scan(&self) -> Result<Vec<(OutputInfo, connector::Handle, crtc::Handle, control::Mode)>> {
         let res = self.device.resource_handles().context("resource handles")?;
         let mut used: Vec<crtc::Handle> = Vec::new();
@@ -200,7 +284,7 @@ impl DrmGfx {
             if info.state() != connector::State::Connected || info.modes().is_empty() {
                 continue;
             }
-            let mode = info
+            let preferred = info
                 .modes()
                 .iter()
                 .find(|m| m.mode_type().contains(ModeTypeFlags::PREFERRED))
@@ -232,6 +316,14 @@ impl DrmGfx {
             }
             let Some(crtc) = crtc_choice else { continue };
             used.push(crtc);
+            // An active CRTC keeps the mode it has: the first commit is then a plain flip.
+            let mode = self
+                .device
+                .get_crtc(crtc)
+                .ok()
+                .and_then(|c| c.mode())
+                .filter(|m| info.modes().iter().any(|x| x == m))
+                .unwrap_or(preferred);
             let (w, h) = mode.size();
             let oi = OutputInfo {
                 name: connector_name(&info),
@@ -382,7 +474,7 @@ impl State {
     }
 }
 
-pub(crate) fn init_drm(state: &mut State, device: Option<PathBuf>) -> Result<()> {
+pub(crate) fn init_drm(state: &mut State, device: Option<PathBuf>, hold: Option<std::time::Duration>) -> Result<()> {
     let (mut session, notifier) = LibSeatSession::new().map_err(|e| anyhow::anyhow!("libseat: {e:?}"))?;
     let seat = session.seat();
     let path = match device {
@@ -395,7 +487,7 @@ pub(crate) fn init_drm(state: &mut State, device: Option<PathBuf>) -> Result<()>
         .open(&path, OFlags::RDWR | OFlags::CLOEXEC | OFlags::NOCTTY | OFlags::NONBLOCK)
         .map_err(|e| anyhow::anyhow!("open {}: {e:?}", path.display()))?;
     let fd = DrmDeviceFd::new(DeviceFd::from(fd));
-    let (device, notifier_drm) = DrmDevice::new(fd.clone(), true).map_err(|e| anyhow::anyhow!("drm device: {e:?}"))?;
+    let (device, notifier_drm) = DrmDevice::new(fd.clone(), false).map_err(|e| anyhow::anyhow!("drm device: {e:?}"))?;
     let gbm = GbmDevice::new(fd.clone()).context("gbm device")?;
     // SAFETY: the display wraps a live GBM device that outlives it (both are owned by DrmGfx).
     let egl = unsafe { EGLDisplay::new(gbm.clone()) }.map_err(|e| anyhow::anyhow!("egl display: {e:?}"))?;
@@ -482,11 +574,25 @@ pub(crate) fn init_drm(state: &mut State, device: Option<PathBuf>) -> Result<()>
         outputs: HashMap::new(),
         cursor: default_cursor_buffer(),
         active: true,
+        hold: None,
+        hold_expired: false,
         device_id,
         tokens,
     };
+    // A CRTC that is already lit (a boot splash) keeps its picture until our first scene
+    // replaces it; nothing here resets or disables what we are going to drive.
+    let lit = gfx.lit_crtcs();
     let infos = gfx.sync_outputs()?;
     anyhow::ensure!(!infos.is_empty(), "no connected display on {}", path.display());
+    gfx.disable_undriven_crtcs();
+    match hold {
+        Some(d) if !lit.is_empty() => {
+            tracing::info!("{} CRTC(s) already lit; holding their picture for up to {} ms", lit.len(), d.as_millis());
+            gfx.hold = Some(std::time::Instant::now() + d);
+            state.first_scene_pending = true;
+        }
+        _ => state.fire_first_scene(crate::FirstSceneReason::NotHeld),
+    }
     state.gfx = Some(Gfx::Drm(gfx));
     state.set_outputs(infos);
     Ok(())

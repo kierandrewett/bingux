@@ -124,3 +124,11 @@ fn the_heartbeat_follows_the_compositor_loop() {
     std::thread::sleep(Duration::from_millis(600));
     assert!(hb.age() >= Duration::from_millis(500), "a stopped loop stops beating: {:?}", hb.age());
 }
+
+#[test]
+fn backends_without_a_hold_report_not_held_at_start() {
+    let cfg = HarnessConfig::with_outputs(1, 64, 48);
+    let fs = cfg.first_scene.clone();
+    let _h = Harness::start(cfg).unwrap();
+    assert_eq!(fs.wait(Duration::from_secs(2)), Some(bsm_compositor::FirstSceneReason::NotHeld));
+}

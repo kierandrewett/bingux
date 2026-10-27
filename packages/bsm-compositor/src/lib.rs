@@ -74,6 +74,56 @@ impl Default for Heartbeat {
     }
 }
 
+/// Why [`FirstScene::wait`] returned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FirstSceneReason {
+    /// The page flip of the first frame with a greeter or session layer completed.
+    Presented,
+    /// The hold deadline passed and a cover was presented instead.
+    TimedOut,
+    /// No hold applies (headless, winit, hold disabled, no active CRTC at start).
+    NotHeld,
+}
+
+/// Set once, when the first real scene is on screen (or when it is known that none will be
+/// held). `bsm-notify` waits on it before sending `READY=1`, so systemd ends bsm's start
+/// job when the greeter is visible and the boot splash can be retained until then.
+#[derive(Clone, Default)]
+pub struct FirstScene(std::sync::Arc<(parking_lot::Mutex<Option<FirstSceneReason>>, parking_lot::Condvar)>);
+
+impl FirstScene {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The first call wins; later calls change nothing. Returns whether this call was first.
+    pub fn fire(&self, reason: FirstSceneReason) -> bool {
+        let mut g = self.0.0.lock();
+        if g.is_some() {
+            return false;
+        }
+        *g = Some(reason);
+        self.0.1.notify_all();
+        true
+    }
+
+    pub fn get(&self) -> Option<FirstSceneReason> {
+        *self.0.0.lock()
+    }
+
+    /// Wait until fired or the timeout; `None` on timeout.
+    pub fn wait(&self, timeout: std::time::Duration) -> Option<FirstSceneReason> {
+        let deadline = std::time::Instant::now() + timeout;
+        let mut g = self.0.0.lock();
+        while g.is_none() {
+            if self.0.1.wait_until(&mut g, deadline).timed_out() {
+                break;
+            }
+        }
+        *g
+    }
+}
+
 /// Which display backend `run` drives.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
@@ -147,6 +197,11 @@ pub struct Config {
     pub request_pass_limit: u64,
     /// Beaten by the compositor thread; hand a clone to the watchdog.
     pub heartbeat: Option<Heartbeat>,
+    /// DRM only: while a CRTC is already lit at start (a boot splash), present nothing until
+    /// the plan has a greeter or session layer, or this long has passed. `None`: present at once.
+    pub hold_first_scene: Option<std::time::Duration>,
+    /// Fired when the first scene is on screen (see [`FirstScene`]).
+    pub first_scene: FirstScene,
 }
 
 impl Default for Config {
@@ -165,6 +220,8 @@ impl Default for Config {
             drm_device: None,
             request_pass_limit: roles::MAX_REQUESTS_PER_PASS,
             heartbeat: None,
+            hold_first_scene: None,
+            first_scene: FirstScene::new(),
         }
     }
 }
@@ -177,4 +234,24 @@ pub fn run(
     evt_tx: std::sync::mpsc::Sender<SceneEvent>,
 ) -> Result<()> {
     state::run(config, cmd_rx, evt_tx)
+}
+
+#[cfg(test)]
+mod first_scene_tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn the_first_call_wins_and_waiters_see_it() {
+        let f = FirstScene::new();
+        assert_eq!(f.wait(Duration::from_millis(20)), None, "unfired: a wait times out");
+        let g = f.clone();
+        let t = std::thread::spawn(move || g.wait(Duration::from_secs(5)));
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(f.fire(FirstSceneReason::Presented));
+        assert!(!f.fire(FirstSceneReason::TimedOut), "a later fire changes nothing");
+        assert_eq!(t.join().unwrap(), Some(FirstSceneReason::Presented));
+        assert_eq!(f.get(), Some(FirstSceneReason::Presented));
+        assert_eq!(f.wait(Duration::ZERO), Some(FirstSceneReason::Presented));
+    }
 }

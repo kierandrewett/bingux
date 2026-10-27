@@ -100,6 +100,7 @@ pub struct HarnessConfig {
     /// See `Config::request_pass_limit`.
     pub request_pass_limit: u64,
     pub heartbeat: Option<crate::Heartbeat>,
+    pub first_scene: crate::FirstScene,
 }
 
 impl HarnessConfig {
@@ -117,7 +118,7 @@ impl HarnessConfig {
                 transform: 0,
             })
             .collect();
-        Self { outputs, cover: CoverColor { r: 0.0, g: 0.0, b: 0.0 }, frame_dump_dir: None, draw_cursor: false, request_pass_limit: crate::roles::MAX_REQUESTS_PER_PASS, heartbeat: None }
+        Self { outputs, cover: CoverColor { r: 0.0, g: 0.0, b: 0.0 }, frame_dump_dir: None, draw_cursor: false, request_pass_limit: crate::roles::MAX_REQUESTS_PER_PASS, heartbeat: None, first_scene: crate::FirstScene::new() }
     }
 }
 
@@ -157,6 +158,8 @@ impl Harness {
             drm_device: None,
             request_pass_limit: cfg.request_pass_limit,
             heartbeat: cfg.heartbeat,
+            hold_first_scene: None,
+            first_scene: cfg.first_scene.clone(),
         };
         let thread = std::thread::Builder::new()
             .name("bsm-compositor".into())
