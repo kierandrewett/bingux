@@ -115,7 +115,7 @@ impl Manager {
             ClientMessage::Power { request_id, action } => {
                 if !self.greeter_authoritative() || self.policy.greeter_uid.is_none() {
                     Self::greeter_error(fx, Some(request_id), ErrorCode::Unauthorised, "the greeter is not active");
-                } else if !self.policy.greeter_power.allows(action) {
+                } else if !self.greeter_may_power(action) {
                     Self::greeter_error(fx, Some(request_id), ErrorCode::Unauthorised, "policy does not allow this action here");
                 } else if let Err(e) = self.request_power(Requester::Greeter, action, None, fx) {
                     Self::greeter_error(fx, Some(request_id), e.code, &e.message);
@@ -171,6 +171,26 @@ impl Manager {
 
     // ----- authentication -----
 
+    /// Count one submitted guess for `uid`. A count older than the cooldown starts again.
+    fn charge_failure(&mut self, uid: u32) {
+        let now = self.now();
+        let cooldown = self.policy.failure_cooldown;
+        let n = match self.failures.get(&uid) {
+            Some((n, at)) if now.duration_since(*at) < cooldown => *n,
+            _ => 0,
+        };
+        self.failures.insert(uid, (n + 1, now));
+    }
+
+    /// Greeter power policy: stricter while somebody is signed in (F4).
+    pub(super) fn greeter_may_power(&self, action: bsm_proto::state::PowerAction) -> bool {
+        if self.sessions.values().any(|s| s.state.is_running()) {
+            self.policy.greeter_power_with_sessions.allows(action)
+        } else {
+            self.policy.greeter_power.allows(action)
+        }
+    }
+
     fn failure_cooldown_active(&self, uid: u32) -> bool {
         self.failures
             .get(&uid)
@@ -201,6 +221,13 @@ impl Manager {
         // A new request supersedes a conversation still waiting for answers.
         if self.op.as_ref().is_some_and(|o| o.tstate == bsm_proto::state::TransitionState::WaitingForAuth) {
             self.fail_challenge(ErrorCode::Cancelled, "superseded", fx);
+        }
+        // A power request of a hosted session that still waits for polkit must not keep the
+        // greeter from authenticating (F1): the user at the keyboard goes first.
+        if self.op.as_ref().is_some_and(|o| {
+            o.kind == OpKind::Power && !o.began && !o.committed && matches!(o.requester, Requester::Session(_))
+        }) {
+            self.cancel_immediate(fx);
         }
         if self.op.is_some() {
             return fail(fx, BsmError::new(ErrorCode::Busy, "an operation is in progress"));
@@ -273,7 +300,10 @@ impl Manager {
             return;
         }
         c.awaiting_response = false;
-        let req_id = c.helper_req;
+        let (req_id, uid) = (c.helper_req, c.uid);
+        // F3: the guess is charged when it is submitted and refunded on success, so cancelling
+        // after the answer was sent (before PAM's verdict arrives) does not dodge the cooldown.
+        self.charge_failure(uid);
         fx.push(Effect::Helper(HelperRequest::AuthResponse { req_id, response }));
     }
 
@@ -315,10 +345,7 @@ impl Manager {
             fx.push(Effect::Greeter(ServerMessage::AuthResult { challenge_id: c.id, ok, code, message: message.to_owned() }));
         };
         if !ok {
-            let n = self.failures.get(&c.uid).map_or(0, |f| f.0);
-            if code != Some(ErrorCode::Cancelled) {
-                self.failures.insert(c.uid, (n + 1, self.now()));
-            }
+            // Already charged when the answer was submitted (F3).
             let code = code.unwrap_or(ErrorCode::PamFailure);
             result(fx, false, Some(code), &message);
             self.op_end_failed(c.op, code, fx);

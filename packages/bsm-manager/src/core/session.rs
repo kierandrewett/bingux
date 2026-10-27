@@ -616,11 +616,7 @@ impl Manager {
         self.protected.remove(sid);
         self.sessions.remove(sid);
         Self::log(fx, LogLevel::Info, Some(sid), "session terminated");
-        // A logout that waited for the exit is done.
-        let finish = self.op.as_ref().is_some_and(|o| o.await_exit.as_ref().is_some_and(|(s, g)| s == sid && *g == gn));
-        if finish {
-            self.op_complete(fx);
-        }
+        self.finish_bg_logout(sid, gn, fx);
     }
 
     /// The session died or its bridge went away without being asked. Only this session

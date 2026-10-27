@@ -66,6 +66,8 @@ impl Manager {
         if needs_polkit && caller.is_none() {
             return Err(BsmError::new(ErrorCode::Unauthorised, "unknown caller"));
         }
+        // F1: a hosted session cannot preempt anything; root and the greeter can.
+        self.session_may_not_preempt(&requester)?;
         self.interrupt_current(fx)?;
         let id = self.new_operation(OpKind::Power, requester, None, fx);
         if let Some(op) = self.op.as_mut() {

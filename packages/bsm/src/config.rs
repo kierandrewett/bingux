@@ -20,6 +20,11 @@
 //! reboot = true
 //! poweroff = true
 //!
+//! [greeter_power_with_sessions]      # the same, while any account has a running session
+//! suspend = true                     # defaults: suspend only; reboot and poweroff would end
+//! reboot = false                     # other people's work
+//! poweroff = false
+//!
 //! [timeouts]                         # seconds
 //! stage = 120
 //! gnoblin_ready = 120
@@ -59,6 +64,7 @@ pub struct FileConfig {
     pub dbus: Option<String>,
     pub system_services: Option<String>,
     pub greeter_power: Option<GreeterPowerFile>,
+    pub greeter_power_with_sessions: Option<GreeterPowerBusyFile>,
     pub timeouts: Timeouts,
     pub transitions: Transitions,
 }
@@ -69,6 +75,21 @@ pub struct GreeterPowerFile {
     pub suspend: bool,
     pub reboot: bool,
     pub poweroff: bool,
+}
+
+/// Like `GreeterPowerFile` but unset keys stay off, except suspend.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct GreeterPowerBusyFile {
+    pub suspend: bool,
+    pub reboot: bool,
+    pub poweroff: bool,
+}
+
+impl Default for GreeterPowerBusyFile {
+    fn default() -> Self {
+        Self { suspend: true, reboot: false, poweroff: false }
+    }
 }
 
 impl Default for GreeterPowerFile {
@@ -163,6 +184,9 @@ impl FileConfig {
         if let Some(s) = self.timeouts.auth {
             p.auth_timeout = Duration::from_secs(s);
         }
+        if let Some(g) = &self.greeter_power_with_sessions {
+            p.greeter_power_with_sessions = GreeterPower { suspend: g.suspend, reboot: g.reboot, poweroff: g.poweroff };
+        }
         let t = &self.transitions;
         for (kind, ms) in [
             (TransitionKind::NewLoginFade, t.new_login_ms),
@@ -240,5 +264,19 @@ unlock_ms = 600
         let p = Path::new("/nonexistent/bsm.toml");
         assert_eq!(FileConfig::load(p, false).unwrap(), FileConfig::default());
         assert!(FileConfig::load(p, true).is_err());
+    }
+}
+
+#[cfg(test)]
+mod busy_tests {
+    use super::*;
+
+    #[test]
+    fn power_with_sessions_is_strict_unless_opened_up() {
+        let p = FileConfig::default().apply(Policy::default());
+        assert!(p.greeter_power_with_sessions.suspend && !p.greeter_power_with_sessions.reboot && !p.greeter_power_with_sessions.poweroff);
+        let c = FileConfig::parse("[greeter_power_with_sessions]\nreboot = true\n", Path::new("t")).unwrap();
+        let p = c.apply(Policy::default());
+        assert!(p.greeter_power_with_sessions.reboot && !p.greeter_power_with_sessions.poweroff);
     }
 }

@@ -61,7 +61,6 @@ pub(super) struct Operation {
     pub new_login: bool,
     pub frames_armed: bool,
     pub locked_scene_ready: bool,
-    pub await_exit: Option<(SessionId, Generation)>,
     // power
     pub action: Option<PowerAction>,
     pub polkit: Option<bool>,
@@ -124,7 +123,6 @@ impl Manager {
             new_login: false,
             frames_armed: false,
             locked_scene_ready: false,
-            await_exit: None,
             action: None,
             polkit: None,
             inhibitors: None,
@@ -289,7 +287,7 @@ impl Manager {
     }
 
     /// Cancel an operation that has not begun a transition. Nothing to undo on screen.
-    fn cancel_immediate(&mut self, fx: &mut Fx) {
+    pub(super) fn cancel_immediate(&mut self, fx: &mut Fx) {
         let Some(op) = self.op.clone() else { return };
         match op.kind {
             OpKind::Reveal => {
@@ -372,6 +370,7 @@ impl Manager {
             }
             _ => return Err(BsmError::new(ErrorCode::Busy, "the session is not in the foreground")),
         }
+        self.session_may_not_preempt(&requester)?;
         self.interrupt_current(fx)?;
         let id = self.new_operation(kind, requester, Some((sid.to_owned(), gn)), fx);
         self.op_set(Some(OperationPhase::Preparing), Some(TransitionState::WaitingForFrames), fx);
@@ -766,33 +765,89 @@ impl Manager {
     // ----- logout -----
 
     pub(super) fn request_logout(&mut self, requester: Requester, sid: &str, fx: &mut Fx) -> Result<OperationId, BsmError> {
-        let (gn, state, uid) = match self.sessions.get(sid) {
-            Some(s) if s.state.is_running() => (s.generation, s.state, s.uid),
+        let (gn, state) = match self.sessions.get(sid) {
+            Some(s) if s.state.is_running() => (s.generation, s.state),
             _ => return Err(BsmError::new(ErrorCode::NoSession, "no such session")),
         };
+        if state != SessionState::Foreground {
+            return self.logout_hidden(sid, gn, state, fx);
+        }
+        // F1: a hosted session never preempts an operation: only root and the greeter may.
+        self.session_may_not_preempt(&requester)?;
         self.interrupt_current(fx)?;
         let id = self.new_operation(OpKind::Logout, requester, Some((sid.to_owned(), gn)), fx);
-        if state == SessionState::Foreground {
-            self.op_set(Some(OperationPhase::Preparing), Some(TransitionState::WaitingForFrames), fx);
-            self.begin_transition(TransitionKind::LogoutFade, Some((sid.to_owned(), gn)), None, None, fx);
-            return Ok(id);
+        self.op_set(Some(OperationPhase::Preparing), Some(TransitionState::WaitingForFrames), fx);
+        self.begin_transition(TransitionKind::LogoutFade, Some((sid.to_owned(), gn)), None, None, fx);
+        Ok(id)
+    }
+
+    /// F1: a request from a hosted session must never cancel, supersede or interrupt an
+    /// operation that is running. It gets `Busy` and may try again.
+    pub(super) fn session_may_not_preempt(&self, requester: &Requester) -> Result<(), BsmError> {
+        if matches!(requester, Requester::Session(_)) && self.op.is_some() {
+            return Err(BsmError::new(ErrorCode::Busy, "another operation is in progress"));
         }
-        // Not on screen: nothing to animate. The session is closed and the operation ends
-        // when its processes are gone.
-        let was_target = state == SessionState::LockedGreeterForeground;
-        let _ = (was_target, uid);
-        if let Some(op) = self.op.as_mut() {
-            op.committed = true;
-            op.await_exit = Some((sid.to_owned(), gn));
+        Ok(())
+    }
+
+    /// F2: a session that is not on screen is closed without an animation and without taking
+    /// the single operation slot, so it cannot make a foreground user's lock return `Busy`. The
+    /// operation is tracked on its own and finishes when the helper reports the exit.
+    fn logout_hidden(&mut self, sid: &str, gn: Generation, state: SessionState, fx: &mut Fx) -> Result<OperationId, BsmError> {
+        if state == SessionState::LockRequested {
+            return Err(BsmError::new(ErrorCode::Busy, "the session is being locked"));
         }
-        self.op_set(Some(OperationPhase::Committed), Some(TransitionState::Prepared), fx);
-        self.op_set(None, Some(TransitionState::Committed), fx);
-        if self.sessions.get(sid).is_some_and(|s| s.state.is_running()) {
-            self.begin_cleanup(sid, SessionState::Stopping, fx);
+        // An operation about this very session cannot go on.
+        if self.op.as_ref().is_some_and(|o| o.session.as_ref().is_some_and(|(s, g)| s == sid && *g == gn)) {
+            self.op_abort(ErrorCode::TransitionInterrupted, fx);
         }
-        if self.foreground.as_deref() == Some(sid) {
-            self.foreground = None;
+        if self.bg_logouts.contains_key(&(sid.to_owned(), gn)) {
+            return Err(BsmError::new(ErrorCode::Busy, "the session is already being closed"));
+        }
+        let id = self.next_op;
+        self.next_op += 1;
+        self.bg_logouts.insert((sid.to_owned(), gn), id);
+        self.emit_bg(id, sid, OperationPhase::Committed, None, fx);
+        let was_greeter_target = state == SessionState::LockedGreeterForeground;
+        self.begin_cleanup(sid, SessionState::Stopping, fx);
+        if was_greeter_target {
+            fx.push(Effect::Scene(SceneCommand::ShowGreeterOnly));
         }
         Ok(id)
+    }
+
+    fn emit_bg(&self, id: OperationId, sid: &str, phase: OperationPhase, reason: Option<ErrorCode>, fx: &mut Fx) {
+        fx.push(Effect::Greeter(ServerMessage::Operation {
+            operation_id: id,
+            kind: TransitionKind::LogoutFade,
+            phase,
+            reason,
+        }));
+        fx.push(Effect::Dbus(DbusSignal::TransitionChanged {
+            operation_id: id,
+            kind: TransitionKind::LogoutFade,
+            phase,
+            state: if phase.is_final() { TransitionState::Idle } else { TransitionState::Committed },
+            reason,
+        }));
+        let _ = sid;
+    }
+
+    /// The helper reported the exit of a session closed in the background.
+    pub(super) fn finish_bg_logout(&mut self, sid: &str, gn: Generation, fx: &mut Fx) {
+        let Some(id) = self.bg_logouts.remove(&(sid.to_owned(), gn)) else { return };
+        self.emit_bg(id, sid, OperationPhase::Completed, None, fx);
+        fx.push(Effect::Dbus(DbusSignal::OperationFinished { operation_id: id, success: true, reason: None }));
+        self.history.push_back(OperationInfo {
+            id,
+            kind: TransitionKind::LogoutFade,
+            phase: OperationPhase::Completed,
+            state: TransitionState::Idle,
+            reason: None,
+            session: Some(sid.to_owned()),
+        });
+        while self.history.len() > self.policy.history_len {
+            self.history.pop_front();
+        }
     }
 }

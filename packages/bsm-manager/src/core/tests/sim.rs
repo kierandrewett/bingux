@@ -279,6 +279,18 @@ impl Sim {
         self.greeter(ClientMessage::AuthResponse { challenge_id: cid, response: PASSWORD.into() });
     }
 
+    /// The helper request id of the newest `AuthStart` (for tests that answer by hand).
+    pub fn last_auth_helper_req_manual(&self) -> u64 {
+        self.all
+            .iter()
+            .rev()
+            .find_map(|e| match e {
+                Effect::Helper(HelperRequest::AuthStart { req_id, .. }) => Some(*req_id),
+                _ => None,
+            })
+            .expect("an AuthStart")
+    }
+
     pub fn last_challenge_id(&self) -> u64 {
         self.all
             .iter()

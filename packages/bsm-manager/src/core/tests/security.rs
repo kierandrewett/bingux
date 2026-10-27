@@ -604,7 +604,11 @@ fn a_protected_ack_for_a_foreground_session_is_ignored() {
 
 #[test]
 fn a_running_lock_is_not_interrupted_and_a_launch_is_cancelled_by_power() {
-    let mut sim = Sim::new();
+    let mut sim = Sim::with_policy(Policy {
+        greeter_uid: Some(GREETER_UID),
+        greeter_power_with_sessions: GreeterPower { suspend: true, reboot: true, poweroff: true },
+        ..Policy::default()
+    });
     sim.boot();
     sim.hold();
     sim.select(ALICE);
@@ -1011,5 +1015,131 @@ fn a_stale_begin_auth_cannot_undo_a_newer_selection() {
     assert!(sim.greeter_msgs(mark).iter().any(|m| matches!(m, ServerMessage::Error { request_id: Some(9), code: ErrorCode::StaleGeneration, .. })));
     // The greeter, now showing Bob, authenticates Bob normally.
     sim.greeter(ClientMessage::BeginAuth { request_id: 10, uid: BOB, intent: AuthIntent::Login });
+    assert!(sim.m.operation().is_some());
+}
+
+// ----- review findings (docs/bsm/review-manager.md) -----
+
+/// F1: a hosted session cannot cancel another user's login by asking for power or logout.
+#[test]
+fn f1_a_session_cannot_preempt_a_login_in_flight() {
+    let mut sim = Sim::new();
+    sim.boot();
+    let a = sim.login(ALICE);
+    sim.call(Sim::session_caller(&sim, &a), Method::RequestSwitchUser).unwrap();
+    // Bob is typing his password at the greeter.
+    sim.select(BOB);
+    sim.greeter(ClientMessage::BeginAuth { request_id: 1, uid: BOB, intent: AuthIntent::Switch });
+    let cid = sim.last_challenge_id();
+    let op = sim.current_op().id;
+    let ca = sim.session_caller(&a);
+    for m in [Method::RequestPowerOff, Method::RequestReboot, Method::RequestSuspend, Method::RequestLock { session: None }] {
+        let e = sim.call(ca.clone(), m).unwrap_err();
+        assert!(matches!(e.code, ErrorCode::Busy | ErrorCode::AlreadyLocked), "{e:?}");
+        assert_eq!(sim.current_op().id, op, "Bob's operation is untouched");
+    }
+    // Her own hidden session may be closed (it takes no operation slot) and Bob's login goes on.
+    assert!(sim.call(ca.clone(), Method::RequestLogout { session: None }).is_ok());
+    assert_eq!(sim.current_op().id, op);
+    // Bob's conversation still works.
+    sim.greeter(ClientMessage::AuthResponse { challenge_id: cid, response: PASSWORD.into() });
+    assert_eq!(sim.m.sessions().filter(|s| s.uid == BOB).count(), 1);
+}
+
+/// F1: a session's power request that is still waiting for polkit does not keep the greeter out.
+#[test]
+fn f1_a_pending_session_power_request_yields_to_the_greeter() {
+    let mut sim = Sim::new();
+    sim.boot();
+    let a = sim.login(ALICE);
+    sim.call(Sim::session_caller(&sim, &a), Method::RequestSwitchUser).unwrap();
+    sim.select(BOB);
+    sim.call(Sim::session_caller(&sim, &a), Method::RequestPowerOff).unwrap();
+    assert!(sim.m.operation().is_some_and(|o| o.kind == TransitionKind::PowerFade));
+    sim.greeter(ClientMessage::BeginAuth { request_id: 1, uid: BOB, intent: AuthIntent::Switch });
+    assert!(sim.m.operation().is_some_and(|o| o.kind == TransitionKind::NewLoginFade));
+    assert!(sim.helper_reqs(0).iter().any(|r| matches!(r, HelperRequest::AuthStart { uid: BOB, .. })));
+    // The late polkit answer of the dead power operation changes nothing.
+    let n = sim.mark();
+    sim.feed(Input::PolkitResult { operation: 1, authorised: true });
+    assert!(sim.begin_transitions(n).is_empty());
+}
+
+/// F2: a background logout does not make the foreground user's lock fail.
+#[test]
+fn f2_logging_out_a_hidden_session_does_not_block_the_foreground_lock() {
+    let (mut sim, a, b) = two_users_locked();
+    // B is the lock owner, A is hidden; bring B to the foreground, A stays hidden.
+    sim.authenticate(BOB, AuthIntent::Unlock);
+    assert_eq!(sim.state(&b), SessionState::Foreground);
+    // A's process asks to log out its hidden session, and the helper is slow to report the exit.
+    sim.helper.auto = false;
+    let r = sim.call(Sim::session_caller(&sim, &a), Method::RequestLogout { session: None }).unwrap();
+    let Reply::Operation(op) = r else { panic!() };
+    assert!(sim.m.operation().is_none(), "no operation slot is held");
+    assert_eq!(sim.state(&a), SessionState::Stopping);
+    // Bob locks at once: works.
+    sim.comp.withhold_protect = false;
+    assert!(sim.call(Sim::session_caller(&sim, &b), Method::RequestLock { session: None }).is_ok());
+    assert!(sim.state(&b).is_protected());
+    // The exit arrives; the background operation finishes and is in the history.
+    let ga = sim.gen_of(&a);
+    sim.feed(Input::Helper(HelperEvent::SessionExited { session: a.clone(), generation: ga, status: 0 }));
+    assert!(sim.m.session(&a).is_none());
+    assert!(sim.all.iter().any(|e| matches!(e, Effect::Dbus(DbusSignal::OperationFinished { operation_id, success: true, .. }) if *operation_id == op)));
+    assert_eq!(sim.m.history().last().unwrap().id, op);
+}
+
+/// F3: cancelling after the answer was submitted still counts as a guess.
+#[test]
+fn f3_cancel_after_submit_is_charged() {
+    let mut sim = Sim::new();
+    sim.boot();
+    sim.helper.auto = false;
+    for n in 0..5u64 {
+        sim.greeter(ClientMessage::BeginAuth { request_id: n, uid: ALICE, intent: AuthIntent::Login });
+        let req = sim.last_auth_helper_req_manual();
+        sim.feed(Input::Helper(HelperEvent::AuthPrompt { req_id: req, kind: PamPromptKind::EchoOff, text: "Password:".into() }));
+        let cid = sim.last_challenge_id();
+        sim.greeter(ClientMessage::AuthResponse { challenge_id: cid, response: "guess".into() });
+        // Cancel before the verdict arrives.
+        sim.greeter(ClientMessage::CancelAuth { challenge_id: cid });
+    }
+    let mark = sim.mark();
+    sim.greeter(ClientMessage::BeginAuth { request_id: 99, uid: ALICE, intent: AuthIntent::Login });
+    assert!(sim.helper_reqs(mark).iter().all(|r| !matches!(r, HelperRequest::AuthStart { .. })));
+    assert!(sim.greeter_msgs(mark).iter().any(|m| matches!(m, ServerMessage::Error { code: ErrorCode::Busy, .. })));
+}
+
+/// F3: a correct answer refunds the charge.
+#[test]
+fn f3_success_refunds() {
+    let mut sim = Sim::new();
+    sim.boot();
+    for n in 0..4u64 {
+        sim.greeter(ClientMessage::BeginAuth { request_id: n, uid: ALICE, intent: AuthIntent::Login });
+        let cid = sim.last_challenge_id();
+        sim.greeter(ClientMessage::AuthResponse { challenge_id: cid, response: "bad".into() });
+    }
+    sim.authenticate(ALICE, AuthIntent::Login);
+    assert!(sim.m.sessions().any(|s| s.uid == ALICE));
+    assert!(sim.m.failures.get(&ALICE).is_none());
+}
+
+/// F4: while somebody is signed in the greeter may not reboot or power off.
+#[test]
+fn f4_the_greeter_cannot_power_off_over_a_running_session() {
+    let mut sim = Sim::new();
+    sim.boot();
+    let a = sim.login(ALICE);
+    sim.call(Sim::session_caller(&sim, &a), Method::RequestLock { session: None }).unwrap();
+    for action in [bsm_proto::state::PowerAction::PowerOff, bsm_proto::state::PowerAction::Reboot] {
+        let mark = sim.mark();
+        sim.greeter(ClientMessage::Power { request_id: 8, action });
+        assert!(sim.m.operation().is_none());
+        assert!(sim.greeter_msgs(mark).iter().any(|m| matches!(m, ServerMessage::Error { request_id: Some(8), code: ErrorCode::Unauthorised, .. })));
+    }
+    // Suspend is allowed: it protects and locks everything.
+    sim.greeter(ClientMessage::Power { request_id: 9, action: bsm_proto::state::PowerAction::Suspend });
     assert!(sim.m.operation().is_some());
 }

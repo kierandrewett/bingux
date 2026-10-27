@@ -75,6 +75,9 @@ pub struct Policy {
     /// uid are the greeter. `None` disables greeter recognition (nobody is the greeter).
     pub greeter_uid: Option<u32>,
     pub greeter_power: GreeterPower,
+    /// What the greeter may do while any account has a running session: shutting the machine
+    /// down would end other people's work (F4), so reboot and power off default to off.
+    pub greeter_power_with_sessions: GreeterPower,
     /// PAM service names handed to the helper.
     pub login_service: String,
     pub unlock_service: String,
@@ -124,6 +127,7 @@ impl Default for Policy {
         Self {
             greeter_uid: None,
             greeter_power: GreeterPower::default(),
+            greeter_power_with_sessions: GreeterPower { suspend: true, reboot: false, poweroff: false },
             login_service: "bsm-login".into(),
             unlock_service: "bsm-unlock".into(),
             host_exe: "/usr/libexec/bsm/bsm-host".into(),

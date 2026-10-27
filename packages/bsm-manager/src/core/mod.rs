@@ -38,7 +38,7 @@ use bsm_proto::error::ErrorCode;
 use bsm_proto::progress::ProgressModel;
 use bsm_proto::scene::{OutputInfo, SceneCommand, SceneEvent};
 use bsm_proto::state::{
-    Generation, InputOwner, Revision, SeatState, SessionAvailability, SessionId,
+    Generation, InputOwner, OperationId, Revision, SeatState, SessionAvailability, SessionId,
     SessionState, SessionSummary, TransitionState,
 };
 
@@ -106,6 +106,8 @@ pub struct Manager {
     /// Progress of a failed launch, shown until the greeter goes back or retries.
     retained_failure: Option<ProgressModel>,
     switching_user: bool,
+    /// Logouts of sessions that were not on screen: tracked without the operation slot (F2).
+    bg_logouts: BTreeMap<(SessionId, Generation), OperationId>,
 
     compositor_ready: bool,
     outputs: Vec<OutputInfo>,
@@ -151,6 +153,7 @@ impl Manager {
             history: VecDeque::new(),
             retained_failure: None,
             switching_user: false,
+            bg_logouts: BTreeMap::new(),
             compositor_ready: false,
             outputs: Vec::new(),
             outputs_epoch: 0,
