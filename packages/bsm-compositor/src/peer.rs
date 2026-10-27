@@ -3,7 +3,7 @@
 //! test process's own credentials against deliberately wrong expectations.
 
 use std::io;
-use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 
@@ -20,8 +20,22 @@ pub struct Peer {
 const SO_PEERPIDFD: libc::c_int = 77;
 
 pub fn peer_of(stream: &UnixStream) -> io::Result<Peer> {
-    let cred = rustix::net::sockopt::socket_peercred(stream.as_fd())?;
-    let mut pid = cred.pid.as_raw_nonzero().get() as u32;
+    let mut cred = libc::ucred { pid: 0, uid: 0, gid: 0 };
+    let mut len = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
+    // SAFETY: getsockopt writes at most `len` bytes into the ucred we own.
+    let r = unsafe {
+        libc::getsockopt(
+            stream.as_raw_fd(),
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            (&mut cred as *mut libc::ucred).cast(),
+            &mut len,
+        )
+    };
+    if r != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let mut pid = cred.pid as u32;
     let pidfd = peer_pidfd(stream);
     if let Some(fd) = &pidfd {
         // The pidfd is authoritative: SO_PEERCRED's pid can name a recycled number.
@@ -29,7 +43,7 @@ pub fn peer_of(stream: &UnixStream) -> io::Result<Peer> {
             pid = p;
         }
     }
-    Ok(Peer { uid: cred.uid.as_raw(), pid, pidfd })
+    Ok(Peer { uid: cred.uid, pid, pidfd })
 }
 
 fn peer_pidfd(stream: &UnixStream) -> Option<OwnedFd> {
@@ -119,6 +133,15 @@ pub struct Expectation {
     pub exe: String,
 }
 
+/// A peer whose process cannot be pinned (no `SO_PEERPIDFD`, Linux before 6.5) is refused:
+/// a pid number alone can be recycled between the connect and our `/proc` reads (review F8).
+fn require_pinned(peer: &Peer) -> Result<(), String> {
+    if peer.pidfd.is_none() {
+        return Err("peer process cannot be pinned (no SO_PEERPIDFD); refusing".into());
+    }
+    Ok(())
+}
+
 /// Check uid only (done at accept time, before the binding arrives).
 pub fn check_uid(peer: &Peer, uid: u32) -> Result<(), String> {
     if peer.uid == uid {
@@ -132,6 +155,7 @@ pub fn check_uid(peer: &Peer, uid: u32) -> Result<(), String> {
 /// `cgroup_of` is `/proc/<pid>/cgroup` unless a test injects another source.
 pub fn verify_host(peer: &Peer, want: &Expectation) -> Result<(), String> {
     check_uid(peer, want.uid)?;
+    require_pinned(peer)?;
     if want.pid == 0 || peer.pid != want.pid {
         return Err(format!("peer pid {} is not the expected pid {}", peer.pid, want.pid));
     }
@@ -155,6 +179,7 @@ pub fn verify_host(peer: &Peer, want: &Expectation) -> Result<(), String> {
 /// greeter is a Quickshell process whose path the helper does not report).
 pub fn verify_greeter(peer: &Peer, uid: u32, pid: u32) -> Result<(), String> {
     check_uid(peer, uid)?;
+    require_pinned(peer)?;
     if peer.pid != pid {
         return Err(format!("peer pid {} is not the greeter pid {pid}", peer.pid));
     }
@@ -225,6 +250,15 @@ mod tests {
         } else {
             assert!(verify_host(&p, &bad).unwrap_err().contains("exe"));
         }
+    }
+
+    #[test]
+    fn a_peer_that_cannot_be_pinned_is_refused() {
+        let mut p = me();
+        p.pidfd = None;
+        let want = Expectation { uid: p.uid, pid: p.pid, scope: "/".into(), exe: String::new() };
+        assert!(verify_host(&p, &want).unwrap_err().contains("pinned"));
+        assert!(verify_greeter(&p, p.uid, p.pid).unwrap_err().contains("pinned"));
     }
 
     #[test]

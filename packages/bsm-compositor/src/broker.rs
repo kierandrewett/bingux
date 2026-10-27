@@ -32,8 +32,21 @@ use crate::state::{GreeterAuth, Internal, PendingConn, State};
 
 /// How long an unbound connection may wait for its registration.
 const PENDING_TTL: Duration = Duration::from_secs(10);
-const MAX_PENDING: usize = 4;
+const MAX_PENDING: usize = 32;
 const MAX_REJECTION_EVENTS: u32 = 32;
+
+/// Hold an unverified connection. One slot per peer process (a newer connection from the
+/// same pid replaces the older), peers that already exited free their slot, and when the
+/// list is still full the oldest unverified connection is evicted, never the newest: a flood
+/// cannot push out a peer that arrives later, and the expected peer is verified the moment
+/// the binding arrives (review F9).
+fn push_pending(list: &mut Vec<PendingConn>, conn: PendingConn) {
+    list.retain(|c| c.peer.pid != conn.peer.pid && c.peer.still_alive());
+    while list.len() >= MAX_PENDING {
+        list.remove(0);
+    }
+    list.push(conn);
+}
 
 pub(crate) struct RuntimeCfg {
     pub greeter_socket: PathBuf,
@@ -136,10 +149,10 @@ impl State {
         let conn = PendingConn { stream, peer, since: Instant::now() };
         if self.greeter.auth.is_some() {
             self.try_promote_greeter(conn);
-        } else if self.greeter.pending.len() < MAX_PENDING {
+        } else {
             // The helper reports the greeter pid to the manager, which registers it here.
             // The process can connect first; hold it outside the display until then.
-            self.greeter.pending.push(conn);
+            push_pending(&mut self.greeter.pending, conn);
         }
     }
 
@@ -238,8 +251,8 @@ impl State {
             .cfg
             .session_socket_dir
             .join(format!("{session}-{generation}.sock"));
-        let listener = match bind_socket(&path, 0o666, None) {
-            Ok(l) => l,
+        let token = match self.arm_session_listener(&session, generation, &path) {
+            Ok(t) => Some(t),
             Err(e) => {
                 self.emit(SceneEvent::SessionConnectionRejected {
                     session,
@@ -249,23 +262,6 @@ impl State {
                 return;
             }
         };
-        let (sid, gen_) = (session.clone(), generation);
-        let token = self
-            .handle
-            .insert_source(Generic::new(listener, Interest::READ, PollMode::Level), move |_, l, state| {
-                loop {
-                    match l.accept() {
-                        Ok((stream, _)) => state.session_accept(&sid, gen_, stream),
-                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
-                        Err(e) => {
-                            tracing::warn!("session accept: {e}");
-                            break;
-                        }
-                    }
-                }
-                Ok(PostAction::Continue)
-            })
-            .ok();
         let bound = host_pid != 0 && !scope.is_empty();
         self.sessions.insert(
             session.clone(),
@@ -297,12 +293,42 @@ impl State {
         });
     }
 
+    /// Create the listening socket of a registration. The path is a pure function of the
+    /// session id and generation, so a registration made again after a restart of bsm
+    /// replaces the socket left behind by the previous process.
+    fn arm_session_listener(
+        &mut self,
+        session: &SessionId,
+        generation: Generation,
+        path: &Path,
+    ) -> Result<smithay::reexports::calloop::RegistrationToken> {
+        let listener = bind_socket(path, 0o666, None)?;
+        let (sid, gen_) = (session.clone(), generation);
+        self.handle
+            .insert_source(Generic::new(listener, Interest::READ, PollMode::Level), move |_, l, state| {
+                loop {
+                    match l.accept() {
+                        Ok((stream, _)) => state.session_accept(&sid, gen_, stream),
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                        Err(e) => {
+                            tracing::warn!("session accept: {e}");
+                            break;
+                        }
+                    }
+                }
+                Ok(PostAction::Continue)
+            })
+            .map_err(|e| anyhow::anyhow!("session listener: {e}"))
+    }
+
     pub(crate) fn bind_host(&mut self, session: &SessionId, generation: Generation, scope: String, host_pid: u32) {
         let Some(rec) = self.sessions.get_mut(session).filter(|r| r.generation == generation) else {
             return;
         };
-        if rec.bound || rec.connected || host_pid == 0 || scope.is_empty() {
-            // Bound once; a second binding or a degenerate one changes nothing.
+        if rec.connected || host_pid == 0 || scope.is_empty() {
+            // The connected bridge is not re-bound, and a degenerate binding changes nothing.
+            // A registration without a connection may be bound again: a restarted bridge has
+            // a new pid and scope.
             return;
         }
         rec.scope = scope;
@@ -339,14 +365,16 @@ impl State {
             self.verify_and_promote(session, conn);
         } else {
             let rec = self.sessions.get_mut(session).expect("present");
-            if rec.pending.len() < MAX_PENDING {
-                rec.pending.push(conn);
-            }
+            push_pending(&mut rec.pending, conn);
         }
     }
 
     fn verify_and_promote(&mut self, session: &SessionId, conn: PendingConn) {
         let Some(rec) = self.sessions.get(session) else { return };
+        if rec.connected {
+            // One concurrent connection per registration.
+            return;
+        }
         let want = Expectation {
             uid: rec.uid,
             pid: rec.host_pid,
@@ -444,6 +472,20 @@ impl State {
                     let surfaces: Vec<_> = rec.surfaces.drain().map(|(_, s)| s.surface).collect();
                     for s in surfaces {
                         self.surface_index.remove(&s);
+                    }
+                    // The registration stays: a bridge that lost its connection (or that was
+                    // restarted, or whose bsm restarted) may connect again, through the same
+                    // checks, one connection at a time.
+                    let path = self.sessions.get(&session).map(|r| r.socket_path.clone());
+                    if let Some(path) = path {
+                        match self.arm_session_listener(&session, generation, &path) {
+                            Ok(t) => {
+                                if let Some(rec) = self.sessions.get_mut(&session) {
+                                    rec.listener = Some(t);
+                                }
+                            }
+                            Err(e) => tracing::warn!("session {session}: cannot re-arm the socket: {e:#}"),
+                        }
                     }
                     self.emit(SceneEvent::SessionGone { session: session.clone(), generation });
                     self.refresh_focus();

@@ -486,7 +486,7 @@ fn f3_a_request_flood_is_cut_off_and_the_loop_keeps_serving_others() {
     cfg.request_pass_limit = 500;
     let mut h = Harness::start(cfg).expect("harness");
     let mut greeter = connect_greeter(&mut h, 1, solid([1, 2, 3, 255]));
-    let mut host = bring_up_session(&mut h, "s00000051", 1, solid([9, 9, 9, 255]));
+    let host = bring_up_session(&mut h, "s00000051", 1, solid([9, 9, 9, 255]));
     let surface = host.surfaces[0].1.clone();
     let started = std::time::Instant::now();
     for i in 0..6_000u32 {
@@ -565,4 +565,94 @@ fn request_evidence_arms_every_surface_like_a_report() {
     c.host_paint(&solid([9, 9, 9, 255]));
     h.sync();
     assert!(!h.events().iter().any(|e| matches!(e, SceneEvent::SessionSurfaces { .. })));
+}
+
+// ---- review F9 and restart recovery ----
+
+#[test]
+fn a_bridge_may_reconnect_to_the_same_registration_one_connection_at_a_time() {
+    let mut h = harness(1);
+    let path = register_session(&mut h, "s00000060", 4);
+    bind_host(&h, "s00000060", 4);
+    let first = Client::connect(&path).expect("first connection");
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnected { .. })).unwrap();
+    // While connected the socket is gone: a second concurrent connection is impossible.
+    assert!(UnixStream::connect(&path).is_err());
+    drop(first);
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionGone { .. })).expect("SessionGone");
+    h.take_events();
+    // The registration survives; the same path accepts the bridge again, same checks.
+    let mut second = Client::connect(&path).expect("reconnect after the connection closed");
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnected { .. })).expect("connected again");
+    second.host_bind();
+    assert_eq!(second.app.identity.as_ref().map(|i| i.1.as_str()), Some("4"));
+    assert!(UnixStream::connect(&path).is_err(), "single concurrent connection again");
+}
+
+#[test]
+fn a_reconnect_still_needs_the_checks() {
+    let mut h = harness(1);
+    let path = register_session(&mut h, "s00000061", 1);
+    let mut other = std::process::Command::new("sleep").arg("30").spawn().unwrap();
+    // Bound to a process that is not us (the bridge of an earlier run).
+    h.send(SceneCommand::BindHost { session: "s00000061".into(), generation: 1, scope: my_scope(), host_pid: other.id() });
+    h.sync();
+    let mut raw = UnixStream::connect(&path).unwrap();
+    raw.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+    assert_eq!(raw.read(&mut [0u8; 8]).unwrap_or(0), 0, "wrong pid: closed");
+    // The manager binds the restarted bridge (our pid): the next connection is accepted.
+    bind_host(&h, "s00000061", 1);
+    h.sync();
+    let _c = Client::connect(&path).expect("rebound registration accepts the right peer");
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnected { .. })).unwrap();
+    let _ = other.kill();
+    let _ = other.wait();
+}
+
+#[test]
+fn a_registration_replaces_a_socket_left_behind_by_a_dead_process() {
+    let mut h = harness(1);
+    let stale = h.session_dir.join("s00000062-3.sock");
+    std::fs::create_dir_all(&h.session_dir).unwrap();
+    {
+        // A socket file nobody listens on, as a crashed bsm leaves it.
+        let l = std::os::unix::net::UnixListener::bind(&stale).unwrap();
+        drop(l);
+    }
+    assert!(stale.exists());
+    let path = register_session(&mut h, "s00000062", 3);
+    assert_eq!(path, stale, "the path is a pure function of id and generation");
+    bind_host(&h, "s00000062", 3);
+    let _c = Client::connect(&path).expect("the new registration listens on it");
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnected { .. })).unwrap();
+}
+
+#[test]
+fn f9_a_flood_of_pending_connections_cannot_push_out_the_expected_peer() {
+    let mut h = harness(1);
+    let path = register_session(&mut h, "s00000063", 1);
+    // 40 other processes of the same uid connect first and hold their connections.
+    let script = r#"
+import os, socket, sys, time
+p = sys.argv[1]
+for _ in range(40):
+    if os.fork() == 0:
+        s = socket.socket(socket.AF_UNIX)
+        s.connect(p)
+        time.sleep(10)
+        os._exit(0)
+"#;
+    let mut flood = std::process::Command::new("python3").arg("-c").arg(script).arg(&path).spawn().unwrap();
+    std::thread::sleep(Duration::from_millis(1500));
+    // The real bridge connects last and is held like the rest.
+    let mut real = UnixStream::connect(&path).unwrap();
+    real.write_all(&[1, 0, 0, 0, 1, 0, 12, 0, 2, 0, 0, 0]).unwrap();
+    std::thread::sleep(Duration::from_millis(200));
+    bind_host(&h, "s00000063", 1);
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnected { .. })).expect("the expected peer was not evicted");
+    // The strangers were refused (wrong pid), not promoted.
+    let rejected = h.events().iter().filter(|e| matches!(e, SceneEvent::SessionConnectionRejected { .. })).count();
+    assert!(rejected >= 1);
+    let _ = flood.kill();
+    let _ = flood.wait();
 }
