@@ -509,14 +509,22 @@ impl Supervisor {
         self.send_parent(opened);
     }
 
-    /// Stop every process of the session, then wait until none is left or the
-    /// grace and kill deadlines pass. Only this session's scope is touched.
+    /// Stop every process of the session, then wait until none is left.
+    /// Only this session's scope is touched.
+    ///
+    /// SIGTERM to the members, a grace period, then `cgroup.kill` on the scope
+    /// (review F6): the kernel kills the whole subtree atomically, so a fork loop
+    /// cannot stay ahead of it and no pid is signalled from a stale listing. The
+    /// supervisor lives in the scope itself (pam_systemd put it there), so it first
+    /// moves into the helper's cgroup. Without `cgroup.kill` (kernel before 5.14) or
+    /// without a scope the fallback is a tight signal sweep.
     fn terminate(&mut self, ch: &mut Children, scope_cgroup: Option<&str>, grace_ms: u32) {
         let me = std::process::id();
-        let live = |ch: &mut Children| -> Vec<u32> {
+        let root = self.p.cgroup_root.clone();
+        let members = |ch: &mut Children| -> Vec<u32> {
             ch.reap();
             match scope_cgroup {
-                Some(cg) => cgroup::procs(&self.p.cgroup_root, cg).unwrap_or_default().into_iter().filter(|p| *p != me).collect(),
+                Some(cg) => cgroup::procs(&root, cg).unwrap_or_default().into_iter().filter(|p| *p != me).collect(),
                 None => [&ch.leader, &ch.bridge]
                     .iter()
                     .filter(|s| s.pid > 0 && s.status.is_none())
@@ -524,40 +532,66 @@ impl Supervisor {
                     .collect(),
             }
         };
+        // Signal pids, and in the development configuration (no scope) the process
+        // groups of children that have NOT been reaped: a reaped pid may be reused.
         let signal = |ch: &Children, pids: &[u32], sig: libc::c_int| {
             for pid in pids {
                 sys::kill(*pid as libc::pid_t, sig);
             }
             if scope_cgroup.is_none() {
-                // Development configuration without a scope: reach the process groups too.
-                sys::kill_group(ch.leader.pid, sig);
-                sys::kill_group(ch.bridge.pid, sig);
+                for s in [&ch.leader, &ch.bridge] {
+                    if s.pid > 0 && s.status.is_none() {
+                        sys::kill_group(s.pid, sig);
+                    }
+                }
             }
         };
-        let pids = live(ch);
-        if pids.is_empty() {
+        let pids = members(ch);
+        if pids.is_empty() && scope_cgroup.is_none() {
             return;
         }
         signal(ch, &pids, libc::SIGTERM);
         let deadline = Instant::now() + Duration::from_millis(grace_ms as u64);
         while Instant::now() < deadline {
-            if live(ch).is_empty() {
-                return;
+            if members(ch).is_empty() {
+                break;
             }
             std::thread::sleep(Duration::from_millis(20));
         }
-        let kill_deadline = Instant::now() + Duration::from_secs(3);
+        if let Some(cg) = scope_cgroup {
+            let moved = self.p.helper_cgroup.as_deref().is_some_and(|dest| cgroup::move_pid(&root, dest, me).is_ok());
+            if moved && cgroup::kill(&root, cg).is_ok() {
+                let end = Instant::now() + Duration::from_secs(5);
+                loop {
+                    ch.reap();
+                    // A scope that systemd already removed is as good as empty.
+                    if cgroup::populated(&root, cg) != Some(true) {
+                        return;
+                    }
+                    if Instant::now() >= end {
+                        eprintln!("bsm-helper: scope {cg} still populated after cgroup.kill in session {}", self.p.session);
+                        return;
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+            }
+            if moved {
+                eprintln!("bsm-helper: cgroup.kill unavailable for {cg}; falling back to a signal sweep");
+            }
+        }
+        // Fallback: sweep without sleeping between listings.
+        let end = Instant::now() + Duration::from_secs(5);
         loop {
-            let pids = live(ch);
+            let pids = members(ch);
             if pids.is_empty() {
                 return;
             }
             signal(ch, &pids, libc::SIGKILL);
-            if Instant::now() >= kill_deadline {
+            if Instant::now() >= end {
                 eprintln!("bsm-helper: processes survived SIGKILL in session {}: {pids:?}", self.p.session);
                 return;
             }
-            std::thread::sleep(Duration::from_millis(50));
+            std::thread::sleep(Duration::from_millis(2));
         }
     }
 }

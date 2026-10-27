@@ -346,18 +346,18 @@ fn rapid_restarts_do_not_leak_children_or_cross_conversations() {
     let env = Env::new();
     let h = env.start();
     let c = env.connect();
-    for req in 1..=20u64 {
+    for req in 1..=6u64 {
         c.auth_start(&env, req, req, AuthIntent::Login);
-        if req % 2 == 0 && req != 20 {
+        if req % 2 == 0 && req != 6 {
             c.send(&HelperRequest::AuthAbort { req_id: req });
         }
     }
     // Only the last request survives; answer it.
-    c.until(|e| matches!(e, HelperEvent::AuthPrompt { req_id: 20, kind: PamPromptKind::EchoOff, .. }));
-    c.send(&HelperRequest::AuthResponse { req_id: 20, response: PASSWORD.into() });
+    c.until(|e| matches!(e, HelperEvent::AuthPrompt { req_id: 6, kind: PamPromptKind::EchoOff, .. }));
+    c.send(&HelperRequest::AuthResponse { req_id: 6, response: PASSWORD.into() });
     loop {
         match c.recv() {
-            HelperEvent::AuthDone { req_id: 20, ok: true, .. } => {
+            HelperEvent::AuthDone { req_id: 6, ok: true, .. } => {
                 break;
             }
             HelperEvent::AuthDone { req_id, ok: true, .. } => panic!("superseded request {req_id} authenticated"),
@@ -467,4 +467,90 @@ fn locked_hint_without_a_logind_session_reports_a_clear_error() {
     assert!(matches!(c.recv(), HelperEvent::LockedHintResult { req_id: 4, ok: false, code: Some(ErrorCode::NotSupported), .. }));
     c.send(&HelperRequest::CloseSession { session: "s0000abab".into(), generation: 4, grace_ms: 300 });
     c.until(|e| matches!(e, HelperEvent::SessionExited { .. }));
+}
+
+fn answer_wrong(c: &Client, env: &Env, req_id: u64, password: &str) {
+    c.auth_start(env, req_id, 1, AuthIntent::Login);
+    c.until(|e| matches!(e, HelperEvent::AuthPrompt { kind: PamPromptKind::EchoOff, .. }));
+    c.send(&HelperRequest::AuthResponse { req_id, response: password.into() });
+}
+
+#[test]
+fn superseding_an_answered_conversation_does_not_skip_the_failure_delay() {
+    // Review F7: a guess whose verdict is thrown away by a new AuthStart still counts.
+    if skip_as_root() {
+        return;
+    }
+    let env = Env::new();
+    let _h = env.start();
+    let c = env.connect();
+    // The stack takes two seconds to reject this guess, like pam_faildelay would.
+    answer_wrong(&c, &env, 1, "slow-wrong");
+    c.auth_start(&env, 2, 1, AuthIntent::Login);
+    let first = c.until(done);
+    assert!(matches!(first, HelperEvent::AuthDone { req_id: 1, ok: false, code: Some(ErrorCode::Cancelled), .. }), "{first:?}");
+    match c.until(done) {
+        HelperEvent::AuthDone { req_id: 2, ok: false, code: Some(ErrorCode::Busy), message, .. } => {
+            assert!(message.contains("try again"), "{message}");
+        }
+        other => panic!("{other:?}"),
+    }
+    // After the delay the account is usable again.
+    std::thread::sleep(Duration::from_millis(2300));
+    assert_ne!(c.login(&env, 3, 1, AuthIntent::Login), 0);
+}
+
+#[test]
+fn repeated_failures_back_off_per_account_and_success_resets() {
+    if skip_as_root() {
+        return;
+    }
+    let env = Env::new();
+    let cfg = env.config().replace("ticket_ttl_secs = 30", "ticket_ttl_secs = 30\nfree_failures = 1");
+    let _h = env.start_with(&cfg);
+    let c = env.connect();
+    // The first failure is free.
+    answer_wrong(&c, &env, 1, "wrong-1");
+    assert!(matches!(c.until(done), HelperEvent::AuthDone { req_id: 1, ok: false, code: Some(ErrorCode::PamFailure), .. }));
+    answer_wrong(&c, &env, 2, "wrong-2");
+    assert!(matches!(c.until(done), HelperEvent::AuthDone { req_id: 2, ok: false, .. }));
+    // The second one starts the helper's own back-off.
+    c.auth_start(&env, 3, 1, AuthIntent::Login);
+    match c.until(done) {
+        HelperEvent::AuthDone { req_id: 3, ok: false, code: Some(ErrorCode::Busy), .. } => {}
+        other => panic!("{other:?}"),
+    }
+    std::thread::sleep(Duration::from_millis(2300));
+    assert_ne!(c.login(&env, 4, 1, AuthIntent::Login), 0);
+    // Success cleared the record: a new failure is free again.
+    answer_wrong(&c, &env, 5, "wrong-3");
+    assert!(matches!(c.until(done), HelperEvent::AuthDone { req_id: 5, ok: false, .. }));
+    assert_ne!(c.login(&env, 6, 1, AuthIntent::Login), 0);
+}
+
+#[test]
+fn too_many_children_still_ending_are_refused_with_busy() {
+    // Review F7: the number of superseded root children is bounded.
+    if skip_as_root() {
+        return;
+    }
+    let env = Env::new();
+    let _h = env.start();
+    let c = env.connect();
+    for req in 1..=40u64 {
+        c.auth_start(&env, req, 1, AuthIntent::Login);
+    }
+    let mut busy = false;
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while std::time::Instant::now() < deadline {
+        match c.try_recv(Duration::from_millis(300)) {
+            Some(HelperEvent::AuthDone { code: Some(ErrorCode::Busy), .. }) => {
+                busy = true;
+                break;
+            }
+            Some(_) => {}
+            None => break,
+        }
+    }
+    assert!(busy, "a flood of superseding AuthStarts must hit the bound");
 }

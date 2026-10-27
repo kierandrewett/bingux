@@ -49,6 +49,9 @@ pub struct PamConfig {
     pub prompt_timeout_secs: u64,
     /// May only shorten the protocol's `TICKET_TTL_SECS`.
     pub ticket_ttl_secs: u64,
+    /// Consecutive failed guesses per account before the helper adds its own
+    /// back-off (2, 4, 8 .. 30 s). The distribution's lockout is separate and stays.
+    pub free_failures: u32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -120,6 +123,7 @@ impl Default for PamConfig {
             conversation_timeout_secs: 120,
             prompt_timeout_secs: 60,
             ticket_ttl_secs: TICKET_TTL_SECS,
+            free_failures: 3,
         }
     }
 }

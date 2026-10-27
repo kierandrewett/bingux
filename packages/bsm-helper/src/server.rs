@@ -6,7 +6,7 @@
 //! refusing what could not be a legitimate request (unknown PAM service,
 //! system accounts, paths outside the configured directories).
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 use std::path::PathBuf;
@@ -44,6 +44,8 @@ struct AuthConv {
     deadline: Instant,
     /// A prompt is waiting for a response. Responses at any other time are dropped.
     awaiting: bool,
+    /// When an answer was last sent: a guess is in flight until the verdict arrives.
+    answered_at: Option<Instant>,
 }
 
 /// An authenticated child waiting for its ticket to be redeemed. It holds the
@@ -52,6 +54,16 @@ struct AuthConv {
 struct Parked {
     sock: OwnedFd,
     pid: libc::pid_t,
+}
+
+/// PAM's own default failure delay (`pam_faildelay`), which an aborted guess skips.
+const FAIL_DELAY: Duration = Duration::from_secs(2);
+/// Authentication children that may still be ending before new ones are refused.
+const MAX_DYING: usize = 8;
+
+struct Throttle {
+    failures: u32,
+    next_allowed: Instant,
 }
 
 /// An aborted authentication child that may still be finishing.
@@ -95,6 +107,8 @@ pub struct Server {
     conn: Option<Conn>,
     auths: Vec<AuthConv>,
     dying: Vec<Dying>,
+    /// Failed authentication guesses per uid (review F7).
+    throttle: HashMap<u32, Throttle>,
     tickets: Tickets<Option<Parked>>,
     sessions: Vec<SessionEntry>,
     greeter: Option<GreeterEntry>,
@@ -180,6 +194,7 @@ impl Server {
             conn: None,
             auths: Vec::new(),
             dying: Vec::new(),
+            throttle: HashMap::new(),
             tickets,
             sessions: Vec::new(),
             greeter: None,
@@ -495,6 +510,12 @@ impl Server {
         while !self.auths.is_empty() {
             self.abort_auth(0, ErrorCode::Cancelled, "superseded by a new authentication");
         }
+        if self.dying.len() >= MAX_DYING {
+            return done_err(self, ErrorCode::Busy, "too many authentication processes are still ending");
+        }
+        if let Some(wait) = self.throttled(uid) {
+            return done_err(self, ErrorCode::Busy, &format!("too many failed attempts, try again in {} s", wait.as_secs() + 1));
+        }
         let (parent_sock, child_sock) = match sys::seqpacket_pair() {
             Ok(p) => p,
             Err(e) => return done_err(self, ErrorCode::Internal, &format!("socketpair: {e}")),
@@ -542,10 +563,37 @@ impl Server {
                     startable,
                     deadline: Instant::now() + Duration::from_secs(self.cfg.pam.conversation_timeout_secs),
                     awaiting: false,
+                    answered_at: None,
                 });
             }
             Err(e) => done_err(self, ErrorCode::Internal, &format!("fork: {e}")),
         }
+    }
+
+    /// Record a failed guess for `uid`. `aborted_at` is set when the verdict never
+    /// arrived, so PAM's failure delay did not run: the next attempt then waits for it.
+    fn note_failure(&mut self, uid: u32, aborted_at: Option<Instant>) {
+        let now = Instant::now();
+        let free = self.cfg.pam.free_failures;
+        let t = self.throttle.entry(uid).or_insert(Throttle { failures: 0, next_allowed: now });
+        t.failures = t.failures.saturating_add(1);
+        let extra = if t.failures > free {
+            Duration::from_secs((1u64 << (t.failures - free).min(5)).min(30))
+        } else {
+            Duration::ZERO
+        };
+        let base = match aborted_at {
+            Some(at) => at + FAIL_DELAY,
+            None => now,
+        };
+        t.next_allowed = t.next_allowed.max(base + extra);
+    }
+
+    /// Remaining wait before `uid` may start another authentication.
+    fn throttled(&self, uid: u32) -> Option<Duration> {
+        let t = self.throttle.get(&uid)?;
+        let now = Instant::now();
+        (now < t.next_allowed).then(|| t.next_allowed - now)
     }
 
     fn auth_response(&mut self, req_id: u64, response: &str) {
@@ -557,6 +605,7 @@ impl Server {
             return;
         }
         conv.awaiting = false;
+        conv.answered_at = Some(Instant::now());
         let cmd = AuthParentCmd::Response { text: zeroize::Zeroizing::new(response.to_owned()) };
         let _ = ipc::send_msg(conv.sock.as_raw_fd(), &cmd);
     }
@@ -565,6 +614,11 @@ impl Server {
     /// the child cannot linger. Its result is never used.
     fn abort_auth(&mut self, index: usize, code: ErrorCode, message: &str) {
         let conv = self.auths.remove(index);
+        // Review F7: an answer was given and its verdict (and PAM's failure delay)
+        // is being thrown away. Count it as a failed guess that has to wait out the delay.
+        if let Some(at) = conv.answered_at {
+            self.note_failure(conv.uid, Some(at));
+        }
         let _ = ipc::send_msg(conv.sock.as_raw_fd(), &AuthParentCmd::Abort);
         drop(conv.sock);
         self.dying.push(Dying { pid: conv.pid, kill_at: Instant::now() + Duration::from_millis(1000) });
@@ -591,6 +645,7 @@ impl Server {
                 Ok(Incoming::Msg(AuthChildEvent::Done { ok, code, message })) => {
                     let conv = self.auths.remove(i);
                     if ok {
+                        self.throttle.remove(&conv.uid);
                         // A login keeps its child, which holds the authenticated PAM
                         // handle, as the ticket's payload. Any other child is done.
                         let parked = if conv.startable {
@@ -613,6 +668,11 @@ impl Server {
                         }
                     } else {
                         self.dying.push(Dying { pid: conv.pid, kill_at: Instant::now() + Duration::from_millis(1000) });
+                        // A verdict after an answer is a failed guess. PAM's own failure delay
+                        // was already served before the verdict arrived.
+                        if conv.answered_at.is_some() {
+                            self.note_failure(conv.uid, None);
+                        }
                         let code = code.or(Some(ErrorCode::PamFailure));
                         self.emit(HelperEvent::AuthDone { req_id, ok: false, code, message, ticket: None });
                     }
@@ -942,6 +1002,7 @@ impl Server {
 
     fn timers(&mut self, now: Instant) {
         self.tickets.expire(now);
+        self.throttle.retain(|_, t| now < t.next_allowed + Duration::from_secs(300));
         for d in &self.dying {
             if now >= d.kill_at {
                 sys::kill(d.pid, libc::SIGKILL);

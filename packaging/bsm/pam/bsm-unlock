@@ -9,6 +9,6 @@
 #
 # system-auth carries the distribution's lockout (pam_faillock) and fprintd
 # settings; bsm adds no bypass of its own.
-auth      include   system-auth
+auth      substack  system-auth
 account   required  pam_nologin.so
-account   include   system-auth
+account   substack  system-auth

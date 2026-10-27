@@ -32,7 +32,7 @@ impl TestPam {
         write(&d.join("banner"), "welcome banner\n", 0o644);
         write(
             &d.join("check.sh"),
-            &format!("#!/bin/sh\n[ \"$PAM_TYPE\" = auth ] || exit 0\nIFS= read -r -d '' pw\n[ \"$pw\" = \"{PASSWORD}\" ]\n"),
+            &format!("#!/bin/sh\n[ \"$PAM_TYPE\" = auth ] || exit 0\nIFS= read -r -d '' pw\n[ \"$pw\" = slow-wrong ] && sleep 2\n[ \"$pw\" = \"{PASSWORD}\" ]\n"),
             0o755,
         );
         // The session hook records what a session module sees. pam_exec runs it
