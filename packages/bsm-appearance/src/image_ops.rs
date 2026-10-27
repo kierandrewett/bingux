@@ -209,6 +209,56 @@ pub fn make_avatar(image: &DynamicImage) -> Result<Encoded, ImageError> {
     Ok(Encoded { bytes, width: rgba.width(), height: rgba.height(), format: OutputFormat::Png })
 }
 
+/// Which published file an output is, for [`inspect_output`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputRole {
+    Avatar,
+    Wallpaper,
+    WallpaperBlur,
+}
+
+/// Structural check of a file the converter wrote, run by the parent before it is renamed into
+/// the cache. It does not decode pixels. It checks that:
+///
+/// * the container is the expected format (by signature) and ends with its terminator (JPEG
+///   `EOI`, PNG `IEND`), so a truncated or padded file is refused;
+/// * the format's own header parses and declares exactly the width and height the converter
+///   reported;
+/// * those dimensions fit the role (avatar: square, at most 512; wallpaper: at most 3840x2400;
+///   blur: at most 960x600).
+pub fn inspect_output(bytes: &[u8], role: OutputRole, format: OutputFormat, width: u32, height: u32) -> Result<(), String> {
+    let (expected, image_format) = match (role, format) {
+        (OutputRole::Avatar, OutputFormat::Png) => ((AVATAR_MAX_SIZE, AVATAR_MAX_SIZE), ImageFormat::Png),
+        (OutputRole::Wallpaper, OutputFormat::Jpeg) => ((WALLPAPER_MAX_WIDTH, WALLPAPER_MAX_HEIGHT), ImageFormat::Jpeg),
+        (OutputRole::WallpaperBlur, OutputFormat::Jpeg) => ((BLUR_MAX_WIDTH, BLUR_MAX_HEIGHT), ImageFormat::Jpeg),
+        _ => return Err(format!("{role:?} has the wrong output format {format:?}")),
+    };
+    if image::guess_format(bytes).ok() != Some(image_format) {
+        return Err("output has the wrong file signature".into());
+    }
+    let terminated = match format {
+        OutputFormat::Jpeg => bytes.ends_with(&[0xff, 0xd9]),
+        OutputFormat::Png => bytes.ends_with(b"IEND\xaeB`\x82"),
+    };
+    if !terminated {
+        return Err("output is truncated or has trailing data".into());
+    }
+    let mut reader = ImageReader::with_format(Cursor::new(bytes), image_format);
+    let mut limits = Limits::default();
+    limits.max_alloc = Some(64 * 1024 * 1024);
+    reader.limits(limits);
+    let decoder = reader.into_decoder().map_err(|error| format!("output header: {error}"))?;
+    let declared = decoder.dimensions();
+    if declared != (width, height) {
+        return Err(format!("output is {}x{}, the converter reported {width}x{height}", declared.0, declared.1));
+    }
+    let fits = width > 0 && height > 0 && width <= expected.0 && height <= expected.1;
+    if !fits || (role == OutputRole::Avatar && width != height) {
+        return Err(format!("output size {width}x{height} is not valid for {role:?}"));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -279,6 +329,37 @@ mod tests {
         let edge = decoded.get_pixel(decoded.width() / 2, decoded.height() / 2).0[0];
         assert!(far_white <= (255.0 * WALLPAPER_DIM) as u8 + 3 && far_white >= 150, "dimmed white, got {far_white}");
         assert!(edge > 20 && edge < far_white, "the edge is a gradient, got {edge}");
+    }
+
+    #[test]
+    fn inspect_output_accepts_what_the_encoders_produce_and_nothing_else() {
+        let picture = decode(&png_of(300, 200), DecodeLimits::default()).unwrap();
+        let avatar = make_avatar(&picture).unwrap();
+        let ok = |bytes: &[u8], role, format, w, h| inspect_output(bytes, role, format, w, h);
+        assert_eq!(ok(&avatar.bytes, OutputRole::Avatar, OutputFormat::Png, 200, 200), Ok(()));
+        // Wrong reported size, wrong role, wrong format.
+        assert!(ok(&avatar.bytes, OutputRole::Avatar, OutputFormat::Png, 100, 100).is_err());
+        assert!(ok(&avatar.bytes, OutputRole::Wallpaper, OutputFormat::Png, 200, 200).is_err());
+        assert!(ok(&avatar.bytes, OutputRole::Avatar, OutputFormat::Jpeg, 200, 200).is_err());
+        // Truncated, padded, signature only.
+        assert!(ok(&avatar.bytes[..avatar.bytes.len() - 5], OutputRole::Avatar, OutputFormat::Png, 200, 200).is_err());
+        let mut padded = avatar.bytes.clone();
+        padded.extend_from_slice(b"trailing");
+        assert!(ok(&padded, OutputRole::Avatar, OutputFormat::Png, 200, 200).is_err());
+        assert!(ok(b"\x89PNG\r\n\x1a\n", OutputRole::Avatar, OutputFormat::Png, 1, 1).is_err());
+        let (wallpaper, rgb) = make_wallpaper(&picture).unwrap();
+        assert_eq!(ok(&wallpaper.bytes, OutputRole::Wallpaper, OutputFormat::Jpeg, 300, 200), Ok(()));
+        assert!(ok(&wallpaper.bytes, OutputRole::Wallpaper, OutputFormat::Jpeg, 300, 201).is_err());
+        assert!(ok(&wallpaper.bytes[..wallpaper.bytes.len() - 2], OutputRole::Wallpaper, OutputFormat::Jpeg, 300, 200).is_err());
+        let blurred = make_blurred(&rgb).unwrap();
+        assert_eq!(ok(&blurred.bytes, OutputRole::WallpaperBlur, OutputFormat::Jpeg, blurred.width, blurred.height), Ok(()));
+        // A wallpaper-sized JPEG is not an acceptable blur, and a non-square PNG is not an avatar.
+        let big = decode(&png_of(2000, 1200), DecodeLimits::default()).unwrap();
+        let (big_wallpaper, _) = make_wallpaper(&big).unwrap();
+        assert!(ok(&big_wallpaper.bytes, OutputRole::WallpaperBlur, OutputFormat::Jpeg, 2000, 1200).is_err());
+        let mut rectangle = Vec::new();
+        PngEncoder::new(&mut rectangle).write_image(&vec![0u8; 40 * 20 * 4], 40, 20, ExtendedColorType::Rgba8).unwrap();
+        assert!(ok(&rectangle, OutputRole::Avatar, OutputFormat::Png, 40, 20).is_err());
     }
 
     #[test]

@@ -134,7 +134,9 @@ fn rule(conditions: Vec<SeccompCondition>) -> SeccompRule {
 }
 
 /// Layer 7: the allow list. Exposed so tests can inspect it.
-pub fn build_filter(write_fds: &[RawFd]) -> Result<BpfProgram, String> {
+/// `pid` and `tid` are the process and thread the filter is installed in: the converter is
+/// single threaded, so `tgkill` is pinned to exactly that pair.
+pub fn build_filter(write_fds: &[RawFd], pid: libc::pid_t, tid: libc::pid_t) -> Result<BpfProgram, String> {
     let mut rules: BTreeMap<i64, Vec<SeccompRule>> = BTreeMap::new();
     // Plain allowed syscalls: memory management and what the Rust runtime needs to run
     // single-threaded and exit. None of them reaches the filesystem or the network.
@@ -156,7 +158,6 @@ pub fn build_filter(write_fds: &[RawFd]) -> Result<BpfProgram, String> {
         libc::SYS_sched_yield,
         libc::SYS_getpid,
         libc::SYS_gettid,
-        libc::SYS_tgkill,
     ] {
         rules.insert(syscall, Vec::new());
     }
@@ -168,6 +169,12 @@ pub fn build_filter(write_fds: &[RawFd]) -> Result<BpfProgram, String> {
     rules.insert(
         libc::SYS_write,
         writable.iter().map(|fd| rule(vec![condition(0, SeccompCmpOp::Eq, *fd as u64)])).collect(),
+    );
+    // The only signalling allowed is tgkill to this very thread of this very process (the Rust
+    // runtime's abort path). kill, tkill and tgkill at any other process or thread are killed.
+    rules.insert(
+        libc::SYS_tgkill,
+        vec![rule(vec![condition(0, SeccompCmpOp::Eq, pid as u64), condition(1, SeccompCmpOp::Eq, tid as u64)])],
     );
     // Memory may be mapped and protected, never made executable.
     let not_executable = || rule(vec![condition(2, SeccompCmpOp::MaskedEq(libc::PROT_EXEC as u64), 0)]);
@@ -188,7 +195,9 @@ pub fn build_filter(write_fds: &[RawFd]) -> Result<BpfProgram, String> {
 
 /// Layer 7: install the filter on the calling (only) thread.
 pub fn install_seccomp(write_fds: &[RawFd]) -> Result<(), String> {
-    let program = build_filter(write_fds)?;
+    // SAFETY: getpid and gettid cannot fail.
+    let (pid, tid) = unsafe { (libc::getpid(), libc::syscall(libc::SYS_gettid) as libc::pid_t) };
+    let program = build_filter(write_fds, pid, tid)?;
     seccompiler::apply_filter(&program).map_err(|error| format!("seccomp install: {error}"))
 }
 
@@ -212,7 +221,7 @@ mod tests {
 
     #[test]
     fn filter_compiles_and_is_small() {
-        let program = build_filter(&[7, 8]).unwrap();
+        let program = build_filter(&[7, 8], 100, 100).unwrap();
         assert!(!program.is_empty() && program.len() < 400, "{} instructions", program.len());
     }
 

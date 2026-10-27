@@ -344,17 +344,109 @@ fn concurrent_publishers_do_not_collide() {
     assert!(leftovers(&env.user_dir()).is_empty());
 }
 
+fn hidden_entries(cache: &Path) -> Vec<String> {
+    fs::read_dir(cache)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| name.starts_with('.'))
+        .collect()
+}
+
 #[test]
-fn an_untrusted_account_directory_is_refused() {
+fn a_squatted_symlink_is_replaced_and_never_followed() {
     let env = Env::new();
     // A symlink where our directory should be (a planted entry in a shared cache root).
     let target = env.root.path().join("elsewhere");
     fs::create_dir(&target).unwrap();
     std::os::unix::fs::symlink(&target, env.user_dir()).unwrap();
+    assert!(env.publisher.load_cached(UID).is_none(), "a read never follows or repairs it");
+    let published = env.publish(&record(), ImageUpdate::Set(env.file("f.png", &png_bytes(64, 64, 1))), ImageUpdate::Keep);
+    assert!(published.warnings.is_empty(), "{:?}", published.warnings);
+    assert!(fs::read_dir(&target).unwrap().next().is_none(), "nothing was written through the symlink");
+    let metadata = fs::symlink_metadata(env.user_dir()).unwrap();
+    assert!(metadata.is_dir() && !metadata.file_type().is_symlink());
+    assert_eq!((metadata.uid(), metadata.permissions().mode() & 0o777), (euid(), 0o755));
+    assert!(env.user_dir().join("avatar").is_file());
+    assert_eq!(env.publisher.load_cached(UID).unwrap(), published);
+    assert!(hidden_entries(&env.cache()).is_empty(), "the squatter is tidied away: {:?}", hidden_entries(&env.cache()));
+}
+
+#[test]
+fn a_squatted_file_or_populated_directory_cannot_block_publishing() {
+    let env = Env::new();
+    fs::write(env.user_dir(), b"i was here first").unwrap();
+    let first = env.publish(&record(), ImageUpdate::Set(env.file("f.png", &png_bytes(64, 64, 1))), ImageUpdate::Keep);
+    assert!(first.avatar_path.is_some() && first.warnings.is_empty());
+    assert!(env.user_dir().is_dir());
+
+    // A directory we cannot enter (mode 000) with content: moved aside, kept for an administrator.
+    let other = Env::new();
+    fs::create_dir(other.user_dir()).unwrap();
+    fs::write(other.user_dir().join("evil"), b"x").unwrap();
+    fs::set_permissions(other.user_dir(), fs::Permissions::from_mode(0o000)).unwrap();
+    let published = other.publish(&record(), ImageUpdate::Set(other.file("f.png", &png_bytes(64, 64, 1))), ImageUpdate::Keep);
+    assert!(published.avatar_path.is_some());
+    let kept = hidden_entries(&other.cache());
+    assert_eq!(kept.len(), 1, "{kept:?}");
+    assert!(kept[0].starts_with(".squatted.1000."));
+    for entry in fs::read_dir(other.cache()).unwrap() {
+        let path = entry.unwrap().path();
+        if path.file_name().unwrap().to_string_lossy().starts_with(".squatted") {
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+    }
+}
+
+#[test]
+fn a_squatter_in_a_cache_root_we_cannot_write_stays_an_error() {
+    let env = Env::new();
+    let target = env.root.path().join("elsewhere");
+    fs::create_dir(&target).unwrap();
+    std::os::unix::fs::symlink(&target, env.user_dir()).unwrap();
+    fs::set_permissions(env.cache(), fs::Permissions::from_mode(0o555)).unwrap();
     let error = env.publisher.publish(UID, &record(), Sources::default()).unwrap_err();
+    fs::set_permissions(env.cache(), fs::Permissions::from_mode(0o755)).unwrap();
     assert!(matches!(error, PublishError::UntrustedDirectory { .. }), "{error}");
     assert!(fs::read_dir(&target).unwrap().next().is_none(), "nothing was written through the symlink");
-    assert!(env.publisher.load_cached(UID).is_none());
+}
+
+/// A converter that lies: it exits "ok" and reports sizes, but the bytes are not what it says.
+fn lying_converter(env: &Env, body: &str) -> Publisher {
+    let script = write_file(
+        env.root.path(),
+        "liar",
+        format!(
+            "#!/bin/sh\nwhile [ $# -gt 0 ]; do case \"$1\" in --out-fd) O=$2;; --blur-fd) B=$2;; esac; shift; done\n{body}\n"
+        )
+        .as_bytes(),
+    );
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    let mut config = env.publisher.config().clone();
+    config.converter = bsm_appearance::convert::Converter::new(script);
+    Publisher::new(config)
+}
+
+#[test]
+fn converter_output_is_checked_structurally_before_it_is_published() {
+    let env = Env::new();
+    let good = env.publish(&record(), ImageUpdate::Keep, ImageUpdate::Set(env.file("w.jpg", &jpeg_bytes(640, 480, 1))));
+    let before = read(good.wallpaper_path.as_ref().unwrap());
+    let report = |bytes: u32| {
+        format!(
+            r#"echo '{{"status":"ok","kind":"wallpaper","source_sha256":"{hash}","unchanged":false,"primary":{{"width":10,"height":10,"bytes":{bytes},"format":"jpeg"}},"blurred":{{"width":10,"height":10,"bytes":{bytes},"format":"jpeg"}},"sandbox":{{"rlimits":true,"no_new_privs":true,"network_namespace":false,"seccomp":true}}}}'"#,
+            hash = "ab".repeat(32)
+        )
+    };
+    // Right magic, right byte count, but not an image at all.
+    let liar = lying_converter(&env, &format!("printf '\\377\\330\\377ABCDEFGHI' >&$O\nprintf '\\377\\330\\377ABCDEFGHI' >&$B\n{}", report(12)));
+    let result = liar
+        .publish(UID, &record(), Sources { avatar: ImageUpdate::Keep, wallpaper: ImageUpdate::Set(env.file("w2.jpg", &jpeg_bytes(640, 480, 2))) })
+        .unwrap();
+    assert_eq!(result.warnings.len(), 1, "{:?}", result.warnings);
+    assert!(result.warnings[0].kept_previous);
+    assert_eq!(result.wallpaper_rev, 1);
+    assert_eq!(read(result.wallpaper_path.as_ref().unwrap()), before, "the published file is untouched");
+    assert!(leftovers(&env.user_dir()).is_empty());
 }
 
 #[test]

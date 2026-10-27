@@ -193,3 +193,18 @@ fn the_real_system_lists_the_current_user_and_never_root() {
         assert!(accounts.iter().any(|account| account.uid == uid), "the current user is a login account: {accounts:?}");
     }
 }
+
+#[test]
+fn display_names_are_length_bounded_and_markup_is_left_to_the_renderer() {
+    // `<`, `>` and `&` are NOT altered here: escaping depends on the renderer, and the greeter
+    // shows names as plain text. What bsm guarantees is a bounded length and no control characters.
+    let fixture = Fixture::new();
+    let huge = format!("{}<b>&amp;</b>\u{1b}[31m", "N".repeat(100_000));
+    fixture.write("etc/passwd", &format!("long:x:2000:2000:{huge}:/home/long:/bin/bash\nmarkup:x:2001:2001:<b>Bob</b> & Co <script>:/home/m:/bin/bash\n"));
+    let accounts = list_accounts(&fixture.policy()).unwrap();
+    let long = accounts.iter().find(|account| account.user_name == "long").unwrap();
+    assert_eq!(long.display_name.chars().count(), bsm_appearance::accounts::MAX_DISPLAY_NAME_CHARS);
+    assert!(!long.display_name.contains('\u{1b}'));
+    let markup = accounts.iter().find(|account| account.user_name == "markup").unwrap();
+    assert_eq!(markup.display_name, "<b>Bob</b> & Co <script>");
+}

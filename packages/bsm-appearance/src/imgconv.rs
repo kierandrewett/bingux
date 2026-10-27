@@ -6,7 +6,7 @@
 //!                     [--max-input-bytes N] [--max-pixels N] [--max-side N]
 //!                     [--memory-limit BYTES] [--cpu-seconds N] [--max-output-bytes N]
 //!                     [--require-seccomp]
-//! bsm-imgconv selftest socket|open|exec|write|exec-memory|memory
+//! bsm-imgconv selftest socket|open|exec|write|exec-memory|kill-other|kill-raw|kill-self|memory
 //! ```
 //!
 //! It never opens a path. The source image, the output file and (for wallpapers)
@@ -287,6 +287,21 @@ fn selftest(probe: &str) -> i32 {
             "write" => {
                 // Descriptor 7 is not an output of this run.
                 libc::write(7, b"x".as_ptr().cast(), 1);
+            }
+            "kill-other" => {
+                // tgkill at another process (the parent): the filter pins tgkill to this thread.
+                libc::syscall(libc::SYS_tgkill, libc::getppid(), libc::getppid(), 0);
+            }
+            "kill-raw" => {
+                // kill(2) is not allowed at all, not even at ourselves.
+                libc::kill(libc::getpid(), 0);
+            }
+            "kill-self" => {
+                // The one allowed form: signal 0 to this thread of this process.
+                let pid = libc::getpid();
+                let ok = libc::syscall(libc::SYS_tgkill, pid, libc::syscall(libc::SYS_gettid), 0) == 0;
+                println!("{}", if ok { "allowed" } else { "failed" });
+                return if ok { exit::OK } else { 99 };
             }
             "exec-memory" => {
                 libc::mmap(

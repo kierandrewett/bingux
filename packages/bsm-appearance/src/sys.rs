@@ -221,3 +221,27 @@ pub fn fchmod(fd: RawFd, mode: u32) -> io::Result<()> {
     // SAFETY: plain syscall on a descriptor owned by the caller.
     check(unsafe { libc::fchmod(fd, mode as libc::mode_t) }).map(|_| ())
 }
+
+/// Creates the directory `name` below `dir`; an existing entry is an error.
+pub fn mkdir_exclusive_at(dir: RawFd, name: &str, mode: u32) -> io::Result<()> {
+    let name = cstring(name.as_bytes())?;
+    // SAFETY: as above.
+    check(unsafe { libc::mkdirat(dir, name.as_ptr(), mode as libc::mode_t) }).map(|_| ())
+}
+
+/// Atomically swaps two entries below `dir` (`renameat2` with `RENAME_EXCHANGE`).
+/// `Err` with `EINVAL` or `ENOSYS` means the filesystem or kernel cannot do it.
+pub fn exchange_at(dir: RawFd, a: &str, b: &str) -> io::Result<()> {
+    let a = cstring(a.as_bytes())?;
+    let b = cstring(b.as_bytes())?;
+    // SAFETY: both strings are valid and NUL terminated; renameat2 has no glibc wrapper in all
+    // versions, so the raw syscall is used.
+    check(unsafe { libc::syscall(libc::SYS_renameat2, dir, a.as_ptr(), dir, b.as_ptr(), libc::RENAME_EXCHANGE) } as libc::c_int).map(|_| ())
+}
+
+/// Removes the empty directory `name` below `dir`.
+pub fn rmdir_at(dir: RawFd, name: &str) -> io::Result<()> {
+    let name = cstring(name.as_bytes())?;
+    // SAFETY: as above.
+    check(unsafe { libc::unlinkat(dir, name.as_ptr(), libc::AT_REMOVEDIR) }).map(|_| ())
+}

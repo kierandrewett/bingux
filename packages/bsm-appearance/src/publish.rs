@@ -34,7 +34,7 @@ use bsm_proto::control::Appearance;
 use serde::{Deserialize, Serialize};
 
 use crate::convert::{ConvertReport, ConvertRequest, Converter, ImageKind, OutputInfo, sha256_hex};
-use crate::image_ops::OutputFormat;
+use crate::image_ops::{OutputRole, inspect_output};
 use crate::record::{PublishRecord, RecordError};
 use crate::sys;
 
@@ -247,8 +247,9 @@ impl Staged {
         Ok(Self { dir, name, file, placed: false })
     }
 
-    /// The bytes the converter wrote, checked against what it reported.
-    fn read_back(&self, info: &OutputInfo) -> Result<Vec<u8>, String> {
+    /// The bytes the converter wrote, structurally checked against what it reported and what the
+    /// published file must be (see `inspect_output`).
+    fn read_back(&self, info: &OutputInfo, role: OutputRole) -> Result<Vec<u8>, String> {
         if info.bytes == 0 || info.bytes > MAX_READBACK_BYTES {
             return Err(format!("converter reported {} output bytes", info.bytes));
         }
@@ -258,13 +259,7 @@ impl Staged {
         if self.file.read_at(&mut extra, info.bytes).map_err(|error| error.to_string())? != 0 {
             return Err("converter wrote more than it reported".into());
         }
-        let magic_ok = match info.format {
-            OutputFormat::Jpeg => bytes.starts_with(&[0xff, 0xd8, 0xff]),
-            OutputFormat::Png => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
-        };
-        if !magic_ok {
-            return Err("converter output has the wrong file signature".into());
-        }
+        inspect_output(&bytes, role, info.format, info.width, info.height)?;
         Ok(bytes)
     }
 
@@ -321,24 +316,74 @@ impl Publisher {
         if create {
             sys::mkdir_at(root.as_raw_fd(), &name, 0o755).map_err(PublishError::io("creating the account directory"))?;
         }
-        let dir = sys::open_dir_at(root.as_raw_fd(), &name).map_err(|error| {
-            if error.kind() == io::ErrorKind::NotFound {
-                PublishError::Io { context: "opening the account directory", error }
-            } else {
-                PublishError::UntrustedDirectory { path: self.user_dir(uid), why: error.to_string() }
+        let me = sys::effective_uid();
+        let opened = match sys::open_dir_at(root.as_raw_fd(), &name) {
+            Ok(dir) => match sys::fstat(dir.as_raw_fd()) {
+                Ok(stat) if stat.uid == me => Ok(dir),
+                Ok(stat) => Err(format!("owned by uid {}, not by the publisher (uid {me})", stat.uid)),
+                Err(error) => Err(error.to_string()),
+            },
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Err(PublishError::Io { context: "opening the account directory", error });
             }
-        })?;
+            // A symlink (ELOOP), a file (ENOTDIR) or a directory we may not enter.
+            Err(error) => Err(error.to_string()),
+        };
+        let dir = match opened {
+            Ok(dir) => dir,
+            Err(why) if create => self.replace_squatter(root.as_raw_fd(), &name, uid, why)?,
+            Err(why) => return Err(PublishError::UntrustedDirectory { path: self.user_dir(uid), why }),
+        };
         let stat = sys::fstat(dir.as_raw_fd()).map_err(PublishError::io("inspecting the account directory"))?;
-        let untrusted = |why: String| PublishError::UntrustedDirectory { path: self.user_dir(uid), why };
-        if stat.uid != sys::effective_uid() {
-            return Err(untrusted(format!("owned by uid {}, not by the publisher (uid {})", stat.uid, sys::effective_uid())));
-        }
         // A directory the publisher owns can only be loosened by the publisher or root; tighten
         // a writable-by-others mode back rather than trusting it.
         if stat.mode & 0o022 != 0 || stat.mode & 0o755 != 0o755 {
             sys::fchmod(dir.as_raw_fd(), 0o755).map_err(PublishError::io("fixing the account directory mode"))?;
         }
         Ok(dir)
+    }
+
+    /// `<cache>/<uid>` exists but is not a directory of ours: somebody squatted the name (the
+    /// legacy snapshot root is world-writable, so any user can create `<cache>/<other uid>`).
+    /// A fresh directory is built under a private name, exchanged with the squatter in one
+    /// atomic step (a reader sees the old entry or the new directory, never nothing), and the
+    /// squatter is moved to `.squatted.<uid>.<time>.<n>`, never followed, never deleted
+    /// recursively. A non-directory is unlinked; an empty directory is removed.
+    ///
+    /// This needs write access to the cache root, i.e. the root belongs to the publisher. In a
+    /// sticky root owned by someone else the rename is refused and the account stays blocked
+    /// with `UntrustedDirectory`, which is the documented packaging requirement.
+    fn replace_squatter(&self, root: RawFd, name: &str, uid: u32, why: String) -> Result<OwnedFd, PublishError> {
+        let blocked = |error: io::Error| PublishError::UntrustedDirectory {
+            path: self.user_dir(uid),
+            why: format!("{why}; cannot replace it: {error}"),
+        };
+        let serial = STAGING_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let staging = format!(".fresh.{uid}.{}.{serial}", std::process::id());
+        let quarantine = format!(".squatted.{uid}.{}.{serial}", now_seconds());
+        sys::mkdir_exclusive_at(root, &staging, 0o755).map_err(blocked)?;
+        let undo = |error: io::Error| {
+            let _ = sys::rmdir_at(root, &staging);
+            blocked(error)
+        };
+        let fresh = sys::open_dir_at(root, &staging).map_err(undo)?;
+        sys::fchmod(fresh.as_raw_fd(), 0o755).map_err(undo)?;
+        match sys::exchange_at(root, &staging, name) {
+            Ok(()) => sys::rename_at(root, &staging, &quarantine).map_err(blocked)?,
+            // No atomic exchange (old kernel or filesystem): move the squatter away, then the
+            // fresh directory in. A reader may see "no directory" for an instant: neutral.
+            Err(error) if matches!(error.raw_os_error(), Some(libc::EINVAL) | Some(libc::ENOSYS)) => {
+                sys::rename_at(root, name, &quarantine).map_err(undo)?;
+                sys::rename_at(root, &staging, name).map_err(blocked)?;
+            }
+            Err(error) => return Err(undo(error)),
+        }
+        // Best effort tidy-up of what is cheap to remove; a populated directory stays for an
+        // administrator (it is hidden: the name starts with a dot).
+        if !sys::unlink_at(root, &quarantine).unwrap_or(false) {
+            let _ = sys::rmdir_at(root, &quarantine);
+        }
+        Ok(fresh)
     }
 
     fn lock(&self, uid: u32) -> Result<Locked, PublishError> {
@@ -652,11 +697,13 @@ impl Publisher {
         origin: Origin,
     ) -> Result<(ImageState, bool), InstallError> {
         let info = report.primary.ok_or_else(|| InstallError::Rejected("converter reported no output".into()))?;
-        let bytes = primary.read_back(&info).map_err(InstallError::Rejected)?;
+        let bytes = primary
+            .read_back(&info, if kind == ImageKind::Avatar { OutputRole::Avatar } else { OutputRole::Wallpaper })
+            .map_err(InstallError::Rejected)?;
         let sha256 = sha256_hex(&bytes);
         let (blur_sha256, blur_staged) = match (kind, blur, report.blurred) {
             (ImageKind::Wallpaper, Some(staged), Some(blur_info)) => {
-                let blur_bytes = staged.read_back(&blur_info).map_err(InstallError::Rejected)?;
+                let blur_bytes = staged.read_back(&blur_info, OutputRole::WallpaperBlur).map_err(InstallError::Rejected)?;
                 (Some(sha256_hex(&blur_bytes)), Some(staged))
             }
             (ImageKind::Wallpaper, ..) => return Err(InstallError::Rejected("converter reported no blurred output".into())),

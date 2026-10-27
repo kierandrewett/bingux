@@ -71,7 +71,7 @@ exclude an account (fingerprint and smart card logins still work); `Account::loc
 there for the caller's policy. The result is sorted by display name.
 
 The display name is AccountsService `RealName`, else the first GECOS field, else the login
-name, with control characters removed and at most 128 characters. `Account::icon_file` is the
+name, with control characters removed and at most 128 characters (tested with a 100,000 character GECOS). `<`, `>` and `&` are deliberately **not** altered here: escaping depends on the renderer, and the greeter shows names as plain text, so a name like `<b>Bob</b> & Co` is passed through unchanged. `Account::icon_file` is the
 AccountsService `IconFile`, else the state file `Icon=`, else a plain file named after the
 account in the icons directory. It is **unvalidated**; the publisher validates it.
 
@@ -117,6 +117,18 @@ symlink) owned by the publisher's euid; anything else is `PublishError::Untruste
 and nothing is written. A directory the publisher owns with a loose mode is set back to 0755.
 All file operations go through the directory descriptor (`openat`, `renameat`, `unlinkat`).
 
+**Squatted directories.** If `<cache>/<uid>` exists but is a symlink, a file, a directory
+owned by someone else, or a directory the publisher cannot enter, `publish` does not stay
+blocked: it builds a fresh 0755 directory under a private name, swaps it in with
+`renameat2(RENAME_EXCHANGE)` (one atomic step, with a plain two-rename fallback), and moves the
+squatter to the hidden name `.squatted.<uid>.<time>.<n>`; a non-directory or empty directory is
+then removed, a populated one is left there for an administrator. The squatter is never
+followed. This needs write access to the cache root, so it works when the root belongs to the
+publisher (the recommended bsm-owned root). In a sticky root owned by someone else the rename is
+refused and the account stays `UntrustedDirectory`. Read-only calls (`load_cached`) never repair
+anything. Tested for a symlink, a file, an unreadable populated directory and a read-only
+root; a directory owned by *another uid* needs root to create and is not tested.
+
 *Packaging note:* the legacy `bingux-session` root is a sticky, world-writable directory from
 tmpfiles. A user can pre-create `<cache>/<someone else's uid>` there; bsm then refuses to use
 it (that user's images stop updating, nothing is exposed). bsm should create the directories
@@ -129,7 +141,15 @@ snapshot directory; that needs a `bingux-session` change and is not done here.
 directory is `fsync`ed. A reader sees the old file or the new one. `wallpaper` and
 `wallpaper-blur` are two renames, so for a moment a reader can hold the new wallpaper and the
 old blur; the revision in `profile.json` (and the snapshot the manager pushes) changes only
-after both are in place, so a client that reloads by revision converges. A failed or killed
+after both are in place, so a client that reloads by revision converges. **Converter output is checked before the rename.** The parent does not decode pixels, but
+`image_ops::inspect_output` checks each result file: expected container signature, JPEG `EOI` or
+PNG `IEND` at the end (no truncation or trailing data), the format's own header parses and
+declares exactly the reported width and height, and the size fits the role (avatar square and
+at most 512, wallpaper at most 3840x2400, blur at most 960x600). A converter that lies is a
+warning and the previous copy stays (tested with a fake converter). Files are created `O_EXCL`,
+`fchmod`ed to 0644 regardless of umask.
+
+A failed or killed
 publish leaves no half file under the final name; leftover `.tmp.` files are removed on drop
 (a crashed process can leave one, which is harmless and has an unreachable name).
 
@@ -212,11 +232,11 @@ Order inside the child (the security design):
 
 **Seccomp allow list.** `read`, `close`, `munmap`, `mremap`, `brk`, `madvise`, `futex`, `exit`,
 `exit_group`, `rt_sigreturn`, `rt_sigprocmask`, `sigaltstack`, `getrandom`, `clock_gettime`,
-`sched_yield`, `getpid`, `gettid`, `tgkill`; `write` only to fd 1, fd 2 and the output
+`sched_yield`, `getpid`, `gettid`; `tgkill` only when its process and thread arguments are this converter's own pid and tid (the Rust abort path; `kill`, `tkill` and `tgkill` at any other process die with `SIGSYS`); `write` only to fd 1, fd 2 and the output
 descriptors; `mmap` and `mprotect` only without `PROT_EXEC`; `fcntl` only with `F_GETFD`. No
 `open*`, `socket`, `connect`, `execve`, `clone`, `fork`, `ptrace`, `unshare`, `mount`,
 `prctl`. A forbidden call kills the process with `SIGSYS`; `bsm-imgconv selftest <probe>`
-runs the probes `socket`, `open`, `exec`, `write`, `exec-memory` and `memory` after lock-down,
+runs the probes `socket`, `open`, `exec`, `write`, `exec-memory`, `kill-other`, `kill-raw`, `kill-self` (allowed) and `memory` after lock-down,
 and the tests assert the kill.
 
 **The gap, precisely.** After lock-down the child can still make the allowed calls, so it can
@@ -305,7 +325,7 @@ threads publishing the same wallpaper (one revision).
 
 ## Verification status
 
-Run (`cargo test` in `packages/bsm-appearance`, 28 unit + 10 + 14 + 16 integration tests,
+Run (`cargo test` in `packages/bsm-appearance`, 29 unit + 11 + 14 + 19 integration tests,
 all passing at the time of writing):
 
 * account filtering on a fixture root (reserved, system, nologin, hidden by name and by uid,
