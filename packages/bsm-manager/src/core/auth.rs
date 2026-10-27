@@ -192,6 +192,12 @@ impl Manager {
         if self.failure_cooldown_active(uid) {
             return fail(fx, BsmError::new(ErrorCode::Busy, "too many failed attempts; wait before trying again"));
         }
+        // The greeter must ask for the account it shows. A begin_auth for another account was
+        // composed before a newer selection (for example `bsmctl select-user`) reached the
+        // greeter: it is stale, and it must not undo that selection.
+        if self.selected_uid != Some(uid) {
+            return fail(fx, BsmError::new(ErrorCode::StaleGeneration, "the selected account changed; select it again"));
+        }
         // A new request supersedes a conversation still waiting for answers.
         if self.op.as_ref().is_some_and(|o| o.tstate == bsm_proto::state::TransitionState::WaitingForAuth) {
             self.fail_challenge(ErrorCode::Cancelled, "superseded", fx);

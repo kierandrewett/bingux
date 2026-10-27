@@ -117,6 +117,10 @@ for `Login` and `Switch` (the helper rejects any other pairing).
 
 * Success is single use: the challenge leaves the manager before the result is acted upon, so a
   repeated or late `AuthDone` finds nothing.
+* `BeginAuth` must name the account the greeter currently shows (`selected_uid`). A request for another account is
+  stale (it was composed before a newer selection, for example `bsmctl select-user`) and is answered with
+  `Error{stale_generation}`; it never re-selects. The greeter sends `SelectUser`, waits for the snapshot that
+  confirms it, then `BeginAuth`.
 * A mid-flight change of the selected account, a lost greeter, a lost helper, the end of its
   operation or the deadline ends the conversation (`AuthAbort` to the helper, `AuthResult{ok:false}` to
   the greeter). Events of the helper for any other request id are dropped.

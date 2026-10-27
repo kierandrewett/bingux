@@ -163,12 +163,19 @@ fn a_failed_password_creates_nothing_and_leads_to_a_cooldown() {
 fn unlock_is_bound_to_the_locked_account() {
     let (mut sim, a, b) = two_users_locked();
     // B is the lock owner. An unlock for A is refused: A's session is not the greeter target.
+    // Without selecting A first the request is stale, not an unlock of A.
     let mark = sim.mark();
     sim.greeter(ClientMessage::BeginAuth { request_id: 1, uid: ALICE, intent: AuthIntent::Unlock });
     assert!(sim.helper_reqs(mark).iter().all(|r| !matches!(r, HelperRequest::AuthStart { .. })));
+    assert_eq!(sim.state(&b), SessionState::LockedGreeterForeground);
+    // Selecting A hides B's unlock form; A is then no lock owner either, so unlock has no target.
+    sim.select(ALICE);
+    let mark = sim.mark();
+    sim.greeter(ClientMessage::BeginAuth { request_id: 2, uid: ALICE, intent: AuthIntent::Unlock });
+    assert!(sim.helper_reqs(mark).iter().all(|r| !matches!(r, HelperRequest::AuthStart { .. })));
     assert!(sim.greeter_msgs(mark).iter().any(|m| matches!(m, ServerMessage::Error { code: ErrorCode::NoSession, .. })));
     assert_eq!(sim.state(&a), SessionState::LockedBackground);
-    assert_eq!(sim.state(&b), SessionState::LockedGreeterForeground);
+    assert_eq!(sim.state(&b), SessionState::LockedBackground);
 }
 
 #[test]
@@ -985,4 +992,24 @@ fn randomised_event_orders_never_break_the_invariants_or_reveal_early() {
             let _ = before_owner;
         }
     }
+}
+
+#[test]
+fn a_stale_begin_auth_cannot_undo_a_newer_selection() {
+    let mut sim = Sim::new();
+    sim.boot();
+    sim.select(ALICE);
+    // `bsmctl select-user` moves the greeter to Bob while the greeter's begin_auth(Alice) is in flight.
+    let g = Caller { uid: 0, pid: 1, bus_name: ":1.1".into(), cgroup: None };
+    sim.call(g, Method::SelectGreeterUser { uid: BOB }).unwrap();
+    assert_eq!(sim.m.selected_uid(), Some(BOB));
+    let mark = sim.mark();
+    sim.greeter(ClientMessage::BeginAuth { request_id: 9, uid: ALICE, intent: AuthIntent::Login });
+    assert_eq!(sim.m.selected_uid(), Some(BOB), "the stale request did not re-select Alice");
+    assert!(sim.helper_reqs(mark).is_empty());
+    assert!(sim.m.operation().is_none());
+    assert!(sim.greeter_msgs(mark).iter().any(|m| matches!(m, ServerMessage::Error { request_id: Some(9), code: ErrorCode::StaleGeneration, .. })));
+    // The greeter, now showing Bob, authenticates Bob normally.
+    sim.greeter(ClientMessage::BeginAuth { request_id: 10, uid: BOB, intent: AuthIntent::Login });
+    assert!(sim.m.operation().is_some());
 }
