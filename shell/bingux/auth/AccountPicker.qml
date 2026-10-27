@@ -189,6 +189,7 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 1
                         Text {
+                            textFormat: Text.PlainText
                             width: parent.width
                             text: row.modelData.displayName
                             color: root.theme.ink
@@ -208,6 +209,7 @@ Item {
                                 color: Theme.success
                             }
                             Text {
+                                textFormat: Text.PlainText
                                 text: Availability.label(row.modelData.availability)
                                 color: root.theme.inkMuted
                                 font.family: Theme.fontFamily

@@ -93,6 +93,7 @@ ColumnLayout {
         offsetY: 1
         colour: Qt.rgba(0, 0, 0, 0.45)
         Text {
+            textFormat: Text.PlainText
             id: accountLabel
             width: parent.width
             text: root.displayName
@@ -143,6 +144,7 @@ ColumnLayout {
         }
     }
     Text {
+        textFormat: Text.PlainText
         id: status
         objectName: "sessionStatus"
         Layout.fillWidth: true
@@ -192,7 +194,9 @@ ColumnLayout {
         visible: root.interactive && root.showForm
         enabled: root.canSubmit
         opacity: root.canSubmit ? 1 : 0.55
-        placeholderText: root.promptText
+        // The prompt comes from PAM. A TextField placeholder auto-detects rich
+        // text, so the prompt is drawn by a plain-text item below instead.
+        placeholderText: ""
         echoMode: root.echoVisible ? TextInput.Normal : TextInput.Password
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSmall + 1
@@ -203,7 +207,7 @@ ColumnLayout {
         rightPadding: 32
         // A secret field never offers completions or keeps predictions.
         inputMethodHints: root.echoVisible ? Qt.ImhNone : Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
-        Accessible.name: placeholderText
+        Accessible.name: root.promptText
         background: SessionGlass {
             backdrop: root.backdrop
             tint: root.theme.glass
@@ -245,6 +249,20 @@ ColumnLayout {
                 to: 0
                 duration: root.theme.motion / 2
             }
+        }
+        Text {
+            objectName: "sessionPrompt"
+            textFormat: Text.PlainText
+            anchors.left: parent.left
+            anchors.leftMargin: response.leftPadding
+            anchors.right: parent.right
+            anchors.rightMargin: response.rightPadding
+            anchors.verticalCenter: parent.verticalCenter
+            visible: response.text.length === 0 && !response.preeditText
+            text: root.promptText
+            color: root.theme.inkMuted
+            font: response.font
+            elide: Text.ElideRight
         }
         AbstractButton {
             id: submitButton

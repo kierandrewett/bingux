@@ -32,6 +32,7 @@ The driver socket takes one JSON object per line and answers `ok` or
   {"cmd": "clear_progress"}
   {"cmd": "availability", "uid": 1002, "value": "running_locked"}
   {"cmd": "operation", "phase": "failed", "reason": "inhibited"}
+  {"cmd": "busy", "seconds": 0.5}                       refuse select_user and begin_auth with busy
   {"cmd": "drop"}                                       close the greeter's connection
   {"cmd": "quit"}
 """
@@ -162,6 +163,7 @@ class Server:
         self.operation = None
         self.log_file = open(args.log, "a", buffering=1) if args.log else None
         self.deny_power = args.deny_power
+        self.busy_until = 0.0
 
     # -- output -----------------------------------------------------------
     def log(self, kind, **fields):
@@ -288,6 +290,10 @@ class Server:
                 self.send({"type": "error", "request_id": None, "code": "not_supported", "message": "version"})
                 return
             self.send(self.snapshot())
+        elif kind in ("select_user", "begin_auth") and asyncio.get_running_loop().time() < self.busy_until:
+            # A lock or switch fade is running: bsm refuses with busy.
+            self.log("busy_" + kind)
+            self.send({"type": "error", "request_id": message.get("request_id"), "code": "busy", "message": "a transition is running"})
         elif kind == "select_user":
             uid = message.get("uid")
             self.log("select_user", uid=uid)
@@ -453,6 +459,8 @@ class Server:
             self.push_snapshot()
         elif name == "operation":
             self.operation_event("power_fade", c["phase"], c.get("reason"))
+        elif name == "busy":
+            self.busy_until = asyncio.get_running_loop().time() + c["seconds"]
         elif name == "drop":
             if self.writer:
                 self.writer.close()

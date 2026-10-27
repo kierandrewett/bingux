@@ -115,6 +115,7 @@ Item {
                 }
             }
             Text {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 visible: root.pending !== ""
                 text: root.selected ? root.selected.title + "?" : ""
@@ -124,6 +125,7 @@ Item {
                 font.weight: Font.Medium
             }
             Text {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 visible: root.pending !== ""
                 text: "Everyone who is signed in will be signed out."

@@ -212,6 +212,7 @@ KioskScreen {
                         visible: running
                     }
                     Text {
+                        textFormat: Text.PlainText
                         objectName: "greeterStatus"
                         Layout.fillWidth: true
                         text: root.statusText
@@ -231,7 +232,9 @@ KioskScreen {
                     visible: root.interactive
                     enabled: root.canSubmit
                     opacity: root.canSubmit ? 1 : 0.55
-                    placeholderText: root.promptOpen && root.authentication.prompt !== "" ? root.authentication.prompt : "Password"
+                    // The prompt comes from PAM: drawn by a plain-text item below, not as an auto-detected placeholder.
+                    readonly property string promptText: root.promptOpen && root.authentication.prompt !== "" ? root.authentication.prompt : "Password"
+                    placeholderText: ""
                     echoMode: root.authentication.responseVisible ? TextInput.Normal : TextInput.Password
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSmall + 1
@@ -240,7 +243,20 @@ KioskScreen {
                     selectByMouse: false
                     leftPadding: Theme.padding
                     rightPadding: Theme.padding
-                    Accessible.name: placeholderText
+                    Accessible.name: promptText
+                    Text {
+                        textFormat: Text.PlainText
+                        anchors.left: parent.left
+                        anchors.leftMargin: parent.leftPadding
+                        anchors.right: parent.right
+                        anchors.rightMargin: parent.rightPadding
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: parent.text.length === 0 && !parent.preeditText
+                        text: parent.promptText
+                        color: Theme.muted
+                        font: parent.font
+                        elide: Text.ElideRight
+                    }
                     background: Rectangle {
                         radius: height / 2
                         color: Theme.elevated

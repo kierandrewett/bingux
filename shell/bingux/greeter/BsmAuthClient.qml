@@ -79,10 +79,46 @@ QtObject {
         cancelConversation();
         root.model.resetConversation();
         selectRequest = nextRequest();
+        pendingSelect = uid;
         send({
             type: "select_user",
             uid: uid
         });
+    }
+
+    // A select_user that bsm may answer with busy (a lock or switch fade is
+    // running), kept to retry once; -1 when none is outstanding.
+    property int pendingSelect: -1
+    // Whether the current attempt already was retried after a busy answer.
+    property bool busyRetried: false
+
+    // bsm refuses selection and authentication while a lock or switch fade
+    // runs. Wait for that operation to finish (or a moment) and try once more;
+    // a second busy is shown to the user instead of looping.
+    function retryAfterBusy() {
+        if (!busyWait.running)
+            busyWait.restart();
+    }
+
+    property Timer busyWait: Timer {
+        interval: 700
+        onTriggered: root.runBusyRetry()
+    }
+
+    function runBusyRetry() {
+        busyWait.stop();
+        const model = root.model;
+        if (pendingSelect >= 0) {
+            const uid = pendingSelect;
+            pendingSelect = -2;
+            selectRequest = nextRequest();
+            send({
+                type: "select_user",
+                uid: uid
+            });
+            return;
+        }
+        reconcile();
     }
 
     function cancelConversation() {
@@ -201,6 +237,10 @@ QtObject {
                 // struct next to the `type` tag.
                 const challenge = model.challengeId;
                 if (model.applySnapshot(message)) {
+                    if (model.selectedUid === pendingSelect || pendingSelect === -2) {
+                        pendingSelect = -1;
+                        busyRetried = false;
+                    }
                     // An account or mode change ended the conversation locally;
                     // tell bsm too, then follow the new selection.
                     if (challenge !== 0 && model.challengeId === 0 && model.phase === "idle")
@@ -224,7 +264,9 @@ QtObject {
         case "operation":
             if (typeof message.operation_id === "number")
                 model.applyOperation(message.operation_id, String(message.kind), String(message.phase), message.reason || "");
-            if (!model.powerActive && !model.signingIn)
+            if (busyWait.running && ["completed", "failed", "cancelled"].includes(String(message.phase)))
+                runBusyRetry();
+            else if (!model.powerActive && !model.signingIn)
                 reconcile();
             break;
         case "error":
@@ -238,6 +280,7 @@ QtObject {
     // bsm answered the begin_auth in flight. The screen may have moved to
     // another account meanwhile: follow the latest snapshot.
     function answered() {
+        busyRetried = false;
         answerTimeout.stop();
         if (!awaitingFirstPrompt)
             return;
@@ -345,6 +388,31 @@ QtObject {
                 snapshotWait.restart();
             }
             return;
+        }
+        if (code === "busy") {
+            const isAuth = id === authRequest && authRequest !== 0;
+            const isSelect = !isAuth && pendingSelect !== -1 && (id === null || id === undefined || id === selectRequest);
+            if (isAuth || isSelect) {
+                if (isAuth) {
+                    authRequest = 0;
+                    answerTimeout.stop();
+                    awaitingFirstPrompt = false;
+                    model.phase = "idle";
+                    model.challengeId = 0;
+                }
+                if (!busyRetried && !(isSelect && pendingSelect === -2)) {
+                    busyRetried = true;
+                    retryAfterBusy();
+                } else {
+                    busyRetried = false;
+                    pendingSelect = -1;
+                    selectRequest = 0;
+                    model.statusText = model.authErrorText("busy", "");
+                    model.statusIsError = true;
+                    model.rejected();
+                }
+                return;
+            }
         }
         if (code === "not_supported") {
             model.fatalError = "This greeter does not match the session manager";

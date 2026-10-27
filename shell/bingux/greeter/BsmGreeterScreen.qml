@@ -222,6 +222,7 @@ Item {
                                 color: authTheme.ink
                             }
                             Text {
+                                textFormat: Text.PlainText
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: "Switch user"
                                 color: authTheme.ink

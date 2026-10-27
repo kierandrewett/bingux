@@ -66,6 +66,7 @@ AbstractButton {
             Column {
                 anchors.verticalCenter: parent.verticalCenter
                 Text {
+                    textFormat: Text.PlainText
                     text: root.text
                     color: "#ffffff"
                     font.family: Theme.fontFamily
@@ -73,6 +74,7 @@ AbstractButton {
                     font.weight: root.selected ? Font.DemiBold : Font.Normal
                 }
                 Text {
+                    textFormat: Text.PlainText
                     visible: root.detail !== ""
                     text: root.detail
                     color: Qt.rgba(1, 1, 1, 0.62)

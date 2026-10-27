@@ -39,6 +39,7 @@ AbstractButton {
                 color: root.theme.ink
             }
             Text {
+                textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.text
                 color: root.theme.ink

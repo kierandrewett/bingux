@@ -105,6 +105,30 @@ ShellRoot {
         return null;
     }
 
+    function collectTexts(item, into) {
+        if (item instanceof Text)
+            into.push(item);
+        const kids = item.children || [];
+        for (let i = 0; i < kids.length; i++)
+            collectTexts(kids[i], into);
+        if (item.contentItem && item.contentItem !== item)
+            collectTexts(item.contentItem, into);
+    }
+    AuthCard {
+        id: card
+    }
+    AuthProgress {
+        id: failing
+    }
+    AccountPicker {
+        id: picker
+        width: 480
+        height: 600
+        open: true
+    }
+    Text {
+        id: probe
+    }
     property real nextChallenge: 200
 
     // bsm answers the begin_auth in flight with its first prompt.
@@ -263,6 +287,40 @@ ShellRoot {
         check("a stale begin_auth is dropped, not resent", !client.awaitingFirstPrompt && model.phase === "idle" && out.filter(m => m.type === "begin_auth").length === beginsBefore);
         client.handle(snapshot(20, 1000, login, users));
         check("the next snapshot's account gets the conversation", last("begin_auth").uid === 1000 && model.selectedUid === 1000);
+
+        // busy: wait for the operation, retry once, then show it.
+        client.handle(snapshot(21, 1000, login, users));
+        answer();
+        client.selectUser(1001);
+        client.handle({ type: "error", request_id: null, code: "busy", message: "" });
+        const selects = out.filter(m => m.type === "select_user").length;
+        check("busy select_user is held, not resent at once", client.busyWait.running && out.filter(m => m.type === "select_user").length === selects);
+        client.handle({ type: "operation", operation_id: 77, kind: "switch_user", phase: "completed", reason: null });
+        check("the finished operation retries select_user once", out.filter(m => m.type === "select_user").length === selects + 1 && !client.busyWait.running);
+        client.handle({ type: "error", request_id: null, code: "busy", message: "" });
+        check("a second busy is shown, not retried", !client.busyWait.running && model.statusLineIsError && model.statusLine === "bsm is busy, try again");
+        client.handle(snapshot(22, 1001, login, users));
+
+        // Server-supplied text is never rich text.
+        const hostile = ["<img src=\"http://x/y\">", "<b>x</b>"];
+        card.displayName = hostile[0];
+        card.statusText = hostile[1];
+        card.promptText = hostile[1];
+        failing.progress = Progress.normalise({ session: "s", generation: 1, revision: 1, reached: [], counted_stage: null, done: 0, total: 0, failure: { stage: "pam_session", code: "x", message: hostile[1] } });
+        picker.users = [{ uid: 1, userName: "u", displayName: hostile[0], avatar: "", availability: "not_signed_in" }];
+        const texts = [];
+        const allTexts = [];
+        for (const root of [card, failing, picker])
+            collectTexts(root, texts);
+        const shown = texts.filter(t => t.text === hostile[0] || t.text === hostile[1]);
+        check("the hostile strings are shown in the card, the failure and the picker", shown.length >= 4);
+        // An empty item (the control's own placeholder) shows nothing.
+        check("every Text item that shows text is plain text", texts.every(t => t.text === "" || t.textFormat === Text.PlainText));
+        check("the PAM prompt is drawn by a plain-text item", texts.some(t => t.objectName === "sessionPrompt" && t.text === hostile[1] && t.textFormat === Text.PlainText));
+        // PlainText keeps the markup characters: <b>x</b> is wider than x alone.
+        const bold = shown.find(t => t.text === hostile[1]);
+        probe.text = "x";
+        check("markup in a name renders literally", bold.contentWidth > probe.contentWidth * 3);
 
         // Hostile or broken lines do not throw or change state.
         const revision = model.revision;

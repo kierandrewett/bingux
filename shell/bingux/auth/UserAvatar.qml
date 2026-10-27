@@ -65,6 +65,7 @@ Item {
             asynchronous: true
         }
         Text {
+            textFormat: Text.PlainText
             anchors.centerIn: parent
             visible: image.status !== Image.Ready
             text: root.initials

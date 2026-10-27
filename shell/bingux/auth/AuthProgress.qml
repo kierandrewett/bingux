@@ -44,6 +44,7 @@ ColumnLayout {
         Layout.fillWidth: true
         spacing: Theme.gap
         Text {
+            textFormat: Text.PlainText
             objectName: "progressLabel"
             Layout.fillWidth: true
             text: root.stageLabel
@@ -54,6 +55,7 @@ ColumnLayout {
             elide: Text.ElideRight
         }
         Text {
+            textFormat: Text.PlainText
             objectName: "progressCount"
             visible: text !== ""
             text: root.countLabel
@@ -132,6 +134,7 @@ ColumnLayout {
     }
 
     Text {
+        textFormat: Text.PlainText
         objectName: "progressFailure"
         Layout.fillWidth: true
         visible: root.failed && text !== ""

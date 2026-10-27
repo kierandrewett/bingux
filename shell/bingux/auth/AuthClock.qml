@@ -25,6 +25,7 @@ SessionShadow {
     Column {
         spacing: 2
         Text {
+            textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
             text: Qt.formatDate(root.now, "ddd d MMM")
             color: root.theme.ink
@@ -34,6 +35,7 @@ SessionShadow {
             opacity: 0.9
         }
         Text {
+            textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
             text: root.timeText
             color: root.theme.ink

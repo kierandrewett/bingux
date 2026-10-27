@@ -392,6 +392,27 @@ def external_select_scenario():
         rig.close()
 
 
+def busy_scenario():
+    """While a fade runs bsm answers busy. The greeter must wait and try once
+    more, not stay stuck."""
+    rig = Rig(["--mode", "login"])
+    try:
+        check("busy: the first prompt is open", rig.wait_for("begin_auth", uid=1000, timeout=20))
+        rig.shot("busy-before", settle=1.5)
+        rig.key("Tab", "Return")
+        time.sleep(0.6)
+        rig.drive(cmd="busy", seconds=0.9)
+        rig.key("Down", "Return")
+        check("busy: select_user is refused while busy", rig.wait_for("busy_select_user"))
+        check("busy: the greeter retries and reaches the account", rig.wait_for("begin_auth", uid=1001, timeout=10))
+        check("busy: it did not loop", rig.count("busy_select_user") <= 2 and rig.count("busy_begin_auth") <= 2, f"{rig.count('busy_select_user')} {rig.count('busy_begin_auth')}")
+        shot = rig.shot("busy-retry-settled", settle=1.0)
+        check("busy: the form is usable afterwards", has_field(shot))
+        return "".join(rig.output)
+    finally:
+        rig.close()
+
+
 def main():
     for tool in ("sway", "grim", "wtype", "swaymsg"):
         if shutil.which(tool) is None:
@@ -403,6 +424,8 @@ def main():
     login_records, login_output = login_scenario()
     unlock_records, unlock_output = unlock_scenario()
     fight_output = fight_scenario()
+    busy_output = busy_scenario()
+    check("busy: no QML errors", "ERROR" not in busy_output.replace("ERROR: ", "ERROR_"))
     external_output = external_select_scenario()
     check("external select: no QML errors", "ERROR" not in external_output.replace("ERROR: ", "ERROR_"))
     check("selection: no QML errors", "ERROR" not in fight_output.replace("ERROR: ", "ERROR_"))

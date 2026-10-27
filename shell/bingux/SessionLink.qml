@@ -36,6 +36,7 @@ AbstractButton {
                 opacity: root.dimmed ? 0.7 : 1
             }
             Text {
+                textFormat: Text.PlainText
                 visible: root.text !== ""
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.text
