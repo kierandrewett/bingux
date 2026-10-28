@@ -124,6 +124,8 @@ pub struct LocalProviders {
     default_engine: String,
     web_opener: Vec<String>,
     os_index_roots: Vec<PathBuf>,
+    /// What running and closed apps expose to search. `None` in tests.
+    app_search: Option<crate::app_search::AppSearch>,
 }
 
 #[derive(Clone)]
@@ -205,6 +207,7 @@ impl LocalProviders {
             } else {
                 Vec::new()
             },
+            app_search: start_index_workers.then(|| crate::app_search::AppSearch::new(config)),
             sqlite_sources: config
                 .sqlite_sources
                 .iter()
@@ -217,6 +220,13 @@ impl LocalProviders {
                 })
                 .collect(),
         })
+    }
+
+    /// Adds the apps' search results; the daemon starts with them, a test can
+    /// point them at a private set of apps.
+    pub fn with_app_search(mut self, app_search: crate::app_search::AppSearch) -> Self {
+        self.app_search = Some(app_search);
+        self
     }
 
     pub fn query(&self, query: &str, limit: usize) -> Vec<Candidate> {
@@ -264,6 +274,9 @@ impl LocalProviders {
             if let Some(candidate) = quick_chat_candidate(query) {
                 candidates.push(candidate);
             }
+        }
+        if let Some(app_search) = &self.app_search {
+            candidates.extend(app_search.query(query, 5));
         }
         if let Some(candidate) = calculation_candidate(query) {
             candidates.push(candidate);

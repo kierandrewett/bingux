@@ -1914,6 +1914,7 @@ mod tests {
             },
             file_roots: Vec::new(),
             provider_manifest_paths: Vec::new(),
+            app_weights: Default::default(),
             sqlite_sources: Vec::new(),
             weather: None,
             ai: None,
@@ -2052,6 +2053,141 @@ mod tests {
         drop(reader);
         drop(shell_stream);
         client.join().expect("join socket client");
+    }
+
+    #[test]
+    fn serves_app_search_results_and_opens_them_through_the_app() {
+        use bingux_search::{Document, Schema, SearchService, ipc};
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!("bingux-searchd-apps-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("apps")).expect("create test directory");
+        // The app: a script that records the address it was asked to open.
+        let opener = dir.join("open.sh");
+        fs::write(
+            &opener,
+            format!("#!/bin/sh\nprintf '%s' \"$1\" > {}\n", dir.join("opened.txt").display()),
+        )
+        .expect("write opener");
+        fs::set_permissions(&opener, fs::Permissions::from_mode(0o755)).expect("chmod opener");
+        fs::write(
+            dir.join("apps/test-settings.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "kind": "bingux.search-app", "id": "test-settings", "displayName": "Test Settings",
+                "command": [opener.to_str().expect("utf-8 path")],
+            }))
+            .expect("encode manifest"),
+        )
+        .expect("write manifest");
+
+        // The running app: one external index.
+        let service = SearchService::new();
+        let index = service
+            .create_index(
+                "settings",
+                Schema::new()
+                    .searchable("title", 10.0)
+                    .searchable("breadcrumb", 3.0)
+                    .displayed(["title", "breadcrumb", "icon", "uri"])
+                    .external(true),
+            )
+            .expect("create index");
+        index
+            .upsert([
+                Document::new("network/proxy")
+                    .title("Proxy")
+                    .breadcrumb(["Network"])
+                    .icon("bingux-settings")
+                    .uri("test-settings://network/proxy#method"),
+                Document::new("hidden")
+                    .title("Proxy secret")
+                    .external(false)
+                    .uri("test-settings://hidden"),
+            ])
+            .expect("add documents");
+        let mut provider_config =
+            ipc::ProviderConfig::new("test-settings", "1", |_| false);
+        provider_config.socket_dir = Some(dir.join("run"));
+        provider_config.state_root = Some(dir.join("state"));
+        let _provider = ipc::serve(service, provider_config).expect("serve app search");
+
+        let config = test_search_config();
+        let app_search = bingux_searchd::app_search::AppSearch::with_paths(
+            &config,
+            &[dir.join("apps")],
+            Some(dir.join("run")),
+            Some(dir.join("state")),
+        );
+        let local = Arc::new(
+            LocalProviders::new_without_index_workers(&config)
+                .expect("start local providers")
+                .with_app_search(app_search),
+        );
+        let (external_sender, _external_receiver) = mpsc::sync_channel(1);
+        let external = Arc::new(
+            ExternalProviders::start(&[], external_sender).expect("start empty external providers"),
+        );
+        let runtime = Arc::new(
+            Runtime::new(local, None, external, config.commands.clone(), None)
+                .expect("start test runtime"),
+        );
+        runtime.start_query_workers().expect("start query workers");
+
+        let (daemon_stream, mut shell_stream) = UnixStream::pair().expect("create socket pair");
+        shell_stream
+            .set_read_timeout(Some(Duration::from_secs(3)))
+            .expect("set socket read timeout");
+        let client = thread::spawn(move || handle_client(runtime, 1, daemon_stream));
+        let mut reader = BufReader::new(shell_stream.try_clone().expect("clone shell socket"));
+        shell_stream
+            .write_all(
+                br#"{"protocolVersion":1,"type":"query","requestId":"q-01","query":"proxy","limit":20}"#,
+            )
+            .and_then(|()| shell_stream.write_all(b"\n"))
+            .expect("send query request");
+        let results = read_socket_event(&mut reader);
+        let all = results["results"].as_array().expect("results array");
+        let hit = all
+            .iter()
+            .find(|r| r["providerId"] == "test-settings")
+            .unwrap_or_else(|| panic!("an app result in {results}"));
+        assert_eq!(hit["title"], "Proxy");
+        assert_eq!(hit["subtitle"], "Network");
+        assert_eq!(hit["kind"], "action");
+        assert_eq!(hit["icon"], "bingux-settings");
+        assert!(
+            all.iter().all(|r| r["title"] != "Proxy secret"),
+            "a document the app did not expose must not appear"
+        );
+
+        // Choosing it opens its address in the app.
+        let activation = format!(
+            r#"{{"protocolVersion":1,"type":"activate","requestId":"a-01","resultId":"{}"}}"#,
+            hit["resultId"].as_str().expect("result id")
+        );
+        shell_stream
+            .write_all(activation.as_bytes())
+            .and_then(|()| shell_stream.write_all(b"\n"))
+            .expect("send activation request");
+        let activated = read_socket_event(&mut reader);
+        assert_eq!(activated["type"], "activated", "{activated}");
+        let opened = dir.join("opened.txt");
+        for _ in 0..100 {
+            if opened.exists() && fs::read_to_string(&opened).map(|t| !t.is_empty()).unwrap_or(false) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(
+            fs::read_to_string(&opened).expect("the app was started with the address"),
+            "test-settings://network/proxy#method"
+        );
+        drop(reader);
+        drop(shell_stream);
+        client.join().expect("join socket client");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

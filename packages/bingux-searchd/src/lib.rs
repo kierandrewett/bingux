@@ -1,4 +1,5 @@
 pub mod ai;
+pub mod app_search;
 pub mod cli_ai;
 pub mod config;
 pub mod external;

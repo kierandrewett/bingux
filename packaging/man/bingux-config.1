@@ -1,0 +1,91 @@
+.TH BINGUX-CONFIG 1 "2026-10-28" "Bingux 0.1.0" "Bingux"
+.SH NAME
+bingux-config \- read, change and check the Bingux shell configuration
+.SH SYNOPSIS
+.B bingux-config
+.I COMMAND
+.RI [ ARGS ]
+.SH DESCRIPTION
+The Bingux shell keeps its settings in one TOML file,
+.IR $XDG_CONFIG_HOME/bingux/bingux.toml .
+.B bingux-config
+reads, changes and validates it.
+Editing the file by hand, running
+.BR bingux\-config ,
+and using Bingux Settings all go through the same validation.
+Writes are atomic and keep comments and key order.
+.SH COMMANDS
+.TP
+.B show
+Print the effective configuration as TOML.
+.TP
+.BI get " KEY"
+Print one value, for example
+.BR desktop.dock_size .
+.TP
+.BI set " KEY VALUE"
+Change one value and confirm the result.
+.TP
+.BI unset " KEY"
+Remove a key so its default applies again.
+.TP
+.BI explain " KEY"
+Describe a key: the accepted values, the default and the current value.
+.TP
+.B check
+Validate the file and point at the first problem.
+.TP
+.B edit
+Open the file in
+.B $VISUAL
+or
+.BR $EDITOR ,
+then validate it.
+.TP
+.B path
+Print the configuration file path.
+.TP
+.B defaults
+Print a commented file with every key at its default.
+.PP
+The shell and Settings also use these commands, which print one JSON object:
+.TP
+.B dump
+The merged configuration in the shell's JSON shape.
+.TP
+.B save
+Apply a JSON patch read from standard input.
+.TP
+.B import-layout
+Import the runtime layout snapshot read from standard input, once.
+.TP
+.B wallpaper
+Resolve the GNOME background to
+.BR {"wallpaper":\ "file://..."} .
+.SH EXAMPLES
+.nf
+bingux\-config set desktop.dock_size 64
+bingux\-config set search.disabled_providers '["web"]'
+bingux\-config explain desktop.dock_click
+bingux\-config edit
+.fi
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/bingux/bingux.toml
+The configuration, or
+.I ~/.config/bingux/bingux.toml
+when
+.B XDG_CONFIG_HOME
+is not set.
+.SH EXIT STATUS
+.B 0
+on success.
+.B 1
+when a command fails or the file is invalid; the problem is printed on standard
+error.
+.SH SEE ALSO
+.BR bingux\-settings (1)
+.PP
+Documentation: docs/configuration.md in the Bingux source lists every key.
+.SH AUTHORS
+Kieran Drewett and the Bingux contributors.

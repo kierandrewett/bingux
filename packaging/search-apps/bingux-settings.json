@@ -1,0 +1,6 @@
+{
+    "kind": "bingux.search-app",
+    "id": "bingux-settings",
+    "displayName": "Settings",
+    "command": ["@BINDIR@/bingux-settings"]
+}

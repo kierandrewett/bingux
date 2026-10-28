@@ -22,6 +22,41 @@ pub const PROVIDERS: &[&str] = &[
     "external",
 ];
 
+/// The ids of the apps that share their search with Spotlight: the file names
+/// of the `bingux.search-app` manifests in `<data dir>/bingux/search-apps/`.
+/// Such an id may also be in `search.disabled_providers`.
+pub fn search_app_ids() -> Vec<String> {
+    let mut dirs: Vec<std::path::PathBuf> = Vec::new();
+    match std::env::var_os("XDG_DATA_HOME").filter(|p| !p.is_empty()) {
+        Some(home) => dirs.push(home.into()),
+        None => {
+            if let Some(home) = std::env::var_os("HOME") {
+                dirs.push(Path::new(&home).join(".local/share"));
+            }
+        }
+    }
+    let system = std::env::var("XDG_DATA_DIRS")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "/usr/local/share:/usr/share".to_string());
+    dirs.extend(system.split(':').filter(|s| !s.is_empty()).map(Into::into));
+    let mut ids = Vec::new();
+    for dir in dirs {
+        let Ok(entries) = std::fs::read_dir(dir.join("bingux/search-apps")) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "json")
+                && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+            {
+                ids.push(stem.to_string());
+            }
+        }
+    }
+    ids
+}
+
 pub const EXTERNAL_CONTROL_IDS: &[&str] = &[
     "search",
     "clock",
@@ -606,7 +641,12 @@ fn validate_desktop(desktop: &Value, previous: Option<&Value>) -> Result<(), Err
 
 fn validate_search(search: &Value) -> Result<(), Error> {
     let disabled = string_list(&search["disabled_providers"]);
-    if !disabled.is_some_and(|items| items.iter().all(|p| PROVIDERS.contains(p))) {
+    let apps = search_app_ids();
+    if !disabled.is_some_and(|items| {
+        items
+            .iter()
+            .all(|p| PROVIDERS.contains(p) || apps.iter().any(|a| a.as_str() == *p))
+    }) {
         return Err(invalid(
             "search.disabled_providers",
             "Unknown search provider.",

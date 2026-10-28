@@ -137,6 +137,53 @@ the browser via the configured `commands.fileOpener`. Without the optional
 suggestion provider, no network request is made until activation. This opens
 browser search results; it does not fetch web snippets into the launcher.
 
+## Results from apps
+
+Apps that share their search with Spotlight appear as an extra source next to
+applications and files. Each result is an action (an icon, the title, the path
+as the subtitle); choosing it opens the app on that item.
+
+An app takes part when it installs a manifest,
+`<data dir>/bingux/search-apps/<app-id>.json`:
+
+```json
+{
+    "kind": "bingux.search-app",
+    "id": "bingux-settings",
+    "displayName": "Settings",
+    "command": ["/usr/bin/bingux-settings"]
+}
+```
+
+- `id` is the app id: lower case letters, digits and `-`; it is also the
+  provider id.
+- `command` is an argument vector that starts with an absolute path. The result's
+  address is appended to it, so the app opens it (Bingux apps start on the
+  address, or hand it to the running window).
+
+While the app runs, searchd asks it over its search socket
+(`$XDG_RUNTIME_DIR/bingux/search/<app-id>.sock`) and the answer is as fresh as
+the app's data. While it does not run, searchd searches the snapshot the app
+left in `$XDG_STATE_HOME/bingux/search/<app-id>/`. A snapshot older than the
+app's program is ignored until the app has run again. Each app has 40 ms to
+answer, and at most five of its results show.
+
+Only what the app marked external is searched, whichever way it is reached.
+
+Switch an app off with the `search.disabled_providers` preference, the same
+list that switches off built-in sources (the app id is its provider id):
+
+```sh
+bingux-config set search.disabled_providers '["bingux-settings"]'
+```
+
+`appWeights` multiplies an app's scores (default 1.0). It is read from the
+daemon's own configuration file, not from `bingux.toml`:
+
+```json
+{ "appWeights": { "bingux-settings": 0.8 } }
+```
+
 ## Optional Web suggestions
 
 `packages/bingux-searchd/web-suggestions.py` implements the external-provider

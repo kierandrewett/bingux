@@ -108,7 +108,7 @@ but you normally do not edit them: `dock_apps` (`pinned_apps`, `order`),
 
 | Key                  | Type   | Default        | Accepted values                                                                                   |
 | -------------------- | ------ | -------------- | ------------------------------------------------------------------------------------------------- |
-| `disabled_providers` | array  | `[]`           | Any of `applications`, `files`, `calculation`, `conversions`, `web`, `web-shortcuts`, `external`. |
+| `disabled_providers` | array  | `[]`           | Any of `applications`, `files`, `calculation`, `conversions`, `web`, `web-shortcuts`, `external`, or the id of an app that shares its search (`bingux-settings`). |
 | `default_engine`     | string | `"duckduckgo"` | Identifier of an enabled engine.                                                                  |
 | `file_roots`         | array  | not set        | Up to 32 absolute directories for file search. Not set uses the built-in home folders.            |
 

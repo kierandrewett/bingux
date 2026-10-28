@@ -27,6 +27,10 @@ pub struct SearchConfig {
     pub file_roots: Vec<PathBuf>,
     #[serde(default)]
     pub provider_manifest_paths: Vec<PathBuf>,
+    /// Multiplier of the scores of an app's search results, by app id
+    /// (default 1.0). An app is switched off through `disabledProviders`.
+    #[serde(default)]
+    pub app_weights: std::collections::BTreeMap<String, f64>,
     #[serde(default)]
     pub sqlite_sources: Vec<SqliteSourceConfig>,
     #[serde(default)]
@@ -582,6 +586,7 @@ mod tests {
             },
             file_roots: vec![PathBuf::from("/home/test")],
             provider_manifest_paths: vec![],
+            app_weights: Default::default(),
             sqlite_sources: vec![SqliteSourceConfig {
                 id: "notes".to_owned(),
                 display_name: "Notes".to_owned(),
