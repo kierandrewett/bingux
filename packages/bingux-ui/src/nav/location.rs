@@ -34,6 +34,10 @@ pub struct Location {
     scheme: String,
     rooted: bool,
     segments: Vec<String>,
+    /// The exact bytes of a segment that is not valid UTF-8 (its `segments`
+    /// text is lossy, for display only); `None` for text. Same length as
+    /// `segments`.
+    raw: Vec<Option<Vec<u8>>>,
     query: Vec<(String, String)>,
     fragment: Option<String>,
 }
@@ -45,6 +49,7 @@ impl Location {
             scheme: scheme.into().to_ascii_lowercase(),
             rooted: false,
             segments: Vec::new(),
+            raw: Vec::new(),
             query: Vec::new(),
             fragment: None,
         }
@@ -105,16 +110,23 @@ impl Location {
             }
         }
         let mut segments: Vec<String> = Vec::new();
+        let mut raws: Vec<Option<Vec<u8>>> = Vec::new();
         for raw in path.split('/') {
             match raw {
                 "" | "." => {}
                 ".." => {
                     segments.pop();
+                    raws.pop();
                 }
-                raw => segments.push(decode(raw)?),
+                raw => {
+                    let (text, bytes) = segment_of(decode_bytes(raw)?);
+                    segments.push(text);
+                    raws.push(bytes);
+                }
             }
         }
         location.segments = segments;
+        location.raw = raws;
         for pair in query.into_iter().flat_map(|query| query.split('&')) {
             if pair.is_empty() {
                 continue;
@@ -185,6 +197,7 @@ impl Location {
     /// belong to one place, so they are dropped.
     pub fn join(mut self, segment: impl Into<String>) -> Self {
         self.segments.push(segment.into());
+        self.raw.push(None);
         self.query.clear();
         self.fragment = None;
         self
@@ -229,6 +242,7 @@ impl Location {
     pub fn up(&self) -> Option<Self> {
         let mut up = self.clone().without_query().without_fragment();
         up.segments.pop()?;
+        up.raw.pop();
         Some(up)
     }
 
@@ -238,23 +252,27 @@ impl Location {
         self.scheme == other.scheme
             && self.rooted == other.rooted
             && self.segments == other.segments
+            && self.raw == other.raw
             && self.query == other.query
     }
 
     /// The same path, ignoring query and fragment.
     pub fn same_path(&self, other: &Self) -> bool {
-        self.scheme == other.scheme && self.segments == other.segments
+        self.scheme == other.scheme && self.segments == other.segments && self.raw == other.raw
     }
 
     /// Whether this location is below `ancestor` in the hierarchy: the same
     /// scheme and `ancestor`'s segments are a strict prefix of this path.
     pub fn is_below(&self, ancestor: &Self) -> bool {
+        let n = ancestor.segments.len();
         self.scheme == ancestor.scheme
-            && self.segments.len() > ancestor.segments.len()
+            && self.segments.len() > n
             && self.segments.starts_with(&ancestor.segments)
+            && self.raw[..n] == ancestor.raw[..]
     }
 
-    /// The path as text, `/network/wifi`, segments unescaped.
+    /// The path as text, `/network/wifi`, segments unescaped. A segment that
+    /// is not valid UTF-8 shows with replacement characters: for display only.
     pub fn path_text(&self) -> String {
         let mut text = String::new();
         for segment in &self.segments {
@@ -265,6 +283,51 @@ impl Location {
             text.push('/');
         }
         text
+    }
+
+    /// The exact bytes of segment `index`.
+    pub fn segment_bytes(&self, index: usize) -> Option<&[u8]> {
+        let text = self.segments.get(index)?;
+        Some(self.raw[index].as_deref().unwrap_or(text.as_bytes()))
+    }
+
+    /// The path of this location below `/`, byte for byte: what a segment
+    /// that is not valid UTF-8 names is exact, not lossy.
+    pub fn os_path(&self) -> std::path::PathBuf {
+        use std::os::unix::ffi::OsStrExt;
+        let mut path = std::path::PathBuf::from("/");
+        for index in 0..self.segments.len() {
+            if let Some(bytes) = self.segment_bytes(index) {
+                path.push(std::ffi::OsStr::from_bytes(bytes));
+            }
+        }
+        path
+    }
+
+    /// The location with the segments of `other` added, byte for byte. Query
+    /// and fragment are dropped, as for [`Location::join`].
+    pub fn join_path_of(mut self, other: &Self) -> Self {
+        self.segments.extend(other.segments.iter().cloned());
+        self.raw.extend(other.raw.iter().cloned());
+        self.query.clear();
+        self.fragment = None;
+        self
+    }
+
+    /// The location with one segment of raw bytes added. Bytes that are not
+    /// valid UTF-8 are kept exactly and shown lossily.
+    pub fn join_bytes(mut self, bytes: &[u8]) -> Self {
+        let (text, raw) = segment_of(bytes.to_vec());
+        self.segments.push(text);
+        self.raw.push(raw);
+        self.query.clear();
+        self.fragment = None;
+        self
+    }
+
+    /// Whether any segment is not valid UTF-8.
+    pub fn has_raw_segments(&self) -> bool {
+        self.raw.iter().any(Option::is_some)
     }
 }
 
@@ -278,7 +341,7 @@ impl fmt::Display for Location {
             if index > 0 {
                 f.write_str("/")?;
             }
-            f.write_str(&encode_segment(segment))?;
+            f.write_str(&encode_segment(segment, self.raw[index].as_deref()))?;
         }
         for (index, (key, value)) in self.query.iter().enumerate() {
             f.write_str(if index == 0 { "?" } else { "&" })?;
@@ -344,15 +407,17 @@ fn encode(text: &str) -> String {
 }
 
 /// A segment of `.` or `..` is written escaped, so it is never a dot segment.
-fn encode_segment(text: &str) -> String {
-    match text {
-        "." => "%2E".to_string(),
-        ".." => "%2E%2E".to_string(),
-        text => encode(text),
+fn encode_segment(text: &str, raw: Option<&[u8]>) -> String {
+    match (text, raw) {
+        (_, Some(bytes)) => encode_bytes(bytes),
+        (".", _) => "%2E".to_string(),
+        ("..", _) => "%2E%2E".to_string(),
+        (text, _) => encode(text),
     }
 }
 
-fn decode(text: &str) -> Option<String> {
+/// The bytes an escaped part stands for.
+fn decode_bytes(text: &str) -> Option<Vec<u8>> {
     let bytes = text.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut index = 0;
@@ -367,11 +432,41 @@ fn decode(text: &str) -> Option<String> {
             index += 1;
         }
     }
-    String::from_utf8(out).ok()
+    Some(out)
+}
+
+fn decode(text: &str) -> Option<String> {
+    String::from_utf8(decode_bytes(text)?).ok()
+}
+
+/// A path segment from its bytes: the text and, when the bytes are not valid
+/// UTF-8, the exact bytes next to a lossy display text.
+fn segment_of(bytes: Vec<u8>) -> (String, Option<Vec<u8>>) {
+    match String::from_utf8(bytes) {
+        Ok(text) => (text, None),
+        Err(error) => {
+            let bytes = error.into_bytes();
+            (String::from_utf8_lossy(&bytes).into_owned(), Some(bytes))
+        }
+    }
+}
+
+fn encode_bytes(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len());
+    for &byte in bytes {
+        if plain(byte) {
+            out.push(byte as char);
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    out
 }
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::ffi::OsStrExt;
+
     use super::*;
 
     fn loc(text: &str) -> Location {
@@ -503,7 +598,10 @@ mod tests {
         assert!(Location::parse("9bad://x").is_none());
         assert!(Location::parse("app://x/%zz").is_none());
         assert!(Location::parse("app://x/%4").is_none());
-        assert!(Location::parse("app://x/%ff").is_none(), "not UTF-8");
+        // A path segment may be any bytes; query and fragment text must be UTF-8.
+        assert!(Location::parse("app://x/%ff").is_some());
+        assert!(Location::parse("app://x?k=%ff").is_none(), "not UTF-8");
+        assert!(Location::parse("app://x#%ff").is_none(), "not UTF-8");
         assert!("garbage".parse::<Location>().is_err());
     }
 
@@ -513,5 +611,24 @@ mod tests {
         assert_eq!(place.to_string(), "app://a?b=2&z=3");
         assert_eq!(place.clone().without_query_key("b").to_string(), "app://a?z=3");
         assert_eq!(place.without_query().to_string(), "app://a");
+    }
+
+    #[test]
+    fn a_segment_that_is_not_utf8_keeps_its_bytes() {
+        let made = Location::rooted("file").join("etc").join_bytes(b"caf\xe9 \xff");
+        assert_eq!(made.to_string(), "file:///etc/caf%E9%20%FF");
+        assert!(made.has_raw_segments());
+        assert_eq!(made.segment_bytes(1), Some(&b"caf\xe9 \xff"[..]));
+        assert_eq!(made.last_segment(), Some("caf\u{fffd} \u{fffd}"));
+        let again = loc(&made.to_string());
+        assert_eq!(again, made);
+        assert_eq!(again.os_path(), std::path::PathBuf::from(std::ffi::OsStr::from_bytes(b"/etc/caf\xe9 \xff")));
+        // Not the same place as the lossy text, nor as another invalid name.
+        assert_ne!(made, Location::rooted("file").join("etc").join("caf\u{fffd} \u{fffd}"));
+        assert_ne!(made, Location::rooted("file").join("etc").join_bytes(b"caf\xe8 \xff"));
+        assert!(made.is_below(&Location::rooted("file").join("etc")));
+        assert_eq!(made.up().unwrap().to_string(), "file:///etc");
+        // Valid UTF-8 given as bytes is plain text.
+        assert_eq!(Location::rooted("file").join_bytes("é".as_bytes()), Location::rooted("file").join("é"));
     }
 }

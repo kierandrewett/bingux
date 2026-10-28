@@ -485,9 +485,7 @@ impl RouteTable {
             if found.is_rooted() {
                 moved = Location::rooted(&self.scheme);
             }
-            for segment in found.segments() {
-                moved = moved.join(segment.clone());
-            }
+            moved = moved.join_path_of(&found);
             for (key, value) in found.query_pairs() {
                 moved = moved.with_query(key.clone(), value.clone());
             }
@@ -525,9 +523,7 @@ impl RouteTable {
             return location;
         }
         let mut formed = self.home();
-        for segment in location.segments() {
-            formed = formed.join(segment.clone());
-        }
+        formed = formed.join_path_of(&location);
         for (key, value) in location.query_pairs() {
             formed = formed.with_query(key.clone(), value.clone());
         }

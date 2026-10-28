@@ -7,9 +7,11 @@
 //! [`folder_table`], so a folder has one URI, one title and one history menu
 //! everywhere. See `design/navigation.md`, "Linear apps".
 //!
-//! A location is text, so a folder whose name is not valid UTF-8 is recorded
-//! with a lossy name; going back to it opens a folder that is not there.
+//! A location is text, but a folder name is bytes: a name that is not valid
+//! UTF-8 is percent-encoded byte for byte in the URI, so going back to it
+//! opens that exact folder. Only the title shows it with replacement characters.
 
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Component, PathBuf};
 
 use super::directory::{Where, home_folder};
@@ -59,7 +61,7 @@ pub fn location_of(at: &Where) -> Location {
             let mut location = Location::rooted(FOLDER_SCHEME);
             for part in path.components() {
                 if let Component::Normal(name) = part {
-                    location = location.join(name.to_string_lossy().into_owned());
+                    location = location.join_bytes(name.as_bytes());
                 }
             }
             location
@@ -72,11 +74,7 @@ pub fn place_of(location: &Location) -> Where {
     if location.scheme() == RECENT_SCHEME {
         return Where::Recent;
     }
-    let mut path = PathBuf::from("/");
-    for segment in location.segments() {
-        path.push(segment);
-    }
-    Where::Folder(path)
+    Where::Folder(location.os_path())
 }
 
 #[cfg(test)]
@@ -136,5 +134,66 @@ mod tests {
             table.up(&location_of(&folder("/srv/media"))),
             Some(location_of(&folder("/srv")))
         );
+    }
+
+    /// A real folder whose name is not valid UTF-8, under a scratch home.
+    fn odd_folder(name: &[u8]) -> PathBuf {
+        let path = PathBuf::from("/var/tmp/NavPaths-home").join(std::ffi::OsStr::from_bytes(name));
+        std::fs::create_dir_all(&path).unwrap();
+        assert!(path.to_str().is_none());
+        path
+    }
+
+    #[test]
+    fn a_folder_that_is_not_utf8_round_trips_exactly() {
+        let path = odd_folder(b"caf\xe9-\xff");
+        let at = Where::Folder(path.clone());
+        let location = location_of(&at);
+        assert!(location.to_string().ends_with("/caf%E9-%FF"), "{location}");
+        assert_eq!(place_of(&location), at);
+        let parsed = Location::parse(&location.to_string()).unwrap();
+        assert_eq!(parsed, location);
+        assert_eq!(place_of(&parsed), at);
+        assert!(path.is_dir());
+        // Another invalid name is another place, though both display alike.
+        let other = location_of(&Where::Folder(odd_folder(b"caf\xe9-\xfe")));
+        assert_ne!(other, location);
+        assert!(!other.same_place(&location));
+        // So is the valid text of the replacement characters.
+        let text = location_of(&folder("/var/tmp/NavPaths-home/caf\u{fffd}-\u{fffd}"));
+        assert_ne!(text, location);
+        assert!(!text.same_place(&location));
+    }
+
+    #[test]
+    fn back_and_forward_reopen_the_exact_folder() {
+        let odd = odd_folder(b"caf\xe9-\xff");
+        let table = Arc::new(folder_table());
+        let mut model = NavModel::new(table, &location_of(&folder("/var/tmp")));
+        model.navigate(&location_of(&Where::Folder(odd.clone())));
+        model.navigate(&location_of(&folder("/var/tmp/NavPaths-home")));
+        // The history menu shows a lossy display name.
+        let menu = model.back_menu();
+        let titles: Vec<_> = menu.iter().map(|item| item.title.as_str()).collect();
+        assert_eq!(titles, ["caf\u{fffd}-\u{fffd}", "tmp"]);
+        model.pop_to(menu[0].entry);
+        assert_eq!(place_of(model.location()), Where::Folder(odd.clone()));
+        let forward = model.forward_menu();
+        assert_eq!(forward.len(), 1);
+        model.forward();
+        assert_eq!(place_of(model.location()), folder("/var/tmp/NavPaths-home"));
+        model.back();
+        assert_eq!(place_of(model.location()), Where::Folder(odd));
+    }
+
+    #[test]
+    fn equal_paths_canonicalise_equal() {
+        let table = folder_table();
+        let odd = odd_folder(b"caf\xe9-\xff");
+        let file = location_of(&Where::Folder(odd.clone()));
+        let own = Location::parse(&file.to_string().replacen("file:", "bingux-files:", 1)).unwrap();
+        assert_eq!(table.canonical(&own), file);
+        assert_eq!(table.canonical(&file), file);
+        assert_eq!(place_of(&table.canonical(&own)), Where::Folder(odd));
     }
 }

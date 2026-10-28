@@ -34,7 +34,9 @@ fn row(tokens: &Tokens, name: impl Into<String>, text: String) -> Element {
     property_row(name).control(value(tokens, text)).into()
 }
 
-/// `title  uri`: what a stack entry is, and the place it names.
+/// `title  uri`: what a stack entry is, and the place it names. The uri is
+/// exact (a folder name that is not valid UTF-8 is percent-encoded byte for
+/// byte); only the title shows it with replacement characters.
 fn entry_text(entry: &EntryInfo) -> String {
     format!("{}  {}", entry.title, entry.uri)
 }

@@ -302,10 +302,15 @@ a split button can use it.
   receives forwarded launches. `files::location_of` and `files::place_of`
   convert between a `Where` and its location. The toolbar's Back and Forward
   carry the history menu of that model. Up is a `go` to the parent folder, so
-  it is a history entry like any navigation in a file view. Known limit: a
-  location is text, so a folder whose name is not valid UTF-8 is recorded
-  with a lossy name; Back to it would open a folder that is not there, which
-  the view reports as not found.
+  it is a history entry like any navigation in a file view. A folder name is
+  bytes: a `Location` keeps the exact bytes of a path segment that is not
+  valid UTF-8 (`Location::join_bytes`, `segment_bytes`, `os_path`), writes them
+  percent-encoded (`%FF`) and decodes them back, so the URI round-trips and
+  Back and Forward reopen the exact folder. `segments()`, `path_text()` and
+  the history menu title show such a segment with replacement characters for
+  display only; navigation never uses them. Two locations are equal only when
+  their bytes are. Not covered: the per-folder view state (`view_state`) is
+  keyed by a lossy path string.
 * **Hidden `Index` on wide windows.** One stack for both size classes keeps a
   window that is resized across the breakpoint consistent.
 * **Modal routes are URIs only when worth sharing.** Imperative dialogs
