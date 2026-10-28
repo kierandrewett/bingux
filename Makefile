@@ -23,7 +23,7 @@ OUTPUT ?= dist/bingux-$(VERSION).tar.xz
 SHELL := /bin/bash
 ROOT := $(abspath .)
 
-.PHONY: all native daemons icons icons-check doctor doctor-build check install install-user uninstall-user rpm-package rpm-check arch-package licenses source-archive
+.PHONY: all native daemons apps icons icons-check doctor doctor-build check install install-user uninstall-user install-apps uninstall-apps rpm-package rpm-check arch-package licenses source-archive
 all: native daemons
 
 native: $(BUILD_DIR)/bingux-image-clipboard $(BUILD_DIR)/bingux-frame
@@ -45,16 +45,20 @@ $(BUILD_DIR)/bingux-frame: packages/bingux-frame/paint-gtk.c packages/bingux-fra
 # The Rust programs. Each crate has its own Cargo.lock, so each is built on its own.
 # bingux-settings, bingux-files and bingux-taxonomy are the Freya applications;
 # bingux-effects and libbingux_dsp.so are the sound-effects engine and its LADSPA plugins.
-daemons:
+# `apps` builds the applications and what Settings runs (bingux-config, the effects
+# engine); `daemons` adds the search and status daemons.
+apps:
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-config/Cargo.toml --target-dir $(CARGO_TARGET)
-	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-searchd/Cargo.toml --target-dir $(CARGO_TARGET)
-	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-statusd/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-audio-effects/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-dsp/Cargo.toml --target-dir $(DSP_TARGET)
 	install -Dm755 $(DSP_TARGET)/release/libbingux_dsp.so $(CARGO_TARGET)/release/libbingux_dsp.so
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-settings/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-files-app/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-taxonomy/Cargo.toml --target-dir $(CARGO_TARGET)
+
+daemons: apps
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-searchd/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-statusd/Cargo.toml --target-dir $(CARGO_TARGET)
 
 # Compile the icon sources (scripts/icons/src) into the bingux-ui icons and the
 # shell's copy. Needs uv: the script declares its own packages. map-fork.py first
@@ -123,6 +127,15 @@ install-user: doctor all
 
 uninstall-user:
 	python3 scripts/install-shell.py --user --uninstall --prefix '$(USER_PREFIX)'
+
+# Settings, Files and Taxonomy only, for your user: no shell, no session change.
+# APPS_PREFIX is the folder that gets bin/, share/ and lib/ (default ~/.local).
+APPS_PREFIX ?= $(HOME)/.local
+install-apps: apps
+	python3 scripts/install-shell.py --apps --prefix '$(APPS_PREFIX)' --cargo-dir '$(CARGO_TARGET)'
+
+uninstall-apps:
+	python3 scripts/install-shell.py --apps --uninstall --prefix '$(APPS_PREFIX)'
 
 source-archive:
 	bash scripts/make-source-archive.sh '$(VERSION)' '$(OUTPUT)'

@@ -150,6 +150,52 @@ so layouts, search settings, extensions and notification history survive a
 reinstall. Use `USER_PREFIX=/some/other/root` with both commands when a
 different central location is required.
 
+## Install only the apps for your user
+
+To use Settings, Files and Taxonomy on a desktop that already has its own shell,
+install only the apps. This changes nothing about the session: it installs no
+Quickshell files, no Gnoblin module, no user units to enable and no defaults.
+
+```sh
+make install-apps
+```
+
+`make install-apps` builds the programs in release mode, then runs
+`scripts/install-shell.py --apps --prefix ~/.local` (change the folder with
+`APPS_PREFIX`). It installs, below the prefix:
+
+- `bin`: `bingux-settings`, `bingux-files`, `bingux-taxonomy`, and the two
+  programs Settings runs, `bingux-config` and `bingux-effects`. They are
+  stripped.
+- `share/applications` and `share/icons/hicolor/scalable/apps`: the desktop
+  entries, with `Exec` pointing at the installed programs, and the icons. Files
+  is registered for `inode/directory` and `x-scheme-handler/bingux-files`,
+  Settings for `x-scheme-handler/bingux-settings`. Nothing becomes the default.
+- `share/man/man1`: the manual pages.
+- `share/bingux/search-apps/bingux-settings.json`: tells `bingux-searchd` that
+  Settings can be searched. The installer does not start the daemon.
+- `lib/ladspa/libbingux_dsp.so` and `share/systemd/user/bingux-effects@.service`:
+  the sound effects plugins and the unit Settings enables. A unit of the same name
+  in `$XDG_CONFIG_HOME/systemd/user` takes precedence over this one.
+- `share/bingux-apps/`: the manifest and a copy of the installer, and
+  `bin/bingux-apps-uninstall`, which removes the install without the checkout.
+
+It then refreshes the user-level desktop database (`update-desktop-database`),
+the `hicolor` icon cache when one exists (`gtk-update-icon-cache`) and the MIME
+database when `share/mime` exists (`update-mime-database`). It installs no
+AppStream metainfo, because software centres read only the system folders.
+
+A file the install would replace is renamed to `NAME.pre-bingux-apps.bak` beside
+it. The manifest records every file with its checksum, the displaced files and the
+folders it created. `bingux-apps-uninstall` (or `make uninstall-apps`) deletes
+exactly those files, keeps any file you changed since, puts the displaced files
+back and removes the folders it created. Settings, Files and effect presets are
+kept.
+
+To open folders in Files from every application, run
+`xdg-mime default bingux-files.desktop inode/directory` yourself, or choose it in
+Settings > Applications > Default applications. The installer never does.
+
 ## Package or stage an install
 
 Use a staging directory when creating a package or testing an install:

@@ -228,6 +228,14 @@ deletes user data.
 (`make install-user`). A package install and a user install can coexist; the user
 install's launchers set `XDG_DATA_DIRS` first and win.
 
+`make install-apps` is the shell-free variant: Settings, Files, Taxonomy and what
+Settings runs go below `~/.local` (`bin`, `share`, `lib/ladspa`), recorded in
+`~/.local/share/bingux-apps/manifest.json`. It does not touch the session or the
+files of a managed install in `$XDG_DATA_HOME/bingux` (it adds only
+`search-apps/bingux-settings.json` there; a later `make install-user` replaces that
+root, so run `make install-apps` again after it). `bingux-apps-uninstall` reverses
+the install exactly.
+
 ### 2.6 Updates
 
 - Fedora: `dnf upgrade` (from COPR). `%systemd_user_postun_with_restart` marks the

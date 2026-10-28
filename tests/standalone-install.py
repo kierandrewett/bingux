@@ -423,6 +423,99 @@ class InstallTest(unittest.TestCase):
             subprocess.run([str(home / ".local/bin/bingux-uninstall")], env=environment, check=True)
             self.assertFalse(prefix.exists())
 
+    def test_apps_install_has_no_shell_and_uninstall_restores_everything(self):
+        with tempfile.TemporaryDirectory() as name:
+            base = Path(name)
+            build, home = base / "build", base / "home"
+            prefix = home / ".local"
+            for filename in FIXTURE_FILES:
+                path = build / filename
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("test fixture\n")
+            # An older install of the same program, and a hand-made entry, are the user's.
+            (prefix / "bin").mkdir(parents=True)
+            (prefix / "share/applications").mkdir(parents=True)
+            older = prefix / "bin/bingux-settings"
+            older.symlink_to("/nonexistent/older-bingux-settings")
+            entry = prefix / "share/applications/bingux-settings.desktop"
+            entry.write_text("[Desktop Entry]\nName=Mine\n")
+            before = sorted(str(p.relative_to(prefix)) for p in prefix.rglob("*"))
+            environment = {**os.environ, "HOME": str(home)}
+            command = [
+                "python3",
+                str(ROOT / "scripts/install-shell.py"),
+                "--apps",
+                "--no-strip",
+                "--no-cache-update",
+                "--prefix",
+                str(prefix),
+                "--build-dir",
+                str(build),
+            ]
+            for _ in range(2):  # the second run is an upgrade and must not displace its own files
+                subprocess.run(command, env=environment, check=True, capture_output=True)
+            for program in ("bingux-config", "bingux-settings", "bingux-files", "bingux-taxonomy", "bingux-effects"):
+                self.assertTrue(os.access(prefix / "bin" / program, os.X_OK), program)
+            self.assertTrue((prefix / "lib/ladspa/libbingux_dsp.so").is_file())
+            for app, mime in (
+                ("bingux-settings", "x-scheme-handler/bingux-settings;"),
+                ("bingux-files", "inode/directory;x-scheme-handler/bingux-files;"),
+                ("bingux-taxonomy", "x-scheme-handler/bingux-taxonomy;"),
+            ):
+                desktop = (prefix / "share/applications" / (app + ".desktop")).read_text()
+                self.assertIn(f"Exec={prefix}/bin/{app} ", desktop)
+                self.assertIn(f"Exec={prefix}/bin/{app} ", desktop.split("[Desktop Action", 1)[1])
+                self.assertIn("MimeType=" + mime, desktop)
+                self.assertTrue((prefix / "share/icons/hicolor/scalable/apps" / (app + ".svg")).is_file())
+            self.assertFalse((prefix / "share/metainfo").exists())
+            self.assertTrue((prefix / "share/man/man1/bingux-settings.1").is_file())
+            search = json.loads((prefix / "share/bingux/search-apps/bingux-settings.json").read_text())
+            self.assertEqual(search["command"], [f"{prefix}/bin/bingux-settings"])
+            unit = (prefix / "share/systemd/user/bingux-effects@.service").read_text()
+            self.assertIn(f"ExecStart={prefix}/bin/bingux-effects run %i", unit)
+            # What the user had stays reachable beside the install.
+            self.assertTrue((prefix / "bin/bingux-settings.pre-bingux-apps.bak").is_symlink())
+            backup = prefix / "share/applications/bingux-settings.desktop.pre-bingux-apps.bak"
+            self.assertIn("Name=Mine", backup.read_text())
+            # The shell is not part of this install, and the session is untouched.
+            for shell_path in (
+                "bin/bingux",
+                "bin/bingux-searchd",
+                "share/bingux/shell",
+                "share/gnoblin",
+                "lib/systemd/user",
+                "share/icons/Adwaita",
+            ):
+                self.assertFalse((prefix / shell_path).exists(), shell_path)
+            self.assertFalse((home / ".config").exists())
+            uninstall = [str(prefix / "bin/bingux-apps-uninstall"), "--no-cache-update"]
+            subprocess.run(uninstall, env=environment, check=True)
+            self.assertEqual(sorted(str(p.relative_to(prefix)) for p in prefix.rglob("*")), before)
+            self.assertEqual(os.readlink(older), "/nonexistent/older-bingux-settings")
+            self.assertEqual(entry.read_text(), "[Desktop Entry]\nName=Mine\n")
+
+    def test_apps_uninstall_keeps_a_file_changed_after_the_install(self):
+        with tempfile.TemporaryDirectory() as name:
+            base = Path(name)
+            build, prefix = base / "build", base / "home/.local"
+            for filename in FIXTURE_FILES:
+                path = build / filename
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("test fixture\n")
+            common = ["--apps", "--no-cache-update", "--prefix", str(prefix)]
+            script = str(ROOT / "scripts/install-shell.py")
+            subprocess.run(
+                ["python3", script, *common, "--no-strip", "--build-dir", str(build)],
+                check=True,
+                capture_output=True,
+            )
+            edited = prefix / "share/applications/bingux-files.desktop"
+            edited.write_text(edited.read_text() + "# edited by hand\n")
+            result = subprocess.run(["python3", script, *common, "--uninstall"], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("changed after the install", result.stderr)
+            self.assertEqual([p.name for p in prefix.rglob("*") if p.is_file()], ["bingux-files.desktop"])
+
 
 if __name__ == "__main__":
     unittest.main()

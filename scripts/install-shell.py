@@ -2,6 +2,7 @@
 """Install or stage the standalone shell and helpers."""
 
 import argparse
+import hashlib
 import json
 import re
 import os
@@ -700,10 +701,265 @@ def uninstall_user(prefix, no_systemd):
     print("  user configuration was kept")
 
 
+# The applications-only install: Settings, Files and Taxonomy with what Settings
+# needs (the configuration command and the sound effects engine), put below one
+# prefix such as ~/.local. It never installs the shell: no Quickshell files, no
+# Gnoblin module, no session or user-service changes. A manifest records every
+# file, its checksum, the file it displaced and the folders it created, so
+# --uninstall removes exactly that and puts the displaced files back.
+APPS_PROGRAMS = ("bingux-config", "bingux-settings", "bingux-files", "bingux-taxonomy", "bingux-effects")
+APPS_MANIFEST = Path("share/bingux-apps/manifest.json")
+APPS_HELPER = Path("share/bingux-apps/install-shell.py")
+APPS_BACKUP_SUFFIX = ".pre-bingux-apps.bak"
+# Written by the cache tools into folders the install may have created.
+APPS_CACHE_FILES = ("mimeinfo.cache", "icon-theme.cache")
+
+
+def default_apps_prefix():
+    return Path.home() / ".local"
+
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def apps_payload(source, cargo, prefix):
+    """Return (destination, content or source path, mode, strip) for every installed file."""
+    bin_dir = str(prefix / "bin")
+    entries = []
+    for name in APPS_PROGRAMS:
+        entries.append((prefix / "bin" / name, cargo / "release" / name, 0o755, True))
+    entries.append((prefix / "lib/ladspa/libbingux_dsp.so", cargo / "release/libbingux_dsp.so", 0o755, True))
+    for package, name in (
+        ("bingux-settings", "bingux-settings"),
+        ("bingux-files-app", "bingux-files"),
+        ("bingux-taxonomy", "bingux-taxonomy"),
+    ):
+        directory = source / "packages" / package
+        # Exec names the program by its bare name; point it at this install, so
+        # the entry works when the launcher's PATH lacks the prefix.
+        desktop = re.sub(
+            r"^(Exec=)(bingux-[a-z]+)(?=[ \n]|$)",
+            lambda match: match.group(1) + bin_dir + "/" + match.group(2),
+            (directory / (name + ".desktop")).read_text(),
+            flags=re.MULTILINE,
+        )
+        entries.append((prefix / "share/applications" / (name + ".desktop"), desktop.encode(), 0o644, False))
+        entries.append(
+            (prefix / "share/icons/hicolor/scalable/apps" / (name + ".svg"), directory / (name + ".svg"), 0o644, False)
+        )
+    # No AppStream metainfo: appstreamcli and software centres index only the
+    # system metainfo folders, so a copy below ~/.local would never be read.
+    for path in sorted((source / "packaging/man").glob("*.1")):
+        entries.append((prefix / "share/man/man1" / path.name, path, 0o644, False))
+    # bingux-searchd reads this manifest to know Settings exposes search.
+    search_app = (source / "packaging/search-apps/bingux-settings.json").read_text().replace("@BINDIR@", bin_dir)
+    entries.append((prefix / "share/bingux/search-apps/bingux-settings.json", search_app.encode(), 0o644, False))
+    # Settings turns the sound effects on by enabling this template unit; the
+    # user manager reads $XDG_DATA_HOME/systemd/user. Nothing is enabled here.
+    unit = (source / "packaging/systemd/bingux-effects@.service").read_text().replace("/usr/bin", bin_dir)
+    entries.append((prefix / "share/systemd/user/bingux-effects@.service", unit.encode(), 0o644, False))
+    # The way out does not need the source checkout.
+    entries.append((prefix / APPS_HELPER, Path(__file__).resolve(), 0o755, False))
+    uninstall = (
+        "#!/bin/sh\nset -eu\nexec "
+        + shlex.quote(sys.executable)
+        + " "
+        + shlex.quote(str(prefix / APPS_HELPER))
+        + " --apps --uninstall --prefix "
+        + shlex.quote(str(prefix))
+        + ' "$@"\n'
+    )
+    entries.append((prefix / "bin/bingux-apps-uninstall", uninstall.encode(), 0o755, False))
+    missing = [str(entry[1]) for entry in entries if isinstance(entry[1], Path) and not entry[1].is_file()]
+    if missing:
+        raise ValueError("build the programs first (make apps); missing: " + ", ".join(missing))
+    return entries
+
+
+def load_apps_manifest(prefix):
+    path = prefix / APPS_MANIFEST
+    if not path.is_file():
+        return None
+    manifest = json.loads(path.read_text())
+    if manifest.get("format") != 1 or manifest.get("kind") != "bingux-apps":
+        raise ValueError(f"invalid Bingux apps manifest: {path}")
+    if Path(manifest.get("prefix", "")).resolve() != prefix.resolve():
+        raise ValueError(f"manifest {path} belongs to {manifest.get('prefix')}, not {prefix}")
+    return manifest
+
+
+def refresh_desktop_caches(prefix):
+    """Refresh the user-level desktop, icon and MIME caches below prefix/share.
+
+    A cache that does not exist is not created, except the desktop database,
+    whose mimeinfo.cache is what makes `gio mime` list the new handlers.
+    """
+    share = prefix / "share"
+    steps = []
+    if (share / "applications").is_dir():
+        steps.append(["update-desktop-database", "-q", str(share / "applications")])
+    icons = share / "icons/hicolor"
+    if (icons / "icon-theme.cache").is_file():
+        # -t: the user's hicolor folder has no index.theme of its own.
+        steps.append(["gtk-update-icon-cache", "-q", "-f", "-t", str(icons)])
+    if (share / "mime").is_dir():
+        steps.append(["update-mime-database", str(share / "mime")])
+    for command in steps:
+        if shutil.which(command[0]) is None:
+            print(f"  cache: {command[0]} is not installed; skipped", file=sys.stderr)
+            continue
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"  cache: {' '.join(command)} failed: {result.stderr.strip()}", file=sys.stderr)
+        else:
+            print("  cache: " + " ".join(command))
+
+
+def install_apps(source, prefix, cargo, strip=True, update_caches=True):
+    previous = load_apps_manifest(prefix)
+    owned = {prefix / entry["path"] for entry in previous["files"]} if previous else set()
+    # A file displaced by an earlier run stays displaced by it.
+    former_backups = {entry["path"]: entry["backup"] for entry in previous["files"]} if previous else {}
+    plan = apps_payload(source, cargo, prefix)
+    strip_tool = shutil.which("strip") if strip else None
+    if strip and strip_tool is None:
+        raise ValueError("strip is not installed (binutils); pass --no-strip to install the programs as built")
+    backups = {}
+    for destination, _content, _mode, _strip in plan:
+        if destination in owned or not os.path.lexists(destination):
+            continue
+        backup = destination.with_name(destination.name + APPS_BACKUP_SUFFIX)
+        if os.path.lexists(backup):
+            raise ValueError(f"{destination} exists and so does its backup {backup}; move one away first")
+        backups[destination] = backup
+    created_dirs = [Path(directory) for directory in previous["dirs"]] if previous else []
+    written = []
+    moved = []
+    entries = []
+    try:
+        for destination, backup in backups.items():
+            os.rename(destination, backup)
+            moved.append((destination, backup))
+            print(f"  kept the existing {destination} as {backup.name}")
+        for destination, content, mode, strippable in plan:
+            missing = []
+            parent = destination.parent
+            while not parent.exists():
+                missing.append(parent)
+                parent = parent.parent
+            for directory in reversed(missing):
+                directory.mkdir()
+                created_dirs.append(directory)
+            temporary = destination.with_name(f".{destination.name}.tmp-{os.getpid()}")
+            if isinstance(content, Path):
+                shutil.copyfile(content, temporary)
+            else:
+                temporary.write_bytes(content)
+            temporary.chmod(mode)
+            if strippable and strip_tool:
+                subprocess.run([strip_tool, "--strip-unneeded", str(temporary)], check=True)
+            if destination not in owned:
+                written.append(destination)
+            os.replace(temporary, destination)
+            relative = str(destination.relative_to(prefix))
+            entries.append(
+                {
+                    "path": relative,
+                    "sha256": sha256_file(destination),
+                    "backup": (
+                        str(backups[destination].relative_to(prefix))
+                        if destination in backups
+                        else former_backups.get(relative)
+                    ),
+                }
+            )
+        # Files a former install owned that this one no longer ships.
+        shipped = {destination for destination, *_ in plan}
+        for entry in previous["files"] if previous else []:
+            path = prefix / entry["path"]
+            if path not in shipped and path.is_file() and sha256_file(path) == entry["sha256"]:
+                path.unlink()
+        manifest = {
+            "format": 1,
+            "kind": "bingux-apps",
+            "prefix": str(prefix),
+            "files": entries,
+            "dirs": [str(directory) for directory in created_dirs],
+        }
+        (prefix / APPS_MANIFEST).write_text(json.dumps(manifest, indent=2) + "\n")
+    except BaseException:
+        for path in written:
+            path.unlink(missing_ok=True)
+        for destination, backup in reversed(moved):
+            os.rename(backup, destination)
+        for directory in reversed(created_dirs):
+            try:
+                directory.rmdir()
+            except OSError:
+                pass
+        raise
+    print(f"Installed the Bingux apps under {prefix}")
+    for name in ("bingux-settings", "bingux-files", "bingux-taxonomy"):
+        print(f"  {prefix / 'bin' / name}")
+    if update_caches:
+        refresh_desktop_caches(prefix)
+    print("  no defaults were changed; to make Files the default folder handler run:")
+    print("    xdg-mime default bingux-files.desktop inode/directory")
+    print(f"  remove with: {prefix / 'bin/bingux-apps-uninstall'}")
+
+
+def uninstall_apps(prefix, update_caches=True):
+    manifest = load_apps_manifest(prefix)
+    if manifest is None:
+        raise ValueError(f"{prefix} has no Bingux apps install ({APPS_MANIFEST} is missing)")
+    removed = 0
+    for entry in reversed(manifest["files"]):
+        path = prefix / entry["path"]
+        if os.path.lexists(path):
+            if path.is_symlink() or not path.is_file() or sha256_file(path) != entry["sha256"]:
+                print(f"  kept {path}: it changed after the install", file=sys.stderr)
+                continue
+            path.unlink()
+            removed += 1
+        if entry["backup"]:
+            backup = prefix / entry["backup"]
+            if os.path.lexists(backup):
+                if os.path.lexists(path):
+                    print(f"  left {backup} in place: {path} exists", file=sys.stderr)
+                else:
+                    os.rename(backup, path)
+                    print(f"  restored {path}")
+    (prefix / APPS_MANIFEST).unlink()
+    if update_caches:
+        refresh_desktop_caches(prefix)
+    for directory in map(Path, reversed(manifest["dirs"])):
+        if directory.is_dir():
+            for cache in APPS_CACHE_FILES:
+                if [child.name for child in directory.iterdir()] == [cache]:
+                    (directory / cache).unlink()
+            try:
+                directory.rmdir()
+            except OSError:
+                pass
+    print(f"Removed the Bingux apps from {prefix} ({removed} files)")
+    print("  user configuration, Files settings and sound effect presets were kept")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--user", action="store_true", help="manage a self-contained user install")
-    parser.add_argument("--uninstall", action="store_true", help="remove a managed user install")
+    parser.add_argument(
+        "--apps",
+        action="store_true",
+        help="install only Settings, Files and Taxonomy (no shell) below --prefix (default ~/.local)",
+    )
+    parser.add_argument("--uninstall", action="store_true", help="remove a managed user or apps install")
+    parser.add_argument("--no-strip", action="store_true", help="with --apps: install the programs unstripped")
     parser.add_argument("--prefix")
     parser.add_argument("--destdir", default="")
     parser.add_argument("--build-dir", default="build")
@@ -711,9 +967,31 @@ def main():
     parser.add_argument("--cargo-dir", help="Cargo target directory that holds release/ (default: BUILD_DIR/cargo)")
     parser.add_argument("--ladspa-dir", help="where the LADSPA plugin library goes (default: PREFIX/lib/ladspa)")
     parser.add_argument("--no-systemd", action="store_true", help="do not reload or start user services")
+    parser.add_argument(
+        "--no-cache-update",
+        action="store_true",
+        help="with --apps: do not refresh the desktop, icon and MIME caches",
+    )
     args = parser.parse_args()
+    if args.apps:
+        if args.user or args.destdir or args.qml_dir or args.ladspa_dir:
+            parser.error("--apps cannot be combined with --user, --destdir, --qml-dir or --ladspa-dir")
+        prefix = Path(args.prefix or default_apps_prefix()).expanduser()
+        validate_prefix(parser, prefix)
+        try:
+            if args.uninstall:
+                uninstall_apps(prefix, not args.no_cache_update)
+            else:
+                source = Path(__file__).resolve().parents[1]
+                cargo = Path(args.cargo_dir).resolve() if args.cargo_dir else Path(args.build_dir).resolve() / "cargo"
+                install_apps(source, prefix, cargo, not args.no_strip, not args.no_cache_update)
+        except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
+            parser.error(str(error))
+        return
+    if args.no_strip or args.no_cache_update:
+        parser.error("--no-strip and --no-cache-update are only valid with --apps")
     if args.uninstall and not args.user:
-        parser.error("--uninstall is only valid with --user")
+        parser.error("--uninstall is only valid with --user or --apps")
     if args.user and args.destdir:
         parser.error("--destdir cannot be used with --user")
     if args.user and args.prefix is None:

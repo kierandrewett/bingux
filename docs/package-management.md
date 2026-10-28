@@ -168,6 +168,10 @@ For a personal source install, use `make install-user`; see the
 root and provides `make uninstall-user` for a complete, configuration-preserving
 removal.
 
+To install only Settings, Files and Taxonomy for your user, without the shell,
+use `make install-apps` (remove with `make uninstall-apps`); see
+[Install only the apps](standalone.md#install-only-the-apps-for-your-user).
+
 `make install PREFIX=/usr DESTDIR=...` remains available for package builders.
 That deterministic staging path writes only below `DESTDIR` and is intentionally
 separate from the managed user install. Package builders choose which staged
