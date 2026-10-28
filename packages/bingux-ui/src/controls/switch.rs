@@ -68,20 +68,20 @@ impl Component for Switch {
         let travel_start = THUMB_INSET;
         let travel = if on { travel_end } else { travel_start };
 
-        let travel_motion = tokens.motion(TRAVEL_MS);
-        let thumb_x = use_animation_transition(travel, move |from, to| {
-            AnimNum::new(from, to)
-                .time(travel_motion)
-                .function(Function::Cubic)
-                .ease(Ease::Out)
-        });
-        let width_motion = tokens.motion(WIDTH_MS);
-        let thumb_w = use_animation_transition(thumb_width, move |from, to| {
-            AnimNum::new(from, to)
-                .time(width_motion)
-                .function(Function::Cubic)
-                .ease(Ease::Out)
-        });
+        // Tweens, not transitions: a switch mounts at rest, and a page of
+        // them mounts without starting an animation for each thumb.
+        let thumb_x = crate::motion::use_tween_with(
+            travel,
+            travel,
+            tokens.motion(TRAVEL_MS),
+            Function::Cubic,
+        );
+        let thumb_w = crate::motion::use_tween_with(
+            thumb_width,
+            thumb_width,
+            tokens.motion(WIDTH_MS),
+            Function::Cubic,
+        );
 
         rect()
             .component("Switch")
@@ -151,14 +151,13 @@ impl Component for Switch {
                     .position(
                         Position::new_absolute()
                             .top((Dim::SwitchHeight.px() - Dim::SwitchThumb.px()) / 2.0)
-                            .left(thumb_x.get().value()),
+                            .left(thumb_x),
                     )
-                    .width(Size::px(thumb_w.get().value()))
+                    .width(Size::px(thumb_w))
                     .tw(
                         &tokens,
                         &[h(Dim::SwitchThumb), rounded(Radius::Pill), bg(thumb)],
                     ),
-            )
-            .focusable(focus(), Radius::Pill)
+            ).focusable(focus())
     }
 }

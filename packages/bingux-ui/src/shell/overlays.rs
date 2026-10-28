@@ -5,7 +5,9 @@
 //! Wrap the window content in [`OverlayHost`] once; it provides the
 //! handle and paints the scrim, dialog and toast on a top overlay level.
 
-use std::time::Duration;
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use freya::prelude::*;
 
@@ -15,6 +17,7 @@ use crate::motion::use_presence;
 use crate::nav::try_router;
 use crate::shell::banner::{Banner, BannerKind};
 use crate::shell::dialog::{Dialog, DialogLayer};
+use crate::shell::hide_clock::HideClock;
 use crate::shell::menu::{Menu, MenuItem, MenuLayer, MenuNav};
 use crate::shell::panel::{PanelTrigger, use_sheet_pull};
 use crate::style::*;
@@ -353,8 +356,22 @@ impl Component for OverlayHost {
         let page = use_try_consume::<crate::nav::Router>().map(|router| router.use_current_id());
         use_side_effect_with_deps(&page, move |_| overlays.forget_menu());
 
+        // Every application window answers the About shortcut: the main window
+        // of an app that went through `Application::run` (which registered its
+        // facts) and has a router. A gallery, a test host and the inspector's
+        // window have none of the two. A dialog that is already open keeps the
+        // window: it holds a question.
+        let about = page.is_some() && crate::about::registered();
         rect()
             .expanded()
+            .maybe(about, |host| {
+                host.on_global_key_down(move |event: Event<KeyboardEventData>| {
+                    if crate::about::is_shortcut(&event) && !overlays.dialog_open() {
+                        event.stop_propagation();
+                        crate::about::open(overlays);
+                    }
+                })
+            })
             .child(crate::window::WindowHost::new(self.child.clone()))
             .child(OverlayLayers {
                 overlays,
@@ -455,11 +472,19 @@ const SWIPE_FADE: f32 = 160.0;
 /// How often a toast's timer looks at whether it is held.
 const TOAST_TICK: Duration = Duration::from_millis(100);
 
+/// The hide clock of one toast, shared by its handlers and its timer task.
+type SharedClock = Rc<RefCell<HideClock>>;
+
 /// The floating shell of a toast: places the [`Banner`] it holds at the
 /// bottom of the window above the content, slides and fades it in and out,
-/// runs its timer (paused while the pointer is over it, a finger is on it or
-/// one of its buttons has keyboard focus) and dismisses it on a sideways
-/// swipe. It draws nothing of its own: the pill is the banner.
+/// runs its [`HideClock`] and dismisses it on a sideways swipe. It draws
+/// nothing of its own: the pill is the banner.
+///
+/// The clock is held while the pointer is anywhere over the toast (the shell
+/// listens for the pointer over its whole box, not only where nothing else
+/// listens: the action and dismiss buttons are inside it and take nothing
+/// away), while a finger is down on it and while one of its buttons has
+/// keyboard focus. When the last of those lets go the full delay starts again.
 #[derive(PartialEq)]
 struct ToastLayer {
     overlays: Overlays,
@@ -479,7 +504,7 @@ impl Component for ToastLayer {
         let overlays = self.overlays;
         let id = self.id;
         let timeout = self.toast.timeout_or_default();
-        let mut hovering = use_state(|| false);
+        let clock: SharedClock = use_hook(move || Rc::new(RefCell::new(HideClock::new(timeout))));
         // Where a finger went down, and how far it has dragged since.
         let mut grab = use_state(|| None::<f32>);
         let mut pull = use_state(|| 0.0_f32);
@@ -493,19 +518,24 @@ impl Component for ToastLayer {
         let dx = use_sheet_pull(pull, grab().is_some(), tokens.motion(140));
         let focused = Platform::get().current_window().focused_accessibility_id;
         // Each toast that takes over the layer gets its own timer. It counts
-        // down only while nothing holds the toast.
+        // down only while nothing holds the toast, and the clock says when.
         let timer_ids = button_ids.clone();
-        use_side_effect_with_deps(&(id, timeout), move |&(id, timeout): &(u64, Duration)| {
+        let timer_clock = clock.clone();
+        use_side_effect_with_deps(&id, move |&id: &u64| {
             let ids = timer_ids.clone();
+            let clock = timer_clock.clone();
             spawn(async move {
-                let mut left = timeout;
-                while !left.is_zero() {
+                let mut last = Instant::now();
+                loop {
                     timer(TOAST_TICK).await;
-                    let held = *hovering.peek()
-                        || grab.peek().is_some()
-                        || ids.contains(&*focused.peek());
-                    if !held {
-                        left = left.saturating_sub(TOAST_TICK);
+                    let now = Instant::now();
+                    let elapsed = now.saturating_duration_since(last);
+                    last = now;
+                    let focus_held = ids.contains(&*focused.peek());
+                    let mut clock = clock.borrow_mut();
+                    clock.set_focus(focus_held);
+                    if clock.tick(elapsed) {
+                        break;
                     }
                 }
                 overlays.dismiss_toast(id);
@@ -535,12 +565,31 @@ impl Component for ToastLayer {
                     .offset_y(S2.px() * (1.0 - progress))
                     .offset_x(dx)
                     .opacity(fade)
-                    .on_pointer_enter(move |_| hovering.set(true))
-                    .on_pointer_leave(move |_| hovering.set(false))
-                    .on_pointer_down(move |event: Event<PointerEventData>| {
-                        if matches!(event.data(), PointerEventData::Touch(_)) {
-                            pull.set(0.0);
-                            grab.set(Some(event.global_location().x as f32));
+                    // Over and out, not enter and leave: those two belong to
+                    // the deepest element that listens, so the pointer on the
+                    // toast's own button would count as having left it.
+                    .on_pointer_over({
+                        let clock = clock.clone();
+                        move |event: Event<PointerEventData>| {
+                            // A finger holds the toast while it is down (below);
+                            // it has no pointer that rests there afterwards.
+                            if !matches!(event.data(), PointerEventData::Touch(_)) {
+                                clock.borrow_mut().set_pointer(true);
+                            }
+                        }
+                    })
+                    .on_pointer_out({
+                        let clock = clock.clone();
+                        move |_| clock.borrow_mut().set_pointer(false)
+                    })
+                    .on_pointer_down({
+                        let clock = clock.clone();
+                        move |event: Event<PointerEventData>| {
+                            if matches!(event.data(), PointerEventData::Touch(_)) {
+                                pull.set(0.0);
+                                grab.set(Some(event.global_location().x as f32));
+                                clock.borrow_mut().set_touch(true);
+                            }
                         }
                     })
                     .on_global_pointer_move(move |event: Event<PointerEventData>| {
@@ -548,17 +597,21 @@ impl Component for ToastLayer {
                             pull.set(event.global_location().x as f32 - start);
                         }
                     })
-                    .on_global_pointer_up(move |_| {
-                        if grab.peek().is_none() {
-                            return;
-                        }
-                        grab.set(None);
-                        // A long enough swipe dismisses and leaves the toast
-                        // where the finger let go; a short one springs back.
-                        if pull.peek().abs() >= SWIPE_DISMISS {
-                            overlays.dismiss_toast(id);
-                        } else {
-                            pull.set(0.0);
+                    .on_global_pointer_up({
+                        let clock = clock.clone();
+                        move |_| {
+                            if grab.peek().is_none() {
+                                return;
+                            }
+                            grab.set(None);
+                            clock.borrow_mut().set_touch(false);
+                            // A long enough swipe dismisses and leaves the toast
+                            // where the finger let go; a short one springs back.
+                            if pull.peek().abs() >= SWIPE_DISMISS {
+                                overlays.dismiss_toast(id);
+                            } else {
+                                pull.set(0.0);
+                            }
                         }
                     })
                     .child(banner),

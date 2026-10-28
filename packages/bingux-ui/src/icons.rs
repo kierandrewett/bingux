@@ -99,6 +99,22 @@ pub enum Icon {
     Starred,
     NonStarred,
     ObjectRotateRight,
+    /// Play.
+    MediaPlaybackStart,
+    /// Full screen.
+    ViewFullscreen,
+    /// Leave full screen.
+    ViewRestore,
+    /// Zoom in.
+    ZoomIn,
+    /// Zoom out.
+    ZoomOut,
+    /// Fit to the window.
+    ZoomFitBest,
+    /// Rotate counter-clockwise.
+    ObjectRotateLeft,
+    /// Subtitles.
+    MediaViewSubtitles,
     DialogPassword,
     SystemLockScreen,
     SendTo,
@@ -149,6 +165,22 @@ pub enum Icon {
     DefaultAppText,
     DefaultAppDocuments,
     DragHandle,
+    /// A PDF file.
+    ApplicationPdf,
+    /// A word-processor document.
+    XOfficeDocument,
+    /// A spreadsheet.
+    XOfficeSpreadsheet,
+    /// A presentation.
+    XOfficePresentation,
+    /// A font file.
+    FontXGeneric,
+    /// Source code or a script.
+    TextXScript,
+    /// A file of no known kind.
+    ApplicationXGeneric,
+    /// The badge on the icon of a symbolic link.
+    EmblemSymbolicLink,
     /// Any icon of the chat fork at any weight, as the fork draws it (feature `chat-icons`).
     #[cfg(feature = "chat-icons")]
     Chat(crate::chat_icons::ChatIcon, crate::chat_icons::ChatWeight),
@@ -156,7 +188,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 136] = [
+    pub const ALL: [Icon; 152] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -243,6 +275,14 @@ impl Icon {
         Self::Starred,
         Self::NonStarred,
         Self::ObjectRotateRight,
+        Self::MediaPlaybackStart,
+        Self::ViewFullscreen,
+        Self::ViewRestore,
+        Self::ZoomIn,
+        Self::ZoomOut,
+        Self::ZoomFitBest,
+        Self::ObjectRotateLeft,
+        Self::MediaViewSubtitles,
         Self::DialogPassword,
         Self::SystemLockScreen,
         Self::SendTo,
@@ -293,6 +333,14 @@ impl Icon {
         Self::DefaultAppText,
         Self::DefaultAppDocuments,
         Self::DragHandle,
+        Self::ApplicationPdf,
+        Self::XOfficeDocument,
+        Self::XOfficeSpreadsheet,
+        Self::XOfficePresentation,
+        Self::FontXGeneric,
+        Self::TextXScript,
+        Self::ApplicationXGeneric,
+        Self::EmblemSymbolicLink,
     ];
 
     /// The embedded SVG source for this icon.
@@ -413,6 +461,14 @@ impl Icon {
             Self::Starred => include_bytes!("../icons/starred-symbolic.svg"),
             Self::NonStarred => include_bytes!("../icons/non-starred-symbolic.svg"),
             Self::ObjectRotateRight => include_bytes!("../icons/object-rotate-right-symbolic.svg"),
+            Self::MediaPlaybackStart => include_bytes!("../icons/media-playback-start-symbolic.svg"),
+            Self::ViewFullscreen => include_bytes!("../icons/view-fullscreen-symbolic.svg"),
+            Self::ViewRestore => include_bytes!("../icons/view-restore-symbolic.svg"),
+            Self::ZoomIn => include_bytes!("../icons/zoom-in-symbolic.svg"),
+            Self::ZoomOut => include_bytes!("../icons/zoom-out-symbolic.svg"),
+            Self::ZoomFitBest => include_bytes!("../icons/zoom-fit-best-symbolic.svg"),
+            Self::ObjectRotateLeft => include_bytes!("../icons/object-rotate-left-symbolic.svg"),
+            Self::MediaViewSubtitles => include_bytes!("../icons/media-view-subtitles-symbolic.svg"),
             Self::DialogPassword => include_bytes!("../icons/dialog-password-symbolic.svg"),
             Self::SystemLockScreen => include_bytes!("../icons/system-lock-screen-symbolic.svg"),
             Self::SendTo => include_bytes!("../icons/send-to-symbolic.svg"),
@@ -471,6 +527,14 @@ impl Icon {
             Self::DefaultAppText => include_bytes!("../icons/default-app-text-symbolic.svg"),
             Self::DefaultAppDocuments => include_bytes!("../icons/default-app-documents-symbolic.svg"),
             Self::DragHandle => include_bytes!("../icons/list-drag-handle-symbolic.svg"),
+            Self::ApplicationPdf => include_bytes!("../icons/application-pdf-symbolic.svg"),
+            Self::XOfficeDocument => include_bytes!("../icons/x-office-document-symbolic.svg"),
+            Self::XOfficeSpreadsheet => include_bytes!("../icons/x-office-spreadsheet-symbolic.svg"),
+            Self::XOfficePresentation => include_bytes!("../icons/x-office-presentation-symbolic.svg"),
+            Self::FontXGeneric => include_bytes!("../icons/font-x-generic-symbolic.svg"),
+            Self::TextXScript => include_bytes!("../icons/text-x-script-symbolic.svg"),
+            Self::ApplicationXGeneric => include_bytes!("../icons/application-x-generic-symbolic.svg"),
+            Self::EmblemSymbolicLink => include_bytes!("../icons/emblem-symbolic-link-symbolic.svg"),
             #[cfg(feature = "chat-icons")]
             // A weight the fork lacks is drawn in the regular weight, which every fork icon has.
             Self::Chat(icon, weight) => icon

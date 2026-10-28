@@ -6,7 +6,7 @@ use freya::prelude::*;
 
 use super::capture::{CaptureEvent, Phase, use_capture};
 use crate::component::ComponentName;
-use crate::motion::Focusable;
+use crate::motion::{Focusable, use_tween_with};
 use crate::style::*;
 use crate::surface::{use_enabled, use_tokens};
 use crate::typography::{CAPTION, Ink};
@@ -174,13 +174,8 @@ impl Component for Slider {
             1.0
         };
         let motion = tokens.motion(SCALE_MS);
-        let scale = use_animation_transition(scale_target, move |from, to| {
-            AnimNum::new(from, to)
-                .time(motion)
-                .function(Function::Expo)
-                .ease(Ease::Out)
-        });
-        let thumb = thumb_size * scale.get().value();
+        let scale = use_tween_with(scale_target, scale_target, motion, Function::Expo);
+        let thumb = thumb_size * scale;
 
         let measured = size.read().width();
         let width = if self.fluid && measured > thumb_size {
@@ -396,8 +391,7 @@ impl Component for Slider {
                         rect()
                             .width(Size::px(thumb_size))
                             .height(Size::px(thumb_size))
-                            .tw(&tokens, &[rounded(Radius::Pill)])
-                            .focusable(focus(), Radius::Pill),
+                            .tw(&tokens, &[rounded(Radius::Pill)]).focusable(focus()),
                     )
             }))
             .child(

@@ -89,7 +89,7 @@ impl Component for App {
             // stage fit side by side.
             .page_width(Dim::ChooserWidth)
             .search(query, results, open_first)
-            .header_trailing(hstack(S2).child(Switcher));
+            .header_trailing(hstack(S2).child(Switcher).child(app_menu(Vec::new())));
         // The stress switches change how text is made, not what a component
         // reads, so the whole window is rebuilt when they change.
         let rebuilt = {

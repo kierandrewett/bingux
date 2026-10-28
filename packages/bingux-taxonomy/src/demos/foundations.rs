@@ -660,11 +660,12 @@ pub const MOTION: &[Spec] = &[
             .into_element()
     }),
     // The ring as it settles on each kind of face: its box is the face's box
-    // grown by FOCUS_GAP and FOCUS_WIDTH, and its corners are the face's radius
-    // plus that distance. Held on (`Focus::Keyboard`), so it is always on screen.
+    // grown by FOCUS_GAP and FOCUS_WIDTH, and each corner is the face's own
+    // painted radius plus that distance, or square where the face is square.
+    // Held on (`Focus::Keyboard`), so it is always on screen.
     Spec::forced("Focus ring", || {
         let tokens = use_tokens();
-        let face = |label: &str, paint: Paint, on: Paint, radius: Radius| {
+        let face = |label: &str, paint: Paint, on: Paint, radius: Radius, corners: Corners| {
             rect()
                 .tw(
                     &tokens,
@@ -675,28 +676,75 @@ pub const MOTION: &[Spec] = &[
                         h(Dim::Control),
                         bg(paint),
                         ink(on),
-                        rounded(radius),
+                        rounded_on(radius, corners, 0.0),
                     ],
                 )
                 .child(typography::BODY.label(&tokens, label.to_string()))
         };
-        hstack(S6)
+        let round = |label: &str, paint: Paint, on: Paint, radius: Radius| face(label, paint, on, radius, Corners::All);
+        vstack(S5)
             .tw(&tokens, &[p(S2)])
-            .child(face("Button", Paint::Control, Paint::Text, Radius::Control).focusable(Focus::Keyboard, Radius::Control))
-            .child(face("Suggested", Paint::Accent, Paint::OnAccent, Radius::Control).focusable(Focus::Keyboard, Radius::Control))
-            .child(face("Destructive", Paint::Danger, Paint::OnDanger, Radius::Control).focusable(Focus::Keyboard, Radius::Control))
-            .child(face("Row", Paint::Card, Paint::Text, Radius::Inner).focusable(Focus::Keyboard, Radius::Inner))
             .child(
-                face("Invalid, focused", Paint::Control, Paint::Text, Radius::Control)
-                    .focusable_invalid(Focus::Keyboard, Radius::Control, Corners::All, true),
+                hstack(S6)
+                    .child(round("Button", Paint::Control, Paint::Text, Radius::Control).focusable(Focus::Keyboard))
+                    .child(round("Suggested", Paint::Accent, Paint::OnAccent, Radius::Control).focusable(Focus::Keyboard))
+                    .child(round("Destructive", Paint::Danger, Paint::OnDanger, Radius::Control).focusable(Focus::Keyboard))
+                    .child(round("Row", Paint::Card, Paint::Text, Radius::Inner).focusable(Focus::Keyboard)),
             )
             .child(
-                face("Invalid", Paint::Control, Paint::Text, Radius::Control)
-                    .focusable_invalid(Focus::Not, Radius::Control, Corners::All, true),
+                hstack(S6)
+                    .child(
+                        face("Square", Paint::Control, Paint::Text, Radius::Control, Corners::None)
+                            .focusable(Focus::Keyboard),
+                    )
+                    .child(
+                        face("Tab", Paint::Control, Paint::Text, Radius::Control, Corners::Top)
+                            .focusable(Focus::Keyboard),
+                    )
+                    .child(
+                        face("Segment", Paint::Control, Paint::Text, Radius::Control, Corners::Left)
+                            .focusable(Focus::Keyboard),
+                    )
+                    .child(
+                        round("Invalid, focused", Paint::Control, Paint::Text, Radius::Control)
+                            .focusable_invalid(Focus::Keyboard, true),
+                    )
+                    .child(
+                        round("Invalid", Paint::Control, Paint::Text, Radius::Control)
+                            .focusable_invalid(Focus::Not, true),
+                    ),
             )
             .into_element()
     })
     .wide(),
+    // Focus gained and lost: the ring blurs in from a wider, softer state and
+    // blurs out again. Press a button to give it the focus; pressing the other
+    // cross-fades the two rings.
+    Spec::live("Focus blur", || {
+        let tokens = use_tokens();
+        let mut which = use_state(|| 0_u8);
+        let face = |label: &'static str, index: u8| {
+            rect()
+                .tw(
+                    &tokens,
+                    &[
+                        flex_row(),
+                        items(Align::Center),
+                        px(S4),
+                        h(Dim::Control),
+                        bg(Paint::Control),
+                        rounded(Radius::Control),
+                    ],
+                )
+                .on_press(move |_| which.set(if which() == index { 0 } else { index }))
+                .child(typography::BODY.label(&tokens, label.to_string()))
+                .focusable(if which() == index { Focus::Keyboard } else { Focus::Not })
+        };
+        vstack(S2)
+            .child(hstack(S6).tw(&tokens, &[p(S2)]).child(face("First", 1)).child(face("Second", 2)))
+            .child(caption("Press one: its ring blurs in. Press the other: they cross-fade. Press again: it blurs out."))
+            .into_element()
+    }),
     Spec::live("Reveal", || {
         let mut expanded = use_state(|| false);
         vstack(S2)

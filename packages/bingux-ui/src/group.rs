@@ -192,7 +192,8 @@ impl Component for Group {
             group_hit,
             searching,
         };
-        let children = card_rows(self.rows.clone(), lit, filter);
+        let (mounted, whole) = crate::stage::use_staged_rows(self.rows.len(), query.is_some());
+        let children = card_rows(self.rows.iter().take(mounted).cloned().collect(), lit, filter);
         let heading = (self.title.is_some() || self.description.is_some()).then(|| {
             rect()
                 .tw(&tokens, GROUP_HEAD)
@@ -238,7 +239,13 @@ impl Component for Group {
                 .maybe_child(heading)
                 .maybe_child(self.below_title.clone())
                 .child(rect().tw(&tokens, BOX).children(children))
-                .maybe_child(self.footer.as_ref().map(|text| caption(text.clone()))),
+                // The footer waits for the last row: it sits under the card.
+                .maybe_child(
+                    self.footer
+                        .as_ref()
+                        .filter(|_| whole)
+                        .map(|text| caption(text.clone())),
+                ),
         )
     }
 }
@@ -254,25 +261,53 @@ pub(crate) struct RowSlot {
     pub matched: State<Vec<usize>>,
 }
 
-/// Marks the calling row as lit or not in its group, if it is in one. A lit
-/// row has no hairline above or below it, so its highlight reads as one
-/// block; the row calls this on every render.
-pub(crate) fn use_row_lit(lit: bool) {
+/// Puts `index` in or out of `rows`, writing only when that changes it.
+fn list(mut rows: State<Vec<usize>>, index: usize, on: bool) {
+    let listed = rows.peek().contains(&index);
+    if on && !listed {
+        rows.write().push(index);
+    } else if !on && listed {
+        rows.write().retain(|listed| *listed != index);
+    }
+}
+
+/// What a row tells the group it is in, and the search section above it, in one
+/// hook (a row is mounted forty at a time, and each hook of a row is paid
+/// forty times): whether it is `lit` (hovered, pressed or selected: a lit row
+/// has no hairline above or below it, so its highlight reads as one block) and
+/// whether it `matched` the search (it is counted into the section above, so
+/// the section shows only when something under it matches). The row calls this
+/// on every render, and takes itself out of both when it goes away.
+pub(crate) fn use_row_slot(lit: bool, matched: bool) {
     let slot = use_try_consume::<RowSlot>();
-    use_side_effect_with_deps(&lit, move |lit| {
-        let Some(slot) = slot else { return };
-        let mut rows = slot.lit;
-        let listed = rows.peek().contains(&slot.index);
-        if *lit && !listed {
-            rows.write().push(slot.index);
-        } else if !*lit && listed {
-            rows.write().retain(|index| *index != slot.index);
+    let sink = use_try_consume::<search_highlight::MatchSink>().map(|sink| sink.0);
+    let counted = use_hook(|| std::rc::Rc::new(std::cell::Cell::new(false)));
+    let counted_here = counted.clone();
+    use_side_effect_with_deps(&(lit, matched), move |&(lit, matched)| {
+        if let Some(slot) = slot {
+            list(slot.lit, slot.index, lit);
+            list(slot.matched, slot.index, matched);
+        }
+        if matched != counted_here.get() {
+            counted_here.set(matched);
+            if let Some(mut sink) = sink {
+                if matched {
+                    *sink.write() += 1;
+                } else {
+                    *sink.write() -= 1;
+                }
+            }
         }
     });
     use_drop(move || {
         if let Some(slot) = slot {
-            let mut rows = slot.lit;
-            rows.write().retain(|index| *index != slot.index);
+            list(slot.lit, slot.index, false);
+            list(slot.matched, slot.index, false);
+        }
+        if counted.get() {
+            if let Some(mut sink) = sink {
+                *sink.write() -= 1;
+            }
         }
     });
 }

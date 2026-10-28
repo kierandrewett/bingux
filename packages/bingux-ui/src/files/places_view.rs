@@ -17,13 +17,12 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use bingux_files::places::special_folder;
-use bingux_files::{Place, Places};
+use bingux_files::{Place, PlaceKind, Places};
 use freya::prelude::*;
 
 use super::directory::Where;
 use super::drives::{Drives, use_drives};
-use super::glyphs::folder_icon;
+use super::file_icon::{FileIcon, file_icon_view};
 use super::places_model::{
     Item, ItemKind, Release, Section, UsageLine, current_name, release_for, sections, selected,
     type_ahead, usage_line, volume_text,
@@ -55,6 +54,7 @@ pub struct PlacesSidebar {
     on_open: EventHandler<Where>,
     on_open_new_tab: Option<EventHandler<Where>>,
     on_properties: Option<EventHandler<Where>>,
+    on_empty_trash: Option<EventHandler<()>>,
     reload: Option<State<u32>>,
 }
 
@@ -68,6 +68,7 @@ impl PlacesSidebar {
             on_open: on_open.into(),
             on_open_new_tab: None,
             on_properties: None,
+            on_empty_trash: None,
             reload: None,
         }
     }
@@ -99,6 +100,13 @@ impl PlacesSidebar {
         self.reload = Some(reload);
         self
     }
+
+    /// Adds Empty Trash to the Trash row's menu. The handler empties the Trash
+    /// (after its question); the owner decides where the question is asked.
+    pub fn on_empty_trash(mut self, handler: impl Into<EventHandler<()>>) -> Self {
+        self.on_empty_trash = Some(handler.into());
+        self
+    }
 }
 
 impl Component for PlacesSidebar {
@@ -108,7 +116,20 @@ impl Component for PlacesSidebar {
         let list = drives.list();
         let bookmarks = use_bookmarks(self.reload);
         let shown = bookmarks.current(&self.places.bookmarks);
-        let groups = sections(&self.places, &shown, &list.mounts, &list.volumes, self.recent);
+        let mut groups = sections(&self.places, &shown, &list.mounts, &list.volumes, self.recent);
+        // The Trash row follows what the Trash holds, looked at every couple of
+        // seconds on a worker (a move to the Trash may come from any window).
+        let mut trash_full = use_state(|| false);
+        use_hook(move || {
+            spawn(async move {
+                loop {
+                    let full = spawn_blocking(|| !bingux_files::ops::trash_is_empty()).await;
+                    trash_full.set_if_modified(full);
+                    timer(Duration::from_secs(2)).await;
+                }
+            });
+        });
+        super::places_model::trash_state(&mut groups, trash_full());
         let chosen = selected(&groups, &self.current, &list.mounts);
         rect()
             .component("PlacesSidebar")
@@ -132,6 +153,8 @@ impl Component for PlacesSidebar {
                                     on_open: self.on_open.clone(),
                                     on_open_new_tab: self.on_open_new_tab.clone(),
                                     on_properties: self.on_properties.clone(),
+                                    on_empty_trash: self.on_empty_trash.clone(),
+                                    trash_full: trash_full(),
                                 },
                                 measure: None,
                                 on_escape: None,
@@ -212,8 +235,8 @@ impl Component for PlacesMenu {
         let name = current_name(&self.current, row);
         let icon = match (row, &self.current) {
             (Some(item), _) => item.icon,
-            (None, Where::Recent) => Icon::Clock,
-            (None, Where::Folder(path)) => folder_icon(special_folder(path)),
+            (None, Where::Recent) => FileIcon::for_place_kind(PlaceKind::Recent),
+            (None, Where::Folder(path)) => FileIcon::folder_at(path),
         };
 
         let content = rect()
@@ -235,11 +258,7 @@ impl Component for PlacesMenu {
             .on_sized(move |event: Event<SizedEventData>| area.set_if_modified(event.area))
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| hovering.set(false))
-            .child(icons::icon(
-                icon,
-                IconSize::Control,
-                Paint::Text.color(&tokens),
-            ))
+            .child(file_icon_view(&tokens, &icon, IconSize::Control, false))
             .child(
                 rect().tw(&tokens, &[w_flex()]).child(
                     BODY.in_ink(Ink::Text)
@@ -288,6 +307,8 @@ impl Component for PlacesMenu {
                 on_open: close,
                 on_open_new_tab: wrap(&self.on_open_new_tab),
                 on_properties: wrap(&self.on_properties),
+                on_empty_trash: None,
+                trash_full: false,
             },
             measure: Some(measured),
             on_escape: Some(EventHandler::new(move |_: ()| open.set(false))),
@@ -433,6 +454,10 @@ struct Actions {
     on_open: EventHandler<Where>,
     on_open_new_tab: Option<EventHandler<Where>>,
     on_properties: Option<EventHandler<Where>>,
+    /// Empty Trash on the Trash row's menu.
+    on_empty_trash: Option<EventHandler<()>>,
+    /// The Trash has something in it, so Empty Trash is not greyed.
+    trash_full: bool,
 }
 
 /// The groups and rows, and the keys that walk them.
@@ -540,6 +565,22 @@ impl PlaceList {
         if !own.is_empty() {
             menu.push(menu_separator());
             menu.extend(own);
+        }
+        // The Trash row says what the Trash holds: Open, Empty Trash (greyed
+        // while it is empty) and Properties.
+        if super::places_model::is_trash(item) {
+            if let Some(handler) = &actions.on_empty_trash {
+                let handler = handler.clone();
+                let entry = menu_item("Empty Trash", move |_: ()| handler.call(()));
+                menu.push(menu_separator());
+                menu.push(if actions.trash_full { entry.destructive() } else { entry.disabled() });
+            }
+            if let Some(handler) = &actions.on_properties {
+                let handler = handler.clone();
+                menu.push(menu_separator());
+                menu.push(menu_item("Properties", move |_: ()| handler.call(target.clone())));
+            }
+            return menu;
         }
         menu.push(menu_separator());
         let text = path.display().to_string();
@@ -753,7 +794,7 @@ struct PlaceRow {
     /// and its focus node, when another row above it comes or goes.
     key: String,
     id: AccessibilityId,
-    icon: Icon,
+    icon: FileIcon,
     label: String,
     kind: ItemKind,
     selected: bool,
@@ -780,13 +821,7 @@ impl Component for PlaceRow {
             _ => false,
         };
         let silent = matches!(self.usage, UsageLine::NotResponding);
-        let icon_paint = if self.selected {
-            Paint::Accent
-        } else if silent {
-            Paint::MutedFaint
-        } else {
-            Paint::Muted
-        };
+        let icon = if silent { self.icon.dimmed() } else { self.icon };
         let ink = if silent { Ink::Muted } else { Ink::Text };
         let name: Element = match self.kind {
             ItemKind::Place => BODY
@@ -888,11 +923,11 @@ impl Component for PlaceRow {
                 let selected = self.selected;
                 move |builder| builder.set_selected(selected)
             })
-            .child(rect().tw(&tokens, NAV_ICON).child(icons::icon(
-                self.icon,
-                IconSize::Row,
-                icon_paint.color(&tokens),
-            )))
+            .child(
+                rect()
+                    .tw(&tokens, NAV_ICON)
+                    .child(file_icon_view(&tokens, &icon, IconSize::Row, self.selected)),
+            )
             .child(
                 rect()
                     .tw(&tokens, &[flex_col(), w_flex(), gap(S0_5)])
@@ -918,4 +953,23 @@ impl Component for PlaceRow {
         )
         .tw(&tokens, &[w_full()])
     }
+}
+
+/// One sidebar row on its own, for the test that every surface draws a path
+/// with the same icon.
+#[cfg(test)]
+pub(super) fn probe_row(icon: FileIcon, selected: bool) -> Element {
+    PlaceRow {
+        key: "probe".into(),
+        id: AccessibilityId::new_unique(),
+        icon,
+        label: "probe".into(),
+        kind: ItemKind::Bookmark,
+        selected,
+        usage: UsageLine::Nothing,
+        menu: Vec::new(),
+        on_open: EventHandler::new(|_: ()| {}),
+        drop: None,
+    }
+    .into()
 }

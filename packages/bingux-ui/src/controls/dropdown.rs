@@ -8,7 +8,7 @@ use freya::prelude::*;
 
 use super::path_label::text_width;
 use super::press::use_press;
-use crate::app_icon::app_icon;
+use crate::app_icon::{AppChoice, app_icon};
 use crate::component::ComponentName;
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
@@ -84,6 +84,9 @@ pub struct Dropdown {
     fixed_width: Option<Dim>,
     /// The sheet's header on a phone: the control's label.
     title: Option<String>,
+    /// Options that are listed but cannot be chosen, with the reason each
+    /// cannot, by key.
+    unavailable: Vec<(String, String)>,
     on_select: EventHandler<String>,
 }
 
@@ -101,18 +104,28 @@ pub fn dropdown(
         min_width: None,
         title: None,
         fixed_width: None,
+        unavailable: Vec::new(),
         on_select: on_select.into(),
     }
 }
 
-impl Dropdown {
-    /// Draw an application icon before each option; `icons` has one icon
-    /// name per option, in the same order.
-    pub fn app_icons(mut self, icons: Vec<String>) -> Self {
-        self.icons = icons.into_iter().map(OptionIcon::App).collect();
-        self
+/// A dropdown of applications: each option is an [`AppChoice`] and shows its
+/// icon, in the list and in the collapsed value. The only way to list
+/// applications in a dropdown.
+pub fn app_dropdown(
+    apps: Vec<AppChoice>,
+    selected: impl Into<String>,
+    on_select: impl Into<EventHandler<String>>,
+) -> Dropdown {
+    let icons = apps.iter().map(|app| OptionIcon::App(app.icon.clone())).collect();
+    let options = apps.into_iter().map(|app| (app.key, app.label)).collect();
+    Dropdown {
+        icons,
+        ..dropdown(options, selected, on_select)
     }
+}
 
+impl Dropdown {
     /// Draw a symbolic icon before each option, in the same order as the
     /// options: a headphone for a headset, a speaker for the built-in output.
     pub fn icons(mut self, icons: Vec<Icon>) -> Self {
@@ -153,6 +166,15 @@ impl Dropdown {
         self
     }
 
+    /// List the options with these keys but do not let them be chosen: each
+    /// shows dimmed with its reason after the label (".7z, 7-Zip is not
+    /// installed"), and a press, Enter or a typed match leaves the choice as
+    /// it was. For a choice that depends on what the machine has.
+    pub fn unavailable(mut self, reasons: Vec<(String, String)>) -> Self {
+        self.unavailable = reasons;
+        self
+    }
+
     /// The sheet's header on a phone: the control's label.
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
@@ -189,6 +211,7 @@ impl Component for Dropdown {
         let focus = use_focus(a11y_id);
         let enabled = use_enabled(self.enabled);
         let on_select = self.on_select.clone();
+        let unavailable = self.unavailable.clone();
         let options = self.options.clone();
         let option_icons = self.icons.clone();
         let selected_index = options.iter().position(|(key, _)| *key == self.selected);
@@ -200,8 +223,11 @@ impl Component for Dropdown {
         let choose = {
             let on_select = on_select.clone();
             let options = options.clone();
+            let unavailable = unavailable.clone();
             EventHandler::new(move |index: usize| {
-                if let Some((key, _)) = options.get(index) {
+                if let Some((key, _)) = options.get(index)
+                    && !unavailable.iter().any(|(off, _)| off == key)
+                {
                     on_select.call(key.clone());
                 }
                 open.set(false);
@@ -272,6 +298,7 @@ impl Component for Dropdown {
             let choose = choose.clone();
             let on_select = on_select.clone();
             let type_options = options.clone();
+            let type_off = unavailable.clone();
             move |event: Event<KeyboardEventData>| {
                 // A query typed on the shut button has no pill, so Escape
                 // takes it back here; the open list's Escape is the panel's.
@@ -308,7 +335,9 @@ impl Component for Dropdown {
                                 <(i32, i32)>::from(scroll).1,
                                 false,
                             ));
-                        } else if let Some((key, _)) = type_options.get(index) {
+                        } else if let Some((key, _)) = type_options.get(index)
+                            && !type_off.iter().any(|(off, _)| off == key)
+                        {
                             on_select.call(key.clone());
                         }
                         return;
@@ -476,18 +505,22 @@ impl Component for Dropdown {
             .focusable(
                 // The open list owns the keyboard, and the ring would run under it.
                 if open() { Focus::Not } else { focus() },
-                button_radius,
             );
 
         let menu_width = button_width().max(Dim::DropdownMenu.px());
         let rows = options
             .iter()
             .enumerate()
-            .map(|(index, (_, text))| {
+            .map(|(index, (key, text))| {
                 let choose = choose.clone();
+                let reason = unavailable.iter().find(|(off, _)| off == key).map(|(_, why)| why);
                 Element::from(DropdownItem {
                     icon: option_icons.get(index).cloned(),
-                    text: text.clone(),
+                    text: match reason {
+                        Some(why) => format!("{text}: {why}"),
+                        None => text.clone(),
+                    },
+                    disabled: reason.is_some(),
                     selected: Some(index) == selected_index,
                     mark: ahead.mark(index),
                     highlighted: hovered_item().is_none() && Some(index) == highlighted(),
@@ -544,6 +577,8 @@ impl Component for Dropdown {
 struct DropdownItem {
     icon: Option<OptionIcon>,
     text: String,
+    /// Listed but not choosable: dimmed, and a press does nothing.
+    disabled: bool,
     selected: bool,
     highlighted: bool,
     /// How the option shows while a typed query is active.
@@ -559,6 +594,7 @@ impl Component for DropdownItem {
         let mut pressing = use_state(|| false);
         let press = use_press();
         let on_press = self.on_press.clone();
+        let disabled = self.disabled;
         let on_hover = self.on_hover.clone();
         let on_leave = on_hover.clone();
         rect()
@@ -568,6 +604,7 @@ impl Component for DropdownItem {
             .maybe(dimmed(&self.mark).is_some(), |row| {
                 row.opacity(dimmed(&self.mark).unwrap_or(1.0))
             })
+            .maybe(self.disabled, |row| row.opacity(0.45))
             // The selected option keeps the fill it has when highlighted, so
             // it does not dim when the pointer moves to another option.
             .tw(
@@ -611,7 +648,9 @@ impl Component for DropdownItem {
                     return;
                 }
                 pressing.set(false);
-                on_press.call(());
+                if !disabled {
+                    on_press.call(());
+                }
             })
             .maybe_child(
                 self.icon

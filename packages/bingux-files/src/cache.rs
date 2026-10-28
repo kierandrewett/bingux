@@ -49,7 +49,9 @@ pub const DEFAULT_BUDGET: u64 = 32 * 1024 * 1024;
 /// The most folders the cache keeps.
 pub const DEFAULT_FOLDERS: usize = 512;
 
-const MAGIC: &[u8; 4] = b"BFC1";
+/// `BFC1` files stored a name that is not valid UTF-8 as replacement
+/// characters and so named no file on disk; they are misses now and are deleted.
+const MAGIC: &[u8; 4] = b"BFC2";
 const KIND_FILE: u8 = 0;
 const KIND_DIR: u8 = 1;
 const KIND_OTHER: u8 = 2;
@@ -303,9 +305,20 @@ fn seconds(time: SystemTime) -> i64 {
     }
 }
 
+/// The bytes of the file an entry names: the last part of its path. Not
+/// `Entry::name`, the text it is shown as, which writes a byte that is not
+/// valid UTF-8 as U+FFFD: two files could share it, and the cache would hand
+/// back a path that is on no disk.
+fn name_bytes(entry: &Entry) -> &[u8] {
+    entry
+        .path
+        .file_name()
+        .map_or_else(|| entry.name.as_bytes(), |name| name.as_bytes())
+}
+
 fn encode(dir: &Path, stamp: &DirStamp, entries: &[Entry]) -> Vec<u8> {
     let mut order: Vec<&Entry> = entries.iter().collect();
-    order.sort_unstable_by(|a, b| a.name.as_bytes().cmp(b.name.as_bytes()));
+    order.sort_unstable_by(|a, b| name_bytes(a).cmp(name_bytes(b)));
     let mut out = Vec::with_capacity(64 + entries.len() * 16);
     out.extend_from_slice(MAGIC);
     out.extend_from_slice(&stamp.modified_ns.to_le_bytes());
@@ -319,7 +332,7 @@ fn encode(dir: &Path, stamp: &DirStamp, entries: &[Entry]) -> Vec<u8> {
     let base = (stamp.modified_ns / 1_000_000_000) as i64;
     let mut previous: &[u8] = &[];
     for entry in order {
-        let name = entry.name.as_bytes();
+        let name = name_bytes(entry);
         let shared = previous
             .iter()
             .zip(name)
@@ -647,5 +660,38 @@ mod tests {
         for value in [0i64, 1, -1, 1000, -1000, i64::MAX, i64::MIN] {
             assert_eq!(unzigzag(zigzag(value)), value);
         }
+    }
+
+    #[test]
+    fn a_name_that_is_not_utf8_comes_back_as_the_same_file() {
+        use std::ffi::OsStr;
+        let root = scratch("odd-names");
+        let cache = Cache::at(&root, DEFAULT_BUDGET, DEFAULT_FOLDERS);
+        let dir = Path::new("/data/Odd");
+        let named = |bytes: &[u8], kind: Kind| {
+            let file = OsStr::from_bytes(bytes);
+            Entry::named(dir.join(file), file.to_string_lossy().into_owned(), kind, false, false)
+        };
+        let written = vec![
+            named(b"caf\xe9-\xff", Kind::Directory),
+            named(b"caf\xe9-\xfe", Kind::Directory),
+            named(b"plain", Kind::File),
+        ];
+        // The two folders are shown alike, and are two folders.
+        assert_eq!(written[0].name, written[1].name);
+        assert_ne!(written[0].path, written[1].path);
+        cache.store(dir, &stamp(1), &written);
+        let cached = cache.load(dir).unwrap();
+        let mut found: Vec<PathBuf> = cached.entries.iter().map(|entry| entry.path.clone()).collect();
+        let mut expected: Vec<PathBuf> = written.iter().map(|entry| entry.path.clone()).collect();
+        found.sort();
+        expected.sort();
+        assert_eq!(found, expected);
+        // Their names read back as the text they are shown as.
+        for entry in &cached.entries {
+            let shown = entry.path.file_name().unwrap().to_string_lossy();
+            assert_eq!(entry.name, shown);
+        }
+        let _ = fs::remove_dir_all(&root);
     }
 }

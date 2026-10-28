@@ -99,11 +99,54 @@ pub enum Column {
     Owner,
     /// The folder an entry is in. Only Recent and search results have it.
     Location,
+    /// The folder an item of the Trash was in before it was deleted. Only the
+    /// Trash has it.
+    OriginalLocation,
+    /// When an item of the Trash was deleted. Only the Trash has it.
+    Deleted,
+}
+
+/// Which columns a list may show: an ordinary folder's, Recent's and search
+/// results' (which add where each item is), or the Trash's (which show where
+/// each item was and when it was deleted, in place of its type and date).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColumnSet {
+    Folder,
+    Results,
+    Trash,
+}
+
+impl From<bool> for ColumnSet {
+    /// `true` for the views that list items from several folders.
+    fn from(with_location: bool) -> ColumnSet {
+        if with_location {
+            ColumnSet::Results
+        } else {
+            ColumnSet::Folder
+        }
+    }
+}
+
+impl Column {
+    /// Whether `set` may show this column at all.
+    pub fn in_set(self, set: ColumnSet) -> bool {
+        let about_the_trash = matches!(self, Column::OriginalLocation | Column::Deleted);
+        match set {
+            ColumnSet::Folder => !about_the_trash && self != Column::Location,
+            ColumnSet::Results => !about_the_trash,
+            ColumnSet::Trash => matches!(self, Column::Size) || about_the_trash,
+        }
+    }
+
+    /// Whether `set` shows this column whatever the layout's tick says.
+    fn always_in(self, set: ColumnSet) -> bool {
+        set == ColumnSet::Trash && matches!(self, Column::OriginalLocation | Column::Deleted)
+    }
 }
 
 impl Column {
     /// Every column, in the order a fresh layout starts with.
-    pub const ALL: [Column; 9] = [
+    pub const ALL: [Column; 11] = [
         Column::Name,
         Column::Size,
         Column::Kind,
@@ -113,6 +156,8 @@ impl Column {
         Column::Permissions,
         Column::Owner,
         Column::Location,
+        Column::OriginalLocation,
+        Column::Deleted,
     ];
 
     /// The heading and the name in menus.
@@ -127,6 +172,8 @@ impl Column {
             Column::Permissions => "Permissions",
             Column::Owner => "Owner",
             Column::Location => "Location",
+            Column::OriginalLocation => "Original Location",
+            Column::Deleted => "Deleted",
         }
     }
 
@@ -142,7 +189,9 @@ impl Column {
             | Column::Accessed
             | Column::Permissions
             | Column::Owner
-            | Column::Location => None,
+            | Column::Location
+            | Column::OriginalLocation => None,
+            Column::Deleted => Some(SortKey::Deleted),
         }
     }
 
@@ -159,6 +208,8 @@ impl Column {
             Column::Permissions => 104.0,
             Column::Owner => 96.0,
             Column::Location => 220.0,
+            Column::OriginalLocation => 220.0,
+            Column::Deleted => 130.0,
         }
     }
 
@@ -174,6 +225,8 @@ impl Column {
             Column::Permissions => 88.0,
             Column::Owner => 56.0,
             Column::Location => 96.0,
+            Column::OriginalLocation => 96.0,
+            Column::Deleted => 96.0,
         }
     }
 
@@ -201,6 +254,8 @@ impl Column {
             Column::Permissions => "permissions",
             Column::Owner => "owner",
             Column::Location => "location",
+            Column::OriginalLocation => "original_location",
+            Column::Deleted => "deleted",
         }
     }
 
@@ -334,10 +389,11 @@ impl ColumnLayout {
 
     /// The shown columns after Name, in order. Location is left out unless
     /// `with_location`.
-    pub fn visible(&self, with_location: bool) -> Vec<Column> {
+    pub fn visible(&self, set: impl Into<ColumnSet>) -> Vec<Column> {
+        let set = set.into();
         self.columns
             .iter()
-            .filter(|slot| slot.visible && (with_location || slot.column != Column::Location))
+            .filter(|slot| slot.column.in_set(set) && (slot.visible || slot.column.always_in(set)))
             .map(|slot| slot.column)
             .collect()
     }
@@ -435,6 +491,8 @@ pub struct Plan {
     pub hidden: usize,
     /// Whether the Location column was a candidate.
     pub with_location: bool,
+    /// The columns the list is drawn with.
+    pub set: ColumnSet,
 }
 
 /// The widths to draw in `available` pixels.
@@ -447,10 +505,11 @@ pub struct Plan {
 /// shown columns do not fit with that, the rightmost optional columns are
 /// left out until they do. Name is never left out. The widths do not depend
 /// on the zoom: the text does not change size, only the icon does.
-pub fn plan(layout: &ColumnLayout, available: f32, with_location: bool) -> Plan {
+pub fn plan(layout: &ColumnLayout, available: f32, set: impl Into<ColumnSet>) -> Plan {
+    let set = set.into();
     let name_min = NAME_MIN_WIDTH;
     let mut columns: Vec<(Column, f32)> = layout
-        .visible(with_location)
+        .visible(set)
         .into_iter()
         .map(|column| (column, layout.width(column).max(column.min_width())))
         .collect();
@@ -468,20 +527,21 @@ pub fn plan(layout: &ColumnLayout, available: f32, with_location: bool) -> Plan 
         name_min,
         columns,
         hidden,
-        with_location,
+        with_location: set == ColumnSet::Results,
+        set,
     }
 }
 
 /// [`plan`] for a measured row of `row_width` pixels whose icon is `icon_px`
 /// wide: the icon [`gutter`] is taken off first. Call it while rendering, as
 /// the gutter gap reads the size class.
-pub fn plan_in(layout: &ColumnLayout, icon_px: f32, row_width: f32, with_location: bool) -> Plan {
+pub fn plan_in(layout: &ColumnLayout, icon_px: f32, row_width: f32, set: impl Into<ColumnSet>) -> Plan {
     let available = if row_width > 0.0 {
         (row_width - gutter(icon_px)).max(1.0)
     } else {
         0.0
     };
-    plan(layout, available, with_location)
+    plan(layout, available, set)
 }
 
 /// The width of the icon slot that opens a row: the icon, `icon_px` wide,
@@ -628,6 +688,22 @@ fn text_with(
             .unwrap_or_default(),
         Column::Owner => owner(entry),
         Column::Location => location_text(&entry.path, home),
+        // Where it was, as the folder it was in; nothing is known when the
+        // info file is missing. The Trash says how long ago, as Recent does.
+        Column::OriginalLocation => match entry.trash.as_ref() {
+            Some(trash) => trash
+                .original
+                .as_deref()
+                .map_or_else(|| "Unknown".to_owned(), |original| location_text(original, home)),
+            None => String::new(),
+        },
+        Column::Deleted => {
+            let Some(time) = entry.trash.as_ref().and_then(|trash| trash.deleted) else {
+                return String::new();
+            };
+            let (then, now) = (unix_seconds(time), unix_seconds(now));
+            relative_date(then, now, offset(then))
+        }
     }
 }
 
@@ -742,10 +818,16 @@ fn location_text(path: &Path, home: &Path) -> String {
 /// The items of the columns menu: a tick for each column that is shown, Name
 /// greyed out because it always is, and `Reset columns`. `with_location`
 /// lists Location too, for the views that have it. Every change is saved.
-pub fn columns_menu_items(layout: State<ColumnLayout>, with_location: bool) -> Vec<MenuItem> {
+pub fn columns_menu_items(layout: State<ColumnLayout>, set: impl Into<ColumnSet>) -> Vec<MenuItem> {
+    let set = set.into();
+    // The Trash shows the columns that are about the Trash and nothing to
+    // choose from.
+    if set == ColumnSet::Trash {
+        return Vec::new();
+    }
     let mut items = Vec::new();
     for column in Column::ALL {
-        if column == Column::Location && !with_location {
+        if !column.in_set(set) {
             continue;
         }
         let shown = layout.peek().is_visible(column);

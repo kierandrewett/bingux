@@ -316,6 +316,8 @@ pub(crate) fn read_folder(
     let reader = fs::read_dir(path).map_err(|error| ListError::from_io(&error))?;
     let listed_hidden = hidden_names(path);
     let special = crate::places::system_user_dirs().children_of(path);
+    // The Trash: each item also says where it was and when it was deleted.
+    let bin = crate::ops::BinFolder::of(path);
     let mut batch: Vec<Entry> = Vec::with_capacity(FIRST_BATCH);
     let mut sent_first = false;
     let mut interval = FIRST_INTERVAL;
@@ -346,6 +348,9 @@ pub(crate) fn read_folder(
                 .map(|(_, kind)| *kind);
         }
         entry.pending_link = symlink;
+        if let Some(bin) = &bin {
+            entry.trash = Some(std::sync::Arc::new(bin.meta(&file_name)));
+        }
         batch.push(entry);
         let due = batch.len() >= target
             || (count % 16 == 0 && last.elapsed() >= if sent_first { interval } else { FIRST_INTERVAL });
@@ -450,6 +455,57 @@ mod tests {
         assert_eq!(names(&view), ["Folder", "b.png"]);
         view.directories_only = true;
         assert_eq!(names(&view), ["Folder"]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The files folder of a drive's bin lists its items with what their info
+    /// files say, and sorts by when they were deleted.
+    #[test]
+    fn a_bins_files_folder_lists_where_each_item_was_and_when_it_went() {
+        let dir = scratch("bin-listing");
+        let files = dir.join("drive/.Trash-1000/files");
+        let info = dir.join("drive/.Trash-1000/info");
+        fs::create_dir_all(&files).unwrap();
+        fs::create_dir_all(&info).unwrap();
+        for (name, path, date) in [
+            ("late.txt", "docs/late.txt", "2024-05-03T10:00:00"),
+            ("early.txt", "early%20one.txt", "2024-05-01T09:30:00"),
+            ("odd", "x/odd", "not a date"),
+        ] {
+            fs::write(files.join(name), b"x").unwrap();
+            fs::write(
+                info.join(format!("{name}.trashinfo")),
+                format!("[Trash Info]\nPath={path}\nDeletionDate={date}\n"),
+            )
+            .unwrap();
+        }
+        // An item with no info file at all.
+        fs::write(files.join("stray"), b"s").unwrap();
+        let listing = list_dir(&files, &Cancel::new()).unwrap();
+        let meta = |name: &str| {
+            let entry = listing.entries.iter().find(|entry| entry.name == name).unwrap();
+            entry.trash.clone().unwrap_or_else(|| panic!("{name} has trash info"))
+        };
+        assert_eq!(meta("late.txt").original, Some(dir.join("drive/docs/late.txt")), "relative to the drive's top");
+        assert_eq!(meta("early.txt").original, Some(dir.join("drive/early one.txt")));
+        assert!(meta("early.txt").deleted.is_some() && meta("late.txt").deleted > meta("early.txt").deleted);
+        assert_eq!(meta("odd").deleted, None, "a date that cannot be read");
+        assert_eq!(meta("stray").original, None, "no info file");
+        let view = View {
+            show_hidden: true,
+            filter: None,
+            directories_only: false,
+            sort: Sort::by(SortKey::Deleted),
+        };
+        let names: Vec<_> = listing
+            .select(&view)
+            .into_iter()
+            .map(|index| listing.entries[index].name.clone())
+            .collect();
+        assert_eq!(names[2..], ["early.txt", "late.txt"], "oldest first, the unknown ones before them: {names:?}");
+        // An ordinary folder's entries have no such info.
+        let plain = list_dir(&dir.join("drive"), &Cancel::new()).unwrap();
+        assert!(plain.entries.iter().all(|entry| entry.trash.is_none()));
         let _ = fs::remove_dir_all(&dir);
     }
 

@@ -741,7 +741,6 @@ pub(super) fn focus_outline(
         core,
         rect().width(Size::px(width)).height(Size::px(height)),
         focus,
-        Radius::Card,
         false,
         crate::motion::RingSize::Known(width, height),
     )

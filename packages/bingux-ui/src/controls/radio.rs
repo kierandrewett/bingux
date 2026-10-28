@@ -5,6 +5,7 @@
 use freya::animation::*;
 use freya::prelude::*;
 
+use crate::motion::use_tween_with;
 use crate::style::*;
 use crate::surface::use_tokens;
 
@@ -42,16 +43,8 @@ impl Component for RadioMark {
         let tokens = use_tokens();
         let motion = tokens.motion(100);
         // The dot grows from nothing: a runtime size, so a raw `Size::px`.
-        let dot = use_animation_transition(
-            if self.selected { Dim::Dot.px() } else { 0.0 },
-            move |from, to| {
-                AnimNum::new(from, to)
-                    .time(motion)
-                    .function(Function::Expo)
-                    .ease(Ease::Out)
-            },
-        );
-        let dot = dot.get().value();
+        let target = if self.selected { Dim::Dot.px() } else { 0.0 };
+        let dot = use_tween_with(target, target, motion, Function::Expo);
         let edge = if self.selected {
             border(Line::Ring(Paint::Accent))
         } else {

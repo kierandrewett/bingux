@@ -122,6 +122,14 @@ pub fn start() -> bool {
     true
 }
 
+/// Forgets the samples taken so far and goes on sampling. Must run on the
+/// thread that called [`start`], the only one the sampling signal goes to, so
+/// the handler cannot be writing while the cursor moves.
+pub fn reset() {
+    CURSOR.store(0, Ordering::Relaxed);
+    FULL.store(false, Ordering::Relaxed);
+}
+
 /// Stops sampling and returns the symbolized samples. Must run on the thread
 /// that called [`start`].
 pub fn stop() -> Profile {

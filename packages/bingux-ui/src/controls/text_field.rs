@@ -830,6 +830,16 @@ impl Component for TextField {
             } else {
                 Size::px(width)
             })
+            // The field's box is the ring's face: a flat field is a line with
+            // no radius, so its ring is square.
+            .tw(
+                &tokens,
+                &[rounded_on(
+                    Radius::Control,
+                    if self.flat { Corners::None } else { Corners::All },
+                    0.0,
+                )],
+            )
             .on_sized(move |event: Event<SizedEventData>| {
                 let area = event.area;
                 field_area.set(Some((area.min_x(), area.min_y(), area.max_x(), area.max_y())));
@@ -928,9 +938,6 @@ impl Component for TextField {
                 } else {
                     Focus::Not
                 },
-                Radius::Control,
-                // A flat field is a line with no radius: its ring is square.
-                if self.flat { Corners::None } else { Corners::All },
                 invalid,
             )
             .maybe(fills, |wrapper| wrapper.tw(&tokens, &[w_flex()]));

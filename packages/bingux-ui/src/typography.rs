@@ -138,15 +138,27 @@ impl TextStyle {
 
     /// Text in this style that wraps onto as many lines as it needs.
     pub fn paragraph(self, tokens: &Tokens, text: impl Into<String>) -> Paragraph {
+        // A span, not a child: paragraph highlights (search marks) are only
+        // painted for the paragraph's own spans.
+        self.paragraph_base(tokens).span(crate::stress::localised(text.into()))
+    }
+
+    /// A paragraph of runs in different inks: a line of code with its
+    /// keywords and strings coloured, a sentence with one word in the accent.
+    /// Each run is `(ink, text)`; the paragraph's own style is this one.
+    pub fn runs(self, tokens: &Tokens, runs: impl IntoIterator<Item = (Ink, String)>) -> Paragraph {
+        runs.into_iter().fold(self.paragraph_base(tokens), |paragraph, (ink, text)| {
+            paragraph.span(self.in_ink(ink).span(tokens, text))
+        })
+    }
+
+    fn paragraph_base(self, tokens: &Tokens) -> Paragraph {
         let paragraph = paragraph()
             .color(self.ink.color(tokens))
             .font_size(self.size.px())
             .font_weight(self.weight)
             .line_height(self.leading)
-            .letter_spacing(self.tracking)
-            // A span, not a child: paragraph highlights (search marks) are
-            // only painted for the paragraph's own spans.
-            .span(crate::stress::localised(text.into()));
+            .letter_spacing(self.tracking);
         let paragraph = if self.mono { paragraph.font_family(mono_family()) } else { paragraph };
         if self.tabular {
             paragraph.font_tabular()

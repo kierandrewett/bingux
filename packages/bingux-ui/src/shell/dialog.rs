@@ -139,6 +139,9 @@ pub struct Dialog {
 pub struct DialogFrame {
     pub width: f32,
     pub height: f32,
+    /// The card fills the whole window, square-cornered to the window's own
+    /// radius, with no margin: a sheet on a phone, a viewer in full screen.
+    pub fill: bool,
 }
 
 pub fn dialog(title: impl Into<String>, body: impl Into<String>) -> Dialog {
@@ -172,12 +175,22 @@ pub fn framed_dialog(
 ) -> Dialog {
     Dialog {
         content: Some(content.into()),
-        frame: Some(DialogFrame { width, height }),
+        frame: Some(DialogFrame { width, height, fill: false }),
         ..dialog(title, "")
     }
 }
 
 impl Dialog {
+    /// Make a [`framed_dialog`] fill the whole window instead of floating as a
+    /// card: a full-screen viewer, or a sheet on a phone. It keeps its scrim
+    /// behaviour (Escape closes it) and the window's corner radius.
+    pub fn fill_window(mut self) -> Self {
+        if let Some(frame) = self.frame.as_mut() {
+            frame.fill = true;
+        }
+        self
+    }
+
     /// Call `handler` when the dialog has closed and gone, whichever way it
     /// closed. Use it to put the keyboard focus back where it was.
     pub fn on_closed(mut self, handler: impl Into<EventHandler<()>>) -> Self {
@@ -373,6 +386,10 @@ const DIALOG_FRAME: Recipe = &[
     clip(),
 ];
 
+/// The card of a [`Dialog::fill_window`]: the window's own corner radius and
+/// nothing floating.
+const DIALOG_FILL: Recipe = &[flex_col(), rounded(Radius::Window), bg(Paint::Bg), clip()];
+
 /// The card of an alert: [`DIALOG_INSET`] all round and between its sections.
 /// The message to the buttons is then the text block's own bottom padding plus
 /// this gap, twice the inset.
@@ -522,16 +539,26 @@ impl Component for DialogLayer {
         });
 
         if let Some(frame) = self.dialog.frame {
+            let (width, height, max_width, max_height) = if frame.fill {
+                (Size::window_percent(100.0), Size::window_percent(100.0), Size::window_percent(100.0), Size::window_percent(100.0))
+            } else {
+                (
+                    Size::px(frame.width),
+                    Size::px(frame.height),
+                    Size::window_percent(DIALOG_MAX_WIDTH_PERCENT),
+                    Size::window_percent(DIALOG_MAX_HEIGHT_PERCENT),
+                )
+            };
             let card = rect()
                 .a11y_id(a11y_id)
                 .a11y_focusable(false)
                 .a11y_role(AccessibilityRole::Dialog)
                 .a11y_alt(self.dialog.title.clone())
-                .tw(&tokens, DIALOG_FRAME)
-                .width(Size::px(frame.width))
-                .height(Size::px(frame.height))
-                .max_width(Size::window_percent(DIALOG_MAX_WIDTH_PERCENT))
-                .max_height(Size::window_percent(DIALOG_MAX_HEIGHT_PERCENT))
+                .tw(&tokens, if frame.fill { DIALOG_FILL } else { DIALOG_FRAME })
+                .width(width)
+                .height(height)
+                .max_width(max_width)
+                .max_height(max_height)
                 // A press on the card never reaches the panel's scrim.
                 .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
                 .maybe_child(self.dialog.content.clone().map(|content| {

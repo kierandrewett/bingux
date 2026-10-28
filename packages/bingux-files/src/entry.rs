@@ -17,6 +17,18 @@ pub enum Kind {
     Other,
 }
 
+/// What a bin's `.trashinfo` file says about an item of the Trash: where it
+/// was and when it was deleted. Only an entry listed from a bin's `files`
+/// folder has it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TrashMeta {
+    /// Where it was before it was deleted. `None` when there is no info file,
+    /// or it does not say: nobody knows where the item came from.
+    pub original: Option<PathBuf>,
+    /// When it was deleted, in the local time the info file records.
+    pub deleted: Option<SystemTime>,
+}
+
 /// A file or folder, as a listing shows it.
 ///
 /// A listing creates entries from the directory read alone, which gives a
@@ -51,6 +63,9 @@ pub struct Entry {
     pub mode: u32,
     pub uid: u32,
     pub gid: u32,
+    /// What the bin's `.trashinfo` says about this item, when the entry was
+    /// listed from a bin's `files` folder.
+    pub trash: Option<std::sync::Arc<TrashMeta>>,
 }
 
 impl Entry {
@@ -86,6 +101,7 @@ impl Entry {
             mode: 0,
             uid: 0,
             gid: 0,
+            trash: None,
         }
     }
 

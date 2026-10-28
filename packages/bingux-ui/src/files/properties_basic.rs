@@ -13,15 +13,13 @@ use freya::prelude::*;
 use freya::torin::prelude::Size2D;
 
 use super::actions::{apps_for, launch};
-use super::glyphs::category_icon;
+use super::file_icon::{FileIcon, FileKind, file_icon_view};
 use super::properties::Page;
 use super::properties_words::{
     NONE, PENDING, common_parent, contents, home_relative, size_with_bytes, time, total_size, types_line,
 };
-use super::view::entry_glyph;
 use crate::controls::{path_label, usage_bar};
 use crate::group::Group;
-use crate::icons::{self, Icon};
 use crate::rows::{property_row, row};
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -54,26 +52,16 @@ fn head(page: &Page) -> Element {
     let tokens = page.tokens;
     let first = page.first();
     let single = page.single();
-    let muted = Paint::Muted.color(&tokens);
     let head_icon = if single {
-        entry_glyph(first)
+        FileIcon::for_entry(first)
     } else {
-        shared_glyph(page)
+        shared_icon(page)
     };
-    let is_folder = page.is_folder();
     let glyph = |scale: f32| {
+        let edge = (IconSize::Hero.px() * scale).round() as u16;
         rect()
             .tw(&tokens, &[w_full(), h_full(), center()])
-            .child(icons::icon_scaled(
-                head_icon,
-                IconSize::Hero,
-                scale,
-                if is_folder {
-                    Paint::Accent.color(&tokens)
-                } else {
-                    muted
-                },
-            ))
+            .child(file_icon_view(&tokens, &head_icon, edge, false))
             .into_element()
     };
     let picture: Element = {
@@ -207,6 +195,21 @@ fn general(page: &Page) -> Group {
         Some(open) => row("Location").path_value(location_text).on_press(open),
         None => row("Location").path_value(location_text),
     });
+    // An item of the Trash says where it was and when it was deleted, from its
+    // info file.
+    if single && let Some(trash) = first.trash.as_ref() {
+        general = general.row(property_row(
+            "Original location",
+            trash
+                .original
+                .as_deref()
+                .map_or_else(|| "Unknown".to_owned(), |original| home_relative(original, page.home)),
+        ));
+        general = general.row(property_row(
+            "Deleted",
+            super::properties_words::time(trash.deleted).unwrap_or_else(|| "Unknown".to_owned()),
+        ));
+    }
     if single && first.symlink {
         general = general.row(property_row(
             "Link target",
@@ -238,7 +241,7 @@ fn open_with(page: &Page) -> Option<Group> {
     for app in apps.into_iter().take(APP_ROWS) {
         let path = first.path.clone();
         let name = app.name.clone();
-        open = open.row(row(name.clone()).on_press(EventHandler::new(move |()| {
+        open = open.row(row(name.clone()).leading_app(app.icon.clone()).on_press(EventHandler::new(move |()| {
             overlays.dismiss_dialog();
             if let Err(error) = launch(&app, &path) {
                 overlays.toast(format!("Could not start {name}: {error}."));
@@ -250,13 +253,12 @@ fn open_with(page: &Page) -> Option<Group> {
 
 /// The icon of several items: their kind's when they are all one kind, else
 /// a plain file.
-fn shared_glyph(page: &Page) -> Icon {
-    let entries = page.entries;
-    let kind = entries[0].category();
-    if entries.iter().all(|entry| entry.category() == kind) {
-        category_icon(kind)
+fn shared_icon(page: &Page) -> FileIcon {
+    let first = FileIcon::for_entry(&page.entries[0]);
+    if page.entries.iter().all(|entry| FileIcon::for_entry(entry).kind == first.kind) {
+        FileIcon::for_kind(first.kind)
     } else {
-        Icon::TextXGeneric
+        FileIcon::for_kind(FileKind::Unknown)
     }
 }
 

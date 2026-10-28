@@ -469,7 +469,10 @@ impl Loader {
         on_event: Box<dyn FnMut(Event) + Send>,
     ) -> Loader {
         let policy = shared_policy.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
-        let cache = options.use_cache.then(|| options.cache.clone().unwrap_or_else(Cache::shared));
+        // A bin's own listing carries what its info files say, which the cache
+        // does not keep, so it is always read.
+        let cache = (options.use_cache && crate::ops::BinFolder::of(&path).is_none())
+            .then(|| options.cache.clone().unwrap_or_else(Cache::shared));
         let mut master = Listing::new(path.clone());
         master.mount = policy.kind;
         Loader {

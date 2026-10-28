@@ -25,6 +25,7 @@
 
 pub mod recipes;
 pub mod catalogue;
+pub mod painted;
 pub mod tokens;
 
 use freya::prelude::*;
@@ -33,6 +34,7 @@ use crate::theme::Tokens;
 
 pub use recipes::*;
 pub use tokens::*;
+pub(crate) use painted::painted;
 
 /// Cross-axis or main-axis alignment.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -149,6 +151,15 @@ pub enum Util {
     /// while it is dragged away (predictive back), scaled by a run-time
     /// amount from 0 to 1 so it vanishes at rest.
     LiftShadow(f32),
+    /// A soft halo of `Paint`: `blur` px of gaussian blur and `spread` px of
+    /// growth, drawn outside the box, or inside it when `inset`. The focus
+    /// ring's blur while it arrives and leaves; the same shadow primitive as
+    /// `LiftShadow`.
+    Glow(Paint, f32, f32, bool),
+    /// The radii another box is painted with, grown by a number of pixels on
+    /// each round corner and square on each square one: a focus ring's, read
+    /// from its face.
+    RoundedRadii(Radii, f32),
     /// `Radius` times a run-time amount on the left corners only, for a card
     /// that slides in from the right.
     RoundedLeftScaled(Radius, f32),
@@ -270,10 +281,19 @@ pub const fn shadow(elevation: Elevation) -> Util {
 pub fn sheet_edge_shadow(amount: f32) -> Util {
     Util::SheetEdgeShadow(amount)
 }
+/// A soft halo around (or, `inset`, within) a box; see `Util::Glow`.
+pub fn glow(paint: Paint, blur: f32, spread: f32, inset: bool) -> Util {
+    Util::Glow(paint, blur, spread, inset)
+}
 /// A soft shadow all round, scaled by `amount` (0 to 1): the screen that
 /// predictive back lifts and shrinks. See `Util::LiftShadow`.
 pub fn lift_shadow(amount: f32) -> Util {
     Util::LiftShadow(amount)
+}
+/// `radii` grown by `extra` pixels on each round corner; see
+/// `Util::RoundedRadii`.
+pub fn rounded_radii(radii: Radii, extra: f32) -> Util {
+    Util::RoundedRadii(radii, extra)
 }
 /// `radius` scaled by `amount` (0 to 1) on the left corners only; see
 /// `Util::RoundedLeftScaled`.
@@ -289,7 +309,69 @@ pub enum Corners {
     All,
     Left,
     Right,
+    /// Both top corners: a tab, which rises from a flat strip.
+    Top,
+    /// Both bottom corners: a pane that rests on a rounded window's bottom edge.
+    Bottom,
+    /// The bottom right corner only: a pane in a window's bottom right corner,
+    /// beside a sidebar.
+    BottomRight,
     None,
+}
+
+impl Corners {
+    /// The radii these corners give a box of corner radius `r`: `r` on the
+    /// rounded corners, 0 on the square ones.
+    pub fn radii(self, r: f32) -> Radii {
+        let (tl, tr, br, bl) = match self {
+            Corners::All => (r, r, r, r),
+            Corners::Left => (r, 0.0, 0.0, r),
+            Corners::Right => (0.0, r, r, 0.0),
+            Corners::Top => (r, r, 0.0, 0.0),
+            Corners::Bottom => (0.0, 0.0, r, r),
+            Corners::BottomRight => (0.0, 0.0, r, 0.0),
+            Corners::None => (0.0, 0.0, 0.0, 0.0),
+        };
+        Radii { tl, tr, br, bl }
+    }
+}
+
+/// A box's four corner radii in pixels, top left, top right, bottom right,
+/// bottom left: the radii it is really painted with. A focus ring reads them
+/// from the face, so a square corner gets a square ring corner.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Radii {
+    pub tl: f32,
+    pub tr: f32,
+    pub br: f32,
+    pub bl: f32,
+}
+
+impl Radii {
+    /// Reads a painted box's radii.
+    pub fn of(radius: &CornerRadius) -> Self {
+        Self {
+            tl: radius.top_left(),
+            tr: radius.top_right(),
+            br: radius.bottom_right(),
+            bl: radius.bottom_left(),
+        }
+    }
+
+    /// The radii of a band `by` pixels outside this box: each round corner
+    /// grows by `by` (nested), each square corner stays square.
+    pub fn grown(self, by: f32) -> Self {
+        let grow = |r: f32| if r > 0.0 { r + by } else { 0.0 };
+        Self { tl: grow(self.tl), tr: grow(self.tr), br: grow(self.br), bl: grow(self.bl) }
+    }
+
+    pub fn array(self) -> [f32; 4] {
+        [self.tl, self.tr, self.br, self.bl]
+    }
+
+    fn corner_radius(self) -> CornerRadius {
+        CornerRadius::new(self.tl, self.tr, self.br, self.bl)
+    }
 }
 /// `radius` plus `extra` pixels on `corners` only, square elsewhere; see
 /// [`Corners`].
@@ -492,6 +574,7 @@ fn apply(rect: Rect, tokens: Option<&Tokens>, util: Util) -> Rect {
             | Util::Font(_)
             | Util::Surface { .. }
             | Util::Border(_)
+            | Util::Glow(..)
     );
     let tokens = match tokens {
         Some(tokens) => tokens,
@@ -525,6 +608,13 @@ fn apply(rect: Rect, tokens: Option<&Tokens>, util: Util) -> Rect {
             selected,
         )),
         Util::Border(line) => rect.border(line_border(tokens, line)),
+        Util::Glow(paint, blur, spread, inset) => rect.shadow(
+            Shadow::new()
+                .position(if inset { ShadowPosition::Inset } else { ShadowPosition::Normal })
+                .blur(blur)
+                .spread(spread)
+                .color(paint.color(tokens)),
+        ),
         _ => rect,
     }
 }
@@ -561,20 +651,16 @@ fn apply_layout(rect: Rect, util: Util) -> Rect {
             rect.corner_radius((r, 0.0, 0.0, r))
         }
         Util::RoundedOn(radius, corners, extra) => {
-            let r = radius.px() + extra;
-            match corners {
-                Corners::All => rect.corner_radius(r),
-                Corners::Left => rect.corner_radius((r, 0.0, 0.0, r)),
-                Corners::Right => rect.corner_radius((0.0, r, r, 0.0)),
-                Corners::None => rect.corner_radius(0.0),
-            }
+            rect.corner_radius(corners.radii(radius.px()).grown(extra).corner_radius())
         }
+        Util::RoundedRadii(radii, extra) => rect.corner_radius(radii.grown(extra).corner_radius()),
         Util::Bg(_)
         | Util::Fill(_)
         | Util::Ink(_)
         | Util::Font(_)
         | Util::Surface { .. }
-        | Util::Border(_) => rect,
+        | Util::Border(_)
+        | Util::Glow(..) => rect,
         Util::Shadow(elevation) => rect.shadow(elevation_shadow(elevation)),
         Util::SheetEdgeShadow(amount) => rect.shadow(
             Shadow::new()

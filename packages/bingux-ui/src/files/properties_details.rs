@@ -9,7 +9,7 @@
 //! in the tab, so a file with many of them only makes the tab longer.
 
 use bingux_files::ops::{HashOutcome, HashProgress};
-use bingux_files::media::{self, AvInfo, ImageInfo};
+use bingux_preview_core::media::{self, AvInfo, ImageInfo};
 use bingux_files::Category;
 use freya::prelude::*;
 

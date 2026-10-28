@@ -55,6 +55,10 @@
   headless session), and report the screenshot path or what you saw. A
   bingux-ui change that nobody has seen in the taxonomy is not done.
 
+- A menu, context menu or dropdown that lists applications shows each app's
+  icon. Build the list with `AppChoice` and `app_menu_items` or `app_dropdown`;
+  a `bingux-ui` test fails on a list of applications built any other way.
+
 ## Shared worktrees
 
 - Preserve unrelated local changes. Inspect the worktree before editing,

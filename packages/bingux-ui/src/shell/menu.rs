@@ -28,6 +28,7 @@ use std::ops::{Deref, DerefMut};
 
 use freya::prelude::*;
 
+use crate::app_icon::{AppChoice, app_icon};
 use crate::component::ComponentName;
 use crate::controls::press::{is_touch, use_press};
 use crate::focus::step_focus;
@@ -48,6 +49,9 @@ use super::type_ahead::{dimmed, marked_label, nav_key, now_ms, wake_after};
 pub struct MenuItem {
     pub(crate) label: String,
     pub(crate) icon: Option<Icon>,
+    /// The icon name of the application this row stands for, drawn full
+    /// colour at [`IconSize::AppSmall`]. Set only by [`app_menu_item`].
+    pub(crate) app: Option<String>,
     pub(crate) checked: Option<bool>,
     pub(crate) enabled: bool,
     pub(crate) destructive: bool,
@@ -100,6 +104,7 @@ pub fn menu_item(label: impl Into<String>, on_press: impl FnMut(()) + 'static) -
     MenuItem {
         label: label.into(),
         icon: None,
+        app: None,
         checked: None,
         enabled: true,
         destructive: false,
@@ -107,6 +112,48 @@ pub fn menu_item(label: impl Into<String>, on_press: impl FnMut(()) + 'static) -
         shortcut: None,
         submenu: None,
         on_press: EventHandler::new(on_press),
+    }
+}
+
+/// A row for an application: its icon in the leading slot, then its name. A
+/// placeholder of the same size holds the slot while the icon loads and an
+/// icon the theme lacks shows the generic application glyph, so the row never
+/// moves and is never empty. Every list of applications in a menu is built
+/// with this or [`app_menu_items`].
+pub fn app_menu_item(app: &AppChoice, on_press: impl FnMut(()) + 'static) -> MenuItem {
+    MenuItem {
+        app: Some(app.icon.clone()),
+        ..menu_item(app.label.clone(), on_press)
+    }
+}
+
+/// The rows of a menu, a submenu or a popover that lists applications, each
+/// with its icon. `on_pick` receives the application that was chosen.
+pub fn app_menu_items(
+    apps: impl IntoIterator<Item = AppChoice>,
+    on_pick: impl Fn(&AppChoice) + Clone + 'static,
+) -> Vec<MenuItem> {
+    apps.into_iter()
+        .map(|app| {
+            let on_pick = on_pick.clone();
+            let chosen = app.clone();
+            app_menu_item(&app, move |_| on_pick(&chosen))
+        })
+        .collect()
+}
+
+/// The width of the leading column of a panel of `items`: none when no row
+/// has a tick or an icon, the application icon's width when any row is an
+/// application, the control icon's otherwise. Every row of the panel takes
+/// the same width, so labels line up whatever mix of rows it holds.
+pub(super) fn leading_width(items: &[MenuItem]) -> Option<f32> {
+    let any = |item: &MenuItem| item.checked.is_some() || item.icon.is_some() || item.app.is_some();
+    if !items.iter().any(any) {
+        None
+    } else if items.iter().any(|item| item.app.is_some()) {
+        Some(IconSize::AppSmall.px())
+    } else {
+        Some(Dim::IconControl.px())
     }
 }
 
@@ -417,9 +464,7 @@ impl Component for MenuLayer {
             let items = items_at(level);
             // One leading column for every row of a panel that has a tick or
             // an icon anywhere, so the labels line up.
-            let leading = items
-                .iter()
-                .any(|item| item.checked.is_some() || item.icon.is_some());
+            let leading = leading_width(&items);
             items
                 .iter()
                 .enumerate()
@@ -500,8 +545,9 @@ struct MenuRow {
     overlays: Overlays,
     level: usize,
     index: usize,
-    /// Whether the panel reserves a leading column for ticks and icons.
-    leading: bool,
+    /// The width of the panel's leading column for ticks and icons, when it
+    /// reserves one.
+    leading: Option<f32>,
     highlighted: bool,
     /// The panel of this row's submenu, when that submenu is open.
     sub: Option<PanelRect>,
@@ -553,10 +599,18 @@ impl Component for MenuRow {
             (Some(true), _) => Some(Icon::Check),
             (_, icon) => icon,
         };
-        let leading = self.leading.then(|| {
+        let app = self.item.app.clone();
+        let leading = self.leading.map(|width| {
+            // A tick or an icon is centred in the column; an application icon
+            // fills it.
             rect()
-                .tw(&tokens, &[w(Dim::IconControl), h(Dim::IconControl)])
-                .maybe_child(glyph.map(|icon| icons::icon(icon, IconSize::Control, text_color)))
+                .width(Size::px(width))
+                .height(Size::px(width))
+                .tw(&tokens, &[center()])
+                .maybe_child(match app {
+                    Some(name) => Some(app_icon(name, IconSize::AppSmall).into_element()),
+                    None => glyph.map(|icon| icons::icon(icon, IconSize::Control, text_color).into_element()),
+                })
         });
         let trailing = has_sub.then(|| icons::icon(Icon::PanEnd, IconSize::Control, text_color));
         let shortcut = self.item.shortcut.clone().map(|text| {
@@ -670,7 +724,16 @@ impl Component for MenuButton {
         let items = self.items.clone();
         let open = overlays.menu_owned_by(a11y_id);
         let size = crate::controls::button::header_size(Dim::Button);
+        // The same rest state as an icon button: a bare glyph, filled only
+        // while hovered, pressed or open. A labelled menu button is a control
+        // and keeps its fill.
+        let base = if self.icon.is_some() {
+            Paint::Transparent
+        } else {
+            Paint::Control
+        };
         rect()
+            .component(if self.icon.is_some() { "IconMenuButton" } else { "MenuButton" })
             .a11y_id(a11y_id)
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Button)
@@ -696,7 +759,7 @@ impl Component for MenuButton {
                 &[
                     center(),
                     rounded(Radius::Control),
-                    surface(Paint::Control, hovering() || open, pressing(), false),
+                    surface(base, hovering() || open, pressing(), false),
                 ],
             )
             .on_sized(move |event: Event<SizedEventData>| {
@@ -770,8 +833,7 @@ impl Component for MenuButton {
                 self.icon.is_none().then(|| {
                     icons::icon(Icon::PanDown, IconSize::Mark, Paint::Muted.color(&tokens))
                 }),
-            )
-            .focusable(focus(), Radius::Control)
+            ).focusable(focus())
             .into_element()
     }
 }

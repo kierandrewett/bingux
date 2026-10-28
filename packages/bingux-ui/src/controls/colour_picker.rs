@@ -410,7 +410,7 @@ impl Component for SvSquare {
                 to_bottom,
             ))
             .child(thumb_handle(&tokens, thumb_x, thumb_y, chosen));
-        capture.bind(square).focusable(focus(), Radius::Mark)
+        capture.bind(square).focusable(focus())
     }
 }
 
@@ -502,7 +502,7 @@ impl Component for Strip {
                 (STRIP_H - thumb) / 2.0,
                 self.colour.with_a(255),
             ));
-        capture.bind(strip).focusable(focus(), Radius::Pill)
+        capture.bind(strip).focusable(focus())
     }
 }
 

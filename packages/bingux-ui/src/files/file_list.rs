@@ -102,6 +102,8 @@ impl Component for ListView {
     }
 
     fn render(&self) -> impl IntoElement {
+        #[cfg(test)]
+        super::hover_card::renders::list();
         let ctx = self.shared.get();
         let icon_px = self.icon_px;
         let compact = self.compact;
@@ -109,7 +111,7 @@ impl Component for ListView {
         let mut viewport = ctx.viewport;
         let width = viewport.read().width();
         let row_width = width - 2.0 * row_padding();
-        let plan = plan_in(&self.layout, f32::from(icon_px), row_width, ctx.location_column());
+        let plan = plan_in(&self.layout, f32::from(icon_px), row_width, ctx.column_set());
         ctx.lattice.set(Some(Lattice {
             columns: 1,
             count: self.rows.len(),
@@ -377,7 +379,7 @@ impl Component for FileRow {
             _ if self.icon_px >= LIST_DECODE_PX => Preview::Full,
             _ => Preview::Cached,
         };
-        let icon = face(&tokens, entry, self.icon_px, self.bucket, preview);
+        let icon = face(&tokens, entry, self.icon_px, self.bucket, preview, selected);
         let now = SystemTime::now();
         let dates = if ctx.recent {
             DateStyle::Relative
@@ -427,8 +429,16 @@ impl Component for FileRow {
             } else {
                 bingux_files::display::size(entry.size)
             };
-            let modified = cell_text_styled(Column::Modified, entry, now, &ctx.home, dates);
-            let detail = [size.as_str(), modified.as_str()]
+            let when = if entry.trash.is_some() {
+                // In the Trash the date that matters is when it was deleted.
+                match cell_text_styled(Column::Deleted, entry, now, &ctx.home, dates) {
+                    text if text.is_empty() => text,
+                    text => format!("Deleted {text}"),
+                }
+            } else {
+                cell_text_styled(Column::Modified, entry, now, &ctx.home, dates)
+            };
+            let detail = [size.as_str(), when.as_str()]
                 .iter()
                 .filter(|part| !part.is_empty())
                 .copied()
@@ -455,7 +465,7 @@ impl Component for FileRow {
                     .filter(|_| *column == Column::Location)
                     .unwrap_or_else(|| cell_text_styled(*column, entry, now, &ctx.home, dates));
                 let content: Element = match column {
-                    Column::Location => path_label(text)
+                    Column::Location | Column::OriginalLocation => path_label(text)
                         .style(CAPTION)
                         .ink(crate::typography::Ink::Muted)
                         .tooltip(false)

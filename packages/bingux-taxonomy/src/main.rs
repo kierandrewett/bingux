@@ -39,6 +39,10 @@ fn main() {
         .size(1320.0, 820.0)
         .title("Taxonomy")
         .borderless()
+        .about(bingux_ui::app_info!(
+            description = "Every Bingux UI component, icon and token, running",
+            licence_text = include_str!("../../../COPYING"),
+        ))
         .usage(usage())
         .run(|| app::App);
 }

@@ -3,12 +3,10 @@
 //! marked. Plain data and functions, so the ordering and the text a pick
 //! produces are tested without a window.
 
-use std::ffi::OsStr;
 use std::ops::Range;
 use std::path::PathBuf;
 
 use bingux_files::location::Completion;
-use bingux_files::places::{SpecialFolder, special_folder_in};
 
 /// One suggestion.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -17,8 +15,6 @@ pub(super) struct Row {
     pub is_dir: bool,
     /// The bytes of `name` that match what was typed, to draw in bold.
     pub matched: Range<usize>,
-    /// Which user folder this is, by its path as shown.
-    pub special: Option<SpecialFolder>,
 }
 
 /// The answer to one typed text.
@@ -62,10 +58,6 @@ impl Suggestions {
             .chain(far)
             .map(|candidate| Row {
                 matched: find_match(&candidate.name, &completion.prefix),
-                special: candidate
-                    .is_dir
-                    .then(|| special_folder_in(&completion.dir, OsStr::new(&candidate.name)))
-                    .flatten(),
                 name: candidate.name.clone(),
                 is_dir: candidate.is_dir,
             })

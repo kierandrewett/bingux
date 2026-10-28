@@ -294,8 +294,7 @@ impl Component for ActionButton {
                     .label(&tokens, self.text.clone())
                     .max_lines(1),
             )
-            .maybe_child(mark)
-            .focusable(focus(), corner)
+            .maybe_child(mark).focusable(focus())
             // The focus wrapper is what the row lays out, so it grows too.
             .maybe(self.grow, |wrapper| {
                 wrapper.tw(&tokens, &[w_flex(), grow_children()])
@@ -417,8 +416,7 @@ impl Component for RowButton {
                     .in_ink(Ink::Text)
                     .label(&tokens, self.text.clone())
                     .max_lines(1),
-            )
-            .focusable(focus(), if fitted { Radius::Inner } else { Radius::Control })
+            ).focusable(focus())
     }
 }
 
@@ -713,8 +711,7 @@ impl Component for IconButton {
                     },
                 )
                 .into()
-            })
-            .focusable(focus(), radius);
+            }).focusable(focus());
         match &self.tooltip {
             Some(text) => hover_tip(button, text.clone()),
             None => Element::from(button),

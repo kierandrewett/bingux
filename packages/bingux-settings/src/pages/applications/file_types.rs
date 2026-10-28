@@ -8,8 +8,7 @@ use std::collections::HashMap;
 use freya::prelude::*;
 
 use bingux_ui::prelude::*;
-use bingux_ui::files::category_icon;
-use bingux_ui::files::model::Category as FileCategory;
+use bingux_ui::files::{FileIcon, FileKind};
 use bingux_ui::shell::{MenuItem, menu_item};
 
 use super::{FileType, LoadMore, ModelState, PAGE, app_name, set_file_type, set_limit};
@@ -55,80 +54,37 @@ impl Category {
 
     /// The icon the file view draws for this kind of file.
     fn icon(self) -> Icon {
-        category_icon(match self {
-            Self::Images => FileCategory::Image,
-            Self::Audio => FileCategory::Audio,
-            Self::Video => FileCategory::Video,
-            Self::Documents => FileCategory::Document,
-            Self::Archives => FileCategory::Archive,
-            Self::Code => FileCategory::Code,
-            Self::Fonts | Self::Other => FileCategory::Other,
+        FileIcon::for_kind(match self {
+            Self::Images => FileKind::Image,
+            Self::Audio => FileKind::Audio,
+            Self::Video => FileKind::Video,
+            Self::Documents => FileKind::Document,
+            Self::Archives => FileKind::Archive,
+            Self::Code => FileKind::Code,
+            Self::Fonts => FileKind::Font,
+            Self::Other => FileKind::Unknown,
         })
+        .glyph
     }
 }
 
-/// The category of a content type, from its name.
+/// The category of a content type: the file view's own judgement of what
+/// kind of file it is ([`FileKind::of_mime`]), grouped for the list.
 fn category_of(mime: &str) -> Category {
-    let (kind, subtype) = mime.split_once('/').unwrap_or((mime, ""));
-    match kind {
-        "image" => return Category::Images,
-        "audio" => return Category::Audio,
-        "video" => return Category::Video,
-        _ => {}
+    match FileKind::of_mime(mime) {
+        FileKind::Image => Category::Images,
+        FileKind::Audio => Category::Audio,
+        FileKind::Video => Category::Video,
+        FileKind::Text
+        | FileKind::Pdf
+        | FileKind::Spreadsheet
+        | FileKind::Presentation
+        | FileKind::Document => Category::Documents,
+        FileKind::Archive => Category::Archives,
+        FileKind::Font => Category::Fonts,
+        FileKind::Code => Category::Code,
+        FileKind::Folder | FileKind::Executable | FileKind::Unknown => Category::Other,
     }
-    let has = |parts: &[&str]| parts.iter().any(|part| subtype.contains(part));
-    if kind == "font" || has(&["font", "woff", "truetype", "opentype", "x-ttf", "x-otf"]) {
-        return Category::Fonts;
-    }
-    if has(&[
-        "pdf",
-        "postscript",
-        "msword",
-        "rtf",
-        "epub",
-        "djvu",
-        "abiword",
-        "fictionbook",
-        "openxmlformats",
-        "oasis.opendocument",
-        "vnd.ms-",
-        "x-cbz",
-        "x-cbr",
-        "markdown",
-        "csv",
-        "calendar",
-    ]) {
-        return Category::Documents;
-    }
-    if has(&[
-        "zip", "tar", "gzip", "bzip", "xz", "7z", "rar", "zstd", "compress", "cpio", "archive",
-        "lzma", "lz4", "iso9660", "cd-image", "x-rpm", "debian",
-    ]) {
-        return Category::Archives;
-    }
-    if has(&[
-        "json",
-        "xml",
-        "javascript",
-        "shellscript",
-        "x-python",
-        "x-perl",
-        "x-ruby",
-        "x-php",
-        "x-java",
-        "sql",
-        "yaml",
-        "toml",
-        "x-csrc",
-        "wasm",
-    ]) || (kind == "text" && subtype.starts_with("x-"))
-    {
-        return Category::Code;
-    }
-    if kind == "text" {
-        return Category::Documents;
-    }
-    Category::Other
 }
 
 /// The first unlocalised `<comment>` of a type's database file, which is what
@@ -225,8 +181,6 @@ pub(super) struct OtherFileTypes {
     pub overlays: Overlays,
     pub apps: Vec<AppEntry>,
     pub types: Vec<FileType>,
-    /// The application icons are cached, so the dropdowns may draw them.
-    pub icons: bool,
 }
 
 impl Component for OtherFileTypes {
@@ -299,7 +253,6 @@ impl Component for OtherFileTypes {
                 &self.apps,
                 entry.file,
                 ambiguous,
-                self.icons,
             ));
             if index + 1 == visible && total > visible {
                 element = LoadMore {
@@ -434,7 +387,6 @@ fn file_type_row(
     apps: &[AppEntry],
     file: &FileType,
     ambiguous: bool,
-    icons: bool,
 ) -> Row {
     let mut ids: Vec<String> = Vec::new();
     ids.extend(file.candidates.iter().cloned());
@@ -443,20 +395,17 @@ fn file_type_row(
             ids.push(id.clone());
         }
     }
-    let mut options: Vec<(String, String)> = Vec::new();
-    let mut icon_names: Vec<String> = Vec::new();
+    let mut options: Vec<AppChoice> = Vec::new();
     if file.current.is_none() {
-        options.push((String::new(), "Not set".to_string()));
-        icon_names.push(String::new());
+        options.push(AppChoice::new(String::new(), "Not set", String::new()));
     }
     for id in &ids {
-        options.push((id.clone(), app_name(apps, id)));
-        icon_names.push(
-            apps.iter()
-                .find(|app| app.id == *id)
-                .map(|app| app.icon.clone())
-                .unwrap_or_default(),
-        );
+        let icon = apps
+            .iter()
+            .find(|app| app.id == *id)
+            .map(|app| app.icon.clone())
+            .unwrap_or_default();
+        options.push(AppChoice::new(id.clone(), app_name(apps, id), icon));
     }
     let mime = file.mime.clone();
     // The extensions are the secondary line; the MIME type stands in when a
@@ -467,7 +416,7 @@ fn file_type_row(
     } else {
         file.extensions.clone()
     };
-    let menu = dropdown(
+    let menu = app_dropdown(
         options,
         file.current.clone().unwrap_or_default(),
         move |app: String| {
@@ -478,7 +427,6 @@ fn file_type_row(
     )
     .width(Dim::FieldApps)
     .title(file.title.clone());
-    let menu = if icons { menu.app_icons(icon_names) } else { menu };
     row(file.title.clone())
         .leading(file.category.icon())
         .subtitle(secondary)

@@ -495,7 +495,7 @@ impl Component for AppearancePage {
                 ),
             ));
 
-        page_column()
+        bingux_ui::stage::staged(page_column()
             .child(PageHead::new())
             .child(picture)
             .child(WallpaperPicker {
@@ -599,7 +599,7 @@ impl Component for AppearancePage {
                     "\"Accent colour\" and \"Colour scheme\" are not available on this system."
                         .into(),
                 )))
-            }))
+            })))
     }
 }
 

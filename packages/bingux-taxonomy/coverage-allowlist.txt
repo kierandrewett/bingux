@@ -63,3 +63,6 @@ file:files/folder_table.rs # folder_table(), the `file:`/`recent:`/`bingux-files
 
 # The chat app's icon fork, behind the `chat-icons` feature.
 file:chat_icons.rs # ChatWeight and the fork's glyph data for choosing icons; an application ships `Icon`'s named set, which "Icon set" shows
+
+# Mounting a page a group a frame, and what a page's host puts under it.
+file:stage.rs # staged(), provide_page() and after_page(): when each part of a page mounts, so no pixels of their own; a page looks the same once whole, and every Settings page is the demonstration (tests in mount_tests.rs)

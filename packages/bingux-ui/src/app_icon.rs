@@ -355,6 +355,53 @@ fn use_resolved(name: &str, size: u32) -> Option<Option<IconFile>> {
     }
 }
 
+/// An application the user can choose: the key the caller gets back, the
+/// label to show, and the icon name from its desktop entry. It is the only
+/// way to put an application in a menu ([`crate::shell::app_menu_items`]) or a
+/// dropdown ([`crate::controls::app_dropdown`]), so a list of applications
+/// cannot be built without its icons. An empty or unknown `icon` shows the
+/// generic application glyph, never an empty slot.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AppChoice {
+    pub key: String,
+    pub label: String,
+    pub icon: String,
+}
+
+impl AppChoice {
+    pub fn new(key: impl Into<String>, label: impl Into<String>, icon: impl Into<String>) -> Self {
+        Self {
+            key: key.into(),
+            label: label.into(),
+            icon: icon.into(),
+        }
+    }
+}
+
+/// What an application icon slot shows. The slot is always the same size, so
+/// a row never moves between states.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum IconSlot {
+    /// The lookup is still running: an empty tile.
+    Pending,
+    /// The theme has the icon: the icon.
+    Found,
+    /// No icon name, or none in the theme: the generic application glyph.
+    Generic,
+}
+
+/// The state of the slot for icon `name` given the lookup `found`.
+pub(crate) fn slot_of(name: &str, found: &Option<Option<IconFile>>) -> IconSlot {
+    if name.is_empty() {
+        return IconSlot::Generic;
+    }
+    match found {
+        None => IconSlot::Pending,
+        Some(Some(_)) => IconSlot::Found,
+        Some(None) => IconSlot::Generic,
+    }
+}
+
 /// An application icon of `size` for the icon name `name`.
 pub fn app_icon(name: impl Into<String>, size: IconSize) -> AppIcon {
     AppIcon {
@@ -375,6 +422,11 @@ impl Component for AppIcon {
         let size = self.size.px();
         // Ask for twice the size so the icon stays sharp on a HiDPI output.
         let found = use_resolved(&self.name, (size * 2.0).ceil() as u32);
+        let found = if slot_of(&self.name, &found) == IconSlot::Generic {
+            Some(None)
+        } else {
+            found
+        };
         match found {
             Some(Some(IconFile {
                 path,
@@ -437,5 +489,129 @@ impl Component for AppIcon {
                 ))
                 .into_element(),
         }
+    }
+}
+
+#[cfg(test)]
+mod slot_tests {
+    use super::*;
+
+    fn file() -> IconFile {
+        IconFile {
+            path: PathBuf::from("/x.png"),
+            svg: None,
+        }
+    }
+
+    #[test]
+    fn a_running_lookup_is_a_placeholder_and_a_miss_is_the_generic_glyph() {
+        assert_eq!(slot_of("vlc", &None), IconSlot::Pending);
+        assert_eq!(slot_of("vlc", &Some(Some(file()))), IconSlot::Found);
+        assert_eq!(slot_of("vlc", &Some(None)), IconSlot::Generic);
+    }
+
+    #[test]
+    fn an_empty_name_is_the_generic_glyph_at_once() {
+        assert_eq!(slot_of("", &None), IconSlot::Generic);
+        assert_eq!(slot_of("", &Some(Some(file()))), IconSlot::Generic);
+    }
+
+    #[test]
+    fn a_choice_keeps_its_icon_name() {
+        let choice = AppChoice::new("a.desktop", "A", "a-icon");
+        assert_eq!(choice.icon, "a-icon");
+    }
+}
+
+/// A list of applications in a menu, a context menu or a dropdown shows each
+/// application's icon. The API makes it hard to forget (`AppChoice`,
+/// `app_menu_items`, `app_dropdown` are the only ways in); this test checks
+/// the source of the whole workspace for the ways around it.
+#[cfg(test)]
+mod enforcement_tests {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    /// Where a list of applications comes from.
+    const APP_SOURCES: &[&str] = &[
+        "apps_for(",
+        "installed()",
+        "open_with::",
+        "DesktopAppInfo",
+        "AppEntry",
+        "DesktopApp",
+    ];
+    /// What builds a menu or a dropdown option list.
+    const LIST_BUILDERS: &[&str] = &["menu_item(", "submenu(", "dropdown(", "Row::Sub("];
+    /// What puts an application's icon on the rows of such a list.
+    const ICON_PATHS: &[&str] = &["app_menu_item", "AppChoice", "app_dropdown", "leading_app"];
+    /// Files that read applications and build menus, but whose menus do not
+    /// list applications, each with the reason.
+    const NOT_APP_LISTS: &[(&str, &str)] = &[
+        (
+            "bingux-settings/src/pages/applications.rs",
+            "the menus are the actions of one application's row, and every row has its icon (leading_app)",
+        ),
+        (
+            "bingux-settings/src/pages/sound.rs",
+            "the dropdowns list audio devices; the per-application rows have their icons (leading app)",
+        ),
+    ];
+
+    fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = fs::read_dir(dir) else { return };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name();
+            if path.is_dir() {
+                if name != "target" && name != "vendor" {
+                    sources(&path, out);
+                }
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                out.push(path);
+            }
+        }
+    }
+
+    /// The code of a file, without its test module (the first `#[cfg(test)]`
+    /// or `#[cfg(all(test`).
+    fn code(text: &str) -> &str {
+        let cut = ["#[cfg(test)]", "#[cfg(all(test"]
+            .iter()
+            .filter_map(|marker| text.find(marker))
+            .min()
+            .unwrap_or(text.len());
+        &text[..cut]
+    }
+
+    #[test]
+    fn every_list_of_applications_carries_icons() {
+        let packages = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let mut files = Vec::new();
+        sources(&packages, &mut files);
+        assert!(files.len() > 100, "the workspace sources were found");
+        let mut problems = Vec::new();
+        for path in files {
+            let relative = path.strip_prefix(&packages).unwrap_or(&path).to_string_lossy().into_owned();
+            let text = fs::read_to_string(&path).unwrap_or_default();
+            let code = code(&text);
+            if !relative.ends_with("controls/dropdown.rs") && code.contains("OptionIcon::App(") {
+                problems.push(format!("{relative}: OptionIcon::App outside the dropdown; use app_dropdown"));
+            }
+            if !relative.ends_with("app_icon.rs") && code.contains(".app_icons(") {
+                problems.push(format!("{relative}: .app_icons(..) was removed; use app_dropdown(Vec<AppChoice>, ..)"));
+            }
+            let reads_apps = APP_SOURCES.iter().any(|token| code.contains(token));
+            let builds_lists = LIST_BUILDERS.iter().any(|token| code.contains(token));
+            let has_icons = ICON_PATHS.iter().any(|token| code.contains(token));
+            let allowed = NOT_APP_LISTS.iter().any(|(file, _)| relative.ends_with(file));
+            if reads_apps && builds_lists && !has_icons && !allowed {
+                problems.push(format!(
+                    "{relative}: reads applications and builds a menu or dropdown without app icons; \
+                     use AppChoice with app_menu_items or app_dropdown"
+                ));
+            }
+        }
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
     }
 }

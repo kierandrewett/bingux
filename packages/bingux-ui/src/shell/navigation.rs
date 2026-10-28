@@ -180,8 +180,7 @@ impl Component for SidebarRow {
                 BODY.label(&tokens, self.label.clone())
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
-            )
-            .focusable(focus(), Radius::Control)
+            ).focusable(focus())
             .tw(&tokens, &[w_full()])
     }
 }

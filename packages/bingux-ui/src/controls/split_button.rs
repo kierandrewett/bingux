@@ -305,7 +305,7 @@ impl Component for SplitButton {
                         .clone()
                         .map(|text| BODY.in_ink(Ink::Text).label(&tokens, text).max_lines(1)),
                 )
-                .focusable_on(primary_focus(), outer, corners)
+                .focusable(primary_focus())
         };
         let primary = match &self.tooltip {
             Some(text) => hover_tip(primary, text.clone()),
@@ -401,11 +401,9 @@ impl Component for SplitButton {
                     IconSize::Control,
                     Paint::Text.color(&tokens),
                 ))
-                .focusable_on(
+                .focusable(
                     // The open menu owns the keyboard; the ring would run under it.
                     if open { Focus::Not } else { menu_focus() },
-                    outer,
-                    Corners::Right,
                 );
             // No tooltip: the shield over an open menu hides the pointer's
             // leave from it, so it would stay on screen beside the menu.

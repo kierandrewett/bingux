@@ -28,8 +28,6 @@
 //! | [`display`] | Sizes and times as people read them |
 //! | [`ops`] | Rename, create, bin, delete, copy, move, compress, extract and properties (blocking, cancellable; atomic renames, durable on removable media, nothing removed before it is safe) |
 //! | [`thumbs`] | Looking up thumbnails the desktop has already made |
-//! | [`media`] | A picture's size and camera, a recording's length and codecs, from the file's header |
-//! | [`preview`] | What Quick Look shows for a file: its kind, the head of a text file, stepping between neighbours |
 //!
 //! # Reading a folder
 //!
@@ -71,12 +69,10 @@ pub mod filter;
 pub mod listing;
 pub mod loader;
 pub mod location;
-pub mod media;
 pub mod mime;
 pub mod mounts;
 pub mod ops;
 pub mod places;
-pub mod preview;
 pub mod recent;
 pub mod request;
 pub mod search;

@@ -119,6 +119,9 @@ pub struct Tokens {
     pub surface: Color,
     /// Sidebar background.
     pub sidebar: Color,
+    /// The strip behind a row of tabs: one step darker than `bg`. The selected
+    /// tab and the content under it are `bg`.
+    pub tab_strip: Color,
     /// Fill of the group cards, dialogs and popovers.
     pub elevated: Color,
     /// Fill of buttons, fields, dropdowns and segmented controls. One step
@@ -236,6 +239,7 @@ impl Tokens {
             bg: p.content,
             surface: p.content,
             sidebar: p.sidebar,
+            tab_strip: p.strip,
             elevated: p.card,
             control: p.control,
             raised: p.raised,
@@ -258,7 +262,6 @@ impl Tokens {
             on_warning: on_fill(warning, &p),
             on_floating: on_colour(composite(floating, p.content)),
             notice: notice_palettes(
-                &p,
                 scheme.is_dark(),
                 [accent, success, warning, danger],
                 floating,
@@ -334,18 +337,17 @@ impl BannerKind {
 
 /// The colours of one [`BannerKind`] in one scheme and accent. The fill is an
 /// opaque low-chroma tint of the kind's hue, so the notice reads over any
-/// content it floats on. The ink (text, icon and dismiss glyph) is the same
-/// hue moved in lightness: darker than the fill on a light scheme, lighter on
-/// a dark one, until it reaches AAA (7:1) on the fill. The edge is the hue
-/// itself at 3:1 on the fill. The action button is filled with the hue and
-/// carries its own on-colour.
+/// content it floats on. The ink (text, icon, dismiss glyph and the label of
+/// an action button) is the same hue moved in lightness: darker than the fill
+/// on a light scheme, lighter on a dark one, until it reaches AAA (7:1) on the
+/// fill. The edge is the hue itself at 3:1 on the fill. An action button has
+/// no colour of its own: it is quiet, the ink on the fill with the hover and
+/// press layers over it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NoticePalette {
     pub fill: Color,
     pub ink: Color,
     pub edge: Color,
-    pub action: Color,
-    pub on_action: Color,
 }
 
 /// The lightness of the tinted fill, how much of the hue's chroma it keeps
@@ -358,14 +360,12 @@ const NOTICE_INK_CHROMA_MAX: f32 = 0.13;
 /// The palettes of every kind, indexed by [`BannerKind::index`]: `hues` are the
 /// accent, success, warning and danger fills.
 fn notice_palettes(
-    p: &Palette,
     dark: bool,
     hues: [Color; 4],
     floating: Color,
     on_floating: Color,
 ) -> [NoticePalette; 5] {
     use crate::contrast::{AAA_TEXT, Oklch};
-    let layers = p.layers();
     let (fill_l, keep, max) = if dark { NOTICE_FILL_DARK } else { NOTICE_FILL_LIGHT };
     let tinted = |hue: Color| {
         let h = Oklch::from_colour(hue);
@@ -378,18 +378,13 @@ fn notice_palettes(
         .to_colour();
         let ink = ensure_contrast(seed, &[fill], AAA_TEXT);
         let edge = ensure_contrast(hue, &[fill], AA_LARGE);
-        let mut surfaces = layers.to_vec();
-        surfaces.push(fill);
-        let action = fit_fill(ensure_contrast(hue, &surfaces, AA_LARGE), p);
-        NoticePalette { fill, ink, edge, action, on_action: on_fill(action, p) }
+        NoticePalette { fill, ink, edge }
     };
     let [info, success, warning, error] = hues.map(tinted);
     let neutral = NoticePalette {
         fill: floating,
         ink: on_floating,
         edge: composite(rgba(1.0, 1.0, 1.0, 0.16), floating),
-        action: on_floating,
-        on_action: on_colour(on_floating),
     };
     [neutral, info, success, warning, error]
 }
@@ -481,6 +476,9 @@ pub(crate) struct Palette {
     pub(crate) content: Color,
     /// Sidebar, one step off the content.
     pub(crate) sidebar: Color,
+    /// The tab strip behind a window's tabs: one step darker than the content,
+    /// so the selected tab, painted in the content's colour, stands out of it.
+    pub(crate) strip: Color,
     /// Group cards on a page.
     pub(crate) card: Color,
     /// Buttons, fields and dropdowns sitting on a card.
@@ -543,6 +541,7 @@ impl Palette {
     pub(crate) fn dark() -> Self {
         Self {
             content: hex(0x222226),
+            strip: hex(0x18181b),
             sidebar: hex(0x2e2e32),
             card: hex(0x343438),
             control: hex(0x424246),
@@ -571,6 +570,7 @@ impl Palette {
         Self {
             content: hex(0xfafafb),
             sidebar: hex(0xebebed),
+            strip: hex(0xebebed),
             card: hex(0xffffff),
             control: hex(0xf1f1f3),
             raised: hex(0xffffff),

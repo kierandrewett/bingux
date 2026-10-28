@@ -13,6 +13,8 @@ use crate::motion::use_tween;
 use crate::nav::router::{try_router, use_entry_id, use_fragment};
 use crate::shell::navigation::{section_top, use_page_scroll};
 use crate::shell::sections::SectionRegistry;
+use crate::style::*;
+use crate::surface::use_tokens;
 
 /// A title as a fragment: its letters and digits in lower case, words joined
 /// by `-` (`Use this connection` is `use-this-connection`).
@@ -36,21 +38,61 @@ pub fn slug(title: &str) -> String {
 /// What [`use_anchor`] gives a row.
 #[derive(Clone)]
 pub struct Anchor {
-    flash: f32,
+    flashing: State<bool>,
+    /// The row is the target of the location, or its highlight is still running.
+    lit: bool,
     on_sized: EventHandler<Event<SizedEventData>>,
 }
 
 impl Anchor {
-    /// 0 to 1: how strongly the row is lit as the target of the location. It
-    /// rises when the page has scrolled to the row and fades over about a
-    /// second.
-    pub fn flash(&self) -> f32 {
-        self.flash
+    /// The highlight to lay over the row, as its last child, while the row is
+    /// the target of the location: it rises when the page has scrolled to the
+    /// row and fades over about a second. `None` for every other row, which
+    /// therefore carries no tween: a page of forty rows has one highlight, and
+    /// that one only while the location points at it.
+    pub fn flash(&self) -> Option<Element> {
+        self.lit.then(|| {
+            AnchorFlash {
+                flashing: self.flashing,
+            }
+            .into()
+        })
     }
 
     /// Put this on the row's root: it tells the anchor where the row is.
     pub fn on_sized(&self) -> EventHandler<Event<SizedEventData>> {
         self.on_sized.clone()
+    }
+}
+
+/// The highlight of the row a location points at: rises over 160 ms, then fades
+/// over 1.1 s. While it is not lit it draws nothing.
+#[derive(PartialEq)]
+struct AnchorFlash {
+    flashing: State<bool>,
+}
+
+impl Component for AnchorFlash {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let mut flashing = self.flashing;
+        let on = flashing();
+        let flash = use_tween(if on { 1.0 } else { 0.0 }, if on { 160 } else { 1100 });
+        // Fully lit: start fading.
+        let peaked = on && flash >= 0.98;
+        use_side_effect_with_deps(&peaked, move |peaked| {
+            if *peaked {
+                flashing.set(false);
+            }
+        });
+        rect()
+            .position(Position::new_absolute().top(0.0).left(0.0))
+            .maybe(flash > 0.01, |lit| {
+                lit.width(Size::fill())
+                    .height(Size::fill())
+                    .tw(&tokens, &[bg(Paint::Accent)])
+                    .opacity(flash * 0.22)
+            })
     }
 }
 
@@ -67,19 +109,11 @@ pub fn use_anchor(id: &str) -> Anchor {
     let scroll = use_page_scroll();
     let registry = use_try_consume::<SectionRegistry>();
     let mut flashing = use_state(|| false);
-    let flash = use_tween(if flashing() { 1.0 } else { 0.0 }, if flashing() { 160 } else { 1100 });
     let done = use_hook(|| Rc::new(Cell::new(false)));
     let last_y = use_hook(|| Rc::new(Cell::new(None::<f32>)));
     if !targeted {
         done.set(false);
     }
-    // Fully lit: start fading.
-    let peaked = flashing() && flash >= 0.98;
-    use_side_effect_with_deps(&peaked, move |peaked| {
-        if *peaked {
-            flashing.set(false);
-        }
-    });
 
     let mut activate = {
         let done = done.clone();
@@ -111,7 +145,11 @@ pub fn use_anchor(id: &str) -> Anchor {
         }
     })
     .into();
-    Anchor { flash, on_sized }
+    Anchor {
+        flashing,
+        lit: targeted || flashing(),
+        on_sized,
+    }
 }
 
 #[cfg(test)]

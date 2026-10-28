@@ -142,8 +142,7 @@ impl Component for SplitPane {
                 }
                 event.stop_propagation();
                 dragging.set(true);
-            })
-            .focusable(focus(), Radius::Pill);
+            }).focusable(focus());
 
         // The first pane is a run-time share of the length, so a raw percent;
         // the second takes what the divider leaves.

@@ -386,10 +386,14 @@ pub const COLOUR_PICKER: &[Spec] = &[
     .script("click-text Pick a colour; wait 600; save {out}"),
 ];
 
+/// How tall a framed strip is: the bar and a few lines of page.
+const FRAME_HEIGHT: f32 = 168.0;
+
 pub const TABS: &[Spec] = &[
     Spec::live("Select, close, add, drag to reorder", || {
         live_tabs(&["Home", "Documents", "Downloads"])
-    }),
+    })
+    .page(FRAME_HEIGHT),
     Spec::live("Many tabs: scroll, fade, tab list", || {
         live_tabs(&[
             "Home",
@@ -405,37 +409,107 @@ pub const TABS: &[Spec] = &[
             "Templates",
             "Public",
         ])
-    }),
+    })
+    .page(FRAME_HEIGHT),
+    Spec::forced("Nine tabs: the strip scrolls, the selected tab in view", || {
+        framed(
+            tab_strip(
+                [
+                    "Home",
+                    "Documents",
+                    "Downloads",
+                    "Pictures",
+                    "Music",
+                    "Videos",
+                    "Projects",
+                    "Archive",
+                    "Backups",
+                ]
+                .iter()
+                .enumerate()
+                .map(|(index, name)| TabItem::new(index as u64 + 1, *name))
+                .collect(),
+                5,
+            )
+            .on_new(|_| {}),
+            None,
+        )
+    })
+    .page(FRAME_HEIGHT),
     Spec::forced("Long titles", || {
-        tab_strip(vec![TabItem::new(1, LONG), TabItem::new(2, "Short")], 1)
-            .on_new(|_| {})
-            .into_element()
-    }),
+        framed(
+            tab_strip(vec![TabItem::new(1, LONG), TabItem::new(2, "Short")], 1).on_new(|_| {}),
+            None,
+        )
+    })
+    .page(FRAME_HEIGHT),
     Spec::forced("With icons", || {
-        tab_strip(
-            vec![
-                TabItem::new(1, "Home").icon(Icon::Folder),
-                TabItem::new(2, "Computer").icon(Icon::Computer),
-                TabItem::new(3, "Documents").icon(Icon::DocumentOpen),
-            ],
-            2,
+        framed(
+            tab_strip(
+                vec![
+                    TabItem::new(1, "Home").icon(Icon::Folder),
+                    TabItem::new(2, "Computer").icon(Icon::Computer),
+                    TabItem::new(3, "Documents").icon(Icon::DocumentOpen),
+                ],
+                2,
+            )
+            .on_new(|_| {}),
+            None,
         )
-        .on_new(|_| {})
-        .into_element()
-    }),
+    })
+    .page(FRAME_HEIGHT),
     Spec::forced("Single tab", || {
-        tab_strip(vec![TabItem::new(1, "Home")], 1)
-            .on_new(|_| {})
-            .into_element()
-    }),
+        framed(tab_strip(vec![TabItem::new(1, "Home")], 1).on_new(|_| {}), None)
+    })
+    .page(FRAME_HEIGHT),
     Spec::forced("Without a New tab button", || {
-        tab_strip(
-            vec![TabItem::new(1, "Home"), TabItem::new(2, "Documents")],
-            1,
+        framed(
+            tab_strip(vec![TabItem::new(1, "Home"), TabItem::new(2, "Documents")], 1),
+            None,
         )
-        .into_element()
-    }),
+    })
+    .page(FRAME_HEIGHT),
+    Spec::forced("Keyboard focus on the selected tab", || {
+        framed(
+            tab_strip(
+                vec![TabItem::new(1, "Home"), TabItem::new(2, "Documents"), TabItem::new(3, "Downloads")],
+                2,
+            )
+            .on_new(|_| {}),
+            None,
+        )
+    })
+    .page(FRAME_HEIGHT)
+    .script("key tab; wait 300; save {out}"),
+    Spec::forced("Painted in a card's surface", || {
+        framed(
+            tab_strip(
+                vec![TabItem::new(1, "Home"), TabItem::new(2, "Documents"), TabItem::new(3, "Downloads")],
+                1,
+            )
+            .on_new(|_| {}),
+            Some(Paint::Card),
+        )
+    })
+    .page(FRAME_HEIGHT),
 ];
+
+/// `strip` in a frame over a few lines of page, as an application uses
+/// tabs: the selected tab and the page are one surface, `surface` or the
+/// page colour, and the bar behind the tabs is a step darker.
+fn framed(strip: TabStrip, surface: Option<Paint>) -> Element {
+    let tokens = use_tokens();
+    let bar = rect().tw(&tokens, &[w_full(), h(Dim::Header)]).child(strip);
+    let page = rect()
+        .tw(&tokens, &[w_full(), flex_col(), p(S4), gap(S1)])
+        .child(caption("The page the selected tab opens."))
+        .child(caption("The tab and this page are one surface; there is no line between them."));
+    let mut frame = tab_frame(bar, page);
+    if let Some(surface) = surface {
+        frame = frame.surface(surface);
+    }
+    frame.into_element()
+}
 
 /// A strip that adds, selects, closes and reorders its own tabs, starting
 /// with `names`, so every behaviour of the control can be tried.
@@ -449,31 +523,33 @@ fn live_tabs(names: &'static [&'static str]) -> Element {
     });
     let mut selected = use_state(|| 1_u64);
     let mut next = use_state(|| names.len() as u64 + 1);
-    tab_strip(tabs.read().clone(), selected())
-        .on_select(move |id| selected.set(id))
-        .on_close(move |id| {
-            let mut list = tabs.write();
-            let Some(index) = list.iter().position(|tab| tab.id == id) else {
-                return;
-            };
-            list.remove(index);
-            if selected() == id && !list.is_empty() {
-                selected.set(list[index.min(list.len() - 1)].id);
-            }
-        })
-        .on_new(move |_| {
-            let id = next();
-            next.set(id + 1);
-            tabs.write().push(TabItem::new(id, format!("Tab {id}")));
-            selected.set(id);
-        })
-        .on_reorder(move |(id, to): (u64, usize)| {
-            let mut list = tabs.write();
-            if let Some(from) = list.iter().position(|tab| tab.id == id) {
-                let tab = list.remove(from);
-                let to = to.min(list.len());
-                list.insert(to, tab);
-            }
-        })
-        .into_element()
+    framed(
+        tab_strip(tabs.read().clone(), selected())
+            .on_select(move |id| selected.set(id))
+            .on_close(move |id| {
+                let mut list = tabs.write();
+                let Some(index) = list.iter().position(|tab| tab.id == id) else {
+                    return;
+                };
+                list.remove(index);
+                if selected() == id && !list.is_empty() {
+                    selected.set(list[index.min(list.len() - 1)].id);
+                }
+            })
+            .on_new(move |_| {
+                let id = next();
+                next.set(id + 1);
+                tabs.write().push(TabItem::new(id, format!("Tab {id}")));
+                selected.set(id);
+            })
+            .on_reorder(move |(id, to): (u64, usize)| {
+                let mut list = tabs.write();
+                if let Some(from) = list.iter().position(|tab| tab.id == id) {
+                    let tab = list.remove(from);
+                    let to = to.min(list.len());
+                    list.insert(to, tab);
+                }
+            }),
+        None,
+    )
 }

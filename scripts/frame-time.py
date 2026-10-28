@@ -21,7 +21,12 @@ scenario, every frame the application drew:
 
 Scenarios: sidebar page switches, push and pop of every Network subpage (the
 address is handed to the running copy, Back is Alt+Left), scrolling, dragging
-sliders and typing in the search field. With --slow-sources MS every system
+sliders and typing in the search field. With --app files (and --binary the
+bingux-files binary) it runs the Files app instead, in Big/ of FILES_HOME (default
+/var/tmp/FileTips-home: 20000 files, one in ten a PNG; made by
+scripts/files-fixture.py), and scrolls the list and the grid at three zoom levels with the wheel
+and the scrollbar while the pointer has armed the hover card: files-list and
+files-grid. With --slow-sources MS every system
 command (nmcli, gsettings, wpctl ...) waits MS milliseconds before it runs: a
 shim on PATH for the programs started anywhere, and BINGUX_SLOW_SOURCES_MS for
 the ones run through bingux_ui::runtime::run. The waits belong on workers, so
@@ -65,8 +70,11 @@ import time
 from pathlib import Path
 
 SESSION = Path(os.environ.get("INSPECTOR_HARNESS", "/var/tmp/InspectorHarness")) / "session.sh"
+FILES_SESSION = SESSION.with_name("files-session.sh")
 TARGET = Path(os.environ.get("CARGO_TARGET_DIR", "/var/tmp/bingux-settings-target")) / "debug"
 FRAME_GAP_MS = 250  # frames further apart than this are separate bursts
+# The folder the Files scenarios open: Big/ holds 20000 files, one in ten a PNG.
+FILES_HOME = Path(os.environ.get("FILES_HOME", "/var/tmp/FileTips-home"))
 
 # Sidebar rows at the default 1400x900 session size, with INSPECT=0.
 PAGES = [("network", 170), ("bluetooth", 212), ("displays", 295), ("sound", 337),
@@ -89,8 +97,10 @@ SLOW_PROGRAMS = ["nmcli", "mmcli", "gsettings", "wpctl", "pactl", "bluetoothctl"
 
 
 class Session:
-    def __init__(self, binary: Path, name: str, workdir: Path, slow_ms: int, watchdog_ms: int):
+    def __init__(self, binary: Path, name: str, workdir: Path, slow_ms: int, watchdog_ms: int,
+                 files: bool = False):
         self.name = name
+        self.script = FILES_SESSION if files else SESSION
         self.dir = Path(os.environ.get("INSPECTOR_HARNESS", "/var/tmp/InspectorHarness")) / "sessions" / name
         self.perf = workdir / "perf.log"
         self.watch = workdir / "watchdog.log"
@@ -99,6 +109,9 @@ class Session:
                    BINGUX_UI_WATCHDOG_LOG=str(self.watch),
                    BINGUX_SETTINGS_FAKE_NETWORK="online", BINGUX_SETTINGS_FAKE_MODEM="ok",
                    BINGUX_SETTINGS_FAKE_DISPLAYS="1")
+        if files:
+            # The Files app in a 1200x800 window, with its own HOME.
+            env.update(FILES_BIN=str(binary), FILES_HOME=str(FILES_HOME), W="1200", H="800")
         config = binary.parent / "bingux-config"
         if config.exists():
             env.setdefault("BINGUX_CONFIG_BIN", str(config))
@@ -114,15 +127,15 @@ class Session:
             env["BINGUX_PATH_PREFIX"] = str(shims)
             env["BINGUX_SLOW_SOURCES_MS"] = str(slow_ms)
         self.env = env
-        subprocess.run([str(SESSION), "start", name], env=env, check=True,
-                       stdout=subprocess.DEVNULL, timeout=600)
-        self.pid = int(subprocess.check_output(["pgrep", "-f", f"^{binary} wired"]).split()[-1])
+        start = [str(self.script), "start", name] + ([str(FILES_HOME / "Big")] if files else [])
+        subprocess.run(start, env=env, check=True, stdout=subprocess.DEVNULL, timeout=600)
+        self.pid = int(subprocess.check_output(["pgrep", "-f", f"^{binary} "]).split()[-1])
         self.binary = binary
         self.session_env = dict(
             line.strip().split("=", 1) for line in (self.dir / "env").read_text().splitlines() if "=" in line)
 
     def inp(self, *commands: str) -> None:
-        subprocess.run([str(SESSION), "in", self.name, *commands], env=self.env, check=True,
+        subprocess.run([str(self.script), "in", self.name, *commands], env=self.env, check=True,
                        stdout=subprocess.DEVNULL, timeout=600)
         wait = 0.0
         for command in commands:
@@ -132,7 +145,7 @@ class Session:
         time.sleep(max(0.0, wait - 0.6))
 
     def key(self, *args: str) -> None:
-        subprocess.run([str(SESSION), "key", self.name, *args], env=self.env,
+        subprocess.run([str(self.script), "key", self.name, *args], env=self.env,
                        stdout=subprocess.DEVNULL, timeout=60)
 
     def goto(self, address: str) -> None:
@@ -141,7 +154,7 @@ class Session:
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
 
     def stop(self) -> None:
-        subprocess.run([str(SESSION), "stop", self.name], env=self.env, stdout=subprocess.DEVNULL)
+        subprocess.run([str(self.script), "stop", self.name], env=self.env, stdout=subprocess.DEVNULL)
 
 
 def read_frames(path: Path, t0: float, t1: float) -> list[tuple[float, float, float, float]]:
@@ -194,6 +207,9 @@ def measure(session: Session, label: str, action) -> dict:
         "over_16_7": sum(1 for g in gaps if g > 16.7),
         "busy_p50": pct(busy, 0.5), "busy_p95": pct(busy, 0.95),
         "busy_p99": pct(busy, 0.99), "busy_max": round(max(busy), 1) if busy else None,
+        "busy_sum": round(sum(busy), 1),
+        # The frames that took more than 8 ms: (ms after the scenario began, busy ms).
+        "heavy": [(round(f[0] - t0), round(f[3], 1)) for f in frames if f[3] > 8],
         "cpu_p99": pct(cpu, 0.99), "cpu_max": round(max(cpu), 1) if cpu else None,
         "blocked": blocked,
     }
@@ -240,10 +256,49 @@ SCENARIOS = {"switch": scenario_switch, "subpages": scenario_subpages, "scroll":
              "sliders": scenario_sliders, "typing": scenario_typing}
 
 
+def files_arm(session: Session, x: int, y: int) -> None:
+    """Rest the pointer on a row or tile until its hover card is up."""
+    session.inp(f"move {x} {y}", "sleep 80", f"move {x + 2} {y + 1}", "sleep 1100")
+
+
+def files_wheel(session: Session, x: int, y: int):
+    notch = [f"wheel {x} {y} 2", "sleep 50"] * 14 + [f"wheel {x} {y} -2", "sleep 50"] * 14
+    return lambda: session.inp(*notch)
+
+
+def scenario_files_list(session: Session):
+    """Wheel and scrollbar scrolling over a list while the hover card is armed."""
+    files_arm(session, 500, 237)
+    yield "files list wheel, card armed", files_wheel(session, 502, 238)
+    files_arm(session, 500, 237)
+    drag = ["move 1197 150", "sleep 80", "down left", "sleep 80"]
+    for y in range(150, 560, 12):
+        drag += [f"move 1197 {y}", "sleep 16"]
+    yield "files list scrollbar drag, card armed", lambda: session.inp(*drag, "up left")
+
+
+def scenario_files_grid(session: Session):
+    """The same over the grid, at three zoom levels (Ctrl+2 is the grid, Ctrl+Plus zooms in)."""
+    for level, keys in enumerate((("2",), ("plus",), ("plus",)), 1):
+        session.key("-M", "ctrl", "-k", *keys, "-m", "ctrl")
+        # A key sent with no modifier tells the window Ctrl is up: the virtual
+        # keyboard's release does not always arrive, and a held Ctrl turns the
+        # wheel into a zoom.
+        session.key("-k", "Escape")
+        time.sleep(1.5)
+        files_arm(session, 420, 260)
+        yield f"files grid level {level} wheel, card armed", files_wheel(session, 422, 261)
+
+
+FILES_SCENARIOS = {"files-list": scenario_files_list, "files-grid": scenario_files_grid}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--binary", type=Path, default=TARGET / "bingux-settings")
-    parser.add_argument("--scenarios", default=",".join(SCENARIOS))
+    parser.add_argument("--app", choices=["settings", "files"], default="settings",
+                        help="files: the Files app in a folder of 20000 files (see FILES_HOME)")
+    parser.add_argument("--binary", type=Path, default=None)
+    parser.add_argument("--scenarios", default=None)
     parser.add_argument("--slow-sources", type=int, default=0, metavar="MS")
     parser.add_argument("--watchdog-ms", type=int, default=12)
     parser.add_argument("--gate-busy", type=float, default=20.0, help="busy-time p99, ms")
@@ -252,17 +307,26 @@ def main() -> None:
     parser.add_argument("--json", type=Path)
     parser.add_argument("--keep", action="store_true", help="keep the session and logs")
     args = parser.parse_args()
+    scenarios = FILES_SCENARIOS if args.app == "files" else SCENARIOS
+    if args.binary is None:
+        args.binary = TARGET / ("bingux-files" if args.app == "files" else "bingux-settings")
+    if args.scenarios is None:
+        args.scenarios = ",".join(scenarios)
     if not args.binary.exists():
         sys.exit(f"no binary at {args.binary}")
     workdir = Path(tempfile.mkdtemp(prefix="frame-time-"))
-    session = Session(args.binary, f"ft{os.getpid()}", workdir, args.slow_sources, args.watchdog_ms)
+    session = Session(args.binary, f"ft{os.getpid()}", workdir, args.slow_sources, args.watchdog_ms,
+                      files=args.app == "files")
     results: list[dict] = []
     try:
         time.sleep(4)
-        session.key("-k", "Shift_L")
-        session.inp("click 700 450", "sleep 500")
+        if args.app == "files":
+            time.sleep(4)  # the folder of 20000 files is listed
+        else:
+            session.key("-k", "Shift_L")
+            session.inp("click 700 450", "sleep 500")
         for name in [n for n in args.scenarios.split(",") if n]:
-            for label, action in SCENARIOS[name](session):
+            for label, action in scenarios[name](session):
                 results.append(measure(session, label, action))
     finally:
         try:

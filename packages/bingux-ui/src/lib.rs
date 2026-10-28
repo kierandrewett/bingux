@@ -9,8 +9,10 @@
 //! [`theme::provide_tokens`] at the window root and read with
 //! [`surface::use_tokens`].
 
+pub mod about;
 pub mod app;
 pub mod nav;
+pub mod preview;
 pub mod app_icon;
 pub mod charts;
 pub mod contrast;
@@ -37,23 +39,28 @@ pub mod search_highlight;
 pub mod shell;
 #[cfg(feature = "testing")]
 pub mod snapshot;
+pub mod stage;
 pub mod stress;
 pub mod style;
 pub mod surface;
 pub mod task;
 pub mod theme;
 pub mod typography;
+mod warm;
+#[cfg(all(test, feature = "testing"))]
+mod mount_tests;
 pub mod window;
 
 /// Everything an application window normally needs.
 pub mod prelude {
+    pub use crate::about::{AppInfo, app_menu};
     pub use crate::app::Application;
     pub use crate::nav::{
         Confirmation, Location, Mode, ModalKind, NavModel, Params, PopGuard, RouteKind, RouteTable,
         Router, Target, Transition, navigate, use_location, use_page_title, use_pop_guard,
         use_retained_state, use_router,
     };
-    pub use crate::app_icon::{AppIcon, app_icon};
+    pub use crate::app_icon::{AppChoice, AppIcon, app_icon};
     pub use crate::charts::{
         Curve, Segment, Series, Unit, bar_chart, donut, line_chart, ring, sparkline,
     };
@@ -80,7 +87,7 @@ pub mod prelude {
     };
     pub use crate::shell::{
         BackButton, Banner, BannerKind, CANCEL_ID, Dialog, DialogIcon, ForwardButton, HeaderBar,
-        MenuButton, MenuItem,
+        MenuButton, MenuItem, app_menu_item, app_menu_items,
         NavigationSplitView, OverlayHost, Overlays, PageAction, PageHead, Profile, ResponseKind,
         SearchField, StatusPage, Toast, WindowControls, banner, dialog, framed_dialog, history_menu,
         menu_button, menu_item, menu_separator, status_page, submenu, use_overlays, use_page_busy,

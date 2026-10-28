@@ -25,6 +25,8 @@ pub mod owner;
 pub mod ring_check;
 #[cfg(all(test, feature = "testing"))]
 mod ring_layout_tests;
+#[cfg(all(test, feature = "testing"))]
+mod ring_anim_tests;
 
 use std::{cell::RefCell, rc::Rc};
 

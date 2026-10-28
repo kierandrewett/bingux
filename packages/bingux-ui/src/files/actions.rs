@@ -13,6 +13,7 @@
 //! the status line, and the inline rename field.
 
 mod backend;
+mod bin;
 mod clipboard;
 mod names;
 mod open_with;
@@ -33,11 +34,37 @@ use super::columns::ColumnLayout;
 use super::properties;
 use super::zoom::Zoom;
 use crate::shell::Overlays;
+use crate::window::Window;
 use crate::task::spawn_blocking;
 
 pub(super) use names::{check_name, stem_chars};
 pub(super) use open_with::{App, apps_for, launch, open_default};
 pub(super) use clipboard::is_cut;
+
+/// The sidebar's Empty Trash asks the file view beside it to empty the Trash:
+/// the view owns the busy line and the status notice the work reports in. The
+/// request is a counter in a window-wide context; whichever view sees it first
+/// does it, so a window with two views asks once.
+#[derive(Clone, Copy, PartialEq)]
+pub(super) struct EmptyTrashRequest(pub State<u32>);
+
+/// Provide the window's [`EmptyTrashRequest`], from a component above the
+/// sidebar and the view.
+pub(super) fn provide_empty_trash() -> EmptyTrashRequest {
+    use_provide_root_context(|| EmptyTrashRequest(State::create(0)))
+}
+
+/// Ask the views of the window to empty the Trash.
+pub(super) fn request_empty_trash(mut request: EmptyTrashRequest) {
+    let next = *request.0.peek() + 1;
+    request.0.set(next);
+}
+
+/// Whether this view is the one to act on request number `wanted`.
+pub(super) fn claim_empty_trash(wanted: u32) -> bool {
+    static LAST: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    wanted != 0 && LAST.swap(wanted, Ordering::SeqCst) != wanted
+}
 
 /// How long a notice stays in the status line.
 const NOTICE_TIME: Duration = Duration::from_secs(4);
@@ -114,6 +141,7 @@ pub(super) struct Ui {
 pub(super) fn use_ui() -> Ui {
     // The first Open with menu should not wait for the disk.
     use_hook(open_with::warm);
+    use_hook(super::compress::warm);
     Ui {
         rename: use_state(|| None),
         notice: use_state(|| None),
@@ -168,6 +196,9 @@ pub(super) struct Env {
     /// The view's keyboard focus, which a dialog opened from the keyboard
     /// gives back when it closes.
     pub focus: AccessibilityId,
+    /// The window the view is in, for a dialog it opens (Restore to… asks for
+    /// a folder). `None` where there is no window.
+    pub window: Option<Window>,
 }
 
 /// A thing a person can ask for.
@@ -192,14 +223,28 @@ pub(super) enum Command {
     NewFromTemplate(PathBuf),
     Trash,
     DeletePermanently,
+    /// Put the selected items of the Trash back where they were.
+    Restore,
+    /// Put the selected items of the Trash into a folder to choose.
+    RestoreTo,
     /// Empty every Trash folder. Only offered while the Trash is on show.
     EmptyTrash,
     CopyPath,
     CopyUri,
     AddBookmark,
     RemoveBookmark,
+    /// Open the Compress dialog (archive, or make pictures, films and songs smaller).
     Compress,
+    /// Open the Compress dialog for what is selected now, from the menu of
+    /// empty space (which a Ctrl or Shift right click opens with the
+    /// selection kept).
+    CompressSelection,
+    /// Compress with the default options and no questions, in this format.
+    CompressQuick(bingux_files::ops::Format),
+    /// Extract Here: into a new folder beside the archive, replacing nothing.
     Extract,
+    /// Extract to…: the dialog.
+    ExtractTo,
     Properties,
     SelectAll,
     InvertSelection,
@@ -227,9 +272,14 @@ impl Command {
                 | Command::NewFromTemplate(_)
                 | Command::Trash
                 | Command::DeletePermanently
+                | Command::Restore
+                | Command::RestoreTo
                 | Command::EmptyTrash
                 | Command::Compress
+                | Command::CompressSelection
+                | Command::CompressQuick(_)
                 | Command::Extract
+                | Command::ExtractTo
                 | Command::Undo
                 | Command::MoveInto { .. }
         )
@@ -275,8 +325,8 @@ pub(super) struct Facts {
     pub shown: usize,
     /// The label of the change Ctrl+Z would take back.
     pub undo: Option<&'static str>,
-    /// The folder on show is a Trash folder.
-    pub in_trash: bool,
+    /// Whether the folder on show is in the Trash.
+    pub trash: TrashView,
 }
 
 impl Facts {
@@ -297,12 +347,74 @@ impl Facts {
                 .is_some_and(|entry| entry.is_dir() && env.bookmarks.contains(&entry.path)),
             extractable: env.caps.modify
                 && single.is_some_and(|entry| !entry.is_dir() && backend::can_extract(&entry.path)),
-            can_compress: env.caps.modify && !selected.is_empty() && compress_format().is_some(),
+            can_compress: env.caps.modify
+                && !selected.is_empty()
+                && bingux_files::ops::Format::ALL.iter().any(|format| format.is_available()),
             shown: env.order.len(),
             undo: undo::next_label(),
-            in_trash: env.folder.as_deref().is_some_and(backend::in_trash),
+            trash: TrashView::of(env.folder.as_deref()),
         }
     }
+}
+
+/// Whether the folder on show is in the Trash, and how far in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum TrashView {
+    /// An ordinary folder.
+    No,
+    /// The `files` folder of a bin (the Trash place): every entry is an item
+    /// with an info file saying where it was and when it was deleted.
+    Root,
+    /// A folder inside something that was trashed.
+    Inside,
+}
+
+impl TrashView {
+    /// Where `folder` is, by its name alone.
+    pub(super) fn of(folder: Option<&Path>) -> TrashView {
+        match folder.and_then(|folder| backend::trash_place(folder)) {
+            None => TrashView::No,
+            Some(place) if place.is_root() => TrashView::Root,
+            Some(_) => TrashView::Inside,
+        }
+    }
+
+    /// Any part of the Trash is on show.
+    pub(super) fn on(self) -> bool {
+        self != TrashView::No
+    }
+}
+
+/// What the Trash changes about the rules. Nothing is made, renamed, cut,
+/// pasted, packed or bookmarked there; the only delete is the permanent one
+/// (it always asks); the rest follows the ordinary rules (`None`).
+fn in_trash(facts: &Facts, command: &Command) -> Option<Availability> {
+    use Availability::{Enabled, Hidden};
+    Some(match command {
+        Command::Cut
+        | Command::Paste
+        | Command::PasteInto(_)
+        | Command::Rename
+        | Command::NewFolder
+        | Command::NewFile
+        | Command::NewFromTemplate(_)
+        | Command::Trash
+        | Command::Compress
+        | Command::CompressSelection
+        | Command::CompressQuick(_)
+        | Command::Extract
+        | Command::ExtractTo
+        | Command::AddBookmark
+        | Command::RemoveBookmark => Hidden,
+        Command::DeletePermanently => {
+            if facts.selected > 0 {
+                Enabled
+            } else {
+                Hidden
+            }
+        }
+        _ => return None,
+    })
 }
 
 const NO_FOLDER: &str = "Open a folder first.";
@@ -316,6 +428,11 @@ pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
     let all_folders = some && facts.folders == facts.selected;
     if command.changes_files() && !caps.modify {
         return Hidden;
+    }
+    if facts.trash.on()
+        && let Some(state) = in_trash(facts, command)
+    {
+        return state;
     }
     match command {
         Command::Open => match facts.selected {
@@ -414,7 +531,23 @@ pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
                 Disabled("No archive tool is installed.")
             }
         }
-        Command::Extract => {
+        Command::CompressSelection => {
+            if facts.can_compress {
+                Enabled
+            } else {
+                Disabled("No archive tool is installed.")
+            }
+        }
+        Command::CompressQuick(format) => {
+            if !some {
+                Hidden
+            } else if format.is_available() {
+                Enabled
+            } else {
+                Disabled("That archive tool is not installed.")
+            }
+        }
+        Command::Extract | Command::ExtractTo => {
             if facts.extractable {
                 Enabled
             } else {
@@ -446,7 +579,18 @@ pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
         }
         Command::Refresh => Enabled,
         Command::EmptyTrash => {
-            if facts.in_trash {
+            if !facts.trash.on() {
+                Hidden
+            } else if facts.shown == 0 {
+                Disabled("The Trash is empty.")
+            } else {
+                Enabled
+            }
+        }
+        // Only items of the Trash itself can be restored: what is inside a
+        // folder that was trashed has no info file of its own.
+        Command::Restore | Command::RestoreTo => {
+            if facts.trash == TrashView::Root && some {
                 Enabled
             } else {
                 Hidden
@@ -473,13 +617,6 @@ pub(super) fn available(env: &Env, selected: &[Entry], command: &Command) -> Ava
 /// the system clipboard.
 pub(super) fn can_paste() -> bool {
     clipboard::has_files()
-}
-
-/// The archive format Compress makes, if a tool for one is installed.
-fn compress_format() -> Option<backend::Format> {
-    [backend::Format::Zip, backend::Format::TarGz]
-        .into_iter()
-        .find(|format| backend::compress_available(*format))
 }
 
 /// Show `text` in the status line for a few seconds.
@@ -569,8 +706,10 @@ pub(super) fn run(env: &Env, selected: &[Entry], command: Command) {
         Command::NewFolder => create(env, true),
         Command::NewFile => create(env, false),
         Command::NewFromTemplate(template) => create_from_template(env, template),
-        Command::Trash => transfer::trash(env, paths_of(selected)),
-        Command::DeletePermanently => transfer::confirm_delete(env, paths_of(selected)),
+        Command::Trash => bin::trash(env, paths_of(selected)),
+        Command::DeletePermanently => bin::confirm_delete(env, paths_of(selected)),
+        Command::Restore => bin::restore(env, paths_of(selected)),
+        Command::RestoreTo => bin::restore_to(env, paths_of(selected)),
         Command::CopyPath => {
             let text = selected
                 .iter()
@@ -589,10 +728,20 @@ pub(super) fn run(env: &Env, selected: &[Entry], command: Command) {
         }
         Command::AddBookmark => bookmark(env, selected, true),
         Command::RemoveBookmark => bookmark(env, selected, false),
-        Command::Compress => transfer::compress(env, paths_of(selected)),
+        Command::Compress => super::compress::show_compress(env, selected),
+        Command::CompressSelection => {
+            let held = held_entries(env);
+            super::compress::show_compress(env, &held);
+        }
+        Command::CompressQuick(format) => super::compress_run::quick(env, selected, format),
         Command::Extract => {
             if let [entry] = selected {
-                transfer::extract(env, entry.path.clone());
+                super::compress_run::extract_here(env, entry.path.clone());
+            }
+        }
+        Command::ExtractTo => {
+            if let [entry] = selected {
+                super::extract_dialog::show_extract(env, entry.path.clone());
             }
         }
         Command::Properties => properties::show_properties(env, selected),
@@ -615,9 +764,20 @@ pub(super) fn run(env: &Env, selected: &[Entry], command: Command) {
         }
         Command::Refresh => env.reload.call(()),
         Command::Undo => transfer::undo(env),
-        Command::EmptyTrash => transfer::confirm_empty_trash(env),
+        Command::EmptyTrash => bin::confirm_empty_trash(env),
         Command::MoveInto { paths, dest, copy } => transfer::move_into(env, paths, dest, copy),
     }
+}
+
+/// The entries of the listing that are selected now.
+pub(super) fn held_entries(env: &Env) -> Vec<Entry> {
+    let selection = env.selection.peek();
+    env.listing
+        .entries
+        .iter()
+        .filter(|entry| selection.contains(&entry.path))
+        .cloned()
+        .collect()
 }
 
 fn visible_paths(env: &Env) -> Vec<PathBuf> {
@@ -857,7 +1017,9 @@ pub(super) fn handle_key(env: &Env, selected: &[Entry], event: &Event<KeyboardEv
         Key::Named(NamedKey::F2) if !ctrl && !alt => Command::Rename,
         Key::Named(NamedKey::F5) if !ctrl && !alt => Command::Refresh,
         Key::Named(NamedKey::Delete) if !ctrl && !alt => {
-            if shift {
+            // Inside the Trash a delete is always permanent (and asks): it is
+            // the only delete there is, so no Shift is needed.
+            if shift || TrashView::of(env.folder.as_deref()).on() {
                 Command::DeletePermanently
             } else {
                 Command::Trash
@@ -874,6 +1036,8 @@ pub(super) fn handle_key(env: &Env, selected: &[Entry], event: &Event<KeyboardEv
             "i" if !shift => Command::Properties,
             "a" if shift => Command::InvertSelection,
             "r" if !shift => Command::Refresh,
+            "e" if shift => Command::ExtractTo,
+            "e" => Command::Compress,
             _ => return false,
         },
         _ => return false,
@@ -899,6 +1063,8 @@ pub(super) fn shortcut(command: &Command) -> Option<&'static str> {
         Command::DeletePermanently => "Shift+Delete",
         Command::CopyPath => "Ctrl+Shift+C",
         Command::Properties => "Alt+Enter",
+        Command::Compress => "Ctrl+E",
+        Command::ExtractTo => "Ctrl+Shift+E",
         Command::SelectAll => "Ctrl+A",
         Command::InvertSelection => "Ctrl+Shift+A",
         Command::Refresh => "F5",
@@ -923,7 +1089,7 @@ mod tests {
             can_compress: true,
             shown: 10,
             undo: None,
-            in_trash: false,
+            trash: TrashView::No,
         }
     }
 
@@ -952,7 +1118,7 @@ mod tests {
         assert!(state(&file, Command::Trash).is_enabled());
         assert!(state(&file, Command::Compress).is_enabled());
         assert!(
-            state(&file, Command::OpenWith(App { name: String::new(), exec: String::new(), mimes: vec![] }))
+            state(&file, Command::OpenWith(App { name: String::new(), exec: String::new(), icon: String::new(), mimes: vec![] }))
                 .is_enabled()
         );
         assert_eq!(state(&file, Command::OpenInNewTab), Availability::Hidden);
@@ -972,7 +1138,7 @@ mod tests {
         assert_eq!(
             state(
                 &folder,
-                Command::OpenWith(App { name: String::new(), exec: String::new(), mimes: vec![] })
+                Command::OpenWith(App { name: String::new(), exec: String::new(), icon: String::new(), mimes: vec![] })
             ),
             Availability::Hidden
         );
@@ -999,7 +1165,7 @@ mod tests {
     #[test]
     fn chooser_cannot_leave_the_dialog() {
         let file = facts(Capabilities::CHOOSER, 1, 0);
-        let app = App { name: String::new(), exec: String::new(), mimes: vec![] };
+        let app = App { name: String::new(), exec: String::new(), icon: String::new(), mimes: vec![] };
         assert_eq!(state(&file, Command::OpenWith(app)), Availability::Hidden);
         let folder = facts(Capabilities::CHOOSER, 1, 1);
         assert_eq!(state(&folder, Command::OpenInNewTab), Availability::Hidden);

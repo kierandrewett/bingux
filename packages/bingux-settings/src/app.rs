@@ -35,7 +35,11 @@ impl Component for App {
             query.set(String::new());
         })
         .into();
-        let mut split = NavigationSplitView::new("Settings").search(query, results, open_first);
+        // The window's main menu: About Settings, the application. The About
+        // page under System is the computer's.
+        let mut split = NavigationSplitView::new("Settings")
+            .search(query, results, open_first)
+            .header_trailing(app_menu(Vec::new()));
         if let Some((name, _)) = &signed_in {
             split = split.profile(Profile {
                 name: name.clone(),
@@ -58,10 +62,13 @@ pub(crate) struct RootPage {
 impl Component for RootPage {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        // The page mounts a group a frame (see `bingux_ui::stage`); the Related
+        // group waits for it, so it is not pushed down as the page fills in.
+        bingux_ui::stage::provide_page();
         rect()
             .tw(&tokens, PAGE)
             .child(self.page.render())
-            .child(RelatedPages { page: self.page })
+            .child(bingux_ui::stage::after_page(RelatedPages { page: self.page }))
     }
 }
 

@@ -5,6 +5,9 @@ edition = "2024"
 rust-version = "1.85"
 license = "GPL-3.0-or-later"
 description = "Settings application for the Bingux desktop shell"
+authors = ["Kieran Drewett"]
+homepage = "https://github.com/kierandrewett/bingux"
+repository = "https://github.com/kierandrewett/bingux"
 
 [[bin]]
 name = "bingux-settings"

@@ -33,6 +33,10 @@ pub mod split_pane;
 pub mod stat_tile;
 pub mod stepper;
 pub mod switch;
+pub mod tab_frame;
+mod tab_shape;
+#[cfg(all(test, feature = "testing"))]
+mod tab_tests;
 pub mod tabs;
 pub mod text_edit;
 pub mod text_field;
@@ -48,7 +52,7 @@ pub use button::{
     ActionButton, IconButton, RowButton, action_button, icon_button, primary_button, row_button,
 };
 pub use checkbox::{CheckState, Checkbox, checkbox};
-pub use dropdown::{Dropdown, dropdown};
+pub use dropdown::{Dropdown, app_dropdown, dropdown};
 pub use focus_stop::{StopRing, focus_stop, focus_stop_menu, focus_stop_with};
 pub use form::{FormField, form_field, live_state, pending_bar};
 pub use meter::{UsageMeter, usage_meter};
@@ -69,6 +73,7 @@ pub use split_pane::{SplitPane, split_pane};
 pub use stat_tile::{StatTile, stat_tile};
 pub use stepper::{Stepper, stepper};
 pub use switch::{Switch, switch};
+pub use tab_frame::{TabFrame, tab_frame};
 pub use tabs::{TabItem, TabStrip, tab_strip};
 pub use text_field::{TextField, search_field, text_field};
 pub use tooltip::{hover_tip, tooltip_icon};

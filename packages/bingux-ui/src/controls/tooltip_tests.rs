@@ -77,6 +77,9 @@ struct Page {
 impl Component for Page {
     fn render(&self) -> impl IntoElement {
         let overlays = try_consume_context::<Overlays>();
+        // The "s" key stands for a notch of the wheel: the window's scroll
+        // signal, which every scroll view sets when its content moves.
+        let activity = scroll_activity();
         let mut page = rect()
             .expanded()
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
@@ -87,6 +90,11 @@ impl Component for Page {
                         (40.0, 40.0),
                         vec![crate::shell::menu_item("Open", |_| {})],
                     );
+                }
+                if let (Some(activity), Key::Character(key)) = (activity, &event.key)
+                    && key == "s"
+                {
+                    activity.pulse();
                 }
             });
         for toggle in &self.toggles {
@@ -437,4 +445,71 @@ fn a_tip_goes_when_a_menu_opens_and_none_opens_over_it() {
     shot.hover(x + 2.0, y + 2.0);
     shot.settle(Duration::from_millis(700));
     assert!(bubbles(&mut shot, &["Copy"]).is_empty(), "a tip opened over the menu");
+}
+
+/// A notch of scrolling that leaves the pointer where it is, as the "s" key.
+fn scroll_notch(shot: &mut Snapshot) {
+    shot.key(Key::Character("s".into()));
+}
+
+#[test]
+fn a_scroll_takes_the_tip_down_at_once_and_it_waits_for_the_content_to_be_still() {
+    let toggle = Toggle::new((300.0, 200.0), "Copy", "Copy");
+    let mut shot = app(vec![toggle.clone()]);
+    shot.settle(Duration::from_millis(300));
+    let (x, y) = toggle.middle();
+    shot.hover(x, y);
+    until_shown(&mut shot, &["Copy"]);
+
+    // The first notch takes it down within two frames, with no fade.
+    scroll_notch(&mut shot);
+    frame(&mut shot);
+    frame(&mut shot);
+    assert!(bubbles(&mut shot, &["Copy"]).is_empty(), "the tip is still up two frames after the scroll began");
+
+    // A second of scrolling, the pointer resting on the control: not one frame
+    // draws the tip, and none opens however long the pointer rests.
+    for notch in 0..20 {
+        scroll_notch(&mut shot);
+        for tick in 0..3 {
+            frame(&mut shot);
+            assert!(
+                bubbles(&mut shot, &["Copy"]).is_empty(),
+                "notch {notch}, frame {tick}: a tip is drawn while the content scrolls"
+            );
+        }
+    }
+
+    // The content is still: after the 200 ms the window waits and the usual
+    // 500 ms rest, the tip is back, on the control the pointer never left.
+    let mut quiet = 0;
+    loop {
+        frame(&mut shot);
+        quiet += 1;
+        if !bubbles(&mut shot, &["Copy"]).is_empty() {
+            break;
+        }
+        assert!(quiet < 150, "the tip never came back");
+    }
+    assert!(quiet * 16 >= 500, "the tip came back after only {} ms of stillness", quiet * 16);
+    assert_eq!(until_shown(&mut shot, &["Copy"]).text, "Copy");
+}
+
+#[test]
+fn a_pointer_that_arrives_while_the_content_scrolls_opens_no_tip_until_it_is_still() {
+    let toggle = Toggle::new((300.0, 200.0), "Copy", "Copy");
+    let mut shot = app(vec![toggle.clone()]);
+    shot.settle(Duration::from_millis(300));
+    scroll_notch(&mut shot);
+    let (x, y) = toggle.middle();
+    shot.hover(x, y);
+    // 900 ms of notches, longer than the 500 ms rest: still no tip.
+    for _ in 0..18 {
+        scroll_notch(&mut shot);
+        for _ in 0..3 {
+            frame(&mut shot);
+            assert!(bubbles(&mut shot, &["Copy"]).is_empty(), "a tip opened during the scroll");
+        }
+    }
+    assert_eq!(until_shown(&mut shot, &["Copy"]).text, "Copy", "and it opens once the content is still");
 }

@@ -377,8 +377,7 @@ impl Component for Segment {
                 })
                 .label(&tokens, self.text.clone())
                 .max_lines(1),
-            )
-            .focusable(focus(), radius)
+            ).focusable(focus())
             .maybe(self.fill, |wrapper| wrapper.tw(&tokens, &[w_flex()]))
             .tw(&tokens, &[h_full()])
     }

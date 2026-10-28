@@ -659,8 +659,7 @@ impl Component for Grip {
                 } else {
                     Ink::Muted.color(&tokens)
                 },
-            ))
-            .focusable(focus(), Radius::Inner)
+            )).focusable(focus())
     }
 }
 

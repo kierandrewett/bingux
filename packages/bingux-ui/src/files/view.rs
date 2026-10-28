@@ -49,18 +49,20 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 use bingux_files::selection::{TypeAhead, type_ahead_target};
-use bingux_files::{Entry, Listing, Selection, Sort, SortKey, display};
+use bingux_files::{Entry, Listing, Selection, Sort, SortKey};
 use freya::prelude::*;
 
 use super::actions::{self, Capabilities, Command, Env, ViewControls, use_ui};
 use super::drag::FileDrag;
-use super::columns::{ColumnHeaders, ColumnLayout, plan_in, row_padding};
+use super::file_icon::{FileIcon, file_icon_view_floating};
+use super::columns::{ColumnHeaders, ColumnLayout, ColumnSet, plan_in, row_padding};
 use super::context_menu;
 use super::directory::Wants;
 use super::file_grid::GridView;
+use super::hover_card::{Hover, HoverCard, HoverFeed, use_hover_feed};
 use super::search::SearchView;
 use super::scroll_memory::{Owner, SearchTop, came_from, recall, remember};
 use super::file_list::ListView;
@@ -75,14 +77,12 @@ use crate::shell::panel::{PanelRect, PanelTrigger};
 use crate::shell::use_overlays;
 use crate::style::*;
 use crate::surface::use_tokens;
-use crate::typography::{BODY, CAPTION, Ink};
+use crate::typography::{BODY, Ink};
 
 /// Two presses on one row this close together open it.
 const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 /// A press this soon after a drag ended is the end of the drag, not a click.
 const DRAG_SETTLE: Duration = Duration::from_millis(120);
-/// The pointer rests this long on a row before its detail card shows.
-const CARD_DELAY: Duration = Duration::from_millis(700);
 /// The edge of a view where a band or drag scrolls it, as a share of one row.
 const AUTOSCROLL_EDGE: f32 = 1.0;
 
@@ -124,19 +124,6 @@ impl Rows {
     }
 }
 
-/// The picture of an entry: a folder in a person's own folders has its own.
-pub(super) fn entry_glyph(entry: &Entry) -> crate::icons::Icon {
-    if entry.is_dir() {
-        let special = entry
-            .path
-            .parent()
-            .and_then(|parent| bingux_files::places::special_folder_in(parent, entry.path.file_name()?));
-        super::glyphs::folder_icon(special)
-    } else {
-        super::glyphs::entry_icon(entry)
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Gestures that outlive one event
 // ---------------------------------------------------------------------------
@@ -153,6 +140,8 @@ pub(super) struct Pending {
 pub(super) struct Drag {
     pub paths: Vec<PathBuf>,
     pub label: String,
+    /// The icon of the one file dragged; `None` for several.
+    pub icon: Option<FileIcon>,
 }
 
 /// A rubber band, in content coordinates.
@@ -168,13 +157,6 @@ pub(super) struct Band {
     pub moved: bool,
 }
 
-/// The row the pointer rests on, for the detail card.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(super) struct Hover {
-    pub row: usize,
-    pub at: (f32, f32),
-}
-
 #[derive(Clone, Copy, PartialEq)]
 pub(super) struct Gestures {
     pub pending: State<Option<Pending>>,
@@ -184,7 +166,7 @@ pub(super) struct Gestures {
     /// Where the pointer is in the window, while something is dragged.
     pub pointer: State<(f32, f32)>,
     pub band: State<Option<Band>>,
-    pub hover: State<Option<Hover>>,
+    pub hover: HoverFeed,
     /// When the last drag ended.
     pub ended: State<Option<Instant>>,
     /// The window's file drag, when its host shares one with drop targets
@@ -200,7 +182,7 @@ fn use_gestures() -> Gestures {
         over: use_state(|| None),
         pointer: use_state(|| (0.0, 0.0)),
         band: use_state(|| None),
-        hover: use_state(|| None),
+        hover: use_hover_feed(),
         ended: use_state(|| None),
     }
 }
@@ -241,6 +223,10 @@ pub(super) struct Ctx {
     pub on_search: Option<EventHandler<String>>,
     pub home: PathBuf,
     pub wants: Wants,
+    /// The docked preview pane is open.
+    pub pane: State<bool>,
+    /// The row that holds the list and the pane, in window coordinates.
+    pub pane_row: State<Area>,
 }
 
 /// The latest [`Ctx`], shared by the view and its rows. Equality is identity,
@@ -288,6 +274,13 @@ impl Ctx {
     /// from many folders.
     pub fn location_column(&self) -> bool {
         self.recent || self.in_results()
+    }
+
+    /// The columns the list is drawn with: the Trash's in the Trash itself,
+    /// else an ordinary folder's, with a Location column for Recent and for
+    /// search results.
+    pub fn column_set(&self) -> ColumnSet {
+        trash_columns_or(self.location_column(), &self.env.folder)
     }
 
     /// The folder of a search result below the folder searched, as the
@@ -784,6 +777,23 @@ impl Ctx {
         (at.0 - area.min_x(), at.1 - area.min_y() - scroll)
     }
 
+    /// The row at a window point, worked out from where the content is
+    /// scrolled to and not from the pointer events, which a glide does not
+    /// send. `None` outside the viewport and between items.
+    pub fn row_at(&self, at: (f32, f32)) -> Option<usize> {
+        let area = *self.viewport.peek();
+        if at.0 < area.min_x() || at.0 >= area.max_x() || at.1 < area.min_y() || at.1 >= area.max_y() {
+            return None;
+        }
+        let point = self.to_content(at);
+        self.lattice
+            .get()?
+            .hits(Span::between(point, point))?
+            .indices()
+            .next()
+            .filter(|row| *row < self.rows.len())
+    }
+
     /// The pointer moved anywhere in the window.
     pub fn pointer_moved(&self, event: &Event<PointerEventData>) {
         self.press.moved(event);
@@ -792,6 +802,7 @@ impl Ctx {
         }
         let at = point_of(event);
         let mut gestures = self.gestures;
+        gestures.hover.pointer(at);
         let pending = *gestures.pending.peek();
         if let Some(pending) = pending {
             let moved = (at.0 - pending.origin.0).hypot(at.1 - pending.origin.1);
@@ -827,12 +838,12 @@ impl Ctx {
             selection.write().select_only(&path);
         }
         let paths: Vec<PathBuf> = selection.peek().paths().to_vec();
-        let label = match paths.as_slice() {
-            [_] => entry.name.clone(),
-            many => format!("{} items", many.len()),
+        let (label, icon) = match paths.as_slice() {
+            [_] => (entry.name.clone(), Some(FileIcon::for_entry(entry))),
+            many => (format!("{} items", many.len()), None),
         };
         let mut gestures = self.gestures;
-        gestures.drag.set(Some(Drag { paths, label }));
+        gestures.drag.set(Some(Drag { paths, label, icon }));
         if let Some(session) = gestures.session {
             session.begin();
         }
@@ -946,10 +957,10 @@ impl Ctx {
         if gestures.band.peek().is_some() {
             return;
         }
-        gestures.hover.set(Some(Hover {
+        gestures.hover.enter(Hover {
             row,
             at: point_of(event),
-        }));
+        });
     }
 
     pub fn row_leave(&self, row: usize) {
@@ -957,9 +968,7 @@ impl Ctx {
         if *gestures.over.peek() == Some(row) {
             gestures.over.set(None);
         }
-        if gestures.hover.peek().is_some_and(|hover| hover.row == row) {
-            gestures.hover.set(None);
-        }
+        gestures.hover.leave(row);
     }
 }
 
@@ -982,12 +991,16 @@ pub struct FileView {
     multiple: bool,
     folders_only: bool,
     autofocus: bool,
+    /// The corners of the view that sit in the window's rounded corners; the
+    /// view paints the window's radius there and is square elsewhere.
+    corners: Corners,
     show_hidden: bool,
     search: Option<SearchView>,
     on_search: Option<EventHandler<String>>,
     caps: Capabilities,
     new_folder: Option<State<u32>>,
     focus: Option<State<u32>>,
+    pane: Option<State<bool>>,
     bookmarks: Arc<Vec<PathBuf>>,
     thumbnails: bool,
     owner: Owner,
@@ -1016,12 +1029,14 @@ impl FileView {
             multiple: false,
             folders_only: false,
             autofocus: false,
+            corners: Corners::None,
             show_hidden: false,
             search: None,
             on_search: None,
             caps: Capabilities::CHOOSER,
             new_folder: None,
             focus: None,
+            pane: None,
             bookmarks: Arc::new(Vec::new()),
             thumbnails: true,
             owner: 0,
@@ -1075,6 +1090,14 @@ impl FileView {
         self
     }
 
+    /// The corners of the view that sit in the window's own rounded corners,
+    /// at [`Radius::Window`]. The view's painted corners are what its focus
+    /// ring follows; the default is square.
+    pub fn corners(mut self, corners: Corners) -> Self {
+        self.corners = corners;
+        self
+    }
+
     /// Hidden files are shown. Only the menu's check mark reads this.
     pub fn show_hidden(mut self, show_hidden: bool) -> Self {
         self.show_hidden = show_hidden;
@@ -1110,6 +1133,14 @@ impl FileView {
 
     /// Creates a folder and starts naming it each time the number goes up,
     /// as a toolbar's New folder button does.
+    /// Whether the docked preview pane is open. The owner passes it when it
+    /// has a toolbar button that shows and hides the pane; without it the view
+    /// keeps the state itself (Space, Alt+P and F3 still work).
+    pub fn preview_pane(mut self, open: State<bool>) -> Self {
+        self.pane = Some(open);
+        self
+    }
+
     pub fn new_folder(mut self, trigger: State<u32>) -> Self {
         self.new_folder = Some(trigger);
         self
@@ -1218,6 +1249,8 @@ impl FileView {
 
 impl Component for FileView {
     fn render(&self) -> impl IntoElement {
+        #[cfg(test)]
+        super::hover_card::renders::view();
         let tokens = use_tokens();
         let compact = is_compact();
         let overlays = use_overlays();
@@ -1262,6 +1295,7 @@ impl Component for FileView {
             .as_ref()
             .is_some_and(|search| search.deep.is_some());
         let folder = (!recent && !in_results).then(|| self.listing.path.clone());
+        let column_set = trash_columns_or(recent || in_results, &folder);
         // The drop of the view reads this, not the first render's value.
         let results_now = use_hook(|| Rc::new(Cell::new(false)));
         results_now.set(in_results);
@@ -1319,16 +1353,17 @@ impl Component for FileView {
             }
         });
         // Rows that come and go under a resting pointer leave no hover to
-        // end: forget it, so the detail card of a row that is gone hides.
+        // end: forget it, so the detail card of a row that is gone hides. A
+        // zoom or a resize lays the rows out again with no pointer event, so
+        // the row the card was for is somewhere else: it goes too.
         use_side_effect_with_deps(
             &(
                 self.order.len(),
                 self.search.as_ref().map(|search| search.query.text().to_string()),
+                zoom.px(),
+                viewport.read().width() as i32,
             ),
-            move |_| {
-                let mut hover = gestures.hover;
-                hover.set_if_modified(None);
-            },
+            move |_| gestures.hover.clear(),
         );
 
         let rows = Rows {
@@ -1360,6 +1395,11 @@ impl Component for FileView {
         // as from the keyboard; the handler reaches the view's context
         // without keeping it alive.
         let preview_target = use_hook(|| Rc::new(RefCell::new(None::<WeakShared>)));
+        // Whether the docked preview pane is open: the owner's, when it has a
+        // toolbar button for it, else the view's own.
+        let own_pane = use_state(|| false);
+        let pane = self.pane.unwrap_or(own_pane);
+        let pane_row = use_state(Area::default);
         let env = Env {
             folder,
             home: home.clone(),
@@ -1391,12 +1431,13 @@ impl Component for FileView {
                 layout,
             },
             focus: a11y_id,
+            window: use_try_consume::<crate::window::Window>(),
             preview: {
                 let target = preview_target.clone();
                 EventHandler::new(move |()| {
                     let shared = target.borrow().as_ref().and_then(WeakShared::upgrade);
                     if let Some(shared) = shared {
-                        super::preview::show(&shared);
+                        super::preview::toggle(&shared);
                     }
                 })
             },
@@ -1427,6 +1468,8 @@ impl Component for FileView {
                 on_search: self.on_search.clone(),
                 home: home.clone(),
                 wants: wants.clone(),
+                pane,
+                pane_row,
             }))))
         });
         shared.set(Ctx {
@@ -1454,6 +1497,8 @@ impl Component for FileView {
             on_search: self.on_search.clone(),
             home: home.clone(),
             wants: wants.clone(),
+            pane,
+            pane_row,
         });
         *preview_target.borrow_mut() = Some(shared.downgrade());
         // While searching, the arrows are in the address field: keep the
@@ -1491,6 +1536,24 @@ impl Component for FileView {
                     let selected = ctx.selected_owned();
                     actions::run(&ctx.env, &selected, Command::NewFolder);
                 });
+            }
+        }
+
+        // The sidebar's Empty Trash asked: this view does it (and says so in
+        // its own status line), unless another view of the window already has.
+        let empty_request = try_consume_root_context::<actions::EmptyTrashRequest>();
+        let empty_seen = use_hook(|| Rc::new(Cell::new(empty_request.map_or(0, |request| *request.0.peek()))));
+        if let Some(request) = empty_request {
+            let wanted = *request.0.read();
+            if empty_seen.get() != wanted {
+                empty_seen.set(wanted);
+                if actions::claim_empty_trash(wanted) {
+                    let shared = shared.clone();
+                    spawn(async move {
+                        let ctx = shared.get();
+                        actions::run(&ctx.env, &[], Command::EmptyTrash);
+                    });
+                }
             }
         }
 
@@ -1532,7 +1595,7 @@ impl Component for FileView {
         let with_header = !grid && !compact;
         let header = with_header.then(|| {
             let row_width = viewport.read().width() - 2.0 * row_padding();
-            let plan = plan_in(&layout.read(), f32::from(px), row_width, recent || in_results);
+            let plan = plan_in(&layout.read(), f32::from(px), row_width, column_set);
             let measure_shared = shared.clone();
             let menu_shared = shared.clone();
             let on_sort = self.on_sort.clone();
@@ -1553,8 +1616,14 @@ impl Component for FileView {
             move |event: Event<KeyboardEventData>| {
                 let ctx = shared.get();
                 // Space opens Quick Look, unless a word is being typed.
-                if super::preview::wants_open(&ctx, &event, typed.borrow().is_active(Instant::now())) {
-                    super::preview::show(&shared);
+                let typing = typed.borrow().is_active(Instant::now());
+                if super::preview::wants_open(&ctx, &event, typing) {
+                    super::preview::toggle(&shared);
+                    event.stop_propagation();
+                    return;
+                }
+                if super::preview::wants_pane(&ctx, &event, typing) {
+                    super::preview::toggle_pane(&shared);
                     event.stop_propagation();
                     return;
                 }
@@ -1654,18 +1723,28 @@ impl Component for FileView {
             })
             .child(HoverCard {
                 shared: shared.clone(),
+                rows: rows.clone(),
                 origin,
             })
             .child(zoom_hud(zoom))
             .child(status_line(info, ui));
 
-        rect()
+        let view = rect()
             .component("FileView")
             .a11y_id(a11y_id)
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::List)
             .a11y_alt("Files")
-            .tw(&tokens, &[flex_col(), grow_children(), w_full(), h_full()])
+            .tw(
+                &tokens,
+                &[
+                    flex_col(),
+                    grow_children(),
+                    w_full(),
+                    h_full(),
+                    rounded_on(Radius::Window, self.corners, 0.0),
+                ],
+            )
             .on_key_down(on_key_down)
             .maybe_child(header)
             .child(area)
@@ -1675,8 +1754,30 @@ impl Component for FileView {
                 origin,
             })
             // The view fills its pane up to the window's edge, so the ring is
-            // drawn inside it: outside, the window would cut it off.
-            .focusable_inside(focus(), Radius::Control)
+            // drawn inside it: outside, the window would cut it off. It takes
+            // the view's own painted corners.
+            .focusable_inside(focus());
+        // The list and, at its right edge, the docked preview pane. The pane
+        // is always mounted so its slide has a state to start from.
+        rect()
+            .tw(&tokens, &[flex_row(), grow_children(), w_full(), h_full()])
+            .on_sized(move |event: Event<SizedEventData>| {
+                let mut pane_row = pane_row;
+                pane_row.set_if_modified(event.area);
+            })
+            .child(rect().tw(&tokens, &[w_flex(), h_full()]).child(view))
+            .child(super::preview::dock(&shared, *pane_row.read()))
+    }
+}
+
+/// The Trash's own columns when `folder` is the Trash itself (the `files`
+/// folder of a bin, whose entries are the items); otherwise an ordinary
+/// folder's, with a Location column when `with_location`.
+fn trash_columns_or(with_location: bool, folder: &Option<PathBuf>) -> ColumnSet {
+    if actions::TrashView::of(folder.as_deref()) == actions::TrashView::Root {
+        ColumnSet::Trash
+    } else {
+        ColumnSet::from(with_location)
     }
 }
 
@@ -1706,6 +1807,9 @@ fn status_info(view: &FileView, ctx: &Ctx) -> StatusInfo {
             },
         }),
         loading: false,
+        trash: actions::TrashView::of(
+            (!view.listing.recent).then_some(view.listing.path.as_path()),
+        ) != actions::TrashView::No,
         complete: true,
         unresponsive: false,
     }
@@ -1770,6 +1874,7 @@ impl Component for DragChip {
         let at = *self.pointer.read();
         let origin = *self.origin.read();
         let copy = freya_winit::modifiers::live().contains(Modifiers::CONTROL);
+        let drag_icon = drag.icon;
         let label = if copy {
             format!("Copy {}", drag.label)
         } else {
@@ -1789,108 +1894,17 @@ impl Component for DragChip {
                 &[border(Line::Stroke(Dim::Hairline, Paint::FloatingOutline))],
             )
             .child(
-                BODY.in_ink(Ink::OnFloating)
-                    .label(&tokens, label)
-                    .max_lines(1),
+                rect()
+                    .tw_layout(&[flex_row(), items(Align::Center), gap(S1)])
+                    .maybe_child(drag_icon.map(|icon| {
+                        file_icon_view_floating(&tokens, &icon, IconSize::Control)
+                    }))
+                    .child(
+                        BODY.in_ink(Ink::OnFloating)
+                            .label(&tokens, label)
+                            .max_lines(1),
+                    ),
             )
             .into_element()
-    }
-}
-
-/// The detail card of the row the pointer rests on: type, size and date.
-#[derive(Clone, PartialEq)]
-struct HoverCard {
-    shared: Shared,
-    origin: State<Area>,
-}
-
-impl Component for HoverCard {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let ctx = self.shared.get();
-        let hover = *ctx.gestures.hover.read();
-        let mut shown = use_state(|| None::<Hover>);
-        let mut size = use_state(|| None::<(f32, f32)>);
-        use_side_effect_with_deps(&hover, move |hover: &Option<Hover>| {
-            // Moving to another row hides the card and starts the wait again.
-            shown.set_if_modified(None);
-            size.set_if_modified(None);
-            if let Some(hover) = *hover {
-                spawn(async move {
-                    timer(CARD_DELAY).await;
-                    shown.set(Some(hover));
-                });
-            }
-        });
-        let busy = ctx.gestures.drag.read().is_some()
-            || ctx.gestures.band.read().is_some()
-            || ctx.env.ui.rename.read().is_some()
-            // A preview or a dialog is over the view; the pointer rests under it.
-            || ctx.env.overlays.dialog_open();
-        let Some(hover) = (*shown.read()).filter(|_| !busy) else {
-            return rect().interactive(false).into_element();
-        };
-        if hover.row >= ctx.rows.len() {
-            return rect().interactive(false).into_element();
-        }
-        let entry = ctx.rows.entry(hover.row);
-        let now = SystemTime::now();
-        let mut lines: Vec<String> = vec![entry.name.clone()];
-        let kind = if entry.is_dir() {
-            "Folder".to_string()
-        } else {
-            format!("{} · {}", entry.mime.description, display::size(entry.size))
-        };
-        lines.push(kind);
-        if entry.modified.is_some() {
-            let modified = super::columns::cell_text_styled(
-                super::columns::Column::Modified,
-                entry,
-                now,
-                &ctx.home,
-                super::columns::DateStyle::Absolute,
-            );
-            lines.push(format!("Modified {modified}"));
-        }
-        if ctx.recent
-            && let Some(parent) = entry.path.parent()
-        {
-            lines.push(parent.to_string_lossy().into_owned());
-        } else if let Some(folder) = ctx.result_folder(entry) {
-            lines.push(format!("In {folder}"));
-        }
-        let origin = *self.origin.read();
-        let (width, height) = (*size.read()).unwrap_or((0.0, 0.0));
-        let measured = width > 0.0;
-        // Below and right of the pointer; flipped when it would leave the view.
-        let mut left = hover.at.0 - origin.min_x() + S4.px();
-        let mut top = hover.at.1 - origin.min_y() + S5.px();
-        if left + width > origin.width() {
-            left = (hover.at.0 - origin.min_x() - width - S2.px()).max(0.0);
-        }
-        if top + height > origin.height() {
-            top = (hover.at.1 - origin.min_y() - height - S2.px()).max(0.0);
-        }
-        let mut card = rect()
-            .interactive(false)
-            .layer(Layer::Overlay)
-            .position(Position::new_absolute().left(left).top(top))
-            .opacity(if measured { 1.0 } else { 0.0 })
-            .on_sized(move |event: Event<SizedEventData>| {
-                size.set_if_modified(Some((event.area.width(), event.area.height())));
-            })
-            .tw(&tokens, TOOLTIP)
-            .tw(
-                &tokens,
-                &[
-                    flex_col(),
-                    border(Line::Stroke(Dim::Hairline, Paint::FloatingOutline)),
-                ],
-            );
-        for (index, line) in lines.into_iter().enumerate() {
-            let style = if index == 0 { BODY } else { CAPTION }.in_ink(Ink::OnFloating);
-            card = card.child(style.label(&tokens, line).max_lines(1));
-        }
-        card.into_element()
     }
 }

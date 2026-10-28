@@ -760,6 +760,10 @@ pub enum Paint {
     Frosted,
     /// The sidebar and the window frame around the page panel.
     Sidebar,
+    /// The strip behind a window's tabs: one step darker than [`Paint::Bg`],
+    /// so the selected tab and the content under it, both `Bg`, read as one
+    /// shape rising out of it.
+    TabStrip,
     /// Group cards.
     Card,
     /// Buttons, fields, dropdowns and segmented tracks.
@@ -854,10 +858,6 @@ pub enum Paint {
     NoticeFill(BannerKind),
     /// The 1 px edge of a banner or toast: the hue at 3:1 on its fill.
     NoticeEdge(BannerKind),
-    /// The filled action button of a banner or toast.
-    NoticeAction(BannerKind),
-    /// Text on that action button.
-    NoticeOnAction(BannerKind),
     /// Syntax colours of markup: a tag name, an attribute name, an
     /// attribute value, text and a comment.
     SyntaxTag,
@@ -900,7 +900,6 @@ impl Paint {
             Paint::Success => Some(Paint::OnSuccess),
             Paint::Warning => Some(Paint::OnWarning),
             Paint::Floating => Some(Paint::OnFloating),
-            Paint::NoticeAction(kind) => Some(Paint::NoticeOnAction(kind)),
             _ => None,
         }
     }
@@ -914,6 +913,7 @@ impl Paint {
             Paint::Surface => tokens.surface,
             Paint::Frosted => tokens.bg.with_af32(0.82),
             Paint::Sidebar => tokens.sidebar,
+            Paint::TabStrip => tokens.tab_strip,
             Paint::Card => tokens.card,
             Paint::Control => tokens.control,
             Paint::Raised => tokens.raised,
@@ -946,8 +946,6 @@ impl Paint {
             Paint::FloatingOutline => tokens.floating_outline,
             Paint::NoticeFill(kind) => tokens.notice(kind).fill,
             Paint::NoticeEdge(kind) => tokens.notice(kind).edge,
-            Paint::NoticeAction(kind) => tokens.notice(kind).action,
-            Paint::NoticeOnAction(kind) => tokens.notice(kind).on_action,
             Paint::Track => tokens.text.with_af32(0.22),
             Paint::Swatch(name) => crate::theme::accent_for(name, tokens.scheme.is_dark()),
             Paint::MockDarkWindow => Color::from_rgb(38, 38, 42),

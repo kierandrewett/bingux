@@ -157,7 +157,8 @@ impl Banner {
         self
     }
 
-    /// A filled button in the kind's colour. Call it again for more.
+    /// A quiet button: a label in the notice's ink with no fill until it is
+    /// hovered or pressed. Call it again for more.
     pub fn action(
         mut self,
         label: impl Into<String>,
@@ -340,9 +341,11 @@ impl Component for Banner {
     }
 }
 
-/// An action button of a notice: filled with the kind's colour, its own
-/// on-colour for the label, as tall as the dismiss button beside it and the
-/// same radius.
+/// An action button of a notice, drawn quiet: no fill at rest, so the notice
+/// reads as one calm surface, its label in the notice's own ink (the colour
+/// of its text and its dismiss glyph, AAA on the fill), the hover and pressed
+/// layers of every control over the fill, and the focus ring. It is as tall
+/// as the dismiss button beside it, with the same radius.
 #[derive(PartialEq)]
 struct NoticeAction {
     label: String,
@@ -375,7 +378,7 @@ impl Component for NoticeAction {
                     px(S3),
                     rounded(self.radius),
                     center(),
-                    surface(Paint::NoticeAction(self.kind), hovering(), pressing(), false),
+                    surface(Paint::Transparent, hovering(), pressing(), false),
                 ],
             )
             .on_pointer_enter(move |_| hovering.set(true))
@@ -407,9 +410,10 @@ impl Component for NoticeAction {
             })
             .child(
                 EMPHASIS
-                    .label_in_paint(&tokens, self.label.clone(), Paint::NoticeOnAction(self.kind))
+                    .in_ink(Ink::Notice(self.kind))
+                    .label(&tokens, self.label.clone())
                     .max_lines(1),
             )
-            .focusable(focus(), self.radius)
+            .focusable(focus())
     }
 }

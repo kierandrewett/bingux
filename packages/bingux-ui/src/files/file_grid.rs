@@ -256,7 +256,7 @@ impl Component for Tile {
         let dim = !enabled || ctx.cut_dim(&entry.path);
 
         let preview = if ctx.thumbnails { Preview::Full } else { Preview::Off };
-        let face = face(&tokens, entry, self.icon_px, self.bucket, preview);
+        let face = face(&tokens, entry, self.icon_px, self.bucket, preview, selected);
         let name_room = metrics.tile - 2.0 * S1.px();
         let caption: Element = if renaming {
             RenameField::new(&ctx.env, entry)

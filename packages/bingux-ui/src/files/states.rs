@@ -3,6 +3,7 @@
 use bingux_files::ListError;
 use freya::prelude::*;
 
+use super::file_icon::FileKind;
 use crate::controls::{SpinnerSize, spinner};
 use crate::icons::Icon;
 use crate::shell::status_page;
@@ -35,7 +36,15 @@ pub fn empty_state(recent: bool, hidden_items: bool, filtered: bool) -> Element 
     } else {
         ("Folder is empty", "There is nothing in this folder.")
     };
-    Element::from(status_page(Icon::Folder, title).description(description))
+    Element::from(status_page(FileKind::Folder.glyph(), title).description(description))
+}
+
+/// The Trash with nothing in it: a status page, not an empty list.
+pub fn trash_empty_state() -> Element {
+    Element::from(
+        status_page(Icon::UserTrash, "Trash is empty")
+            .description("Things you move to the Trash appear here until you empty it."),
+    )
 }
 
 /// A search with no matches. `subfolders` is the state of the subfolder

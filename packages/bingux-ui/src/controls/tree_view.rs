@@ -640,7 +640,7 @@ impl Component for TreeView {
             )
             // `focusable_inside` returns a wrapper that sizes to its content,
             // so the wrapper is sized too.
-            .focusable_inside(focus(), Radius::Card)
+            .focusable_inside(focus())
             .tw(&tokens, &[w_full(), h_full()])
     }
 }

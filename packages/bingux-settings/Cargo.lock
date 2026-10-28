@@ -566,6 +566,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bingux-preview-core"
+version = "0.1.0"
+dependencies = [
+ "bingux-files",
+ "flate2",
+ "libc",
+ "ttf-parser",
+]
+
+[[package]]
 name = "bingux-search"
 version = "0.1.0"
 dependencies = [
@@ -595,6 +605,7 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "bingux-files",
+ "bingux-preview-core",
  "bingux-search",
  "bytes",
  "freya",
@@ -1382,6 +1393,7 @@ dependencies = [
  "freya-engine",
  "freya-sdk",
  "futures-channel",
+ "gif 0.13.3",
  "paste",
  "thiserror 2.0.21",
  "torin",
@@ -1668,6 +1680,16 @@ dependencies = [
 
 [[package]]
 name = "gif"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ae047235e33e2829703574b54fdec96bfbad892062d97fed2f76022287de61b"
+dependencies = [
+ "color_quant",
+ "weezl",
+]
+
+[[package]]
+name = "gif"
 version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee8cfcc411d9adbbaba82fb72661cc1bcca13e8bba98b364e62b2dba8f960159"
@@ -1849,7 +1871,7 @@ dependencies = [
  "byteorder-lite",
  "color_quant",
  "exr",
- "gif",
+ "gif 0.14.2",
  "image-webp",
  "moxcms",
  "num-traits",

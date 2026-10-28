@@ -26,6 +26,10 @@ fn main() {
         .size(width, height)
         .borderless()
         .normalise(target::normalise)
+        .about(bingux_ui::app_info!(
+            description = "Browse and organise files and folders",
+            licence_text = include_str!("../../../COPYING"),
+        ))
         .usage(USAGE)
         .run(|| app::App);
 }

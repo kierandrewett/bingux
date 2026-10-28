@@ -1,0 +1,18 @@
+[package]
+name = "bingux-preview-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "Bingux file preview core: what a file is, which viewer shows it, and what the viewer reads; no UI"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+bingux-files = { path = "../bingux-files" }
+libc = "0.2"
+# Names and metrics of a font for the specimen viewer.
+ttf-parser = "0.25"
+# Inflating the head of a .tar.gz to list it.
+flate2 = "1"

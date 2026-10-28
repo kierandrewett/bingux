@@ -9,10 +9,12 @@ use std::sync::{Arc, LazyLock};
 
 use bingux_ui::files::model::{Places, Selection, Sort};
 use bingux_ui::files::{
-    AddressBar, Browse, ChooserRequest, FileView, Load, PlacesMenu, PlacesSidebar, TabMemory,
-    Where, browse, choose, empty_state, entry_icon, error_state, folder_icon, home_folder,
-    loading_state, place_icon, skeleton, use_directory,
+    AddressBar, Browse, ChooserRequest, FileIcon, FileKind, FileView, Load, PlacesMenu, PlacesSidebar,
+    TabMemory, Where, browse, choose, empty_state, error_state, file_icon_view, home_folder,
+    loading_state, skeleton, use_directory,
 };
+use bingux_ui::preview::{Mode, PreviewDock, PreviewHost, PreviewNav, PreviewSource, Step};
+use bingux_ui::shell::use_overlays;
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 
@@ -211,53 +213,137 @@ pub const FILE_VIEW: &[Spec] = &[
     .script("wait 600; rclick-text Notes.txt; wait 400; save {out}"),
 ];
 
-/// The icons the views choose for a place, a folder and a file.
-pub const GLYPHS: &[Spec] = &[Spec::forced("Place, folder and entry icons", || {
-    let tokens = use_tokens();
-    let (load, _reload) = use_directory(&documents());
-    let mut line = rect().tw(&tokens, &[w_full(), flex_row(), wrap(S3), gap(S3)]);
-    for kind in [
-        bingux_ui::files::model::PlaceKind::Home,
-        bingux_ui::files::model::PlaceKind::Desktop,
-        bingux_ui::files::model::PlaceKind::Documents,
-        bingux_ui::files::model::PlaceKind::Downloads,
-        bingux_ui::files::model::PlaceKind::Music,
-        bingux_ui::files::model::PlaceKind::Computer,
-    ] {
-        line = line.child(
-            vstack(S1)
-                .child(icon(
-                    place_icon(kind),
-                    IconSize::Row,
-                    Paint::Text.color(&tokens),
-                ))
-                .child(caption(format!("{kind:?}"))),
-        );
-    }
-    line = line.child(
-        vstack(S1)
-            .child(icon(
-                folder_icon(None),
-                IconSize::Row,
-                Paint::Text.color(&tokens),
-            ))
-            .child(caption("folder")),
-    );
-    if let Load::Ready(listing) = &*load.read() {
-        for entry in listing.entries.iter().take(8) {
-            line = line.child(
-                vstack(S1)
-                    .child(icon(
-                        entry_icon(entry),
-                        IconSize::Row,
-                        Paint::Text.color(&tokens),
-                    ))
-                    .child(caption(entry.name.chars().take(10).collect::<String>())),
-            );
+/// The icon sizes the file view zooms through.
+const ICON_SIZES: [u16; 4] = [16, 32, 64, 128];
+
+/// One icon over its name.
+fn labelled(tokens: &Tokens, icon: &FileIcon, size: u16, selected: bool, name: String) -> Element {
+    vstack(S1)
+        .tw_layout(&[items(Align::Center)])
+        .child(file_icon_view(tokens, icon, size, selected))
+        .child(caption(name))
+        .into_element()
+}
+
+/// A wrapping line of icons.
+fn flow(tokens: &Tokens) -> Rect {
+    rect().tw(tokens, &[w_full(), flex_row(), wrap(S3), gap(S3), items(Align::End)])
+}
+
+/// The icon every surface draws: each kind of file, at each size the view
+/// zooms through, resting and selected, then the folders a path decides, the
+/// places and drives, and the link emblem and hidden look.
+pub const FILE_ICON: &[Spec] = &[
+    Spec::forced("Every kind at 16, 32, 64 and 128 px, resting and selected", || {
+        let tokens = use_tokens();
+        let mut page = vstack(S4).tw_layout(&[w_full()]);
+        for px in ICON_SIZES {
+            for (selected, state) in [(false, "resting"), (true, "selected")] {
+                let mut line = flow(&tokens);
+                for kind in FileKind::ALL {
+                    line = line.child(labelled(
+                        &tokens,
+                        &FileIcon::for_kind(kind),
+                        px,
+                        selected,
+                        kind.label().to_owned(),
+                    ));
+                }
+                page = page
+                    .child(caption(format!("{px} px, {state}")))
+                    .child(line);
+            }
         }
-    }
-    line.into_element()
-})];
+        page.into_element()
+    })
+    .page(1900.0),
+    Spec::forced("Folders: decided by the text of the path", || {
+        use bingux_ui::files::model::places::SpecialFolder;
+        let tokens = use_tokens();
+        let mut line = flow(&tokens);
+        for kind in [
+            SpecialFolder::Home,
+            SpecialFolder::Desktop,
+            SpecialFolder::Documents,
+            SpecialFolder::Downloads,
+            SpecialFolder::Music,
+            SpecialFolder::Pictures,
+            SpecialFolder::Videos,
+            SpecialFolder::Templates,
+            SpecialFolder::PublicShare,
+            SpecialFolder::Trash,
+            SpecialFolder::Root,
+        ] {
+            line = line.child(labelled(
+                &tokens,
+                &FileIcon::for_special(kind),
+                32,
+                false,
+                format!("{kind:?}"),
+            ));
+        }
+        line = line.child(labelled(
+            &tokens,
+            &FileIcon::for_kind(FileKind::Folder),
+            32,
+            false,
+            "any other".to_owned(),
+        ));
+        line.into_element()
+    })
+    .page(140.0),
+    Spec::forced("Places and drives", || {
+        use bingux_ui::files::model::mounts::MountKind;
+        let tokens = use_tokens();
+        let mut line = flow(&tokens);
+        for kind in [
+            bingux_ui::files::model::PlaceKind::Recent,
+            bingux_ui::files::model::PlaceKind::Home,
+            bingux_ui::files::model::PlaceKind::Trash,
+            bingux_ui::files::model::PlaceKind::Computer,
+            bingux_ui::files::model::PlaceKind::Volume,
+        ] {
+            line = line.child(labelled(
+                &tokens,
+                &FileIcon::for_place_kind(kind),
+                32,
+                false,
+                format!("{kind:?}"),
+            ));
+        }
+        for kind in [MountKind::Local, MountKind::Removable, MountKind::Network, MountKind::Optical] {
+            line = line.child(labelled(
+                &tokens,
+                &FileIcon::for_mount(kind),
+                32,
+                false,
+                format!("{kind:?}"),
+            ));
+        }
+        line.into_element()
+    })
+    .page(140.0),
+    Spec::forced("A link (emblem) and a hidden item (faint)", || {
+        let tokens = use_tokens();
+        let mut page = vstack(S4).tw_layout(&[w_full()]);
+        for px in ICON_SIZES {
+            let mut line = flow(&tokens);
+            for (name, icon, selected) in [
+                ("folder link", FileIcon::for_kind(FileKind::Folder).linked(true), false),
+                ("folder link, selected", FileIcon::for_kind(FileKind::Folder).linked(true), true),
+                ("file link", FileIcon::for_kind(FileKind::Pdf).linked(true), false),
+                ("hidden folder", FileIcon::for_kind(FileKind::Folder).hidden(true), false),
+                ("hidden file", FileIcon::for_kind(FileKind::Text).hidden(true), false),
+                ("hidden, selected", FileIcon::for_kind(FileKind::Text).hidden(true), true),
+            ] {
+                line = line.child(labelled(&tokens, &icon, px, selected, name.to_owned()));
+            }
+            page = page.child(caption(format!("{px} px"))).child(line);
+        }
+        page.into_element()
+    })
+    .page(560.0),
+];
 
 fn address(at: Where, editing: bool, draft: &str) -> Element {
     let editing = use_state(|| editing);
@@ -381,4 +467,88 @@ pub const CHOOSER: &[Spec] = &[
                 .into_element(),
         ])
     }),
+];
+
+/// What the owner of a list wires into a preview's header: the file's place in
+/// the list, Open, Properties and the switch between frames. A button whose
+/// handler is absent is not drawn.
+fn preview_nav() -> PreviewNav {
+    PreviewNav::new(|_| {})
+        .position(2, 5)
+        .dockable(true)
+        .on_open(|_| {})
+        .on_properties(|_| {})
+        .on_step(|_: Step| {})
+        .on_mode(|_: Mode| {})
+}
+
+/// The sample file `path` previewed in `mode`: the content of every frame is
+/// the same component.
+fn preview(path: &str, mode: Mode) -> Element {
+    let source = PreviewSource::path(fixture().join(path));
+    PreviewHost::new(Some(source), mode, preview_nav()).into_element()
+}
+
+/// The height of the row a docked preview sits in, and of the pane shown alone.
+const DOCK_HEIGHT: f32 = 360.0;
+const PANE_HEIGHT: f32 = 420.0;
+
+/// A file list with the preview docked at its right edge, as the file manager
+/// has it: the list stays usable and the pane takes the rest of the row.
+fn docked() -> Element {
+    let mut row_area = use_state(Area::default);
+    let source = PreviewSource::path(fixture().join("Documents/Notes.txt"));
+    rect()
+        .horizontal()
+        .width(Size::fill())
+        .height(Size::px(DOCK_HEIGHT))
+        .on_sized(move |event: Event<SizedEventData>| row_area.set_if_modified(event.area))
+        .child(
+            rect()
+                .width(Size::flex(1.0))
+                .height(Size::fill())
+                .child(folder(documents(), 32)),
+        )
+        .child(PreviewDock::new(true, row_area(), Some(source), preview_nav()))
+        .into_element()
+}
+
+pub const PREVIEW: &[Spec] = &[
+    Spec::live("Popup: a picture (Open, Info, dock, full screen, Close)", || {
+        preview("Documents/Photos/network.svg", Mode::Popup)
+    })
+    .page(460.0),
+    Spec::live("Popup: a text file (Info on the right, W wraps lines)", || {
+        preview("Documents/Notes.txt", Mode::Popup)
+    })
+    .page(360.0),
+    Spec::forced("Pane: the same content in a column", || {
+        rect()
+            .width(Size::px(bingux_ui::preview::DEFAULT_WIDTH))
+            .height(Size::px(PANE_HEIGHT))
+            .child(preview("Documents/Notes.txt", Mode::Pane))
+            .into_element()
+    })
+    .page(PANE_HEIGHT),
+    Spec::forced("A folder: its contents, counted live", || {
+        preview("Documents", Mode::Pane)
+    })
+    .page(360.0),
+    Spec::forced("A file with no viewer: its icon and facts", || {
+        preview("Documents/Quarterly report.pdf", Mode::Popup)
+    })
+    .page(360.0),
+    Spec::forced("Nothing selected", || {
+        PreviewHost::new(None, Mode::Pane, PreviewNav::new(|_| {})).into_element()
+    })
+    .page(220.0),
+    Spec::live("Docked beside a list (drag the edge, Alt+P)", docked).page(380.0),
+    Spec::live("Over the window: Space or Escape closes it", || {
+        let overlays = use_overlays();
+        action_button("Preview Notes.txt", move |_| {
+            bingux_ui::preview::open(overlays, PreviewSource::path(fixture().join("Documents/Notes.txt")));
+        })
+        .into_element()
+    })
+    .script("click-text Preview Notes.txt; wait 1200; save {out}"),
 ];

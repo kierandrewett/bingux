@@ -8,7 +8,7 @@ use freya::prelude::*;
 use super::press::use_press;
 use crate::component::ComponentName;
 use crate::icons::{self, Icon};
-use crate::motion::Focusable;
+use crate::motion::{Focusable, use_tween_with};
 use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
 use crate::typography::BODY;
@@ -78,13 +78,8 @@ impl Component for Checkbox {
         let motion = tokens.motion(100);
         // The accent fades in over the control colour. The fade is an
         // opacity, so the transition survives without a raw colour.
-        let fill = use_animation_transition(if filled { 1.0_f32 } else { 0.0 }, move |from, to| {
-            AnimNum::new(from, to)
-                .time(motion)
-                .function(Function::Expo)
-                .ease(Ease::Out)
-        });
-        let fill = fill.get().value();
+        let target = if filled { 1.0_f32 } else { 0.0 };
+        let fill = use_tween_with(target, target, motion, Function::Expo);
         // The border follows the state: the accent when filled (the same colour
         // as the fill), otherwise the outline. Keyboard focus draws its own ring.
         let edge = if filled {
@@ -184,8 +179,7 @@ impl Component for Checkbox {
                             )
                             .opacity(fill)
                             .maybe_child(glyph),
-                    )
-                    .focusable(focus(), Radius::Mark),
+                    ).focusable(focus()),
             )
             .maybe_child(
                 self.text

@@ -17,7 +17,8 @@ testing = ["dep:freya-testing", "dep:freya-components"]
 chat-icons = []
 
 [dependencies]
-freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar", "engine"] }
+# `gif`: the picture viewer plays animated GIFs.
+freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar", "engine", "gif"] }
 freya-core = "0.5.0-rc.10"
 torin = "0.5.0-rc.10"
 freya-winit = "0.5.0-rc.10"
@@ -33,6 +34,8 @@ libc = "0.2"
 unicode-segmentation = "1"
 # The filesystem model behind bingux_ui::files (no UI of its own).
 bingux-files = { path = "../bingux-files" }
+# What a file is and which viewer shows it, behind bingux_ui::preview (no UI of its own).
+bingux-preview-core = { path = "../bingux-preview-core" }
 # The search engine behind bingux_ui::search (documents, index, OpenSearch-shaped
 # responses; no UI of its own).
 bingux-search = { path = "../bingux-search" }

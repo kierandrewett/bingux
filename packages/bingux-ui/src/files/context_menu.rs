@@ -24,7 +24,8 @@ use super::actions::{
 use super::columns::columns_menu_items;
 use super::directory::Where;
 use super::zoom::{LADDER, ViewKind, kind_of};
-use crate::shell::{MenuItem, Overlays, menu_item, menu_separator, submenu};
+use crate::app_icon::AppChoice;
+use crate::shell::{MenuItem, Overlays, app_menu_item, menu_item, menu_separator, submenu};
 
 
 /// A change the menu makes to the view rather than to files.
@@ -47,6 +48,8 @@ struct Item {
     enabled: bool,
     destructive: bool,
     checked: Option<bool>,
+    /// The icon name of the application the row opens the file with.
+    app: Option<String>,
     act: Act,
 }
 
@@ -80,6 +83,7 @@ impl Row {
             enabled: state.is_enabled(),
             destructive: false,
             checked: None,
+            app: None,
             act: Act::Do(command),
         }))
     }
@@ -101,6 +105,7 @@ impl Row {
             enabled: true,
             destructive: false,
             checked: Some(checked),
+            app: None,
             act,
         })
     }
@@ -156,6 +161,7 @@ fn entries_plan(facts: &Facts, folder: Option<&Path>, apps: &[App], permanent: b
                         enabled: true,
                         destructive: false,
                         checked: None,
+                        app: Some(app.icon.clone()),
                         act: Act::Do(Command::OpenWith(app.clone())),
                     })
                 })
@@ -179,15 +185,28 @@ fn entries_plan(facts: &Facts, folder: Option<&Path>, apps: &[App], permanent: b
             paste_into,
         ],
         vec![
+            Row::command("Restore", facts, Command::Restore),
+            Row::command("Restore to…", facts, Command::RestoreTo),
             Row::command("Rename", facts, Command::Rename),
             Row::command("Move to Trash", facts, Command::Trash),
+            // In the Trash it is the only delete there is, so no Shift is
+            // needed and the plain Delete key does it.
             Row::command("Delete permanently", facts, Command::DeletePermanently)
-                .filter(|_| permanent)
-                .map(Row::destructive),
+                .filter(|_| permanent || facts.trash.on())
+                .map(Row::destructive)
+                .map(|row| match row {
+                    Row::Item(item) if facts.trash.on() => Row::Item(Item {
+                        shortcut: Some("Delete"),
+                        ..item
+                    }),
+                    other => other,
+                }),
         ],
         vec![
-            Row::command("Compress", facts, Command::Compress),
-            Row::command("Extract", facts, Command::Extract),
+            Row::command("Compress…", facts, Command::Compress),
+            compress_as(facts),
+            Row::command("Extract Here", facts, Command::Extract),
+            Row::command("Extract to…", facts, Command::ExtractTo),
             Row::command("Copy path", facts, Command::CopyPath),
             Row::command("Copy location as URI", facts, Command::CopyUri),
             Row::command("Add to bookmarks", facts, Command::AddBookmark),
@@ -197,12 +216,27 @@ fn entries_plan(facts: &Facts, folder: Option<&Path>, apps: &[App], permanent: b
     ])
 }
 
+/// Compress as: the two archives that skip the dialog, made with the default
+/// options beside the originals. Left out when neither tool is installed.
+fn compress_as(facts: &Facts) -> Option<Row> {
+    use bingux_files::ops::Format;
+    let rows: Vec<Row> = [
+        Row::command("Quick .zip", facts, Command::CompressQuick(Format::Zip)),
+        Row::command("Quick .tar.gz", facts, Command::CompressQuick(Format::TarGz)),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    (!rows.is_empty()).then(|| Row::Sub("Compress as".to_owned(), rows))
+}
+
 /// An application with nothing in it, to ask [`availability`] whether Open
 /// with is on offer at all.
 fn placeholder_app() -> App {
     App {
         name: String::new(),
         exec: String::new(),
+        icon: String::new(),
         mimes: Vec::new(),
     }
 }
@@ -263,6 +297,7 @@ fn view_rows(looks: Looks) -> Vec<Row> {
             enabled: true,
             destructive: false,
             checked: Some(looks.show_hidden),
+            app: None,
             act: Act::ShowHidden(!looks.show_hidden),
         }),
     ]
@@ -334,7 +369,7 @@ fn new_file_row(facts: &Facts, templates: &[Template]) -> Option<Row> {
 /// cannot apply here (nothing to select in an empty folder, Create in Recent,
 /// Undo with nothing done) is left out rather than greyed; Paste stays in a
 /// folder, greyed until something is copied.
-fn empty_plan(facts: &Facts, looks: Looks, templates: &[Template]) -> Vec<Row> {
+fn empty_plan(facts: &Facts, looks: Looks, templates: &[Template], compress: Option<Row>) -> Vec<Row> {
     let paste = facts
         .in_folder
         .then(|| Row::command_greyed("Paste", facts, Command::Paste))
@@ -348,12 +383,13 @@ fn empty_plan(facts: &Facts, looks: Looks, templates: &[Template]) -> Vec<Row> {
             new_file_row(facts, templates),
         ],
         vec![paste, undo],
+        vec![compress],
         vec![
             Row::command("Select all", facts, Command::SelectAll),
             Row::command("Invert selection", facts, Command::InvertSelection),
         ],
         vec![Some(Row::Sub("View".to_owned(), view_rows(looks)))],
-        vec![Row::command("Empty Trash", facts, Command::EmptyTrash).map(Row::destructive)],
+        vec![Row::command_greyed("Empty Trash", facts, Command::EmptyTrash).map(Row::destructive)],
         vec![
             Row::command("Refresh", facts, Command::Refresh),
             Row::command("Properties", facts, Command::Properties),
@@ -405,10 +441,18 @@ fn realise(target: &Target, rows: Vec<Row>) -> Vec<MenuItem> {
                     enabled,
                     destructive,
                     checked,
+                    app,
                     act,
                 } = item;
                 let target = target.clone();
-                let mut entry = menu_item(label, move |_| perform(&target, &act));
+                // An application row is built from an AppChoice, so it
+                // always carries its icon.
+                let mut entry = match app {
+                    Some(icon) => app_menu_item(&AppChoice::new(label.clone(), label, icon), move |_| {
+                        perform(&target, &act)
+                    }),
+                    None => menu_item(label, move |_| perform(&target, &act)),
+                };
                 if let Some(shortcut) = shortcut {
                     entry = entry.shortcut(shortcut);
                 }
@@ -486,9 +530,14 @@ pub(super) fn menu_for_empty(env: &Env) -> Vec<MenuItem> {
         env: env.clone(),
         selected: Arc::new(Vec::new()),
     };
+    // A Ctrl or Shift right click keeps the selection: then Compress is on offer.
+    let held = super::actions::held_entries(env);
+    let compress = (!held.is_empty())
+        .then(|| Facts::of(env, &held, false))
+        .and_then(|with| Row::command("Compress selection…", &with, Command::CompressSelection));
     realise(
         &target,
-        empty_plan(&facts, looks_of(env), &user_templates()),
+        empty_plan(&facts, looks_of(env), &user_templates(), compress),
     )
 }
 
@@ -595,6 +644,7 @@ pub fn place_menu_with(env: PlaceEnv, place: &Place, extra: Vec<MenuItem>) -> Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::actions::TrashView;
 
     fn facts(caps: Capabilities, selected: usize, folders: usize) -> Facts {
         Facts {
@@ -608,7 +658,7 @@ mod tests {
             can_compress: true,
             shown: 10,
             undo: None,
-            in_trash: false,
+            trash: TrashView::No,
         }
     }
 
@@ -627,6 +677,7 @@ mod tests {
         App {
             name: name.to_owned(),
             exec: "x".to_owned(),
+            icon: format!("{name}-icon"),
             mimes: Vec::new(),
         }
     }
@@ -648,13 +699,36 @@ mod tests {
             labels(&rows),
             [
                 "Open", "Open with", "Preview", "---", "Cut", "Copy", "---", "Rename", "Move to Trash",
-                "---", "Compress", "Copy path", "Copy location as URI", "---", "Properties",
+                "---", "Compress…", "Compress as", "Copy path", "Copy location as URI", "---", "Properties",
             ]
         );
         let Row::Sub(_, apps) = &rows[1] else {
             panic!("a submenu");
         };
         assert_eq!(labels(apps), ["Viewer"]);
+    }
+
+    #[test]
+    fn every_open_with_row_carries_its_applications_icon() {
+        let rows = ordinary(
+            &facts(Capabilities::FILES_APP, 1, 0),
+            None,
+            &[app("Viewer"), app("Player")],
+        );
+        let Row::Sub(_, apps) = &rows[1] else {
+            panic!("a submenu");
+        };
+        let icons: Vec<Option<String>> = apps
+            .iter()
+            .map(|row| match row {
+                Row::Item(item) => item.app.clone(),
+                other => panic!("an application row, not {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            icons,
+            [Some("Viewer-icon".to_owned()), Some("Player-icon".to_owned())]
+        );
     }
 
     #[test]
@@ -694,7 +768,7 @@ mod tests {
         let labels = labels(&rows);
         assert!(!labels.iter().any(|label| label == "Rename"));
         assert!(!labels.iter().any(|label| label == "Add to bookmarks"));
-        for wanted in ["Cut", "Copy", "Move to Trash", "Compress", "Properties"] {
+        for wanted in ["Cut", "Copy", "Move to Trash", "Compress…", "Properties"] {
             assert!(labels.iter().any(|label| label == wanted), "{wanted}");
         }
     }
@@ -720,7 +794,7 @@ mod tests {
             shifted(&facts(caps, 1, 0)),
         ] {
             let labels = labels(&rows);
-            for gone in ["Cut", "Rename", "Move to Trash", "Delete permanently", "Compress"] {
+            for gone in ["Cut", "Rename", "Move to Trash", "Delete permanently", "Compress…"] {
                 assert!(!labels.iter().any(|label| label == gone), "{gone}");
             }
             assert!(labels.iter().any(|label| label == "Copy"));
@@ -772,10 +846,10 @@ mod tests {
     }
 
     #[test]
-    fn empty_trash_is_offered_in_the_trash_only() {
+    fn empty_trash_is_offered_in_the_trash_only_and_greyed_when_it_is_empty() {
         let mut in_trash = facts(Capabilities::FILES_APP, 0, 0);
         assert!(!offers(&plan(&in_trash), "Empty Trash"));
-        in_trash.in_trash = true;
+        in_trash.trash = TrashView::Root;
         let rows = plan(&in_trash);
         assert!(offers(&rows, "Empty Trash"));
         let destructive: Vec<String> = rows
@@ -786,6 +860,60 @@ mod tests {
             })
             .collect();
         assert_eq!(destructive, ["Empty Trash"]);
+        let enabled = |rows: &[Row]| {
+            rows.iter().any(|row| matches!(row, Row::Item(item) if item.label == "Empty Trash" && item.enabled))
+        };
+        assert!(enabled(&rows), "something to empty");
+        in_trash.shown = 0;
+        assert!(offers(&plan(&in_trash), "Empty Trash") && !enabled(&plan(&in_trash)), "greyed when empty");
+        // No new folder, paste or new file in the Trash.
+        for gone in ["New folder", "Paste", "New file", "Empty file"] {
+            assert!(!offers(&plan(&in_trash), gone), "{gone}");
+        }
+    }
+
+    #[test]
+    fn inside_the_trash_the_menu_is_restore_delete_copy_and_properties() {
+        let mut one = facts(Capabilities::FILES_APP, 1, 0);
+        one.trash = TrashView::Root;
+        let rows = ordinary(&one, None, &[app("Viewer")]);
+        let labels = labels(&rows);
+        for gone in ["Move to Trash", "Rename", "Compress…", "Cut", "Paste", "New folder", "Add to bookmarks"] {
+            assert!(!labels.iter().any(|label| label == gone), "{gone} is not offered in the Trash: {labels:?}");
+        }
+        for wanted in ["Restore", "Restore to…", "Delete permanently", "Copy", "Properties"] {
+            assert!(labels.iter().any(|label| label == wanted), "{wanted}: {labels:?}");
+        }
+        // Delete permanently needs no Shift here, is the one destructive row,
+        // and shows the plain Delete key.
+        let delete = rows.iter().find_map(|row| match row {
+            Row::Item(item) if item.label == "Delete permanently" => Some(item.clone()),
+            _ => None,
+        });
+        let delete = delete.expect("Delete permanently without Shift");
+        assert!(delete.destructive);
+        assert_eq!(delete.shortcut, Some("Delete"));
+        // Several items: the same.
+        let mut many = facts(Capabilities::FILES_APP, 3, 1);
+        many.trash = TrashView::Root;
+        let many_labels = labels_of(&ordinary(&many, None, &[]));
+        assert!(many_labels.iter().any(|label| label == "Restore"));
+        assert!(!many_labels.iter().any(|label| label == "Move to Trash"));
+        // Inside a folder that was trashed there is nothing to restore by
+        // info file, but it can still be copied and deleted for good.
+        let mut inside = facts(Capabilities::FILES_APP, 1, 0);
+        inside.trash = TrashView::Inside;
+        let inside_labels = labels_of(&ordinary(&inside, None, &[]));
+        assert!(!inside_labels.iter().any(|label| label == "Restore" || label == "Restore to…"));
+        assert!(inside_labels.iter().any(|label| label == "Delete permanently"));
+        assert!(inside_labels.iter().any(|label| label == "Copy"));
+        // Outside the Trash none of this shows.
+        let plain = labels_of(&ordinary(&facts(Capabilities::FILES_APP, 1, 0), None, &[]));
+        assert!(!plain.iter().any(|label| label == "Restore" || label == "Delete permanently"));
+    }
+
+    fn labels_of(rows: &[Row]) -> Vec<String> {
+        labels(rows)
     }
 
     #[test]
@@ -813,7 +941,7 @@ mod tests {
     }
 
     fn plan(facts: &Facts) -> Vec<Row> {
-        empty_plan(facts, looks(), &[])
+        empty_plan(facts, looks(), &[], None)
     }
 
     /// The rows of the submenu called `label`.
@@ -924,7 +1052,7 @@ mod tests {
                 path: PathBuf::from("/t/Notes.md"),
             },
         ];
-        let rows = empty_plan(&facts(Capabilities::FILES_APP, 0, 0), looks(), &templates);
+        let rows = empty_plan(&facts(Capabilities::FILES_APP, 0, 0), looks(), &templates, None);
         assert_eq!(labels(&rows)[..2], ["New folder".to_owned(), "New file".to_owned()]);
         let new_file = submenu_of(&rows, "New file");
         assert_eq!(labels(new_file), ["Empty file", "---", "Letter", "Notes"]);
@@ -953,7 +1081,7 @@ mod tests {
             label: "Letter".to_owned(),
             path: PathBuf::from("/t/Letter.odt"),
         }];
-        let rows = empty_plan(&recent, looks(), &templates);
+        let rows = empty_plan(&recent, looks(), &templates, None);
         assert!(!labels(&rows).iter().any(|label| label == "New file"));
     }
 

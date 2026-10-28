@@ -31,6 +31,13 @@ address opens the folder that holds it.
 
 Only the first argument is used; Files opens one folder per launch.
 
+A folder's name is bytes, not text. A name that is not valid UTF-8 (`café` saved
+as Latin-1, `caf\xe9`) is a valid argument and opens that exact folder: the
+launch address carries its bytes (`file:///home/me/caf%E9`), and so do the
+history, the tab and the per-folder state below. Two folders that display alike
+(`caf\xe9-\xff` and `caf\xe9-\xfe` both show as `caf�-�`) stay two folders, with
+their own sort and icon size, and the cached listing of their parent keeps both.
+
 ## The window
 
 ```text
@@ -45,8 +52,25 @@ Only the first argument is used; Files opens one folder per launch.
 ```
 
 - The **sidebar** lists Recent, Home, your folders, the Trash (once something
-  has been trashed), your bookmarks and your drives with free space. Every row
-  has a context menu.
+  has been trashed; the icon is faint while it is empty), your bookmarks and
+  your drives with free space. Every row has a context menu; the Trash row's
+  has Open, Empty Trash and Properties.
+- The **Trash** (a bin's `files` folder) is a special view. Its list shows
+  **Original Location** and **Deleted** in place of Type and Modified; the
+  status line says `Trash · N items`; when it is empty the page says
+  **Trash is empty**. The context menu offers **Restore**, **Restore to…**,
+  **Delete permanently** (always asks, Cancel is the default), Copy, Open,
+  Preview and Properties (original location and deletion date) and none of
+  Move to Trash, Rename, Compress, Cut, Paste or New folder. **Empty Trash**
+  (empty-space menu, sidebar menu) counts the items and the space first.
+  Dragging files onto the Trash row trashes them; dragging items out of the
+  Trash restores them into the folder you drop on. Moving to the Trash says
+  `Moved 3 items to Trash` and Restore says `Restored 3 items`, each with an
+  Undo. The folders the desktop stands on (home, Documents, the Trash itself)
+  are refused with a reason, and what a drive cannot take (no Trash there, a
+  read-only drive) is explained and offered to delete permanently, never
+  deleted quietly. A bin on another drive (`.Trash-$uid`) is listed when you
+  open its `files` folder; the Trash place itself lists the home bin only.
 - The **address bar** shows the path as crumbs. It is also the search box.
 - The **view button** switches between a list and a grid; the arrow beside it
   opens sort and hidden-file choices. Text never changes size with zoom; zoom
@@ -58,7 +82,32 @@ Only the first argument is used; Files opens one folder per launch.
   never counts hidden files.
 
 Each folder remembers its icon size and sort order, and the window remembers
-its size. State lives in `$XDG_STATE_HOME/bingux/files/view.json`.
+its size. State lives in `$XDG_STATE_HOME/bingux/files/view.json`; a folder is
+remembered under its exact path bytes, so folders that display alike do not share a view.
+
+## Icons
+
+Every icon in the app, in the sidebar, the list, the grid, the address bar and
+its menus, Properties, Quick Look, the drag chip and the tabs, comes from one
+place (`bingux_ui::files::FileIcon`, see "File icons" in `docs/bingux-ui.md`),
+so a folder looks the same wherever it shows.
+
+- A folder's icon is decided by its **path as written**, never by where a link
+  leads. `~/Downloads` keeps the Downloads icon when it is a link to
+  `/mnt/nas/Downloads`; the share's own path is a plain folder. Home, Desktop,
+  Documents, Downloads, Music, Pictures, Videos, Templates, Public, the Trash
+  and the root have their own, by the paths in `~/.config/user-dirs.dirs` and
+  by their usual names under home (a line that says `$HOME/` only turns the
+  configured folder off). Names are case sensitive. Any other folder, such as a
+  bookmark called Projects or Notes, has the plain folder in every place.
+- A file's icon follows its type: image, audio, video, text, code, PDF,
+  archive, spreadsheet, presentation, document, font, program, or a blank page
+  when the type is unknown.
+- A symbolic link has the icon of what it is and a small arrow badge in the
+  list, grid, Properties and Quick Look. The sidebar and the address bar do not
+  read the disk, so they show no badge.
+- A hidden file or folder is faint. An icon is in the accent colour only on the
+  selected row or tile, and muted otherwise.
 
 ## Tabs
 
@@ -94,9 +143,9 @@ search that changes the rows goes back to the top.
 | Ctrl+Shift+N | New folder |
 | F2 | Rename |
 | Ctrl+C, Ctrl+X, Ctrl+V | Copy, cut, paste |
-| Delete | Move to the Trash |
+| Delete | Move to the Trash (inside the Trash: delete permanently, after a question) |
 | Shift+Delete | Delete permanently, after a question that names the files |
-| Ctrl+Z | Undo the last move, rename, trash or create |
+| Ctrl+Z | Undo the last move, rename, trash, restore or create |
 | Ctrl+A | Select all |
 | Space | Preview the file (Quick Look) |
 | Enter | Open the folder, or open the file in its default application |
@@ -182,3 +231,30 @@ cargo run --manifest-path packages/bingux-files-app/Cargo.toml -- ~/Documents
 - Several windows. Open another folder in a tab; a second launch always
   reuses the one window.
 - Restoring the tabs of the last session.
+
+
+## Compress and Extract
+
+**Compress…** (Ctrl+E, the item's menu, or the empty-space menu opened with a Ctrl or Shift right click while items stay selected) opens a form dialog titled `Compress "name"` or `Compress 3 items`. The card is one size (520 x 680 px; a full-window sheet at 390 x 800) and its body scrolls. Cancel is Escape, Create is Enter and is disabled with the reason in the footer while the form is invalid.
+
+**Archive** (the only mode for a mixed selection):
+
+| Option | Notes |
+| --- | --- |
+| Name | Prefilled from the selection. Empty, a slash or a name too long is an inline error. A taken name shows "Keep both" (`Archive 2.zip`) or "Replace" (the old file goes to the Trash) |
+| Format | `.zip`, `.tar.gz`, `.tar.xz`, `.tar.zst`, `.tar.bz2`, `.7z`, `.tar`. A format whose tool is missing is listed dimmed with the reason |
+| Save in | The same folder, or Choose… (the folder chooser) |
+| Level | Fastest, Balanced, Smallest; hidden for `.tar` |
+| Password | `.zip` and `.7z`, AES-256 through 7-Zip (zip's own `-P` would put it on the command line). `.7z` can also encrypt the file names. The password reaches 7-Zip on standard input only and is never logged |
+| Volumes | `.zip` and `.7z`: 100 MB, 650 MB, 700 MB, 2 GB, 4095 MB |
+| Options | Include hidden files, keep links as links, keep owners (tar), leave out comma-separated patterns (`*.tmp, node_modules`; a pattern with `/` matches from the archive root), move the originals to the Trash after the archive is checked (asks first) |
+
+**Reduce size** is the default when everything selected is a picture, a film or a song. Pictures: JPEG, WebP, AVIF, PNG or the same format, quality, longest side, remove EXIF/GPS. Films: H.264, H.265, AV1 or VP9 (only encoders `ffmpeg -encoders` lists), Fastest/Balanced/Smallest or a custom CRF, resolution and frame-rate caps, sound bitrate or none. Songs: Opus, AAC, MP3 or FLAC and a bitrate. The Result group shows `Original 842 MB, estimated 120 MB`: the estimate encodes the first picture, or four seconds of the first film, at the chosen settings off the UI thread. Results are `name (compressed).ext` beside the original; a file that would not shrink is kept ("Already small: kept original"). "Replace the originals" moves each original to the Trash once the new file opened again and checked out (asks first). A kind with no tool shows a disabled row with the reason.
+
+Both modes remember the format, level and options (not the name, a password, "move originals" or "replace original") in `$XDG_CONFIG_HOME/bingux/files/compress.conf`.
+
+**Compress as** has Quick .zip and Quick .tar.gz: default options, no dialog. **Extract Here** unpacks into a new folder beside the archive and replaces nothing; **Extract to…** (Ctrl+Shift+E) asks for the folder, whether to make a folder, what to do when a name is taken (keep both, replace through the Trash, skip) and the password of a locked archive, which is tried before the dialog closes.
+
+A job runs on a worker with a busy line (files or percent; for media, "Reducing 2 of 5: name, 45%") and a cancel button that kills the programs and removes the hidden work folder. When it ends a toast offers **Show** and **Undo** (the made files go to the Trash and what was replaced comes back). Everything is written to a hidden folder beside the result, read back, written out (`fsync`, `syncfs` on removable media) and renamed into place.
+
+Tools: `zip`, `unzip`, `tar` with `gzip`/`xz`/`zstd`/`bzip2`, `7z` (`7zz`, `7za`), `ffmpeg`/`ffprobe`, ImageMagick (`magick`). Names reach them from NUL lists, standard input, list files or after `--`, never in a shell string.

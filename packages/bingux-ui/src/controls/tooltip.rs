@@ -21,6 +21,14 @@
 //!   controls is one bubble that changes place, never a gap and never two.
 //! - **A menu or dialog takes tips down.** None opens while one is up, so a
 //!   bubble never covers the menu a control opened.
+//! - **Scrolling takes tips down.** Content that scrolls moves under a resting
+//!   pointer, so no tip is up while the window scrolls (`ScrollActivity`, which
+//!   every scroll view pulses). A tip that is up goes in the frame the scroll
+//!   begins, with no fade; one that is waiting, or whose pointer arrives
+//!   meanwhile, opens nothing; when the content has been still for 200 ms a tip
+//!   whose pointer is on its control rests the usual 500 ms and opens, with no
+//!   grace time after a scroll. A tip reads the signal only while it is up or
+//!   waiting.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -109,6 +117,9 @@ struct TipHub {
     /// before their size is known; the one they replace stays until this
     /// reaches the stage they opened at.
     drawn: State<u64>,
+    /// The window's scroll signal, when its host provides one: no tip is up
+    /// while it is set.
+    scroll: Option<ScrollActivity>,
 }
 
 impl TipHub {
@@ -118,6 +129,7 @@ impl TipHub {
             stage: State::create(0),
             hid_at: State::create(None),
             drawn: State::create(0),
+            scroll: scroll_activity(),
         }
     }
 
@@ -128,6 +140,16 @@ impl TipHub {
                 .hid_at
                 .peek()
                 .is_some_and(|at| at.elapsed() < TOOLTIP_GRACE)
+    }
+
+    /// Whether the window is scrolling. Reading it subscribes the reader.
+    fn scrolling(self) -> bool {
+        self.scroll.is_some_and(|scroll| scroll.scrolling())
+    }
+
+    /// Whether the window is scrolling, without subscribing.
+    fn scrolling_now(self) -> bool {
+        self.scroll.is_some_and(|scroll| scroll.is_scrolling())
     }
 
     /// Makes tip `id` the one that is up. Returns the new stage.
@@ -146,8 +168,9 @@ impl TipHub {
     }
 
     /// Lets go of tip `id` if it is the one that is up, and starts the grace
-    /// time. Safe in a drop: it does nothing for a state that is gone.
-    fn release(self, id: u64) {
+    /// time when `grace`. Safe in a drop: it does nothing for a state that is
+    /// gone.
+    fn release(self, id: u64, grace: bool) {
         let mut up = self.up;
         let mine = up.try_peek().is_some_and(|up| *up == Some(id));
         if !mine {
@@ -158,7 +181,7 @@ impl TipHub {
         }
         let mut hid_at = self.hid_at;
         if let Some(mut at) = hid_at.try_write() {
-            *at = Some(Instant::now());
+            *at = grace.then(Instant::now);
         }
     }
 }
@@ -199,6 +222,9 @@ struct Tip {
     opened: State<u64>,
     measured: State<Option<Measured>>,
     pending: State<Option<TaskHandle>>,
+    /// Content scrolled under the pointer: the tip is down, and comes back
+    /// when the content is still, if the pointer is still on the element.
+    suspended: State<bool>,
 }
 
 impl Tip {
@@ -224,6 +250,11 @@ impl Tip {
         if self.blocked() {
             return;
         }
+        if self.hub.scrolling_now() {
+            // Content is moving under the pointer: wait for it to be still.
+            self.suspended.set_if_modified(true);
+            return;
+        }
         if self.hub.warm() {
             self.open(true);
             return;
@@ -239,6 +270,10 @@ impl Tip {
         if self.blocked() {
             return;
         }
+        if self.hub.scrolling_now() {
+            self.suspended.set_if_modified(true);
+            return;
+        }
         self.handoff.set_if_modified(handoff);
         // The text it was last measured with is from an earlier show.
         self.measured.set_if_modified(None);
@@ -250,10 +285,27 @@ impl Tip {
     /// The pointer left, or something opened over the element.
     fn close(mut self) {
         self.cancel_pending();
+        self.suspended.set_if_modified(false);
         if *self.visible.peek() {
             self.visible.set(false);
         }
-        self.hub.release(self.id);
+        self.hub.release(self.id, true);
+    }
+
+    /// Content started to scroll: the tip goes now, and comes back by
+    /// [`Tip::resume`] when the content is still, if the pointer is still here.
+    fn suspend(mut self) {
+        self.cancel_pending();
+        self.suspended.set_if_modified(true);
+        self.visible.set_if_modified(false);
+        // The next tip after a scroll waits its full rest: no grace.
+        self.hub.release(self.id, false);
+    }
+
+    /// The content is still: wait for the pointer to rest again.
+    fn resume(mut self) {
+        self.suspended.set_if_modified(false);
+        self.rest();
     }
 }
 
@@ -297,6 +349,7 @@ impl Component for HoverTip {
         let mut anchor = use_state::<Option<Area>>(|| None);
         let mut measured = use_state::<Option<Measured>>(|| None);
         let pending = use_state::<Option<TaskHandle>>(|| None);
+        let suspended = use_state(|| false);
         // The side the bubble is on, kept between renders so the decision can
         // keep it. Read and written during render, but only ever to the value
         // the same inputs give again.
@@ -310,10 +363,11 @@ impl Component for HoverTip {
             opened,
             measured,
             pending,
+            suspended,
         };
         // An unmounted control takes its tip down with it. This touches the
         // hub only: this component's own state may already be gone.
-        use_drop(move || hub.release(id));
+        use_drop(move || hub.release(id, true));
 
         // A menu or dialog that opens while the tip is up takes it down. It is
         // read only while the tip is up, so an idle tip does not render for it.
@@ -321,6 +375,21 @@ impl Component for HoverTip {
         use_side_effect_with_deps(&blocked, move |&blocked| {
             if blocked {
                 tip.close();
+            }
+        });
+
+        // Content that scrolls moves under a resting pointer, so no tip is up
+        // while anything does. The scroll takes a tip that is up down at once,
+        // and one that was waiting for the pointer to rest waits for the
+        // content to be still. Read only while the tip is up or waiting, so an
+        // idle tip does not render for it.
+        let waiting = suspended();
+        let scrolling = (visible() || waiting) && hub.scrolling();
+        use_side_effect_with_deps(&(scrolling, waiting), move |&(scrolling, waiting)| {
+            if scrolling {
+                tip.suspend();
+            } else if waiting {
+                tip.resume();
             }
         });
 
@@ -348,6 +417,12 @@ impl Component for HoverTip {
         let mut progress = use_presence(visible(), motion, || {});
         if swapping {
             progress = 1.0;
+        }
+        // Scrolling took it down: it goes at once, with no fade, so no frame
+        // draws a bubble beside content that moved.
+        if !visible() && suspended() {
+            side.set(None);
+            return rect().child(wrapper).into_element();
         }
         if !visible() {
             if progress <= 0.0 {

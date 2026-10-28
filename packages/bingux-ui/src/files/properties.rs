@@ -43,7 +43,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
 
-use bingux_files::media::{self, AvInfo, ImageInfo};
+use bingux_preview_core::media::{self, AvInfo, ImageInfo};
 use bingux_files::ops::{self, ChildSize, Counting, FileDetails, HashProgress, Hashing, Permissions, Properties, Totals};
 use bingux_files::thumbs::{self, Bucket};
 use bingux_files::{Cancel, Category, Entry, Kind};

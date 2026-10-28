@@ -576,14 +576,14 @@ impl Component for AboutPage {
                 .into()
         });
 
-        page_column()
+        bingux_ui::stage::staged(page_column()
             .child(hero)
             .child(section(
                 &tokens,
                 "System details",
                 Group::new(None).rows(details),
             ))
-            .child(section(&tokens, "Storage", storage))
+            .child(section(&tokens, "Storage", storage)))
     }
 }
 

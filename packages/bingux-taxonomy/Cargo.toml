@@ -5,6 +5,9 @@ edition = "2024"
 rust-version = "1.85"
 license = "GPL-3.0-or-later"
 description = "Every component, icon and token of bingux-ui, live, in a running Bingux app"
+authors = ["Kieran Drewett"]
+homepage = "https://github.com/kierandrewett/bingux"
+repository = "https://github.com/kierandrewett/bingux"
 build = "build.rs"
 
 [[bin]]

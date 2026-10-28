@@ -21,6 +21,9 @@ pub(in crate::files) struct App {
     pub name: String,
     /// The `Exec` line, with its field codes.
     pub exec: String,
+    /// The `Icon` key: an icon name or an absolute path. Empty when the entry
+    /// has none, which shows the generic application glyph.
+    pub icon: String,
     pub mimes: Vec<String>,
 }
 
@@ -107,7 +110,7 @@ fn scan() -> Vec<App> {
 /// hidden, is not an application, or opens no types.
 fn parse_desktop_entry(text: &str) -> Option<App> {
     let mut in_entry = false;
-    let (mut name, mut exec, mut mimes) = (None, None, Vec::new());
+    let (mut name, mut exec, mut icon, mut mimes) = (None, None, String::new(), Vec::new());
     let (mut hidden, mut application) = (false, true);
     for line in text.lines() {
         let line = line.trim();
@@ -124,6 +127,7 @@ fn parse_desktop_entry(text: &str) -> Option<App> {
         match key.trim() {
             "Name" => name = Some(value.trim().to_owned()),
             "Exec" => exec = Some(value.trim().to_owned()),
+            "Icon" => icon = value.trim().to_owned(),
             "MimeType" => {
                 mimes = value
                     .split(';')
@@ -142,6 +146,7 @@ fn parse_desktop_entry(text: &str) -> Option<App> {
     Some(App {
         name: name?,
         exec: exec?,
+        icon,
         mimes,
     })
 }
@@ -240,7 +245,7 @@ mod tests {
     use super::*;
 
     const ENTRY: &str = "[Desktop Entry]\nType=Application\nName=Image Viewer\n\
-Exec=viewer --open %f\nMimeType=image/png;image/jpeg;\n\
+Exec=viewer --open %f\nIcon=viewer-icon\nMimeType=image/png;image/jpeg;\n\
 [Desktop Action new]\nName=Other\nExec=nope\n";
 
     #[test]
@@ -248,6 +253,7 @@ Exec=viewer --open %f\nMimeType=image/png;image/jpeg;\n\
         let app = parse_desktop_entry(ENTRY).expect("an application");
         assert_eq!(app.name, "Image Viewer");
         assert_eq!(app.exec, "viewer --open %f");
+        assert_eq!(app.icon, "viewer-icon");
         assert_eq!(app.mimes, ["image/png", "image/jpeg"]);
     }
 
@@ -265,6 +271,7 @@ Exec=viewer --open %f\nMimeType=image/png;image/jpeg;\n\
         let app = App {
             name: "A".into(),
             exec: r#"/opt/a b/viewer --title "My \"App\"" %i %U 100%%"#.into(),
+            icon: String::new(),
             mimes: vec![],
         };
         let line = command_line(&app, Path::new("/tmp/x y.png"));
@@ -282,6 +289,7 @@ Exec=viewer --open %f\nMimeType=image/png;image/jpeg;\n\
         let bare = App {
             name: "B".into(),
             exec: "tool".into(),
+            icon: String::new(),
             mimes: vec![],
         };
         assert_eq!(command_line(&bare, Path::new("/t")), ["tool", "/t"]);

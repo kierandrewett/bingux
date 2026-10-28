@@ -73,9 +73,36 @@ mod names;
 mod props;
 mod tally;
 mod transfer;
+mod restore;
 mod trash;
+mod unpack;
+mod trash_empty;
+mod trash_info;
+mod pack;
+mod pack_plan;
+mod media_plan;
+pub mod prefs;
+mod shrink;
+pub mod tool;
 
-pub use archive::{Format, can_extract, compress, compress_available, extract, extract_available};
+pub use archive::{can_extract, extract_available};
+pub use unpack::{
+    Inspection, Overwrite, Unpacked, UnpackOptions, check_password, extract, inspect, unpack,
+};
+pub use media_plan::{
+    AUDIO_KBPS, AudioCodec, AudioOptions, DIMENSIONS, FRAME_RATES, HEIGHTS, ImageFormat, ImageOptions,
+    MediaKind, Probe, ReduceOptions, SOUND_KBPS, Sound, Tools, VideoCodec, VideoOptions, VideoQuality,
+    free_reduced_name, image_format_of, reduced_name,
+};
+pub use shrink::{
+    Batch, Estimate, FileReport, Live, Outcome, ReduceJob, Reduced, Stage, all_media, estimate,
+    kind_of_name, parallelism, reduce,
+};
+pub use pack::{ItemKind, OnConflict, Packed, PackJob, Scan, pack, parent_of, scan};
+pub use pack_plan::{
+    Excludes, Format, Level, NAME_LIMIT, NameCheck, PackOptions, PatternError, Password,
+    SPLIT_SIZES_MIB, base_of, check_name, file_name, free_base, split_label, suggested_base,
+};
 pub use clip::{gnome_copied_files, parse_gnome_copied_files, parse_uri_list, uri_of};
 pub use details::{FileDetails, Xattr, file_details, xattrs};
 pub use digest::{HashOutcome, HashProgress, Hashing, Sha256};
@@ -86,7 +113,15 @@ pub use props::{
 };
 pub use tally::{ChildSize, Counting, Tally, Totals, count};
 pub use transfer::{Conflict, ConflictPolicy, Resolution, copy, delete, move_to};
-pub use trash::{Trashed, can_trash, empty_trash, in_trash, trash, untrash};
+pub use restore::{RestoreEntry, RestoreFailure, RestorePlan, Restored, plan_restore, restore};
+pub use trash::{
+    Trashed, TrashRefusal, can_trash, check_trash, in_trash, trash, trash_copying, untrash,
+};
+pub(crate) use trash_info::BinFolder;
+pub use trash_empty::{
+    TrashSummary, delete_trashed, empty_trash, trash_is_empty, trash_summary,
+};
+pub use trash_info::{InBin, TrashItem, cached_dir_size, trash_item, trash_items, trash_place};
 
 /// Why an operation did not happen. Each one reads as a plain sentence.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -105,6 +140,11 @@ pub enum OpError {
     Unsupported(String),
     /// Anything else, already worded for a person.
     Other(String),
+    /// It cannot go to the bin, and why (see [`TrashRefusal`]).
+    CannotTrash(TrashRefusal),
+    /// Binning it takes a copy between two drives, and it is big: ask first,
+    /// then use [`trash_copying`].
+    CopyNeeded,
 }
 
 impl fmt::Display for OpError {
@@ -116,6 +156,10 @@ impl fmt::Display for OpError {
             OpError::Invalid(error) => error.fmt(f),
             OpError::Cancelled => f.write_str("The operation was cancelled."),
             OpError::Unsupported(text) | OpError::Other(text) => f.write_str(text),
+            OpError::CannotTrash(refusal) => refusal.fmt(f),
+            OpError::CopyNeeded => f.write_str(
+                "Moving it to the Trash means copying it to another place first, which can take a long time.",
+            ),
         }
     }
 }
@@ -401,6 +445,24 @@ pub(crate) mod testing {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    /// Run `work` with the Trash pointed at `data`. The environment is the
+    /// process's, so the tests that change it take turns.
+    pub fn with_data_home<T>(data: &Path, work: impl FnOnce() -> T) -> T {
+        static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _turn = TURN.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let previous = std::env::var_os("XDG_DATA_HOME");
+        // SAFETY: the lock above keeps the tests that set it apart, and no
+        // other test in this crate reads it.
+        unsafe { std::env::set_var("XDG_DATA_HOME", data) };
+        let outcome = work();
+        match previous {
+            // SAFETY: as above.
+            Some(value) => unsafe { std::env::set_var("XDG_DATA_HOME", value) },
+            None => unsafe { std::env::remove_var("XDG_DATA_HOME") },
+        }
+        outcome
     }
 }
 

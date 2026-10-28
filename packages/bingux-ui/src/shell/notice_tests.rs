@@ -223,17 +223,187 @@ fn a_toast_renders_a_banner() {
     assert!(named(&mut inline, "Toast").is_empty());
 }
 
-/// The toast's timer waits while the pointer is over it.
+/// A scene with one toast that goes after `timeout` (and an Undo button, so
+/// the pointer has a button to be over), plus a second queued behind it.
+#[derive(PartialEq)]
+struct Held {
+    timeout: Duration,
+    queued: bool,
+}
+
+impl Component for Held {
+    fn render(&self) -> impl IntoElement {
+        let overlays = use_overlays();
+        let (timeout, queued) = (self.timeout, self.queued);
+        use_hook(move || {
+            overlays.show_toast(
+                Toast::new("Moved 3 items to Trash")
+                    .kind(BannerKind::Neutral)
+                    .action("Undo", |_| {})
+                    .timeout(timeout),
+            );
+            if queued {
+                overlays.show_toast(Toast::new("Restored").timeout(timeout));
+            }
+        });
+        rect()
+    }
+}
+
+/// The window the held-toast scene lives in: the theme, then the overlays.
+#[derive(PartialEq)]
+struct HeldWindow {
+    timeout: Duration,
+    queued: bool,
+}
+
+impl Component for HeldWindow {
+    fn render(&self) -> impl IntoElement {
+        let _tokens = crate::theme::provide_tokens();
+        Element::from(OverlayHost::new(Held {
+            timeout: self.timeout,
+            queued: self.queued,
+        }))
+    }
+}
+
+fn held(timeout: Duration, queued: bool) -> Snapshot {
+    let mut shot = Snapshot::new(move || HeldWindow { timeout, queued }.into(), (900.0, 400.0));
+    shot.settle(Duration::from_millis(400));
+    shot
+}
+
+fn centre(b: Box4) -> (f32, f32) {
+    ((b[0] + b[1]) / 2.0, (b[2] + b[3]) / 2.0)
+}
+
+/// The toast stays while the pointer is on any part of it: its padding at
+/// each side, the gap between the message and the buttons, the action button
+/// and the dismiss cross. A pointer on a button must hold it too: those
+/// buttons are inside the toast and listen to the pointer themselves.
 #[test]
-fn a_toast_stays_up_while_the_pointer_is_over_it() {
-    let mut shot = scene(Place::Toast, "Saved", false, BannerKind::Neutral, (900.0, 400.0));
+fn a_toast_stays_up_while_the_pointer_is_anywhere_over_it() {
+    let timeout = Duration::from_millis(500);
+    let mut probe = held(timeout, false);
+    let bar = named(&mut probe, "Banner")[0];
+    let action = named(&mut probe, "NoticeAction")[0];
+    let dismiss = named(&mut probe, "IconButton")[0];
+    drop(probe);
+    let (mid_x, mid_y) = centre(bar);
+    let places = [
+        ("the middle", (mid_x, mid_y)),
+        ("the leading padding", (bar[0] + 3.0, mid_y)),
+        ("the trailing padding", (bar[1] - 1.5, mid_y)),
+        ("the top padding", (mid_x, bar[2] + 1.5)),
+        ("the bottom padding", (mid_x, bar[3] - 1.5)),
+        ("the gap before the action", (action[0] - 2.0, mid_y)),
+        ("the action button", centre(action)),
+        ("the dismiss cross", centre(dismiss)),
+    ];
+    for (name, (x, y)) in places {
+        let mut shot = held(timeout, false);
+        shot.hover(x, y);
+        shot.settle(Duration::from_millis(1600));
+        assert_eq!(
+            named(&mut shot, "Banner").len(),
+            1,
+            "the pointer on {name} ({x:.0}, {y:.0}) holds the toast"
+        );
+        // Moving between two of its parts does not let it go either.
+        shot.hover(mid_x, mid_y);
+        shot.settle(Duration::from_millis(900));
+        assert_eq!(named(&mut shot, "Banner").len(), 1, "after {name}, over the middle");
+        shot.hover(20.0, 20.0);
+        shot.settle(Duration::from_millis(1600));
+        assert!(named(&mut shot, "Banner").is_empty(), "gone once the pointer left from {name}");
+    }
+}
+
+/// Once the pointer leaves, the whole delay starts again: a toast that was
+/// hovered for longer than its delay does not close at once.
+#[test]
+fn leaving_a_toast_restarts_the_full_delay() {
+    let timeout = Duration::from_millis(1000);
+    let mut shot = held(timeout, false);
     let bar = named(&mut shot, "Banner")[0];
-    shot.hover((bar[0] + bar[1]) / 2.0, (bar[2] + bar[3]) / 2.0);
-    shot.settle(Duration::from_secs(6));
-    assert_eq!(named(&mut shot, "Banner").len(), 1, "held by the pointer");
+    let (x, y) = centre(bar);
+    shot.hover(x, y);
+    shot.settle(Duration::from_millis(2500));
+    assert_eq!(named(&mut shot, "Banner").len(), 1, "held for longer than its delay");
     shot.hover(20.0, 20.0);
-    shot.settle(Duration::from_secs(6));
-    assert!(named(&mut shot, "Banner").is_empty(), "gone once released");
+    shot.settle(Duration::from_millis(600));
+    assert_eq!(
+        named(&mut shot, "Banner").len(),
+        1,
+        "600 ms after leaving: the delay restarted, it did not resume from where it paused"
+    );
+    // Entering again pauses again, and leaving again restarts again.
+    shot.hover(x, y);
+    shot.settle(Duration::from_millis(1500));
+    assert_eq!(named(&mut shot, "Banner").len(), 1, "held again");
+    shot.hover(20.0, 20.0);
+    shot.settle(Duration::from_millis(600));
+    assert_eq!(named(&mut shot, "Banner").len(), 1, "restarted again");
+    shot.settle(Duration::from_millis(1100));
+    assert!(named(&mut shot, "Banner").is_empty(), "gone a full delay after the last leave");
+}
+
+/// A toast queued while another is hovered waits behind it: the hovered one
+/// stays as it is, and the next shows when it is gone.
+#[test]
+fn a_toast_queued_while_one_is_hovered_waits_behind_it() {
+    let timeout = Duration::from_millis(600);
+    let mut shot = held(timeout, true);
+    let bar = named(&mut shot, "Banner")[0];
+    assert_eq!(named(&mut shot, "NoticeAction").len(), 1, "the first toast is up");
+    let (x, y) = centre(bar);
+    shot.hover(x, y);
+    shot.settle(Duration::from_millis(2000));
+    assert_eq!(named(&mut shot, "Banner").len(), 1, "only the hovered toast");
+    assert_eq!(named(&mut shot, "NoticeAction").len(), 1, "still the first, with its action");
+    shot.hover(20.0, 20.0);
+    shot.settle(Duration::from_millis(1400));
+    assert_eq!(named(&mut shot, "Banner").len(), 1, "the queued toast took its place");
+    assert!(named(&mut shot, "NoticeAction").is_empty(), "the second toast has no action");
+}
+
+/// The fill each node of component `name` paints now, in tree order, `None`
+/// for a node that paints nothing.
+fn fills(shot: &mut Snapshot, name: &str) -> Vec<Option<Color>> {
+    let tree = crate::inspector::snapshot::Snapshot::capture_headless(&*shot.runner(), 1.0);
+    tree.nodes
+        .iter()
+        .filter(|node| node.a11y.component.as_deref() == Some(name))
+        .map(|node| {
+            node.props
+                .as_ref()
+                .and_then(|props| props.background)
+                .filter(|colour| colour.a() != 0)
+        })
+        .collect()
+}
+
+/// The action button is quiet: it paints nothing at rest, so the toast reads
+/// as one surface; hovering gives it the hover fill and leaving takes it
+/// away. It is as tall as the dismiss cross and shares its top inset.
+#[test]
+fn the_action_button_is_quiet_and_matches_the_dismiss_cross() {
+    for kind in BannerKind::ALL {
+        let mut shot = scene(Place::Toast, "Saved", true, kind, (900.0, 400.0));
+        let action = named(&mut shot, "NoticeAction")[0];
+        let dismiss = named(&mut shot, "IconButton")[0];
+        assert!(near(action[3] - action[2], dismiss[3] - dismiss[2]), "{kind:?}: same height");
+        assert!(near(action[2], dismiss[2]), "{kind:?}: same top inset");
+        assert_eq!(fills(&mut shot, "NoticeAction"), [None], "{kind:?}: no fill at rest");
+        let (x, y) = centre(action);
+        shot.hover(x, y);
+        shot.settle(Duration::from_millis(100));
+        let hovered = fills(&mut shot, "NoticeAction");
+        assert!(hovered[0].is_some(), "{kind:?}: the hover layer shows");
+        shot.hover(20.0, 20.0);
+        shot.settle(Duration::from_millis(100));
+        assert_eq!(fills(&mut shot, "NoticeAction"), [None], "{kind:?}: gone when the pointer leaves");
+    }
 }
 
 #[derive(PartialEq)]
@@ -316,8 +486,6 @@ fn every_kind_reads_in_both_schemes_and_every_accent() {
                 let name = format!("{accent} {scheme:?} {kind:?}");
                 let text = ratio(colours.ink, colours.fill);
                 assert!(text >= AA_TEXT, "{name}: ink on fill is {text:.2}");
-                let label = ratio(colours.on_action, colours.action);
-                assert!(label >= AA_TEXT, "{name}: action label is {label:.2}");
                 if kind == BannerKind::Neutral {
                     continue;
                 }

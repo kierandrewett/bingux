@@ -4,6 +4,19 @@ use std::cmp::Ordering;
 
 use crate::entry::Entry;
 
+/// When `entry` was deleted, if it is an item of the Trash that says.
+fn deleted_of(entry: &Entry) -> Option<std::time::SystemTime> {
+    entry.trash.as_ref().and_then(|trash| trash.deleted)
+}
+
+/// A time as a number that sorts the way the time does; none sorts first.
+fn time_key(time: Option<std::time::SystemTime>) -> i128 {
+    time.map_or(i128::MIN, |time| match time.duration_since(std::time::UNIX_EPOCH) {
+        Ok(after) => after.as_nanos() as i128,
+        Err(before) => -(before.duration().as_nanos() as i128),
+    })
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SortKey {
     Name,
@@ -11,6 +24,9 @@ pub enum SortKey {
     Modified,
     /// The type's description, then the name.
     Kind,
+    /// When the item was put in the Trash, from its `.trashinfo`. An entry that
+    /// is not an item of the Trash has none and sorts first.
+    Deleted,
 }
 
 /// How a listing is ordered.
@@ -82,6 +98,9 @@ impl Sort {
                 .description
                 .cmp(b.mime.description)
                 .then_with(|| natural_cmp(&a.name, &b.name)),
+            SortKey::Deleted => deleted_of(a)
+                .cmp(&deleted_of(b))
+                .then_with(|| natural_cmp(&a.name, &b.name)),
         };
         if self.descending {
             by_key.reverse()
@@ -128,15 +147,11 @@ impl Sort {
             let primary = match self.key {
                 SortKey::Name => 0,
                 SortKey::Size => i128::from(entry.size),
-                SortKey::Modified => entry.modified.map_or(i128::MIN, |time| {
-                    match time.duration_since(std::time::UNIX_EPOCH) {
-                        Ok(after) => after.as_nanos() as i128,
-                        Err(before) => -(before.duration().as_nanos() as i128),
-                    }
-                }),
+                SortKey::Modified => time_key(entry.modified),
                 SortKey::Kind => ranks
                     .binary_search_by(|(name, _)| (*name).cmp(entry.mime.description))
                     .map_or(0, |at| i128::from(ranks[at].1)),
+                SortKey::Deleted => time_key(deleted_of(entry)),
             };
             let mut head = [0u8; 8];
             let key = &arena[start as usize..];
@@ -309,7 +324,15 @@ mod tests {
             .enumerate()
             .map(|(i, name)| entry(name, name.starts_with(['F', 'f']), (i as u64 * 5) % 4))
             .collect();
-        for key in [SortKey::Name, SortKey::Size, SortKey::Modified, SortKey::Kind] {
+        // Give some of them a deletion date, as items of the Trash have.
+        let mut entries = entries;
+        for (index, entry) in entries.iter_mut().enumerate().filter(|(index, _)| index % 3 != 0) {
+            entry.trash = Some(std::sync::Arc::new(crate::entry::TrashMeta {
+                original: None,
+                deleted: Some(std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000 + (index as u64 * 37) % 11)),
+            }));
+        }
+        for key in [SortKey::Name, SortKey::Size, SortKey::Modified, SortKey::Kind, SortKey::Deleted] {
             for descending in [false, true] {
                 for folders_first in [false, true] {
                     let sort = Sort { key, descending, folders_first };
@@ -322,5 +345,28 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn deleted_sorts_by_the_deletion_time_and_puts_what_has_none_first() {
+        let when = |seconds: u64| {
+            Some(std::sync::Arc::new(crate::entry::TrashMeta {
+                original: None,
+                deleted: Some(std::time::UNIX_EPOCH + std::time::Duration::from_secs(seconds)),
+            }))
+        };
+        let mut entries = vec![entry("late", false, 1), entry("early", false, 1), entry("unknown", false, 1), entry("mid", false, 1)];
+        entries[0].trash = when(300);
+        entries[1].trash = when(100);
+        entries[3].trash = when(200);
+        let names = |sort: Sort| {
+            let mut order: Vec<usize> = (0..entries.len()).collect();
+            sort.order(&entries, &mut order);
+            order.iter().map(|index| entries[*index].name.as_str()).collect::<Vec<_>>()
+        };
+        let ascending = Sort::by(SortKey::Deleted);
+        assert_eq!(names(ascending), ["unknown", "early", "mid", "late"]);
+        assert_eq!(names(Sort { descending: true, ..ascending }), ["late", "mid", "early", "unknown"]);
+        assert_eq!(Sort::by(SortKey::Name).toggled(SortKey::Deleted).key, SortKey::Deleted);
     }
 }

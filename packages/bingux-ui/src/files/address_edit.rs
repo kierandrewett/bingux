@@ -23,11 +23,12 @@ use bingux_files::location::{self, CompleteOptions, Completer};
 use freya::prelude::*;
 
 use super::address_complete::{Suggestions, step};
-use super::address_list::{ListRow, NoticeRow, Part, popover, scroll_offset};
+use super::address_list::{Lead, ListRow, NoticeRow, Part, popover, scroll_offset};
 use super::address_target::{DEADLINE, Problem, Target, check};
 use super::search::{SearchLink, SubfolderRow};
 use super::directory::Where;
-use super::glyphs::{category_icon, folder_icon};
+use super::file_icon::{FileIcon, FileKind};
+use bingux_files::Kind;
 use crate::component::ComponentName;
 use crate::controls::button::icon_button;
 use crate::controls::path_label::path_label;
@@ -528,7 +529,7 @@ impl Component for Edit {
             } else {
                 "Type a path"
             })
-            .leading(if scoped { Icon::Search } else { Icon::Folder })
+            .leading(if scoped { Icon::Search } else { FileKind::Folder.glyph() })
             .a11y_id(id)
             .on_enter_modifiers({
                 let enter_keys = enter_keys.clone();
@@ -617,14 +618,13 @@ impl Component for Edit {
                 .enumerate()
                 .map(|(index, row)| {
                     let pick = pick.clone();
-                    let icon = if row.is_dir {
-                        folder_icon(row.special)
-                    } else {
-                        category_icon(bingux_files::mime::for_name(&row.name).category)
-                    };
+                    let icon = FileIcon::for_path(
+                        &answer.dir.join(&row.name),
+                        if row.is_dir { Kind::Directory } else { Kind::File },
+                    );
                     let after = if row.is_dir { "/" } else { "" };
                     Element::from(ListRow {
-                        icon,
+                        icon: Lead::File(icon),
                         parts: Part::matched(&row.name, row.matched.clone(), after),
                         current: false,
                         mark: crate::shell::menu_query::Mark::Plain,

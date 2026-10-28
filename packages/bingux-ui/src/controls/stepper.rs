@@ -157,8 +157,7 @@ impl Component for Stepper {
             .child(step_button(Icon::ListAdd, can_increment, move |_| {
                 increment();
                 a11y_id.request_focus();
-            }))
-            .focusable(focus(), Radius::Control)
+            })).focusable(focus())
     }
 }
 

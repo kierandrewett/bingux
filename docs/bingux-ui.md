@@ -216,6 +216,39 @@ you can see. The rule for an application: **nothing on the UI thread waits.**
   nothing and an idle window stays idle. The Date & Time clock writes only
   when the minute (the second, when the face shows seconds) changed.
   `runtime::background` is for first loads and one-shot work.
+- The frame that mounts a page costs in proportion to what the page has, so
+  the page is mounted a piece a frame (`bingux_ui::stage`). `veiled(..)` (the
+  Settings page wrapper) and `stage::staged(page_column()..)` mount the page
+  head and the first group with the page and one more child of the column
+  each frame, top to bottom; a group of more than 24 rows mounts 24 and
+  adds 12 a frame (`use_staged_rows`), and what is below it waits for it to
+  be whole. Nothing is mounted below something that is not mounted, so
+  nothing moves while the page fills in, and a page keeps its height from the
+  last time it was whole as a minimum height. What a page's host puts under
+  the page's column (the Related group under a Settings page) would be
+  pushed down by every child that mounts above it, so the host calls
+  `stage::provide_page()` and wraps it in `stage::after_page(..)`, which
+  mounts it once the page is whole. A page mounts whole when the
+  location names a row (`#fragment`) and while a search runs;
+  `BINGUX_NO_STAGE=1` mounts every page whole, to compare.
+- A control that mounts at rest has no hook that works at mount. A focus ring
+  is not made until keyboard focus first reaches its control (`RingFace` in
+  `motion.rs`: the wrapper keeps the face's size and a latch, and the ring
+  component, its two animations and its nodes exist only after the latch);
+  the anchor highlight of a row exists only on the row a location points at;
+  a row tells its group whether it is lit and whether it matched in one hook
+  (`use_row_slot`); a switch, checkbox, radio and slider thumb move with
+  `use_tween_with`, which starts nothing at mount, not with
+  `use_animation_transition`, which runs an animation from the value to
+  itself on every mount. A row measures its title only once it and its
+  control have been sized.
+- Text is laid out once. The window's text cache keeps the paragraphs of the
+  nodes that went away (2048 of them, `RETAINED_PARAGRAPHS` in the vendored
+  `freya-core`), so a page opened again finds its labels shaped, and
+  `warm::FontWarm` lays out one word in each text style the apps use, a style
+  a frame, after the window is up, so the first page with tabular figures or
+  a new weight does not pay for fontconfig's family search (40 ms on the
+  frame that mounted it).
 - `scripts/ui-lint.py` forbids `Command::new`, `std::fs` reads and writes and
   `thread::sleep` outside `BLOCKING_ALLOWED` (each entry has its reason), and
   any of them, or a blocking `system::` call, directly in a `render` body or
@@ -243,9 +276,20 @@ UI thread's CPU ms since the last frame, and the same without the presenting
 step (on a software renderer, rasterisation, which says nothing about the
 app; `frame-time.py` gates on that last figure).
 
+`BINGUX_PERF_FOLDED=FILE BINGUX_PERF_SLOW_FRAMES=12` keeps only the stacks of
+the frames busy for more than 12 ms (each under a `frame <ms> ms` root), the
+profile of what the gate fails on. `BINGUX_SETTINGS_SNAPSHOT_TIMING=10
+bingux-settings --snapshot DIR page,..` (a `snapshot` build) opens each page
+ten times from the Power page and prints the UI-thread milliseconds of the
+mount update: no window, no slide, no GPU.
+
 `scripts/frame-time.py` drives a headless session through page switches, every
 Network subpage's push and pop, scrolling, sliders and typing, and prints
-interval and UI-thread busy-time percentiles per scenario. With
+interval and UI-thread busy-time percentiles per scenario. `--app files` runs it
+on the Files app (`--binary` its path) in a folder of 20,000 files
+(`FILES_HOME`, default `/var/tmp/FileTips-home`, made by
+`scripts/files-fixture.py`) and scrolls a list and a grid at three zoom levels with the
+wheel and the scrollbar while the pointer has armed the detail card. With
 `--slow-sources 500` it slows every command first. It exits 1 when a scenario
 has busy p99 over 20 ms, a busy frame or blocked stretch of 50 ms or more, no
 frames at all, or (with `--gate-wall`) an interval p99 over a limit. A software
@@ -346,6 +390,7 @@ fn main() {
         .routes(routes()) // the navigation tree: see Navigation below
         .title("My App")
         .borderless() // Gnoblin draws the frame
+        .about(bingux_ui::app_info!()) // who it is: the About window's facts
         .usage("Usage: my-app [URI]") // printed by --help
         .run(|| App);
 }
@@ -370,6 +415,78 @@ fn main() {
 
 Where the window is, and how it got there, is the [Navigation](#navigation)
 system's: a location is a URI, and `use_location()` reads it.
+
+### About window
+
+Every application has an About window, made by `Application::run`. It is a
+card over the window (the same card on a phone) with the application icon,
+name, version, a one-line description, the website and "Report an issue" as
+links (opened with `xdg-open`), Licence, Credits and Legal pages, the app id and
+build, and **Copy details**, which puts a plain-text block for a bug report on
+the clipboard: name and version, app id, commit and build date, licence, the
+Rust, Freya and bingux-ui versions, OS, kernel and session, display scale, the
+graphics driver, and the window's theme and density. A fact that is not known
+is left out of the block.
+
+**Configure it in three lines.** Put the package's metadata in `Cargo.toml`,
+call `about(app_info!())` in `main`, and add the app's own items to its main
+menu:
+
+```toml
+[package] # description, homepage, repository, license and authors feed the window
+description = "Browse and organise files and folders"
+homepage = "https://github.com/kierandrewett/bingux"
+repository = "https://github.com/kierandrewett/bingux"
+```
+
+```rust
+Application::new("my-app")
+    .about(bingux_ui::app_info!(name = "My App", licence_text = include_str!("../../../COPYING")))
+    .run(|| App);
+
+// the app's main menu ends with About; an app with no menu uses a header menu
+items.extend(bingux_ui::about::app_menu_items(overlays));
+split.header_trailing(bingux_ui::prelude::app_menu(Vec::new()));
+```
+
+`app_info!()` reads `CARGO_PKG_NAME`, `VERSION`, `DESCRIPTION`, `HOMEPAGE`,
+`REPOSITORY`, `LICENSE` and `AUTHORS` at compile time, the build's commit from
+`BINGUX_BUILD_COMMIT` and its date from `BINGUX_BUILD_DATE` when the build sets
+them (`cargo:rustc-env=` in a `build.rs`, or the environment of `cargo build`).
+The name and id come from the package name (`bingux-files-app` is "Files" with
+id `bingux-files`), the website from `homepage`, else `repository`, and the
+issue tracker from a GitHub repository (`<repository>/issues`). Each
+`key = value` after it calls the `AppInfo` method of that name (`name`, `id`,
+`icon`, `description`, `website`, `issues`, `licence`, `licence_text`,
+`authors`, `commit`, `built`, `third_party`) and wins. Only web and `mailto:`
+links open; a field left empty leaves its row out.
+
+- **Licence text** is the page behind the Licence row. Pass `licence_text =
+  include_str!(..)` (Bingux's apps embed the repository's `COPYING`).
+- **Legal** lists the libraries linked in. It shows the `third_party` text when
+  the app gives one, else the `<id>.LICENSE.dependencies` that
+  `scripts/cargo-licenses.py` writes and the RPM and Arch packages install under
+  `/usr/share/licenses/<package>/` (`$BINGUX_LICENSES_DIR` overrides the
+  directory, for a build tree). Nothing is read until the page is opened.
+- **It cannot be forgotten.** `Application::run` registers the window whatever
+  `main` says, so a bare `Application::new("id")` still has one, named after its
+  id and title with no version, and the shortcut and `about::open` work.
+  `scripts/ui-lint.py` fails an app crate whose `src/main.rs` starts an
+  `Application` without `.about(` and `app_info!`.
+- **The shortcut is Ctrl+Shift+?** in the main window of every application
+  (`about::is_shortcut`). It does nothing while a dialog is open: that dialog
+  holds a question. `about::open(overlays)` opens it from code, and the
+  headless runner's script command `key ctrl+shift+?` reaches it the way a
+  person does.
+- **The main menu ends with "About <name>"** from `about::app_menu_items(overlays)`
+  (a separator and the item, with the shortcut shown). An app whose menu is a
+  list it builds appends them; an app with no menu puts `app_menu(items)` in
+  its header (`NavigationSplitView::header_trailing`). Settings, Files and
+  Taxonomy do. Settings' **System > About** page is about the computer; the
+  window the menu opens is about Settings.
+- The page behind it is inert while it is open, Escape and a press on the scrim
+  close it, Alt+Left goes back from a page to the main one, and the focus returns to
+  where it was. The card has one size on every page.
 
 ## Navigation
 
@@ -533,7 +650,7 @@ dialogs (top first). It reads `Router::snapshot()` each time the pane renders.
 
 | Family           | Components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Controls         | `switch`, `checkbox` (tri-state), `slider` (`step`, `show_value`, `fill`, `gradient(stops)`: the track is a colour ramp instead of the accent fill; the night light's colour temperature uses it, and a hue or brightness ramp is the same call), `segmented` (`fill` for equal segments; only the selected segment is raised, a hovered one brightens its text), `dropdown` (`app_icons`, `width`), `stepper`, `usage_meter` (a figure, its total and a thin bar), `qr_code` (`ecc`, `label`, `size`: a pure-Rust QR encoder, versions 1 to 15, drawn black on a white tile with the quiet zone in every theme; `QrMatrix::encode` gives the modules; too-long data draws an empty tile), `action_strip` of `strip_action` (two to four icon-over-label actions in one rounded bar), `text_field` (`password`, `invalid`, `clearable`), `search_field`, `progress_bar`, `spinner` |
+| Controls         | `switch`, `checkbox` (tri-state), `slider` (`step`, `show_value`, `fill`, `gradient(stops)`: the track is a colour ramp instead of the accent fill; the night light's colour temperature uses it, and a hue or brightness ramp is the same call), `segmented` (`fill` for equal segments; only the selected segment is raised, a hovered one brightens its text), `dropdown` (`width`; a list of applications is `app_dropdown(Vec<AppChoice>, ..)`, which icons it), `stepper`, `usage_meter` (a figure, its total and a thin bar), `qr_code` (`ecc`, `label`, `size`: a pure-Rust QR encoder, versions 1 to 15, drawn black on a white tile with the quiet zone in every theme; `QrMatrix::encode` gives the modules; too-long data draws an empty tile), `action_strip` of `strip_action` (two to four icon-over-label actions in one rounded bar), `text_field` (`password`, `invalid`, `clearable`), `search_field`, `progress_bar`, `spinner` |
 | Navigation       | `segmented(options, selected, on_select).tabs()` (the tab bar: each tab a real button with the segmented look, only the selected one raised, Left, Right, Home and End move the selection and focus; `scroll()` for a narrow container; an app's view tabs and the inspector's tabs use it too), `breadcrumb(crumbs, on_select)` (crumbs separated by chevrons, each a Tab stop, the last in normal ink; `code` for a code-face trail; a file manager path uses it too) |
 | Buttons          | `action_button` (`suggested`, `destructive`, `flat`, `loading`, `icon`), `primary_button`, `row_button`, `icon_button` (`tooltip`, `danger`, `busy` (a spinner in place of the icon, the size unchanged), `radius`: `Control` like every button by default), `split_button(icon)` or `SplitButton::new(icon)` (a primary action and a menu in one control: `on_press`, `tooltip` or `label` (the primary segment's name), `menu(items)` or `on_menu(handler)` for the chevron, `menu_label` (the chevron's name), `enabled`; see Split buttons) |
 | Rows             | `row` (`subtitle`, `value` (selectable, one line), `badge`, `leading`, `leading_tone` (draws the leading icon in the accent, warning or danger colour, for a row that reports a state), `leading_space` (a blank icon column so text lines up), `leading_app`, `navigates`, `selected`, `destructive`, `context_menu`, `on_press` (makes the row activatable)), `radio_row(title, selected, on_select)` (a radio on the leading edge; the whole row selects; `subtitle`, `value`, `leading_app` as for `row`), `radio_rows(title, rows)` (a group of radio rows: Up and Down move the selection, and only the selected row is in the Tab order), `switch_row` (`nested` for sub-rows shown while on), `slider_row` (a `level_row` for a setting), `level_row` (title on the left and a slider filling the rest of the line; `control` such as a mute button sits between them, `footer` under the track, `mark` and `mark_label` for a tick such as 100%, `danger_from`, `value_text`, `max`, `leading`, `context_menu`), `choice_row`, `text_row`, `entry_row`, `expander_row`, `property_row` |
@@ -550,7 +667,7 @@ dialogs (top first). It reads `Router::snapshot()` each time the pane renders.
 | Forms            | `form_row(label, control)` for a label beside a control; `form_field(title, value)` for a validated text row (see Forms below); `live_state(rows)` for a read-only "Right now" group; `pending_bar(dirty, valid, on_apply, on_revert)` for the apply bar of a form with a draft; `segmented(options, selected, on_select).fill()` for a popup tab rail of equal segments (it stays a rail on a phone) |
 | Trees            | `tree_view(roots, expanded, selected)` takes `TreeNode`s (`TreeNode::new(id, label)` with `detail`, `icon`, `badge`, `chips`, `paints(label, detail)` and `children`; a `Vec` or an `Rc<[TreeNode]>`) and the sets of open branches and the selected id as state. Rows are `MenuItem` height, or `CodeRow` height in the code face with `.code()`. Up and Down move the selection, Right opens a branch or enters it, Left closes it or goes to the parent, Enter and Space open or close a branch and activate it. A click selects; clicking the selected row activates it; Alt-clicking a chevron opens or closes the whole subtree. A selection the caller sets opens the row's ancestors and scrolls it into view. `TreeView::on_hover`, `on_activate` and `on_context` (a right click selects the row and reports its window position) report to the caller; `child_counts()` shows the child count of a closed branch and `find(text, current)` marks a search text in the rows. The inspector's Elements tree is a `tree_view`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | Splits           | `split_pane(first, second, ratio)` with the first pane's share of the length in `ratio` (kept between 0.15 and 0.85). Side by side by default; `.vertical()` stacks the panes. Drag the divider to resize; the divider is a hairline with an `S1` hit zone on each side                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Menus            | `menu_item` and `menu_button(label, items)`. `MenuItem::checked` (state is a tick; menus are text, and `MenuItem::icon` is only for a menu whose rows the icon names, never in the file views), `menu_button` opens its menu against its own button (below it, above when there is no room, edge aligned, kept inside the window), `Overlays::show_menu` at a point is for context menus only; `MenuItem::destructive` and `MenuItem::disabled`; `menu_separator()`. `Overlays::show_menu` opens at window coordinates and stays on screen: it opens upward or leftward when there is no room. Picking an item closes the menu, then runs it; Escape and an outside press close it. While a menu or dropdown list is open, the window behind it takes no presses, wheel turns or hover, and the wheel never scrolls the page behind a list                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Menus            | `menu_item` and `menu_button(label, items)`. `MenuItem::checked` (state is a tick; menus are text, and `MenuItem::icon` is only for a menu whose rows the icon names, never in the file views; a list of applications is the exception and always has app icons: `app_menu_items(Vec<AppChoice>, on_pick)`, `app_dropdown(Vec<AppChoice>, selected, f)`), `menu_button` opens its menu against its own button (below it, above when there is no room, edge aligned, kept inside the window), `Overlays::show_menu` at a point is for context menus only; `MenuItem::destructive` and `MenuItem::disabled`; `menu_separator()`. `Overlays::show_menu` opens at window coordinates and stays on screen: it opens upward or leftward when there is no room. Picking an item closes the menu, then runs it; Escape and an outside press close it. While a menu or dropdown list is open, the window behind it takes no presses, wheel turns or hover, and the wheel never scrolls the page behind a list                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 Every control supports keyboard use: Enter and Space activate. Arrows move
 sliders and steppers. Page Up and Page Down move sliders and steppers by ten
@@ -616,7 +733,7 @@ A row that holds a control (a switch, checkbox, dropdown or button) and also ope
 | --- | --- |
 | Body | Leading icon, text and the control, one gutter from the card edge. Pressing the text or the icon opens the page; the control only acts. The body takes the hover and pressed fill, not the chevron. |
 | Divider | One `Paint::Separator` hairline between the control and the chevron, the row's height less `S3` above and below (about 60% of a one-line row), with `S3` of space on both sides. A button, dropdown or segmented control keeps `ROW_INSET` between it and the divider instead (see below). |
-| Chevron zone | Its own target, the row's full height and flush with the card edge, at least `Dim::Control` wide (44 px on a phone). It has its own hover and pressed fill, clipped by the card so its outer corners follow the card radius, and its own `Radius::Inner` focus ring and Tab stop, named "Open <title>" to assistive technology. |
+| Chevron zone | Its own target, the row's full height and flush with the card edge, at least `Dim::Control` wide (44 px on a phone). It has its own hover and pressed fill, clipped by the card so its outer corners follow the card radius, and its own focus ring (drawn inside, with the zone's own square painted corners) and Tab stop, named "Open <title>" to assistive technology. |
 
 The taxonomy's Row entry shows it under "Control and chevron" and "Button, dropdown and chevron".
 
@@ -628,7 +745,7 @@ A trailing `switch` sits `SWITCH_INSET` from the trailing edge (the row height l
 
 ### Banners and toasts: one notice
 
-A banner and a toast are the same component. `Banner` is the base: a pill with an optional leading icon, an optional title, a message that wraps, any number of filled action buttons and an optional dismiss cross. `Toast` is a `Banner` that floats: `Toast::new(text)` builds a `Banner::new(text)` (neutral kind) and only adds what makes it float, so the pill, its colours and its buttons are drawn by one code path.
+A banner and a toast are the same component. `Banner` is the base: a pill with an optional leading icon, an optional title, a message that wraps, any number of quiet action buttons and an optional dismiss cross. `Toast` is a `Banner` that floats: `Toast::new(text)` builds a `Banner::new(text)` (neutral kind) and only adds what makes it float, so the pill, its colours and its buttons are drawn by one code path.
 
 ```rust
 banner("Updates are ready to install.")
@@ -648,46 +765,54 @@ overlays.show_toast(Toast::new("Could not reach the network.")
 
 **Several actions.** `.action(..)` can be called again. On a desktop the buttons share the row with the message; on a phone (compact density) a banner with more than one action puts them on a row of its own under the message, end-aligned, with the dismiss cross at the top corner, so the message is never squeezed to a word a line. That banner is tall, so it takes the tall radii above.
 
-**Colour.** `BannerKind` decides every colour, from `tokens.notice(kind)` (`NoticePalette`): `fill`, `ink`, `edge`, `action`, `on_action`. For a tinted kind the fill is the kind's hue (the accent for Info, `success`, `warning`, `danger`) as an opaque low-chroma tint, so it reads over whatever a toast floats on. The text, the leading icon and the dismiss glyph are that same hue moved in lightness: darker than the fill on a light scheme, lighter on a dark one, until they reach 7:1 (AAA) on the fill. The 1 px edge is the hue at 3:1 on the fill. Each action button is filled with the hue and its label is the derived on-colour. `Neutral` is the dark floating surface of a tooltip (`on_floating` ink, a light action button). Paints: `Paint::NoticeFill/NoticeEdge/NoticeAction/NoticeOnAction(kind)`, ink `Ink::Notice(kind)`; `icon_button(..).ink(Ink::Notice(kind))` draws a glyph in it. Every kind, in both schemes and for every accent, is in the contrast matrix.
+**Colour.** `BannerKind` decides every colour, from `tokens.notice(kind)` (`NoticePalette`): `fill`, `ink`, `edge`. For a tinted kind the fill is the kind's hue (the accent for Info, `success`, `warning`, `danger`) as an opaque low-chroma tint, so it reads over whatever a toast floats on. The text, the leading icon, the dismiss glyph and the label of an action button are that same hue moved in lightness: darker than the fill on a light scheme, lighter on a dark one, until they reach 7:1 (AAA) on the fill. The 1 px edge is the hue at 3:1 on the fill. An action button is **quiet**: no fill at rest, its label in that ink, the hover and pressed layers of every control over the fill, the focus ring, a nested-radius pill the same height and inset as the dismiss cross, so the notice reads as one calm surface. `Neutral` is the dark floating surface of a tooltip (`on_floating` ink). Paints: `Paint::NoticeFill/NoticeEdge(kind)`, ink `Ink::Notice(kind)`; `icon_button(..).ink(Ink::Notice(kind))` draws a glyph in it. Every kind, in both schemes and for every accent, is in the contrast matrix, including the quiet action label at rest, hover and press.
 
 **Icons.** Info, Success, Warning and Error lead with `DialogInformation`, `Check`, `DialogWarning` and `DialogError`, so the kind is not told by colour alone; `.icon(Icon)` picks another, `.without_icon()` none. A neutral banner has none.
 
 **Inline.** A banner opens and closes by height through `reveal` (`.visible(bool)`; no motion under reduced motion), and a closed one is unmounted. `.gap(space)` names the column's spacing so a closed banner takes none and the page does not jump.
 
-**Floating.** The toast shell adds only the part that floats: a layer above the dialog and menus, the `Elevation::Raised` shadow, bottom-centre placement (`S6` above the bottom edge plus `Dim::SafeBottom` on a phone), a 140 ms slide-and-fade, a queue (toasts show one at a time, in the order they were queued) and a timer: four seconds, six with an action, set with `Toast::timeout`. The timer waits while the pointer is over the toast, a finger is on it, or one of its buttons has keyboard focus. On a touch screen a sideways drag of 72 px or more dismisses it; a shorter one springs back. Pressing an action also dismisses the toast.
+**Floating.** The toast shell adds only the part that floats: a layer above the dialog and menus, the `Elevation::Raised` shadow, bottom-centre placement (`S6` above the bottom edge plus `Dim::SafeBottom` on a phone), a 140 ms slide-and-fade, a queue (toasts show one at a time, in the order they were queued) and a timer: four seconds, six with an action, set with `Toast::timeout`. The timer is a pure state machine, `shell::hide_clock::HideClock` (tested with a fake clock), held by three things: the pointer anywhere over the toast's own box (padding, gaps, text and buttons: the shell listens to `pointer_over` and `pointer_out`, which a button inside it does not steal), a finger down on it, and keyboard focus on one of its buttons. While held the clock does not run and the toast never closes; when the last hold lets go the **whole** delay starts again from zero (not from where it paused), and entering again pauses again. A toast that arrives while one is held waits behind it. On a touch screen a sideways drag of 72 px or more dismisses it; a shorter one springs back. Pressing an action also dismisses the toast.
 
 ### Tab strip
 
-`tab_strip(tabs, selected)` is the title of a header bar for an application whose window holds several views of one kind: the folders of Files, the documents of an editor. The host owns the list and the selected id; the strip holds no state. Use `segmented(..).tabs()` instead for a few fixed pages that cannot be closed.
+`tab_strip(tabs, selected)` is the tab strip of a window that holds several views of one kind: the folders of Files, the documents of an editor. It is Chromium's tab strip: the selected tab is the same surface as the content under it, with rounded top corners and a concave flare at each foot that joins the strip's bottom edge, and the other tabs are flat and recessed on a darker strip. The model, the sources it follows and the numbers are in `design/tabs.md`. The host owns the list and the selected id; the strip holds no state. Use `segmented(..).tabs()` instead for a few fixed pages that cannot be closed and have no content of their own to attach to (the inspector's tabs, the Properties dialog).
+
+The strip sits in a `tab_frame(bar, content)`, which owns the two facts that make the tabs attached. The **surface**: the content is painted in `Paint::Bg` (or `.surface(paint)`) and the strip inside fills the selected tab with the same value, so tab and content are one colour and one shape, with no line between them; the bar behind the tabs is `Paint::TabStrip`, one step darker. The **seam**: the bar is `Dim::Header` tall and the content begins at its bottom edge, with no gap and no overlap; a hairline runs along the bar's bottom edge and the selected tab's outline starts and ends on it, so it is drawn everywhere but under the selected tab. The bar is either a `HeaderBar` filled with `Paint::Transparent` whose `.tab_slot(strip)` holds the strip from the start of the room between its controls (the window controls share the row, and the band above the tabs still drags the window), or any row that holds the strip.
 
 ```rust
-HeaderBar::new("Files").title_slot(
-    tab_strip(
-        tabs.iter().map(|tab| TabItem::new(tab.id, tab.title.clone()).icon(Icon::Folder)).collect(),
-        active,
-    )
-    .on_select(move |id| select(id))
-    .on_close(move |id| close(id))
-    .on_new(move |_| open_new())                 // the New tab button; Ctrl+T on a tab
-    .on_reorder(move |(id, to)| reorder(id, to)) // drag a tab, or Move left / right in its menu
-    .on_hover(move |(id, over)| hover(id, over)) // pointer over a tab, for drops
-    .drop_target(highlighted),                   // the tab a drag would drop on
+tab_frame(
+    HeaderBar::new("Files")
+        .fill(Paint::Transparent)
+        .trailing(WindowControls)
+        .tab_slot(
+            tab_strip(
+                tabs.iter().map(|tab| TabItem::new(tab.id, tab.title.clone()).icon(Icon::Folder)).collect(),
+                active,
+            )
+            .on_select(move |id| select(id))
+            .on_close(move |id| close(id))
+            .on_new(move |_| open_new())                 // the New tab button; Ctrl+T on a tab
+            .on_reorder(move |(id, to)| reorder(id, to)) // drag a tab, or Move left / right in its menu
+            .on_hover(move |(id, over)| hover(id, over)) // pointer over a tab, for drops
+            .drop_target(highlighted),                   // the tab a drag would drop on
+        ),
+    page,
 )
 ```
 
-The strip is a rail in the language of `segmented(..).tabs()`: the same `Dim::Control` height and `Control` fill, a tab that is the rail's radius less its inset (`Radius::Control.nested(FIELD_INSET)`: `Radius::Inner` at mouse density), and a close button that is a further inset in (`Radius::Mark`). The inset is `FIELD_INSET`, the space a field keeps around its trailing button: 4 px at mouse density and none at compact density, where each tab and each button of the rail is the whole 44 px touch target and takes the rail's corner. It never overflows its container: the rail is as wide as its tabs (so the New tab button follows the last tab) and no wider than the room it is given, and every part is laid out from the measured width, so nothing can spill out of its rounded shape.
+Every length is a token. A tab is `Dim::Control` tall (the height of a header button; 44 px at compact density) and stands on the bottom edge of the `Dim::Header` bar, so 12 px of the bar stay above the tabs. Its top corners are `Radius::Control`; its feet flare out by that radius less `FIELD_INSET` (`Radius::Control.nested(FIELD_INSET)`: 8 px at mouse density, 12 px at compact density where there is no inset), and the foot is also the gap between two tabs. The close button is `Dim::Box5` (the whole `Dim::InlineButton` at compact density) `FIELD_INSET` from the tab's end, with the tab's corner nested by that inset; the New tab and Tab list buttons are `Dim::InlineButton`, level with the tabs, with the same corner. The strip never overflows its container: it is as wide as its tabs (so the New tab button follows the last tab) and no wider than the room it is given, and every part is laid out from the measured width, so nothing can spill out of it.
 
 | Part | Behaviour |
 | ---- | --------- |
-| Width | Tabs share one width: `Dim::Field` at most, shrinking together as tabs are added down to `Dim::TabMin` (96 px; 128 px on a phone, where the close slot is a whole touch target and a title still needs room beside it). Beyond that the strip scrolls sideways (wheel, drag with a finger, or Left and Right) instead of squeezing, the rail fills its container, and the tabs fade where they continue. The selected tab is scrolled into view by the shortest distance whenever the selection moves. |
-| Tab | `[icon] [title] [close]` on one row, `Dim::InlineButton` tall. The title takes the room that is left and is cut with an ellipsis before the close slot. The close slot is `Dim::Box5` (the whole tab height at compact density), `FIELD_INSET` from the tab's top, bottom and end, and is always laid out, so a tab never changes width when the button appears. The button is the standard `icon_button`, drawn on the selected tab and on a hovered one (not on a touch screen's other tabs), named "Close <title>". A lone tab has no close slot. The selected tab is raised; the others only brighten their text. |
-| End of the rail | The New tab button (`on_new`) is the last item, an `icon_button` of the tab's height, `FIELD_INSET` from the rail's end. It never scrolls. When tabs overflow, a Tab list button (`Icon::PanDown`) before it opens a menu of every tab, the selected one checked. |
-| Motion | Adding a tab grows it in and the others narrow to make room; closing one shrinks it away and the others widen (`MOVE_MS`). The widths are laid out from one clock, so the rail never exceeds its container during the motion. |
-| Pointer | A press selects (a mouse as it goes down, a finger when it lifts). A middle click closes. With `on_reorder`, dragging a tab shows an accent line in the gap it would land in and drops it there; releasing far above or below the rail cancels. A right click, or a finger held on a tab, opens its menu: Close tab, and Move left and Move right with `on_reorder`, which is how touch reorders. `on_hover` reports the pointer entering and leaving a tab, so a host can accept a drag on it (see Files below). |
-| Keyboard | Only the selected tab is in the tab order. Left, Right, Home and End move the selection and the focus; Delete or Ctrl+W closes the selected tab and the focus follows to its neighbour; Ctrl+T calls `on_new`. The tab's focus ring is drawn inside the tab, so the scroll region cannot clip it. |
-| Accessibility | The rail is a `TabList` named "Tabs"; each tab is a `Tab` named by its title with its selected state. The buttons are named "Close <title>", "Tab list" and "New tab". |
+| Width | Tabs share one width: `Dim::Field` at most, shrinking together as tabs are added down to `Dim::TabMin` (96 px; 128 px on a phone, where the close slot is a whole touch target and a title still needs room beside it). Beyond that the strip scrolls sideways (wheel, drag with a finger, or Left and Right) instead of squeezing, the strip fills its container, and the tabs fade into the bar where they continue. The selected tab is scrolled into view by the shortest distance whenever the selection moves. |
+| Tab | `[icon] [title] [close]` on one row. The title takes the room that is left and is cut with an ellipsis before the close slot. The close slot is always laid out, so a tab never changes width when the button appears. The button is the standard `icon_button`, drawn on the selected tab and on a hovered one (not on a touch screen's other tabs), named "Close <title>"; pressing it neither selects nor drags the tab. A lone tab has no close slot. The selected tab is the attached shape; an unselected one is flat, shows `Ink::Muted` text (4.5:1 on the strip, and under the hover and pressed fills), fills with `Paint::Hover` under the pointer and `Paint::Pressed` under a finger, and has a short separator after it that hides next to the selected tab and the tab the pointer is on. |
+| End of the strip | The New tab button (`on_new`) follows the last tab, an `icon_button` the tab's height. It never scrolls. When tabs overflow, a Tab list button (`Icon::PanDown`) before it opens a menu of every tab, the selected one checked. |
+| Motion | Adding a tab grows it in and the others narrow to make room; closing one shrinks it away and the others widen (`MOVE_MS`, instant with reduced motion). The widths are laid out from one clock, so the strip never exceeds its container during the motion. |
+| Pointer | A press selects (a mouse as it goes down, a finger when it lifts). A middle click closes. With `on_reorder`, a tab dragged more than 6 px follows the pointer, drawn over the others, which slide aside on the springs of `crate::reorder`; letting go settles it into its place and calls `on_reorder(id, to)` once, after it has settled. Dragging past the strip's end scrolls it. Escape, or letting go more than a header's height above or below the strip, puts the tab back. The strip uses `crate::drag::PointerDrag` and `crate::reorder::Reorder`, as `sortable` does. A right click, or a finger held on a tab, opens its menu: Close tab, and Move left and Move right with `on_reorder`, which is how touch reorders. `on_hover` reports the pointer entering and leaving a tab, so a host can accept a drag on it (see Files below). |
+| Keyboard | Only the selected tab is in the tab order. Left, Right, Home and End move the selection and the focus; Ctrl+Shift+Left and Right move the selected tab (`on_reorder`); Delete or Ctrl+W closes the selected tab and the focus follows to its neighbour; Ctrl+T calls `on_new`. The tab's focus ring is drawn inside the tab, with its top corners, so the scroll region cannot clip it. |
+| Accessibility | The strip is a `TabList` named "Tabs"; each tab is a `Tab` named by its title with its selected state. The buttons are named "Close <title>", "Tab list" and "New tab". |
 
-The taxonomy's Tabs entry shows each state at both densities: select, close and add with drag; many tabs; long titles; icons; a single tab; no New tab button. `controls/tabs.rs` holds its geometry tests (everything inside the rail at every width, one tab width, the close slot reserved, the buttons pinned, 44 px targets at compact density) and the keyboard and motion tests.
+The taxonomy's Tabs entry shows each state in a frame at both densities: select, close and add with drag; many tabs; nine tabs; long titles; icons; a single tab; no New tab button; keyboard focus; a frame painted in a card's surface. `controls/tab_shape.rs` holds the geometry and path tests (the tab ends where the strip does, nested flare radius, the outline stays in its box and ends on the hairline), `controls/tabs.rs` the layout and contrast tests, and `controls/tab_tests.rs` renders strips at mouse and compact density: the selected tab's bottom edge is the content's top edge at every width, everything is inside the strip, tab widths are uniform, the seam and the flares are checked to the pixel in both schemes, and the keyboard, drag and motion behaviour.
 
 ### Sortable list
 
@@ -849,6 +974,24 @@ it alone and gives the panel `Panel::on_escape` (`ListQuery::escape` clears the
 query, else the list closes).
 `search_highlight::highlighted_label(style, tokens, text, ranges)` draws a
 label with byte ranges marked, for any list of names.
+**Menus that list applications show their icons.** A menu, a context menu, a
+submenu, a popover, a dropdown or a compact sheet whose rows are applications
+(Open with, Set as default, Choose application, a handler dropdown) draws each
+application's full-colour icon at `IconSize::AppSmall` (20 px) in the leading
+slot. It is not optional and not a style: the list API is the only way in.
+Describe each application as an `AppChoice::new(key, label, icon)` (`icon` is
+the desktop entry's `Icon` value; an empty one is allowed) and build the rows with
+`app_menu_items(apps, on_pick)` (one row: `app_menu_item(&choice, f)`), or a
+dropdown with `app_dropdown(apps, selected, on_select)`, which icons the list
+and the collapsed value. The icon is looked up off the UI thread by the shared
+`app_icon` loader; until it arrives the slot is an empty tile of the same
+size, and an application whose icon the theme lacks shows the generic
+application glyph, so a row is never empty and never moves. An application row
+anywhere in a panel widens the panel's leading column to 20 px for every row,
+ticks included, so labels stay aligned. The Menus page of the taxonomy shows
+an Open with submenu, a dropdown of applications and the compact sheet.
+`cargo test -p bingux-ui --lib app_icon` fails on a workspace source that reads
+an application list and builds a menu or dropdown from it without `AppChoice`.
 `MenuItem::shortcut("Ctrl+C")` shows a muted hint at the trailing edge; the app handles the keys. A menu panel with any hint is `Dim::MenuWide` (300 px) instead of `Dim::Menu` (220 px).
 
 Popups share one motion, all with an ease-out curve and all scaled by
@@ -890,8 +1033,10 @@ Every action in a text field (the password reveal, the clear button of a search 
 - **Long text wraps** inside `Dim::TooltipMax` (280 px) onto at most four lines, then is cut with an ellipsis. The size comes from the hidden copy, so the wrap never reflows after the bubble is drawn.
 - **One clock per window.** While a tip is up, and for 300 ms after the last one went, the next control's tip opens at once, in full, instead of waiting 500 ms. The tip it replaces stays as it was until the new bubble has its size and is drawn, and goes in that same frame: moving along a row of controls is one bubble that changes place, with no frame between them that draws nothing and none that draws two. After 300 ms with no tip, the 500 ms rest applies again. `WindowHost` provides the shared state (`provide_tooltips`); a tip with no host keeps its own.
 - **Never over a menu.** No tip opens while a menu or dialog is open, and one that is up goes when it opens (`Overlays::menu_open`).
+- **Scrolling takes tips down.** Content that scrolls moves under a resting pointer, so no tip is up while anything scrolls. Every `ScrollView` and `VirtualScrollView` tells its window, through one window-level signal (`ScrollActivity`, vendored in `freya-components`, provided by `WindowHost` and read by the tooltip hub), when its content moves: from a wheel notch, and from every frame in which the content has a new position (a glide, a scrollbar drag, the keys, a drag of the content). The window is scrolling from then until the content has stood still for 200 ms (`SCROLL_STILL`). A tip that is up goes in the frame the signal rises, with no fade. A tip that was waiting for the pointer to rest, or whose pointer arrives meanwhile, opens no bubble while it is set; when it clears, a tip whose pointer is still on its control waits the usual 500 ms rest (no 300 ms grace after a scroll) and opens. Tips subscribe to the signal only while they are up or waiting, so an idle tip does not render for it. A host that does not provide the signal (a test that mounts a view bare) never scrolls, as before.
 
 `controls/tooltip_tests.rs` steps the headless app frame by frame with the pointer on real icon buttons: a label that changes while hovered (the bubble is centred on its control, at the same distance, in every frame), neighbouring controls (never two bubbles, the second at once), the wait coming back, a long label wrapping and flipping once at the window edge, and a menu taking the tip down. The taxonomy's Tooltip specimens (Feedback) are the same cases to try by hand.
+`controls/tooltip_tests.rs` also scrolls with a tip up: it goes within two frames, none opens for a pointer that arrives while the content moves, and it returns once the content is still.
 
 ### Panel
 
@@ -961,6 +1106,15 @@ What the dialog has:
 
 **The file view.** `FileView::new(listing, order, selection)` shows a folder as a list with columns or a grid of tiles, chosen by the zoom level. List columns: Name, Size, Type, Modified, Created, Accessed, Permissions, Owner (Location in Recent). Drag a column's left edge to resize it (double-click fits it), drag a heading to reorder, right-click the header to show or hide columns; widths, order and visibility are remembered in `$XDG_STATE_HOME/bingux/files/view.json`. A row is the sidebar's row (`LIST_ITEM`: the same radius, inset, fills and minimum height), held `LIST_EDGE` clear of the list's sides, and the header lines up with it. **Zoom** changes the icon and nothing else: the text, its size and the column widths never change. The level is an icon size in pixels from one ladder, `16, 20, 24, 32` (a list, and 16 px is the default in every folder) and `48, 64, 96, 128, 192` (a grid of tiles with the name under the icon in the same text size, each tile growing with its icon). Ctrl+wheel, Ctrl+plus and minus step one level, Ctrl+0 returns to 16 px in a list, a pinch picks the nearest level, and a badge shows the size and view for a moment. Choosing a list or a grid (toolbar, View as menu, Ctrl+1 and Ctrl+2) goes to the nearest level of that view. Nothing picks a larger level for you, neither the window size nor what the folder holds; the one limit is that a tile must fit twice across, so a narrow view stops at a smaller level. Images, and videos and documents that have a desktop thumbnail, show their picture, uncropped, at every grid level and at every list size (at the default 16 px a list row shows only a picture the desktop's thumbnail cache already has, and keeps the file-type icon in the same slot until then; from 24 px it decodes an image too); folders and everything else keep their icon. The level is remembered per folder in the same file (`icon_px`). Right-click gives a menu for a file, several files, empty space and the headers; Menu or Shift+F10 opens it from the keyboard. Rename in place with F2, rubber-band from blank space, drag files onto a folder (Ctrl copies), hover for a detail card. Rows are drawn only when in view, sizes and dates are asked of the loader only for those rows, and thumbnails load after a short rest in view and never on network drives. Keys: Space (Quick Look), Ctrl+A, Ctrl+Space, F2, Delete, Shift+Delete, Ctrl+C, X, V and Z, Ctrl+Shift+N, F5, Alt+Enter or Ctrl+I (properties), Ctrl+1 and 2 (list, grid), Ctrl+Alt+1 to 4 (sort) and Ctrl+Alt+R (reverse).
 
+**The detail card.** Resting the pointer on a row or tile for 700 ms shows a card with the name, the type and size, the date, and in Recent and in search results of subfolders the folder (`files/hover_card.rs`). The card belongs to the view, not to a row, so it is not remounted as rows come and go while the list scrolls. The decision is `Track`, a pure state machine with its own unit tests (`cargo test --lib files::hover_card`), and the rules are:
+
+- **Scrolling hides it at once and keeps it down.** Rows move under a resting pointer, so a card made for one is wrong a frame later. It hides in the frame the content starts to move (wheel, scrollbar, keys, drag), no row enter or leave brings it back while the window scrolls, and it comes back 700 ms after the content last moved (the window's 200 ms of stillness, then the rest of the wait). The row it is for is looked up again then from the geometry (`Ctx::row_at`: the lattice, the viewport and the scroll position, at the last pointer position), not taken from the last row event: Freya sends a pointer move after the layout of a wheel notch but none during the glide that follows or after a key's scroll, so the last row an event named is from the middle of the scroll and the pointer ends on another.
+- **Moving to another row while it is up swaps it in place**: the same card element with the new text at the new place, with no wait and no frame without a card. Leaving every row hides it a frame later, so a leave and the enter that follows in the same frame are one swap.
+- **One State write a frame, only when the row changes.** Rows report `enter` and `leave`; the same row again is ignored, and the one State the card reads is written by a task that runs at most once a frame and only when the card it would draw changed. The pointer events that scrolling makes (the synthetic move after the layout of a wheel notch) therefore re-render neither the list nor the view.
+- **No disk, no waiting.** The text comes from the entry the listing already holds (`card_lines`, pure). A size and date the listing has not loaded yet (a network folder is statted in the background, as the rows are) read as `…` in a line of the same height, and the card draws again when the listing arrives, so it never changes shape. A view that shows a folder line (Recent, search results of subfolders) keeps that line, blank, on the cards that have none.
+
+`files/hover_tests.rs` runs the view headless over three thousand files: the card down within two frames of the first notch and not drawn in any frame of a second of scrolling, back for the row then under the pointer once the content is still, the same after a scroll by keys (which sends no pointer event at all), a swap between rows with no frame without a card, and the view and list not rendering again for sixty scroll ticks. A zoom or a resize lays the rows out again with no pointer event, so it forgets the card too.
+
 **Context menus of the file view.** A menu is grouped by task and holds only what can apply: a row that can never apply in that place is left out, not greyed. The empty-space menu is, in order: New folder, New file (a submenu of Empty file and the files of the XDG Templates folder when that folder has any, otherwise one row); Paste (greyed until something is copied, left out in Recent) and, only when there is something to take back, a named Undo such as "Undo Rename" (there is no Redo); Select all and Invert selection (left out in an empty folder); one View submenu; then Refresh and Properties. View holds List and Grid, Icon size (the sizes of the view on show, from the zoom ladder), Sort by (Name, Size, Type and Modified; Ascending and Descending; Folders first) and Show hidden files. Choices are ticked rows in one leading column, so labels line up. The header menu's Sort by is the same submenu. Shortcuts show on the right.
 
 **Quick Look.** Space on the selected file opens a large card over a dimmed scrim, as macOS Quick Look and GNOME Sushi do; the context menu has Preview too. Space or Escape closes it; Left and Right (Up and Down too in a grid, and in a list they step one file) move the selection to the neighbouring file and update the card without closing it; Enter closes it and opens the file as a double click does; Alt+Enter or Ctrl+I closes it and shows Properties. Space only opens it when the file view itself has the keyboard: never while a rename field, the address bar or a filter has it, and not in the middle of a word typed to jump to a file. It works in the chooser dialog as well. What it shows depends on the type: a picture scaled to fit with its proportions kept; the first 64 KiB of a text, code, markup or JSON file in a monospace face, with a notice that says how much is shown when the file is longer; the largest thumbnail the desktop has made for a PDF, document, song or film, with the type's icon when there is none; a folder's item count and total size, counted while the card is open; an unknown type as text if it is text, else as its icon. The footer says the type, size, picture size or length and codec, and date. Everything loads off the UI thread. The stage is a fixed box and the type's icon is the placeholder at the size the content will have, so nothing moves when the content arrives, and stepping to another file drops the load of the last one (a folder count stops after its current entry).
@@ -988,7 +1142,9 @@ The card is one size for every tab: the header and tab bar stay and the page scr
 
 **Removable media.** A copy, move or delete on a USB stick, SD card, external disk, network share, or a FAT, exFAT or NTFS drive is only *done* when the data is on the device. The drive is recognised from the mount table, the device's `removable` flag and a USB bus in `/sys` (also under an encrypted layer). For those drives every file is `fsync`ed before it gets its name, then every folder that changed, then the whole drive is written out (`syncfs`). While that last step runs the status line says **Finishing… writing to <drive>** with a bar that keeps still and no Stop button; the line that follows says **Everything is written to <drive>.** An ordinary internal disk is not flushed: that is the kernel's job, and flushing would only make copies slower. **Eject** (and Unmount) in the sidebar write the drive out first, then unmount; if the drive is busy it says so in the tool's own words, and when it is ejected the toast says the drive is safe to remove. A drive that cannot be written out is not detached.
 
-**Removing.** Delete and *Move to Trash* put the item in the Trash: `$XDG_DATA_HOME/Trash` on the home drive, `$topdir/.Trash/$uid` or `$topdir/.Trash-$uid` on another drive. It is one rename, and Ctrl+Z or the toast's Undo puts it back. *Delete permanently* is **not** in the ordinary context menu. It appears when you open the menu with Shift held (Shift and right click), and Shift+Delete does it from the keyboard. Both open a question first: it names the item (or says "3 items"), says that it cannot be undone and will not go to the Trash, has a red **Delete permanently** button, and gives the focus to Cancel, so Enter keeps the files. Something the Trash cannot take (a drive with no Trash, a network share, a read-only drive, or something in the Trash already) is never deleted quietly: the same question opens, with the reason. **Empty Trash** (in the empty-space menu while a Trash folder is on show) asks too. Rename, move and Move to Trash can be undone; deleting for good cannot, and the question says so.
+**Removing.** Delete and *Move to Trash* put the item in the Trash: `$XDG_DATA_HOME/Trash` on the home drive, else the bin of its own drive (`$topdir/.Trash/$uid` when the admin made a sticky `.Trash` that is not a link, else `$topdir/.Trash-$uid`, mode 0700, ours). The choice is made from the mount table (`ops::trash` has a pure `plan_bin` the tests drive with a made-up one); an item is never copied to another drive to bin it, except on the home drive's own mount points when a `rename` there says `EXDEV`, and then only for a small tree: a big one answers `OpError::CopyNeeded` and a dialog asks **Copy to Trash?** (`trash_copying`). Each item gets an `info/NAME.trashinfo` made with `O_EXCL` (`Path` percent-encoded from the raw bytes, `DeletionDate` in local time), a clash is numbered `name.2` (`name.2.tar.gz`), a folder's disk use goes into `directorysizes` (written through a temporary file and renamed), and on removable media, shares and FAT the info file, the folders and the drive are made durable before the move reports done. The toast says **Moved 3 items to Trash** (**Moved “a.txt” to Trash**) with a quiet **Undo**, and Ctrl+Z does the same. *Delete permanently* is **not** in the ordinary context menu outside the Trash. It appears when you open the menu with Shift held (Shift and right click), and Shift+Delete does it from the keyboard. Both open a question first: it names the item (or says "3 items"), says that it cannot be undone and will not go to the Trash, has a red **Delete permanently** button, and gives the focus to Cancel, so Enter keeps the files. What the Trash cannot take is told with its reason (`TrashRefusal::reason`) and never deleted quietly: a drive with no Trash, a read-only drive, something in the Trash already and a refused permission open the same question with the reason; the root, the home folder, your Documents/Pictures/… folders, a folder that holds home or the Trash and the Trash itself are refused with a message and no offer. Rename, move and Move to Trash can be undone; deleting for good cannot, and the question says so.
+
+**Inside the Trash.** A folder that is a bin's `files` folder (the Trash place, or `$topdir/.Trash-$uid/files` of a drive) lists each item with its `.trashinfo` (`Entry::trash`: original place and deletion date; the loader never takes this listing from its cache). The list has **Original Location** (the folder it was in, drawn with the shared path label) and **Deleted** (how long ago) in place of Type and Modified, sortable by Deleted; hidden items are shown; the status line says **Trash · 12 items**; an empty Trash is the status page **Trash is empty**. The context menu has **Restore**, **Restore to…**, **Delete permanently** (always, no Shift, and the plain Delete key does it; the question has the focus on Cancel), Copy, Open, Preview, Copy path and Properties (which add **Original location** and **Deleted**), and none of Move to Trash, Rename, Compress, Cut, Paste or New folder (`actions::in_trash`). **Empty Trash** is in the empty-space menu (greyed while empty); its question first counts the items and their disk use on a worker with a Stop button (`ops::trash_summary`), says them ("124 items (3.2 GB) in the Trash will be deleted for good"), and the work runs off the UI thread with a progress bar and Stop. Restore asks only what needs asking: to make a folder that is gone again, and, for a name that is taken, Keep both, Replace (what was there goes to the Trash, so it can be undone) or Cancel; an item with no record of its place is told so and offered Restore to…; a read-only drive, a missing permission and a file where the folder should be are reported with the item and the folder. It says **Restored 3 items** with an Undo that puts them back in the Trash (`Step::Restore`). Dragging files onto the sidebar's Trash row trashes them (Ctrl cannot copy into it), dragging items out of the Trash into a folder restores them there, and nothing can be dropped inside a folder of the Trash. The sidebar's Trash row is drawn by `FileIcon::for_trash(full)` (faint while empty) and its menu is Open, Empty Trash (greyed while empty), Properties.
 
 A filter takes file extensions, globs and MIME types in one string:
 
@@ -1080,6 +1236,76 @@ never share a type. Apps build the same behaviour with
 `FileView::search(..)` / `.on_search(..)` and `use_subfolder_search(..)`; the
 chooser is the reference.
 
+### File icons
+
+One API decides which icon a file, a folder, a place or a drive has, and one
+element draws it. Every surface asks it: the sidebar's places, bookmarks and
+drives, list rows, grid tiles, the address bar's crumbs and their menus,
+typed-path suggestions, Properties, Quick Look, the drag chip, the chooser,
+the Files app's tabs and the file-type rows of Settings > Applications. No
+surface picks a glyph itself, so one folder looks the same everywhere.
+
+```rust
+use bingux_ui::files::{FileIcon, FileKind, file_icon_view};
+use bingux_ui::style::IconSize;
+
+let spec = FileIcon::for_entry(&entry);                  // a listed entry: link, hidden, type
+let spec = FileIcon::for_path(path, bingux_files::Kind::Directory); // a path: its text decides
+let spec = FileIcon::for_place(&place);                  // a sidebar place or bookmark
+let spec = FileIcon::for_mime("application/pdf");        // a type the system reports
+let spec = FileIcon::for_name("report.ods");             // a name with no entry yet
+
+file_icon_view(&tokens, &spec, IconSize::Row, selected)  // a token size ...
+file_icon_view(&tokens, &spec, 64u16, selected)          // ... or pixels (the view's zoom)
+```
+
+A `FileIcon` is data: the `glyph`, the `kind` (`FileKind`), an optional
+`emblem`, a `tint` and `thumbnail`, where a picture of the file may come from
+(the view replaces the glyph with it when it can; a folder never has one).
+`FileKind::of_mime` is the one classification of a MIME type, shared with the
+file-type rows in Settings.
+
+**Which glyph.**
+
+- A **folder is decided by the text of its path** and never by where a link
+  leads. The special folders are the home folder, the XDG user directories
+  (the paths `user-dirs.dirs` configures, and the usual names under home:
+  Desktop, Documents, Downloads, Music, Pictures, Videos, Templates, Public),
+  the trash (`~/.local/share/Trash/files`) and the filesystem root. A key that
+  `user-dirs.dirs` writes as `$HOME/`, how `xdg-user-dirs` disables a folder,
+  does not make home that folder, and the usual name still counts. So
+  `~/Downloads`, a link to `/mnt/x/Downloads`, has the Downloads glyph and
+  `/mnt/x/Downloads` has the plain folder. Case counts and a trailing slash
+  does not. Any other folder, a bookmark such as Projects included, has the
+  plain folder, in the sidebar and in a list alike. Only a directory is asked:
+  a file called `Downloads` is a file.
+- A **file** is its MIME type's kind: image, audio, video, text, code, PDF,
+  archive, spreadsheet, presentation, document, font, program or unknown. A
+  type's own name decides first (`application/pdf`); the extension table's
+  coarse category decides when the name says nothing; an extension-less file
+  that is executable and of no known type is a program.
+- A **drive** has the glyph of its kind (disk, removable, network, optical).
+- A **symbolic link** keeps the glyph of what it is and gains the link emblem,
+  a disc with an arrow, at half the glyph's size and never below 8 px, over the
+  lower right corner. Only a listed entry carries it: places and crumbs never
+  read the disk.
+- A **hidden** file or folder is drawn faint.
+
+**Which colour.** One rule on every surface: the glyph is the **accent only
+when its row or tile is selected**, muted otherwise, fainter when hidden or
+when a drive does not answer. A folder is told from a file by its shape, not
+its colour. On a floating surface (the drag chip) `file_icon_view_floating`
+uses the ink that reads there.
+
+**Adding a glyph.** If a kind or special folder needs a glyph the set lacks, add
+it through `scripts/icons` (see the icon set above): a row in `labels.tsv` with
+where it is used, `build.py --check` passing, then the `Icon` variant. Never draw
+a surface's own glyph.
+
+The inspector shows each icon as `FileIcon` with its glyph and size; the
+taxonomy page "File icon" shows every kind at 16, 32, 64 and 128 px, resting and
+selected, the folders a path decides, places and drives, and the emblem.
+
 ### Layers
 
 | Layer | Where | Depends on |
@@ -1135,7 +1361,7 @@ asks `Load::want_stats(&listing, rows_in_view)` on every frame.
 
 | Step | What happens |
 | ---- | ------------ |
-| Cache | The folder's last listing is shown at once from `$XDG_CACHE_HOME/bingux/files/v1` (about 10 bytes an entry; 32 MiB and 512 folders at most, least recently used deleted first). One `statx` of the folder says whether it changed. If not, nothing else is read, locally or over NFS. If it did, only the difference arrives as `Diff`, so rows are patched and the scroll position and selection stay. |
+| Cache | The folder's last listing is shown at once from `$XDG_CACHE_HOME/bingux/files/v1` (about 10 bytes an entry; 32 MiB and 512 folders at most, least recently used deleted first). One `statx` of the folder says whether it changed. If not, nothing else is read, locally or over NFS. If it did, only the difference arrives as `Diff`, so rows are patched and the scroll position and selection stay. A name is stored as the bytes of the file (not the text it is shown as), so a name that is not valid UTF-8 comes back as the same file; files of an earlier format (`BFC1`) stored it as replacement characters and are dropped. |
 | Streaming | With no cache the first 50 entries arrive after about 2 ms and the rest in batches that grow, so a 20,000-entry folder is complete in about 50 to 90 ms. |
 | Drive kind | The kind (`Local`, `Removable`, `Network`, `Optical`, `Other`) comes from the folder's own device and the mount table, not its path: `~/Downloads` that links to an NFS share is `Network`. |
 | Network drives | Names and types only, one worker, no thumbnails, no reading of file content (`Listing::mount.thumbnails()` is false). Size and time come only for the rows in view, newest request first. |
@@ -1639,6 +1865,9 @@ values are:
 | `IconSize::App`                     | 32 px           | 36 px           |
 
 `HEADER_BUTTON` (an alias of `Dim::Control`: 36 px, 44 px on a phone) is the size of an icon button in a `HeaderBar`. It is the control height, the same token the segmented control and the split button use, so header controls line up on one height and an icon button is never taller than the tabs beside it. `HeaderBar` marks its subtree, so every `icon_button` and icon `menu_button` in `leading`, `trailing` or `title_slot` takes it with no per-app sizing; do not call `.size(..)` on a header button (`scripts/ui-lint.py` fails it). The 44 px on a phone is the touch minimum, so the hit area never falls below it. The bar is 48 px (56 px on a phone), leaving 6 px above and below the button.
+
+**An icon button has no fill at rest.** In a header, a toolbar or anywhere else, `icon_button` and the icon `menu_button` paint nothing until the pointer is over them, they are pressed or (for a menu) open; `.filled()` and `.active(true)` are the two ways to ask for a fill, and neither is the default. A labelled `menu_button` is a control and keeps its `Paint::Control` fill. The Files main-menu button once drew that fill at rest because its icon variant took the labelled button's paint; `Snapshot::icon_buttons()` reads the fill every icon button of a headless frame paints, and `shell::rest_fill_tests` (and `header_rest_tests` in `bingux-settings`) fail for a header or toolbar button that has one.
+
 Sizes that are not in the table are the same at both classes. The chart
 geometry, menu edge and display arrangement use `Space::fixed_px()`, which
 reads the regular value whatever the class, because they are constants.
@@ -2148,6 +2377,17 @@ of widths, with tests. A control that can shrink reads `use_line_fill()`; a
 new control that takes a width in a form line should do the same. Do not put a
 field inside a fixed-width wrapper: the wrapper does not shrink.
 
+**A text field in a row on a phone** (`row(title).trailing(text_field(..))`,
+`text_row`, `entry_row`) is not left at its 168 px (`Dim::Field` compact). At
+compact density it fills the row: the title keeps its natural width, at most
+40 % of the line (`LABEL_SHARE`), and the field takes every pixel after it,
+at least `Dim::FieldMin`; a title with a word wider than its share, or a line
+too narrow to leave the field its least, puts the field under the title at
+the full width. `choose_filled_line` is that rule as a pure function, next to
+`choose_line`, and the `Row` tells the field to fill through the same
+`LineFit` a form line uses (`use_line_fill()`). On a desktop the field keeps
+`Dim::Field`. Geometry tests at 390 and 320 px are in `rows::phone_fields`.
+
 **The checks.** The inspector's Layout tab lists them (they are pure
 functions over the measured tree, `inspector/layout_checks.rs`, each with
 tests on hand-made trees):
@@ -2255,48 +2495,69 @@ inside it (roving). A pointer click focuses without a ring, and the next Tab
 continues from the clicked control.
 
 Controls draw their focus ring by ending `render` with
-`.focusable(focus(), radius)`, from the `Focusable` trait in `motion.rs`. The
+`.focusable(focus())`, from the `Focusable` trait in `motion.rs`. The
 node passed in is the control's **face**: the node that carries its fill and
-its corner radius. `focusable` wraps the face in a row that hugs it (no
+its corner radii. `focusable` wraps the face in a row that hugs it (no
 padding, border or margin of its own), measures that row with `on_sized` after
 layout, and draws the ring from the measured box, so the ring is always the
 painted box and never the padded content of a wrapper. A face must therefore
 carry no margin: put the margin on the returned wrapper. Give the wrapper any
 grow or fill style the control had (for example `w_full()` or `w_flex()`). For
-a row inside a clipped container edge, such as a card's, use
-`.focusable_inside(focus(), radius)`: the ring is drawn just inside the face's
-box, so the clip cannot cut it off. `.focusable_on(focus(), radius, corners)`
-squares the corners at a seam (a split button; `Corners::None` for a square face,
-such as a flat field's line), and
-`.focusable_invalid(focus(), radius, corners, invalid)` draws the error ring.
+a pane on a clipped container edge, such as the window's, use
+`.focusable_inside(focus())`: the ring is drawn just inside the face's box, with
+the face's own radii, so the clip cannot cut it off (the Files list does this,
+and `FileView::corners` says which of its corners sit in the window's rounded
+corners, so it paints `Radius::Window` there and is square elsewhere).
+`.focusable_invalid(focus(), invalid)` draws the error ring.
+
+**The ring's corners are the face's, read from it.** `focusable` reads the four
+corner radii the face is painted with (`Radii`: top left, top right, bottom
+right, bottom left) and gives each ring corner that radius plus the outset
+(the nested radius rule), or zero where the face's corner is square. There is no
+radius argument and nothing to keep in step: a square face (a flat field's line,
+a list pane, a table header, a chart area, a row in a card) has a square ring;
+a segment with two square corners, a tab (`Corners::Top`) or the primary half
+of a split button (`Corners::Left`) has a ring that is square at exactly those
+corners. A face that should have a rounded ring paints a radius
+(`rounded(..)`, `rounded_on(radius, Corners::.., 0.)`); `focus_stop` paints its
+`radius` argument on the box it is given.
 
 The ring is one crisp 2 px line (`FOCUS_WIDTH`, the `Ring` dimension) set
 `FOCUS_GAP` (2 px) off the face, so a gap of the surface shows between the face
 and the ring and the ring never merges with a coloured fill (a suggested or
-destructive button, a selected sidebar item). It follows the face's shape: its
-corner radius is the face's plus the outset (gap and width), the nested radius
-rule, so it is concentric with the face. Its colour is `Paint::FocusRing`, which
+destructive button, a selected sidebar item). Its colour is `Paint::FocusRing`, which
 shows 3:1 against every layer (see the contrast matrix). An invalid control
 draws the same ring in `Paint::ErrorRing` always, not only on focus; while it
 also has keyboard focus a second band, `Paint::ErrorHalo` (the error ring at
 34 %), arrives just outside it, so focused and invalid read differently from
-invalid alone. The ring grows in from `FOCUS_TRAVEL` outside and fades in when
-keyboard focus arrives (`FOCUS_IN_MS`), then fades out when focus leaves
-(`FOCUS_OUT_MS`). Pointer focus draws no ring. The Taxonomy app's Foundations >
-Motion page shows the ring on each kind of face.
+invalid alone.
+
+**Focus changes blur in and out.** One progress value (0 gone, 1 settled)
+drives the ring's whole look (`RingLook::at`): when focus arrives the ring
+starts `FOCUS_TRAVEL` (4 px) outside its place, blurred (`FOCUS_BLUR`, 4 px of
+gaussian blur through `glow(..)`, the shadow primitive that `lift_shadow` uses)
+and transparent, and sharpens, comes in and fades in over `FOCUS_IN_MS`; when
+focus leaves it softens to 4 px of blur, grows back out and fades out over
+`FOCUS_OUT_MS`, quicker so the ring never lingers. Moving focus from one
+control to another cross-fades: the old ring blurs out while the new one blurs
+in, each animating only its own few nodes. A change part-way continues from the
+value on screen and never snaps. Reduced motion makes every change instant, and
+a window that loses focus loses its keyboard focus, so its ring blurs out too.
+Pointer focus draws no ring. The Taxonomy app's Foundations > Motion page shows
+the ring on each kind of face, square, rounded and mixed.
 
 `scripts/focus-ring-check.py` checks every ring on every Settings page and every
 Taxonomy page, at the desktop and the phone size: the ring's rectangle must be the
-face's border box grown by the outset and its radius the face's plus the outset.
-The face is the node `focusable` was given, or the first box of the same size
-inside it that draws (a text field's wrapper draws nothing; the input inside it
-holds the fill). A face that draws nothing at all (a file list, a chart, a row
-at rest) has no corners to follow, so only its box is checked, and so is a ring
-drawn inside a square row that the card around it rounds. Give the face and the
-ring one radius: a `Segment` that rounds its fill with `Radius::Mark` rings with
-`Radius::Mark`. The inspector's Layout tab reports a ring that is off its face as
-"Focus ring off its face". `scripts/focus-ring-sheet.py` renders the ring on each
-kind of control in light and dark, at both widths, into one contact sheet.
+face's border box grown by the outset and each of its four corner radii the
+face's painted radius there plus the outset, or zero where the face's corner is
+square. A rounded ring around a square face and a square ring around a rounded
+face both fail; there are no exemptions for faces that draw nothing or for rings
+inside a row. The face is the node `focusable` was given, or the first box of the
+same size inside it that draws (a text field's wrapper carries the radius, so the
+input inside it must agree). The inspector's Layout tab reports a ring that is
+off its face as "Focus ring off its face". `scripts/focus-ring-sheet.py` renders
+the ring on each kind of control in light and dark, at both widths, into one
+contact sheet.
 
 Window focus lives in `focus.rs`. The window host and the overlay host share one
 `FocusCore` (whichever is outermost creates it, with `provide_focus_core()`), so
@@ -2605,3 +2866,8 @@ Environment variables for tests and screenshots:
 - `BINGUX_INSPECT_SHOT=<dir>` writes `app.png`, `inspector.png` and, for an
   inspector of an inspector, `inspector2.png`, `inspector3.png`…, at most once
   every 1.5 seconds each. Without it, nothing is read back from the canvas.
+
+
+### Form dialogs
+
+`open_form(overlays, title, content, on_closed)` shows a form in a framed dialog (a sheet that fills the window on a phone); `content` is a component that renders `form_dialog(title, body, action, on_action)`, so the action, `.blocked(reason)` and `.busy(message)` follow the form state. The card is one size (`FORM_WIDTH` x `FORM_HEIGHT`) whatever the body holds: a standard `HeaderBar` with Close, a scrolling body, a footer with a one-line reason and Cancel / action (the action carries the Return key cap; on a phone the buttons stack, action on top). Enter runs the action unless a control inside takes it; Escape closes. Options that come and go use `reveal_block`, so nothing jumps. Used by Compress and Extract in Files; any settings dialog with a few fields and one action is the second use. `Dropdown::unavailable(vec![(key, reason)])` lists an option that cannot be chosen, dimmed, with its reason. `files::compress_preview(CompressPreview)` renders the Compress dialog in a fixed world for the taxonomy and tests (`COMPRESS_PNG_DIR=dir cargo test --features testing compress_tests` writes every state at 1100x820 and 390x800).

@@ -39,7 +39,8 @@ pub struct Application {
     min_size: (f32, f32),
     borderless: bool,
     usage: String,
-    normalise: Option<fn(&str) -> String>,
+    normalise: Option<fn(&std::ffi::OsStr) -> String>,
+    about: Option<crate::about::AppInfo>,
 }
 
 impl Application {
@@ -58,6 +59,7 @@ impl Application {
             min_size: (min_width as f32, min_height as f32),
             borderless: false,
             normalise: None,
+            about: None,
         }
     }
 
@@ -72,6 +74,23 @@ impl Application {
 
     pub fn title(mut self, title: &'static str) -> Self {
         self.title = title;
+        self
+    }
+
+    /// Who the application is, for its About window: name, id, version, icon,
+    /// description, website, issue tracker, licence and authors. Build it with
+    /// [`app_info!`](crate::app_info), which reads `Cargo.toml`:
+    ///
+    /// ```ignore
+    /// Application::new("bingux-files").about(bingux_ui::app_info!(name = "Files"))
+    /// ```
+    ///
+    /// Without it the About window still exists, with the id and title the
+    /// application launched with, and `scripts/ui-lint.py` fails the crate.
+    /// What the info leaves empty (the id, the name, the icon) is filled from
+    /// [`Application::new`] and [`Application::title`].
+    pub fn about(mut self, info: crate::about::AppInfo) -> Self {
+        self.about = Some(info);
         self
     }
 
@@ -97,7 +116,10 @@ impl Application {
     /// application whose addresses name files makes a relative path absolute
     /// here, because the running copy does not share this process's folder.
     /// An empty argument, which only raises the running window, is not passed.
-    pub fn normalise(mut self, normalise: fn(&str) -> String) -> Self {
+    /// The argument is the process's own bytes (`OsStr`): a file name that is
+    /// not valid UTF-8 is a valid argument, and the address built from it
+    /// must name that exact file. An option (`-h`) is not passed either.
+    pub fn normalise(mut self, normalise: fn(&std::ffi::OsStr) -> String) -> Self {
         self.normalise = Some(normalise);
         self
     }
@@ -124,9 +146,15 @@ impl Application {
         // relaunch plan exist before the first window and the first thread.
         crate::resilience::install_for_app();
         let normalise = self.normalise;
-        let argument = std::env::args().nth(1).map(|text| match normalise {
-            Some(normalise) if !text.is_empty() && !text.starts_with('-') => normalise(&text),
-            _ => text,
+        // `args()` panics on an argument that is not valid UTF-8, which a file
+        // name may be; `args_os()` never does.
+        let argument = std::env::args_os().nth(1).map(|text| match normalise {
+            Some(normalise) if !text.is_empty() && !text.as_encoded_bytes().starts_with(b"-") => {
+                normalise(&text)
+            }
+            // No address form to build: the text is a location as typed, and
+            // one that is not UTF-8 is not a location (it is reported below).
+            _ => text.to_string_lossy().into_owned(),
         });
         if matches!(argument.as_deref(), Some("--help") | Some("-h")) {
             println!("{}", self.usage);
@@ -185,6 +213,16 @@ impl Application {
         // before the window exists, never on the first frame that wants it.
         let _ = crate::typography::mono_family();
         let _ = theme::font_family();
+        // The About window's facts: the app's own, with what it left out taken
+        // from the id and title it launched with. The system's side of them
+        // (OS, session, graphics) is read now, not when the window is asked for.
+        crate::about::register(
+            self.about
+                .clone()
+                .unwrap_or_default()
+                .completed(&self.app_id, self.title),
+        );
+        crate::about::read_facts();
 
         let (width, height) = self.size;
         let (min_width, min_height) = self.min_size;
@@ -231,6 +269,7 @@ impl Application {
 /// `scripts/ui-lint.py` fails on `LaunchConfig::new()` or `freya::launch`
 /// anywhere else.
 fn launch_application(window: WindowConfig, borderless: bool) {
+    crate::warm::enable();
     let mut config = theme::with_font(LaunchConfig::new()).with_plugin(crate::inspector::plugin());
     if borderless {
         config = config.with_plugin(freya::borderless::BorderlessPlugin::new());

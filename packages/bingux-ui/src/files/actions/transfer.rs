@@ -1,5 +1,4 @@
-//! The operations that take time: copy, move, trash, delete, compress,
-//! extract and undo. Each runs on the worker pool, shows a busy line with a
+//! The operations that take time: copy, move and undo. Each runs on the worker pool, shows a busy line with a
 //! cancel button while it runs, and says how it ended in the status line.
 
 use std::fs;
@@ -16,7 +15,7 @@ use super::backend::{self, Conflict, ConflictPolicy, OpError, Progress, Resoluti
 use super::undo::{self, Step};
 use super::{Busy, Env, clipboard, describe, notify, set};
 use crate::controls::checkbox;
-use crate::shell::{CANCEL_ID, DialogIcon, Overlays, ResponseKind, dialog};
+use crate::shell::{Overlays, ResponseKind, dialog};
 use crate::task::spawn_blocking;
 
 /// How often the busy line and the conflict question are looked at.
@@ -28,7 +27,7 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 /// Claim the one busy slot. Two operations at once would fight over the
 /// status line and over each other's files.
-fn begin(env: &Env, label: String, cancel: Option<Cancel>) -> bool {
+pub(super) fn begin(env: &Env, label: String, cancel: Option<Cancel>) -> bool {
     if env.ui.busy.peek().is_some() {
         notify(env.ui, "Wait for the current operation to finish.", true);
         return false;
@@ -44,12 +43,12 @@ fn begin(env: &Env, label: String, cancel: Option<Cancel>) -> bool {
     true
 }
 
-fn finish(env: &Env) {
+pub(super) fn finish(env: &Env) {
     set(env.ui.busy, None);
 }
 
 /// Select `paths` once they are listed: what a person expects after a paste.
-fn select_paths(env: &Env, paths: &[PathBuf]) {
+pub(super) fn select_paths(env: &Env, paths: &[PathBuf]) {
     let mut selection = env.selection;
     let mut selection = selection.write();
     if let Some((first, rest)) = paths.split_first() {
@@ -60,7 +59,7 @@ fn select_paths(env: &Env, paths: &[PathBuf]) {
     }
 }
 
-fn error_text(what: &str, error: &OpError) -> String {
+pub(super) fn error_text(what: &str, error: &OpError) -> String {
     format!("Could not {what}: {error}")
 }
 
@@ -84,7 +83,7 @@ pub(super) fn move_into(env: &Env, paths: Vec<PathBuf>, dest: PathBuf, copy: boo
 
 /// The question a copy or move asks when a name is taken.
 #[derive(Default)]
-struct Asker {
+pub(super) struct Asker {
     pending: Mutex<Option<Ask>>,
     /// An answer given for every later conflict.
     all: Mutex<Option<Resolution>>,
@@ -100,7 +99,7 @@ struct Ask {
 impl Asker {
     /// Called on the worker: leave the question for the UI and wait for the
     /// answer. Closing the dialog, or cancelling the operation, answers Cancel.
-    fn decide(&self, conflict: &Conflict, cancel: &Cancel) -> Resolution {
+    pub(super) fn decide(&self, conflict: &Conflict, cancel: &Cancel) -> Resolution {
         if let Some(answer) = *lock(&self.all) {
             return answer;
         }
@@ -182,6 +181,7 @@ fn ask_about(overlays: Overlays, ask: Ask) {
             format!("Something with this name is already in {place}."),
         )
         .content(Element::from(ApplyToAll(remember)))
+        .cancel("Cancel")
         .response("Skip", ResponseKind::Default, answer(Resolution::Skip))
         .response("Keep both", ResponseKind::Default, answer(Resolution::KeepBoth))
         .response("Replace", ResponseKind::Destructive, answer(Resolution::Replace))
@@ -232,7 +232,7 @@ fn done_text(past: &str, whole: &str, flushed_to: Option<&str>) -> String {
 }
 
 /// Keep the busy line and the conflict question current until `done`.
-async fn follow(
+pub(super) async fn follow(
     env: Env,
     verb: &'static str,
     whole: String,
@@ -263,6 +263,11 @@ async fn follow(
 
 fn transfer(env: &Env, paths: Vec<PathBuf>, dest: PathBuf, cut: bool, clear_held: bool) {
     if paths.is_empty() {
+        return;
+    }
+    // The Trash is not a folder to copy into: a drop on it trashes, a drop out
+    // of it restores, and nothing goes inside it.
+    if super::bin::redirect(env, &paths, &dest, !cut) {
         return;
     }
     if paths
@@ -370,287 +375,6 @@ pub(super) fn pair_moves(originals: &[PathBuf], arrived: &[PathBuf]) -> Vec<(Pat
 }
 
 // ---------------------------------------------------------------------------
-// Trash and delete
-// ---------------------------------------------------------------------------
-
-/// Which of some items the Trash can take, and which it cannot: a drive with
-/// no Trash, a share, a read-only drive, something in the Trash already.
-#[derive(Debug, PartialEq)]
-struct TrashPlan {
-    bin: Vec<PathBuf>,
-    /// Never deleted without a question.
-    ask: Vec<PathBuf>,
-}
-
-fn plan_trash(paths: Vec<PathBuf>, can_trash: impl Fn(&Path) -> bool) -> TrashPlan {
-    let (bin, ask) = paths.into_iter().partition(|path| can_trash(path));
-    TrashPlan { bin, ask }
-}
-
-/// Why `paths` are asked about instead of binned.
-fn no_trash_reason(paths: &[PathBuf], in_trash: impl Fn(&Path) -> bool) -> &'static str {
-    let one = paths.len() == 1;
-    if paths.iter().all(|path| in_trash(path)) {
-        if one {
-            "It is in the Trash already."
-        } else {
-            "They are in the Trash already."
-        }
-    } else if one {
-        "It cannot be moved to the Trash."
-    } else {
-        "They cannot be moved to the Trash."
-    }
-}
-
-/// Move to the Trash. This is the ordinary way to remove something, and it
-/// can be undone. Items the Trash cannot take (a drive with no Trash, a
-/// network share) are never deleted quietly: they turn into a question about
-/// deleting for good.
-pub(super) fn trash(env: &Env, paths: Vec<PathBuf>) {
-    if paths.is_empty() {
-        return;
-    }
-    let plan = plan_trash(paths, backend::can_trash);
-    if plan.bin.is_empty() {
-        let reason = no_trash_reason(&plan.ask, backend::in_trash);
-        ask_delete(env, plan.ask, Some(reason));
-    } else {
-        move_to_trash(env, plan.bin, plan.ask);
-    }
-}
-
-/// Bin `paths`, then, if some other items could not go there, ask about
-/// those.
-fn move_to_trash(env: &Env, paths: Vec<PathBuf>, then_ask: Vec<PathBuf>) {
-    if !begin(env, format!("Moving {} to the Trash", describe(&paths)), None) {
-        return;
-    }
-    let env = env.clone();
-    spawn_in_window(async move {
-        let whole = describe(&paths);
-        let attempted = paths.clone();
-        let outcome = spawn_blocking(move || backend::trash(&paths)).await;
-        finish(&env);
-        match outcome {
-            Ok(trashed) => {
-                undo::push(Step::Trash(trashed));
-                let again = env.clone();
-                env.overlays.toast_with_action(
-                    format!("Moved {whole} to the Trash"),
-                    "Undo",
-                    move |_: ()| undo(&again),
-                );
-                if !then_ask.is_empty() {
-                    let reason = no_trash_reason(&then_ask, backend::in_trash);
-                    ask_delete(&env, then_ask, Some(reason));
-                }
-            }
-            // The drive turned out to have no Trash after all. Nothing was
-            // moved; ask rather than delete.
-            Err(OpError::Unsupported(text)) => {
-                let mut all = attempted;
-                all.extend(then_ask);
-                ask_delete(&env, all, Some(&text));
-            }
-            Err(error) => notify(env.ui, error_text("move to the Trash", &error), true),
-        }
-        env.reload.call(());
-    });
-}
-
-/// Delete permanently (Shift+Delete, or Delete permanently in the Shift
-/// menu). Always asks first.
-pub(super) fn confirm_delete(env: &Env, paths: Vec<PathBuf>) {
-    if !paths.is_empty() {
-        ask_delete(env, paths, None);
-    }
-}
-
-/// The words of the question before deleting for good.
-#[derive(Debug, PartialEq)]
-struct Prompt {
-    title: String,
-    body: String,
-}
-
-fn delete_prompt(paths: &[PathBuf], reason: Option<&str>) -> Prompt {
-    let what = describe(paths);
-    let (it, they, them) = if paths.len() == 1 {
-        ("It", "it", "it")
-    } else {
-        ("They", "they", "them")
-    };
-    let mut body = String::new();
-    if let Some(reason) = reason {
-        body.push_str(reason);
-        body.push(' ');
-    }
-    body.push_str(&format!(
-        "{it} will be deleted for good. This cannot be undone: {they} will not go to the Trash, and Undo cannot bring {them} back."
-    ));
-    Prompt {
-        title: format!("Delete {what} permanently?"),
-        body,
-    }
-}
-
-/// Ask before deleting for good. Cancel is the default action and has the
-/// focus, so a stray Enter keeps the files.
-fn ask_delete(env: &Env, paths: Vec<PathBuf>, reason: Option<&str>) {
-    let prompt = delete_prompt(&paths, reason);
-    let env = env.clone();
-    env.overlays.show_dialog(
-        dialog(prompt.title, prompt.body)
-            .cancel("Cancel")
-            .default_action(CANCEL_ID)
-            .icon(DialogIcon::Warning)
-            .response("Delete permanently", ResponseKind::Destructive, {
-                let env = env.clone();
-                move |_: ()| delete(&env, paths.clone())
-            }),
-    );
-}
-
-/// Ask before emptying the Trash.
-pub(super) fn confirm_empty_trash(env: &Env) {
-    let env = env.clone();
-    env.overlays.show_dialog(
-        dialog(
-            "Empty the Trash?",
-            "Everything in the Trash will be deleted for good. This cannot be undone.",
-        )
-        .cancel("Cancel")
-        .default_action(CANCEL_ID)
-        .icon(DialogIcon::Warning)
-        .response("Empty Trash", ResponseKind::Destructive, {
-            let env = env.clone();
-            move |_: ()| empty_trash(&env)
-        }),
-    );
-}
-
-fn delete(env: &Env, paths: Vec<PathBuf>) {
-    let whole = describe(&paths);
-    run_permanent(
-        env,
-        "Deleting",
-        whole.clone(),
-        format!("Deleted {whole}."),
-        move |progress, cancel| backend::delete(&paths, progress, cancel),
-    );
-}
-
-fn empty_trash(env: &Env) {
-    run_permanent(
-        env,
-        "Emptying",
-        "the Trash".to_owned(),
-        "Emptied the Trash.".to_owned(),
-        backend::empty_trash,
-    );
-}
-
-/// A permanent removal, with a busy line and a cancel button. Only called
-/// from the answer to a question.
-fn run_permanent(
-    env: &Env,
-    verb: &'static str,
-    whole: String,
-    done_text: String,
-    job: impl FnOnce(&Progress, &Cancel) -> Result<(), OpError> + Send + 'static,
-) {
-    let cancel = Cancel::new();
-    if !begin(env, format!("{verb} {whole}"), Some(cancel.clone())) {
-        return;
-    }
-    let progress = Progress::new();
-    let done = Arc::new(AtomicBool::new(false));
-    spawn_in_window(follow(
-        env.clone(),
-        verb,
-        whole,
-        progress.clone(),
-        cancel.clone(),
-        Arc::new(Asker::default()),
-        done.clone(),
-    ));
-    let env = env.clone();
-    spawn_in_window(async move {
-        let outcome = spawn_blocking(move || job(&progress, &cancel)).await;
-        done.store(true, Ordering::Release);
-        finish(&env);
-        match outcome {
-            Ok(()) => notify(env.ui, done_text, false),
-            Err(OpError::Cancelled) => notify(env.ui, format!("{verb} stopped."), false),
-            Err(error) => notify(env.ui, error_text("delete", &error), true),
-        }
-        env.reload.call(());
-    });
-}
-
-// ---------------------------------------------------------------------------
-// Archives
-// ---------------------------------------------------------------------------
-
-/// Pack `paths` into an archive next to the first of them.
-pub(super) fn compress(env: &Env, paths: Vec<PathBuf>) {
-    let Some(format) = super::compress_format() else {
-        notify(env.ui, "No archive tool is installed.", true);
-        return;
-    };
-    let Some(parent) = paths.first().and_then(|path| path.parent()).map(Path::to_path_buf) else {
-        return;
-    };
-    let stem = match paths.as_slice() {
-        [only] => only
-            .file_name()
-            .map_or_else(|| "Archive".to_owned(), |name| name.to_string_lossy().into_owned()),
-        _ => "Archive".to_owned(),
-    };
-    let dest = parent.join(format!("{stem}{}", format.extension()));
-    if !begin(env, format!("Compressing {}", describe(&paths)), None) {
-        return;
-    }
-    let env = env.clone();
-    spawn_in_window(async move {
-        let outcome = spawn_blocking(move || backend::compress(&paths, &dest, format)).await;
-        finish(&env);
-        match outcome {
-            Ok(made) => {
-                notify(env.ui, format!("Created {}.", describe(std::slice::from_ref(&made))), false);
-                select_paths(&env, &[made]);
-            }
-            Err(error) => notify(env.ui, error_text("compress", &error), true),
-        }
-        env.reload.call(());
-    });
-}
-
-/// Unpack an archive into a new folder beside it.
-pub(super) fn extract(env: &Env, archive: PathBuf) {
-    let Some(parent) = archive.parent().map(Path::to_path_buf) else {
-        return;
-    };
-    if !begin(env, format!("Extracting {}", describe(std::slice::from_ref(&archive))), None) {
-        return;
-    }
-    let env = env.clone();
-    spawn_in_window(async move {
-        let outcome = spawn_blocking(move || backend::extract(&archive, &parent)).await;
-        finish(&env);
-        match outcome {
-            Ok(made) => {
-                notify(env.ui, format!("Extracted to {}.", describe(std::slice::from_ref(&made))), false);
-                select_paths(&env, &[made]);
-            }
-            Err(error) => notify(env.ui, error_text("extract", &error), true),
-        }
-        env.reload.call(());
-    });
-}
-
-// ---------------------------------------------------------------------------
 // Undo
 // ---------------------------------------------------------------------------
 
@@ -690,6 +414,7 @@ fn reverse(step: &Step) -> Result<Vec<PathBuf>, OpError> {
             backend::rename(to, &name).map(|path| vec![path])
         }
         Step::Trash(items) => backend::untrash(items),
+        Step::Restore(items) => super::bin::undo_restore(items),
         Step::Create { path, folder } => {
             // An item nobody has touched since is simply removed. One that
             // gained content goes to the Trash instead of being lost.
@@ -770,53 +495,6 @@ mod tests {
     #[test]
     fn a_move_to_the_same_place_is_no_change() {
         assert!(pair_moves(&paths(&["/a/x"]), &paths(&["/a/x"])).is_empty());
-    }
-
-    // ---- permanent delete is never quiet ------------------------------------
-
-    #[test]
-    fn items_the_trash_cannot_take_are_asked_about_never_binned_or_deleted() {
-        let plan = plan_trash(paths(&["/home/a", "/mnt/nas/b", "/home/c"]), |path| {
-            !path.starts_with("/mnt/nas")
-        });
-        assert_eq!(plan.bin, paths(&["/home/a", "/home/c"]));
-        assert_eq!(plan.ask, paths(&["/mnt/nas/b"]));
-        let all_stuck = plan_trash(paths(&["/mnt/nas/b"]), |_| false);
-        assert!(all_stuck.bin.is_empty());
-        assert_eq!(all_stuck.ask.len(), 1);
-        let none_stuck = plan_trash(paths(&["/home/a"]), |_| true);
-        assert!(none_stuck.ask.is_empty(), "plain Delete goes to the Trash");
-    }
-
-    #[test]
-    fn the_reason_says_why_there_is_a_question() {
-        let on = |path: &Path| path.starts_with("/home/a/.local/share/Trash");
-        assert_eq!(
-            no_trash_reason(&paths(&["/mnt/nas/b"]), on),
-            "It cannot be moved to the Trash."
-        );
-        assert_eq!(
-            no_trash_reason(&paths(&["/mnt/nas/b", "/mnt/nas/c"]), on),
-            "They cannot be moved to the Trash."
-        );
-        assert_eq!(
-            no_trash_reason(&paths(&["/home/a/.local/share/Trash/files/x"]), on),
-            "It is in the Trash already."
-        );
-    }
-
-    #[test]
-    fn the_delete_question_names_the_items_and_says_it_cannot_be_undone() {
-        let one = delete_prompt(&paths(&["/a/report.txt"]), None);
-        assert_eq!(one.title, "Delete “report.txt” permanently?");
-        assert!(one.body.contains("cannot be undone"), "{}", one.body);
-        assert!(one.body.contains("will not go to the Trash"), "{}", one.body);
-        assert!(one.body.starts_with("It will be deleted for good."), "{}", one.body);
-
-        let many = delete_prompt(&paths(&["/a/x", "/a/y", "/a/z"]), Some("They cannot be moved to the Trash."));
-        assert_eq!(many.title, "Delete 3 items permanently?");
-        assert!(many.body.starts_with("They cannot be moved to the Trash. They will be deleted"), "{}", many.body);
-        assert!(many.body.contains("Undo cannot bring them back"), "{}", many.body);
     }
 
     #[test]

@@ -188,7 +188,7 @@ impl Rule {
             }
             Rule::HiddenLabel => "Give the control room for its label, or shorten the label or use an icon with a tooltip.",
             Rule::TextCollision => "Lay the two out in a row or a column, or give the first one a width limit.",
-            Rule::FocusRing => "End the control's render with .focusable(..) on the node that paints its fill, and pass that node's radius.",
+            Rule::FocusRing => "End the control's render with .focusable(..) on the node that paints its fill and its corner radii.",
         }
     }
 }

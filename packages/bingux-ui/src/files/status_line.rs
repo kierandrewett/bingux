@@ -58,6 +58,8 @@ pub(super) struct StatusInfo {
     pub unresponsive: bool,
     /// A search is narrowing or replacing the list.
     pub search: Option<SearchLine>,
+    /// The folder on show is in the Trash: the line says so.
+    pub trash: bool,
 }
 
 /// What a search says about the list.
@@ -140,10 +142,12 @@ pub(super) fn status_text(info: &StatusInfo) -> String {
             text
         }
         None if info.selected > 0 => format!(
-            "{} of {} selected{size}",
+            "{}{} of {} selected{size}",
+            if info.trash { "Trash · " } else { "" },
             grouped(info.selected),
             grouped(info.shown)
         ),
+        None if info.trash => format!("Trash · {}", item_count(info.shown)),
         None => item_count(info.shown),
     }
 }

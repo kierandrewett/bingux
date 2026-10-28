@@ -490,6 +490,171 @@ pub const DIALOG: &[Spec] = &[
     .script("click-text Open framed dialog; wait 500; save {out}"),
 ];
 
+
+// ---- Form dialog (Compress) ------------------------------------------------
+
+/// A file for the Compress dialog's states.
+fn pic(name: &str, size: u64) -> bingux_ui::files::model::Entry {
+    let mut entry = bingux_ui::files::model::Entry::named(
+        std::path::PathBuf::from("/home/kieran/Pictures").join(name),
+        name.to_string(),
+        bingux_ui::files::model::Kind::File,
+        false,
+        false,
+    );
+    entry.size = size;
+    entry
+}
+
+fn tools_all() -> bingux_ui::files::model::ops::Tools {
+    use bingux_ui::files::model::ops::Tools;
+    Tools {
+        ffmpeg: Some("/usr/bin/ffmpeg".into()),
+        ffprobe: Some("/usr/bin/ffprobe".into()),
+        magick: Some("/usr/bin/magick".into()),
+        encoders: ["libx264", "libx265", "libsvtav1", "libvpx-vp9", "aac", "libopus", "libmp3lame", "flac", "libwebp", "mjpeg", "png"]
+            .map(String::from)
+            .to_vec(),
+        magick_formats: ["JPEG", "PNG", "WEBP"].map(String::from).to_vec(),
+    }
+}
+
+/// A button that opens the Compress dialog in one fixed state: `$state` is an
+/// expression that builds the [`CompressPreview`](bingux_ui::files::CompressPreview).
+macro_rules! compress_state {
+    ($label:expr, $state:expr) => {
+        Spec::live($label, || {
+            let overlays = use_overlays();
+            action_button("Open Compress", move |_| {
+                bingux_ui::shell::open_form(overlays, "Compress", bingux_ui::files::compress_preview($state), None);
+            })
+            .into_element()
+        })
+        .script("click-text Open Compress; wait 700; save {out}")
+    };
+}
+
+fn estimate(entries: &[bingux_ui::files::model::Entry], ratio: f64) -> bingux_ui::files::model::ops::Estimate {
+    let per_file: Vec<Option<u64>> = entries.iter().map(|e| Some((e.size as f64 * ratio) as u64)).collect();
+    bingux_ui::files::model::ops::Estimate {
+        original: entries.iter().map(|e| e.size).sum(),
+        estimated: per_file.iter().flatten().sum(),
+        per_file,
+    }
+}
+
+pub const FORM_DIALOG: &[Spec] = &[
+    compress_state!("Archive: valid", {
+        let mut p = bingux_ui::files::CompressPreview::new(vec![pic("notes.txt", 1200), pic("report.pdf", 90_000)], tools_all());
+        p.format = Some(bingux_ui::files::model::ops::Format::Zip);
+        p
+    }),
+    compress_state!("Archive: name taken (keep both)", {
+        let mut p = bingux_ui::files::CompressPreview::new(vec![pic("Holiday.txt", 10)], tools_all());
+        p.name = Some("Holiday".into());
+        p.taken = vec!["Holiday.zip".into()];
+        p
+    }),
+    compress_state!("Archive: invalid name and pattern", {
+        let mut p = bingux_ui::files::CompressPreview::new(vec![pic("a.txt", 10), pic("b.txt", 10)], tools_all());
+        p.name = Some("a/b".into());
+        p.excludes = "a[bc".into();
+        p
+    }),
+    compress_state!("Archive: password does not match", {
+        let mut p = bingux_ui::files::CompressPreview::new(vec![pic("a.txt", 10), pic("b.txt", 10)], tools_all());
+        p.locked = true;
+        p.password = "secret".into();
+        p.confirm = "secre".into();
+        p
+    }),
+    compress_state!("Reduce size: pictures", {
+        let files = vec![pic("a.jpg", 4_200_000), pic("b.png", 7_500_000)];
+        let mut p = bingux_ui::files::CompressPreview::new(files.clone(), tools_all());
+        p.estimate = Some(estimate(&files, 0.28));
+        p
+    }),
+    compress_state!("Reduce size: films", {
+        let files = vec![pic("clip.mp4", 612_000_000)];
+        let mut p = bingux_ui::files::CompressPreview::new(files.clone(), tools_all());
+        p.estimate = Some(estimate(&files, 0.14));
+        p
+    }),
+    compress_state!("Reduce size: songs", {
+        let files = vec![pic("track.flac", 31_000_000)];
+        let mut p = bingux_ui::files::CompressPreview::new(files.clone(), tools_all());
+        p.estimate = Some(estimate(&files, 0.1));
+        p
+    }),
+    compress_state!("Reduce size: tool missing", {
+        bingux_ui::files::CompressPreview::new(vec![pic("clip.mp4", 1_000_000), pic("a.jpg", 2000)], Default::default())
+    }),
+];
+
+// ---- About ------------------------------------------------------------------
+
+/// What an application that gives everything shows.
+fn about_complete() -> AppInfo {
+    AppInfo::default()
+        .name("Files")
+        .id("bingux-files")
+        .version("0.1.0")
+        .description("Browse and organise files and folders")
+        .website("https://github.com/kierandrewett/bingux")
+        .issues("https://github.com/kierandrewett/bingux/issues")
+        .licence("GPL-3.0-or-later")
+        .licence_text(
+            "Bingux is licensed under the GNU General Public License, version 3 or any later version, \
+             as published by the Free Software Foundation.\n\nThe complete license text is available at:\n\
+             https://www.gnu.org/licenses/gpl-3.0.html",
+        )
+        .authors(["Kieran Drewett"])
+        .commit("444fb3b9f2ac1d77")
+        .built("2026-10-28")
+        .third_party(
+            "Licences of the Rust crates linked into bingux-files\n\nSummary: Apache-2.0 AND MIT AND Zlib\n\n\
+             ab_glyph 0.2.32: Apache-2.0\naccesskit 0.24.1: Apache-2.0 OR MIT\nadler2 2.0.1: 0BSD OR Apache-2.0 OR MIT\n\
+             ahash 0.8.12: Apache-2.0 OR MIT\nbytes 1.10.1: MIT\nserde 1.0.228: Apache-2.0 OR MIT\nzlib-rs 0.5.2: Zlib\n",
+        )
+}
+
+/// What an application gets when it gives only a name and an id.
+fn about_minimal() -> AppInfo {
+    AppInfo::default().name("Notes").id("bingux-notes")
+}
+
+/// A button that opens the About window of `make()` on `page`.
+fn about_button(make: fn() -> AppInfo, page: bingux_ui::about::Page) -> Element {
+    let overlays = use_overlays();
+    action_button("Open About", move |_| bingux_ui::about::open_at(overlays, make(), page)).into_element()
+}
+
+const OPEN_ABOUT: &str = "click-text Open About; wait 700; save {out}";
+
+pub const ABOUT: &[Spec] = &[
+    Spec::live("Complete info", || about_button(about_complete, bingux_ui::about::Page::Main)).script(OPEN_ABOUT),
+    Spec::live("Minimal info: a name and an id", || {
+        about_button(about_minimal, bingux_ui::about::Page::Main)
+    })
+    .script(OPEN_ABOUT),
+    Spec::live("Long description", || {
+        about_button(
+            || {
+                about_complete().description(
+                    "A file manager that keeps each tab's folder, history and scroll position, shows thumbnails \
+                     and previews, copies, moves, renames and trashes with undo, and treats drives and removable \
+                     media as places like any other, in the same window as the file chooser other applications use.",
+                )
+            },
+            bingux_ui::about::Page::Main,
+        )
+    })
+    .script(OPEN_ABOUT),
+    Spec::live("Licence page", || about_button(about_complete, bingux_ui::about::Page::Licence)).script(OPEN_ABOUT),
+    Spec::live("Credits page", || about_button(about_complete, bingux_ui::about::Page::Credits)).script(OPEN_ABOUT),
+    Spec::live("Legal page", || about_button(about_complete, bingux_ui::about::Page::Legal)).script(OPEN_ABOUT),
+];
+
 /// A button that queues the toast `make` builds.
 fn toast_button(make: fn() -> Toast) -> Element {
     let overlays = use_overlays();
@@ -658,7 +823,38 @@ pub const MENU: &[Spec] = &[
         })
         .into_element()
     }),
+    Spec::live("Open with: a submenu of applications, each with its icon", || {
+        menu_button("File", open_with_items()).into_element()
+    })
+    .script("click-text File; wait 300; click-text Open with; wait 500; save {out}"),
+    Spec::live("A dropdown of applications: icons in the list and the value", || {
+        app_dropdown(sample_apps(), "org.gnome.TextEditor", |_| {}).into_element()
+    })
+    .script("click-text Text Editor; wait 500; save {out}"),
+    Spec::live("An application without an icon in the theme: the generic glyph", || {
+        app_dropdown(sample_apps(), "no-icon", |_| {}).into_element()
+    }),
 ];
+
+/// Applications as a list of choices: the icon comes with each one.
+fn sample_apps() -> Vec<AppChoice> {
+    vec![
+        AppChoice::new("org.gnome.Nautilus", "Files", "org.gnome.Nautilus"),
+        AppChoice::new("org.gnome.TextEditor", "Text Editor", "org.gnome.TextEditor"),
+        AppChoice::new("org.gnome.Totem", "Videos", "org.gnome.Totem"),
+        AppChoice::new("no-icon", "Unpackaged tool", "no-such-icon-in-any-theme"),
+    ]
+}
+
+/// A file's menu with an Open with submenu of applications.
+fn open_with_items() -> Vec<MenuItem> {
+    vec![
+        menu_item("Open", |_| {}),
+        submenu("Open with", app_menu_items(sample_apps(), |_| {})),
+        menu_separator(),
+        menu_item("Properties", |_| {}),
+    ]
+}
 
 /// A column of banners as a page would hold them: the same width, spaced.
 fn banners(items: Vec<Banner>) -> Element {

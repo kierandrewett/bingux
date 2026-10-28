@@ -152,6 +152,14 @@ fn tab_titles(tabs: &[Tab]) -> Vec<String> {
     titles
 }
 
+/// The icon a tab shows: its folder's, as the sidebar and the crumbs draw it.
+fn tab_icon(at: &Where) -> files::FileIcon {
+    match at {
+        Where::Recent => files::FileIcon::for_place_kind(files::model::PlaceKind::Recent),
+        Where::Folder(path) => files::FileIcon::folder_at(path),
+    }
+}
+
 /// The name a tab and the window go by: the folder's name, and "Home" for the
 /// home folder, as its crumb and its sidebar place read.
 fn title_of(at: &Where) -> String {
@@ -254,17 +262,18 @@ impl Component for Content {
                 .on_new_tab(move |path: std::path::PathBuf| tabs.open(Where::Folder(path))),
         );
 
-        let mut header = HeaderBar::new(title)
-            .fill(Paint::Bg)
+        // The tabs stand on the file view: the header bar is transparent over
+        // the frame's strip, and the strip, from the left, is its title.
+        let header = HeaderBar::new(title)
+            .fill(Paint::Transparent)
             .trailing(menu_button("Main menu", main_menu(tabs, overlays)).icon(Icon::OpenMenu))
-            .trailing(WindowControls);
-        if shown.len() > 1 {
-            header = header.title_slot(
+            .trailing(WindowControls)
+            .tab_slot(
                 tab_strip(
                     shown
                         .iter()
                         .zip(tab_titles(&shown))
-                        .map(|(tab, title)| TabItem::new(tab.id, title))
+                        .map(|(tab, title)| TabItem::new(tab.id, title).icon(tab_icon(&tab.at).glyph))
                         .collect(),
                     current,
                 )
@@ -297,12 +306,6 @@ impl Component for Content {
                     _ => None,
                 }),
             );
-        } else {
-            header = header.leading(
-                icon_button(Icon::ListAdd, move |_: ()| tabs.open(home()))
-                    .tooltip("New tab"),
-            );
-        }
 
         let shortcuts = move |event: Event<KeyboardEventData>| {
             let ctrl = event.modifiers.contains(Modifiers::CONTROL);
@@ -350,14 +353,14 @@ impl Component for Content {
                     remember_size(event.area.width(), event.area.height());
                 }
             })
-            .child(header)
-            .child(
+            .child(tab_frame(
+                header,
                 // Keyed by tab: each tab's body has its own state.
                 rect()
                     .key(tab.id)
                     .tw(&tokens, &[w_full(), h_flex(), flex_col()])
                     .child(body),
-            )
+            ))
             .into_element()
     }
 }
@@ -391,15 +394,19 @@ Shift+Delete  Delete permanently\n\
 Ctrl+C, Ctrl+X, Ctrl+V  Copy, cut, paste\n\
 Ctrl+Z  Undo\n\
 Space  Preview\n\
-Alt+Enter  Properties";
+Alt+Enter  Properties\n\
+Ctrl+Shift+?  About Files";
 
 fn main_menu(tabs: Tabs, overlays: Overlays) -> Vec<MenuItem> {
-    vec![
+    let mut items = vec![
         menu_item("New tab", move |_: ()| tabs.open(here(tabs))).shortcut("Ctrl+T"),
         menu_item("Close tab", move |_: ()| tabs.close(*tabs.active.peek())).shortcut("Ctrl+W"),
         menu_separator(),
         menu_item("Keyboard shortcuts", move |_: ()| {
             overlays.show_dialog(dialog("Keyboard shortcuts", SHORTCUTS).cancel("Close"));
         }),
-    ]
+    ];
+    // Every application's menu ends with About.
+    items.extend(bingux_ui::about::app_menu_items(overlays));
+    items
 }

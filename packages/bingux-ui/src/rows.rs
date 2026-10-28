@@ -20,8 +20,11 @@ use crate::controls::segmented::segmented;
 use crate::controls::slider::slider;
 use crate::controls::switch::{Switch, switch};
 use crate::controls::{ActionButton, Checkbox, Dropdown, IconButton, RowButton, Segmented, SplitButton, Stepper};
-use crate::controls::text_field::text_field;
-use crate::group::{SlotFilter, card_rows, use_row_lit, use_row_match};
+use crate::controls::adaptive::{
+    ControlFacts, LabelFacts, LineFit, LineMode, choose_filled_line, choose_line, label_cell_width,
+};
+use crate::controls::text_field::{TextField, text_field};
+use crate::group::{SlotFilter, card_rows, use_row_match, use_row_slot};
 use crate::icons::{self, Icon};
 use crate::focus::use_focus_core;
 use crate::motion::{
@@ -96,6 +99,10 @@ pub struct Row {
     /// Whether the trailing content is a switch, which sits [`SWITCH_INSET`]
     /// from the row's trailing edge, the same as above and below it.
     trailing_switch: bool,
+    /// Whether the trailing content is a text field. On a phone it fills what
+    /// the title leaves instead of keeping its width, or goes under the title
+    /// when there is not room. See [`Row::trailing`].
+    trailing_fluid: bool,
     /// Whether the trailing content is a read-only value. The title and the
     /// value then share the row evenly, and a long value is cut to its half.
     value_trailing: bool,
@@ -136,6 +143,7 @@ pub fn row(title: impl Into<String>) -> Row {
         trailing_control: false,
         trailing_fit: false,
         trailing_switch: false,
+        trailing_fluid: false,
         radio: None,
         title_marks: None,
         subtitle_marks: None,
@@ -191,6 +199,12 @@ impl Row {
     /// then separates it from the chevron, and the chevron is a target of its
     /// own that opens the page, while the control only acts. Wrap a control
     /// in a container and call [`Row::trailing_control`] to get the same.
+    ///
+    /// A [`TextField`] passed directly fills the row on a phone: the title
+    /// keeps its width (at most [`LABEL_SHARE`](crate::controls::adaptive::LABEL_SHARE)
+    /// of the line) and the field takes the rest, at least [`Dim::FieldMin`];
+    /// a title that leaves it less goes above the field. See
+    /// [`choose_filled_line`](crate::controls::adaptive::choose_filled_line).
     pub fn trailing<E: Into<Element> + 'static>(mut self, trailing: E) -> Self {
         use std::any::TypeId;
         let id = TypeId::of::<E>();
@@ -216,6 +230,7 @@ impl Row {
         ]
         .contains(&id);
         self.trailing_switch = id == TypeId::of::<Switch>();
+        self.trailing_fluid = id == TypeId::of::<TextField>();
         self.trailing = Some(trailing.into());
         self
     }
@@ -233,6 +248,7 @@ impl Row {
         self.trailing_control = false;
         self.trailing_fit = false;
         self.trailing_switch = false;
+        self.trailing_fluid = false;
         self
     }
 
@@ -541,13 +557,17 @@ impl Component for Row {
         // a title that would get less than its floor goes under the title, as
         // in `controls::adaptive`. Only a row of title, control and nothing
         // that navigates is laid out this way.
-        let stackable = self.trailing_control
-            && self.trailing.is_some()
+        let plain_line = self.trailing.is_some()
             && !self.navigates
             && !self.value_trailing
             && radio.is_none();
-        let stacked = stackable && {
-            use crate::controls::adaptive::{ControlFacts, LabelFacts, LineMode, choose_line};
+        let stackable = self.trailing_control && plain_line;
+        // A text field on a phone fills what the title leaves, or goes under
+        // the title when it would get less than `Dim::FieldMin`.
+        let filling = self.trailing_fluid && plain_line && is_compact();
+        // The room the title and the control share: the face less its gutters
+        // and any icon or avatar before the title.
+        let line_inner = || {
             let leading = if self.leading.is_some() || self.leading_space || self.leading_signal.is_some() {
                 Dim::IconRow.px() + S3.px()
             } else if self.leading_avatar.is_some() || self.leading_app.is_some() {
@@ -555,18 +575,38 @@ impl Component for Row {
             } else {
                 0.0
             };
-            let inner = (face_size().0 - 2.0 * GUTTER.px() - leading).max(0.0);
+            (face_size().0 - 2.0 * GUTTER.px() - leading).max(0.0)
+        };
+        let filled = filling.then(|| {
+            choose_filled_line(
+                line_inner(),
+                S3.px() + S1.px(),
+                LabelFacts::measure(&self.title, BODY),
+                Dim::FieldMin.px(),
+            )
+        });
+        // Until the row and its control have been sized there is nothing to
+        // choose (`choose_line` says `Beside`), and the title is not measured:
+        // measuring shapes the title and each of its words, on the frame that
+        // mounts the row.
+        let stacked = (stackable && trailing_width() > 0.0 && line_inner() > 0.0 && {
             let control = ControlFacts {
                 natural: trailing_width(),
                 least: None,
             };
             choose_line(
-                inner,
+                line_inner(),
                 S3.px() + S1.px(),
                 LabelFacts::measure(&self.title, BODY),
                 control,
             ) == LineMode::Stacked
+        }) || filled == Some(LineMode::Stacked);
+        // The title's width in a line the field fills: its own, at most its share.
+        let title_cell = match filled {
+            Some(LineMode::Shrunk { label }) => Some(label_cell_width(label)),
+            _ => None,
         };
+        LineFit::provide(filled.is_some());
         let fit = self.trailing_fit && !stacked;
         let mut fitting = use_provide_context(|| RowFit(State::create(fit)));
         fitting.0.set_if_modified(fit);
@@ -577,7 +617,6 @@ impl Component for Row {
         let activatable = interactive && self.activatable;
         let overlays = try_consume_context::<Overlays>();
         let menu = self.context_menu.clone();
-        use_row_lit((activatable && (hovering() || pressing())) || self.selected);
         // A location's `#fragment` equal to the title's slug scrolls here and
         // flashes the row (see `nav::anchor`).
         let anchor = crate::nav::use_anchor(&crate::nav::slug(&self.title));
@@ -593,7 +632,10 @@ impl Component for Row {
         let nested_lit = use_state(Vec::<usize>::new);
         let nested_matched = use_state(Vec::<usize>::new);
         let nested_hit = !nested_matched.read().is_empty();
-        use_row_match(row_hit || nested_hit);
+        use_row_slot(
+            (activatable && (hovering() || pressing())) || self.selected,
+            row_hit || nested_hit,
+        );
         let single_line = self.subtitle.is_none() && !stacked;
         let ink = if !self.enabled {
             Ink::Muted
@@ -695,6 +737,7 @@ impl Component for Row {
         // the row is no taller than one without the button.
         let text_column = rect()
             .tw(&tokens, ROW_TEXT)
+            .map(title_cell, |text, width| text.width(Size::px(width)))
             .maybe(fit && !single_line, |text| {
                 text.tw(&tokens, &[py(S1)])
             })
@@ -721,9 +764,15 @@ impl Component for Row {
                 // fills it, so a long value is cut before the chevron. Any
                 // other trailing control keeps its own width. Freya's layout
                 // cannot shrink an overflowing child, so a cap on this area
-                // would push a chevron or a dropdown past the box edge.
+                // would push a chevron or a dropdown past the box edge. A text
+                // field on a phone takes what the title's own width leaves.
                 .maybe(self.value_trailing, |element| {
                     element.tw(&tokens, &[w_flex(), grow_children(), justify(Align::End)])
+                })
+                .maybe(title_cell.is_some(), |element| {
+                    element
+                        .tw(&tokens, &[w_flex(), grow_children()])
+                        .min_width(Size::px(0.0))
                 })
                 .maybe_child(self.trailing.clone())
                 .maybe_child((self.selected && !self.navigates).then(|| {
@@ -842,7 +891,6 @@ impl Component for Row {
                 ring_core.clone(),
                 body,
                 focus(),
-                Radius::Control,
                 true,
                 RingSize::Measured(body_ring),
             )
@@ -905,7 +953,6 @@ impl Component for Row {
                 ring_core.clone(),
                 zone,
                 zone_focus(),
-                Radius::Inner,
                 true,
                 RingSize::Measured(zone_ring),
             )
@@ -1006,14 +1053,7 @@ impl Component for Row {
                     })
             })
             .children(parts)
-            .maybe_child((anchor.flash() > 0.01).then(|| {
-                rect()
-                    .position(Position::new_absolute().top(0.0).left(0.0))
-                    .width(Size::fill())
-                    .height(Size::fill())
-                    .tw(&tokens, &[bg(Paint::Accent)])
-                    .opacity(anchor.flash() * 0.22)
-            }))
+            .maybe_child(anchor.flash())
             .on_sized(move |event: Event<SizedEventData>| {
                 face_size.set_if_modified((event.area.width(), event.area.height()));
                 anchor.on_sized().call(event);
@@ -1028,7 +1068,6 @@ impl Component for Row {
                 ring_core.clone(),
                 face,
                 focus(),
-                Radius::Control,
                 true,
                 RingSize::Measured(face_ring),
             )
@@ -1992,6 +2031,166 @@ mod narrow_rows {
         assert!(
             *width >= TITLE_MIN,
             "the title is {width} px wide, under {TITLE_MIN}",
+        );
+    }
+}
+
+/// A text field that trails a row fills the row on a phone, under a title that
+/// keeps its width, or goes under the title when there is not room.
+#[cfg(all(test, feature = "testing"))]
+mod phone_fields {
+    use std::time::Duration;
+
+    use torin::prelude::Area;
+
+    use super::*;
+    use crate::group::Group;
+    use crate::inspector::snapshot::Snapshot as Tree;
+    use crate::snapshot::Snapshot;
+
+    #[derive(PartialEq)]
+    struct Scene(&'static str);
+
+    impl Component for Scene {
+        fn render(&self) -> impl IntoElement {
+            let tokens = crate::theme::provide_tokens();
+            let value = use_state(String::new);
+            rect()
+                .expanded()
+                .tw(&tokens, &[p(S4)])
+                .child(crate::shell::OverlayHost::new(Group::new(None::<String>).rows(
+                    vec![row(self.0).trailing(text_field(value, |_| {})).into_element()],
+                )))
+        }
+    }
+
+    /// Where the row, its title and its text field are.
+    struct Line {
+        row: Area,
+        title: Area,
+        field: Area,
+    }
+
+    fn line(title: &'static str, size: (f32, f32)) -> Line {
+        let mut shot = Snapshot::new(move || Scene(title).into(), size);
+        shot.settle(Duration::from_millis(500));
+        let tree = Tree::capture_headless(shot.runner(), 1.0);
+        let area = |name: &str| {
+            tree.nodes
+                .iter()
+                .filter(|node| node.a11y.component.as_deref() == Some(name))
+                .find_map(|node| node.area)
+                .unwrap_or_else(|| panic!("no {name} in the tree"))
+        };
+        let titles: Vec<(String, Area)> = shot.runner().find_many(|node, element| {
+            let text = match Label::try_downcast(element) {
+                Some(label) => label.text.to_string(),
+                None => Paragraph::try_downcast(element)?
+                    .spans
+                    .iter()
+                    .map(|span| span.text.to_string())
+                    .collect(),
+            };
+            Some((text, node.layout().area))
+        });
+        let (_, title_area) = titles
+            .into_iter()
+            .find(|(text, _)| text == title)
+            .unwrap_or_else(|| panic!("no title {title:?}"));
+        Line {
+            row: area("Row"),
+            title: title_area,
+            field: area("TextField"),
+        }
+    }
+
+    fn near(a: f32, b: f32) -> bool {
+        (a - b).abs() < 0.76
+    }
+
+    /// 'Try it' beside its field on the two phone widths the apps are
+    /// held to: the field is no longer the 168 px it was, it ends at the
+    /// row's gutter and starts one gap after the title.
+    #[test]
+    fn a_field_beside_a_short_title_takes_every_pixel_the_title_leaves() {
+        for width in [390.0, 320.0] {
+            let line = line("Try it", (width, 600.0));
+            let gutter = GUTTER.px_in(SizeClass::Compact);
+            let gap = S3.px_in(SizeClass::Compact) + S1.px_in(SizeClass::Compact);
+            assert!(
+                near(line.field.max_x(), line.row.max_x() - gutter),
+                "{width}: the field ends at {}, not a gutter ({gutter}) from the row's end {}",
+                line.field.max_x(),
+                line.row.max_x(),
+            );
+            assert!(
+                near(line.field.min_x(), line.title.max_x() + gap),
+                "{width}: the field starts at {}, not a gap ({gap}) after the title's end {}",
+                line.field.min_x(),
+                line.title.max_x(),
+            );
+            assert!(
+                line.field.width() > Dim::Field.px_in(SizeClass::Compact) + 20.0,
+                "{width}: the field is {} px wide, no more than its 168 px",
+                line.field.width(),
+            );
+            assert!(line.field.width() >= Dim::FieldMin.px_in(SizeClass::Compact), "{width}");
+            // 'Try it' is about 36 px of body text: a title the field had
+            // squeezed would be narrower.
+            assert!(
+                line.title.width() >= 33.0,
+                "{width}: the title is {} px wide, narrower than its text",
+                line.title.width(),
+            );
+            assert!(
+                near(line.row.height(), Dim::Row.px_in(SizeClass::Compact)),
+                "{width}: the row is {} px tall, not one line",
+                line.row.height(),
+            );
+        }
+    }
+
+    /// A title with a word wider than its share cannot be set beside a field:
+    /// the field goes under it, as wide as the row's content.
+    #[test]
+    fn a_title_with_a_wide_word_puts_the_field_under_it_at_the_full_width() {
+        let line = line("Internationalisation", (320.0, 600.0));
+        let gutter = GUTTER.px_in(SizeClass::Compact);
+        assert!(
+            line.field.min_y() >= line.title.max_y() - 0.5,
+            "the field ({}) is not under the title ({})",
+            line.field.min_y(),
+            line.title.max_y(),
+        );
+        assert!(near(line.field.min_x(), line.row.min_x() + gutter), "{}", line.field.min_x());
+        assert!(near(line.field.max_x(), line.row.max_x() - gutter), "{}", line.field.max_x());
+    }
+
+    /// A long title of short words keeps to its share and wraps; the field
+    /// keeps at least `Dim::FieldMin`.
+    #[test]
+    fn a_long_title_of_short_words_wraps_in_its_share_and_leaves_the_field_its_least() {
+        for width in [390.0, 320.0] {
+            let line = line("Delay used when you test the keys", (width, 600.0));
+            let inner = line.row.width() - 2.0 * GUTTER.px_in(SizeClass::Compact);
+            assert!(
+                line.title.width() <= crate::controls::adaptive::LABEL_SHARE * inner + 2.0,
+                "{width}: the title is {} px of {inner}",
+                line.title.width(),
+            );
+            assert!(line.field.width() >= Dim::FieldMin.px_in(SizeClass::Compact), "{width}");
+            assert!(line.title.max_x() <= line.field.min_x(), "{width}: they overlap");
+        }
+    }
+
+    /// On a desktop the field keeps its width: nothing changes there.
+    #[test]
+    fn a_field_on_a_desktop_keeps_its_width() {
+        let line = line("Try it", (900.0, 400.0));
+        assert!(
+            near(line.field.width(), Dim::Field.px_in(SizeClass::Regular)),
+            "the field is {} px wide",
+            line.field.width(),
         );
     }
 }

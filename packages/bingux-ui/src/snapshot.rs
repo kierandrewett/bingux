@@ -27,6 +27,18 @@ use crate::theme::font_family;
 /// Width and height in logical pixels.
 pub type SnapshotSize = (f32, f32);
 
+/// One icon button of a frame, from [`Snapshot::icon_buttons`].
+#[derive(Clone, Debug)]
+pub struct IconButtonLook {
+    /// `IconButton`, or `IconMenuButton` for a `menu_button` with an icon.
+    pub component: String,
+    /// Its accessible name: the tooltip or the menu button's label.
+    pub name: String,
+    pub area: freya::torin::prelude::Area,
+    /// The fill it paints now, `None` when it paints nothing.
+    pub fill: Option<Color>,
+}
+
 /// One step of the animation clock. Each step is one recorded frame.
 const FRAME: Duration = Duration::from_millis(16);
 
@@ -429,7 +441,9 @@ impl Snapshot {
                         "escape" => Key::Named(NamedKey::Escape),
                         "return" => Key::Named(NamedKey::Enter),
                         "tab" => Key::Named(NamedKey::Tab),
+                        "f3" => Key::Named(NamedKey::F3),
                         "f6" => Key::Named(NamedKey::F6),
+                        "f11" => Key::Named(NamedKey::F11),
                         "delete" => Key::Named(NamedKey::Delete),
                         "space" => Key::Character(" ".to_owned()),
                         "left" => Key::Named(NamedKey::ArrowLeft),
@@ -545,6 +559,35 @@ impl Snapshot {
         let snapshot =
             crate::inspector::snapshot::Snapshot::capture_headless(&self.runner, scale_factor() as f32);
         crate::inspector::layout_checks::check(&snapshot)
+    }
+
+    /// Every icon button of the current frame (`icon_button`, and the icon
+    /// variant of `menu_button`), with the fill it paints now. A button at
+    /// rest (not hovered, pressed, open or `filled()`/`active()` by design)
+    /// paints none, in a header and in a toolbar alike.
+    pub fn icon_buttons(&mut self) -> Vec<IconButtonLook> {
+        let tree =
+            crate::inspector::snapshot::Snapshot::capture_headless(&self.runner, scale_factor() as f32);
+        tree.nodes
+            .iter()
+            .filter_map(|node| {
+                let component = node.a11y.component.as_deref()?;
+                if !matches!(component, "IconButton" | "IconMenuButton") {
+                    return None;
+                }
+                let fill = node
+                    .props
+                    .as_ref()
+                    .and_then(|props| props.background)
+                    .filter(|colour| colour.a() != 0);
+                Some(IconButtonLook {
+                    component: component.to_owned(),
+                    name: node.a11y.name.clone().unwrap_or_default(),
+                    area: node.area?,
+                    fill,
+                })
+            })
+            .collect()
     }
 
     /// With `BINGUX_UI_LAYOUT_LINT=FILE` set, appends one JSON line to FILE

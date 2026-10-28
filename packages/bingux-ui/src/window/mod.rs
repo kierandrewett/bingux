@@ -431,6 +431,10 @@ impl Component for WindowHost {
         });
         use_provide_context(move || manager);
         use_provide_context(move || Window::Main(MainWindow { manager }));
+        // Scroll views report their movement here; tooltips and detail cards
+        // stay down while anything scrolls. Before the tooltips: their hub
+        // reads it.
+        provide_scroll_activity();
         // The window's tooltips share one clock: see `controls::tooltip`.
         crate::controls::tooltip::provide_tooltips();
         // Tab, Shift+Tab and F6 move focus for every window and popup, so the
@@ -531,6 +535,7 @@ impl Component for WindowHost {
                         ),
                     ),
             )
+            .child(crate::warm::FontWarm)
             .children(popups.into_iter().map(|entry| PopupFrame {
                 manager,
                 entry,

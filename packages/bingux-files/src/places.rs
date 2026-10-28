@@ -159,7 +159,7 @@ impl Places {
                 });
             }
         }
-        let trash = home.join(".local/share/Trash/files");
+        let trash = home.join(TRASH_FILES);
         if is_dir(&trash) {
             standard.push(Place {
                 kind: PlaceKind::Trash,
@@ -351,24 +351,6 @@ fn bookmarks(text: &str) -> Vec<Place> {
         .collect()
 }
 
-impl Place {
-    /// The user folder this place is, if any. A bookmark counts when it
-    /// points at one.
-    pub fn special(&self) -> Option<SpecialFolder> {
-        match self.kind {
-            PlaceKind::Home => Some(SpecialFolder::Home),
-            PlaceKind::Desktop => Some(SpecialFolder::Desktop),
-            PlaceKind::Documents => Some(SpecialFolder::Documents),
-            PlaceKind::Downloads => Some(SpecialFolder::Downloads),
-            PlaceKind::Music => Some(SpecialFolder::Music),
-            PlaceKind::Pictures => Some(SpecialFolder::Pictures),
-            PlaceKind::Videos => Some(SpecialFolder::Videos),
-            PlaceKind::Bookmark => self.path.as_deref().and_then(special_folder),
-            PlaceKind::Recent | PlaceKind::Computer | PlaceKind::Volume | PlaceKind::Trash => None,
-        }
-    }
-}
-
 fn bookmarks_file() -> PathBuf {
     let sources = Sources::from_system();
     let config = std::env::var_os("XDG_CONFIG_HOME")
@@ -457,8 +439,11 @@ fn rename_bookmark_in(file: &Path, path: &Path, name: &str) -> io::Result<()> {
     write_atomically(file, &out)
 }
 
-/// A folder the desktop gives a special icon: the home folder and the XDG
-/// user directories.
+/// The trash's folder of files, under home.
+const TRASH_FILES: &str = ".local/share/Trash/files";
+
+/// A folder the desktop gives a special icon: the home folder, the XDG
+/// user directories, the trash and the filesystem root.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SpecialFolder {
     Home,
@@ -470,21 +455,34 @@ pub enum SpecialFolder {
     Videos,
     Templates,
     PublicShare,
+    /// The folder the trash keeps its files in.
+    Trash,
+    /// The filesystem root.
+    Root,
 }
 
-/// Where the special folders are on this system, read from
-/// `user-dirs.dirs`. Everything is lexical: the answers are about the path
-/// as a person sees it, so `~/Downloads` stays `Downloads` when it is a link
-/// to a network share, and the share's own path is a plain folder.
+/// Where the special folders are on this system: the paths `user-dirs.dirs`
+/// configures, and the standard English names under `$HOME` (Desktop,
+/// Documents, Downloads, Music, Pictures, Videos, Templates, Public), which
+/// count even when the file is missing or writes a folder as `$HOME/` (how
+/// `xdg-user-dirs` disables one). Everything is lexical: the answers are
+/// about the path as a person sees it, so `~/Downloads` stays `Downloads`
+/// when it is a link to a network share, and the share's own path is a plain
+/// folder.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UserDirs {
+    /// Home first, then each configured folder that is not home itself.
     dirs: Vec<(SpecialFolder, PathBuf)>,
+    /// The standard names under home that differ from `dirs`.
+    standard: Vec<(SpecialFolder, PathBuf)>,
 }
 
 impl UserDirs {
     /// Parse the text of `user-dirs.dirs`. A missing key falls back to the
     /// English name under `home`; a key that points at `home` itself (the
-    /// way a disabled directory is written) is not special.
+    /// way a disabled directory is written) has no configured folder, so
+    /// [`UserDirs::path`] has none for it, but the English name under `home`
+    /// is still that special folder to [`UserDirs::special`].
     pub fn parse(text: Option<&str>, home: &Path) -> UserDirs {
         const KEYS: [(&str, SpecialFolder, &str); 8] = [
             ("XDG_DESKTOP_DIR", SpecialFolder::Desktop, "Desktop"),
@@ -497,7 +495,12 @@ impl UserDirs {
             ("XDG_PUBLICSHARE_DIR", SpecialFolder::PublicShare, "Public"),
         ];
         let home = normalize(home);
-        let mut dirs = vec![(SpecialFolder::Home, home.clone())];
+        let mut dirs = vec![
+            (SpecialFolder::Home, home.clone()),
+            (SpecialFolder::Trash, home.join(TRASH_FILES)),
+            (SpecialFolder::Root, PathBuf::from("/")),
+        ];
+        let mut standard = Vec::new();
         for (key, kind, default) in KEYS {
             let configured = text.and_then(|text| {
                 let line = text.lines().map(str::trim).find(|line| {
@@ -511,12 +514,16 @@ impl UserDirs {
                 };
                 path.is_absolute().then(|| normalize(&path))
             });
-            let path = configured.unwrap_or_else(|| home.join(default));
+            let usual = home.join(default);
+            let path = configured.unwrap_or_else(|| usual.clone());
             if !dirs.iter().any(|(_, known)| *known == path) {
                 dirs.push((kind, path));
             }
+            if !dirs.iter().chain(&standard).any(|(_, known)| *known == usual) {
+                standard.push((kind, usual));
+            }
         }
-        UserDirs { dirs }
+        UserDirs { dirs, standard }
     }
 
     /// Where the special folder `kind` is, if this system has one.
@@ -527,11 +534,14 @@ impl UserDirs {
             .map(|(_, dir)| dir.as_path())
     }
 
-    /// The special folder `path` is, comparing text only.
+    /// The special folder `path` is, comparing text only: the configured
+    /// folders first, then the standard names under home. Case counts, as it
+    /// does on disk.
     pub fn special(&self, path: &Path) -> Option<SpecialFolder> {
         let path = lexically_clean(path);
         self.dirs
             .iter()
+            .chain(&self.standard)
             .find(|(_, dir)| *dir == *path)
             .map(|(kind, _)| *kind)
     }
@@ -542,6 +552,7 @@ impl UserDirs {
         let parent = lexically_clean(parent);
         self.dirs
             .iter()
+            .chain(&self.standard)
             .filter(|(_, dir)| dir.parent() == Some(&*parent))
             .filter_map(|(kind, dir)| Some((dir.file_name()?.to_os_string(), *kind)))
             .collect()
@@ -687,7 +698,10 @@ mod tests {
         assert_eq!(place.kind, PlaceKind::Trash);
         assert_eq!(place.name, "Trash");
         assert_eq!(place.path.as_deref(), Some(trash));
-        assert_eq!(place.special(), None);
+        assert_eq!(
+            UserDirs::parse(None, &sources.home).special(place.path.as_deref().unwrap()),
+            Some(SpecialFolder::Trash)
+        );
     }
 
     #[test]
@@ -702,13 +716,25 @@ mod tests {
             dirs.special(Path::new("/home/a/Herunterladen/")),
             Some(SpecialFolder::Downloads)
         );
-        assert_eq!(dirs.special(Path::new("/home/a/Downloads")), None);
+        // The usual names count too, beside the configured ones.
+        assert_eq!(
+            dirs.special(Path::new("/home/a/Downloads")),
+            Some(SpecialFolder::Downloads)
+        );
         assert_eq!(
             dirs.special(Path::new("/home/a/Pictures/../Documents")),
             Some(SpecialFolder::Documents)
         );
-        // A disabled directory points at home and stays Home.
-        assert_eq!(dirs.special(Path::new("/home/a/Music")), None);
+        // A disabled directory points at home: it has no configured folder
+        // (so the sidebar lists none), home stays Home, and the usual name
+        // is still Music.
+        assert_eq!(dirs.path(SpecialFolder::Music), None);
+        assert_eq!(dirs.special(Path::new("/home/a/Music")), Some(SpecialFolder::Music));
+        // Paths are case sensitive, as on disk.
+        assert_eq!(dirs.special(Path::new("/home/a/music")), None);
+        assert_eq!(dirs.special(Path::new("/home/a/Pictures/Documents")), None);
+        assert_eq!(dirs.special(Path::new("/other/Downloads")), None);
+        assert_eq!(dirs.special(Path::new("/home/a/Downloads/")), Some(SpecialFolder::Downloads));
         assert_eq!(
             dirs.special(Path::new("/srv/public")),
             Some(SpecialFolder::PublicShare)
@@ -717,6 +743,33 @@ mod tests {
         let children = dirs.children_of(home);
         assert!(children.iter().any(|(name, _)| name == "Herunterladen"));
         assert!(dirs.children_of(Path::new("/etc")).is_empty());
+    }
+
+    #[test]
+    fn a_user_dirs_file_that_disables_every_folder_still_names_the_usual_ones() {
+        // The `user-dirs.dirs` of a machine whose folders live elsewhere and
+        // are linked back into home: every key points at `$HOME/`.
+        let text = "# comment\nXDG_DESKTOP_DIR=\"$HOME/Desktop\"\nXDG_DOWNLOAD_DIR=\"$HOME/\"\nXDG_TEMPLATES_DIR=\"$HOME/Templates\"\nXDG_PUBLICSHARE_DIR=\"$HOME/Public\"\nXDG_DOCUMENTS_DIR=\"$HOME/\"\nXDG_MUSIC_DIR=\"$HOME/\"\nXDG_PICTURES_DIR=\"$HOME/\"\nXDG_VIDEOS_DIR=\"$HOME/\"\n";
+        let home = Path::new("/home/kieran");
+        let dirs = UserDirs::parse(Some(text), home);
+        for (name, kind) in [
+            ("Desktop", SpecialFolder::Desktop),
+            ("Documents", SpecialFolder::Documents),
+            ("Downloads", SpecialFolder::Downloads),
+            ("Music", SpecialFolder::Music),
+            ("Pictures", SpecialFolder::Pictures),
+            ("Videos", SpecialFolder::Videos),
+            ("Templates", SpecialFolder::Templates),
+            ("Public", SpecialFolder::PublicShare),
+        ] {
+            assert_eq!(dirs.special(&home.join(name)), Some(kind), "{name}");
+        }
+        assert_eq!(dirs.special(home), Some(SpecialFolder::Home));
+        // Folders that are not special stay plain, even as bookmarks.
+        assert_eq!(dirs.special(&home.join("Notes")), None);
+        assert_eq!(dirs.special(&home.join("dev")), None);
+        let names: Vec<_> = dirs.children_of(home).into_iter().map(|(name, _)| name).collect();
+        assert!(names.iter().any(|name| name == "Videos"));
     }
 
     #[test]

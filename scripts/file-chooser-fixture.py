@@ -116,6 +116,68 @@ try:
     img.save(f"{root}/Pictures/Camera.jpg", "JPEG", quality=88, exif=exif)
 except ImportError:
     pass
+# The preview's own folder: one real file of each kind the viewers show.
+media = f"{root}/Media"
+os.makedirs(media)
+png(f"{media}/Gradient.png", 1600, 1000, lambda x, y, w, h: (30 + x * 200 // w, 60 + y * 120 // h, 200 - x * 100 // w))
+png(f"{media}/Small.png", 120, 80, lambda x, y, w, h: (220, 60 + x, 60 + y * 2))
+open(f"{media}/Logo.svg", "w").write('<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160"><rect width="240" height="160" fill="#e0e8ff"/><circle cx="120" cy="80" r="50" fill="#2a6fdb"/></svg>\n')
+open(f"{media}/Note UTF-8.txt", "w", encoding="utf-8").write("Héllo, wörld\nA second line with an arrow →\n")
+open(f"{media}/Note Latin-1.txt", "wb").write("Café crème\nA file that is not UTF-8\n".encode("latin-1"))
+open(f"{media}/Note UTF-16.txt", "wb").write(b"\xff\xfe" + "UTF-16 text with a byte order mark\n".encode("utf-16-le"))
+with open(f"{media}/Blob.bin", "wb") as f:
+    f.write(bytes((n * 73 + 5) % 256 for n in range(4096)))
+import tarfile, zipfile, io
+with zipfile.ZipFile(f"{media}/Bundle.zip", "w", zipfile.ZIP_DEFLATED) as z:
+    z.writestr("readme.txt", "Hello\n" * 20)
+    z.writestr("src/main.rs", "fn main() {}\n")
+    z.writestr("src/lib.rs", "pub fn f() {}\n" * 8)
+    z.writestr("assets/", "")
+    z.writestr("assets/logo.svg", "<svg/>")
+with tarfile.open(f"{media}/Backup.tar.gz", "w:gz") as t:
+    for name, body in [("notes/a.txt", b"alpha\n" * 30), ("notes/b.txt", b"bravo\n" * 10), ("photo.raw", bytes(range(256)) * 40)]:
+        info = tarfile.TarInfo(name)
+        info.size = len(body)
+        t.addfile(info, io.BytesIO(body))
+def make_pdf(path, pages):
+    """A small PDF in Helvetica: `pages` is a list of lists of text lines."""
+    objects = []
+    def add(body):
+        objects.append(body)
+        return len(objects)
+    font = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    kids = []
+    page_ids = []
+    pages_id = len(objects) + 1 + 2 * len(pages)
+    for lines in pages:
+        text = "BT /F1 12 Tf 50 780 Td 16 TL " + " ".join(f"({line.replace('(', '[').replace(')', ']')}) Tj T*" for line in lines) + " ET"
+        stream = add(f"<< /Length {len(text)} >>\nstream\n{text}\nendstream".encode())
+        page = add(f"<< /Type /Page /Parent {pages_id} 0 R /MediaBox [0 0 595 842] /Contents {stream} 0 R /Resources << /Font << /F1 {font} 0 R >> >> >>".encode())
+        kids.append(f"{page} 0 R")
+    add(f"<< /Type /Pages /Kids [{' '.join(kids)}] /Count {len(pages)} >>".encode())
+    catalog = add(f"<< /Type /Catalog /Pages {pages_id} 0 R >>".encode())
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for number, body in enumerate(objects, 1):
+        offsets.append(len(out))
+        out += f"{number} 0 obj\n".encode() + body + b"\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode()
+    for offset in offsets:
+        out += f"{offset:010} 00000 n \n".encode()
+    out += f"trailer\n<< /Size {len(objects) + 1} /Root {catalog} 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    open(path, "wb").write(out)
+make_pdf(f"{media}/Report.pdf", [
+    [f"Quarterly report, page {page}"] + [f"Line {n}: the quick brown fox jumps over the lazy dog, invoice {page * 100 + n}" for n in range(1, 41)]
+    for page in range(1, 4)
+])
+# A film and a song, when ffmpeg is installed: the player is shown on real media.
+import subprocess
+if shutil.which("ffmpeg"):
+    quiet = ["ffmpeg", "-loglevel", "error", "-y"]
+    subprocess.run(quiet + ["-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30:duration=6", "-f", "lavfi", "-i", "sine=frequency=440:duration=6", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", f"{media}/Film.mp4"], check=False)
+    subprocess.run(quiet + ["-f", "lavfi", "-i", "sine=frequency=330:duration=8", "-c:a", "libopus", f"{media}/Song.opus"], check=False)
+    open(f"{media}/Film.srt", "w").write("1\n00:00:00,500 --> 00:00:02,500\nHello subtitle\n\n2\n00:00:03,000 --> 00:00:05,000\nSecond line\n")
 os.makedirs(f"{root}/.config/gtk-3.0")
 open(f"{root}/.config/user-dirs.dirs", "w").write(
  f'XDG_DESKTOP_DIR="$HOME/Desktop"\nXDG_DOWNLOAD_DIR="$HOME/Downloads"\nXDG_DOCUMENTS_DIR="$HOME/Documents"\nXDG_MUSIC_DIR="$HOME/Music"\nXDG_PICTURES_DIR="$HOME/Pictures"\nXDG_VIDEOS_DIR="$HOME/Videos"\nXDG_TEMPLATES_DIR="$HOME/Templates"\nXDG_PUBLICSHARE_DIR="$HOME/Public"\n')

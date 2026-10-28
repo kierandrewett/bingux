@@ -24,6 +24,14 @@
 //! applies it; [`form_row`](crate::group::form_row) is one. A control that can
 //! shrink calls `use_line_fill()` and fills its cell when it says so.
 //! `FormField` uses [`choose_line`] too.
+//!
+//! A control that *fills* (a text field in a row on a phone) is not left at
+//! its natural width when that would fit: [`choose_filled_line`] gives the
+//! label its floor, at most [`LABEL_SHARE`] of the line, and the control
+//! every pixel after it, at least [`Dim::FieldMin`]; when the label's floor
+//! leaves less than that, the line stacks. [`Row`](crate::rows::Row) uses it
+//! for a trailing text field on a phone, and tells the field to fill through
+//! the same [`LineFit`] a form line gives it.
 
 use freya::prelude::*;
 
@@ -118,12 +126,52 @@ pub fn choose_line(inner: f32, gap: f32, label: LabelFacts, control: ControlFact
     LineMode::Stacked
 }
 
+/// Decides how a line of `inner` px, with `gap` px between label and control,
+/// is laid out when its control fills what the label leaves, to at least
+/// `least` px, whatever its natural width: the label keeps its floor (its
+/// natural width, or [`LABEL_SHARE`] of the line when that is less, and never
+/// less than its longest word) and the control takes the rest
+/// ([`LineMode::Shrunk`], never [`LineMode::Beside`]). When the floor leaves
+/// the control less than `least`, the line stacks. A line that has not been
+/// measured yet is laid out as it will settle when its label fits its share:
+/// the label at its natural width, the control filling the rest.
+pub fn choose_filled_line(inner: f32, gap: f32, label: LabelFacts, least: f32) -> LineMode {
+    if inner <= 0.0 {
+        return LineMode::Shrunk {
+            label: label.natural,
+        };
+    }
+    let floor = label.natural.min(LABEL_SHARE * inner);
+    if label.longest_word > floor + 0.5 {
+        return LineMode::Stacked;
+    }
+    if inner - gap - floor >= least {
+        LineMode::Shrunk { label: floor }
+    } else {
+        LineMode::Stacked
+    }
+}
+
 /// What a line tells its control: whether to fill the cell it is given, and
 /// the control's reply that it can.
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct LineFit {
     fill: State<bool>,
     fluid: State<bool>,
+}
+
+impl LineFit {
+    /// Gives the controls below the calling component a fit it decides:
+    /// `fill` says whether they fill their cell. For a component that lays
+    /// out its own line (a [`Row`](crate::rows::Row)) instead of being an
+    /// [`AdaptiveLine`]. Every render takes the same hooks, whatever `fill`.
+    pub(crate) fn provide(fill: bool) {
+        let mut fit = use_provide_context(|| LineFit {
+            fill: State::create(fill),
+            fluid: State::create(false),
+        });
+        fit.fill.set_if_modified(fill);
+    }
 }
 
 /// For a control that can shrink or grow to its cell (a text field, a
@@ -338,6 +386,77 @@ mod tests {
                     LineMode::Shrunk { label: taken } => {
                         assert!(taken >= floor, "{inner}");
                         assert!(inner - GAP - taken >= control.least.unwrap(), "{inner}");
+                    }
+                    LineMode::Stacked => {}
+                }
+            }
+        }
+    }
+
+    /// The gap a row puts between its title and its trailing control (`S3`
+    /// and the trailing area's `S1`).
+    const ROW_GAP: f32 = 16.0;
+    const FIELD_MIN: f32 = 120.0;
+
+    #[test]
+    fn a_short_title_keeps_its_width_and_the_field_takes_every_other_pixel() {
+        // 'Try it' (36 px) in a row of a 390 px phone (322 px of content) and
+        // of a 320 px one (252): the field is not left at its 168 px.
+        for (inner, field) in [(322.0, 270.0), (252.0, 200.0)] {
+            let mode = choose_filled_line(inner, ROW_GAP, label(36.0, 36.0), FIELD_MIN);
+            assert_eq!(mode, LineMode::Shrunk { label: 36.0 }, "{inner}");
+            assert_eq!(inner - ROW_GAP - 36.0, field, "{inner}");
+        }
+    }
+
+    #[test]
+    fn a_title_wider_than_its_share_is_held_to_the_share() {
+        // 200 px of title in 322: the title takes 40 % and wraps between
+        // words, the field gets the 60 % that is left.
+        let mode = choose_filled_line(322.0, ROW_GAP, label(200.0, 70.0), FIELD_MIN);
+        let LineMode::Shrunk { label } = mode else {
+            panic!("{mode:?}")
+        };
+        assert!((label - 0.4 * 322.0).abs() < 0.01, "{label}");
+        assert!(322.0 - ROW_GAP - label >= FIELD_MIN);
+    }
+
+    #[test]
+    fn a_word_wider_than_the_titles_share_stacks_the_line() {
+        assert_eq!(
+            choose_filled_line(252.0, ROW_GAP, label(190.0, 150.0), FIELD_MIN),
+            LineMode::Stacked
+        );
+    }
+
+    #[test]
+    fn a_line_too_narrow_to_leave_the_field_its_least_stacks() {
+        // 150 px of content: a 60 px title and the gap leave 74 px.
+        assert_eq!(
+            choose_filled_line(150.0, ROW_GAP, label(60.0, 40.0), FIELD_MIN),
+            LineMode::Stacked
+        );
+    }
+
+    #[test]
+    fn a_line_that_has_not_been_measured_is_laid_out_as_it_settles() {
+        assert_eq!(
+            choose_filled_line(0.0, ROW_GAP, label(36.0, 36.0), FIELD_MIN),
+            LineMode::Shrunk { label: 36.0 }
+        );
+    }
+
+    #[test]
+    fn a_filling_control_is_never_beside_and_never_squeezes_the_title_or_the_field() {
+        for inner in 80..700 {
+            let inner = inner as f32;
+            for label in [label(36.0, 36.0), label(155.0, 95.0), label(310.0, 190.0)] {
+                let floor = label.natural.min(LABEL_SHARE * inner);
+                match choose_filled_line(inner, ROW_GAP, label, FIELD_MIN) {
+                    LineMode::Beside => panic!("beside at {inner}"),
+                    LineMode::Shrunk { label: taken } => {
+                        assert!(taken >= floor, "{inner}");
+                        assert!(inner - ROW_GAP - taken >= FIELD_MIN, "{inner}");
                     }
                     LineMode::Stacked => {}
                 }

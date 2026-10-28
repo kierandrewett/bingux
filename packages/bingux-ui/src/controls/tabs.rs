@@ -1,45 +1,63 @@
-//! A strip of closable tabs, for an application whose window holds several
-//! views of the same kind: the folders of a file manager, the documents of an
-//! editor. It is the header bar's title, so it is one row tall, and it is a
-//! rail like the [`segmented`](super::segmented) control's: the same
-//! [`Dim::Control`] height, the same `Control` fill, and a tab that is the
-//! rail's radius less its inset.
+//! A strip of closable tabs that are attached to the content they open, for an
+//! application whose window holds several views of the same kind: the folders
+//! of a file manager, the documents of an editor. It is Chromium's tab strip:
+//! the selected tab is the same surface as the content under it, with rounded
+//! top corners and a concave flare at each foot that joins the strip's bottom
+//! edge, and the other tabs are flat and recessed on a darker strip. See
+//! `design/tabs.md` for the model and the numbers.
 //!
+//! The strip is the title of a header bar and sits in a [`tab_frame`], which
+//! owns the content below it and the seam between them: the selected tab is
+//! painted in the frame's surface, so tab and content are one shape and there
+//! is no line between them. A strip outside a frame draws the same tabs on
+//! whatever is behind it, and the tab is still painted in the page colour.
+//!
+//! * **Shape.** A tab is [`Dim::Control`] tall and stands on the strip's
+//!   bottom edge, [`Dim::Header`] below its top, so a band above the tabs
+//!   still drags the window. Its top corners are [`Radius::Control`]; its
+//!   feet flare out by that radius less [`FIELD_INSET`], and the feet of two
+//!   neighbours are the gap between them. Only the selected tab has an
+//!   outline; an unselected tab is flat, lifts with a fill when the pointer
+//!   is over it, and has a short separator after it that hides next to the
+//!   selected tab and the tab the pointer is on.
 //! * **Width.** Tabs share one width. It is [`Dim::Field`] at most; as tabs
 //!   are added they shrink together, down to [`Dim::TabMin`], and past that the
-//!   strip scrolls sideways instead. The rail hugs its tabs and never grows
-//!   past its container, so nothing spills out of its rounded shape, whatever
-//!   the container's width.
+//!   strip scrolls sideways instead. The strip hugs its tabs and never grows
+//!   past its container.
 //! * **A tab** is an optional icon, a title that takes what room is left and
 //!   is cut with an ellipsis, and a close button. The close button has a slot
 //!   of its own that is always laid out, so a long title is cut before it and
 //!   a tab does not change width when the button appears. It shows on the
 //!   selected tab, and on a tab the pointer is over. A lone tab has no close
 //!   button, because there is nothing to close into.
-//! * **The ends of the rail** are fixed: the New tab button (drawn when
-//!   [`TabStrip::on_new`] is set) is the last item and never scrolls away.
+//! * **The end of the strip** is fixed: the New tab button (drawn when
+//!   [`TabStrip::on_new`] is set) follows the last tab and never scrolls away.
 //!   When the tabs overflow, a tab list button beside it opens a menu of
 //!   every tab, and the tabs fade at the edge they continue past. The
 //!   selected tab is scrolled into view.
 //! * **Adding and closing** animate the widths, so the tabs make room and
 //!   close ranks without a jump.
 //! * **Pointer.** A press selects, a middle click closes, and with
-//!   [`TabStrip::on_reorder`] set a tab can be dragged to another place (a
-//!   line shows where it would land). A right click, or a touch held on a
-//!   tab, opens its menu: Close, and Move left and Move right for a
-//!   reorderable strip, which is how touch reorders.
+//!   [`TabStrip::on_reorder`] set a tab can be dragged: it follows the
+//!   pointer and the others slide aside ([`crate::reorder`]), and it settles
+//!   into its place when let go. Escape, or letting go far above or below the
+//!   strip, puts it back. A right click, or a touch held on a tab, opens its
+//!   menu: Close, and Move left and Move right for a reorderable strip, which
+//!   is how touch reorders.
 //! * **Keyboard.** Only the selected tab is in the tab order. Left, Right,
-//!   Home and End move the selection and the focus; Delete or Ctrl+W closes
-//!   the selected tab, and Ctrl+T asks for a new one.
+//!   Home and End move the selection and the focus; Ctrl+Shift+Left and Right
+//!   move the selected tab; Delete or Ctrl+W closes the selected tab, and
+//!   Ctrl+T asks for a new one.
 //! * [`TabStrip::drop_target`] marks the tab a drag would drop on with the
 //!   accent, so a host can accept files on a tab.
 //!
-//! At compact density the rail has no inset ([`FIELD_INSET`]): each tab, and
-//! the close, tab list and New tab buttons, is the whole 44 px touch target
-//! and takes the rail's corner.
+//! At compact density the strip has no [`FIELD_INSET`]: each tab, and the
+//! close, tab list and New tab buttons, is the whole 44 px touch target.
 //!
 //! The strip keeps no state of its own beyond what is on screen: the host
 //! owns the list and the selected id.
+//!
+//! [`tab_frame`]: super::tab_frame
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -51,9 +69,13 @@ use freya::prelude::*;
 
 use super::button::icon_button;
 use super::press::use_press;
+use super::tab_frame::{STRIP, SURFACE, TabSurface};
+use super::tab_shape::{Geometry, Shape, shape_box};
 use crate::component::ComponentName;
+use crate::drag::{Frames, PointerDrag, use_frames, use_pointer_drag};
 use crate::icons::{self, Icon};
 use crate::motion::{Focusable, MOVE_MS};
+use crate::reorder::{self, Done, Indicate, Reorder, Stack};
 use crate::shell::menu::{MenuItem, menu_item};
 use crate::shell::overlays::Overlays;
 use crate::shell::panel::{PanelRect, PanelTrigger};
@@ -64,9 +86,9 @@ use crate::typography::{BODY, Ink};
 /// How far the pointer travels before a press on a tab becomes a drag.
 const DRAG_SLOP: f32 = 6.0;
 
-/// The most a pointer may leave the rail, up and down, and still drop a
+/// The most a pointer may leave the strip, up and down, and still drop a
 /// dragged tab: beyond this the drag is cancelled.
-const DRAG_REACH: Dim = Dim::Control;
+const DRAG_REACH: Dim = Dim::Header;
 
 /// One tab. `id` names it for as long as it exists, whatever its place.
 #[derive(Clone, Debug, PartialEq)]
@@ -145,9 +167,10 @@ impl TabStrip {
     }
 
     /// Let the person move tabs: the handler gets the id of the tab that was
-    /// dragged (or moved by its menu) and the place it now belongs at in the
-    /// list, as if it were removed and inserted there. The strip does not
-    /// reorder itself; the host reorders its list and passes it back.
+    /// dragged (or moved by its menu or the keyboard) and the place it now
+    /// belongs at in the list, as if it were removed and inserted there. The
+    /// strip does not reorder itself; the host reorders its list and passes
+    /// it back.
     pub fn on_reorder(mut self, handler: impl Into<EventHandler<(u64, usize)>>) -> Self {
         self.on_reorder = Some(handler.into());
         self
@@ -160,53 +183,14 @@ impl TabStrip {
     }
 }
 
-// ---- Geometry --------------------------------------------------------------
-
-/// The sizes the strip is laid out with, in logical pixels, for one density.
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct Metrics {
-    /// The rail's padding, and the gap between its items: [`FIELD_INSET`].
-    inset: f32,
-    /// A tab's height, and the side of the tab list and New tab buttons: the
-    /// rail's height less its inset above and below ([`Dim::InlineButton`]).
-    height: f32,
-    /// The least and the most a tab is wide.
-    min: f32,
-    max: f32,
-}
-
-impl Metrics {
-    fn current() -> Self {
-        Self {
-            inset: FIELD_INSET.px(),
-            height: Dim::InlineButton.px(),
-            min: TAB_MIN.px(),
-            max: TAB_MAX.px(),
-        }
-    }
-
-    #[cfg(test)]
-    fn in_class(class: SizeClass) -> Self {
-        Self {
-            inset: FIELD_INSET.px_in(class),
-            height: Dim::InlineButton.px_in(class),
-            min: TAB_MIN.px_in(class),
-            max: TAB_MAX.px_in(class),
-        }
-    }
-}
-
-/// The narrowest a tab gets before the strip scrolls.
-const TAB_MIN: Dim = Dim::TabMin;
-/// The widest a tab is.
-const TAB_MAX: Dim = Dim::Field;
+// ---- Layout ----------------------------------------------------------------
 
 /// How the strip fills `available` pixels.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Fit {
-    /// The width of one tab that is fully present.
+    /// The width of one tab's body that is fully present.
     tab: f32,
-    /// The width of the rail.
+    /// The width of the strip.
     rail: f32,
     /// The width of the region the tabs show in.
     region: f32,
@@ -218,55 +202,36 @@ struct Fit {
 /// The widths for `target` tabs that are staying and `effective` tabs' worth of
 /// width right now (a tab that is arriving or leaving counts for part of one),
 /// in `available` pixels, with or without the New tab button.
-fn fit(metrics: Metrics, available: f32, target: usize, effective: f32, add: bool) -> Fit {
-    let Metrics { inset, height, min, max } = metrics;
-    let slot = height + inset;
-    let inner = (available - 2.0 * inset).max(0.0);
-    let room = (inner - if add { slot } else { 0.0 }).max(0.0);
-    let needs = |count: f32| count * min + (count - 1.0).max(0.0) * inset;
-    if needs(target as f32) > room + 0.01 {
-        // Past the narrowest width: the rail is as wide as its container, and
+fn fit(geometry: Geometry, available: f32, target: usize, effective: f32, add: bool) -> Fit {
+    let slot = geometry.button;
+    let room = (available - if add { slot } else { 0.0 }).max(0.0);
+    if geometry.content(target as f32, geometry.min) > room + 0.01 {
+        // Past the narrowest width: the strip is as wide as its container, and
         // the tab list button takes a slot beside the tabs.
         return Fit {
-            tab: min,
-            rail: available.max(2.0 * inset),
+            tab: geometry.min,
+            rail: available.max(0.0),
             region: (room - slot).max(0.0),
             overflow: true,
         };
     }
-    let share = (room - (effective - 1.0).max(0.0) * inset) / effective.max(1.0);
-    let tab = share.min(max).max(0.0);
-    let region = effective * tab + (effective - 1.0).max(0.0) * inset;
+    let count = effective.max(1.0);
+    let tab = ((room - geometry.foot) / count - geometry.gap()).clamp(0.0, geometry.max);
+    let region = geometry.content(effective, tab);
     Fit {
         tab,
-        rail: region + 2.0 * inset + if add { slot } else { 0.0 },
+        rail: region + if add { slot } else { 0.0 },
         region,
         overflow: false,
     }
 }
 
-/// Where a tab dragged from place `from` ends up when dropped into gap `gap`
-/// (a gap is a place between tabs; 0 is before the first): the gaps on either
-/// side of the tab itself leave it where it is.
-fn destination(from: usize, gap: usize) -> usize {
-    if gap > from { gap - 1 } else { gap }
-}
-
-/// The index, among `count` tabs of width `tab` set `inset` apart, of the gap
-/// a pointer `x` pixels from the first tab's edge would drop a tab into: the
-/// number of tabs whose middle is before it. 0 is before the first tab.
-fn landing(x: f32, tab: f32, inset: f32, count: usize) -> usize {
-    let unit = (tab + inset).max(1.0);
-    let passed = ((x - tab / 2.0) / unit).floor() + 1.0;
-    (passed.max(0.0) as usize).min(count)
-}
-
 /// The scroll offset, from the start of the tabs, that brings the tab at
-/// `index` into a region `region` wide without moving more than it must:
-/// `current` is where the region starts now.
-fn scroll_into_view(index: usize, tab: f32, inset: f32, region: f32, current: f32) -> f32 {
-    let left = index as f32 * (tab + inset);
-    let right = left + tab;
+/// `index` and its feet into a region `region` wide without moving more than
+/// it must: `current` is where the region starts now.
+fn scroll_into_view(index: usize, geometry: Geometry, tab: f32, region: f32, current: f32) -> f32 {
+    let left = index as f32 * (tab + geometry.gap());
+    let right = left + tab + 2.0 * geometry.foot;
     if left < current {
         left
     } else if right > current + region {
@@ -378,18 +343,212 @@ struct Memory {
     mounted: bool,
 }
 
-/// A drag of a tab that is under way.
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct Drag {
-    id: u64,
-    /// Its place in the list when the drag began.
-    from: usize,
-    /// Where the pointer was, across the window, when it went down.
-    start: f32,
-    /// Whether the pointer has moved far enough for this to be a drag.
-    active: bool,
-    /// The gap it would drop into.
-    gap: usize,
+// ---- Drag to reorder -------------------------------------------------------
+
+/// What a drag draws: which tab is held, how far each live tab is from its
+/// place, and how far the held one is lifted. Idle is the default.
+#[derive(Clone, Default, PartialEq)]
+struct View {
+    held: Option<usize>,
+    offsets: Vec<f32>,
+}
+
+/// Everything a drag works on that is not drawn directly. It lives for the
+/// life of the strip and handlers read it, so none of it re-renders.
+struct Shared {
+    reorder: RefCell<Reorder>,
+    /// The tab a press went down on, until the pointer has travelled far
+    /// enough for it to be picked up.
+    pending: Cell<Option<usize>>,
+    /// The ids of the live tabs, in order.
+    ids: RefCell<Vec<u64>>,
+    on_reorder: RefCell<Option<EventHandler<(u64, usize)>>>,
+    /// One tab's body width, and the gap between bodies.
+    tab: Cell<f32>,
+    gap: Cell<f32>,
+    /// How far the tabs are scrolled now, and when the tab was picked up.
+    offset: Cell<f32>,
+    offset_start: Cell<f32>,
+    /// The most the tabs scroll.
+    range: Cell<f32>,
+    /// The part of a pixel the strip has not scrolled yet.
+    carry: Cell<f32>,
+    /// Where the region of tabs is in the window, left and right.
+    region: Cell<(f32, f32)>,
+    /// Where the strip is in the window, top and bottom.
+    bounds: Cell<(f32, f32)>,
+    reduced: Cell<bool>,
+}
+
+/// The handles every handler of one strip needs. Clone it into each.
+#[derive(Clone)]
+struct Env {
+    shared: Rc<Shared>,
+    drag: PointerDrag,
+    frames: Frames,
+    view: State<View>,
+    scroll: ScrollController,
+}
+
+impl Env {
+    fn busy(&self) -> bool {
+        self.shared.reorder.borrow().is_busy()
+    }
+
+    /// A press went down on live tab `index`: the drag begins when the
+    /// pointer has gone far enough.
+    fn arm(&self, index: usize, at: (f32, f32)) {
+        if self.busy() || self.shared.ids.borrow().len() < 2 {
+            return;
+        }
+        self.shared.pending.set(Some(index));
+        self.drag.begin_at(at, false);
+        self.start_frames();
+    }
+
+    /// Pick the pressed tab up once the pointer has gone [`DRAG_SLOP`] from
+    /// where it went down.
+    fn pick_if_moved(&self) {
+        let Some(index) = self.shared.pending.get() else {
+            return;
+        };
+        if self.drag.is_active_now() && !self.busy() && self.drag.travelled().0.abs() >= DRAG_SLOP {
+            self.shared.pending.set(None);
+            self.pick(index);
+        }
+    }
+
+    fn pick(&self, index: usize) {
+        let count = self.shared.ids.borrow().len();
+        let stack = Stack::new(vec![self.shared.tab.get(); count], self.shared.gap.get());
+        self.shared.offset_start.set(self.shared.offset.get());
+        self.shared.carry.set(0.0);
+        self.shared.reorder.borrow_mut().pick(stack, index);
+    }
+
+    /// The pointer went up: let the tab settle, or put it back when the
+    /// pointer is far from the strip.
+    fn release(&self, at: (f32, f32)) {
+        // A drag that was quicker than a frame is still a drag.
+        self.pick_if_moved();
+        self.shared.pending.set(None);
+        self.follow(0.0);
+        let (top, bottom) = self.shared.bounds.get();
+        let reach = DRAG_REACH.px();
+        if at.1 < top - reach || at.1 > bottom + reach {
+            self.shared.reorder.borrow_mut().cancel();
+        } else {
+            self.shared.reorder.borrow_mut().drop();
+        }
+        self.drag.end();
+        self.publish();
+        self.start_frames();
+    }
+
+    /// Escape: take the tab home.
+    fn cancel(&self) {
+        self.shared.pending.set(None);
+        self.shared.reorder.borrow_mut().cancel();
+        self.drag.end();
+        self.publish();
+        self.start_frames();
+    }
+
+    /// Carry the held tab to where the pointer is, and scroll the strip when
+    /// the pointer is at the edge of the region. `dt` is the seconds since the
+    /// last frame.
+    fn follow(&self, dt: f32) {
+        if !self.shared.reorder.borrow().is_held() {
+            return;
+        }
+        let (pointer, _) = self.drag.pointer();
+        let (left, right) = self.shared.region.get();
+        let speed = reorder::edge_speed(pointer, left, right);
+        if speed != 0.0 && dt > 0.0 {
+            let want = self.shared.carry.get() + speed * dt;
+            let whole = want.trunc();
+            self.shared.carry.set(want - whole);
+            if whole != 0.0 {
+                let next = (self.shared.offset.get() + whole).clamp(0.0, self.shared.range.get());
+                self.shared.offset.set(next);
+                let mut scroll = self.scroll;
+                scroll.scroll_to_x(-(next.round() as i32));
+            }
+        }
+        // Distances are in the content: the strip scrolling under the pointer
+        // moves the held tab with it.
+        let scrolled = self.shared.offset.get() - self.shared.offset_start.get();
+        let delta = (pointer - self.drag.start().0) + scrolled;
+        let count = self.shared.ids.borrow().len();
+        let step = self.shared.tab.get() + self.shared.gap.get();
+        let mut model = self.shared.reorder.borrow_mut();
+        let from = model.held().unwrap_or(0);
+        let low = -(from as f32) * step;
+        let high = (count.saturating_sub(1 + from)) as f32 * step;
+        model.drag(delta.clamp(low, high));
+    }
+
+    /// One frame: pick the tab up once the pointer has moved, follow the
+    /// pointer, step the springs, draw, and finish what came to rest. Returns
+    /// whether there is more to do.
+    fn frame(&self, dt: f32) -> bool {
+        self.pick_if_moved();
+        if !self.drag.is_active_now() {
+            self.shared.pending.set(None);
+        }
+        self.follow(dt);
+        let done = self
+            .shared
+            .reorder
+            .borrow_mut()
+            .step(dt, self.shared.reduced.get());
+        self.publish();
+        if let Some(done) = done {
+            self.finish(done);
+        }
+        self.busy() || self.shared.pending.get().is_some()
+    }
+
+    fn finish(&self, done: Done) {
+        let Done::Moved { from, to } = done else {
+            return;
+        };
+        let id = self.shared.ids.borrow().get(from).copied();
+        let handler = self.shared.on_reorder.borrow().clone();
+        if let (Some(id), Some(handler)) = (id, handler) {
+            handler.call((id, to));
+        }
+    }
+
+    /// Write what is drawn, if it changed: the one state write of a frame.
+    fn publish(&self) {
+        let model = self.shared.reorder.borrow();
+        let count = self.shared.ids.borrow().len();
+        let next = if model.is_busy() {
+            View {
+                held: model.held(),
+                offsets: (0..count).map(|index| model.offset(index)).collect(),
+            }
+        } else {
+            View::default()
+        };
+        drop(model);
+        let mut view = self.view;
+        view.set_if_modified(next);
+    }
+
+    /// Run the frame clock until everything is at rest. With reduced motion
+    /// the settling finishes in the same call.
+    fn start_frames(&self) {
+        if self.shared.reduced.get() && !self.shared.reorder.borrow().is_held() && self.shared.pending.get().is_none() {
+            while self.busy() {
+                self.frame(0.0);
+            }
+            return;
+        }
+        let env = self.clone();
+        self.frames.run(move |dt| env.frame(dt));
+    }
 }
 
 // ---- The strip -------------------------------------------------------------
@@ -397,13 +556,15 @@ struct Drag {
 impl Component for TabStrip {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let metrics = Metrics::current();
+        let geometry = Geometry::current();
+        let surface = use_try_consume::<TabSurface>().map_or(SURFACE, |surface| surface.0);
         let mut available = use_state(|| None::<f32>);
         let mut rail_area = use_state(Area::default);
+        let mut region_area = use_state(Area::default);
         let mut button_area = use_state(Area::default);
-        let mut drag = use_state(|| None::<Drag>);
-        let mut seen = use_state(|| 0_u64);
-        let mut tick = use_state(|| 0_u64);
+        let mut hovered = use_state(|| None::<u64>);
+        let seen = use_state(|| 0_u64);
+        let tick = use_state(|| 0_u64);
         let scroll = use_scroll_controller(ScrollConfig::default);
         let overlays = use_try_consume::<Overlays>();
         let memory = use_hook(|| Rc::new(RefCell::new(Memory::default())));
@@ -416,7 +577,29 @@ impl Component for TabStrip {
         // One accessibility id per tab, kept for the life of the strip, so
         // the arrow keys can move focus to a neighbouring tab.
         let ids = use_hook(|| Rc::new(RefCell::new(HashMap::<u64, AccessibilityId>::new())));
+        let drag = use_pointer_drag();
+        let frames = use_frames();
+        let view = use_state(View::default);
+        let shared = use_hook(|| {
+            Rc::new(Shared {
+                reorder: RefCell::new(Reorder::new(Indicate::Slide)),
+                pending: Cell::new(None),
+                ids: RefCell::new(Vec::new()),
+                on_reorder: RefCell::new(None),
+                tab: Cell::new(0.0),
+                gap: Cell::new(0.0),
+                offset: Cell::new(0.0),
+                offset_start: Cell::new(0.0),
+                range: Cell::new(0.0),
+                carry: Cell::new(0.0),
+                region: Cell::new((0.0, 0.0)),
+                bounds: Cell::new((0.0, 0.0)),
+                reduced: Cell::new(false),
+            })
+        });
         let _ = tick();
+        shared.reduced.set(tokens.reduced_motion);
+        *shared.on_reorder.borrow_mut() = self.on_reorder.clone();
 
         let entries = {
             let mut memory = memory.borrow_mut();
@@ -443,9 +626,10 @@ impl Component for TabStrip {
         // The motion's clock runs from 0 to 1 once for each epoch. Until the
         // effect below has started it for this epoch, an arriving tab has no
         // width and a leaving one all of it.
-        let clock = use_animation(|_| {
+        let motion = tokens.motion(MOVE_MS).max(1);
+        let clock = use_animation(move |_| {
             AnimNum::new(0.0, 1.0)
-                .time(MOVE_MS)
+                .time(motion)
                 .function(Function::Quad)
                 .ease(Ease::Out)
         });
@@ -462,7 +646,7 @@ impl Component for TabStrip {
                 seen.set(epoch);
                 let memory = memory.clone();
                 spawn(async move {
-                    timer(Duration::from_millis(MOVE_MS + 40)).await;
+                    timer(Duration::from_millis(motion + 40)).await;
                     let mut memory = memory.borrow_mut();
                     if memory.epoch != epoch {
                         return;
@@ -490,18 +674,26 @@ impl Component for TabStrip {
             .count();
         let effective: f32 = entries.iter().map(|entry| entry.presence(progress)).sum();
         let fit = fit(
-            metrics,
+            geometry,
             available().unwrap_or(Dim::Page.px()),
             staying,
             effective,
             add,
         );
-        let radius = Radius::Control.nested(metrics.inset);
-        let unit = fit.tab + metrics.inset;
-        let content = (effective * fit.tab + (effective - 1.0).max(0.0) * metrics.inset).max(0.0);
+        let content = geometry.content(effective, fit.tab).max(0.0);
         let range = (content - fit.region).max(0.0);
         let offset = (-(<(i32, i32)>::from(scroll).0 as f32)).clamp(0.0, range);
         scrolled.set(offset);
+        shared.tab.set(fit.tab);
+        shared.gap.set(geometry.gap());
+        shared.range.set(range);
+        if !drag.is_active() {
+            shared.offset.set(offset);
+        }
+        let region_bounds = *region_area.peek();
+        shared.region.set((region_bounds.min_x(), region_bounds.max_x()));
+        let rail_bounds = *rail_area.peek();
+        shared.bounds.set((rail_bounds.min_y(), rail_bounds.max_y()));
 
         // Scroll the selected tab into view when the selection moves, and again
         // when the tabs have settled, because the content only has its final
@@ -514,25 +706,18 @@ impl Component for TabStrip {
             let deps = (
                 selected_index,
                 fit.tab.round() as i32,
-                metrics.inset as i32,
                 fit.region.round() as i32,
                 fit.overflow,
                 tick(),
             );
             use_side_effect_with_deps(&deps, move |deps| {
-                let (index, tab, inset, region, overflow, _) = *deps;
+                let (index, tab, region, overflow, _) = *deps;
                 let Some(index) = index else { return };
                 if !overflow {
                     return;
                 }
                 let mut scroll = scroll;
-                let to = scroll_into_view(
-                    index,
-                    tab as f32,
-                    inset as f32,
-                    region as f32,
-                    scrolled.get(),
-                );
+                let to = scroll_into_view(index, geometry, tab as f32, region as f32, scrolled.get());
                 scroll.scroll_to_x(-(to.round() as i32));
             });
         }
@@ -554,15 +739,31 @@ impl Component for TabStrip {
             .filter(|entry| entry.life != Life::Leaving)
             .collect();
         let live_ids: Vec<u64> = live.iter().map(|entry| entry.item.id).collect();
+        *shared.ids.borrow_mut() = live_ids.clone();
         let closable = live.len() > 1;
         let reorderable = self.on_reorder.is_some();
+        let env = Env {
+            shared: shared.clone(),
+            drag: drag.clone(),
+            frames,
+            view,
+            scroll,
+        };
+        let current_view = view.read().clone();
 
         // ---- Tabs
-        let mut row_children: Vec<Element> = Vec::with_capacity(entries.len() * 2);
+        let mut row_children: Vec<Element> = Vec::with_capacity(entries.len());
+        let mut held_child: Option<Element> = None;
+        let mut x = geometry.foot;
         for (position, entry) in entries.iter().enumerate() {
             let presence = entry.presence(progress);
             let id = entry.item.id;
             let place = live_ids.iter().position(|live| *live == id);
+            let body = fit.tab * presence;
+            let slide = place
+                .and_then(|place| current_view.offsets.get(place).copied())
+                .unwrap_or(0.0);
+            let held = place.is_some() && place == current_view.held;
             let mut menu = Vec::new();
             if closable && entry.life != Life::Leaving {
                 let on_close = self.on_close.clone();
@@ -578,35 +779,59 @@ impl Component for TabStrip {
                     menu.push(menu_item("Move right", move |_| on_reorder.call((id, place + 1))));
                 }
             }
-            row_children.push(Element::from(Tab {
+            // A separator follows a tab unless the tab or the next one is the
+            // selected one, the one the pointer is on, or the one in hand.
+            let next = live.get(place.map_or(usize::MAX, |place| place + 1)).map(|entry| entry.item.id);
+            let quiet = |tab: u64| {
+                tab == self.selected
+                    || hovered() == Some(tab)
+                    || place_of(&live_ids, tab).is_some_and(|place| Some(place) == current_view.held)
+            };
+            let separator = entry.life == Life::Live
+                && next.is_some_and(|next| !quiet(id) && !quiet(next));
+            let tab = Element::from(Tab {
                 item: entry.item.clone(),
-                width: fit.tab * presence,
-                lead: if position > 0 { metrics.inset * presence } else { 0.0 },
+                geometry,
+                surface,
+                width: body,
+                left: x - geometry.foot + slide,
+                presence,
                 selected: id == self.selected,
                 drop_target: self.drop_target == Some(id),
                 closable,
-                dragging: (*drag.read()).is_some_and(|drag| drag.active && drag.id == id),
+                separator,
                 menu,
                 on_select: self.on_select.clone(),
                 on_close: self.on_close.clone(),
-                on_hover: self.on_hover.clone(),
-                on_drag: reorderable.then(|| {
-                    let live_ids = live_ids.clone();
-                    EventHandler::new(move |(id, x): (u64, f32)| {
-                        if let Some(from) = live_ids.iter().position(|live| *live == id) {
-                            drag.set(Some(Drag {
-                                id,
-                                from,
-                                start: x,
-                                active: false,
-                                gap: from,
-                            }));
+                on_hover: {
+                    let on_hover = self.on_hover.clone();
+                    EventHandler::new(move |(tab, entered): (u64, bool)| {
+                        let next = if entered { Some(tab) } else { None };
+                        if entered || *hovered.peek() == Some(tab) {
+                            hovered.set_if_modified(next);
+                        }
+                        on_hover.call((tab, entered));
+                    })
+                },
+                on_arm: (reorderable && place.is_some()).then(|| {
+                    let env = env.clone();
+                    EventHandler::new(move |(_, at): (u64, (f32, f32))| {
+                        if let Some(place) = place {
+                            env.arm(place, at);
                         }
                     })
                 }),
                 a11y_id: a11y_ids[position],
-            }));
+            });
+            if held {
+                held_child = Some(tab);
+            } else {
+                row_children.push(tab);
+            }
+            x += (fit.tab + geometry.gap()) * presence;
         }
+        // The tab in hand is drawn last, over the ones that slide aside.
+        row_children.extend(held_child);
 
         let key_ids: Vec<(u64, AccessibilityId)> = entries
             .iter()
@@ -614,22 +839,37 @@ impl Component for TabStrip {
             .filter(|(entry, _)| entry.life != Life::Leaving)
             .map(|(entry, a11y)| (entry.item.id, *a11y))
             .collect();
-        let (on_select, on_close, on_new) = (
+        let (on_select, on_close, on_new, on_reorder) = (
             self.on_select.clone(),
             self.on_close.clone(),
             self.on_new.clone(),
+            self.on_reorder.clone(),
         );
         let selected = self.selected;
         let wants_focus = refocus.clone();
         let row = rect()
-            .tw(&tokens, &[h(Dim::Control), flex_row(), items(Align::Center)])
+            .tw(&tokens, &[h(Dim::Header)])
+            .width(Size::px(content))
             .on_key_down(move |event: Event<KeyboardEventData>| {
                 let Some(index) = key_ids.iter().position(|(id, _)| *id == selected) else {
                     return;
                 };
                 let last = key_ids.len() - 1;
                 let ctrl = event.modifiers.contains(Modifiers::CONTROL);
+                let shift = event.modifiers.contains(Modifiers::SHIFT);
                 let next = match &event.key {
+                    Key::Named(NamedKey::ArrowLeft | NamedKey::ArrowRight) if ctrl && shift => {
+                        event.stop_propagation();
+                        let to = if event.key == Key::Named(NamedKey::ArrowLeft) {
+                            index.checked_sub(1)
+                        } else {
+                            (index < last).then_some(index + 1)
+                        };
+                        if let (Some(to), Some(on_reorder)) = (to, &on_reorder) {
+                            on_reorder.call((selected, to));
+                        }
+                        return;
+                    }
                     Key::Named(NamedKey::ArrowLeft) => index.saturating_sub(1),
                     Key::Named(NamedKey::ArrowRight) => (index + 1).min(last),
                     Key::Named(NamedKey::Home) => 0,
@@ -669,8 +909,12 @@ impl Component for TabStrip {
             .children(row_children);
 
         // ---- The region the tabs scroll in, with fades where they continue
+        // A fade stops above the bar's last row, so it does not hide the
+        // hairline the strip stands on.
+        let fade_width = Dim::Box5.px();
+        let fade_height = geometry.strip - geometry.hairline;
         let fade = |at_start: bool| {
-            let solid = Paint::Control.color(&tokens);
+            let solid = STRIP.color(&tokens);
             let (from, to) = if at_start {
                 (solid, solid.with_a(0))
             } else {
@@ -685,7 +929,8 @@ impl Component for TabStrip {
                 rect()
                     .position(position)
                     .interactive(false)
-                    .tw(&tokens, &[w(Dim::Box5), h(Dim::Control)]),
+                    .width(Size::px(fade_width))
+                    .height(Size::px(fade_height)),
                 LinearGradient::new()
                     .angle(90.0)
                     .stop(GradientStop::new(from, 0.0))
@@ -694,10 +939,12 @@ impl Component for TabStrip {
         };
         // The fades need room of their own: a region narrower than two of them has none.
         let fades = fit.overflow && fit.region >= 2.0 * Dim::Box5.px();
-        let dropping = drag.read().filter(|drag| drag.active);
         let region = rect()
-            .tw(&tokens, &[h(Dim::Control), clip()])
+            .tw(&tokens, &[h(Dim::Header), clip()])
             .width(Size::px(fit.region))
+            .on_sized(move |event: Event<SizedEventData>| {
+                region_area.set_if_modified(event.area);
+            })
             .child(
                 scroll_x_controlled(scroll)
                     .show_scrollbar(false)
@@ -706,18 +953,21 @@ impl Component for TabStrip {
                     .child(row),
             )
             .maybe_child((fades && offset > 0.5).then(|| fade(true)))
-            .maybe_child((fades && offset < range - 0.5).then(|| fade(false)))
-            .maybe_child(dropping.map(|drag| {
-                // Where a dropped tab would land: a line in the gap.
-                let at = (drag.gap as f32 * unit - metrics.inset / 2.0 - offset)
-                    .clamp(0.0, (fit.region - 2.0).max(0.0));
-                rect()
-                    .position(Position::new_absolute().top(0.0).left(at))
-                    .interactive(false)
-                    .tw(&tokens, &[w(Dim::Indicator), h(Dim::Control), bg(Paint::Accent)])
-            }));
+            .maybe_child((fades && offset < range - 0.5).then(|| fade(false)));
 
-        // ---- The buttons at the end of the rail
+        // ---- The buttons at the end of the strip. Each sits in a cell as
+        // tall as the strip, level with the tabs: the nested corner of a tab.
+        let radius = Radius::Control.nested(geometry.inset);
+        let cell = |button: Element| {
+            rect()
+                .tw(&tokens, &[w(Dim::InlineButton), h(Dim::Header), flex_col(), justify(Align::End)])
+                .child(
+                    rect()
+                        .component("TabEnd")
+                        .tw(&tokens, &[w_full(), h(Dim::Control), flex_row(), items(Align::Center)])
+                        .child(button),
+                )
+        };
         let all_tabs: Vec<MenuItem> = live
             .iter()
             .map(|entry| {
@@ -728,123 +978,101 @@ impl Component for TabStrip {
             })
             .collect();
         let tab_list = fit.overflow.then(|| {
-            rect()
-                .on_sized(move |event: Event<SizedEventData>| {
-                    button_area.set_if_modified(event.area);
-                })
-                .child(
-                    icon_button(Icon::PanDown, move |_| {
-                        if let Some(overlays) = overlays {
-                            overlays.show_menu_from(
-                                None,
-                                PanelTrigger::Control(PanelRect::from_area(&button_area.read())),
-                                all_tabs.clone(),
-                                false,
-                            );
-                        }
+            cell(
+                rect()
+                    .on_sized(move |event: Event<SizedEventData>| {
+                        button_area.set_if_modified(event.area);
                     })
-                    .size(Dim::InlineButton)
-                    .radius(radius)
-                    .tooltip("Tab list"),
-                )
+                    .child(
+                        icon_button(Icon::PanDown, move |_| {
+                            if let Some(overlays) = overlays {
+                                overlays.show_menu_from(
+                                    None,
+                                    PanelTrigger::Control(PanelRect::from_area(&button_area.read())),
+                                    all_tabs.clone(),
+                                    false,
+                                );
+                            }
+                        })
+                        .size(Dim::InlineButton)
+                        .radius(radius)
+                        .tooltip("Tab list"),
+                    )
+                    .into_element(),
+            )
         });
         let new_tab = self.on_new.clone().map(|on_new| {
-            icon_button(Icon::ListAdd, on_new)
-                .size(Dim::InlineButton)
-                .radius(radius)
-                .tooltip("New tab")
+            cell(
+                icon_button(Icon::ListAdd, on_new)
+                    .size(Dim::InlineButton)
+                    .radius(radius)
+                    .tooltip("New tab")
+                    .into_element(),
+            )
         });
 
-        // ---- Drag to reorder
-        let on_reorder = self.on_reorder.clone();
-        let (tab, inset, count) = (fit.tab, metrics.inset, live_ids.len());
-        let reach = DRAG_REACH.px();
-        let rail = rect()
+        // ---- Drag to reorder: the strip tracks the pointer while one is on.
+        let release = env.clone();
+        let cancel = env.clone();
+        let strip = rect()
             .component("TabStrip")
             .a11y_role(AccessibilityRole::TabList)
             .a11y_alt("Tabs")
             .width(Size::px(fit.rail))
-            .tw(
-                &tokens,
-                &[
-                    h(Dim::Control),
-                    flex_row(),
-                    items(Align::Center),
-                    px(FIELD_INSET),
-                    gap(FIELD_INSET),
-                    rounded(Radius::Control),
-                    bg(Paint::Control),
-                ],
-            )
+            .tw(&tokens, &[h(Dim::Header), flex_row()])
             .on_sized(move |event: Event<SizedEventData>| {
                 rail_area.set_if_modified(event.area);
-            })
-            .on_capture_global_pointer_move(move |event: Event<PointerEventData>| {
-                let Some(mut current) = *drag.peek() else { return };
-                let x = event.global_location().x as f32;
-                if !current.active {
-                    if (x - current.start).abs() < DRAG_SLOP {
-                        return;
-                    }
-                    current.active = true;
-                }
-                event.prevent_default();
-                let origin = rail_area.peek().min_x() + inset - offset;
-                current.gap = landing(x - origin, tab, inset, count);
-                drag.set_if_modified(Some(current));
-            })
-            .on_global_pointer_up(move |event: Event<PointerEventData>| {
-                let Some(done) = drag.write().take() else { return };
-                if !done.active {
-                    return;
-                }
-                let area = *rail_area.peek();
-                let y = event.global_location().y as f32;
-                if y < area.min_y() - reach || y > area.max_y() + reach {
-                    return;
-                }
-                let to = destination(done.from, done.gap);
-                if to != done.from {
-                    if let Some(on_reorder) = &on_reorder {
-                        on_reorder.call((done.id, to));
-                    }
-                }
             })
             .child(region)
             .maybe_child(tab_list)
             .maybe_child(new_tab);
+        let strip = drag.track(strip, move |at| release.release(at), move || cancel.cancel());
 
         rect()
-            .tw(&tokens, &[w_full(), h(Dim::Control)])
+            .tw(&tokens, &[w_full(), h(Dim::Header)])
             .on_sized(move |event: Event<SizedEventData>| {
                 available.set_if_modified(Some(event.area.width()));
             })
-            .child(rail)
+            .child(strip)
     }
+}
+
+/// The place of tab `id` among the live tabs.
+fn place_of(live_ids: &[u64], id: u64) -> Option<usize> {
+    live_ids.iter().position(|live| *live == id)
 }
 
 // ---- A tab -----------------------------------------------------------------
 
+/// One tab: a slot a foot wider than the body on each side, so the selected
+/// tab's flares fit. The slot is placed by the strip, `left` from the start of
+/// the tabs; the body is the control that takes the pointer and the focus.
 #[derive(PartialEq)]
 struct Tab {
     item: TabItem,
-    /// Its width at this moment of the motion.
+    geometry: Geometry,
+    /// The paint of the content, which the selected tab is painted in.
+    surface: Paint,
+    /// The body's width at this moment of the motion.
     width: f32,
-    /// The gap before it, which grows and shrinks with it.
-    lead: f32,
+    /// The slot's left edge in the strip's content.
+    left: f32,
+    /// How much of the tab is there, for a tab that is arriving or leaving.
+    presence: f32,
     selected: bool,
     drop_target: bool,
     /// A lone tab has nothing to close into.
     closable: bool,
-    /// The tab is being dragged to another place.
-    dragging: bool,
+    /// Whether the short separator after the tab is drawn.
+    separator: bool,
     /// Its right click and long press menu.
     menu: Vec<MenuItem>,
     on_select: EventHandler<u64>,
     on_close: EventHandler<u64>,
     on_hover: EventHandler<(u64, bool)>,
-    /// A press with the primary button began; set when the strip reorders.
-    on_drag: Option<EventHandler<(u64, f32)>>,
+    /// A press with the primary mouse button went down at this window point;
+    /// set when the strip reorders.
+    on_arm: Option<EventHandler<(u64, (f32, f32))>>,
     a11y_id: AccessibilityId,
 }
 
@@ -856,9 +1084,9 @@ impl Component for Tab {
 
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let metrics = Metrics::current();
-        let radius = Radius::Control.nested(metrics.inset);
+        let geometry = self.geometry;
         let mut hovering = use_state(|| false);
+        let mut pressing = use_state(|| false);
         let mut area = use_state(Area::default);
         let a11y_id = self.a11y_id;
         let focus = use_focus(a11y_id);
@@ -867,7 +1095,7 @@ impl Component for Tab {
         let id = self.item.id;
         let (on_select, on_close) = (self.on_select.clone(), self.on_close.clone());
         let (on_enter, on_leave) = (self.on_hover.clone(), self.on_hover.clone());
-        let on_drag = self.on_drag.clone();
+        let on_arm = self.on_arm.clone();
         let closable = self.closable;
         let open_menu: EventHandler<()> = {
             let items = self.menu.clone();
@@ -883,9 +1111,24 @@ impl Component for Tab {
             })
         };
         let long_press = open_menu.clone();
-        let show_close = self.closable
-            && (self.selected || (hovering() && pointer_kind() == PointerKind::Mouse));
-        let control = rect()
+        let mouse_over = hovering() && pointer_kind() == PointerKind::Mouse;
+        let show_close = self.closable && (self.selected || mouse_over);
+        let lit = self.selected || mouse_over;
+
+        // What fills an unselected tab: a pill that is lifted from the strip
+        // by the pointer, pressed by a finger, or marked as a drop target.
+        let pill = if self.drop_target {
+            Paint::AccentSoft
+        } else if pressing() && !self.selected {
+            Paint::Pressed
+        } else if mouse_over && !self.selected {
+            Paint::Hover
+        } else {
+            Paint::Transparent
+        };
+        let lift = geometry.tab - geometry.inset.max(Dim::Hairline.px());
+
+        let face = rect()
             .component("Tab")
             .a11y_id(a11y_id)
             .a11y_focusable(self.selected)
@@ -897,19 +1140,10 @@ impl Component for Tab {
                 &[
                     w_full(),
                     h_full(),
-                    rounded(radius),
+                    rounded_on(Radius::Control, Corners::Top, 0.0),
                     clip(),
-                    bg(if self.drop_target {
-                        Paint::AccentSoft
-                    } else if self.selected {
-                        Paint::Raised
-                    } else {
-                        Paint::Transparent
-                    }),
                 ],
             )
-            .maybe(self.selected, |tab| tab.tw(&tokens, &[shadow(Elevation::Knob)]))
-            .maybe(self.dragging, |tab| tab.opacity(0.5))
             .on_sized(move |event: Event<SizedEventData>| {
                 area.set_if_modified(event.area);
             })
@@ -923,6 +1157,7 @@ impl Component for Tab {
             })
             .on_pointer_down(move |event: Event<PointerEventData>| {
                 event.stop_propagation();
+                pressing.set(true);
                 if let PointerEventData::Mouse(mouse) = event.data() {
                     match mouse.button {
                         Some(MouseButton::Middle) => {
@@ -943,15 +1178,20 @@ impl Component for Tab {
                 // the strip or holds for the menu.
                 if !matches!(event.data(), PointerEventData::Touch(_)) {
                     on_select.call(id);
-                    if let Some(on_drag) = &on_drag {
-                        on_drag.call((id, event.global_location().x as f32));
+                    a11y_id.request_focus();
+                    if let Some(on_arm) = &on_arm {
+                        let at = event.global_location();
+                        on_arm.call((id, (at.x as f32, at.y as f32)));
                     }
                 }
                 let long_press = long_press.clone();
                 press.begin(&event, Some(EventHandler::new(move |_: (f32, f32)| long_press.call(()))));
             })
             .on_global_pointer_move(move |event: Event<PointerEventData>| press.moved(&event))
-            .on_global_pointer_up(move |_| press.release())
+            .on_global_pointer_up(move |_| {
+                press.release();
+                pressing.set_if_modified(false);
+            })
             .on_press({
                 let on_select = self.on_select.clone();
                 move |event: Event<PressEventData>| {
@@ -963,8 +1203,14 @@ impl Component for Tab {
                     a11y_id.request_focus();
                 }
             })
-            // The control holds no padding, so its focus ring, which is placed
-            // from the control's own corner, hugs the tab; the row inside has it.
+            .maybe_child((pill != Paint::Transparent).then(|| {
+                rect()
+                    .position(Position::new_absolute().top(0.0).left(0.0))
+                    .interactive(false)
+                    .width(Size::px(self.width))
+                    .height(Size::px(lift))
+                    .tw(&tokens, &[rounded(Radius::Control), bg(pill)])
+            }))
             .child(
                 rect()
                     .tw(
@@ -984,7 +1230,7 @@ impl Component for Tab {
                         icons::icon(
                             icon,
                             IconSize::Control,
-                            if self.selected || hovering() {
+                            if lit {
                                 Ink::Text.color(&tokens)
                             } else {
                                 Ink::Muted.color(&tokens)
@@ -993,14 +1239,10 @@ impl Component for Tab {
                     }))
                     .child(
                         rect().tw(&tokens, &[w_flex()]).child(
-                            BODY.in_ink(if self.selected || hovering() {
-                                Ink::Text
-                            } else {
-                                Ink::Muted
-                            })
-                            .label(&tokens, self.item.title.clone())
-                            .max_lines(1)
-                            .text_overflow(TextOverflow::Ellipsis),
+                            BODY.in_ink(if lit { Ink::Text } else { Ink::Muted })
+                                .label(&tokens, self.item.title.clone())
+                                .max_lines(1)
+                                .text_overflow(TextOverflow::Ellipsis),
                         ),
                     )
                     .maybe_child(self.closable.then(|| {
@@ -1012,20 +1254,36 @@ impl Component for Tab {
                         }
                     })),
             );
-        // The slot is as tall as the rail, so the raised tab's shadow is not
-        // cut by the scroll region. It holds the gap before the tab and the
-        // tab, and is as wide as the motion allows. No sibling of a tab is
-        // unkeyed, so tabs can change places.
+
+        let body = face
+            .focusable_inside(focus())
+            .position(Position::new_absolute().top(geometry.top).left(geometry.foot))
+            .tw(&tokens, &[h(Dim::Control)])
+            .width(Size::px(self.width));
+
+        let slot = geometry.foot * 2.0 + self.width;
         rect()
-            .tw(&tokens, &[h(Dim::Control), flex_row(), items(Align::Center)])
-            .width(Size::px(self.width + self.lead))
-            .child(rect().width(Size::px(self.lead)))
-            .child(
-                control
-                    .focusable_inside(focus(), radius)
-                    .tw(&tokens, &[h(Dim::InlineButton)])
-                    .width(Size::px(self.width)),
-            )
+            .position(Position::new_absolute().top(0.0).left(self.left))
+            .tw(&tokens, &[h(Dim::Header)])
+            .width(Size::px(slot))
+            .maybe(self.presence < 1.0, |slot| slot.opacity(self.presence))
+            // The selected tab's outline, under the body that holds its text.
+            .maybe_child(self.selected.then(|| {
+                shape_box(Shape::new(&geometry, self.width), self.surface, Paint::Separator, &tokens)
+                    .position(Position::new_absolute().top(geometry.top).left(0.0))
+            }))
+            .maybe_child(self.separator.then(|| {
+                let at = geometry.foot + self.width + geometry.gap() / 2.0 - Dim::Indicator.px() / 2.0;
+                let rise = geometry.top + (geometry.tab - Dim::Box5.px()) / 2.0;
+                rect()
+                    .position(Position::new_absolute().top(rise).left(at))
+                    .interactive(false)
+                    .tw(
+                        &tokens,
+                        &[w(Dim::Indicator), h(Dim::Box5), rounded(Radius::Mark), bg(Paint::MutedFaint)],
+                    )
+            }))
+            .child(body)
     }
 }
 
@@ -1033,7 +1291,7 @@ impl Component for Tab {
 /// when it is hovered, and drawn only while it can be used. It is the standard
 /// icon button, [`FIELD_INSET`] from the tab's edges like a field's trailing
 /// button: 20 px at mouse density, and the whole 44 px touch target at compact
-/// density.
+/// density. Its corner is the tab's, nested by that inset.
 #[derive(PartialEq)]
 struct CloseTab {
     id: u64,
@@ -1049,8 +1307,13 @@ impl Component for CloseTab {
         let on_close = self.on_close.clone();
         let inset = FIELD_INSET.px();
         let size = if inset > 0.0 { Dim::Box5 } else { Dim::InlineButton };
-        let radius = Radius::Control.nested(inset).nested(inset);
-        let slot = rect().component("TabClose").tw(&tokens, &[w(size), h(size)]);
+        let radius = Radius::Control.nested(inset);
+        // A press on the button is the button's: it must not select the tab
+        // or begin dragging it.
+        let slot = rect()
+            .component("TabClose")
+            .tw(&tokens, &[w(size), h(size)])
+            .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation());
         if !self.visible {
             return slot.into_element();
         }
@@ -1078,27 +1341,25 @@ mod tests {
     }
 
     #[test]
-    fn the_rail_never_passes_its_container_at_any_width() {
+    fn the_strip_never_passes_its_container_at_any_width() {
         for class in CLASSES {
-            let metrics = Metrics::in_class(class);
+            let geometry = Geometry::in_class(class);
             for add in [false, true] {
                 for count in 1..=14 {
                     for available in (100..=900).step_by(7) {
                         let available = available as f32;
-                        let fit = fit(metrics, available, count, count as f32, add);
+                        let fit = fit(geometry, available, count, count as f32, add);
                         assert!(
-                            fit.rail <= available.max(2.0 * metrics.inset) + 0.01,
-                            "{class:?} add {add}: {count} tabs in {available}px make a rail {} wide",
+                            fit.rail <= available + 0.01,
+                            "{class:?} add {add}: {count} tabs in {available}px make a strip {} wide",
                             fit.rail
                         );
-                        let slot = metrics.height + metrics.inset;
-                        let end = 2.0 * metrics.inset
-                            + fit.region
-                            + if add { slot } else { 0.0 }
-                            + if fit.overflow { slot } else { 0.0 };
+                        let end = fit.region
+                            + if add { geometry.button } else { 0.0 }
+                            + if fit.overflow { geometry.button } else { 0.0 };
                         assert!(
                             end <= fit.rail + 0.01,
-                            "{class:?}: the region and the buttons ({end}) outrun the rail ({})",
+                            "{class:?}: the region and the buttons ({end}) outrun the strip ({})",
                             fit.rail
                         );
                     }
@@ -1110,72 +1371,50 @@ mod tests {
     #[test]
     fn tabs_share_a_width_between_the_tokens_until_they_scroll() {
         for class in CLASSES {
-            let metrics = Metrics::in_class(class);
-            let wide = fit(metrics, 2000.0, 3, 3.0, true);
-            assert_eq!(wide.tab, metrics.max, "{class:?}: few tabs are as wide as the token");
+            let geometry = Geometry::in_class(class);
+            let wide = fit(geometry, 2000.0, 3, 3.0, true);
+            assert_eq!(wide.tab, geometry.max, "{class:?}: roomy tabs are the widest");
             assert!(!wide.overflow);
-            let mut last = f32::MAX;
-            for count in 1..=40 {
-                let fit = fit(metrics, 500.0, count, count as f32, true);
-                assert!(fit.tab <= last + 0.01, "{class:?}: more tabs never widen the tabs");
-                last = fit.tab;
-                if fit.overflow {
-                    assert_eq!(fit.tab, metrics.min, "{class:?}: a scrolling strip holds tabs at the minimum");
-                } else {
-                    assert!(fit.tab >= metrics.min - 0.01 && fit.tab <= metrics.max + 0.01);
-                    let used = count as f32 * fit.tab + (count as f32 - 1.0) * metrics.inset;
-                    assert!((used - fit.region).abs() < 0.01, "{class:?}: the tabs fill their region");
-                }
+            let mut last = wide.tab;
+            for available in (300..2000).rev().step_by(11) {
+                let narrower = fit(geometry, available as f32, 6, 6.0, true);
+                assert!(narrower.tab <= last + 0.01, "{class:?}: tabs only get narrower as room goes");
+                assert!(narrower.tab >= geometry.min - 0.01, "{class:?}: never below the minimum");
+                last = narrower.tab;
             }
-            assert!(fit(metrics, 500.0, 40, 40.0, true).overflow);
         }
     }
 
     #[test]
     fn overflow_begins_when_the_minimum_widths_no_longer_fit() {
-        let metrics = Metrics::in_class(SizeClass::Regular);
-        // 4 px inset, a 28 px button: a rail of 500 holds 492 - 32 = 460 of tabs.
-        // Four at 96 with three 4 px gaps are 396; five are 496.
-        assert!(!fit(metrics, 500.0, 4, 4.0, true).overflow);
-        assert!(fit(metrics, 500.0, 5, 5.0, true).overflow);
-        // Without the New tab button there is 32 px more room: 5 fit in 510.
-        assert!(fit(metrics, 500.0, 5, 5.0, false).overflow);
-        assert!(!fit(metrics, 510.0, 5, 5.0, false).overflow);
+        let geometry = Geometry::in_class(SizeClass::Regular);
+        // 8 px feet, a 28 px button, 96 px bodies: a strip of 500 holds 472 of
+        // tabs; four need 8 + 4 * 104 = 424, five need 528.
+        assert!(!fit(geometry, 500.0, 4, 4.0, true).overflow);
+        assert!(fit(geometry, 500.0, 5, 5.0, true).overflow);
+        let overflowing = fit(geometry, 500.0, 9, 9.0, true);
+        assert_eq!(overflowing.tab, geometry.min);
+        assert_eq!(overflowing.rail, 500.0);
+        assert_eq!(overflowing.region, 500.0 - 2.0 * geometry.button);
     }
 
     #[test]
     fn a_leaving_tab_does_not_change_whether_the_strip_overflows() {
-        let metrics = Metrics::in_class(SizeClass::Regular);
-        let settled = fit(metrics, 500.0, 4, 4.0, true);
-        let leaving = fit(metrics, 500.0, 4, 4.6, true);
+        let geometry = Geometry::in_class(SizeClass::Regular);
+        let settled = fit(geometry, 500.0, 4, 4.0, true);
+        let leaving = fit(geometry, 500.0, 4, 4.6, true);
         assert_eq!(settled.overflow, leaving.overflow);
     }
 
     #[test]
-    fn a_pointer_lands_a_dragged_tab_in_the_gap_it_is_nearest() {
-        // Three tabs of 100 with 4 px between: middles at 50, 154 and 258.
-        assert_eq!(landing(-20.0, 100.0, 4.0, 3), 0);
-        assert_eq!(landing(49.0, 100.0, 4.0, 3), 0);
-        assert_eq!(landing(51.0, 100.0, 4.0, 3), 1);
-        assert_eq!(landing(160.0, 100.0, 4.0, 3), 2);
-        assert_eq!(landing(900.0, 100.0, 4.0, 3), 3);
-    }
-
-    #[test]
-    fn dropping_beside_itself_leaves_a_tab_where_it_is() {
-        assert_eq!(destination(1, 1), 1);
-        assert_eq!(destination(1, 2), 1);
-        assert_eq!(destination(0, 3), 2);
-        assert_eq!(destination(2, 0), 0);
-    }
-
-    #[test]
     fn the_selected_tab_is_scrolled_in_by_the_least_distance() {
-        // Tabs of 96 with 4 px between, in a region 250 wide.
-        let view = |index, current| scroll_into_view(index, 96.0, 4.0, 250.0, current);
+        let geometry = Geometry::in_class(SizeClass::Regular);
+        // Bodies of 96 with 8 px feet between, in a region 250 wide: a tab's
+        // slot is 112 wide and a step is 104.
+        let view = |index, current| scroll_into_view(index, geometry, 96.0, 250.0, current);
         assert_eq!(view(1, 0.0), 0.0, "a tab in view does not scroll");
-        assert_eq!(view(2, 0.0), 296.0 - 250.0, "a tab past the end scrolls its end into view");
-        assert_eq!(view(0, 150.0), 0.0, "a tab before the start scrolls its start into view");
+        assert_eq!(view(3, 0.0), 3.0 * 104.0 + 112.0 - 250.0, "the tab's far foot comes to the edge");
+        assert_eq!(view(0, 200.0), 0.0, "a tab before the region scrolls back to it");
     }
 
     #[test]
@@ -1184,19 +1423,12 @@ mod tests {
         let mut entries = Vec::new();
         assert!(!merge(&mut entries, &tabs(&[1, 2]), false), "the first tabs do not grow in");
         assert!(entries.iter().all(|entry| entry.life == Life::Live));
-
         assert!(merge(&mut entries, &tabs(&[1, 2, 3]), true));
         assert_eq!(entries[2].life, Life::Entering);
-        assert!(!merge(&mut entries, &tabs(&[1, 2, 3]), true), "the same list is no new motion");
-
         assert!(merge(&mut entries, &tabs(&[1, 3]), true));
         let lives: Vec<(u64, Life)> = entries.iter().map(|entry| (entry.item.id, entry.life)).collect();
-        assert_eq!(
-            lives,
-            vec![(1, Life::Live), (2, Life::Leaving), (3, Life::Live)],
-            "tab 2 stays where it was while it shrinks; tab 3 had arrived by the new motion"
-        );
-        assert!(!merge(&mut entries, &tabs(&[1, 3]), true), "a leaving tab does not restart its motion");
+        assert_eq!(lives, [(1, Life::Live), (2, Life::Leaving), (3, Life::Live)]);
+        assert_eq!(entries[1].presence(0.25), 0.75);
     }
 
     #[test]
@@ -1206,549 +1438,73 @@ mod tests {
         merge(&mut entries, &tabs(&[1, 2, 3]), false);
         assert!(!merge(&mut entries, &tabs(&[3, 1, 2]), true));
         let ids: Vec<u64> = entries.iter().map(|entry| entry.item.id).collect();
-        assert_eq!(ids, vec![3, 1, 2]);
+        assert_eq!(ids, [3, 1, 2]);
     }
 
     #[test]
-    fn the_inset_is_the_nested_radius_rule() {
-        // A tab is the rail's radius less the rail's inset; the close button
-        // is the tab's less its own.
+    fn dragging_the_first_tab_past_the_middle_of_the_next_swaps_them() {
+        let geometry = Geometry::in_class(SizeClass::Regular);
+        // Three bodies of 100 with the feet between: a step is 108.
+        let stack = Stack::new(vec![100.0; 3], geometry.gap());
+        assert_eq!(stack.landing(0, 40.0), 0, "a short way is still the same place");
+        assert_eq!(stack.landing(0, 60.0), 1, "the front edge passes the next tab's middle");
+        assert_eq!(stack.landing(0, 500.0), 2);
+        assert_eq!(stack.landing(2, -500.0), 0);
+    }
+
+    #[test]
+    fn the_close_button_and_the_new_tab_button_nest_in_the_tab_corner() {
+        // A tab's corner is Control; a button FIELD_INSET inside it is that
+        // radius less the inset, and at compact density there is no inset.
         for class in CLASSES {
             let inset = FIELD_INSET.px_in(class);
-            let tab = Radius::Control.nested(inset);
-            let close = tab.nested(inset);
-            assert!((Radius::Control.px() - inset - tab.px()).abs() < 0.01);
-            match class {
-                SizeClass::Regular => assert_eq!((tab, close), (Radius::Inner, Radius::Mark)),
-                SizeClass::Compact => assert_eq!((tab, close), (Radius::Control, Radius::Control)),
-            }
+            assert_eq!(Radius::Control.nested(inset).px(), Radius::Control.px() - inset);
+            let geometry = Geometry::in_class(class);
+            assert_eq!((geometry.tab - geometry.button) / 2.0, inset, "{class:?}: the button is inset by the field inset");
         }
     }
 
     #[test]
     fn at_compact_density_every_target_is_the_touch_minimum() {
-        let metrics = Metrics::in_class(SizeClass::Compact);
-        assert!(metrics.height >= TOUCH_MIN, "a tab is {} tall", metrics.height);
-        assert_eq!(Dim::InlineButton.px_in(SizeClass::Compact), metrics.height);
-        assert!(TAB_MIN.px_in(SizeClass::Compact) >= TOUCH_MIN);
+        let geometry = Geometry::in_class(SizeClass::Compact);
+        assert!(geometry.tab >= TOUCH_MIN, "a tab is {} tall", geometry.tab);
+        assert_eq!(geometry.button, geometry.tab);
+        assert!(geometry.min >= TOUCH_MIN, "a tab is {} wide at least", geometry.min);
+        assert_eq!(Dim::InlineButton.px_in(SizeClass::Compact), TOUCH_MIN);
     }
-}
-
-#[cfg(all(test, feature = "testing"))]
-mod geometry_tests {
-    use std::time::Duration;
-
-    use freya::prelude::*;
-    use freya_core::elements::label::Label;
-    use torin::prelude::Area;
-
-    use super::*;
-    use crate::snapshot::Snapshot;
-    use crate::theme::provide_tokens;
-    use crate::window::WindowHost;
-
-    const LONG: &str = "A name far too long for the room it is given, which must be cut";
-
-    /// The window root: it provides the tokens the window host reads.
-    #[derive(PartialEq, Clone, Copy)]
-    struct Root(Fixed);
-
-    impl Component for Root {
-        fn render(&self) -> impl IntoElement {
-            let _ = provide_tokens();
-            WindowHost::new(self.0)
-        }
-    }
-
-    #[derive(PartialEq, Clone, Copy)]
-    struct Fixed {
-        count: usize,
-        container: f32,
-        add: bool,
-        long: bool,
-    }
-
-    impl Component for Fixed {
-        fn render(&self) -> impl IntoElement {
-            let tokens = use_tokens();
-            let tabs = (0..self.count)
-                .map(|index| {
-                    let id = index as u64 + 1;
-                    if self.long && index == 0 {
-                        TabItem::new(id, LONG)
-                    } else {
-                        TabItem::new(id, format!("Folder {id}"))
-                    }
-                })
-                .collect();
-            let mut strip = tab_strip(tabs, 1);
-            if self.add {
-                strip = strip.on_new(|_| {});
-            }
-            rect().expanded().tw(&tokens, &[p(S4)]).child(
-                rect()
-                    .component("Container")
-                    .width(Size::px(self.container))
-                    .child(strip),
-            )
-        }
-    }
-
-    /// Every box a strip draws, by role.
-    #[derive(Debug)]
-    struct Geo {
-        container: Area,
-        rail: Area,
-        tabs: Vec<Area>,
-        closes: Vec<Area>,
-        titles: Vec<Area>,
-        buttons: Vec<Area>,
-        inset: f32,
-        height: f32,
-        rail_height: f32,
-    }
-
-    fn named(shot: &mut Snapshot, name: &'static str) -> Vec<Area> {
-        shot.runner().find_many(|node, element| {
-            (element.accessibility().builder.class_name() == Some(name)).then(|| node.layout().area)
-        })
-    }
-
-    fn read(shot: &mut Snapshot) -> Geo {
-        let container = named(shot, "Container").into_iter().next().expect("the container");
-        let rail = named(shot, "TabStrip").into_iter().next().expect("the rail");
-        let tabs = named(shot, "Tab");
-        let closes = named(shot, "TabClose");
-        let titles = shot.runner().find_many(|node, element| {
-            let label = Label::try_downcast(element)?;
-            (label.text.starts_with("Folder") || label.text.starts_with("Tab ") || label.text.starts_with("A name"))
-                .then(|| node.layout().area)
-        });
-        let mut buttons: Vec<Area> = named(shot, "IconButton")
-            .into_iter()
-            .filter(|button| closes.iter().all(|close| !contains(close, button, 0.5)))
-            .collect();
-        buttons.sort_by(|a, b| a.min_x().total_cmp(&b.min_x()));
-        let (inset, height, rail_height) = shot.runner().run_in(|| {
-            (FIELD_INSET.px(), Dim::InlineButton.px(), Dim::Control.px())
-        });
-        Geo { container, rail, tabs, closes, titles, buttons, inset, height, rail_height }
-    }
-
-    fn contains(outer: &Area, inner: &Area, slack: f32) -> bool {
-        inner.min_x() >= outer.min_x() - slack
-            && inner.max_x() <= outer.max_x() + slack
-            && inner.min_y() >= outer.min_y() - slack
-            && inner.max_y() <= outer.max_y() + slack
-    }
-
-    fn render(window: f32, fixed: Fixed) -> (Snapshot, Geo) {
-        let mut shot = Snapshot::new(
-            move || Root(fixed).into_element(),
-            (window, 200.0),
-        );
-        shot.settle(Duration::from_millis(400));
-        let geo = read(&mut shot);
-        (shot, geo)
-    }
-
-    /// Check one strip: everything inside its container and its rail, the
-    /// tabs one width, the close slot reserved on every tab, the end buttons
-    /// pinned and clear of the tabs.
-    fn check(case: &str, window: f32, container: f32, count: usize, add: bool, long: bool) {
-        let (_shot, geo) = render(window, Fixed { count, container, add, long });
-        let Geo { rail, inset, height, rail_height, .. } = geo;
-        let near = |a: f32, b: f32| (a - b).abs() < 0.6;
-        assert!(contains(&geo.container, &rail, 0.5), "{case}: the rail {rail:?} spills out of its container {:?}", geo.container);
-        assert!(near(rail.height(), rail_height), "{case}: the rail is {} tall", rail.height());
-        assert_eq!(geo.tabs.len(), count, "{case}: a tab is drawn for each");
-        // Tabs: one height and, while they all show, one width.
-        for tab in &geo.tabs {
-            assert!(near(tab.height(), height), "{case}: a tab is {} tall, not {height}", tab.height());
-            assert!(near(tab.min_y() - rail.min_y(), inset), "{case}: a tab sits {inset} px from the rail's top");
-            assert!(near(rail.max_y() - tab.max_y(), inset), "{case}: a tab sits {inset} px from the rail's bottom");
-        }
-        let first = geo.tabs[0];
-        assert!(near(first.min_x() - rail.min_x(), inset), "{case}: the first tab keeps the rail's inset");
-        let width = first.width();
-        for tab in &geo.tabs {
-            assert!(near(tab.width(), width), "{case}: tab widths differ: {} and {width}", tab.width());
-        }
-        // The close slot is reserved on every tab, with an equal inset above, below and after it.
-        assert_eq!(geo.closes.len(), if count > 1 { count } else { 0 }, "{case}: a lone tab has no close slot");
-        for (tab, close) in geo.tabs.iter().zip(&geo.closes) {
-            assert!(contains(tab, close, 0.5), "{case}: the close slot {close:?} is outside its tab {tab:?}");
-            assert!(near(tab.max_x() - close.max_x(), inset), "{case}: the close slot is {} from the tab's end", tab.max_x() - close.max_x());
-            assert!(
-                near(close.min_y() - tab.min_y(), tab.max_y() - close.max_y()),
-                "{case}: the close slot is not centred in its tab"
-            );
-            assert!(near(close.width(), close.height()), "{case}: the close slot is square");
-        }
-        // A title is cut before the close slot, never under it.
-        for (index, title) in geo.titles.iter().enumerate() {
-            if let Some(close) = geo.closes.get(index) {
-                assert!(title.max_x() <= close.min_x() + 0.5, "{case}: title {index} runs under the close slot");
-            }
-        }
-        // The end buttons: inside the rail, square, centred, pinned to its end, clear of the tabs.
-        let expected = usize::from(add) + usize::from(width <= TAB_MIN_PX + 0.6 && count > 1);
-        for button in &geo.buttons {
-            assert!(contains(&rail, button, 0.5), "{case}: a button {button:?} is outside the rail {rail:?}");
-            assert!(near(button.width(), height) && near(button.height(), height), "{case}: a button is {}x{}", button.width(), button.height());
-            assert!(near(button.min_y() - rail.min_y(), inset), "{case}: a button is centred in the rail");
-        }
-        if add {
-            let new = geo.buttons.last().expect("the New tab button");
-            assert!(near(rail.max_x() - new.max_x(), inset), "{case}: the New tab button is pinned to the rail's end: {:?}, rail {rail:?}, tabs {:?}", geo.buttons, geo.tabs);
-            if let Some(list) = geo.buttons.iter().rev().nth(1) {
-                assert!(near(new.min_x() - list.max_x(), inset), "{case}: the buttons are an inset apart");
-            }
-        }
-        assert!(geo.buttons.len() <= expected.max(2), "{case}: {} end buttons", geo.buttons.len());
-        let overflowing = count as f32 * TAB_MIN_PX + (count as f32 - 1.0) * inset > container - 2.0 * inset - if add { height + inset } else { 0.0 } + 0.01;
-        if !overflowing {
-            // Every tab is inside the rail, before the end buttons.
-            let limit = geo.buttons.first().map_or(rail.max_x() - inset, |button| button.min_x() - inset);
-            let last = geo.tabs.last().unwrap();
-            assert!(last.max_x() <= limit + 0.6, "{case}: the last tab ({}) overlaps what follows ({limit})", last.max_x());
-            for pair in geo.tabs.windows(2) {
-                assert!(near(pair[1].min_x() - pair[0].max_x(), inset), "{case}: tabs are an inset apart");
-            }
-            assert!(width <= TAB_MAX_PX + 0.6, "{case}: tabs are {width} wide, past the token");
-        } else {
-            assert!(near(width, TAB_MIN_PX), "{case}: scrolling tabs are {width} wide, not the minimum");
-            assert!(geo.buttons.len() >= 1 + usize::from(add), "{case}: the tab list button is drawn when tabs overflow");
-            assert!(near(rail.width(), geo.container.width()), "{case}: an overflowing rail fills its container");
-        }
-    }
-
-    const TAB_MIN_PX: f32 = 96.0;
-    const TAB_MAX_PX: f32 = 240.0;
 
     #[test]
-    fn at_mouse_density_everything_is_inside_the_rail_at_every_width() {
-        for container in [260.0, 340.0, 440.0, 600.0, 720.0] {
-            for (count, add, long) in [(1, true, false), (2, true, false), (3, true, false), (3, false, false), (6, true, false), (12, true, false), (2, true, true)] {
-                check(&format!("regular {container}px, {count} tabs, add {add}, long {long}"), 800.0, container, count, add, long);
-            }
+    fn unselected_titles_are_readable_on_the_strip_in_both_schemes() {
+        use crate::contrast::{AA_TEXT, composite, worst_ratio};
+        use crate::theme::{Scheme, Tokens};
+        for scheme in [Scheme::PreferDark, Scheme::PreferLight] {
+            let tokens = Tokens::new("blue", scheme, false);
+            let strip = STRIP.color(&tokens);
+            let surface = SURFACE.color(&tokens);
+            // An unselected title is muted ink on the strip, under the hover
+            // fill and the pressed fill too; the selected title is text ink
+            // on the surface.
+            let grounds = [
+                strip,
+                composite(Paint::Hover.color(&tokens), strip),
+                composite(Paint::Pressed.color(&tokens), strip),
+            ];
+            let muted = Ink::Muted.color(&tokens);
+            assert!(worst_ratio(muted, &grounds) >= AA_TEXT, "{scheme:?}: muted on the strip is {}", worst_ratio(muted, &grounds));
+            let text = Ink::Text.color(&tokens);
+            assert!(worst_ratio(text, &[surface]) >= AA_TEXT, "{scheme:?}: text on the surface");
         }
     }
 
     #[test]
-    fn at_compact_density_everything_is_inside_the_rail_at_every_width() {
-        for container in [200.0, 280.0, 340.0] {
-            for (count, add, long) in [(1, true, false), (2, true, false), (3, true, false), (6, true, false), (2, true, true)] {
-                let (window, _) = (390.0, ());
-                // The compact density's tokens are not the regular ones.
-                check_compact(&format!("compact {container}px, {count} tabs, add {add}, long {long}"), window, container, count, add, long);
-            }
+    fn the_strip_is_one_step_off_the_surface_in_both_schemes() {
+        use crate::theme::{Scheme, Tokens};
+        for scheme in [Scheme::PreferDark, Scheme::PreferLight] {
+            let tokens = Tokens::new("blue", scheme, false);
+            let (strip, surface) = (STRIP.color(&tokens), SURFACE.color(&tokens));
+            assert_ne!(strip, surface);
+            let luma = |c: Color| 0.2126 * c.r() as f32 + 0.7152 * c.g() as f32 + 0.0722 * c.b() as f32;
+            assert!(luma(strip) < luma(surface), "{scheme:?}: the strip is darker than the surface");
         }
-    }
-
-    fn check_compact(case: &str, window: f32, container: f32, count: usize, add: bool, long: bool) {
-        let (_shot, geo) = render(window, Fixed { count, container, add, long });
-        let near = |a: f32, b: f32| (a - b).abs() < 0.6;
-        assert_eq!(geo.inset, 0.0, "{case}: no rail inset at compact density");
-        assert!(contains(&geo.container, &geo.rail, 0.5), "{case}: the rail spills out of its container");
-        assert!(near(geo.rail.height(), 44.0), "{case}: the rail is {} tall", geo.rail.height());
-        for tab in &geo.tabs {
-            assert!(near(tab.height(), 44.0), "{case}: a tab is {} tall: not a touch target", tab.height());
-        }
-        for close in &geo.closes {
-            assert!(near(close.width(), 44.0) && near(close.height(), 44.0), "{case}: the close target is {}x{}", close.width(), close.height());
-        }
-        for button in &geo.buttons {
-            assert!(near(button.width(), 44.0) && near(button.height(), 44.0), "{case}: a button is {}x{}", button.width(), button.height());
-            assert!(contains(&geo.rail, button, 0.5), "{case}: a button is outside the rail");
-        }
-        let widths: Vec<f32> = geo.tabs.iter().map(Area::width).collect();
-        assert!(widths.windows(2).all(|pair| near(pair[0], pair[1])), "{case}: tab widths differ: {widths:?}");
-        if add {
-            let new = geo.buttons.last().unwrap_or_else(|| panic!("{case}: no New tab button; {geo:?}"));
-            assert!(near(geo.rail.max_x() - new.max_x(), 0.0), "{case}: the New tab button is flush with the rail's end");
-        }
-        for (tab, close) in geo.tabs.iter().zip(&geo.closes) {
-            assert!(near(tab.max_x(), close.max_x()), "{case}: the close target is flush with its tab");
-        }
-    }
-}
-
-#[cfg(all(test, feature = "testing"))]
-mod interaction_tests {
-    use std::time::Duration;
-
-    use freya::prelude::*;
-    use torin::prelude::Area;
-
-    use super::*;
-    use crate::snapshot::Snapshot;
-    use crate::theme::provide_tokens;
-    use crate::window::WindowHost;
-
-    /// The window root: it provides the tokens the window host reads.
-    #[derive(PartialEq)]
-    struct Root(f32);
-
-    impl Component for Root {
-        fn render(&self) -> impl IntoElement {
-            let _ = provide_tokens();
-            WindowHost::new(Strip(self.0))
-        }
-    }
-
-    /// A strip that keeps its own tabs, like a host does.
-    #[derive(PartialEq)]
-    struct Strip(f32);
-
-    impl Component for Strip {
-        fn render(&self) -> impl IntoElement {
-            let tokens = use_tokens();
-            let mut tabs = use_state(|| {
-                vec![TabItem::new(1, "Home"), TabItem::new(2, "Documents"), TabItem::new(3, "Downloads")]
-            });
-            let mut selected = use_state(|| 1_u64);
-            let mut next = use_state(|| 4_u64);
-            let strip = tab_strip(tabs.read().clone(), selected())
-                .on_select(move |id| selected.set(id))
-                .on_close(move |id| {
-                    let mut list = tabs.write();
-                    let Some(index) = list.iter().position(|tab| tab.id == id) else {
-                        return;
-                    };
-                    list.remove(index);
-                    if selected() == id {
-                        selected.set(list[index.min(list.len() - 1)].id);
-                    }
-                })
-                .on_new(move |_| {
-                    let id = next();
-                    next.set(id + 1);
-                    tabs.write().push(TabItem::new(id, format!("Tab {id}")));
-                    selected.set(id);
-                })
-                .on_reorder(move |(id, to): (u64, usize)| {
-                    let mut list = tabs.write();
-                    if let Some(from) = list.iter().position(|tab| tab.id == id) {
-                        let tab = list.remove(from);
-                        let to = to.min(list.len());
-                        list.insert(to, tab);
-                    }
-                });
-            rect().expanded().tw(&tokens, &[p(S4)]).child(
-                rect().component("Container").width(Size::px(self.0)).child(strip),
-            )
-        }
-    }
-
-    fn start(width: f32) -> Snapshot {
-        let mut shot = Snapshot::new(move || Root(width).into_element(), (800.0, 200.0));
-        shot.settle(Duration::from_millis(400));
-        shot
-    }
-
-    /// The tabs in order: name and whether it is the selected one.
-    fn tabs_of(shot: &mut Snapshot) -> Vec<(String, bool)> {
-        shot.runner().find_many(|_, element| {
-            let data = element.accessibility();
-            (data.builder.class_name() == Some("Tab")).then(|| {
-                (
-                    data.builder.label().unwrap_or_default().to_string(),
-                    data.builder.is_selected() == Some(true),
-                )
-            })
-        })
-    }
-
-    fn selected(shot: &mut Snapshot) -> String {
-        tabs_of(shot)
-            .into_iter()
-            .find(|(_, selected)| *selected)
-            .map(|(name, _)| name)
-            .unwrap_or_default()
-    }
-
-    fn areas(shot: &mut Snapshot, name: &'static str) -> Vec<Area> {
-        shot.runner().find_many(|node, element| {
-            (element.accessibility().builder.class_name() == Some(name)).then(|| node.layout().area)
-        })
-    }
-
-    fn rest(shot: &mut Snapshot) {
-        shot.settle(Duration::from_millis(400));
-    }
-
-    #[test]
-    fn the_keyboard_selects_closes_and_adds() {
-        let mut shot = start(600.0);
-        // Tab reaches the selected tab, the only one in the tab order.
-        shot.key(Key::Named(NamedKey::Tab));
-        rest(&mut shot);
-        assert_eq!(selected(&mut shot), "Home");
-        shot.key(Key::Named(NamedKey::ArrowRight));
-        rest(&mut shot);
-        assert_eq!(selected(&mut shot), "Documents");
-        shot.key(Key::Named(NamedKey::End));
-        rest(&mut shot);
-        assert_eq!(selected(&mut shot), "Downloads");
-        shot.key(Key::Named(NamedKey::ArrowRight));
-        rest(&mut shot);
-        assert_eq!(selected(&mut shot), "Downloads", "Right stops at the last tab");
-        shot.key(Key::Named(NamedKey::Home));
-        rest(&mut shot);
-        assert_eq!(selected(&mut shot), "Home");
-        // The focus follows the selection, so the keys keep working.
-        shot.key(Key::Named(NamedKey::ArrowRight));
-        shot.key(Key::Named(NamedKey::ArrowRight));
-        rest(&mut shot);
-        assert_eq!(selected(&mut shot), "Downloads");
-
-        shot.key(Key::Named(NamedKey::Delete));
-        rest(&mut shot);
-        let names: Vec<String> = tabs_of(&mut shot).into_iter().map(|(name, _)| name).collect();
-        assert_eq!(names, ["Home", "Documents"], "Delete closes the selected tab");
-        assert_eq!(selected(&mut shot), "Documents", "the neighbour takes the selection");
-        shot.key(Key::Named(NamedKey::ArrowLeft));
-        rest(&mut shot);
-        assert_eq!(selected(&mut shot), "Home", "the focus followed the close");
-
-        shot.key_with(Key::Character("t".into()), Modifiers::CONTROL);
-        rest(&mut shot);
-        assert_eq!(tabs_of(&mut shot).len(), 3, "Ctrl+T adds a tab");
-        assert_eq!(selected(&mut shot), "Tab 4");
-        shot.key_with(Key::Character("w".into()), Modifiers::CONTROL);
-        rest(&mut shot);
-        assert_eq!(tabs_of(&mut shot).len(), 2, "Ctrl+W closes the selected tab");
-    }
-
-    #[test]
-    fn a_lone_tab_cannot_be_closed() {
-        let mut shot = start(600.0);
-        shot.key(Key::Named(NamedKey::Tab));
-        shot.key(Key::Named(NamedKey::Delete));
-        rest(&mut shot);
-        shot.key(Key::Named(NamedKey::Delete));
-        rest(&mut shot);
-        assert_eq!(tabs_of(&mut shot).len(), 1);
-        shot.key(Key::Named(NamedKey::Delete));
-        rest(&mut shot);
-        assert_eq!(tabs_of(&mut shot).len(), 1, "the last tab stays");
-        assert!(areas(&mut shot, "TabClose").is_empty(), "and it has no close button");
-    }
-
-    #[test]
-    fn the_new_tab_button_adds_and_the_widths_never_leave_the_rail_while_they_move() {
-        let mut shot = start(600.0);
-        let rail = areas(&mut shot, "TabStrip")[0];
-        let buttons: Vec<Area> = areas(&mut shot, "IconButton");
-        let new = buttons.last().copied().expect("the New tab button");
-        let before = areas(&mut shot, "Tab");
-        assert_eq!(before.len(), 3);
-        shot.click(new.min_x() + new.width() / 2.0, new.min_y() + new.height() / 2.0);
-        let mut seen = std::collections::BTreeSet::new();
-        for _ in 0..30 {
-            shot.settle(Duration::from_millis(16));
-            let rail_now = areas(&mut shot, "TabStrip")[0];
-            let tabs = areas(&mut shot, "Tab");
-            seen.insert(tabs.len());
-            for tab in &tabs {
-                assert!(
-                    tab.max_x() <= rail_now.max_x() + 0.6,
-                    "a tab at {tab:?} is outside the rail {rail_now:?} while a tab arrives"
-                );
-            }
-            let first = tabs[0].width();
-            let widths: Vec<f32> = tabs.iter().take(3).map(Area::width).collect();
-            assert!(
-                widths.iter().all(|width| (width - first).abs() < 0.6),
-                "the tabs that were already there keep one width while the new one grows: {widths:?}"
-            );
-        }
-        assert!(seen.contains(&4));
-        rest(&mut shot);
-        let after = areas(&mut shot, "Tab");
-        assert_eq!(after.len(), 4);
-        assert!(after[0].width() < before[0].width(), "the tabs made room");
-        assert!(rail.width() > 0.0);
-        assert_eq!(selected(&mut shot), "Tab 4", "the new tab is selected");
-    }
-
-    #[test]
-    fn closing_a_tab_with_its_button_shrinks_it_away_and_the_others_widen() {
-        let mut shot = start(600.0);
-        // The selected tab shows its close button.
-        let close = areas(&mut shot, "IconButton")
-            .into_iter()
-            .find(|button| button.width() < 24.0)
-            .expect("the selected tab's close button");
-        let before = areas(&mut shot, "Tab")[1].width();
-        shot.click(close.min_x() + close.width() / 2.0, close.min_y() + close.height() / 2.0);
-        let mut widest_gap = 0.0_f32;
-        let mut last_end = None;
-        for _ in 0..30 {
-            shot.settle(Duration::from_millis(16));
-            let rail = areas(&mut shot, "TabStrip")[0];
-            let tabs = areas(&mut shot, "Tab");
-            for tab in &tabs {
-                assert!(tab.max_x() <= rail.max_x() + 0.6, "a tab leaves the rail while one closes");
-            }
-            let end = tabs.last().unwrap().max_x();
-            if let Some(last) = last_end {
-                widest_gap = widest_gap.max((end - last as f32).abs());
-            }
-            last_end = Some(end);
-        }
-        rest(&mut shot);
-        let names: Vec<String> = tabs_of(&mut shot).into_iter().map(|(name, _)| name).collect();
-        assert_eq!(names, ["Documents", "Downloads"]);
-        assert!(areas(&mut shot, "Tab")[0].width() >= before - 0.6, "the remaining tabs are no narrower");
-        assert!(widest_gap < 60.0, "the strip closed ranks in steps, not in one jump ({widest_gap})");
-    }
-
-    #[test]
-    fn dragging_a_tab_past_its_neighbour_reorders_and_a_short_drag_does_not() {
-        let mut shot = start(600.0);
-        let tabs = areas(&mut shot, "Tab");
-        let (a, c) = (tabs[0], tabs[2]);
-        let y = a.min_y() + a.height() / 2.0;
-        // A drag from the first tab to the end of the last.
-        shot.drag((a.min_x() + 30.0, y), (c.max_x() - 10.0, y));
-        rest(&mut shot);
-        let names: Vec<String> = tabs_of(&mut shot).into_iter().map(|(name, _)| name).collect();
-        assert_eq!(names, ["Documents", "Downloads", "Home"]);
-        assert_eq!(selected(&mut shot), "Home", "the dragged tab is the selected one");
-        // A drag that stays on the tab only selects it.
-        let tabs = areas(&mut shot, "Tab");
-        let b = tabs[1];
-        shot.drag((b.min_x() + 30.0, y), (b.min_x() + 33.0, y));
-        rest(&mut shot);
-        let names: Vec<String> = tabs_of(&mut shot).into_iter().map(|(name, _)| name).collect();
-        assert_eq!(names, ["Documents", "Downloads", "Home"]);
-    }
-
-    #[test]
-    fn many_tabs_scroll_with_the_new_tab_button_pinned_and_the_selection_in_view() {
-        let mut shot = start(300.0);
-        let new_x = |shot: &mut Snapshot| areas(shot, "IconButton").last().copied().expect("the New tab button").min_x();
-        let pinned = new_x(&mut shot);
-        shot.key(Key::Named(NamedKey::Tab));
-        for _ in 0..8 {
-            shot.key_with(Key::Character("t".into()), Modifiers::CONTROL);
-            rest(&mut shot);
-        }
-        assert_eq!(tabs_of(&mut shot).len(), 11);
-        assert_eq!(new_x(&mut shot), pinned, "the New tab button does not move while the tabs scroll");
-        // The newest tab, selected, is scrolled into the region, which ends before the buttons.
-        let rail = areas(&mut shot, "TabStrip")[0];
-        let tab = areas(&mut shot, "Tab").into_iter().last().unwrap();
-        let tab_list = areas(&mut shot, "IconButton").into_iter().rev().nth(1).expect("the tab list button");
-        assert!(
-            tab.max_x() <= tab_list.min_x() + 0.6 && tab.min_x() >= rail.min_x(),
-            "the selected tab {tab:?} is in view, before the buttons ({tab_list:?}) in the rail {rail:?}"
-        );
-        shot.key(Key::Named(NamedKey::Home));
-        rest(&mut shot);
-        let first = areas(&mut shot, "Tab")[0];
-        assert!(first.min_x() >= rail.min_x() && first.max_x() <= tab_list.min_x() + 0.6, "Home scrolls back to the first tab");
     }
 }

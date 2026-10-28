@@ -29,13 +29,12 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, SystemTime};
 
+use bingux_files::Entry;
 use bingux_files::thumbs::{self, Bucket};
-use bingux_files::{Category, Entry};
 use freya::prelude::*;
 use freya::torin::prelude::Size2D;
 
-use super::view::entry_glyph;
-use crate::icons::Icon;
+use super::file_icon::{FileIcon, Source, file_icon_view};
 use crate::style::*;
 
 /// How long a slot waits in view before it loads its picture.
@@ -59,55 +58,28 @@ pub enum Preview {
     Full,
 }
 
-/// Where a file's picture can come from.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Source {
-    /// The cache, or else the file itself.
-    Decode,
-    /// The cache only.
-    Cache,
-}
-
-/// Where the picture of `entry` comes from, if it can have one.
-pub fn source_of(entry: &Entry) -> Option<Source> {
-    match entry.category() {
-        Category::Image => Some(Source::Decode),
-        Category::Video | Category::Document => Some(Source::Cache),
-        _ => None,
-    }
-}
-
-/// The icon of `entry` at `px` logical pixels square: its folder or file-type
-/// icon, in the accent for a folder and muted otherwise.
-pub fn glyph(tokens: &crate::theme::Tokens, entry: &Entry, px: u16) -> SvgViewer {
-    glyph_of(entry_glyph(entry), entry.is_dir(), tokens, px)
-}
-
-fn glyph_of(icon: Icon, folder: bool, tokens: &crate::theme::Tokens, px: u16) -> SvgViewer {
-    crate::icons::glyph(
-        icon,
-        f32::from(px),
-        if folder {
-            Paint::Accent.color(tokens)
-        } else {
-            Paint::Muted.color(tokens)
-        },
-    )
-}
-
 /// What stands for `entry` in a square slot `px` wide: its picture when
 /// `preview` allows one and the file can have one (the icon until it loads,
-/// and when it cannot be loaded), otherwise its icon. The slot is always `px`
-/// square and clips the picture to the small corner radius of the nested
+/// and when it cannot be loaded), otherwise its icon, drawn by
+/// [`file_icon_view`] with the accent when `selected`. The slot is always
+/// `px` square and clips the picture to the small corner radius of the nested
 /// box, [`Radius::Mark`].
-pub fn face(tokens: &crate::theme::Tokens, entry: &Entry, px: u16, bucket: u32, preview: Preview) -> Element {
+pub fn face(
+    tokens: &crate::theme::Tokens,
+    entry: &Entry,
+    px: u16,
+    bucket: u32,
+    preview: Preview,
+    selected: bool,
+) -> Element {
     let edge = f32::from(px);
-    let icon = glyph(tokens, entry, px);
+    let spec = FileIcon::for_entry(entry);
+    let icon = file_icon_view(tokens, &spec, px, selected);
     let slot = rect().width(Size::px(edge)).height(Size::px(edge));
     let source = match preview {
         Preview::Off => None,
-        Preview::Cached => source_of(entry).map(|_| Source::Cache),
-        Preview::Full => source_of(entry),
+        Preview::Cached => spec.thumbnail.map(|_| Source::Cache),
+        Preview::Full => spec.thumbnail,
     };
     let Some(source) = source else {
         return slot.child(icon).into();
@@ -206,29 +178,22 @@ impl Component for Thumb {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
-    use bingux_files::{Entry, Kind};
-
     use super::*;
 
-    fn file(name: &str) -> Entry {
-        Entry::named(PathBuf::from("/x").join(name), name.to_owned(), Kind::File, false, false)
-    }
-
     #[test]
-    fn images_decode_documents_and_videos_only_use_the_cache() {
-        assert_eq!(source_of(&file("a.png")), Some(Source::Decode));
-        assert_eq!(source_of(&file("a.jpg")), Some(Source::Decode));
-        assert_eq!(source_of(&file("a.pdf")), Some(Source::Cache));
-        assert_eq!(source_of(&file("a.mp4")), Some(Source::Cache));
-        assert_eq!(source_of(&file("a.txt")), None);
-        assert_eq!(source_of(&file("a.zip")), None);
-    }
-
-    #[test]
-    fn a_folder_has_no_picture() {
-        let folder = Entry::named(PathBuf::from("/x/d"), "d".to_owned(), Kind::Directory, false, false);
-        assert_eq!(source_of(&folder), None);
+    fn a_preview_mode_decides_where_a_picture_may_come_from() {
+        use bingux_files::Kind;
+        let file = |name: &str| {
+            Entry::named(PathBuf::from("/x").join(name), name.to_owned(), Kind::File, false, false)
+        };
+        let source = |entry: &Entry, preview: Preview| match preview {
+            Preview::Off => None,
+            Preview::Cached => FileIcon::for_entry(entry).thumbnail.map(|_| Source::Cache),
+            Preview::Full => FileIcon::for_entry(entry).thumbnail,
+        };
+        assert_eq!(source(&file("a.png"), Preview::Full), Some(Source::Decode));
+        assert_eq!(source(&file("a.png"), Preview::Cached), Some(Source::Cache));
+        assert_eq!(source(&file("a.png"), Preview::Off), None);
+        assert_eq!(source(&file("a.txt"), Preview::Full), None);
     }
 }

@@ -7,6 +7,8 @@
 
 mod app;
 mod apps;
+#[cfg(all(test, feature = "snapshot"))]
+mod header_rest_tests;
 mod pages;
 mod passwd;
 mod routes;
@@ -50,6 +52,10 @@ fn main() {
         .routes(routes::table())
         .title("Settings")
         .borderless()
+        .about(bingux_ui::app_info!(
+            description = "Change Bingux and system settings",
+            licence_text = include_str!("../../../COPYING"),
+        ))
         .usage(usage())
         .run(|| app::App);
 }
@@ -150,8 +156,6 @@ fn usage() -> String {
 #[cfg(feature = "snapshot")]
 fn snapshot_pages(dir: &str, only: &[String]) {
     use bingux_ui::prelude::Location;
-    use bingux_ui::style::{Paint, Tw, bg, h_full, w_full};
-    use freya::prelude::*;
     // Each name is a location, as on the command line: `network`,
     // `network/wifi/saved`. BINGUX_SETTINGS_SNAPSHOT_ADDRESS="network/wifi/saved"
     // renders that one location (it overrides the list), so a page can be
@@ -214,18 +218,17 @@ fn snapshot_pages(dir: &str, only: &[String]) {
         } else {
             address.clone()
         };
-        let mut shot = bingux_ui::snapshot::Snapshot::new(
-            move || {
-                let tokens = theme::load_tokens();
-                bingux_ui::nav::provide_router(std::sync::Arc::new(routes::table()), &page);
-                Element::from(
-                    rect()
-                        .tw(&tokens, &[w_full(), h_full(), bg(Paint::Bg)])
-                        .child(app::App),
-                )
-            },
-            size,
-        );
+        // BINGUX_SETTINGS_SNAPSHOT_TIMING=N mounts the page N times and prints
+        // what the mount frame cost on the UI thread: no window, no slide, no
+        // GPU, so the figure is the render, diff, layout and text work alone.
+        if let Some(rounds) = std::env::var("BINGUX_SETTINGS_SNAPSHOT_TIMING")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+        {
+            snapshot_timing(&address, &page, size, rounds);
+            continue;
+        }
+        let mut shot = bingux_ui::snapshot::Snapshot::new(snapshot_app(page), size);
         // BINGUX_SETTINGS_SNAPSHOT_FRAMES=DIR records every frame of the run,
         // from the first load on, to DIR/<page>/ as NNNNNN.png plus
         // frames.jsonl. Used by scripts/frame-walk.py to find layout shifts.
@@ -337,6 +340,55 @@ fn snapshot_pages(dir: &str, only: &[String]) {
         shot.save(&path);
         println!("[snapshot] wrote {path}");
     }
+}
+
+/// The window root a snapshot mounts for `page`: the app on the page's route.
+#[cfg(feature = "snapshot")]
+fn snapshot_app(page: bingux_ui::prelude::Location) -> impl Fn() -> freya::prelude::Element {
+    use bingux_ui::style::{Paint, Tw, bg, h_full, w_full};
+    use freya::prelude::*;
+    move || {
+        let tokens = theme::load_tokens();
+        bingux_ui::nav::provide_router(std::sync::Arc::new(routes::table()), &page);
+        Element::from(
+            rect()
+                .tw(&tokens, &[w_full(), h_full(), bg(Paint::Bg)])
+                .child(app::App),
+        )
+    }
+}
+
+/// Opens `address` from a settled page `rounds` times and prints the
+/// milliseconds the UI thread spent on the first update after it (the mount:
+/// components, diff, layout, text), the first one apart (cold caches) and the
+/// median and best of the rest. The page it comes from is the Power page.
+#[cfg(feature = "snapshot")]
+fn snapshot_timing(
+    address: &bingux_ui::prelude::Location,
+    page: &bingux_ui::prelude::Location,
+    size: (f32, f32),
+    rounds: usize,
+) {
+    use std::time::{Duration, Instant};
+    let home = PageId::Power.location();
+    let mut shot = bingux_ui::snapshot::Snapshot::new(snapshot_app(home.clone()), size);
+    shot.settle(Duration::from_millis(600));
+    let mut times: Vec<f64> = Vec::new();
+    for _ in 0..rounds.max(2) {
+        let started = Instant::now();
+        shot.navigate(page.clone());
+        times.push(started.elapsed().as_secs_f64() * 1000.0);
+        shot.settle(Duration::from_millis(400));
+        shot.navigate(home.clone()).settle(Duration::from_millis(400));
+    }
+    let first = times.remove(0);
+    times.sort_by(f64::total_cmp);
+    println!(
+        "[timing] {:28} first {first:7.1} ms  median {:7.1} ms  best {:7.1} ms",
+        snapshot_name(address),
+        times[times.len() / 2],
+        times[0],
+    );
 }
 
 /// The file name of a location's snapshot: its segments joined by `_`, so

@@ -15,6 +15,8 @@ const LOADING_OPACITY: f32 = 0.55;
 /// `page` as it is while loading: dimmed, with a pane over it that takes every
 /// press. Returns `page` untouched once `loading` is false.
 pub fn veiled(page: Rect, loading: bool) -> Rect {
+    // The page mounts a group a frame (see `bingux_ui::stage`), veiled or not.
+    let page = bingux_ui::stage::staged(page);
     if !loading {
         return page;
     }

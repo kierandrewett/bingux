@@ -133,9 +133,10 @@ const fn pair(what: &'static str, fg: Fg, bg: Bg, need: Requirement) -> Pair {
 }
 
 /// The layers a control or text can sit on directly.
-const LAYERS: [Paint; 6] = [
+const LAYERS: [Paint; 7] = [
     Paint::Bg,
     Paint::Sidebar,
+    Paint::TabStrip,
     Paint::Card,
     Paint::Control,
     Paint::Raised,
@@ -163,7 +164,7 @@ pub fn pairs() -> Vec<Pair> {
     }
     // Interaction layers: hover, press and the selected row or sidebar item.
     for ink in [Ink::Text, Ink::Muted] {
-        for layer in [Paint::Bg, Paint::Sidebar, Paint::Card, Paint::Control, Paint::Popover] {
+        for layer in [Paint::Bg, Paint::Sidebar, Paint::TabStrip, Paint::Card, Paint::Control, Paint::Popover] {
             for state in [State::Hover, State::Pressed, State::Selected] {
                 out.push(pair(
                     "text ink on an interaction layer",
@@ -211,8 +212,9 @@ pub fn pairs() -> Vec<Pair> {
         ));
     }
     // Banners and toasts of every kind: the ink is the hue darkened (lightened
-    // on a dark scheme) on its tinted fill, the action button is filled with
-    // the hue and carries its own on-colour.
+    // on a dark scheme) on its tinted fill. An action button is quiet: its
+    // label is that same ink with no fill of its own, so it is held to the
+    // same ratio at rest and under the hover and press layers.
     for kind in BannerKind::ALL {
         let fill_paint = Paint::NoticeFill(kind);
         let fill = Bg::layer(fill_paint);
@@ -232,18 +234,12 @@ pub fn pairs() -> Vec<Pair> {
         }
         for state in [State::Rest, State::Hover, State::Pressed] {
             out.push(pair(
-                "action label on a banner or toast",
-                Fg::Paint(Paint::NoticeOnAction(kind)),
-                Bg::over(Paint::NoticeAction(kind), fill_paint).state(state),
+                "quiet action label on a banner or toast",
+                Fg::Ink(Ink::Notice(kind)),
+                fill.state(state),
                 text,
             ));
         }
-        out.push(pair(
-            "action button on its banner or toast",
-            Fg::Paint(Paint::NoticeAction(kind)),
-            fill,
-            ui,
-        ));
         let mut edge = pair(
             "banner or toast edge",
             Fg::Paint(Paint::NoticeEdge(kind)),

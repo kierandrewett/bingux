@@ -210,11 +210,14 @@ RENDER_BLOCKING = re.compile(
 BLOCKING_ALLOWED: dict[str, str] = {
     "packages/bingux-ui/src/runtime.rs": "the guarded wrappers themselves",
     "packages/bingux-ui/src/resilience/relaunch.rs": "`exec` of a fresh copy after an unrecoverable failure: the process is being replaced",
+    "packages/bingux-ui/src/files/compress.rs": "load_names reads the destination folder inside a use_resource loader, on a worker, never in render",
     "packages/bingux-ui/src/task.rs": "the worker pool: its threads sleep and spawn by design",
     "packages/bingux-ui/src/theme.rs": "reads fonts and the font family before the window exists (Application::run), never in render",
     "packages/bingux-ui/src/typography.rs": "the monospace family is asked once, at start-up, before the window exists",
     "packages/bingux-ui/src/app.rs": "the single-instance socket and its listener thread",
     "packages/bingux-ui/src/snapshot.rs": "the headless test runner, no window",
+    "packages/bingux-ui/src/about/details.rs": "reads os-release, the kernel release and sysfs once, in Application::run before the window exists; never in render",
+    "packages/bingux-ui/src/about/link.rs": "the xdg-open child, started from a press handler and reaped on a thread of its own, and the licence-file read, run by use_resource on a worker",
     "packages/bingux-settings/src/apps.rs": "the application scanner and its loader thread; nothing in it is called from render",
     "packages/bingux-settings/src/passwd.rs": "runs `passwd` on its own thread and polls it there",
     "packages/bingux-settings/src/pages/applications.rs": "autostart file write, run inside the worker closure of the switch row",
@@ -428,6 +431,32 @@ def skipped(path: Path) -> bool:
     return path in SKIP_FILES or any(parent in SKIP_DIRS for parent in path.parents)
 
 
+# --- Every application has an About window ------------------------------------
+#
+# `Application::run` registers the About window of every app, so one cannot be
+# missing; what an app can forget is to say who it is. The app crate's
+# `src/main.rs` therefore calls `.about(bingux_ui::app_info!(..))` on its
+# `Application`: the version, licence, website and authors come from its
+# Cargo.toml and the window is not the bare placeholder.
+
+
+def about_problems() -> list[str]:
+    found = []
+    for main in sorted((ROOT / "packages").glob("*/src/main.rs")):
+        relative = main.relative_to(ROOT / "packages").parts
+        if relative[0] == "vendor":
+            continue
+        text = strip_comments(main.read_text())
+        if "Application::new(" not in text:
+            continue
+        if not re.search(r"\.about\(\s*(?:bingux_ui::)?app_info!\s*\(", text):
+            found.append(
+                f"{main.relative_to(ROOT)}: starts an Application without `.about(bingux_ui::app_info!(..))`; "
+                "every Bingux app tells its About window who it is (docs/bingux-ui.md, \"About window\")"
+            )
+    return found
+
+
 def main() -> int:
     problems = []
     for source in SOURCES:
@@ -449,15 +478,20 @@ def main() -> int:
         launches.extend(check_launch(path))
     blocking = blocking_problems()
     panics = panic_problems()
-    for problem in problems + launches + blocking + panics:
+    abouts = about_problems()
+    everything = problems + launches + blocking + panics + abouts
+    for problem in everything:
         print(problem)
-    if problems or launches or blocking or panics:
+    if everything:
         print(
-            f"\nui-lint: {len(problems) + len(launches) + len(blocking) + len(panics)} problem(s). Style boxes with tokens from "
+            f"\nui-lint: {len(everything)} problem(s). Style boxes with tokens from "
             "packages/bingux-ui/src/style/; start windows with Application::run."
         )
         return 1
-    print("ui-lint: every box is styled with tokens, and every window starts through Application::run.")
+    print(
+        "ui-lint: every box is styled with tokens, every window starts through Application::run "
+        "and every app says who it is."
+    )
     return 0
 
 

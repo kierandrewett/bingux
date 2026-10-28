@@ -35,8 +35,10 @@ pub struct HeaderBar {
     trailing: Vec<Element>,
     background: Paint,
     title_slot: Option<Element>,
+    tab_slot: Option<Element>,
     busy: bool,
     draggable: bool,
+    title_start: bool,
 }
 
 impl HeaderBar {
@@ -47,8 +49,10 @@ impl HeaderBar {
             trailing: Vec::new(),
             background: Paint::Surface,
             title_slot: None,
+            tab_slot: None,
             busy: false,
             draggable: true,
+            title_start: false,
         }
     }
 
@@ -84,10 +88,30 @@ impl HeaderBar {
         self
     }
 
+    /// Put a strip of tabs where the title goes: from the start of the room
+    /// between the controls, filling it, and as tall as the bar, so the tabs
+    /// stand on the bar's bottom edge (see [`crate::controls::tab_frame`]).
+    /// The bar should be [`fill`](Self::fill)ed with [`Paint::Transparent`]
+    /// so the frame's strip shows behind the tabs. Replaces the title and
+    /// [`title_slot`](Self::title_slot).
+    pub fn tab_slot(mut self, strip: impl Into<Element>) -> Self {
+        self.tab_slot = Some(strip.into());
+        self
+    }
+
     /// Whether pressing the bar drags the window (on by default). A bar inside
     /// a dialog or a sheet is not a window title bar, so it turns this off.
     pub fn draggable(mut self, draggable: bool) -> Self {
         self.draggable = draggable;
+        self
+    }
+
+    /// Lay the title out from the start, in the room between the leading and
+    /// the trailing controls, instead of centring it on the bar. A viewer
+    /// header with many buttons uses this: a centred title would give up the
+    /// room of both sides' wider cluster and leave a narrow pane no name.
+    pub fn title_start(mut self, start: bool) -> Self {
+        self.title_start = start;
         self
     }
 }
@@ -140,7 +164,7 @@ impl Component for HeaderBar {
                     // Freya does not size an absolute box from top and bottom,
                     // so the row takes the bar's full height to centre the title.
                     .tw(&tokens, &[h_full(), flex_row(), items(Align::Center)])
-                    .child(text),
+                    .child(text.clone()),
             );
         let leading = rect()
             .tw(&tokens, &[flex_row(), items(Align::Center), gap(S1)])
@@ -157,7 +181,7 @@ impl Component for HeaderBar {
             .children(self.trailing.clone());
         let inert = try_consume_context::<InertControls>().is_some();
         let draggable = self.draggable;
-        rect()
+        let bar = rect()
             .component("HeaderBar")
             .tw(&tokens, HEADER)
             .tw(
@@ -171,11 +195,28 @@ impl Component for HeaderBar {
                 if !inert && draggable {
                     drag_on_pointer_down(event);
                 }
-            })
-            .child(title)
-            .child(leading)
-            .child(rect().tw(&tokens, &[w_flex()]))
-            .child(trailing)
+            });
+        match &self.tab_slot {
+            // A strip of tabs takes the room between the controls, from the
+            // start, and is as tall as the bar so its tabs reach the bottom edge.
+            Some(strip) => bar
+                .child(leading)
+                .child(rect().tw(&tokens, &[w_flex(), h_full()]).child(strip.clone()))
+                .child(trailing),
+            None if self.title_start => bar
+                .child(leading)
+                .child(
+                    rect()
+                        .tw(&tokens, &[w_flex(), h_full(), flex_row(), items(Align::Center), px(S2)])
+                        .child(text),
+                )
+                .child(trailing),
+            None => bar
+                .child(title)
+                .child(leading)
+                .child(rect().tw(&tokens, &[w_flex()]))
+                .child(trailing),
+        }
     }
 }
 
@@ -295,8 +336,7 @@ impl Component for WindowControl {
                 } else {
                     Paint::Text.color(&tokens)
                 },
-            ))
-            .focusable(focus(), Radius::Pill)
+            )).focusable(focus())
     }
 }
 

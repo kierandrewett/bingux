@@ -18,7 +18,7 @@
 //! Durations go through [`Tokens::motion`], so reduced motion turns every
 //! animation into an instant change.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -50,33 +50,57 @@ pub const PRESENCE_SCALE: f32 = 0.96;
 /// continues from where it is and never snaps. With `ms` of 0 (reduced
 /// motion) it jumps.
 pub fn use_tween(target: f32, ms: u64) -> f32 {
+    use_tween_with(target, target, ms, Function::Quad)
+}
+
+/// [`use_tween`] for something that mounts already on its way: it starts at
+/// `start` and moves to `target` at once, over `ms`. A focus ring that is only
+/// mounted when focus first reaches it arrives like this, from 0 to 1.
+pub fn use_tween_from(start: f32, target: f32, ms: u64) -> f32 {
+    use_tween_with(start, target, ms, Function::Quad)
+}
+
+/// [`use_tween`] along another curve than the standard one, such as the
+/// cubic of a switch's thumb. A control that moves between two values (a
+/// switch) uses this and not [`use_animation_transition`]: that one runs an
+/// animation as the control mounts, from the value to itself, and a page of
+/// switches starts one task for each of them on the frame that mounts it.
+pub fn use_tween_with(start: f32, target: f32, ms: u64, function: Function) -> f32 {
     let animation = use_animation(move |conf| {
         conf.on_creation(OnCreation::Finish);
-        ease_between(target, target, ms)
+        ease_along(start, start, ms, function)
     });
+    // The last target asked for: a tween turned around on the frame it began
+    // is still at its start, which is the new target, yet its run towards the
+    // old one must be stopped.
+    let asked = use_hook(|| std::rc::Rc::new(std::cell::Cell::new(start)));
     use_side_effect_with_deps(&(target.to_bits(), ms), move |&(bits, ms): &(u32, u64)| {
         let mut animation = animation;
         let mut state = *animation;
         let target = f32::from_bits(bits);
         let from = state.peek().value();
+        let before = asked.replace(target);
         if from == target {
+            if before != target {
+                *state.write() = ease_along(target, target, 0, function);
+            }
             return;
         }
         if ms == 0 {
-            *state.write() = ease_between(target, target, 0);
+            *state.write() = ease_along(target, target, 0, function);
             return;
         }
-        *state.write() = ease_between(from, target, ms);
+        *state.write() = ease_along(from, target, ms, function);
         animation.start();
     });
     animation.get().value()
 }
 
-/// The standard motion curve: quadratic, ease out.
-fn ease_between(from: f32, to: f32, ms: u64) -> AnimNum {
+/// `from` to `to` over `ms` along `function`, easing out.
+fn ease_along(from: f32, to: f32, ms: u64, function: Function) -> AnimNum {
     AnimNum::new(from, to)
         .time(ms)
-        .function(Function::Quad)
+        .function(function)
         .ease(Ease::Out)
 }
 
@@ -567,6 +591,9 @@ pub const FOCUS_WIDTH: f32 = 2.0;
 /// How far outside its settled place the ring starts, in pixels. The ring
 /// travels this far inward as focus arrives and outward as it leaves.
 pub const FOCUS_TRAVEL: f32 = 4.0;
+/// The blur of the ring's halo, in pixels, as focus arrives and as it leaves:
+/// the ring sharpens from this to 0 and softens from 0 to this.
+pub const FOCUS_BLUR: f32 = 4.0;
 /// Focus arrives in this long, ease out.
 pub const FOCUS_IN_MS: u64 = 160;
 /// Focus leaves in this long, ease out. Leaving is quicker so the ring never
@@ -590,119 +617,110 @@ pub const FOCUS_OUT_MS: u64 = 120;
 /// pointer events, so the control keeps every click. Reduced motion makes both
 /// changes instant.
 pub trait Focusable: Sized {
-    /// Wraps this control, drawing its focus ring for corner radius `radius`
-    /// while `focus` is keyboard focus. Return the wrapper from `render`.
+    /// Wraps this control while `focus` is keyboard focus. Return the wrapper
+    /// from `render`.
+    ///
+    /// The ring's corners are the face's own: each is the radius the face is
+    /// painted with, plus the ring's outset, or square where the face is
+    /// square. Nothing is declared twice; a face that should have a rounded
+    /// ring paints a radius.
     ///
     /// The wrapper is a row that takes its content's size. A control that
     /// grows to fill its row also grows the wrapper, with `w_flex()` on the
     /// returned box.
-    fn focusable(self, focus: Focus, radius: Radius) -> Rect;
+    fn focusable(self, focus: Focus) -> Rect;
 
-    /// Wraps a row whose edges may sit on a clipped container edge, such as a
-    /// card's. The ring is drawn just inside the face's box, so the clip cannot
-    /// cut it off. Return the wrapper from `render`.
-    fn focusable_inside(self, focus: Focus, radius: Radius) -> Rect;
-
-    /// [`focusable`](Self::focusable) for a control that sits flush against a
-    /// neighbour: the ring is rounded on `corners` only and square at the
-    /// seam, so it follows the control's visible shape. The ring is drawn
-    /// outside the control, so the control's container must not clip it.
-    fn focusable_on(self, focus: Focus, radius: Radius, corners: Corners) -> Rect;
+    /// Wraps a pane whose edges sit on a clipped container edge, such as the
+    /// window's. The ring is drawn just inside the face's box, with the face's
+    /// own radii, so the clip cannot cut it off. Return the wrapper from
+    /// `render`.
+    fn focusable_inside(self, focus: Focus) -> Rect;
 
     /// [`focusable`](Self::focusable) for a control that can be invalid: while
     /// `invalid` the ring is drawn in the error colour, always, and not only
     /// on focus; a focused invalid control shows both (see the focus section
-    /// of docs/bingux-ui.md). `corners` is as for [`focusable_on`](Self::focusable_on):
-    /// `Corners::None` for a square face such as a flat field's line.
-    fn focusable_invalid(self, focus: Focus, radius: Radius, corners: Corners, invalid: bool) -> Rect;
+    /// of docs/bingux-ui.md).
+    fn focusable_invalid(self, focus: Focus, invalid: bool) -> Rect;
 }
 
 impl Focusable for Rect {
-    fn focusable(self, focus: Focus, radius: Radius) -> Rect {
-        wrap_focusable(self, focus, radius, false)
+    fn focusable(self, focus: Focus) -> Rect {
+        wrap_focusable(self, focus, false, false)
     }
 
-    fn focusable_inside(self, focus: Focus, radius: Radius) -> Rect {
-        wrap_focusable(self, focus, radius, true)
+    fn focusable_inside(self, focus: Focus) -> Rect {
+        wrap_focusable(self, focus, true, false)
     }
 
-    fn focusable_on(self, focus: Focus, radius: Radius, corners: Corners) -> Rect {
-        let tokens = use_tokens();
-        let core = use_focus_core();
-        let size = use_ring_size();
-        wrap_ring(
-            &tokens,
-            core,
-            self,
-            FocusRing {
-                focus,
-                radius,
-                corners,
-                inside: false,
-                size: RingSize::Measured(size),
-                invalid: false,
-            },
-        )
-    }
-
-    fn focusable_invalid(self, focus: Focus, radius: Radius, corners: Corners, invalid: bool) -> Rect {
-        let tokens = use_tokens();
-        let core = use_focus_core();
-        let size = use_ring_size();
-        wrap_ring(
-            &tokens,
-            core,
-            self,
-            FocusRing {
-                focus,
-                radius,
-                corners,
-                inside: false,
-                size: RingSize::Measured(size),
-                invalid,
-            },
-        )
+    fn focusable_invalid(self, focus: Focus, invalid: bool) -> Rect {
+        wrap_focusable(self, focus, false, invalid)
     }
 }
 
-/// The measured box of a ring's face, in logical pixels. The wrapper writes
-/// it after layout and the ring reads it.
-pub(crate) fn use_ring_size() -> State<(f32, f32)> {
-    use_state(|| (0.0, 0.0))
+/// What a focus wrapper keeps for its ring between renders: the measured box
+/// of the face, in logical pixels (the wrapper writes it after layout and the
+/// ring reads it), and whether keyboard focus has ever reached the control.
+///
+/// Until it has, the control has no ring at all: no component, no nodes and no
+/// animations. A page of forty rows is forty faces and no ring, and the ring
+/// of the one that gets focus is made when it does, growing in as it always
+/// has. Once made it stays, so it can fade out when focus leaves.
+#[derive(Clone)]
+pub(crate) struct RingFace {
+    size: State<(f32, f32)>,
+    reached: Rc<Cell<bool>>,
+}
+
+impl PartialEq for RingFace {
+    fn eq(&self, other: &Self) -> bool {
+        self.size == other.size && Rc::ptr_eq(&self.reached, &other.reached)
+    }
+}
+
+impl RingFace {
+    /// Notes whether focus is on the control now, and returns whether the ring
+    /// has been wanted yet.
+    fn reached(&self, now: bool) -> bool {
+        if now {
+            self.reached.set(true);
+        }
+        self.reached.get()
+    }
+}
+
+/// The ring state of the calling component's focus wrapper: see [`RingFace`].
+pub(crate) fn use_ring_size() -> RingFace {
+    RingFace {
+        size: use_state(|| (0.0, 0.0)),
+        reached: use_hook(|| Rc::new(Cell::new(false))),
+    }
 }
 
 /// Where a ring gets its face's size.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub(crate) enum RingSize {
     /// Measured from the wrapper after layout; see [`use_ring_size`].
-    Measured(State<(f32, f32)>),
-    /// The caller sets the face's size itself, in logical pixels.
+    Measured(RingFace),
+    /// The caller sets the face's size itself, in logical pixels. Its ring is
+    /// always made.
     Known(f32, f32),
 }
 
 impl RingSize {
-    fn get(self) -> (f32, f32) {
+    fn get(&self) -> (f32, f32) {
         match self {
-            Self::Measured(size) => *size.read(),
-            Self::Known(width, height) => (width, height),
+            Self::Measured(face) => *face.size.read(),
+            Self::Known(width, height) => (*width, *height),
         }
     }
 }
 
 /// Builds the wrapper for [`Focusable`]: the press claim and the ring.
-fn wrap_focusable(control: Rect, focus: Focus, radius: Radius, inside: bool) -> Rect {
+fn wrap_focusable(control: Rect, focus: Focus, inside: bool, invalid: bool) -> Rect {
     let tokens = use_tokens();
     let core = use_focus_core();
     let size = use_ring_size();
-    wrap_focusable_with(
-        &tokens,
-        core,
-        control,
-        focus,
-        radius,
-        inside,
-        RingSize::Measured(size),
-    )
+    wrap_ring(&tokens, core, control, focus, inside, invalid, RingSize::Measured(size))
 }
 
 /// [`wrap_focusable`] with its hooks already taken and the face's size given.
@@ -713,34 +731,35 @@ pub(crate) fn wrap_focusable_with(
     core: FocusCore,
     control: Rect,
     focus: Focus,
-    radius: Radius,
     inside: bool,
     size: RingSize,
 ) -> Rect {
-    wrap_ring(
-        tokens,
-        core,
-        control,
-        FocusRing {
-            focus,
-            radius,
-            corners: Corners::All,
-            inside,
-            size,
-            invalid: false,
-        },
-    )
+    wrap_ring(tokens, core, control, focus, inside, false, size)
 }
 
 /// Wraps `control` (the face) with the press claim and `ring`.
-fn wrap_ring(tokens: &Tokens, core: FocusCore, mut control: Rect, ring: FocusRing) -> Rect {
+fn wrap_ring(
+    tokens: &Tokens,
+    core: FocusCore,
+    mut control: Rect,
+    focus: Focus,
+    inside: bool,
+    invalid: bool,
+    size: RingSize,
+) -> Rect {
+    // The ring's corners are the face's, as painted.
+    let radii = Radii::of(&control.get_style().corner_radius);
+    let ring = FocusRing { focus, radii, inside, size, invalid };
     // The wrapper claims presses, and records the pressed control, so whatever
     // modal scope the press opens returns focus to it. It measures itself,
     // which is the face's box, for the ring.
     let face = control.get_accessibility_data().a11y_id;
-    let measured = match ring.size {
-        RingSize::Measured(size) => Some(size),
-        RingSize::Known(..) => None,
+    let (measured, wanted) = match &ring.size {
+        RingSize::Measured(face) => (
+            Some(face.size),
+            face.reached(ring.focus == Focus::Keyboard || ring.invalid),
+        ),
+        RingSize::Known(..) => (None, true),
     };
     rect()
         .tw(tokens, &[flex_row()])
@@ -757,7 +776,7 @@ fn wrap_ring(tokens: &Tokens, core: FocusCore, mut control: Rect, ring: FocusRin
             }
         })
         .child(control)
-        .child(ring)
+        .maybe_child(wanted.then_some(ring))
 }
 
 /// The ring itself, drawn as the last child of a [`Focusable::focusable`]
@@ -765,14 +784,43 @@ fn wrap_ring(tokens: &Tokens, core: FocusCore, mut control: Rect, ring: FocusRin
 #[derive(Clone, PartialEq)]
 struct FocusRing {
     focus: Focus,
-    radius: Radius,
+    /// The face's painted corner radii; the ring's corners follow them.
+    radii: Radii,
     inside: bool,
-    /// The corners that are rounded; the others are square, for a segment
-    /// that sits flush against a neighbour.
-    corners: Corners,
     size: RingSize,
     /// The control is invalid: the ring shows in the error colour, always.
     invalid: bool,
+}
+
+/// What the ring looks like at animation `progress` (0 gone, 1 settled): it
+/// fades in from a blurred, expanded state and fades and blurs out again.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RingLook {
+    pub opacity: f32,
+    /// How far the ring is outside its settled place, in pixels.
+    pub travel: f32,
+    /// The gaussian blur of the ring's halo, in pixels.
+    pub blur: f32,
+    /// How far the halo spreads, in pixels.
+    pub spread: f32,
+}
+
+impl RingLook {
+    /// Whether the halo is drawn: while the ring is on its way, not once it is
+    /// settled or has gone.
+    pub fn glows(self) -> bool {
+        self.blur > 0.0 && self.opacity > 0.01
+    }
+
+    pub fn at(progress: f32) -> Self {
+        let gone = 1.0 - progress.clamp(0.0, 1.0);
+        Self {
+            opacity: progress.clamp(0.0, 1.0),
+            travel: FOCUS_TRAVEL * gone,
+            blur: FOCUS_BLUR * gone,
+            spread: FOCUS_WIDTH * gone,
+        }
+    }
 }
 
 /// One concentric band of a ring: `gap` pixels off the face, `FOCUS_WIDTH`
@@ -817,11 +865,11 @@ impl FocusRing {
         tokens: &Tokens,
         band: Band,
         step: f32,
-        travel: f32,
+        look: RingLook,
         face: Option<(f32, f32)>,
         main: bool,
     ) -> Rect {
-        let outset = band.outset(travel);
+        let outset = band.outset(look.travel);
         let (width, height) = match face {
             Some((width, height)) => (
                 Size::px(width + step + step),
@@ -841,9 +889,12 @@ impl FocusRing {
                 tokens,
                 &[
                     border(Line::Ring(band.paint)),
-                    rounded_on(self.radius, self.corners, outset),
+                    rounded_radii(self.radii, outset),
                 ],
-            );
+            )
+            .maybe(main && look.glows(), |node| {
+                node.tw(tokens, &[glow(band.paint, look.blur, look.spread, false)])
+            });
         if main { node.component("FocusRing") } else { node.component("FocusBand") }
     }
 }
@@ -854,33 +905,28 @@ impl Component for FocusRing {
         // A ring on the page behind a modal scope is not drawn: the page is
         // inert, whatever still holds the window's focus.
         let inert = use_focus_core().page_inert(try_consume_context::<InsideScope>().is_some());
-        let focused = self.focus == Focus::Keyboard && !inert;
+        // A window that has lost focus keeps no ring: it blurs out with the rest
+        // and comes back when the window does.
+        let active = *crate::runtime::window_focus().read();
+        let focused = self.focus == Focus::Keyboard && !inert && active;
         let in_ms = tokens.motion(FOCUS_IN_MS);
         let out_ms = tokens.motion(FOCUS_OUT_MS);
-        let ease = move |from: f32, to: f32| {
-            AnimNum::new(from, to)
-                .time(if to > from { in_ms } else { out_ms })
-                .function(Function::Quad)
-                .ease(Ease::Out)
-        };
-        // One progress value drives both the offset and the opacity, so the
-        // ring grows and fades together in each direction. An invalid
-        // control keeps its ring whether or not it is focused.
-        let shown = use_animation_transition(
-            if focused || self.invalid { 1.0 } else { 0.0 },
-            ease,
-        )
-        .get()
-        .value();
-        let arrived = use_animation_transition(if focused { 1.0 } else { 0.0 }, ease)
-            .get()
-            .value();
+        // A ring is made when focus first reaches its control (see
+        // [`RingFace`]), so it starts on its way in: from 0 to 1 at once. One
+        // made for an invalid control starts shown. One progress value drives
+        // the offset, the blur and the opacity, so the ring grows, sharpens
+        // and fades in together, and softens, shrinks out and fades together
+        // on the way out. An invalid control keeps its ring whether or not it
+        // is focused.
+        let wanted = if focused || self.invalid { 1.0 } else { 0.0 };
+        let reaching = if focused { 1.0 } else { 0.0 };
+        let time = |target: f32| if target > 0.5 { in_ms } else { out_ms };
+        let shown = use_tween_from(if self.invalid { 1.0 } else { 0.0 }, wanted, time(wanted));
+        let arrived = use_tween_from(0.0, reaching, time(reaching));
         let (width, height) = self.size.get();
         // Until the face has been measured there is nothing to ring.
         let measured = width > 0.0 && height > 0.0;
-        // The ring's outer edge sits this far outside the face, so the ring's
-        // corner radius is the face's plus this distance.
-        let travel = FOCUS_TRAVEL * (1.0 - shown);
+        let look = RingLook::at(shown);
         if self.inside {
             // The ring is drawn within the face's own box, so a clipped
             // container edge cannot cut it off.
@@ -891,24 +937,24 @@ impl Component for FocusRing {
                 .position(Position::new_absolute().top(0.0).left(0.0))
                 .width(Size::px(width))
                 .height(Size::px(height))
-                .opacity(if measured { shown } else { 0.0 })
+                .opacity(if measured { look.opacity } else { 0.0 })
                 .tw(
                     &tokens,
-                    &[
-                        border(Line::Ring(paint)),
-                        rounded_on(self.radius, self.corners, 0.),
-                    ],
-                );
+                    &[border(Line::Ring(paint)), rounded_radii(self.radii, 0.0)],
+                )
+                .maybe(look.glows(), |node| {
+                    node.tw(&tokens, &[glow(paint, look.blur, 0.0, true)])
+                });
         }
         let bands = bands(self.invalid);
-        let outsets: Vec<f32> = bands.iter().map(|band| band.outset(travel)).collect();
+        let outsets: Vec<f32> = bands.iter().map(|band| band.outset(look.travel)).collect();
         // Build from the outermost band in, so each is its parent's child.
         let mut nested: Option<Rect> = None;
         for (index, band) in bands.iter().enumerate().rev() {
             let step = outsets[index] - if index == 0 { 0.0 } else { outsets[index - 1] };
             let face = (index == 0).then_some((width, height));
             let mut node = self
-                .band(&tokens, *band, step, travel, face, index == 0)
+                .band(&tokens, *band, step, look, face, index == 0)
                 .maybe_child(nested.take());
             if index > 0 {
                 // The outer band arrives with focus; the ring itself stays for
@@ -919,7 +965,7 @@ impl Component for FocusRing {
         }
         nested
             .unwrap_or_else(rect)
-            .opacity(if measured { shown } else { 0.0 })
+            .opacity(if measured { look.opacity } else { 0.0 })
     }
 }
 

@@ -16,6 +16,11 @@
 //!   the app runs. Create `FILE.dump` and the next frame writes the stacks
 //!   sampled since the last dump to `FILE` in folded form (`a;b;c <count>`,
 //!   the input of `flamegraph.pl`), deletes `FILE.dump` and samples again.
+//! - `BINGUX_PERF_SLOW_FRAMES=MS`, with `BINGUX_PERF_FOLDED`, keeps only the
+//!   stacks of the frames whose busy time (the fourth figure above) is over
+//!   `MS`: each such frame appends its stacks to `FILE` at once, under a first
+//!   frame `frame <busy> ms`, and every other frame's samples are dropped. It
+//!   is the profile of what the frame gate fails on, not of a whole session.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -30,6 +35,10 @@ use super::perf_sample;
 struct Log {
     frames: Option<File>,
     folded: Option<PathBuf>,
+    /// Frames busy for longer than this many milliseconds are profiled alone.
+    slow_over: Option<f64>,
+    /// The busy time of the frame that just ended, in milliseconds.
+    last_app_ms: f64,
     frame_start: Option<u64>,
     /// The UI thread's CPU clock when the previous frame ended.
     cpu_at: u64,
@@ -54,9 +63,14 @@ fn open() -> Option<Log> {
     if folded.is_some() {
         perf_sample::start();
     }
+    let slow_over = std::env::var("BINGUX_PERF_SLOW_FRAMES")
+        .ok()
+        .and_then(|value| value.trim().parse::<f64>().ok());
     Some(Log {
         frames,
         folded,
+        slow_over,
+        last_app_ms: 0.0,
         frame_start: None,
         cpu_at: thread_cpu_ns(),
         present_from: None,
@@ -100,14 +114,40 @@ pub fn on_event(event: &PluginEvent<'_>) {
                         "{unix_ms} {:.2} {busy:.2} {app:.2}",
                         now.saturating_sub(start) as f64 / 1.0e6
                     );
+                    log.last_app_ms = app;
                 }
-                if let Some(path) = &log.folded {
+                if let (Some(path), Some(over)) = (&log.folded, log.slow_over) {
+                    dump_slow_frame(path, log.last_app_ms, over);
+                } else if let Some(path) = &log.folded {
                     dump_if_asked(path);
                 }
+                // Writing the profile is not the next frame's work.
+                log.cpu_at = thread_cpu_ns();
             }
             _ => {}
         }
     });
+}
+
+/// Appends the samples of the frame that just ended to `path` when it was busy
+/// for more than `over` milliseconds, and drops them otherwise.
+fn dump_slow_frame(path: &PathBuf, busy_ms: f64, over: f64) {
+    if busy_ms <= over {
+        perf_sample::reset();
+        return;
+    }
+    let profile = perf_sample::stop();
+    let mut counts: HashMap<String, u32> = HashMap::new();
+    for sample in &profile.samples {
+        let stack: Vec<&str> = sample.stack.iter().map(|name| &**name).collect();
+        *counts.entry(stack.join(";")).or_insert(0) += 1;
+    }
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        for (stack, count) in counts {
+            let _ = writeln!(file, "frame {busy_ms:.0} ms;{stack} {count}");
+        }
+    }
+    perf_sample::start();
 }
 
 fn dump_if_asked(path: &PathBuf) {

@@ -7,7 +7,10 @@
 //! it. This module checks the result: for every ring in a laid-out tree, the
 //! ring's rectangle must equal the face's border box grown by the ring's
 //! outset (gap, width and, while it animates, travel), within half a pixel,
-//! and its corner radius must be the face's plus that outset (nested).
+//! and each of its four corner radii must be the face's painted radius there
+//! plus that outset (nested), or zero where the face's corner is square: a
+//! rounded ring around a square face and a square ring around a rounded face
+//! both fail.
 //!
 //! The rule is pure: [`check`] takes rectangles. [`collect`] reads them from a
 //! headless run, so the same check runs over every Settings page and every
@@ -33,21 +36,22 @@ pub struct RingProbe {
     pub label: String,
     /// The face's border box.
     pub face: Box4,
-    /// The face's corner radius.
-    pub face_radius: f32,
+    /// The face's four corner radii as painted: top left, top right, bottom
+    /// right, bottom left.
+    pub face_radii: [f32; 4],
     /// The ring node's border box.
     pub ring: Box4,
     /// The ring's own opacity, which is its animation progress: 0 unfocused,
     /// 1 settled.
     pub progress: f32,
-    /// The ring's corner radius.
-    pub ring_radius: f32,
+    /// The ring's four corner radii, in the same order.
+    pub ring_radii: [f32; 4],
     /// Whether the ring sits inside the face (a face on a clipped edge)
     /// instead of outside it.
     pub inside: bool,
-    /// Whether the face, or a box of its size inside it, draws a fill, a border
-    /// or rounded corners. A face that draws nothing has no corners to follow.
-    pub painted: bool,
+    /// Whether the ring node carries its blur halo (while it arrives or
+    /// leaves; a settled ring is crisp).
+    pub blurred: bool,
 }
 
 /// One ring that is not where its face is painted.
@@ -89,14 +93,17 @@ pub fn same(a: Box4, b: Box4, tolerance: f32) -> bool {
     a.iter().zip(&b).all(|(a, b)| (a - b).abs() <= tolerance)
 }
 
-/// The corner radius a ring needs for a face of `face_radius`: nested, so the
-/// ring's outer edge follows the face's corner.
-pub fn expected_radius(face_radius: f32, progress: f32, inside: bool) -> f32 {
-    if inside || face_radius == 0.0 {
-        face_radius
-    } else {
-        face_radius + outset(progress)
-    }
+/// The corner radii a ring needs for a face of `face` radii: nested, so the
+/// ring's outer edge follows each round corner, and square where the face's
+/// corner is square.
+pub fn expected_radii(face: [f32; 4], progress: f32, inside: bool) -> [f32; 4] {
+    face.map(|radius| {
+        if inside || radius == 0.0 {
+            radius
+        } else {
+            radius + outset(progress)
+        }
+    })
 }
 
 /// Every ring that is not on the face it is drawn for.
@@ -113,24 +120,21 @@ pub fn check(probes: &[RingProbe]) -> Vec<Mismatch> {
             });
             continue;
         }
-        // A face that draws nothing (a list, a chart, a row at rest) has no
-        // corners for the ring to follow; the box was checked above.
-        if !probe.painted {
-            continue;
-        }
-        // A row clipped by its card paints a square that the card rounds at its
-        // own corners, so the ring drawn inside it takes the radius it is given.
-        if probe.inside && probe.face_radius == 0.0 {
-            continue;
-        }
-        let radius = expected_radius(probe.face_radius, probe.progress, probe.inside);
-        if (probe.ring_radius - radius).abs() > RADIUS_TOLERANCE {
-            found.push(Mismatch {
-                label: probe.label.clone(),
-                what: "the ring's corner radius does not follow the face's",
-                expected: [radius, 0.0, 0.0, 0.0],
-                found: [probe.ring_radius, 0.0, 0.0, 0.0],
-            });
+        let radii = expected_radii(probe.face_radii, probe.progress, probe.inside);
+        for corner in 0..4 {
+            let (want, got) = (radii[corner], probe.ring_radii[corner]);
+            if (got - want).abs() <= RADIUS_TOLERANCE {
+                continue;
+            }
+            let what = if probe.face_radii[corner] == 0.0 {
+                "a rounded ring corner around a square face corner"
+            } else if got <= RADIUS_TOLERANCE {
+                "a square ring corner around a rounded face corner"
+            } else {
+                "the ring's corner radius does not follow the face's"
+            };
+            found.push(Mismatch { label: probe.label.clone(), what, expected: radii, found: probe.ring_radii });
+            break;
         }
     }
     found
@@ -170,7 +174,7 @@ pub fn probes(snapshot: &Snapshot) -> Vec<(u64, RingProbe)> {
         if face_box[2] <= 0.0 || face_box[3] <= 0.0 || face.used.hidden {
             continue;
         }
-        let ring_radius = ring.props.as_ref().map_or(0.0, |props| props.corner_radius);
+        let ring_radii = ring.props.as_ref().map_or([0.0; 4], |props| props.corner_radii);
         let progress = ring.props.as_ref().and_then(|props| props.opacity).unwrap_or(1.0);
         let painter = painted(snapshot, face, face_box);
         found.push((
@@ -178,16 +182,16 @@ pub fn probes(snapshot: &Snapshot) -> Vec<(u64, RingProbe)> {
             RingProbe {
                 label: path_of(snapshot, face),
                 face: face_box,
-                // A face that is not a box has no radius of its own to follow.
-                face_radius: painter.props.as_ref().map_or_else(
-                    || expected_inverse(ring_radius, progress, inside),
-                    |props| props.corner_radius,
+                // A face that is not a box has no radii of its own to follow.
+                face_radii: painter.props.as_ref().map_or_else(
+                    || expected_inverse(ring_radii, progress, inside),
+                    |props| props.corner_radii,
                 ),
                 ring: ring_box,
                 progress,
-                ring_radius,
+                ring_radii,
                 inside,
-                painted: paints(painter),
+                blurred: ring.props.as_ref().is_some_and(|props| !props.shadows.is_empty()),
             },
         ));
     }
@@ -199,7 +203,7 @@ pub fn probes(snapshot: &Snapshot) -> Vec<(u64, RingProbe)> {
 fn paints(node: &Node) -> bool {
     node.props.as_ref().is_some_and(|props| {
         props.background.is_some_and(|colour| colour.a() > 0)
-            || props.corner_radius > 0.0
+            || props.corner_radii.iter().any(|radius| *radius > 0.0)
             || !props.borders.is_empty()
     })
 }
@@ -224,13 +228,15 @@ fn painted<'a>(snapshot: &'a Snapshot, face: &'a Node, face_box: Box4) -> &'a No
     node
 }
 
-/// The face radius a ring of `ring_radius` is nested around.
-fn expected_inverse(ring_radius: f32, progress: f32, inside: bool) -> f32 {
-    if inside || ring_radius == 0.0 {
-        ring_radius
-    } else {
-        (ring_radius - outset(progress)).max(0.0)
-    }
+/// The face radii a ring of `ring` radii is nested around.
+fn expected_inverse(ring: [f32; 4], progress: f32, inside: bool) -> [f32; 4] {
+    ring.map(|radius| {
+        if inside || radius == 0.0 {
+            radius
+        } else {
+            (radius - outset(progress)).max(0.0)
+        }
+    })
 }
 
 fn border_box(node: &Node) -> Option<Box4> {
@@ -262,13 +268,21 @@ mod tests {
         RingProbe {
             label: "Dropdown".to_string(),
             face,
-            face_radius: 8.0,
+            face_radii: [8.0; 4],
             ring,
             progress,
-            ring_radius: 8.0 + outset(progress),
+            ring_radii: [8.0 + outset(progress); 4],
             inside: false,
-            painted: true,
+            blurred: false,
         }
+    }
+
+    /// A settled outside ring around `face` with the given face and ring radii.
+    fn settled(face_radii: [f32; 4], ring_radii: [f32; 4]) -> RingProbe {
+        let face = [20.0, 20.0, 100.0, 40.0];
+        let out = outset(1.0);
+        let ring = [face[0] - out, face[1] - out, face[2] + 2.0 * out, face[3] + 2.0 * out];
+        RingProbe { face_radii, ring_radii, ..probe(face, ring, 1.0) }
     }
 
     #[test]
@@ -306,58 +320,78 @@ mod tests {
         let face = [0.0, 0.0, 100.0, 40.0];
         let mut inside = probe(face, face, 1.0);
         inside.inside = true;
-        inside.ring_radius = 8.0;
+        inside.ring_radii = [8.0; 4];
         assert!(check(&[inside]).is_empty());
     }
 
     #[test]
-    fn an_inside_ring_may_be_rounded_on_a_square_face_a_card_clips() {
+    fn an_inside_ring_takes_the_faces_radii_and_no_others() {
         let face = [0.0, 0.0, 300.0, 56.0];
         let mut row = probe(face, face, 1.0);
         row.inside = true;
-        row.face_radius = 0.0;
-        row.ring_radius = 12.0;
-        assert!(check(&[row]).is_empty());
-        // An outside ring on a square face still has to stay square.
-        let out = outset(1.0);
-        let ring = [-out, -out, 300.0 + 2.0 * out, 56.0 + 2.0 * out];
-        let mut outside = probe(face, ring, 1.0);
-        outside.face_radius = 0.0;
-        outside.ring_radius = 12.0;
-        assert_eq!(check(&[outside]).len(), 1);
-    }
-
-    #[test]
-    fn a_face_that_draws_nothing_has_no_corners_to_follow_but_keeps_its_box() {
-        let face = [0.0, 0.0, 100.0, 40.0];
-        let out = outset(1.0);
-        let ring = [-out, -out, 100.0 + 2.0 * out, 40.0 + 2.0 * out];
-        let mut list = probe(face, ring, 1.0);
-        list.painted = false;
-        list.face_radius = 0.0;
-        list.ring_radius = 12.0;
-        assert!(check(&[list.clone()]).is_empty());
-        // The box is still held to the face.
-        list.ring = [0.0, 0.0, 100.0, 40.0];
-        assert_eq!(check(&[list]).len(), 1);
-    }
-
-    #[test]
-    fn a_ring_with_the_wrong_radius_is_reported() {
-        let face = [0.0, 0.0, 100.0, 40.0];
-        let out = outset(1.0);
-        let ring = [-out, -out, 100.0 + 2.0 * out, 40.0 + 2.0 * out];
-        let mut wrong = probe(face, ring, 1.0);
-        wrong.ring_radius = 8.0;
-        let found = check(&[wrong]);
+        row.face_radii = [0.0, 0.0, 12.0, 0.0];
+        row.ring_radii = [0.0, 0.0, 12.0, 0.0];
+        assert!(check(&[row.clone()]).is_empty());
+        // A rounded ring inside a square face is the old exemption: now wrong.
+        row.face_radii = [0.0; 4];
+        let found = check(&[row]);
         assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].what, "a rounded ring corner around a square face corner");
+    }
+
+    #[test]
+    fn a_square_face_gets_a_square_ring() {
+        let out = outset(1.0);
+        assert!(check(&[settled([0.0; 4], [0.0; 4])]).is_empty());
+        let found = check(&[settled([0.0; 4], [12.0; 4])]);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].what, "a rounded ring corner around a square face corner");
+        assert_eq!(found[0].expected, [0.0; 4], "{out}");
+    }
+
+    #[test]
+    fn a_rounded_face_gets_a_rounded_ring() {
+        let out = outset(1.0);
+        assert!(check(&[settled([8.0; 4], [8.0 + out; 4])]).is_empty());
+        let found = check(&[settled([8.0; 4], [0.0; 4])]);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].what, "a square ring corner around a rounded face corner");
+        let found = check(&[settled([8.0; 4], [8.0; 4])]);
         assert_eq!(found[0].what, "the ring's corner radius does not follow the face's");
     }
 
     #[test]
-    fn the_nested_radius_is_the_face_radius_plus_the_outset() {
-        assert_eq!(expected_radius(8.0, 1.0, false), 8.0 + FOCUS_GAP + FOCUS_WIDTH);
-        assert_eq!(expected_radius(0.0, 1.0, false), 0.0);
-        assert_eq!(expected_radius(8.0, 1.0, true), 8.0);
+    fn mixed_corners_are_held_one_by_one() {
+        let out = outset(1.0);
+        // A tab: round top corners, square bottom ones.
+        let tab = [10.0, 10.0, 0.0, 0.0];
+        let ring = [10.0 + out, 10.0 + out, 0.0, 0.0];
+        assert!(check(&[settled(tab, ring)]).is_empty());
+        // The same ring on a face whose corners are the other way is wrong at
+        // every corner, and the first bad corner is reported.
+        assert_eq!(check(&[settled([0.0, 0.0, 10.0, 10.0], ring)]).len(), 1);
+        // One corner off in an otherwise exact ring.
+        let found = check(&[settled(tab, [10.0 + out, 0.0, 0.0, 0.0])]);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].what, "a square ring corner around a rounded face corner");
+    }
+
+    #[test]
+    fn a_face_that_draws_nothing_is_square_and_its_ring_is_too() {
+        let list = settled([0.0; 4], [12.0; 4]);
+        assert_eq!(check(&[list.clone()]).len(), 1);
+        // The box is still held to the face.
+        let mut moved = settled([0.0; 4], [0.0; 4]);
+        moved.ring = [0.0, 0.0, 100.0, 40.0];
+        assert_eq!(check(&[moved]).len(), 1);
+    }
+
+    #[test]
+    fn the_nested_radii_are_each_the_face_radius_plus_the_outset() {
+        let out = FOCUS_GAP + FOCUS_WIDTH;
+        assert_eq!(expected_radii([8.0; 4], 1.0, false), [8.0 + out; 4]);
+        assert_eq!(expected_radii([0.0; 4], 1.0, false), [0.0; 4]);
+        assert_eq!(expected_radii([8.0, 0.0, 4.0, 0.0], 1.0, false), [8.0 + out, 0.0, 4.0 + out, 0.0]);
+        assert_eq!(expected_radii([8.0; 4], 1.0, true), [8.0; 4]);
     }
 }

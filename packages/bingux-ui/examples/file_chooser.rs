@@ -78,6 +78,13 @@ fn documents(home: &Path) -> ChooserRequest {
         .current_folder(home.join("Documents"))
 }
 
+/// One real file of each kind the preview shows.
+fn media(home: &Path) -> ChooserRequest {
+    ChooserRequest::open()
+        .title("Open file")
+        .current_folder(home.join("Media"))
+}
+
 /// A small folder of text, logs and data, for Quick Look.
 fn notes(home: &Path) -> ChooserRequest {
     ChooserRequest::open()
@@ -305,6 +312,102 @@ const SCENARIOS: &[Scenario] = &[
         name: "preview-document",
         request: documents,
         script: "wait 500; click-text Quarterly report.pdf; wait 300; key space; wait 1000",
+    },
+    // The preview's viewers, in the popup, the pane and full screen.
+    Scenario {
+        name: "preview-view-image",
+        request: media,
+        script: "wait 500; click-text Gradient.png; wait 300; key space; wait 1500",
+    },
+    Scenario {
+        name: "preview-view-small",
+        request: media,
+        script: "wait 500; click-text Small.png; wait 300; key space; wait 1500",
+    },
+    Scenario {
+        name: "preview-view-zoom",
+        request: media,
+        script: "wait 500; click-text Gradient.png; wait 300; key space; wait 1200; key +; key +; key +; wait 600",
+    },
+    Scenario {
+        name: "preview-view-rotate",
+        request: media,
+        script: "wait 500; click-text Gradient.png; wait 300; key space; wait 1200; key r; wait 600",
+    },
+    Scenario {
+        name: "preview-view-svg",
+        request: media,
+        script: "wait 500; click-text Logo.svg; wait 300; key space; wait 1500",
+    },
+    Scenario {
+        name: "preview-view-text",
+        request: media,
+        script: "wait 500; click-text Note UTF-8.txt; wait 300; key space; wait 1200",
+    },
+    Scenario {
+        name: "preview-view-latin1",
+        request: media,
+        script: "wait 500; click-text Note Latin-1.txt; wait 300; key space; wait 1200",
+    },
+    Scenario {
+        name: "preview-view-utf16",
+        request: media,
+        script: "wait 500; click-text Note UTF-16.txt; wait 300; key space; wait 1200",
+    },
+    Scenario {
+        name: "preview-view-archive",
+        request: media,
+        script: "wait 500; click-text Bundle.zip; wait 300; key space; wait 1200",
+    },
+    Scenario {
+        name: "preview-view-targz",
+        request: media,
+        script: "wait 500; click-text Backup.tar.gz; wait 300; key space; wait 1200",
+    },
+    Scenario {
+        name: "preview-view-binary",
+        request: media,
+        script: "wait 500; click-text Blob.bin; wait 300; key space; wait 1200",
+    },
+    Scenario {
+        name: "preview-view-info",
+        request: media,
+        script: "wait 500; click-text Gradient.png; wait 300; key space; wait 1200; key i; wait 600",
+    },
+    Scenario {
+        name: "preview-view-fullscreen",
+        request: media,
+        script: "wait 500; click-text Gradient.png; wait 300; key space; wait 1000; key f; wait 1200",
+    },
+    Scenario {
+        name: "preview-pane-image",
+        request: media,
+        script: "wait 500; click-text Gradient.png; wait 300; key alt+p; wait 1200",
+    },
+    Scenario {
+        name: "preview-pane-text",
+        request: media,
+        script: "wait 500; click-text Note UTF-8.txt; wait 300; key alt+p; wait 1200",
+    },
+    Scenario {
+        name: "preview-pane-follow",
+        request: media,
+        script: "wait 500; click-text Backup.tar.gz; wait 300; key alt+p; wait 800; key down; wait 800; key down; wait 1000",
+    },
+    Scenario {
+        name: "preview-pane-info",
+        request: media,
+        script: "wait 500; click-text Gradient.png; wait 300; key alt+p; wait 1000; key tab; wait 200; click-text Info; wait 800",
+    },
+    Scenario {
+        name: "preview-pane-closed",
+        request: media,
+        script: "wait 500; click-text Gradient.png; wait 300; key alt+p; wait 1000; key f3; wait 800",
+    },
+    Scenario {
+        name: "preview-dock-from-popup",
+        request: media,
+        script: "wait 500; click-text Gradient.png; wait 300; key space; wait 1000; key alt+p; wait 1200",
     },
     Scenario {
         name: "preview-closed",

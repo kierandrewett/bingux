@@ -10,14 +10,15 @@ use std::time::{Duration, Instant};
 
 use bingux_files::listing::Cancel;
 use bingux_files::location::{self, subfolders};
-use bingux_files::places::{Places, SpecialFolder, special_folder, special_folder_in};
+use bingux_files::places::Places;
+use bingux_files::{Kind, PlaceKind};
 use freya::prelude::*;
 
-use super::address_list::{ListRow, NoticeRow, Part, rows_height, scroll_offset};
+use super::address_list::{Lead, ListRow, NoticeRow, Part, rows_height, scroll_offset};
 use super::address_target::StopOnDrop;
 use super::address_trail::{Item, Metrics, layout};
 use super::directory::Where;
-use super::glyphs::folder_icon;
+use super::file_icon::{FileIcon, FileKind, file_icon_view};
 use crate::component::ComponentName;
 use crate::controls::path_label::measure_text;
 use crate::controls::tooltip::hover_tip;
@@ -51,7 +52,9 @@ pub(super) struct Stop {
     pub label: String,
     /// `None` for Recent, which is not a folder.
     pub path: Option<PathBuf>,
-    pub icon: Option<Icon>,
+    /// The folder's icon, decided by its path as everywhere else. The trail
+    /// draws it on its first crumb only; the compact trail's rows all do.
+    pub icon: FileIcon,
 }
 
 /// The stops of `location`, outermost first. A path in the home folder starts
@@ -62,19 +65,12 @@ pub(super) fn stops(location: &Where, home: &Path) -> Vec<Stop> {
         Where::Recent => vec![Stop {
             label: "Recent".into(),
             path: None,
-            icon: Some(Icon::Clock),
+            icon: FileIcon::for_place_kind(PlaceKind::Recent),
         }],
         Where::Folder(path) => location::crumbs(path, home)
             .into_iter()
-            .enumerate()
-            .map(|(index, crumb)| Stop {
-                icon: (index == 0).then(|| {
-                    if crumb.path == home {
-                        Icon::UserHome
-                    } else {
-                        Icon::Computer
-                    }
-                }),
+            .map(|crumb| Stop {
+                icon: FileIcon::folder_at(&crumb.path),
                 label: crumb.label,
                 path: Some(crumb.path),
             })
@@ -82,9 +78,9 @@ pub(super) fn stops(location: &Where, home: &Path) -> Vec<Stop> {
     }
 }
 
-/// The icon of the folder at `path`.
-pub(super) fn icon_of(path: &Path) -> Icon {
-    folder_icon(special_folder(path))
+/// The icon of the folder `name` inside `dir`, in a crumb's list.
+pub(super) fn subfolder_icon(dir: &Path, name: &str) -> FileIcon {
+    FileIcon::for_path(&dir.join(name), Kind::Directory)
 }
 
 /// The trail of a desktop window.
@@ -183,7 +179,7 @@ impl Component for Crumbs {
                         CrumbButton {
                             shown: text,
                             label: stop.label.clone(),
-                            icon: stop.icon,
+                            icon: (index == 0).then_some(stop.icon),
                             current,
                             menu,
                             on_press: EventHandler::new(move |_: ()| press.call(target.clone())),
@@ -338,7 +334,7 @@ struct CrumbButton {
     shown: String,
     /// The whole name.
     label: String,
-    icon: Option<Icon>,
+    icon: Option<FileIcon>,
     /// The last crumb is where you are: normal ink, the others muted.
     current: bool,
     menu: Vec<MenuItem>,
@@ -369,7 +365,7 @@ impl Component for CrumbButton {
             .on_pointer_leave(move |_| hovering.set(false))
             .maybe_child(
                 self.icon
-                    .map(|icon| icons::icon(icon, IconSize::Control, ink.color(&tokens))),
+                    .map(|icon| file_icon_view(&tokens, &icon, IconSize::Control, false)),
             )
             .child(
                 BODY.in_ink(ink)
@@ -485,7 +481,6 @@ fn chevron_glyph(tokens: &crate::theme::Tokens) -> Rect {
 #[derive(Clone, PartialEq)]
 struct Folder {
     name: String,
-    special: Option<SpecialFolder>,
 }
 
 /// What a crumb's list holds.
@@ -505,7 +500,6 @@ fn read_folders(dir: &Path, show_hidden: bool, cancel: &Cancel) -> Folders {
         .filter(|candidate| candidate.is_dir)
         .filter(|candidate| show_hidden || !candidate.name.starts_with('.'))
         .map(|candidate| Folder {
-            special: special_folder_in(dir, std::ffi::OsStr::new(&candidate.name)),
             name: candidate.name,
         })
         .collect();
@@ -733,7 +727,7 @@ impl Component for Chevron {
                     .map(|(index, folder)| {
                         let choose = choose.clone();
                         Element::from(ListRow {
-                            icon: folder_icon(folder.special),
+                            icon: Lead::File(subfolder_icon(&self.path, &folder.name)),
                             parts: vec![Part::plain(folder.name.clone())],
                             current: self.child.as_deref() == Some(folder.name.as_str()),
                             mark: ahead.mark(index),
@@ -812,10 +806,9 @@ impl Component for CompactTrail {
             .as_ref()
             .map(|stop| stop.label.clone())
             .unwrap_or_default();
-        let current_icon = current.as_ref().map_or(Icon::Folder, |stop| {
-            stop.icon
-                .unwrap_or_else(|| stop.path.as_deref().map_or(Icon::Folder, icon_of))
-        });
+        let current_icon = current
+            .as_ref()
+            .map_or(FileIcon::for_kind(FileKind::Folder), |stop| stop.icon);
 
         let close = EventHandler::new(move |_: ()| open.set(false));
         let mut rows: Vec<Element> = stops
@@ -830,9 +823,7 @@ impl Component for CompactTrail {
                 let on_open = self.on_open.clone();
                 let close = close.clone();
                 Element::from(ListRow {
-                    icon: stop
-                        .icon
-                        .unwrap_or_else(|| stop.path.as_deref().map_or(Icon::Folder, icon_of)),
+                    icon: Lead::File(stop.icon),
                     parts: vec![Part::plain(stop.label.clone())],
                     current: index == last,
                     highlighted: false,
@@ -855,7 +846,7 @@ impl Component for CompactTrail {
         };
         rows.push(
             ListRow {
-                icon: Icon::DocumentEdit,
+                icon: Lead::Action(Icon::DocumentEdit),
                 parts: vec![Part::plain("Type a path")],
                 current: false,
                 highlighted: false,
@@ -892,11 +883,7 @@ impl Component for CompactTrail {
                     rounded(Radius::Control),
                 ],
             )
-            .child(icons::icon(
-                current_icon,
-                IconSize::Control,
-                Ink::Muted.color(&tokens),
-            ))
+            .child(file_icon_view(&tokens, &current_icon, IconSize::Control, false))
             .child(
                 BODY.in_ink(Ink::Text)
                     .label(&tokens, name.clone())

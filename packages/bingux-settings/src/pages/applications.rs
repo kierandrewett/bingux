@@ -116,8 +116,6 @@ struct Model {
     apps: Vec<AppEntry>,
     /// The row icons are cached, so rows may draw them without a stall.
     icons: bool,
-    /// The dropdown and page-head icons are cached too.
-    all_icons: bool,
     /// The default and the registered applications for each kind, once read.
     choices: Option<Result<Vec<Choice>, CommandError>>,
     /// The default and the registered applications for each other content type.
@@ -157,8 +155,6 @@ enum Update {
     Details(Vec<AppEntry>),
     /// The row icons are cached.
     RowIcons,
-    /// The dropdown and page-head icons are cached too.
-    AllIcons,
     /// The default and registered applications for each kind.
     Choices(Result<Vec<Choice>, CommandError>),
     /// The default and registered applications for each other content type.
@@ -230,7 +226,6 @@ fn apply(current: &mut Model, update: Update) {
         }
         Update::Details(apps) => current.apps = apps,
         Update::RowIcons => current.icons = true,
-        Update::AllIcons => current.all_icons = true,
         Update::Choices(choices) => current.choices = Some(choices),
         Update::FileTypes(types) => current.file_types = Some(types),
     }
@@ -255,7 +250,6 @@ fn stream_load(sender: mpsc::Sender<Update>) {
         warm_icons(&icon_names, &[ROW_ICON_SIZE]);
         let _ = icon_sender.send(Update::RowIcons);
         warm_icons(&icon_names, &OTHER_ICON_SIZES);
-        let _ = icon_sender.send(Update::AllIcons);
     });
 
     apps::with_details(&mut installed);
@@ -782,7 +776,7 @@ impl Component for ApplicationsPage {
             }
         };
 
-        page_column()
+        bingux_ui::stage::staged(page_column()
             .child(PageHead::new())
             .child(
                 Group::new(None).row(
@@ -792,7 +786,7 @@ impl Component for ApplicationsPage {
                         .on_press(move |_| router.open(routes::default_apps())),
                 ),
             )
-            .child(list)
+            .child(list))
     }
 }
 
@@ -1286,7 +1280,6 @@ impl Component for DefaultAppsPage {
                     overlays,
                     apps: data.apps.clone(),
                     types: types.clone(),
-                    icons: data.all_icons,
                 })
             }),
         };

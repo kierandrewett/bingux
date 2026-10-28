@@ -48,7 +48,11 @@ pub struct Props {
     pub cross_align: &'static str,
     /// The solid background colour, `None` for gradients and shaders.
     pub background: Option<Color>,
+    /// The top left radius, which is what the editor shows and sets.
     pub corner_radius: f32,
+    /// All four radii as painted: top left, top right, bottom right, bottom
+    /// left. The focus ring check compares them corner by corner.
+    pub corner_radii: [f32; 4],
     pub font_size: Option<f32>,
     pub text_color: Option<Color>,
     pub font_weight: Option<FontWeight>,
@@ -760,6 +764,7 @@ fn rect_props(rect: &RectElement) -> Props {
     Props {
         background,
         corner_radius: f32::from(rect.style.corner_radius.top_left()),
+        corner_radii: crate::style::Radii::of(&rect.style.corner_radius).array(),
         opacity: rect.effect.as_ref().and_then(|effect| effect.opacity),
         clip: rect
             .effect

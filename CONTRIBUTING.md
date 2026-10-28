@@ -137,6 +137,11 @@ builder, icon, style token or behaviour) must land with its entry in the
    same rule is the inspector's Layout rule "Focus ring off its face", so
    `layout-lint.py` fails on it too.
 
+A menu, context menu or dropdown that lists applications must show each app's
+icon, through the app list API: `AppChoice` with `app_menu_items` or
+`app_dropdown`. `cargo test -p bingux-ui --lib app_icon` fails on a list built
+any other way.
+
 See "Taxonomy app" in `docs/bingux-ui.md`.
 
 ## Panics are never fatal

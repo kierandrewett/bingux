@@ -35,6 +35,11 @@
 //! | Views: [`PlacesSidebar`], [`AddressBar`], [`FileView`] (list and grid), [`use_directory`] | this module | the model, bingux-ui controls |
 //! | The dialog: [`choose`], and the same body in a window: [`browse`] | this module | the views |
 //!
+//! Every file, folder, place and drive icon any of them draws comes from one
+//! description, [`FileIcon`], drawn by one element, [`file_icon_view`]; see
+//! the `file_icon` module for the rules (a folder is decided by the text of
+//! its path, a link has an emblem, the accent marks the selected row).
+//!
 //! The model has no UI, so the Files app, a command-line tool and a
 //! `bingux-contrib-portals` backend share it. The views are ordinary
 //! bingux-ui components and work in any window, not only in the chooser:
@@ -60,17 +65,24 @@ mod address_trail;
 mod browser;
 mod chooser;
 mod columns;
+mod compress;
+mod compress_media;
+mod compress_model;
+mod compress_run;
+#[cfg(all(test, feature = "testing"))]
+mod compress_tests;
 mod context_menu;
+mod extract_dialog;
 mod directory;
 mod drag;
 mod drives;
 mod file_grid;
 mod file_list;
 mod folder_table;
-mod glyphs;
+mod file_icon;
+mod hover_card;
 mod interaction;
 mod preview;
-mod preview_stage;
 mod properties;
 mod properties_access;
 mod properties_basic;
@@ -84,7 +96,11 @@ mod places_view;
 mod rename_field;
 mod scroll_memory;
 #[cfg(all(test, feature = "testing"))]
+mod file_icon_surfaces;
+#[cfg(all(test, feature = "testing"))]
 mod scroll_tests;
+#[cfg(all(test, feature = "testing"))]
+mod hover_tests;
 mod search;
 mod skeleton;
 mod states;
@@ -104,11 +120,14 @@ pub use address_bar::AddressBar;
 pub use search::{Deep, DeepResults, DeepStatus, Find, SearchLink, SearchView, use_subfolder_search};
 pub use browser::{Browse, TabMemory, browse};
 pub use chooser::choose;
+pub use compress::{CompressPreview, compress_preview};
 pub use directory::{Load, Where, home_folder, use_directory, use_places};
 pub use folder_table::{
     APP_SCHEME, FOLDER_SCHEME, RECENT_SCHEME, folder_table, location_of, place_of,
 };
-pub use glyphs::{category_icon, entry_icon, folder_icon, place_icon};
+pub use file_icon::{
+    Emblem, FileIcon, FileIconSize, FileKind, Source, Tint, file_icon_view, file_icon_view_floating,
+};
 pub use places_view::{PlacesMenu, PlacesSidebar};
 pub use skeleton::skeleton;
 pub use states::{empty_state, error_state, loading_state};

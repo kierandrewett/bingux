@@ -1,5 +1,6 @@
 //! What the file views remember between runs: column widths and order, and
-//! the icon size (the zoom level) and sort of each folder.
+//! the icon size (the zoom level) and sort of each folder. A folder is
+//! remembered under its exact path bytes (see [`folder_key`]).
 //!
 //! It is one small JSON file at `$XDG_STATE_HOME/bingux/files/view.json`
 //! (`~/.local/state/...` when that is unset). `BINGUX_FILES_STATE` names
@@ -13,7 +14,10 @@
 //! there; a write that fails is dropped, because this is a convenience and
 //! nothing depends on it.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex, PoisonError};
 use std::time::Duration;
@@ -61,6 +65,7 @@ pub enum SortKeySetting {
     Size,
     Modified,
     Kind,
+    Deleted,
     #[serde(other)]
     Unknown,
 }
@@ -73,6 +78,7 @@ impl From<Sort> for SortSetting {
                 SortKey::Size => SortKeySetting::Size,
                 SortKey::Modified => SortKeySetting::Modified,
                 SortKey::Kind => SortKeySetting::Kind,
+                SortKey::Deleted => SortKeySetting::Deleted,
             },
             descending: sort.descending,
             folders_first: sort.folders_first,
@@ -88,6 +94,7 @@ impl From<SortSetting> for Sort {
                 SortKeySetting::Size => SortKey::Size,
                 SortKeySetting::Modified => SortKey::Modified,
                 SortKeySetting::Kind => SortKey::Kind,
+                SortKeySetting::Deleted => SortKey::Deleted,
             },
             descending: setting.descending,
             folders_first: setting.folders_first,
@@ -164,27 +171,45 @@ pub fn save<T: Serialize>(key: &str, value: &T) {
     schedule_write(&mut store);
 }
 
-/// How `folder` was last shown, if the person ever changed it.
-pub fn folder(folder: &Path) -> Option<FolderView> {
-    let key = folder.to_string_lossy();
-    let store = store().lock().unwrap_or_else(PoisonError::into_inner);
-    store
-        .file
-        .folders
+/// The key a folder is remembered under: its path, byte for byte, so two
+/// folders whose names are not valid UTF-8 never share a view because they
+/// display alike (a lossy conversion gives both the same replacement
+/// characters).
+///
+/// A path that is valid UTF-8 is its own text, so the keys an earlier build
+/// wrote still match. Any other path is a NUL, which no path contains and so
+/// no other key starts with, then its bytes, with `%` and every byte outside
+/// printable ASCII written as `%XX`: different bytes, different key.
+fn folder_key(folder: &Path) -> Cow<'_, str> {
+    if let Some(text) = folder.to_str() {
+        return Cow::Borrowed(text);
+    }
+    let mut key = String::from("\0");
+    for &byte in folder.as_os_str().as_bytes() {
+        if (0x20..0x7f).contains(&byte) && byte != b'%' {
+            key.push(char::from(byte));
+        } else {
+            let _ = write!(key, "%{byte:02X}");
+        }
+    }
+    Cow::Owned(key)
+}
+
+/// The view saved under `key`, the newest first.
+fn find_folder(folders: &[(String, FolderView)], key: &str) -> Option<FolderView> {
+    folders
         .iter()
         .rev()
-        .find(|(path, _)| *path == key)
+        .find(|(path, _)| path == key)
         .map(|(_, view)| *view)
 }
 
-/// Remember how `folder` is shown.
-pub fn remember_folder(folder: &Path, view: FolderView) {
-    let key = folder.to_string_lossy().into_owned();
-    let mut store = store().lock().unwrap_or_else(PoisonError::into_inner);
-    let folders = &mut store.file.folders;
+/// Puts `view` under `key` as the newest, and forgets the oldest past
+/// [`FOLDER_LIMIT`]. False when nothing changed.
+fn put_folder(folders: &mut Vec<(String, FolderView)>, key: String, view: FolderView) -> bool {
     if let Some(at) = folders.iter().position(|(path, _)| *path == key) {
         if folders[at].1 == view && at + 1 == folders.len() {
-            return;
+            return false;
         }
         folders.remove(at);
     }
@@ -193,7 +218,21 @@ pub fn remember_folder(folder: &Path, view: FolderView) {
         let extra = folders.len() - FOLDER_LIMIT;
         folders.drain(..extra);
     }
-    schedule_write(&mut store);
+    true
+}
+
+/// How `folder` was last shown, if the person ever changed it.
+pub fn folder(folder: &Path) -> Option<FolderView> {
+    let store = store().lock().unwrap_or_else(PoisonError::into_inner);
+    find_folder(&store.file.folders, &folder_key(folder))
+}
+
+/// Remember how `folder` is shown.
+pub fn remember_folder(folder: &Path, view: FolderView) {
+    let mut store = store().lock().unwrap_or_else(PoisonError::into_inner);
+    if put_folder(&mut store.file.folders, folder_key(folder).into_owned(), view) {
+        schedule_write(&mut store);
+    }
 }
 
 fn schedule_write(guard: &mut Store) {
@@ -262,5 +301,103 @@ mod tests {
         .unwrap();
         assert_eq!(back.icon_px, super::super::zoom::DEFAULT_PX);
         assert_eq!(Sort::from(back.sort).key, SortKey::Size);
+    }
+}
+
+#[cfg(test)]
+mod folder_keys {
+    use std::ffi::OsStr;
+
+    use super::*;
+
+    fn odd(name: &[u8]) -> PathBuf {
+        PathBuf::from("/home/me").join(OsStr::from_bytes(name))
+    }
+
+    fn view(key: SortKey, icon_px: u16) -> FolderView {
+        FolderView {
+            icon_px,
+            sort: Sort {
+                key,
+                descending: false,
+                folders_first: true,
+            }
+            .into(),
+        }
+    }
+
+    #[test]
+    fn two_folders_that_display_alike_have_two_keys() {
+        let a = odd(b"caf\xe9-\xff");
+        let b = odd(b"caf\xe9-\xfe");
+        let text = PathBuf::from("/home/me/caf\u{fffd}-\u{fffd}");
+        // The text they used to share.
+        assert_eq!(a.to_string_lossy(), b.to_string_lossy());
+        assert_eq!(a.to_string_lossy(), text.to_string_lossy());
+        let keys = [folder_key(&a), folder_key(&b), folder_key(&text)];
+        for (at, key) in keys.iter().enumerate() {
+            for other in &keys[at + 1..] {
+                assert_ne!(key, other);
+            }
+        }
+        assert_eq!(folder_key(&a), folder_key(&odd(b"caf\xe9-\xff")));
+    }
+
+    #[test]
+    fn a_valid_path_is_its_own_key_so_a_file_from_an_earlier_build_still_matches() {
+        let path = Path::new("/srv/with space/a%20b/\u{e9}");
+        assert_eq!(folder_key(path), "/srv/with space/a%20b/\u{e9}");
+        assert!(matches!(folder_key(path), Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn an_escape_typed_as_text_is_not_the_byte_it_spells() {
+        // `%FF` as three characters and the byte 0xFF, before the same byte.
+        assert_ne!(folder_key(&odd(b"%FF\xfe")), folder_key(&odd(b"\xff\xfe")));
+        // No valid path starts with the NUL that marks an escaped one.
+        assert_ne!(folder_key(&odd(b"x\xff")), folder_key(Path::new("/home/me/x%FF")));
+        assert!(folder_key(&odd(b"x\xff")).starts_with('\0'));
+    }
+
+    #[test]
+    fn each_odd_folder_keeps_its_own_view() {
+        let (a, b) = (odd(b"caf\xe9-\xff"), odd(b"caf\xe9-\xfe"));
+        let mut folders = Vec::new();
+        assert!(put_folder(&mut folders, folder_key(&a).into_owned(), view(SortKey::Size, 96)));
+        assert_eq!(find_folder(&folders, &folder_key(&a)), Some(view(SortKey::Size, 96)));
+        // The lookalike has not been given a view.
+        assert_eq!(find_folder(&folders, &folder_key(&b)), None);
+        assert!(put_folder(&mut folders, folder_key(&b).into_owned(), view(SortKey::Modified, 32)));
+        assert_eq!(folders.len(), 2);
+        assert_eq!(find_folder(&folders, &folder_key(&a)), Some(view(SortKey::Size, 96)));
+        assert_eq!(find_folder(&folders, &folder_key(&b)), Some(view(SortKey::Modified, 32)));
+        // Putting the same view again changes nothing.
+        assert!(!put_folder(&mut folders, folder_key(&b).into_owned(), view(SortKey::Modified, 32)));
+    }
+
+    #[test]
+    fn an_odd_folder_survives_the_file() {
+        let (a, b) = (odd(b"caf\xe9-\xff"), odd(b"caf\xe9-\xfe"));
+        let mut file = File {
+            format: FORMAT,
+            ..File::default()
+        };
+        put_folder(&mut file.folders, folder_key(&a).into_owned(), view(SortKey::Kind, 64));
+        put_folder(&mut file.folders, folder_key(&b).into_owned(), view(SortKey::Name, 128));
+        let text = serde_json::to_string(&file).unwrap();
+        let back: File = serde_json::from_str(&text).unwrap();
+        assert_eq!(find_folder(&back.folders, &folder_key(&a)), Some(view(SortKey::Kind, 64)));
+        assert_eq!(find_folder(&back.folders, &folder_key(&b)), Some(view(SortKey::Name, 128)));
+    }
+
+    #[test]
+    fn the_oldest_folders_are_forgotten_past_the_limit() {
+        let mut folders = Vec::new();
+        for index in 0..FOLDER_LIMIT + 5 {
+            put_folder(&mut folders, format!("/f/{index}"), view(SortKey::Name, 64));
+        }
+        assert_eq!(folders.len(), FOLDER_LIMIT);
+        assert_eq!(find_folder(&folders, "/f/0"), None);
+        assert!(find_folder(&folders, &format!("/f/{}", FOLDER_LIMIT + 4)).is_some());
     }
 }

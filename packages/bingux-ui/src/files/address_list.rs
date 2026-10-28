@@ -5,6 +5,7 @@
 use freya::prelude::*;
 
 use crate::component::ComponentName;
+use super::file_icon::{FileIcon, file_icon_view};
 use crate::controls::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
 use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
@@ -67,10 +68,18 @@ impl Part {
     }
 }
 
+/// What stands before a row's name: a file or folder, drawn by
+/// [`file_icon_view`], or the glyph of an action ("Type a path").
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum Lead {
+    File(FileIcon),
+    Action(Icon),
+}
+
 /// One choosable row: an icon, a name and, for the current choice, a tick.
 #[derive(PartialEq)]
 pub(super) struct ListRow {
-    pub icon: Icon,
+    pub icon: Lead,
     pub parts: Vec<Part>,
     /// The folder the trail is in: ticked and filled.
     pub current: bool,
@@ -142,11 +151,14 @@ impl Component for ListRow {
                 event.stop_propagation();
                 on_press.call(());
             })
-            .child(icons::icon(
-                self.icon,
-                IconSize::Control,
-                Paint::Text.color(&tokens),
-            ))
+            .child(match &self.icon {
+                Lead::File(icon) => {
+                    file_icon_view(&tokens, icon, IconSize::Control, self.current)
+                }
+                Lead::Action(icon) => {
+                    icons::icon(*icon, IconSize::Control, Paint::Muted.color(&tokens)).into()
+                }
+            })
             .child(label)
             .child(icons::icon(
                 Icon::Check,

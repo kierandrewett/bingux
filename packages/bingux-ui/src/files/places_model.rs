@@ -10,9 +10,8 @@ use bingux_files::volumes::Volume;
 use bingux_files::{Place, PlaceKind, Places};
 
 use super::directory::Where;
-use super::glyphs::{drive_icon, sidebar_icon};
+use super::file_icon::FileIcon;
 use crate::controls::USAGE_WARN;
-use crate::icons::Icon;
 
 /// What a row is, which decides its menu and its end button.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -27,7 +26,7 @@ pub(crate) enum ItemKind {
 /// One row.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Item {
-    pub icon: Icon,
+    pub icon: FileIcon,
     pub label: String,
     pub target: Where,
     pub kind: ItemKind,
@@ -81,7 +80,7 @@ pub(crate) fn sections(
             .any(|bookmark| bookmark.path.as_deref() == Some(path))
     };
     let place_item = |place: &Place, kind: ItemKind| Item {
-        icon: sidebar_icon(place),
+        icon: FileIcon::for_place(place),
         label: place.name.clone(),
         target: match &place.path {
             Some(path) => Where::Folder(path.clone()),
@@ -122,7 +121,7 @@ pub(crate) fn sections(
         .iter()
         .find(|place| place.kind == PlaceKind::Computer);
     let mut drives = vec![Item {
-        icon: drive_icon(MountKind::Local),
+        icon: FileIcon::for_mount(MountKind::Local),
         label: computer.map_or_else(bingux_files::location::host_name, |place| place.name.clone()),
         target: Where::Folder(root.to_path_buf()),
         kind: ItemKind::Drive,
@@ -138,7 +137,7 @@ pub(crate) fn sections(
             .iter()
             .filter(|mount| mount.mount_point != root)
             .map(|mount| Item {
-                icon: drive_icon(mount.kind),
+                icon: FileIcon::for_mount(mount.kind),
                 label: mount.label.clone(),
                 target: Where::Folder(mount.mount_point.clone()),
                 kind: ItemKind::Drive,
@@ -148,7 +147,7 @@ pub(crate) fn sections(
             }),
     );
     drives.extend(volumes.iter().map(|volume| Item {
-        icon: drive_icon(volume.kind),
+        icon: FileIcon::for_mount(volume.kind),
         label: volume.label.clone(),
         // Not a folder: the device, so two volumes never look alike.
         target: Where::Folder(volume.device.clone().into()),
@@ -162,6 +161,25 @@ pub(crate) fn sections(
         items: drives,
     });
     out
+}
+
+/// Whether `item` is the Trash row.
+pub(crate) fn is_trash(item: &Item) -> bool {
+    item.kind == ItemKind::Place
+        && item
+            .path()
+            .and_then(bingux_files::ops::trash_place)
+            .is_some_and(|place| place.is_root())
+}
+
+/// Give the Trash row the icon for a Trash with something in it (`full`) or
+/// nothing in it, from [`FileIcon::for_trash`].
+pub(crate) fn trash_state(sections: &mut [Section], full: bool) {
+    for item in sections.iter_mut().flat_map(|section| section.items.iter_mut()) {
+        if is_trash(item) {
+            item.icon = FileIcon::for_trash(full);
+        }
+    }
 }
 
 /// The row to select for `current`, as (section, row). A row that is exactly
@@ -414,7 +432,7 @@ mod tests {
         let out = sections(&places, &[], &[], &[], true);
         let trash = out[0].items.last().unwrap();
         assert_eq!(trash.label, "Trash");
-        assert_eq!(trash.icon, Icon::UserTrash);
+        assert_eq!(trash.icon.glyph, crate::icons::Icon::UserTrash);
         assert_eq!(
             trash.path(),
             Some(Path::new("/home/a/.local/share/Trash/files"))

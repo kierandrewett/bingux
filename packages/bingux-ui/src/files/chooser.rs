@@ -653,6 +653,11 @@ impl Component for ChooserBody {
             remembered.map_or(fallback, |view| nearest_level(f32::from(view.icon_px)))
         });
         let new_folder = use_state(|| 0_u32);
+        // The sidebar's Empty Trash reaches the view beside it through this.
+        let empty_trash = super::actions::provide_empty_trash();
+        // Whether the docked preview pane is open; the toolbar button and the
+        // file view share it.
+        let preview_pane = use_state(|| false);
         let focus = use_state(|| 0_u32);
         let choices = use_state(|| {
             request
@@ -785,7 +790,11 @@ impl Component for ChooserBody {
                     (*filter.read()).and_then(|index| filters.get(index))
                 };
                 let shown = listing.select_counted(&View {
-                    show_hidden: *show_hidden.read(),
+                    // Everything in the Trash is shown, dot files included: a
+                    // deleted `.bashrc` is an item to restore, not a hidden one.
+                    show_hidden: *show_hidden.read()
+                        || (!listing.recent
+                            && bingux_files::ops::trash_place(&listing.path).is_some_and(|place| place.is_root())),
                     filter: active,
                     directories_only: false,
                     sort: *sort.read(),
@@ -981,6 +990,16 @@ impl Component for ChooserBody {
             }
         };
 
+        let footer = footer(&tokens, compact, &session, saving, problem);
+        // A browser window's view reaches the window's bottom edge when no
+        // footer sits below it, so it paints the window's radius at the corners
+        // that touch the window; its focus ring follows. Beside the sidebar
+        // only the right corner does.
+        let corners = match (&self.host, footer.is_none(), compact) {
+            (Host::Browser(_), true, true) => Corners::Bottom,
+            (Host::Browser(_), true, false) => Corners::BottomRight,
+            _ => Corners::None,
+        };
         let main = main_area(
             &session,
             &current_load,
@@ -990,6 +1009,7 @@ impl Component for ChooserBody {
             show_hidden,
             level,
             new_folder,
+            preview_pane,
             focus,
             Arc::new(
                 places
@@ -1007,6 +1027,7 @@ impl Component for ChooserBody {
             folder_mode,
             active_filter.is_some(),
             search_view.clone(),
+            corners,
         );
         let toolbar = toolbar(
             &tokens,
@@ -1021,11 +1042,11 @@ impl Component for ChooserBody {
             show_hidden,
             level,
             new_folder,
+            preview_pane,
             focus,
             (!compact && shows_filters(&session)).then(|| filter_control(&session)),
             address_search,
         );
-        let footer = footer(&tokens, compact, &session, saving, problem);
 
         // A phone's sheet reaches the screen's bottom edge, so with no footer
         // the list keeps its own clearance.
@@ -1054,7 +1075,10 @@ impl Component for ChooserBody {
                                             move |to: Where| nav.go(to),
                                         )
                                         .recent(request.action == Action::Open)
-                                        .reload(places_rev);
+                                        .reload(places_rev)
+                                        .on_empty_trash(move |_: ()| {
+                                            super::actions::request_empty_trash(empty_trash)
+                                        });
                                         match &self.host {
                                             Host::Browser(browse) => {
                                                 let on_new_tab = browse.on_new_tab.clone();
@@ -1111,12 +1135,14 @@ fn main_area(
     show_hidden: State<bool>,
     level: State<u16>,
     new_folder: State<u32>,
+    preview_pane: State<bool>,
     focus: State<u32>,
     bookmarks: Arc<Vec<PathBuf>>,
     use_grid: bool,
     folder_mode: bool,
     filtered: bool,
     search: Option<SearchView>,
+    corners: Corners,
 ) -> Element {
     match load {
         Load::Loading => skeleton(use_grid),
@@ -1129,6 +1155,9 @@ fn main_area(
                         search.query.text(),
                         search.deep.as_ref().map(|deep| deep.running),
                     );
+                }
+                if bingux_files::ops::trash_place(&listing.path).is_some_and(|place| place.is_root()) {
+                    return super::states::trash_empty_state();
                 }
                 let hidden_items =
                     !shown_hidden && listing.entries.iter().any(|entry| entry.hidden);
@@ -1163,6 +1192,7 @@ fn main_area(
                 .show_hidden(shown_hidden)
                 .thumbnails(listing.mount.thumbnails())
                 .new_folder(new_folder)
+                .preview_pane(preview_pane)
                 .focus(focus)
                 .bookmarks(bookmarks)
                 .on_refresh({
@@ -1186,6 +1216,7 @@ fn main_area(
                 .on_open_folder(move |path: PathBuf| nav.go(Where::Folder(path)))
                 .on_pick(pick)
                 .on_activate(activate);
+            view = view.corners(corners);
             if let Host::Browser(browse) = &session.host {
                 view = view
                     .caps(Capabilities::FILES_APP)
@@ -1217,6 +1248,7 @@ fn toolbar(
     show_hidden: State<bool>,
     mut level: State<u16>,
     mut new_folder: State<u32>,
+    mut preview_pane: State<bool>,
     mut focus: State<u32>,
     filter: Option<Element>,
     search: SearchLink,
@@ -1312,6 +1344,17 @@ fn toolbar(
     })
     .menu(view_items(nav, sort, show_hidden, session.include_noise));
 
+    // The docked preview pane: it shows the selected file beside the list and
+    // follows the selection. A phone has no room for it.
+    let pane_shown = *preview_pane.read();
+    let pane = icon_button(Icon::SidebarShow, move |_: ()| {
+        let shown = *preview_pane.peek();
+        preview_pane.set(!shown);
+    })
+    .size(Dim::Control)
+    .active(pane_shown)
+    .tooltip("Preview pane (Alt+P)");
+
     if compact {
         let first = rect()
             .tw(
@@ -1359,6 +1402,7 @@ fn toolbar(
         .child(rect().tw(tokens, &[w_flex()]).child(path_bar))
         .maybe_child(filter)
         .child(create)
+        .child(pane)
         .child(view)
         .into()
 }

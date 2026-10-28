@@ -5,6 +5,9 @@ edition = "2024"
 rust-version = "1.85"
 license = "GPL-3.0-or-later"
 description = "Files, the file manager of the Bingux desktop shell"
+authors = ["Kieran Drewett"]
+homepage = "https://github.com/kierandrewett/bingux"
+repository = "https://github.com/kierandrewett/bingux"
 
 # The package is `bingux-files-app` because `bingux-files` is the filesystem
 # model it and the file chooser share. The program and its desktop id are

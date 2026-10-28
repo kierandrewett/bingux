@@ -16,8 +16,8 @@ use crate::motion::Focusable;
 use crate::shell::menu::MenuItem;
 use crate::shell::overlays::Overlays;
 use crate::shell::panel::{PanelRect, PanelTrigger};
-use crate::style::Radius;
-use crate::surface::{is_activation_key, use_enabled};
+use crate::style::{Radius, Tw, rounded};
+use crate::surface::{is_activation_key, use_enabled, use_tokens};
 
 /// Makes `content` one Tab stop with the library's focus ring.
 ///
@@ -108,7 +108,10 @@ pub fn focus_stop_with(
     let overlays = try_consume_context::<Overlays>().filter(|_| !menu.is_empty());
     let on_activate: EventHandler<()> = on_activate.into();
     let on_key = on_activate.clone();
+    let tokens = use_tokens();
+    // The stop's radius is the face's own, painted here, and the ring reads it.
     let control = content
+        .tw(&tokens, &[rounded(radius)])
         .a11y_id(a11y_id)
         .a11y_role(role)
         .a11y_alt(label.into())
@@ -181,7 +184,7 @@ pub fn focus_stop_with(
                 })
         });
     match ring {
-        StopRing::Outside => control.focusable(focus(), radius),
-        StopRing::Inside => control.focusable_inside(focus(), radius),
+        StopRing::Outside => control.focusable(focus()),
+        StopRing::Inside => control.focusable_inside(focus()),
     }
 }
