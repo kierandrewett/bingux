@@ -12,7 +12,7 @@ use freya::prelude::*;
 
 use super::press::{point_of, use_press};
 use crate::focus::{press_focus, use_focus_core};
-use crate::motion::{Focusable, RingFit};
+use crate::motion::Focusable;
 use crate::shell::menu::MenuItem;
 use crate::shell::overlays::Overlays;
 use crate::shell::panel::{PanelRect, PanelTrigger};
@@ -82,10 +82,6 @@ pub enum StopRing {
     Outside,
     /// Just inside the box, so a clipped container edge cannot cut it off.
     Inside,
-    /// Inside, for a box that takes its height from its content and pads it.
-    /// `left` and `top` are the padding the ring reaches back over; the box's
-    /// size is measured here.
-    Fitted { left: f32, top: f32 },
 }
 
 /// [`focus_stop_menu`] on a focus node the caller made. A list that moves
@@ -187,18 +183,5 @@ pub fn focus_stop_with(
     match ring {
         StopRing::Outside => control.focusable(focus(), radius),
         StopRing::Inside => control.focusable_inside(focus(), radius),
-        StopRing::Fitted { left, top } => {
-            let size = area.read().size;
-            control.focusable_fitted(
-                focus(),
-                radius,
-                RingFit {
-                    left,
-                    top,
-                    width: size.width,
-                    height: size.height,
-                },
-            )
-        }
     }
 }

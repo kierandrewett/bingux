@@ -415,7 +415,7 @@ pub fn fake() -> Option<Model> {
     let radio_on = !matches!(scenario.as_str(), "wifi-off" | "airplane" | "no-wifi");
     let joined = radio_on && scenario != "offline";
     let network = |ssid: &str, signal: u8, security: Security, in_use: bool, saved: bool| Network {
-        ssid: ssid.into(),
+        ssid: bingux_ui::stress::data(ssid),
         signal,
         security,
         in_use,
@@ -430,9 +430,9 @@ pub fn fake() -> Option<Model> {
         bssid: format!("A4:2B:B0:11:22:{signal:02X}"),
     };
     let profile = |name: &str, key_mgmt: &str, priority: i32, active: bool| Saved {
-        name: name.into(),
+        name: bingux_ui::stress::data(name),
         uuid: format!("fake-wifi-{name}"),
-        ssid: name.into(),
+        ssid: bingux_ui::stress::data(name),
         autoconnect: true,
         priority,
         ap: false,

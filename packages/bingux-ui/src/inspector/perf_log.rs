@@ -2,7 +2,13 @@
 //! headless session. Inert unless one of the variables below is set.
 //!
 //! - `BINGUX_PERF_LOG=FILE` appends one line per application frame:
-//!   `<unix time in milliseconds when it ended> <milliseconds the frame took>`.
+//!   `<unix time in milliseconds when it ended> <milliseconds the frame took>
+//!   <milliseconds of UI-thread CPU since the previous frame ended>
+//!   <the same without the presenting step>. The third figure is the UI
+//!   thread's busy time per frame, events and layout and render and the GPU
+//!   submit; the fourth leaves the submit out, which on a software renderer
+//!   (llvmpipe, headless sway) is rasterisation on the UI thread and says
+//!   nothing about the app. Neither depends on waiting.
 //!   A frame starts at its layout pass (or its render when the layout was
 //!   clean) and ends when it is on screen, the same span the Performance tab
 //!   times.
@@ -25,6 +31,12 @@ struct Log {
     frames: Option<File>,
     folded: Option<PathBuf>,
     frame_start: Option<u64>,
+    /// The UI thread's CPU clock when the previous frame ended.
+    cpu_at: u64,
+    /// The UI thread's CPU clock when presenting began, while it runs.
+    present_from: Option<u64>,
+    /// CPU the UI thread spent presenting since the previous frame ended.
+    present_cpu: u64,
 }
 
 thread_local! {
@@ -46,6 +58,9 @@ fn open() -> Option<Log> {
         frames,
         folded,
         frame_start: None,
+        cpu_at: thread_cpu_ns(),
+        present_from: None,
+        present_cpu: 0,
     })
 }
 
@@ -63,13 +78,28 @@ pub fn on_event(event: &PluginEvent<'_>) {
                 let now = perf_sample::now_ns();
                 log.frame_start.get_or_insert(now);
             }
+            PluginEvent::BeforePresenting { .. } => log.present_from = Some(thread_cpu_ns()),
+            PluginEvent::AfterPresenting { .. } => {
+                if let Some(from) = log.present_from.take() {
+                    log.present_cpu += thread_cpu_ns().saturating_sub(from);
+                }
+            }
             PluginEvent::AfterRedraw { .. } => {
                 let now = perf_sample::now_ns();
                 if let (Some(start), Some(file)) = (log.frame_start.take(), log.frames.as_mut()) {
                     let unix_ms = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .map_or(0, |elapsed| elapsed.as_millis());
-                    let _ = writeln!(file, "{unix_ms} {:.2}", now.saturating_sub(start) as f64 / 1.0e6);
+                    let cpu = thread_cpu_ns();
+                    let busy = cpu.saturating_sub(log.cpu_at) as f64 / 1.0e6;
+                    let app = cpu.saturating_sub(log.cpu_at).saturating_sub(log.present_cpu) as f64 / 1.0e6;
+                    log.cpu_at = cpu;
+                    log.present_cpu = 0;
+                    let _ = writeln!(
+                        file,
+                        "{unix_ms} {:.2} {busy:.2} {app:.2}",
+                        now.saturating_sub(start) as f64 / 1.0e6
+                    );
                 }
                 if let Some(path) = &log.folded {
                     dump_if_asked(path);
@@ -100,4 +130,12 @@ fn dump_if_asked(path: &PathBuf) {
     }
     let _ = std::fs::remove_file(trigger);
     perf_sample::start();
+}
+
+/// CPU time this thread has used, in nanoseconds.
+fn thread_cpu_ns() -> u64 {
+    let mut ts = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+    // SAFETY: `ts` is a valid out-pointer.
+    unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut ts) };
+    ts.tv_sec as u64 * 1_000_000_000 + ts.tv_nsec as u64
 }

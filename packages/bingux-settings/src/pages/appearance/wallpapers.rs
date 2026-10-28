@@ -102,7 +102,7 @@ fn is_picture(path: &Path) -> bool {
 /// Collects the pictures under `dir`. Hidden entries and symlinked folders are
 /// skipped, so a link cannot send the walk round in a loop.
 fn walk(dir: &Path, depth: usize, found: &mut Vec<PathBuf>) {
-    let Ok(entries) = fs::read_dir(dir) else {
+    let Ok(entries) = crate::system::read_dir(dir) else {
         return;
     };
     for entry in entries.flatten() {
@@ -254,7 +254,6 @@ impl Component for WallpaperPicker {
             rows.extend(tile_rows(&tokens, tiles, TILE_HEIGHT));
             return Element::from(
                 Group::titled("Wallpaper")
-                    .description("Loading pictures")
                     .rows(rows),
             );
         };
@@ -283,7 +282,6 @@ impl Component for WallpaperPicker {
 
         Element::from(
             Group::titled("Wallpaper")
-                .description(format!("{} pictures", shown.len()))
                 .rows(rows),
         )
     }

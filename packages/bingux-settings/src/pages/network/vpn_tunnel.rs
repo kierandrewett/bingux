@@ -16,10 +16,10 @@ use super::vpn::{self, Profile, nm};
 use super::{Owner, Section};
 use crate::icons::Icon;
 use crate::pages::loading::veiled;
-use crate::routes::Route;
+use crate::routes;
 use crate::system;
 use crate::ui::{
-    Group, ResponseKind, Status, action_button, action_row, choice_row, dialog, form_field,
+    CANCEL_ID, Group, ResponseKind, Status, action_button, action_row, choice_row, dialog, form_field,
     icon_button, page_column, pending_bar, primary_button, row, status, switch_row, text_field,
 };
 use bingux_ui::style::*;
@@ -206,17 +206,15 @@ impl Component for WgTunnel {
         let public = use_state(|| None::<String>);
         let error = use_state(|| None::<String>);
         let busy = use_state(|| false);
-        let has_wg = wireguard::has_wg();
+        let has_wg = wireguard::use_has_wg();
         use_hook({
             let key = self.profile.interface.private_key.clone();
             move || {
-                if wireguard::has_wg() {
-                    let mut public = public;
-                    system::background_then(
-                        move || wireguard::public_key(&key),
-                        move |derived| public.set(derived),
-                    );
-                }
+                let mut public = public;
+                system::background_then(
+                    move || wireguard::public_key(&key),
+                    move |derived| public.set(derived),
+                );
             }
         });
 
@@ -276,12 +274,9 @@ impl Component for WgTunnel {
 
         let public_row = if has_wg {
             row("Public key")
-                .subtitle("Give this to the other side of the tunnel.")
                 .mono_value(public.read().clone().unwrap_or_default())
         } else {
-            row("Public key").subtitle(
-                "Not shown here: the wg tool is not installed. The other side needs it; wg pubkey makes it from the private key.",
-            )
+            row("Public key").subtitle("The wg tool is not installed")
         };
         let mut interface = Group::titled("Interface")
             .row(
@@ -335,8 +330,7 @@ impl Component for WgTunnel {
                     .validate(check::fwmark),
             );
 
-        let mut peers = Group::titled("Peers")
-            .description("A peer is a server or computer this tunnel talks to.");
+        let mut peers = Group::titled("Peers");
         for (index, peer) in self.profile.peers.iter().enumerate() {
             let owner = self.owner.clone();
             peers = peers.row(
@@ -346,10 +340,7 @@ impl Component for WgTunnel {
                     .subtitle_one_line()
                     .navigates()
                     .on_press(move |_| {
-                        ctx.navigator.push(Route::Section {
-                            owner: owner.clone(),
-                            section: Section::Peer(index),
-                        })
+                        ctx.router.open(routes::section(&owner.clone(), &Section::Peer(index)))
                     }),
             );
         }
@@ -360,21 +351,19 @@ impl Component for WgTunnel {
                 .leading(Icon::ListAdd)
                 .navigates()
                 .on_press(move |_| {
-                    ctx.navigator.push(Route::Section {
-                        owner: owner.clone(),
-                        section: Section::Peer(next),
-                    })
+                    ctx.router.open(routes::section(&owner.clone(), &Section::Peer(next)))
                 }),
         );
 
         page_column()
-            .maybe_child(pending_bar(dirty, problem.is_none(), apply, revert))
-            .maybe_child(
+            .child(pending_bar(dirty, problem.is_none(), apply, revert))
+            .child(bingux_ui::motion::reveal_block_if(
+                S10,
                 error
                     .read()
                     .clone()
-                    .map(|message| status(Status::Error(message))),
-            )
+                    .map(|message| Element::from(status(Status::Error(message)))),
+            ))
             .child(interface)
             .child(peers)
     }
@@ -609,7 +598,7 @@ impl Component for PeerForm {
                                     ctx.overlays.toast(RECONNECT_NOTE);
                                 }
                                 if was_new {
-                                    ctx.navigator.pop();
+                                    ctx.router.pop();
                                 } else {
                                     saved.call(());
                                 }
@@ -627,10 +616,6 @@ impl Component for PeerForm {
 
         let all = wireguard::is_all_traffic(&peer.allowed_ips);
         let mut traffic = Group::titled("Traffic")
-            .description(
-                "Route all traffic sends everything you do online through this peer. \
-                 Otherwise only the addresses you list go through it.",
-            )
             .row(switch_row("Route all traffic", all, move |on: bool| {
                 let mut allowed = draft.allowed;
                 allowed.set(if on {
@@ -684,19 +669,16 @@ impl Component for PeerForm {
 
         // A saved peer applies its changes together, like the interface. A new
         // peer has nothing to revert to, so it has a button to add it.
-        let bar = if is_new {
-            None
-        } else {
-            pending_bar(dirty, problem.is_none(), apply.clone(), revert)
-        };
+        let bar = pending_bar(dirty && !is_new, problem.is_none(), apply.clone(), revert);
         let mut page = page_column()
-            .maybe_child(bar)
-            .maybe_child(
+            .child(bar)
+            .child(bingux_ui::motion::reveal_block_if(
+                S10,
                 error
                     .read()
                     .clone()
-                    .map(|message| status(Status::Error(message))),
-            )
+                    .map(|message| Element::from(status(Status::Error(message)))),
+            ))
             .child(peer_group)
             .child(traffic);
         if is_new {
@@ -743,6 +725,7 @@ fn confirm_delete_peer(ctx: NetCtx, form: &PeerForm, label: &str) {
             "This tunnel stops talking to that peer.",
         )
         .cancel("Cancel")
+        .default_action(CANCEL_ID)
         .response("Delete", ResponseKind::Destructive, move |_| {
             let (peers, uuid, device) = (peers.clone(), uuid.clone(), device.clone());
             system::background_then(
@@ -752,7 +735,7 @@ fn confirm_delete_peer(ctx: NetCtx, form: &PeerForm, label: &str) {
                         if reconnect {
                             ctx.overlays.toast(RECONNECT_NOTE);
                         }
-                        ctx.navigator.pop();
+                        ctx.router.pop();
                     }
                     Err(message) => ctx.overlays.toast(message),
                 },
@@ -1123,16 +1106,9 @@ impl Component for PluginForm {
         };
 
         let mut sign_in = Group::titled(&plugins::display_name(&short));
-        if !plugins::is_known(&short) {
-            sign_in = sign_in.description(
-                "This app has no screen for this kind of VPN yet, so its settings are listed below as the plugin keeps them.",
-            );
-        }
         sign_in = field_rows(sign_in, fields, &states, &texts);
 
-        let mut advanced = Group::titled("Advanced").description(
-            "Every other setting of this VPN, as its plugin keeps it. Change them only if you know what they do.",
-        );
+        let mut advanced = Group::titled("Advanced");
         for extra in &current_extras {
             advanced = advanced.row(Element::from(rect().key(&extra.key).child(ExtraRow {
                 extra: extra.clone(),
@@ -1182,13 +1158,14 @@ impl Component for PluginForm {
             ));
 
         page_column()
-            .maybe_child(pending_bar(dirty, problem.is_none(), apply, revert))
-            .maybe_child(
+            .child(pending_bar(dirty, problem.is_none(), apply, revert))
+            .child(bingux_ui::motion::reveal_block_if(
+                S10,
                 error
                     .read()
                     .clone()
-                    .map(|message| status(Status::Error(message))),
-            )
+                    .map(|message| Element::from(status(Status::Error(message)))),
+            ))
             .child(sign_in)
             .child(advanced)
     }

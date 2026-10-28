@@ -8,6 +8,8 @@ use freya::prelude::*;
 
 use bingux_ui::controls::form::validate;
 use bingux_ui::controls::{form_field, pending_bar};
+use bingux_ui::motion::reveal_block;
+use bingux_ui::style::S10;
 
 use super::draft::{Draft, Values, use_draft};
 use super::store;
@@ -94,14 +96,6 @@ fn changes(form: &Form, saved: &ProfileData) -> Changes {
     out
 }
 
-/// What the method does, in plain words.
-fn method_caption(method: &str) -> &'static str {
-    match method {
-        "auto" => "Applications get their proxy settings from an address or a script.",
-        _ => "This connection does not set a proxy.",
-    }
-}
-
 /// The Proxy page of a connection.
 #[derive(PartialEq)]
 pub struct ProxyBody {
@@ -158,28 +152,26 @@ impl Component for ProxyBody {
                     draft.set("method", value);
                 },
             )
-            .subtitle(method_caption(&form.method))
         };
 
         let mut column =
-            page_column().maybe_child(pending_bar(dirty, ok && !*busy.read(), apply, revert));
-        let mut proxy = Group::titled("Proxy").row(method_row);
-        if form.automatic() {
+            page_column().child(pending_bar(dirty, ok && !*busy.read(), apply, revert));
+        let browser_only = {
             let page = page.clone();
-            proxy = proxy.row(
-                switch_row(
-                    "Only for web browsers",
-                    page.saved.yes("proxy.browser-only"),
-                    move |on: bool| page.apply_now(Changes::one("proxy.browser-only", yes_no(on))),
-                )
-                .subtitle("Other applications connect directly."),
-            );
-        }
+            switch_row(
+                "Only for web browsers",
+                page.saved.yes("proxy.browser-only"),
+                move |on: bool| page.apply_now(Changes::one("proxy.browser-only", yes_no(on))),
+            )
+        };
+        let proxy = Group::titled("Proxy")
+            .row(method_row.nested(form.automatic(), vec![browser_only.into()]));
         column = column.child(proxy);
-        if form.automatic() {
-            column = column.child(
+        {
+            column = column.child(reveal_block(
+                form.automatic(),
+                S10,
                 Group::titled("Automatic configuration")
-                    .description("Use an address or a script.")
                     .row(
                         form_field("Address", draft.text("pac_url"))
                             .placeholder("http://wpad.example.com/proxy.pac")
@@ -197,7 +189,7 @@ impl Component for ProxyBody {
                             .monospace()
                             .multiline(6),
                     ),
-            );
+            ));
         }
         column
     }

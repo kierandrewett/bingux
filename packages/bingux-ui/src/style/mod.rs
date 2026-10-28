@@ -100,6 +100,12 @@ pub enum Sides {
 const SHEET_EDGE_OFFSET: f32 = 24.0;
 const SHEET_EDGE_BLUR: f32 = 32.0;
 const SHEET_EDGE_OPACITY: f32 = 0.5;
+/// The shadow of a lifted screen (`Util::LiftShadow`): offset down in px,
+/// blur in px and black opacity at full amount.
+const LIFT_OFFSET: f32 = 12.0;
+const LIFT_BLUR: f32 = 32.0;
+const LIFT_OPACITY: f32 = 0.35;
+
 
 /// One utility: a single fact about a box.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -113,6 +119,9 @@ pub enum Util {
     /// `Radius` times a run-time amount from 0 to 1, for a box whose corners
     /// animate in and out.
     RoundedScaled(Radius, f32),
+    /// A top margin of minus `space` times the amount, for a box that pulls
+    /// back the gap its column puts above it while it grows in.
+    PullUp(Space, f32),
     Bg(Paint),
     /// A run-time colour fill, for a colour chosen while the app runs (a
     /// picker's value, a swatch). Fixed colours are `Bg(Paint::..)`.
@@ -136,9 +145,15 @@ pub enum Util {
     /// at rest. Stronger and tighter than `Elevation::Floating`, so the
     /// edge reads while the sheet moves.
     SheetEdgeShadow(f32),
+    /// A soft shadow all round that lifts a screen off the one beneath it
+    /// while it is dragged away (predictive back), scaled by a run-time
+    /// amount from 0 to 1 so it vanishes at rest.
+    LiftShadow(f32),
     /// `Radius` times a run-time amount on the left corners only, for a card
     /// that slides in from the right.
     RoundedLeftScaled(Radius, f32),
+    /// `Radius` plus a run-time number of pixels on some corners only.
+    RoundedOn(Radius, Corners, f32),
     W(Extent),
     H(Extent),
     MinW(Dim),
@@ -214,6 +229,11 @@ pub const fn rounded(radius: Radius) -> Util {
 pub fn rounded_by(radius: Radius, extra: f32) -> Util {
     Util::RoundedBy(radius, extra)
 }
+/// A top margin of minus `space` times `amount` (0 to 1): the box takes back
+/// part of the gap above it. `amount` may change at run time.
+pub fn pull_up(space: Space, amount: f32) -> Util {
+    Util::PullUp(space, amount)
+}
 /// `radius` scaled by `amount` (0 to 1), for a box that animates its corners
 /// in and out. `amount` may change at run time.
 pub fn rounded_scaled(radius: Radius, amount: f32) -> Util {
@@ -250,10 +270,31 @@ pub const fn shadow(elevation: Elevation) -> Util {
 pub fn sheet_edge_shadow(amount: f32) -> Util {
     Util::SheetEdgeShadow(amount)
 }
+/// A soft shadow all round, scaled by `amount` (0 to 1): the screen that
+/// predictive back lifts and shrinks. See `Util::LiftShadow`.
+pub fn lift_shadow(amount: f32) -> Util {
+    Util::LiftShadow(amount)
+}
 /// `radius` scaled by `amount` (0 to 1) on the left corners only; see
 /// `Util::RoundedLeftScaled`.
 pub fn rounded_left_scaled(radius: Radius, amount: f32) -> Util {
     Util::RoundedLeftScaled(radius, amount)
+}
+/// The corners of a box that take a radius, for a box that sits flush against
+/// a neighbour (a segment of a split button): the outer corners are rounded
+/// and the corners at the seam are square. `None` is a square box, such as a
+/// flat text field's line, whose focus ring is square too.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Corners {
+    All,
+    Left,
+    Right,
+    None,
+}
+/// `radius` plus `extra` pixels on `corners` only, square elsewhere; see
+/// [`Corners`].
+pub fn rounded_on(radius: Radius, corners: Corners, extra: f32) -> Util {
+    Util::RoundedOn(radius, corners, extra)
 }
 pub const fn surface(base: Paint, hover: bool, press: bool, selected: bool) -> Util {
     Util::Surface {
@@ -337,6 +378,12 @@ pub const fn clip() -> Util {
 /// as a breadcrumb. Its children flow left to right.
 pub fn scroll_x() -> ScrollView {
     ScrollView::new().direction(Direction::Horizontal)
+}
+
+/// [`scroll_x`] driven by `scroll`, for a row whose owner scrolls it to a
+/// place (a tab strip bringing the selected tab into view).
+pub fn scroll_x_controlled(scroll: ScrollController) -> ScrollView {
+    ScrollView::new_controlled(scroll).direction(Direction::Horizontal)
 }
 
 /// Applies utilities and recipes to a box.
@@ -502,9 +549,25 @@ fn apply_layout(rect: Rect, util: Util) -> Rect {
         Util::Rounded(radius) => rect.corner_radius(radius.px()),
         Util::RoundedBy(radius, extra) => rect.corner_radius(radius.px() + extra),
         Util::RoundedScaled(radius, amount) => rect.corner_radius(radius.px() * amount),
+        Util::PullUp(space, amount) => {
+            let mut rect = rect;
+            let mut gaps = sides_of(&rect.get_layout().layout.margin);
+            set_sides(&mut gaps, Sides::Top, -(space.px() * amount));
+            let [top, right, bottom, left] = gaps;
+            rect.margin((top, right, bottom, left))
+        }
         Util::RoundedLeftScaled(radius, amount) => {
             let r = radius.px() * amount;
             rect.corner_radius((r, 0.0, 0.0, r))
+        }
+        Util::RoundedOn(radius, corners, extra) => {
+            let r = radius.px() + extra;
+            match corners {
+                Corners::All => rect.corner_radius(r),
+                Corners::Left => rect.corner_radius((r, 0.0, 0.0, r)),
+                Corners::Right => rect.corner_radius((0.0, r, r, 0.0)),
+                Corners::None => rect.corner_radius(0.0),
+            }
         }
         Util::Bg(_)
         | Util::Fill(_)
@@ -520,6 +583,14 @@ fn apply_layout(rect: Rect, util: Util) -> Rect {
                 .y(0.0)
                 .blur(SHEET_EDGE_BLUR)
                 .color(Color::BLACK.with_af32(SHEET_EDGE_OPACITY * amount)),
+        ),
+        Util::LiftShadow(amount) => rect.shadow(
+            Shadow::new()
+                .position(ShadowPosition::Normal)
+                .x(0.0)
+                .y(LIFT_OFFSET)
+                .blur(LIFT_BLUR)
+                .color(Color::BLACK.with_af32(LIFT_OPACITY * amount)),
         ),
         Util::W(extent) => rect.width(extent.size()),
         Util::H(extent) => rect.height(extent.size()),

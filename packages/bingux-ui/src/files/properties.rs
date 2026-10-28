@@ -1,60 +1,75 @@
-//! The Properties dialog: what a file, a folder or a selection is.
+//! The Properties dialog: what a file, a folder or a selection is, in tabs.
 //!
-//! One file shows, top to bottom: its picture or icon, name and type; what
-//! it is (type, size with the byte count, where it lives, where a link
-//! leads); for a picture its size and camera, for a recording its length and
-//! codecs; its times; its owner and group; its permissions as a grid of
-//! boxes, editable by the owner, with the numeric mode and "allow executing
-//! as program"; the drive it is on with a free space bar; and the
-//! applications that can open it. Several items show their combined count,
-//! size and types, where they are, and the drive.
+//! | Tab | Holds |
+//! | --- | ----- |
+//! | Basic | picture or icon, name and type; type, size with the byte count, location, where a link leads; times; the drive with a free space bar; the applications that can open it |
+//! | Permissions | the read, write and execute grid, editable by the owner, with the numeric mode, "allow executing as program", the special bits, ownership, and for a folder an explicit, confirmed "apply to enclosed items"; the SELinux context and ACL where the system keeps them |
+//! | Details | a picture's size and camera, a recording's length and codecs; the file's SHA-256 on demand; inode, device, links, block size and disk use; extended attributes |
+//! | Contents | one folder's item count, size (with Stop) and largest items |
 //!
-//! Nothing blocks the window. The facts of one `stat` and the file's header
-//! are read on a pool worker; the size of a folder or a selection is added
-//! up by a counting thread that reports as it goes, so the figure grows on
-//! screen, can be stopped with a button, and stops when the dialog closes.
+//! Several items show Basic, with the combined count, size and types, and
+//! Permissions, which act on all of them; where they differ a box is mixed.
+//! One file has the first three tabs, one folder all four.
 //!
-//! Every row exists from the first frame. A fact that has not arrived shows
-//! "…" and one that does not exist shows "—", so nothing moves when the
-//! answers come. The permission boxes are laid out disabled until the mode
-//! is known.
+//! The tabs are a segmented control with the tab variant under the header,
+//! as the inspector's are. Left, Right, Home and End move between them;
+//! Ctrl+1 to Ctrl+4 pick one and Ctrl+Tab and Ctrl+Shift+Tab step through
+//! them. The last tab picked is the one the next dialog opens on. On a phone
+//! the bar scrolls sideways.
+//!
+//! # Nothing moves
+//!
+//! The card is one fixed size for every tab: the header and the tab bar stay,
+//! and the content scrolls inside. Each tab's rows exist from the first frame.
+//! A fact that has not arrived shows "…" and one that does not exist shows
+//! "—". What can only be listed once read (extended attributes, the biggest
+//! items of a folder, the security context) is the last group of its tab. The
+//! state of the tabs that are not shown (a checksum being worked out, a count,
+//! the modes just set, the scroll position) is kept while the dialog is open.
+//!
+//! # Nothing blocks the window
+//!
+//! The facts of one `stat` and the file's header are read on a pool worker;
+//! the modes of every item on another. A folder or selection is added up by a
+//! counting thread that reports as it goes, so the figure grows on screen, can
+//! be stopped with a button, and stops when the dialog closes. So do the
+//! checksum and "apply to enclosed items".
 //!
 //! The dialog is a [`framed_dialog`]: Escape and the scrim close it, and so
-//! does the close button.
+//! does the close button. Its focus scope is the one every modal layer has.
 
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use bingux_files::media::{self, AvInfo, ImageInfo};
-use bingux_files::ops::{self, Counting, Properties, Totals, Volume};
+use bingux_files::ops::{self, ChildSize, Counting, FileDetails, HashProgress, Hashing, Permissions, Properties, Totals};
 use bingux_files::thumbs::{self, Bucket};
-use bingux_files::{Category, Entry, Kind, display};
+use bingux_files::{Cancel, Category, Entry, Kind};
 use freya::prelude::*;
-use freya::torin::prelude::Size2D;
 
-use super::actions::{Env, apps_for, launch};
-use super::properties_permissions::{PermissionGrid, is_executable, mode_line, with_execute};
-use super::glyphs::category_icon;
-use super::view::entry_glyph;
+use super::actions::Env;
+use super::properties_access::{Access, TreePhase, permissions_tab};
+use super::properties_basic::basic;
+use super::properties_contents::{LARGEST, contents_tab};
+use super::properties_details::{HashView, details_tab};
+use super::properties_permissions::ModeSet;
+use super::properties_tabs::{self as tab_model, Tab};
+use super::properties_words::{NONE, PENDING};
 use crate::component::ComponentName;
-use crate::controls::{action_button, icon_button, usage_bar};
-use crate::group::Group;
-use crate::icons::{self, Icon};
-use crate::rows::{property_row, row, switch_row};
-use crate::shell::{Overlays, framed_dialog};
+use crate::controls::{action_button, icon_button, segmented, text_width};
+use crate::icons::Icon;
+use crate::shell::dialog::frame_width;
+use crate::shell::{HeaderBar, Overlays, framed_dialog};
+use crate::prelude::Tokens;
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::task::{spawn_blocking, use_resource};
-use crate::typography::{BODY, CAPTION, Ink, SECTION, TITLE};
+use crate::typography::BODY;
 
 /// How often a running total is read.
 const TICK: Duration = Duration::from_millis(150);
-/// How many applications "Open with" lists.
-const APP_ROWS: usize = 6;
-/// A fact that has not arrived yet, and one that does not exist.
-const PENDING: &str = "…";
-const NONE: &str = "—";
 
 /// Open the Properties dialog for `selected`, or for the folder on show when
 /// nothing is selected.
@@ -71,26 +86,35 @@ pub(super) fn show_properties(env: &Env, selected: &[Entry]) {
     } else {
         selected.to_vec()
     };
-    let title = match entries.as_slice() {
+    let focus = env.focus;
+    show(
+        Body {
+            entries,
+            overlays: env.overlays,
+            open_folder: env.open_folder.clone(),
+            open_with: env.caps.open_with,
+            home: env.home.clone(),
+        },
+        // Opened from the keyboard: give it back.
+        EventHandler::new(move |()| focus.request_focus()),
+    );
+}
+
+/// Put the dialog for `body` on screen, calling `closed` when it has gone.
+fn show(body: Body, closed: EventHandler<()>) {
+    let title = match body.entries.as_slice() {
         [only] => only.name.clone(),
         many => format!("{} items", many.len()),
     };
-    let focus = env.focus;
-    env.overlays.show_dialog(
+    let overlays = body.overlays;
+    overlays.show_dialog(
         framed_dialog(
             format!("Properties of {title}"),
-            Element::from(Body {
-                entries,
-                overlays: env.overlays,
-                open_folder: env.open_folder.clone(),
-                open_with: env.caps.open_with,
-                home: env.home.clone(),
-            }),
+            Element::from(body),
             Dim::PopupWidth.px(),
             Dim::PopupHeight.px() + 120.0,
         )
-        // Opened from the keyboard: give it back.
-        .on_closed(move |()| focus.request_focus()),
+        .on_closed(closed),
     );
 }
 
@@ -108,17 +132,19 @@ struct Subject {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct Facts {
-    props: Properties,
-    image: Option<ImageInfo>,
-    av: Option<AvInfo>,
+pub(super) struct Facts {
+    pub props: Properties,
+    pub image: Option<ImageInfo>,
+    pub av: Option<AvInfo>,
     /// The desktop's thumbnail of a document or recording.
-    poster: Option<PathBuf>,
+    pub poster: Option<PathBuf>,
+    /// Inode, device, links, disk use, security context, extended attributes.
+    pub details: Option<FileDetails>,
 }
 
 fn load_facts(subject: Subject) -> Result<Facts, String> {
     let props = ops::stat_properties(&subject.path).map_err(|error| error.to_string())?;
-    let (mut image, mut av, mut poster) = (None, None, None);
+    let (mut image, mut av, mut poster, mut details) = (None, None, None, None);
     if subject.details {
         match subject.category {
             Category::Image => image = media::image_info(&subject.path),
@@ -129,12 +155,14 @@ fn load_facts(subject: Subject) -> Result<Facts, String> {
             Category::Document => poster = find_poster(&props),
             _ => {}
         }
+        details = ops::file_details(&subject.path).ok();
     }
     Ok(Facts {
         props,
         image,
         av,
         poster,
+        details,
     })
 }
 
@@ -144,127 +172,65 @@ fn find_poster(props: &Properties) -> Option<PathBuf> {
         .find_map(|bucket| thumbs::lookup(&props.path, props.modified, bucket))
 }
 
-// ---------------------------------------------------------------------------
-// Words
-// ---------------------------------------------------------------------------
-
-/// `2,500,000`.
-fn grouped(number: u64) -> String {
-    let digits = number.to_string();
-    let mut out = String::new();
-    for (index, digit) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index) % 3 == 0 {
-            out.push(',');
-        }
-        out.push(digit);
-    }
-    out
-}
-
-/// `2.5 MB (2,500,000 bytes)`, or `512 bytes` when the unit is bytes.
-fn size_with_bytes(bytes: u64) -> String {
-    let size = display::size(bytes);
-    if bytes < 1000 {
-        size
-    } else {
-        format!("{size} ({} bytes)", grouped(bytes))
-    }
-}
-
-fn plural(count: u64, one: &str, many: &str) -> String {
-    format!("{count} {}", if count == 1 { one } else { many })
-}
-
-/// The size line of a folder or a selection while and after it is counted.
-fn total_size(totals: Totals) -> String {
-    let size = size_with_bytes(totals.bytes);
-    if totals.cancelled {
-        format!("At least {size} (stopped)")
-    } else if !totals.done {
-        format!("{size} so far…")
-    } else if totals.unreadable > 0 {
-        format!("At least {size}")
-    } else {
-        size
-    }
-}
-
-/// How many items a folder or selection holds, while and after it is counted.
-fn contents(totals: Totals) -> String {
-    let files = plural(totals.files, "file", "files");
-    let folders = plural(totals.folders, "folder", "folders");
-    let mut text = format!("{} ({files}, {folders})", plural(totals.items(), "item", "items"));
-    if totals.cancelled {
-        text.insert_str(0, "At least ");
-        text.push_str(" (stopped)");
-    } else if !totals.done {
-        text.push_str(" so far…");
-    } else if totals.unreadable > 0 {
-        text.insert_str(0, "At least ");
-    }
-    text
-}
-
-/// The kinds of several items: "PNG image (3), Folder (2)", the most first.
-fn types_line(entries: &[Entry]) -> String {
-    let mut counts: Vec<(&str, usize)> = Vec::new();
-    for entry in entries {
-        match counts
-            .iter_mut()
-            .find(|(name, _)| *name == entry.mime.description)
-        {
-            Some((_, count)) => *count += 1,
-            None => counts.push((entry.mime.description, 1)),
-        }
-    }
-    counts.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
-    counts
+/// The owner, group and mode of every item, in order.
+fn load_permissions(paths: Vec<PathBuf>) -> Result<Vec<Permissions>, String> {
+    paths
         .iter()
-        .map(|(name, count)| format!("{name} ({count})"))
-        .collect::<Vec<_>>()
-        .join(", ")
+        .map(|path| ops::permissions(path).map_err(|error| error.to_string()))
+        .collect()
 }
 
-/// The folder every one of `entries` is in, or `None` when they are in
-/// several.
-fn common_parent(entries: &[Entry]) -> Option<PathBuf> {
-    let first = entries.first()?.path.parent()?;
-    entries
-        .iter()
-        .all(|entry| entry.path.parent() == Some(first))
-        .then(|| first.to_path_buf())
-}
-
-/// `~/Pictures` for a folder under the home folder, else the whole path.
-fn home_relative(path: &Path, home: &Path) -> String {
-    match path.strip_prefix(home) {
-        Ok(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
-        Ok(rest) => format!("~/{}", rest.to_string_lossy()),
-        Err(_) => path.to_string_lossy().into_owned(),
-    }
-}
-
-fn time(value: Option<SystemTime>) -> Option<String> {
-    value.map(display::full)
+/// Set each item's mode to the new one where it differs from the old one.
+/// Returns the mode every item has now, and the first failure. An item that
+/// could not be changed keeps its old mode in the answer.
+fn apply_modes(work: Vec<(PathBuf, u32, u32)>) -> (Vec<u32>, Option<String>) {
+    let mut error = None;
+    let modes = work
+        .into_iter()
+        .map(|(path, new, old)| {
+            if new == old {
+                return old;
+            }
+            match ops::chmod(&path, new) {
+                Ok(()) => new,
+                Err(failure) => {
+                    error.get_or_insert_with(|| failure.to_string());
+                    old
+                }
+            }
+        })
+        .collect();
+    (modes, error)
 }
 
 // ---------------------------------------------------------------------------
 // The dialog's body
 // ---------------------------------------------------------------------------
 
-/// Count `roots` in the background and return the running total and the
-/// handle that stops it. The count stops when the dialog goes. With no roots
-/// nothing is counted.
-fn use_counting(roots: Option<Vec<PathBuf>>) -> (State<Totals>, Option<Rc<Counting>>) {
+/// Count `roots` in the background and return the running total, the biggest
+/// items so far and the handle that stops it. A single folder is counted with
+/// its breakdown. The count stops when the dialog goes. With no roots nothing
+/// is counted.
+fn use_counting(
+    roots: Option<Vec<PathBuf>>,
+    breakdown: bool,
+) -> (State<Totals>, State<Vec<ChildSize>>, Option<Rc<Counting>>) {
     let mut totals = use_state(Totals::default);
+    let mut largest = use_state(Vec::<ChildSize>::new);
     let counting = use_hook(move || {
         roots.map(|roots| {
-            let counting = Rc::new(Counting::start(roots));
+            let counting = Rc::new(match roots.as_slice() {
+                [only] if breakdown => Counting::start_breakdown(only.clone()),
+                _ => Counting::start(roots),
+            });
             let reader = counting.clone();
             spawn(async move {
                 loop {
                     let now = reader.totals();
-                    totals.set(now);
+                    totals.set_if_modified(now);
+                    if breakdown {
+                        largest.set_if_modified(reader.largest(LARGEST));
+                    }
                     if now.done {
                         break;
                     }
@@ -274,7 +240,64 @@ fn use_counting(roots: Option<Vec<PathBuf>>) -> (State<Totals>, Option<Rc<Counti
             counting
         })
     });
-    (totals, counting)
+    (totals, largest, counting)
+}
+
+/// Everything a tab reads, built once per render of the dialog.
+pub(super) struct Page<'a> {
+    pub tokens: Tokens,
+    pub entries: &'a [Entry],
+    pub overlays: Overlays,
+    pub open_folder: &'a EventHandler<PathBuf>,
+    /// The view may open files with another application.
+    pub open_with: bool,
+    /// The home folder, which a location under it is written relative to.
+    pub home: &'a Path,
+    pub loaded: Option<&'a Facts>,
+    pub failed: Option<&'a str>,
+    pub totals: Totals,
+    pub counting: Option<Rc<Counting>>,
+    pub largest: Vec<ChildSize>,
+}
+
+impl Page<'_> {
+    pub(super) fn first(&self) -> &Entry {
+        &self.entries[0]
+    }
+
+    pub(super) fn single(&self) -> bool {
+        self.entries.len() == 1
+    }
+
+    pub(super) fn is_folder(&self) -> bool {
+        self.single() && self.first().is_dir()
+    }
+
+    /// The size and count come from a running count: a folder, or several
+    /// items.
+    pub(super) fn counted(&self) -> bool {
+        !self.single() || self.is_folder()
+    }
+
+    /// A fact from the load: the placeholder before it arrives, a dash if
+    /// there is none, or what `of` makes of it.
+    pub(super) fn fact(&self, of: impl Fn(&Facts) -> Option<String>) -> String {
+        match (self.loaded, self.failed) {
+            (Some(loaded), _) => of(loaded).unwrap_or_else(|| NONE.to_owned()),
+            (None, Some(_)) => NONE.to_owned(),
+            (None, None) => PENDING.to_owned(),
+        }
+    }
+
+    /// Stop, while a count is running.
+    pub(super) fn stop_button(&self) -> Option<Element> {
+        let counting = self.counting.clone().filter(|_| self.counted() && !self.totals.done)?;
+        Some(
+            action_button("Stop", move |_| counting.cancel())
+                .compact()
+                .into_element(),
+        )
+    }
 }
 
 #[derive(PartialEq)]
@@ -296,7 +319,9 @@ impl Component for Body {
         let first = &entries[0];
         let single = entries.len() == 1;
         let is_folder = single && first.is_dir();
+        let paths: Vec<PathBuf> = entries.iter().map(|entry| entry.path.clone()).collect();
 
+        // ---- what is read -------------------------------------------------
         let facts = use_resource(
             Subject {
                 path: first.path.clone(),
@@ -307,15 +332,17 @@ impl Component for Body {
         );
         let loaded = facts.with(|facts| facts.value().cloned());
         let failed = facts.with(|facts| facts.error().map(str::to_owned));
+        let permissions = use_resource(paths.clone(), load_permissions);
+        let perms = permissions.with(|read| read.value().cloned());
+        let perms_failed = permissions.with(|read| read.error().map(str::to_owned));
 
         let counted = !single || is_folder;
-        let (totals, counting) = use_counting(counted.then(|| {
-            entries.iter().map(|entry| entry.path.clone()).collect()
-        }));
+        let (counted_totals, largest, counting) =
+            use_counting(counted.then(|| paths.clone()), is_folder);
         // Each folder picked is one of the items, though the count does not
         // include the folder it starts from.
         let totals = {
-            let counted = totals();
+            let counted = counted_totals();
             let roots = if single {
                 0
             } else {
@@ -327,541 +354,282 @@ impl Component for Body {
             }
         };
 
-        // The permissions the person has set in this dialog, until the next
-        // time it is opened and read again.
-        let mut edited = use_state(|| None::<u32>);
-        let mut mode_error = use_state(|| None::<String>);
-
-        // A fact from the load: the placeholder before it arrives, a dash
-        // if there is none, or what `of` makes of it.
-        let fact = |of: &dyn Fn(&Facts) -> Option<String>| -> String {
-            match (&loaded, &failed) {
-                (Some(loaded), _) => of(loaded).unwrap_or_else(|| NONE.to_owned()),
-                (None, Some(_)) => NONE.to_owned(),
-                (None, None) => PENDING.to_owned(),
-            }
-        };
-
-        // ---- the head: picture, name, type ----------------------------
-        let muted = Paint::Muted.color(&tokens);
-        let head_icon = if single {
-            entry_glyph(first)
-        } else {
-            shared_glyph(entries)
-        };
-        let glyph = |scale: f32| {
-            rect()
-                .tw(&tokens, &[w_full(), h_full(), center()])
-                .child(icons::icon_scaled(
-                    head_icon,
-                    IconSize::Hero,
-                    scale,
-                    if is_folder {
-                        Paint::Accent.color(&tokens)
-                    } else {
-                        muted
-                    },
-                ))
-                .into_element()
-        };
-        let picture: Element = {
-            let poster = loaded.as_ref().and_then(|loaded| loaded.poster.clone());
-            let shows_file = single && first.category() == Category::Image;
-            let source = if shows_file {
-                Some(first.path.clone())
-            } else {
-                poster
-            };
-            match source {
-                Some(path) => {
-                    let fallback = glyph(2.0);
-                    ImageViewer::new(path)
-                        .decode_mode(DecodeMode::Custom(Size2D::new(256.0, 256.0)))
-                        .width(Size::fill())
-                        .height(Size::fill())
-                        .aspect_ratio(AspectRatio::Min)
-                        .image_cover(ImageCover::Center)
-                        .loading_placeholder(fallback.clone())
-                        .error_renderer(move |_: String| fallback.clone())
-                        .into()
-                }
-                None => glyph(2.0),
-            }
-        };
-        let name = if single {
-            first.name.clone()
-        } else {
-            format!("{} items", entries.len())
-        };
-        let subtitle = if single {
-            first.mime.description.to_owned()
-        } else {
-            types_line(entries)
-        };
-        let status = failed
-            .clone()
-            .map(|message| format!("Could not read everything: {message}"))
-            .unwrap_or_default();
-
-        let head = rect()
-            .tw(&tokens, &[flex_col(), items(Align::Center), w_full(), gap(S2), py(S2)])
-            .child(
-                rect()
-                    .tw(&tokens, &[w(Dim::Box24), h(Dim::Box24), rounded(Radius::Control), clip()])
-                    .child(picture),
-            )
-            .child(
-                TITLE
-                    .label(&tokens, name)
-                    .width(Size::fill())
-                    .max_lines(1)
-                    .text_overflow(TextOverflow::Ellipsis)
-                    .text_align(TextAlign::Center),
-            )
-            .child(
-                CAPTION
-                    .in_ink(Ink::Muted)
-                    .label(&tokens, subtitle)
-                    .width(Size::fill())
-                    .max_lines(1)
-                    .text_overflow(TextOverflow::Ellipsis)
-                    .text_align(TextAlign::Center),
-            )
-            // The line is always there, so an error appearing moves nothing.
-            .child(
-                CAPTION
-                    .in_ink(Ink::Danger)
-                    .label(&tokens, if status.is_empty() { " ".to_owned() } else { status })
-                    .width(Size::fill())
-                    .max_lines(1)
-                    .text_overflow(TextOverflow::Ellipsis)
-                    .text_align(TextAlign::Center),
-            );
-
-        // ---- General --------------------------------------------------
-        let location = common_parent(entries);
-        let mut general = Group::titled("General");
-        general = general.row(property_row(
-            "Type",
-            if single {
-                format!("{} ({})", first.mime.description, first.mime.mime)
-            } else {
-                types_line(entries)
-            },
-        ));
-        let size_text = if counted {
-            total_size(totals)
-        } else if first.sized {
-            size_with_bytes(first.size)
-        } else {
-            fact(&|facts| Some(size_with_bytes(facts.props.size)))
-        };
-        let stop = counting
-            .clone()
-            .filter(|_| counted && !totals.done)
-            .map(|counting| {
-                action_button("Stop", move |_| counting.cancel())
-                    .compact()
-                    .into_element()
-            });
-        general = general.row(
-            row("Size").trailing(
-                rect()
-                    .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
-                    .child(BODY.in_ink(Ink::Muted).selectable(&tokens, size_text))
-                    .maybe_child(stop),
-            ),
-        );
-        if counted {
-            general = general.row(property_row("Contents", contents(totals)));
-        }
-        let location_text = location.as_ref().map_or_else(
-            || "Several folders".to_owned(),
-            |folder| home_relative(folder, &self.home),
-        );
-        let open_location = location.clone().map(|folder| {
-            let open_folder = self.open_folder.clone();
-            EventHandler::new(move |()| {
-                overlays.dismiss_dialog();
-                open_folder.call(folder.clone());
-            })
+        // ---- the tabs -----------------------------------------------------
+        let tabs = tab_model::available(single, is_folder);
+        let mut selected = use_state({
+            let tabs = tabs.clone();
+            move || tab_model::pick(tab_model::remembered(), &tabs)
         });
-        general = general.row(match open_location {
-            Some(open) => row("Location").value(location_text).on_press(open),
-            None => property_row("Location", location_text),
+        let current = selected();
+        let scrolls = [
+            use_scroll_controller(ScrollConfig::default),
+            use_scroll_controller(ScrollConfig::default),
+            use_scroll_controller(ScrollConfig::default),
+            use_scroll_controller(ScrollConfig::default),
+        ];
+        let choose = EventHandler::new(move |tab: Tab| {
+            selected.set(tab);
+            tab_model::remember(tab);
         });
-        if single && first.symlink {
-            general = general.row(property_row(
-                "Link target",
-                fact(&|facts| {
-                    facts
-                        .props
-                        .link_target
-                        .as_ref()
-                        .map(|target| target.to_string_lossy().into_owned())
-                }),
-            ));
-        }
 
-        let mut groups: Vec<Element> = vec![general.into()];
-
-        // ---- Picture or recording -------------------------------------
-        if single && first.category() == Category::Image {
-            let mut image = Group::titled("Image").row(property_row(
-                "Dimensions",
-                fact(&|facts| {
-                    facts.image.as_ref().map(|image| match image.megapixels() {
-                        Some(mega) => format!("{} ({mega})", image.dimensions()),
-                        None => image.dimensions(),
-                    })
-                }),
-            ));
-            // Only JPEG carries the camera's notes that are read.
-            if first.mime.mime == "image/jpeg" {
-                for (title, of) in [
-                    ("Camera", exif_camera as fn(&ImageInfo) -> Option<String>),
-                    ("Lens", exif_lens),
-                    ("Taken", exif_taken),
-                    ("Exposure", exif_exposure),
-                ] {
-                    image = image.row(property_row(
-                        title,
-                        fact(&|facts| facts.image.as_ref().and_then(of)),
-                    ));
-                }
-            }
-            groups.push(image.into());
-        }
-        if single && matches!(first.category(), Category::Audio | Category::Video) {
-            groups.push(
-                Group::titled(if first.category() == Category::Audio {
-                    "Audio"
-                } else {
-                    "Video"
-                })
-                .row(property_row(
-                    "Duration",
-                    fact(&|facts| {
-                        facts
-                            .av
-                            .as_ref()
-                            .and_then(|av| av.seconds)
-                            .map(media::clock)
-                    }),
-                ))
-                .row(property_row(
-                    "Codec",
-                    fact(&|facts| facts.av.as_ref().and_then(AvInfo::codec_line)),
-                ))
-                .into(),
-            );
-        }
-
-        // ---- Times, owner, permissions --------------------------------
-        if single {
-            groups.push(
-                Group::titled("Times")
-                    .row(property_row("Created", fact(&|facts| time(facts.props.created))))
-                    .row(property_row("Modified", fact(&|facts| time(facts.props.modified))))
-                    .row(property_row("Accessed", fact(&|facts| time(facts.props.accessed))))
-                    .into(),
-            );
-            groups.push(
-                Group::titled("Owner")
-                    .row(property_row("Owner", fact(&|facts| facts.props.owner.clone())))
-                    .row(property_row("Group", fact(&|facts| facts.props.group.clone())))
-                    .into(),
-            );
-
-            let mode = edited().or_else(|| loaded.as_ref().map(|loaded| loaded.props.mode & 0o7777));
-            let read_only = loaded
-                .as_ref()
-                .and_then(|loaded| loaded.props.volume.as_ref())
-                .is_some_and(|volume| volume.read_only);
-            let may_change = loaded.as_ref().is_some_and(|loaded| loaded.props.can_chmod());
-            let editable = may_change && !read_only;
-            let description = match (&loaded, editable) {
-                (None, _) => "Reading permissions…",
-                (Some(_), true) => "You own this, so you can change who may use it.",
-                (Some(_), false) if read_only => "The drive is read-only.",
-                (Some(_), false) => "Only the owner can change these.",
-            };
-            let path = first.path.clone();
-            let on_change = EventHandler::new(move |new_mode: u32| {
-                let path = path.clone();
+        // ---- the modes ----------------------------------------------------
+        // The modes the person has set in this dialog, until it is closed.
+        let edited = use_state(|| None::<Vec<u32>>);
+        let mode_error = use_state(|| None::<String>);
+        let modes = edited
+            .read()
+            .clone()
+            .or_else(|| perms.as_ref().map(|perms| perms.iter().map(|perm| perm.mode).collect()))
+            .map(ModeSet::new);
+        let read_only = loaded
+            .as_ref()
+            .and_then(|loaded| loaded.props.volume.as_ref())
+            .is_some_and(|volume| volume.read_only);
+        let may_change = perms
+            .as_ref()
+            .is_some_and(|perms| !perms.is_empty() && perms.iter().all(|perm| perm.can_chmod));
+        let on_modes = {
+            let paths = paths.clone();
+            let current = modes.as_ref().map(|modes| modes.modes().to_vec());
+            EventHandler::new(move |new: Vec<u32>| {
+                let Some(old) = current.clone() else {
+                    return;
+                };
+                let mut edited = edited;
+                let mut mode_error = mode_error;
+                // The boxes follow the press at once; what the disk said
+                // replaces them when it answers.
+                edited.set(Some(new.clone()));
+                mode_error.set(None);
+                let work: Vec<(PathBuf, u32, u32)> = paths
+                    .iter()
+                    .cloned()
+                    .zip(new)
+                    .zip(old)
+                    .map(|((path, new), old)| (path, new, old))
+                    .collect();
                 spawn(async move {
-                    match spawn_blocking(move || ops::chmod(&path, new_mode)).await {
-                        Ok(()) => {
-                            edited.set(Some(new_mode));
-                            mode_error.set(None);
+                    let (now, error) = spawn_blocking(move || apply_modes(work)).await;
+                    edited.set(Some(now));
+                    mode_error.set(error);
+                });
+            })
+        };
+
+        // ---- apply to enclosed items --------------------------------------
+        let tree = use_state(|| TreePhase::Idle);
+        let tree_job = use_hook(|| Rc::new(RefCell::new(None::<Cancel>)));
+        use_drop({
+            let tree_job = tree_job.clone();
+            move || {
+                if let Some(cancel) = tree_job.borrow().as_ref() {
+                    cancel.cancel();
+                }
+            }
+        });
+        let folder_mode = modes.as_ref().and_then(ModeSet::common);
+        let on_tree_ask = EventHandler::new(move |()| {
+            let mut tree = tree;
+            tree.set(TreePhase::Confirming);
+        });
+        let on_tree_cancel = {
+            let tree_job = tree_job.clone();
+            EventHandler::new(move |()| {
+                let mut tree = tree;
+                if matches!(*tree.peek(), TreePhase::Running) {
+                    if let Some(cancel) = tree_job.borrow().as_ref() {
+                        cancel.cancel();
+                    }
+                } else {
+                    tree.set(TreePhase::Idle);
+                }
+            })
+        };
+        let on_tree_apply = {
+            let tree_job = tree_job.clone();
+            let root = first.path.clone();
+            EventHandler::new(move |()| {
+                let Some(mode) = folder_mode else {
+                    return;
+                };
+                let mut tree = tree;
+                let cancel = Cancel::new();
+                *tree_job.borrow_mut() = Some(cancel.clone());
+                tree.set(TreePhase::Running);
+                let root = root.clone();
+                spawn(async move {
+                    let result = spawn_blocking(move || ops::chmod_tree(&root, mode, &cancel)).await;
+                    tree.set(match result {
+                        Ok(change) => TreePhase::Done(change),
+                        Err(ops::OpError::Cancelled) => TreePhase::Stopped,
+                        Err(error) => TreePhase::Failed(error.to_string()),
+                    });
+                });
+            })
+        };
+
+        // ---- the checksum -------------------------------------------------
+        let hash_progress = use_state(|| None::<HashProgress>);
+        let hashing = use_hook(|| Rc::new(RefCell::new(None::<Rc<Hashing>>)));
+        let on_hash_start = {
+            let hashing = hashing.clone();
+            let path = first.path.clone();
+            EventHandler::new(move |()| {
+                let job = Rc::new(Hashing::start(path.clone()));
+                *hashing.borrow_mut() = Some(job.clone());
+                let mut progress = hash_progress;
+                spawn(async move {
+                    loop {
+                        let now = job.progress();
+                        let finished = now.outcome.is_some();
+                        progress.set_if_modified(Some(now));
+                        if finished {
+                            break;
                         }
-                        Err(error) => mode_error.set(Some(error.to_string())),
+                        timer(TICK).await;
                     }
                 });
-            });
-            let mode_text = match (mode_error.read().clone(), mode) {
-                (Some(error), _) => error,
-                (None, Some(mode)) => mode_line(mode),
-                (None, None) => PENDING.to_owned(),
-            };
-            let mut permissions = Group::titled("Permissions")
-                .description(description)
-                .content(PermissionGrid {
-                    mode,
-                    editable,
-                    execute: if is_folder { "Access" } else { "Execute" },
-                    on_change: on_change.clone(),
-                })
-                .row(row("Mode").mono_value(mode_text));
-            if !is_folder {
-                let toggle = EventHandler::new({
-                    let on_change = on_change.clone();
-                    move |on: bool| {
-                        if let Some(mode) = mode {
-                            on_change.call(with_execute(mode, on));
-                        }
+            })
+        };
+        let on_hash_stop = {
+            let hashing = hashing.clone();
+            EventHandler::new(move |()| {
+                if let Some(job) = hashing.borrow().as_ref() {
+                    job.cancel();
+                }
+            })
+        };
+
+        // ---- the page the tabs read ---------------------------------------
+        let page = Page {
+            tokens,
+            entries,
+            overlays,
+            open_folder: &self.open_folder,
+            open_with: self.open_with,
+            home: &self.home,
+            loaded: loaded.as_ref(),
+            failed: failed.as_deref(),
+            totals,
+            counting,
+            largest: largest.read().clone(),
+        };
+        let groups: Vec<Element> = match current {
+            Tab::Basic => basic(&page),
+            Tab::Permissions => permissions_tab(
+                &page,
+                &Access {
+                    perms: perms.as_deref(),
+                    failed: perms_failed.as_deref(),
+                    modes,
+                    editable: may_change && !read_only,
+                    read_only,
+                    error: mode_error.read().clone(),
+                    on_change: on_modes,
+                    tree: tree.read().clone(),
+                    on_tree_ask,
+                    on_tree_cancel,
+                    on_tree_apply,
+                },
+            ),
+            Tab::Details => details_tab(
+                &page,
+                &HashView {
+                    progress: hash_progress.read().clone(),
+                    on_start: on_hash_start,
+                    on_stop: on_hash_stop,
+                    overlays,
+                },
+            ),
+            Tab::Contents => contents_tab(&page),
+        };
+
+        // ---- the frame ----------------------------------------------------
+        // The standard header bar: its icon buttons take the header size and
+        // its insets, so Close sits where it does in every other header.
+        let header = HeaderBar::new("Properties").draggable(false).trailing(
+            icon_button(Icon::WindowClose, move |_| overlays.dismiss_dialog()).tooltip("Close"),
+        );
+        let bar = segmented(
+            tabs.iter()
+                .map(|tab| (tab.key().to_owned(), tab.title().to_owned()))
+                .collect(),
+            current.key(),
+            {
+                let choose = choose.clone();
+                move |key: String| {
+                    if let Some(tab) = Tab::from_key(&key) {
+                        choose.call(tab);
                     }
-                });
-                permissions = permissions.row(
-                    switch_row(
-                        "Allow executing as program",
-                        mode.is_some_and(is_executable),
-                        toggle,
-                    )
-                    .enabled(editable && mode.is_some()),
-                );
-            }
-            groups.push(permissions.into());
-        }
+                }
+            },
+        )
+        .tabs();
+        // Equal segments fill the card when the titles fit; on a phone four
+        // may not, and then the bar scrolls sideways.
+        let widest = tabs
+            .iter()
+            .map(|tab| text_width(tab.title(), BODY))
+            .fold(0.0, f32::max);
+        let card = frame_width(Dim::PopupWidth.px()) - 2.0 * S4.px();
+        let bar = if tab_model::fits_filled(widest, tabs.len(), card, S2.px(), S1.px()) {
+            bar.fill()
+        } else {
+            bar.scroll()
+        };
+        let scroll = scrolls[match current {
+            Tab::Basic => 0,
+            Tab::Permissions => 1,
+            Tab::Details => 2,
+            Tab::Contents => 3,
+        }];
 
-        // ---- The drive ------------------------------------------------
-        let volume = loaded.as_ref().and_then(|loaded| loaded.props.volume.clone());
-        groups.push(volume_group(&volume, loaded.is_some() || failed.is_some()).into());
-
-        // ---- Open with ------------------------------------------------
-        if single && !is_folder && self.open_with {
-            let apps = apps_for(first.mime.mime);
-            let mut open = Group::titled("Open with");
-            if apps.is_empty() {
-                open = open.row(property_row("Applications", "None found"));
-            }
-            for app in apps.into_iter().take(APP_ROWS) {
-                let path = first.path.clone();
-                let name = app.name.clone();
-                open = open.row(
-                    row(name.clone()).on_press(EventHandler::new(move |()| {
-                        overlays.dismiss_dialog();
-                        if let Err(error) = launch(&app, &path) {
-                            overlays.toast(format!("Could not start {name}: {error}."));
-                        }
-                    })),
-                );
-            }
-            groups.push(open.into());
-        }
-
-        let header = rect()
-            .tw(
-                &tokens,
-                &[flex_row(), grow_children(), items(Align::Center), w_full(), h(Dim::Header), px(S4), gap(S3)],
-            )
-            .child(
-                rect()
-                    .tw(&tokens, &[w_flex()])
-                    .child(SECTION.label(&tokens, "Properties").max_lines(1)),
-            )
-            .child(
-                icon_button(Icon::WindowClose, move |_| overlays.dismiss_dialog())
-                    .tooltip("Close"),
-            );
-
+        let shortcuts = tabs.clone();
         rect()
             .component("Properties")
             .tw(&tokens, &[flex_col(), grow_children(), w_full(), h_full()])
+            .on_global_key_down(move |event: Event<KeyboardEventData>| {
+                // Read the tab first: a borrow held across the choice would
+                // make writing the new one fail.
+                let now = *selected.peek();
+                if let Some(next) = tab_model::shortcut(&event.key, event.modifiers, &shortcuts, now) {
+                    event.stop_propagation();
+                    choose.call(next);
+                }
+            })
             .child(header)
             .child(rect().tw(&tokens, &[w_full(), h(Dim::Hairline), bg(Paint::Separator)]))
             .child(
                 rect()
+                    .component("PropertiesTabs")
+                    .tw(&tokens, &[w_full(), px(S4), pt(S3), pb(S2)])
+                    .child(bar),
+            )
+            .child(
+                rect()
+                    .component("PropertiesPage")
                     .width(Size::fill())
                     .height(Size::flex(1.0))
                     .min_height(Size::px(0.0))
                     .child(
-                        ScrollView::new().child(
-                            rect()
-                                .tw(&tokens, &[flex_col(), w_full(), gap(S4), p(S4)])
-                                .child(head)
-                                .children(groups),
-                        ),
+                        ScrollView::new_controlled(scroll)
+                            .key(current.key())
+                            .child(
+                                rect()
+                                    .tw(&tokens, &[flex_col(), w_full(), gap(S4), p(S4)])
+                                    .children(groups),
+                            ),
                     ),
             )
     }
 }
 
-/// The icon of several items: their kind's when they are all one kind, else
-/// a plain file.
-fn shared_glyph(entries: &[Entry]) -> Icon {
-    let kind = entries[0].category();
-    if entries.iter().all(|entry| entry.category() == kind) {
-        category_icon(kind)
-    } else {
-        Icon::TextXGeneric
-    }
-}
-
-fn exif_camera(image: &ImageInfo) -> Option<String> {
-    image.exif.camera.clone()
-}
-
-fn exif_lens(image: &ImageInfo) -> Option<String> {
-    image.exif.lens.clone()
-}
-
-fn exif_taken(image: &ImageInfo) -> Option<String> {
-    image.exif.taken.clone()
-}
-
-fn exif_exposure(image: &ImageInfo) -> Option<String> {
-    image.exif.exposure.clone()
-}
-
-/// The drive the item is on, with how full it is. `known`: the load has
-/// ended, so a missing drive is a dash and not a placeholder.
-fn volume_group(volume: &Option<Volume>, known: bool) -> Group {
-    let text = |of: &dyn Fn(&Volume) -> String| -> String {
-        match (volume, known) {
-            (Some(volume), _) => of(volume),
-            (None, true) => NONE.to_owned(),
-            (None, false) => PENDING.to_owned(),
-        }
-    };
-    let fraction = volume.as_ref().and_then(Volume::used_fraction);
-    let space = match volume {
-        Some(Volume {
-            total_bytes: Some(total),
-            free_bytes: Some(free),
-            ..
-        }) => format!("{} free of {}", display::size(*free), display::size(*total)),
-        // The line is always one line high, so the bar does not move.
-        _ => " ".to_owned(),
-    };
-    Group::titled("Volume")
-        .row(property_row(
-            "Name",
-            text(&|volume| format!("{} ({})", volume.label, volume.fs_type)),
-        ))
-        .row(row("Device").mono_value(text(&|volume| volume.device.clone())))
-        .row(property_row(
-            "Mounted at",
-            text(&|volume| volume.mount_point.to_string_lossy().into_owned()),
-        ))
-        .content(VolumeSpace { fraction, space })
-}
-
-/// The free space bar and its line.
-#[derive(PartialEq)]
-struct VolumeSpace {
-    fraction: Option<f32>,
-    space: String,
-}
-
-impl Component for VolumeSpace {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        rect()
-            .tw(&tokens, &[flex_col(), w_full(), gap(S2)])
-            .child(usage_bar(self.fraction))
-            .child(CAPTION.in_ink(Ink::Muted).label(&tokens, self.space.clone()).max_lines(1))
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use bingux_files::Kind;
-
     use super::*;
 
-    fn entry(path: &str, kind: Kind) -> Entry {
-        let path = PathBuf::from(path);
-        let name = path.file_name().unwrap().to_string_lossy().into_owned();
-        Entry::named(path, name, kind, false, false)
-    }
-
     #[test]
-    fn numbers_are_grouped_in_threes() {
-        assert_eq!(grouped(0), "0");
-        assert_eq!(grouped(999), "999");
-        assert_eq!(grouped(1_000), "1,000");
-        assert_eq!(grouped(2_500_000), "2,500,000");
-        assert_eq!(grouped(123_456_789_012), "123,456,789,012");
-    }
-
-    #[test]
-    fn a_size_has_its_byte_count_past_a_kilobyte() {
-        assert_eq!(size_with_bytes(512), "512 bytes");
-        assert_eq!(size_with_bytes(1), "1 byte");
-        assert_eq!(size_with_bytes(2_500_000), "2.5 MB (2,500,000 bytes)");
-    }
-
-    #[test]
-    fn a_running_count_says_so_and_a_stopped_one_says_at_least() {
-        let running = Totals {
-            bytes: 1_500_000,
-            files: 3,
-            folders: 1,
-            ..Totals::default()
-        };
-        assert_eq!(total_size(running), "1.5 MB (1,500,000 bytes) so far…");
-        assert_eq!(contents(running), "4 items (3 files, 1 folder) so far…");
-        let done = Totals {
-            done: true,
-            ..running
-        };
-        assert_eq!(total_size(done), "1.5 MB (1,500,000 bytes)");
-        assert_eq!(contents(done), "4 items (3 files, 1 folder)");
-        let stopped = Totals {
-            done: true,
-            cancelled: true,
-            ..running
-        };
-        assert_eq!(total_size(stopped), "At least 1.5 MB (1,500,000 bytes) (stopped)");
-        assert_eq!(contents(stopped), "At least 4 items (3 files, 1 folder) (stopped)");
-        let locked = Totals {
-            done: true,
-            unreadable: 1,
-            ..running
-        };
-        assert_eq!(total_size(locked), "At least 1.5 MB (1,500,000 bytes)");
-    }
-
-    #[test]
-    fn several_items_name_their_types_most_first() {
-        let entries = [
-            entry("/a/one.png", Kind::File),
-            entry("/a/dir", Kind::Directory),
-            entry("/a/two.png", Kind::File),
-        ];
-        assert_eq!(types_line(&entries), "PNG image (2), Folder (1)");
-    }
-
-    #[test]
-    fn a_location_under_home_is_written_with_a_tilde() {
-        let home = Path::new("/home/ana");
-        assert_eq!(home_relative(Path::new("/home/ana/Pictures"), home), "~/Pictures");
-        assert_eq!(home_relative(Path::new("/home/ana"), home), "~");
-        assert_eq!(home_relative(Path::new("/srv/data"), home), "/srv/data");
-        assert_eq!(home_relative(Path::new("/home/anabel"), home), "/home/anabel");
-    }
-
-    #[test]
-    fn items_share_a_location_only_in_one_folder() {
-        let together = [entry("/a/one", Kind::File), entry("/a/two", Kind::File)];
-        assert_eq!(common_parent(&together), Some(PathBuf::from("/a")));
-        let apart = [entry("/a/one", Kind::File), entry("/b/two", Kind::File)];
-        assert_eq!(common_parent(&apart), None);
-    }
-
-    #[test]
-    fn a_fact_load_reads_a_picture_header_and_the_drive() {
+    fn a_fact_load_reads_a_picture_header_the_drive_and_the_details() {
         let dir = std::env::temp_dir().join(format!("bingux-props-ui-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("pic.png");
@@ -877,6 +645,7 @@ mod tests {
         .unwrap();
         assert_eq!(facts.image.unwrap().dimensions(), "64 × 32");
         assert!(facts.props.volume.is_some());
+        assert_eq!(facts.details.unwrap().hard_links, 1);
         // The first of several items is read for its drive only.
         let plain = load_facts(Subject {
             path,
@@ -885,6 +654,7 @@ mod tests {
         })
         .unwrap();
         assert_eq!(plain.image, None);
+        assert_eq!(plain.details, None);
         assert!(
             load_facts(Subject {
                 path: dir.join("gone.png"),
@@ -893,5 +663,216 @@ mod tests {
             })
             .is_err()
         );
+    }
+
+    #[test]
+    fn modes_are_set_on_disk_where_they_differ_and_failures_keep_the_old_mode() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("bingux-props-modes-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (one, two) = (dir.join("one"), dir.join("two"));
+        std::fs::write(&one, "x").unwrap();
+        std::fs::write(&two, "x").unwrap();
+        std::fs::set_permissions(&one, std::fs::Permissions::from_mode(0o644)).unwrap();
+        std::fs::set_permissions(&two, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let mode = |path: &Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o7777;
+
+        let (now, error) = apply_modes(vec![(one.clone(), 0o664, 0o644), (two.clone(), 0o600, 0o600)]);
+        assert_eq!((now, error), (vec![0o664, 0o600], None));
+        assert_eq!((mode(&one), mode(&two)), (0o664, 0o600));
+
+        // A file that is gone cannot be changed; the answer keeps its old mode.
+        let gone = dir.join("gone");
+        let (now, error) = apply_modes(vec![(gone, 0o755, 0o644), (one.clone(), 0o640, 0o664)]);
+        assert_eq!(now, vec![0o644, 0o640]);
+        assert_eq!(error.as_deref(), Some("That file or folder no longer exists."));
+        assert_eq!(mode(&one), 0o640);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn permissions_of_every_item_are_read_in_order() {
+        let dir = std::env::temp_dir().join(format!("bingux-props-perms-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("f");
+        std::fs::write(&file, "x").unwrap();
+        let read = load_permissions(vec![dir.clone(), file.clone()]).unwrap();
+        assert!(read[0].is_dir && !read[1].is_dir);
+        assert!(load_permissions(vec![file, dir.join("missing")]).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
+
+/// The dialog in a headless window, at desktop and phone size.
+#[cfg(all(test, feature = "testing"))]
+mod window_tests {
+    use std::path::PathBuf;
+    use std::time::Duration;
+
+    use torin::prelude::Area;
+
+    use super::*;
+    use crate::shell::{OverlayHost, use_overlays};
+    use crate::snapshot::Snapshot;
+    use crate::theme::provide_tokens;
+    use crate::window::WindowHost;
+
+    const DESKTOP: (f32, f32) = (1100.0, 820.0);
+    const PHONE: (f32, f32) = (390.0, 800.0);
+
+    /// Opens the dialog for `entries` as soon as it is mounted.
+    #[derive(PartialEq)]
+    struct Open {
+        entries: Vec<Entry>,
+    }
+
+    impl Component for Open {
+        fn render(&self) -> impl IntoElement {
+            let overlays = use_overlays();
+            let entries = self.entries.clone();
+            use_hook(move || {
+                show(
+                    Body {
+                        entries,
+                        overlays,
+                        open_folder: EventHandler::new(|_: PathBuf| {}),
+                        open_with: false,
+                        home: PathBuf::from("/home/nobody"),
+                    },
+                    EventHandler::new(|()| {}),
+                );
+            });
+            rect()
+        }
+    }
+
+    #[derive(PartialEq)]
+    struct Root {
+        entries: Vec<Entry>,
+    }
+
+    impl Component for Root {
+        fn render(&self) -> impl IntoElement {
+            let _tokens = provide_tokens();
+            WindowHost::new(OverlayHost::new(Open {
+                entries: self.entries.clone(),
+            }))
+        }
+    }
+
+    /// A folder with two files in it, and a file beside it.
+    fn fixture(tag: &str) -> (PathBuf, Entry, Entry) {
+        let root = std::env::temp_dir().join(format!("bingux-props-win-{}-{tag}", std::process::id()));
+        let folder = root.join("folder");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join("a.txt"), "hello").unwrap();
+        std::fs::write(folder.join("b.bin"), vec![0u8; 3000]).unwrap();
+        let file = root.join("notes.txt");
+        std::fs::write(&file, "notes").unwrap();
+        let entry = |path: PathBuf, kind| {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            Entry::named(path, name, kind, false, false)
+        };
+        (root, entry(folder, Kind::Directory), entry(file, Kind::File))
+    }
+
+    fn open(entries: Vec<Entry>, size: (f32, f32)) -> Snapshot {
+        tab_model::remember(Tab::Basic);
+        let mut shot = Snapshot::new(move || Element::from(Root { entries: entries.clone() }), size);
+        shot.settle(Duration::from_millis(900));
+        shot
+    }
+
+    fn named(shot: &mut Snapshot, name: &'static str) -> Vec<Area> {
+        shot.runner().find_many(|node, element| {
+            (element.accessibility().builder.class_name() == Some(name)).then(|| node.layout().area)
+        })
+    }
+
+    fn shows(shot: &mut Snapshot, text: &str) -> bool {
+        !shot
+            .runner()
+            .find_many(|_, element| Label::try_downcast(element).filter(|label| label.text == text).map(|_| ()))
+            .is_empty()
+    }
+
+    /// The card, the tab bar and the page, which must not move between tabs.
+    fn frame(shot: &mut Snapshot) -> [Area; 3] {
+        ["Properties", "PropertiesTabs", "PropertiesPage"].map(|name| {
+            let found = named(shot, name);
+            assert_eq!(found.len(), 1, "one {name}");
+            found[0]
+        })
+    }
+
+    fn ctrl(shot: &mut Snapshot, key: Key) {
+        shot.key_with(key, Modifiers::CONTROL);
+        shot.settle(Duration::from_millis(300));
+    }
+
+    /// A text that only one tab has.
+    const MARKS: [(&str, &str); 4] = [
+        ("1", "General"),
+        ("2", "Ownership"),
+        ("3", "Storage"),
+        ("4", "Largest items"),
+    ];
+
+    #[test]
+    fn the_card_is_one_size_on_every_tab_at_desktop_and_phone_size() {
+        let (root, folder, _) = fixture("size");
+        for size in [DESKTOP, PHONE] {
+            let mut shot = open(vec![folder.clone()], size);
+            let before = frame(&mut shot);
+            assert!(before[0].width() > 100.0 && before[2].height() > 100.0, "{size:?}: {before:?}");
+            for (digit, mark) in MARKS {
+                ctrl(&mut shot, Key::Character(digit.into()));
+                assert!(shows(&mut shot, mark), "{size:?}: Ctrl+{digit} shows {mark}");
+                assert_eq!(frame(&mut shot), before, "{size:?}: the frame on tab {digit}");
+            }
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn control_tab_steps_through_the_tabs_and_wraps() {
+        let (root, folder, _) = fixture("steps");
+        let mut shot = open(vec![folder], DESKTOP);
+        // Four steps go round once and end where they began.
+        for (_, mark) in MARKS.iter().cycle().skip(1).take(4) {
+            ctrl(&mut shot, Key::Named(NamedKey::Tab));
+            assert!(shows(&mut shot, mark), "Ctrl+Tab shows {mark}");
+        }
+        shot.key_with(Key::Named(NamedKey::Tab), Modifiers::CONTROL | Modifiers::SHIFT);
+        shot.settle(Duration::from_millis(300));
+        assert!(shows(&mut shot, "Largest items"), "Ctrl+Shift+Tab goes back");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_press_on_a_tab_title_switches_to_it() {
+        let (root, _, file) = fixture("click");
+        let mut shot = open(vec![file], DESKTOP);
+        assert!(shows(&mut shot, "General"));
+        assert!(shot.click_text("Permissions"));
+        shot.settle(Duration::from_millis(300));
+        assert!(shows(&mut shot, "Ownership") && !shows(&mut shot, "General"));
+        assert!(shot.click_text("Details"));
+        shot.settle(Duration::from_millis(300));
+        assert!(shows(&mut shot, "Storage") && shows(&mut shot, "Checksum"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn several_items_have_basic_and_permissions_only() {
+        let (root, folder, file) = fixture("several");
+        let mut shot = open(vec![folder, file], DESKTOP);
+        assert!(shows(&mut shot, "General"));
+        ctrl(&mut shot, Key::Character("3".into()));
+        assert!(shows(&mut shot, "General"), "there is no third tab");
+        ctrl(&mut shot, Key::Character("2".into()));
+        assert!(shows(&mut shot, "Ownership"));
+        assert!(!shows(&mut shot, "Allow executing as program"), "a folder is among them");
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

@@ -30,7 +30,7 @@ use super::preview_stage::Subject;
 use super::view::{Ctx, Shared};
 use super::zoom::ViewKind;
 use crate::component::ComponentName;
-use crate::controls::icon_button;
+use crate::controls::{icon_button, path_label};
 use crate::icons::Icon;
 use crate::shell::{Overlays, framed_dialog};
 use crate::style::*;
@@ -268,24 +268,27 @@ impl Component for QuickLook {
             text
         });
 
-        let header = rect()
-            .tw(
-                &tokens,
-                &[flex_row(), grow_children(), items(Align::Center), w_full(), h(Dim::Header), px(S4), gap(S3)],
-            )
+        // The standard header bar: its icon buttons take the header size and
+        // its insets, so Close sits where it does in every other header.
+        let title: Element = rect()
+            .tw(&tokens, &[flex_row(), items(Align::Center), gap(S3), w_full()])
             .child(
                 rect().tw(&tokens, &[w_flex()]).child(
-                    SECTION
-                        .label(
-                            &tokens,
-                            entry.as_ref().map_or("Nothing to preview", |entry| entry.name.as_str()),
-                        )
-                        .max_lines(1)
-                        .text_overflow(TextOverflow::Ellipsis),
+                    path_label(
+                        entry
+                            .as_ref()
+                            .map_or("Nothing to preview", |entry| entry.name.as_str()),
+                    )
+                    .name()
+                    .style(SECTION),
                 ),
             )
             .maybe_child(position.map(|text| CAPTION.in_ink(Ink::Muted).label(&tokens, text).max_lines(1)))
-            .child(
+            .into();
+        let header = crate::shell::HeaderBar::new("")
+            .draggable(false)
+            .title_slot(title)
+            .trailing(
                 icon_button(Icon::WindowClose, move |_| overlays.dismiss_dialog())
                     .tooltip("Close (Space)"),
             );

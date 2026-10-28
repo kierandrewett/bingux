@@ -399,25 +399,6 @@ pub fn label_of(choices: Choices, key: &str) -> String {
         .unwrap_or_else(|| key.to_string())
 }
 
-/// One sentence on what an IP method does, shown under the method.
-pub fn method_caption(version: u8, method: &str) -> &'static str {
-    match (version, method) {
-        (4, "auto") => "Gets its address, gateway and DNS servers from the network.",
-        (6, "auto") => {
-            "Gets its address and DNS servers from the network, through router advertisements or DHCPv6."
-        }
-        (6, "dhcp") => "Gets its address and DNS servers from a DHCPv6 server only.",
-        (_, "link-local") => "Only reaches devices on the same link. Nothing beyond this network.",
-        (_, "manual") => "Uses the addresses and gateway you enter.",
-        (_, "shared") => {
-            "Shares this connection with other devices, which get addresses from this computer."
-        }
-        (6, "ignore") => "NetworkManager does not configure IPv6 for this connection.",
-        (_, "disabled") => "Turns this protocol off for the connection.",
-        _ => "",
-    }
-}
-
 /// The IP fields that mean something for a method.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Shown {
@@ -500,14 +481,6 @@ pub const MAC_RANDOMIZATION_CHOICES: Choices = &[
     ("always", "Always"),
 ];
 
-pub fn mac_randomization_caption(mode: &str) -> &'static str {
-    match mode {
-        "never" => "Always uses the adapter's own address on this network.",
-        "always" => "Uses a random address on this network, so it is harder to track.",
-        _ => "Follows the system setting.",
-    }
-}
-
 /// The cloned MAC choices: the mode keyword, or "address" for a literal address.
 pub const CLONED_MAC_CHOICES: Choices = &[
     ("", "Default"),
@@ -517,18 +490,6 @@ pub const CLONED_MAC_CHOICES: Choices = &[
     ("stable", "Stable"),
     ("address", "Specific address"),
 ];
-
-/// What a cloned MAC mode does, in plain words.
-pub fn cloned_mac_caption(mode: &str) -> &'static str {
-    match mode {
-        "preserve" => "Keeps the address the adapter already has.",
-        "permanent" => "Uses the address built into the adapter.",
-        "random" => "Uses a new random address each time it connects.",
-        "stable" => "Uses a random address that stays the same on this network.",
-        "address" => "Uses the address you type here.",
-        _ => "Uses the adapter's own address.",
-    }
-}
 
 /// The cloned MAC modes NetworkManager accepts as keywords. Any other value is a literal address.
 const CLONED_MAC_MODES: &[&str] = &["preserve", "permanent", "random", "stable", "stable-ssid"];
@@ -557,15 +518,6 @@ pub const WAKE_ON_LAN_CHOICES: Choices = &[
     ("none", "Off"),
     ("magic", "Magic packet"),
 ];
-
-/// What Wake on LAN does for each choice.
-pub fn wake_on_lan_caption(mode: &str) -> &'static str {
-    match mode {
-        "magic" => "Wakes when it receives a magic packet from the network.",
-        "none" => "Does not wake from the network.",
-        _ => "Follows the system setting.",
-    }
-}
 
 /// Wi-Fi key types. `none` removes the security setting; `wep` is `key-mgmt none` with a WEP key.
 pub const WIFI_SECURITY_CHOICES: Choices = &[

@@ -146,11 +146,17 @@ pub enum Icon {
     FolderDesktop,
     WindowNew,
     GoUp,
+    DefaultAppText,
+    DefaultAppDocuments,
+    DragHandle,
+    /// Any icon of the chat fork at any weight, as the fork draws it (feature `chat-icons`).
+    #[cfg(feature = "chat-icons")]
+    Chat(crate::chat_icons::ChatIcon, crate::chat_icons::ChatWeight),
 }
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 133] = [
+    pub const ALL: [Icon; 136] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -284,6 +290,9 @@ impl Icon {
         Self::FolderDesktop,
         Self::WindowNew,
         Self::GoUp,
+        Self::DefaultAppText,
+        Self::DefaultAppDocuments,
+        Self::DragHandle,
     ];
 
     /// The embedded SVG source for this icon.
@@ -459,6 +468,15 @@ impl Icon {
             Self::FolderDesktop => include_bytes!("../icons/folder-desktop-symbolic.svg"),
             Self::WindowNew => include_bytes!("../icons/window-new-symbolic.svg"),
             Self::GoUp => include_bytes!("../icons/go-up-symbolic.svg"),
+            Self::DefaultAppText => include_bytes!("../icons/default-app-text-symbolic.svg"),
+            Self::DefaultAppDocuments => include_bytes!("../icons/default-app-documents-symbolic.svg"),
+            Self::DragHandle => include_bytes!("../icons/list-drag-handle-symbolic.svg"),
+            #[cfg(feature = "chat-icons")]
+            // A weight the fork lacks is drawn in the regular weight, which every fork icon has.
+            Self::Chat(icon, weight) => icon
+                .bytes(weight)
+                .or_else(|| icon.bytes(crate::chat_icons::ChatWeight::Regular))
+                .expect("every fork icon has a regular weight"),
         }
     }
 }

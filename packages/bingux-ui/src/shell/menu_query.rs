@@ -5,15 +5,20 @@
 //! # What the person gets
 //!
 //! - Typing while a menu or list is open does not close it. The characters
-//!   build a query, which restarts once nothing was typed for
-//!   [`RESET_MS`]; Backspace edits it.
+//!   build a query.
+//! - **The query never times out.** It ends only when the person edits it
+//!   away or acts on it: Backspace removes the last character, Ctrl+Backspace
+//!   the last word, Delete or Ctrl+A everything, Escape everything (and only
+//!   the next Escape closes the list), and picking a row or closing the list
+//!   drops it. A pause of any length, as a slow typist or someone using
+//!   assistive technology makes, leaves it as it was, and typing goes on from
+//!   there. Nothing in this module can age a query: it has no clock.
 //! - A row matches when its label contains the query, ignoring case. A label
 //!   that starts with the query ranks first, then one with a word that starts
 //!   with it, then any other substring. The first match of the best rank is
 //!   focused, and the matched letters of every match are marked.
 //! - Down, Up, Tab, Shift+Tab, Ctrl+N and Ctrl+P walk through the matches
-//!   only, wrapping at the ends. Enter activates the focused match. Escape
-//!   clears the query, and only then closes the list.
+//!   only, wrapping at the ends. Enter activates the focused match.
 //! - Space types a space while a query is active. Otherwise it activates, as
 //!   it always did.
 //! - Rows that cannot be picked (disabled rows, separators) never match.
@@ -21,21 +26,17 @@
 //! # How a list uses it
 //!
 //! The list turns its rows into [`Candidate`]s and hands each key press to
-//! [`TypeAhead::key`] with the time. The answer is a [`Reaction`]: focus a
-//! row, activate a row, swallow the key, or leave it to the list. The list
-//! draws each row from [`TypeAhead::mark`] and the query pill from
-//! [`TypeAhead::pill`], and calls [`TypeAhead::expire`] when the reset time
-//! has passed so a stale query goes away without a key press.
+//! [`TypeAhead::key`]. The answer is a [`Reaction`]: focus a row, activate a
+//! row, swallow the key, or leave it to the list. The list draws each row
+//! from [`TypeAhead::mark`] and the query pill from [`TypeAhead::pill`], and
+//! calls [`TypeAhead::clear`] when it closes or a row is picked.
+//!
+//! The one place a reset is allowed is a dropdown whose list is shut: there
+//! typing picks a value at once and no pill shows the query, so a stale
+//! prefix would be invisible. That reset belongs to the window side
+//! ([`super::type_ahead`]), not to this module.
 
 use std::ops::Range;
-
-/// A time in milliseconds on any clock that only moves forward. The caller
-/// supplies it, so a test can use a clock it controls.
-pub type Ms = u64;
-
-/// How long a query lives after the last key. A key after that starts a new
-/// query.
-pub const RESET_MS: Ms = 1000;
 
 /// How a label matches the query, best first.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -227,6 +228,10 @@ pub enum Key {
     /// A printable character, Space included.
     Char(char),
     Backspace,
+    /// Ctrl+Backspace: the last word.
+    BackWord,
+    /// Delete or Ctrl+A: the whole query.
+    Clear,
     /// Down, Tab or Ctrl+N.
     Next,
     /// Up, Shift+Tab or Ctrl+P.
@@ -279,7 +284,6 @@ impl Pill {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TypeAhead {
     query: String,
-    typed_at: Ms,
     matches: Matches,
 }
 
@@ -295,27 +299,12 @@ impl TypeAhead {
         !self.query.is_empty()
     }
 
-    /// The time the query ends if nothing more is typed, for scheduling the
-    /// call to [`Self::expire`].
-    pub fn expires_at(&self) -> Option<Ms> {
-        self.is_active().then(|| self.typed_at + RESET_MS)
-    }
-
     /// Forgets the query. It returns whether there was one.
     pub fn clear(&mut self) -> bool {
         let was = self.is_active();
         self.query.clear();
         self.matches = Matches::default();
         was
-    }
-
-    /// Forgets the query once [`RESET_MS`] has passed since the last key. It
-    /// returns whether it did, so the list knows to draw again.
-    pub fn expire(&mut self, now: Ms) -> bool {
-        match self.expires_at() {
-            Some(end) if now >= end => self.clear(),
-            _ => false,
-        }
     }
 
     /// How row `index` shows now.
@@ -344,19 +333,10 @@ impl TypeAhead {
         &self.matches
     }
 
-    /// Handles `key` at time `now` for a list of `items` whose row `focused`
-    /// has the keyboard focus.
-    ///
-    /// A query that ran out before this key is dropped first, so it never
-    /// decides anything.
-    pub fn key(
-        &mut self,
-        key: Key,
-        now: Ms,
-        items: &[Candidate],
-        focused: Option<usize>,
-    ) -> Reaction {
-        self.expire(now);
+    /// Handles `key` for a list of `items` whose row `focused` has the
+    /// keyboard focus. There is no time here on purpose: a query only ends
+    /// when the person ends it.
+    pub fn key(&mut self, key: Key, items: &[Candidate], focused: Option<usize>) -> Reaction {
         match key {
             Key::Char(c) => {
                 if c.is_control() {
@@ -368,7 +348,6 @@ impl TypeAhead {
                     return Reaction::Ignored;
                 }
                 self.query.push(c);
-                self.typed_at = now;
                 self.refresh(items)
             }
             Key::Backspace => {
@@ -376,14 +355,24 @@ impl TypeAhead {
                     return Reaction::Ignored;
                 }
                 self.query.pop();
-                self.typed_at = now;
-                if self.query.is_empty() {
-                    self.matches = Matches::default();
-                    return Reaction::Handled;
-                }
                 self.refresh(items)
             }
-            Key::Escape => {
+            Key::BackWord => {
+                if !self.is_active() {
+                    return Reaction::Ignored;
+                }
+                // Trailing spaces go with the word before them.
+                self.query.truncate(self.query.trim_end().len());
+                let word_start = self
+                    .query
+                    .char_indices()
+                    .rev()
+                    .find(|(_, c)| c.is_whitespace())
+                    .map_or(0, |(at, c)| at + c.len_utf8());
+                self.query.truncate(word_start);
+                self.refresh(items)
+            }
+            Key::Escape | Key::Clear => {
                 if self.clear() {
                     Reaction::Handled
                 } else {
@@ -395,8 +384,6 @@ impl TypeAhead {
                     return Reaction::Ignored;
                 }
                 self.matches = Matches::rank(&self.query, items);
-                // Walking is activity too: the query stays while it is used.
-                self.typed_at = now;
                 let forward = key == Key::Next;
                 match self.matches.step(focused, forward) {
                     Some(index) => Reaction::Focus(index),
@@ -420,7 +407,12 @@ impl TypeAhead {
     }
 
     /// Ranks the rows again for the changed query and focuses the best one.
+    /// An emptied query shows nothing and has nothing to focus.
     fn refresh(&mut self, items: &[Candidate]) -> Reaction {
+        if self.query.is_empty() {
+            self.matches = Matches::default();
+            return Reaction::Handled;
+        }
         self.matches = Matches::rank(&self.query, items);
         match self.matches.best() {
             Some(index) => Reaction::Focus(index),
@@ -443,10 +435,10 @@ mod tests {
             .collect()
     }
 
-    fn type_all(ahead: &mut TypeAhead, text: &str, now: Ms, items: &[Candidate]) -> Reaction {
+    fn type_all(ahead: &mut TypeAhead, text: &str, items: &[Candidate]) -> Reaction {
         let mut last = Reaction::Ignored;
         for c in text.chars() {
-            last = ahead.key(Key::Char(c), now, items, None);
+            last = ahead.key(Key::Char(c), items, None);
         }
         last
     }
@@ -523,7 +515,7 @@ mod tests {
         assert_eq!(matches.count(), 1);
         assert_eq!(matches.best(), Some(1));
         let mut ahead = TypeAhead::default();
-        type_all(&mut ahead, "co", 0, &items);
+        type_all(&mut ahead, "co", &items);
         assert_eq!(ahead.mark(0), Mark::Plain);
         assert_eq!(ahead.mark(1), Mark::Hit(0..2));
     }
@@ -534,17 +526,11 @@ mod tests {
         let mut ahead = TypeAhead::default();
         assert_eq!(ahead.mark(0), Mark::Plain);
         // A prefix beats an earlier row that only contains the letter.
-        assert_eq!(
-            ahead.key(Key::Char('o'), 0, &items, None),
-            Reaction::Focus(1)
-        );
+        assert_eq!(ahead.key(Key::Char('o'), &items, None), Reaction::Focus(1));
         assert_eq!(ahead.mark(0), Mark::Hit(1..2));
         assert_eq!(ahead.mark(1), Mark::Hit(0..1));
         assert_eq!(ahead.mark(2), Mark::Dim);
-        assert_eq!(
-            ahead.key(Key::Char('p'), 10, &items, Some(1)),
-            Reaction::Focus(1)
-        );
+        assert_eq!(ahead.key(Key::Char('p'), &items, Some(1)), Reaction::Focus(1));
         assert_eq!(ahead.mark(0), Mark::Hit(1..3));
         assert_eq!(ahead.mark(1), Mark::Hit(0..2));
     }
@@ -553,7 +539,7 @@ mod tests {
     fn a_query_with_no_match_dims_everything_and_takes_the_key() {
         let items = rows(&["Open", "Copy"]);
         let mut ahead = TypeAhead::default();
-        assert_eq!(type_all(&mut ahead, "zz", 0, &items), Reaction::Handled);
+        assert_eq!(type_all(&mut ahead, "zz", &items), Reaction::Handled);
         assert_eq!(ahead.mark(0), Mark::Dim);
         assert_eq!(ahead.mark(1), Mark::Dim);
         let pill = ahead.pill().expect("a pill");
@@ -566,11 +552,11 @@ mod tests {
         let items = rows(&["Open", "Open with", "Paste"]);
         let mut ahead = TypeAhead::default();
         assert_eq!(ahead.pill(), None);
-        type_all(&mut ahead, "op", 0, &items);
+        type_all(&mut ahead, "op", &items);
         let pill = ahead.pill().expect("a pill");
         assert_eq!(pill.count, 2);
         assert_eq!(pill.announcement(), "2 matches for op");
-        type_all(&mut ahead, "en w", 1, &items);
+        type_all(&mut ahead, "en w", &items);
         assert_eq!(ahead.pill().map(|pill| pill.announcement()), Some("1 match for open w".to_owned()));
     }
 
@@ -578,88 +564,135 @@ mod tests {
     fn down_and_up_cycle_through_only_the_matches() {
         let items = rows(&["Cut", "Copy", "Paste", "Copy path", "Delete"]);
         let mut ahead = TypeAhead::default();
-        assert_eq!(type_all(&mut ahead, "cop", 0, &items), Reaction::Focus(1));
-        assert_eq!(ahead.key(Key::Next, 1, &items, Some(1)), Reaction::Focus(3));
-        assert_eq!(ahead.key(Key::Next, 2, &items, Some(3)), Reaction::Focus(1));
-        assert_eq!(ahead.key(Key::Previous, 3, &items, Some(1)), Reaction::Focus(3));
-        assert_eq!(ahead.key(Key::Previous, 4, &items, Some(3)), Reaction::Focus(1));
+        assert_eq!(type_all(&mut ahead, "cop", &items), Reaction::Focus(1));
+        assert_eq!(ahead.key(Key::Next, &items, Some(1)), Reaction::Focus(3));
+        assert_eq!(ahead.key(Key::Next, &items, Some(3)), Reaction::Focus(1));
+        assert_eq!(ahead.key(Key::Previous, &items, Some(1)), Reaction::Focus(3));
+        assert_eq!(ahead.key(Key::Previous, &items, Some(3)), Reaction::Focus(1));
     }
 
     #[test]
     fn cycling_starts_from_a_focus_that_is_not_a_match() {
         let items = rows(&["Cut", "Copy", "Paste", "Copy path"]);
         let mut ahead = TypeAhead::default();
-        type_all(&mut ahead, "copy", 0, &items);
-        assert_eq!(ahead.key(Key::Next, 1, &items, Some(2)), Reaction::Focus(3));
-        assert_eq!(ahead.key(Key::Previous, 2, &items, Some(2)), Reaction::Focus(1));
-        assert_eq!(ahead.key(Key::Next, 3, &items, None), Reaction::Focus(1));
-        assert_eq!(ahead.key(Key::Previous, 4, &items, None), Reaction::Focus(3));
+        type_all(&mut ahead, "copy", &items);
+        assert_eq!(ahead.key(Key::Next, &items, Some(2)), Reaction::Focus(3));
+        assert_eq!(ahead.key(Key::Previous, &items, Some(2)), Reaction::Focus(1));
+        assert_eq!(ahead.key(Key::Next, &items, None), Reaction::Focus(1));
+        assert_eq!(ahead.key(Key::Previous, &items, None), Reaction::Focus(3));
     }
 
     #[test]
     fn arrows_with_no_query_are_the_lists_own() {
         let items = rows(&["Cut", "Copy"]);
         let mut ahead = TypeAhead::default();
-        assert_eq!(ahead.key(Key::Next, 0, &items, Some(0)), Reaction::Ignored);
-        assert_eq!(ahead.key(Key::Previous, 0, &items, Some(0)), Reaction::Ignored);
-        assert_eq!(ahead.key(Key::Enter, 0, &items, Some(0)), Reaction::Ignored);
-        assert_eq!(ahead.key(Key::Backspace, 0, &items, Some(0)), Reaction::Ignored);
-        assert_eq!(ahead.key(Key::Escape, 0, &items, Some(0)), Reaction::Ignored);
+        assert_eq!(ahead.key(Key::Next, &items, Some(0)), Reaction::Ignored);
+        assert_eq!(ahead.key(Key::Previous, &items, Some(0)), Reaction::Ignored);
+        assert_eq!(ahead.key(Key::Enter, &items, Some(0)), Reaction::Ignored);
+        assert_eq!(ahead.key(Key::Backspace, &items, Some(0)), Reaction::Ignored);
+        assert_eq!(ahead.key(Key::BackWord, &items, Some(0)), Reaction::Ignored);
+        assert_eq!(ahead.key(Key::Clear, &items, Some(0)), Reaction::Ignored);
+        assert_eq!(ahead.key(Key::Escape, &items, Some(0)), Reaction::Ignored);
     }
 
     #[test]
     fn with_no_match_the_arrows_stay_put() {
         let items = rows(&["Cut", "Copy"]);
         let mut ahead = TypeAhead::default();
-        type_all(&mut ahead, "x", 0, &items);
-        assert_eq!(ahead.key(Key::Next, 1, &items, Some(1)), Reaction::Handled);
-        assert_eq!(ahead.key(Key::Enter, 1, &items, Some(1)), Reaction::Handled);
+        type_all(&mut ahead, "x", &items);
+        assert_eq!(ahead.key(Key::Next, &items, Some(1)), Reaction::Handled);
+        assert_eq!(ahead.key(Key::Enter, &items, Some(1)), Reaction::Handled);
     }
 
     #[test]
     fn enter_activates_the_focused_match() {
         let items = rows(&["Copy", "Copy path"]);
         let mut ahead = TypeAhead::default();
-        type_all(&mut ahead, "copy", 0, &items);
-        assert_eq!(ahead.key(Key::Enter, 1, &items, Some(1)), Reaction::Activate(1));
+        type_all(&mut ahead, "copy", &items);
+        assert_eq!(ahead.key(Key::Enter, &items, Some(1)), Reaction::Activate(1));
         // A focus that is not a match gives way to the best match.
         let mixed = rows(&["Paste", "Copy"]);
         let mut other = TypeAhead::default();
-        type_all(&mut other, "copy", 0, &mixed);
-        assert_eq!(other.key(Key::Enter, 1, &mixed, Some(0)), Reaction::Activate(1));
+        type_all(&mut other, "copy", &mixed);
+        assert_eq!(other.key(Key::Enter, &mixed, Some(0)), Reaction::Activate(1));
     }
 
     #[test]
     fn escape_clears_the_query_and_the_next_escape_is_the_lists() {
         let items = rows(&["Copy"]);
         let mut ahead = TypeAhead::default();
-        type_all(&mut ahead, "co", 0, &items);
-        assert_eq!(ahead.key(Key::Escape, 1, &items, Some(0)), Reaction::Handled);
+        type_all(&mut ahead, "co", &items);
+        assert_eq!(ahead.key(Key::Escape, &items, Some(0)), Reaction::Handled);
         assert!(!ahead.is_active());
         assert_eq!(ahead.mark(0), Mark::Plain);
-        assert_eq!(ahead.key(Key::Escape, 2, &items, Some(0)), Reaction::Ignored);
+        assert_eq!(ahead.pill(), None);
+        assert_eq!(ahead.key(Key::Escape, &items, Some(0)), Reaction::Ignored);
     }
 
     #[test]
     fn backspace_edits_the_query() {
         let items = rows(&["Copy", "Cut", "Paste"]);
         let mut ahead = TypeAhead::default();
-        assert_eq!(type_all(&mut ahead, "cu", 0, &items), Reaction::Focus(1));
-        assert_eq!(ahead.key(Key::Backspace, 1, &items, Some(1)), Reaction::Focus(0));
+        assert_eq!(type_all(&mut ahead, "cu", &items), Reaction::Focus(1));
+        assert_eq!(ahead.key(Key::Backspace, &items, Some(1)), Reaction::Focus(0));
         assert_eq!(ahead.query(), "c");
-        assert_eq!(ahead.key(Key::Backspace, 2, &items, Some(0)), Reaction::Handled);
+        assert_eq!(ahead.key(Key::Backspace, &items, Some(0)), Reaction::Handled);
         assert!(!ahead.is_active());
-        assert_eq!(ahead.key(Key::Backspace, 3, &items, Some(0)), Reaction::Ignored);
+        assert_eq!(ahead.key(Key::Backspace, &items, Some(0)), Reaction::Ignored);
+    }
+
+    #[test]
+    fn backspace_takes_a_whole_character_not_a_byte() {
+        let items = rows(&["Écoute", "Café"]);
+        let mut ahead = TypeAhead::default();
+        type_all(&mut ahead, "café", &items);
+        assert_eq!(ahead.key(Key::Backspace, &items, Some(1)), Reaction::Focus(1));
+        assert_eq!(ahead.query(), "caf");
+    }
+
+    #[test]
+    fn ctrl_backspace_takes_the_last_word() {
+        let items = rows(&["Open with", "Open", "Paste"]);
+        let mut ahead = TypeAhead::default();
+        type_all(&mut ahead, "open wi", &items);
+        assert_eq!(ahead.key(Key::BackWord, &items, Some(0)), Reaction::Focus(0));
+        assert_eq!(ahead.query(), "open ");
+        // Spaces at the end go with the word before them.
+        assert_eq!(ahead.key(Key::BackWord, &items, Some(0)), Reaction::Handled);
+        assert!(!ahead.is_active());
+        assert_eq!(ahead.key(Key::BackWord, &items, Some(0)), Reaction::Ignored);
+    }
+
+    #[test]
+    fn ctrl_backspace_on_one_word_clears_the_query() {
+        let items = rows(&["Open"]);
+        let mut ahead = TypeAhead::default();
+        type_all(&mut ahead, "ope", &items);
+        assert_eq!(ahead.key(Key::BackWord, &items, Some(0)), Reaction::Handled);
+        assert!(!ahead.is_active());
+        assert_eq!(ahead.mark(0), Mark::Plain);
+    }
+
+    #[test]
+    fn clear_empties_the_query_and_only_with_one() {
+        let items = rows(&["Copy", "Cut"]);
+        let mut ahead = TypeAhead::default();
+        assert_eq!(ahead.key(Key::Clear, &items, None), Reaction::Ignored);
+        type_all(&mut ahead, "cop", &items);
+        assert_eq!(ahead.key(Key::Clear, &items, Some(0)), Reaction::Handled);
+        assert!(!ahead.is_active());
+        assert_eq!(ahead.pill(), None);
+        assert_eq!(ahead.mark(0), Mark::Plain);
     }
 
     #[test]
     fn space_types_only_while_a_query_is_active() {
         let items = rows(&["Open with", "Open"]);
         let mut ahead = TypeAhead::default();
-        assert_eq!(ahead.key(Key::Char(' '), 0, &items, Some(0)), Reaction::Ignored);
+        assert_eq!(ahead.key(Key::Char(' '), &items, Some(0)), Reaction::Ignored);
         assert!(!ahead.is_active());
-        type_all(&mut ahead, "open", 0, &items);
-        assert_eq!(ahead.key(Key::Char(' '), 1, &items, Some(1)), Reaction::Focus(0));
+        type_all(&mut ahead, "open", &items);
+        assert_eq!(ahead.key(Key::Char(' '), &items, Some(1)), Reaction::Focus(0));
         assert_eq!(ahead.query(), "open ");
     }
 
@@ -667,66 +700,54 @@ mod tests {
     fn control_characters_are_not_text() {
         let items = rows(&["Open"]);
         let mut ahead = TypeAhead::default();
-        assert_eq!(ahead.key(Key::Char('\u{8}'), 0, &items, None), Reaction::Ignored);
+        assert_eq!(ahead.key(Key::Char('\u{8}'), &items, None), Reaction::Ignored);
         assert!(!ahead.is_active());
     }
 
+    // The query takes no time, so no pause can end it; the menu's own tests
+    // (`menu_nav`) run the same promise against a clock.
     #[test]
-    fn the_query_resets_after_a_second_without_typing() {
-        let items = rows(&["Apple", "Banana", "Apricot"]);
+    fn the_query_stays_exactly_as_typed_until_the_person_changes_it() {
+        let items = rows(&["English", "Español", "Deutsch"]);
         let mut ahead = TypeAhead::default();
-        type_all(&mut ahead, "ap", 100, &items);
-        assert_eq!(ahead.expires_at(), Some(100 + RESET_MS));
-        // Just short of the reset nothing happens.
-        assert!(!ahead.expire(100 + RESET_MS - 1));
-        assert!(ahead.is_active());
-        // A key before the end keeps the query going and moves the end.
-        assert_eq!(ahead.key(Key::Char('r'), 900, &items, Some(0)), Reaction::Focus(2));
-        assert_eq!(ahead.query(), "apr");
-        assert_eq!(ahead.expires_at(), Some(900 + RESET_MS));
-        assert!(!ahead.expire(1000 + RESET_MS - 1 - 100));
-        assert!(ahead.expire(900 + RESET_MS));
-        assert!(!ahead.is_active());
-        assert_eq!(ahead.mark(0), Mark::Plain);
-        assert_eq!(ahead.expires_at(), None);
+        assert_eq!(type_all(&mut ahead, "eng", &items), Reaction::Focus(0));
+        // Reading marks and the pill changes nothing.
+        for _ in 0..3 {
+            assert_eq!(ahead.query(), "eng");
+            assert_eq!(ahead.mark(0), Mark::Hit(0..3));
+            assert_eq!(ahead.mark(1), Mark::Dim);
+            assert_eq!(ahead.pill().map(|pill| pill.count), Some(1));
+        }
+        // Typing carries on from where it was.
+        assert_eq!(ahead.key(Key::Char('l'), &items, Some(0)), Reaction::Focus(0));
+        assert_eq!(ahead.query(), "engl");
     }
 
     #[test]
-    fn a_key_after_the_reset_starts_a_new_query() {
-        let items = rows(&["Apple", "Banana"]);
-        let mut ahead = TypeAhead::default();
-        type_all(&mut ahead, "ap", 0, &items);
-        // The timer has not run yet, but the query is stale.
-        assert_eq!(
-            ahead.key(Key::Char('b'), RESET_MS + 5, &items, Some(0)),
-            Reaction::Focus(1)
-        );
-        assert_eq!(ahead.query(), "b");
-    }
-
-    #[test]
-    fn a_stale_space_or_backspace_is_the_lists_own() {
-        let items = rows(&["Apple"]);
-        let mut ahead = TypeAhead::default();
-        type_all(&mut ahead, "ap", 0, &items);
-        assert_eq!(
-            ahead.key(Key::Char(' '), RESET_MS, &items, Some(0)),
-            Reaction::Ignored
-        );
-        assert_eq!(
-            ahead.key(Key::Backspace, RESET_MS, &items, Some(0)),
-            Reaction::Ignored
-        );
-    }
-
-    #[test]
-    fn cycling_keeps_the_query_alive() {
+    fn walking_and_enter_do_not_end_the_query() {
         let items = rows(&["Copy", "Copy path"]);
         let mut ahead = TypeAhead::default();
-        type_all(&mut ahead, "cop", 0, &items);
-        assert_eq!(ahead.key(Key::Next, 800, &items, Some(0)), Reaction::Focus(1));
-        assert!(!ahead.expire(RESET_MS));
-        assert!(ahead.expire(800 + RESET_MS));
+        type_all(&mut ahead, "cop", &items);
+        assert_eq!(ahead.key(Key::Next, &items, Some(0)), Reaction::Focus(1));
+        assert_eq!(ahead.query(), "cop");
+        assert_eq!(ahead.key(Key::Enter, &items, Some(1)), Reaction::Activate(1));
+        // Picking is the list's: it clears the query when it closes.
+        assert!(ahead.is_active());
+        assert!(ahead.clear());
+        assert!(!ahead.clear());
+    }
+
+    #[test]
+    fn a_typed_edit_and_escape_sequence_ends_with_the_list_closing() {
+        let items = rows(&["English", "Español"]);
+        let mut ahead = TypeAhead::default();
+        type_all(&mut ahead, "eng", &items);
+        type_all(&mut ahead, "x", &items);
+        assert_eq!(ahead.pill().map(|pill| pill.count), Some(0));
+        assert_eq!(ahead.key(Key::Backspace, &items, Some(0)), Reaction::Focus(0));
+        assert_eq!(ahead.query(), "eng");
+        assert_eq!(ahead.key(Key::Escape, &items, Some(0)), Reaction::Handled);
+        assert_eq!(ahead.key(Key::Escape, &items, Some(0)), Reaction::Ignored);
     }
 
     #[test]
@@ -740,8 +761,8 @@ mod tests {
             })
             .collect();
         let mut ahead = TypeAhead::default();
-        assert_eq!(type_all(&mut ahead, "r-19", 0, &items), Reaction::Focus(1900));
+        assert_eq!(type_all(&mut ahead, "r-19", &items), Reaction::Focus(1900));
         assert_eq!(ahead.matches().count(), 100);
-        assert_eq!(ahead.key(Key::Previous, 1, &items, Some(1900)), Reaction::Focus(1999));
+        assert_eq!(ahead.key(Key::Previous, &items, Some(1900)), Reaction::Focus(1999));
     }
 }

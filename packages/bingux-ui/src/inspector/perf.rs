@@ -10,6 +10,7 @@
 //! stretch.
 
 use std::cell::RefCell;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -18,6 +19,7 @@ use freya::prelude::*;
 use freya_winit::plugins::PluginEvent;
 
 use super::a11y_checks::FrameHistory;
+use super::target::InstanceId;
 use super::perf_sample::{self, Profile};
 use crate::charts::{Bar, FlameTree, Unit, flame_graph, timeline_chart};
 use crate::component::ComponentName;
@@ -83,8 +85,6 @@ struct Recorder {
     /// Why the last recording could not start.
     error: Option<&'static str>,
     session: Option<Rc<Session>>,
-    /// Counts recordings, so a cached flame graph knows which it was built from.
-    sessions: u64,
 }
 
 struct Recording {
@@ -111,18 +111,28 @@ struct Stamp {
 }
 
 thread_local! {
-    static RECORDER: RefCell<Recorder> = RefCell::new(Recorder::default());
+    /// One recorder per inspector that has one. Frames are timed only for a
+    /// window an inspector watches; the stack sampler is shared, so one
+    /// inspector records at a time.
+    static RECORDERS: RefCell<HashMap<InstanceId, Recorder>> = RefCell::new(HashMap::new());
     /// The flame graph last built: recording, range, graph.
     static FLAME: RefCell<Option<(u64, Option<(u64, u64)>, Rc<FlameTree>)>> = const { RefCell::new(None) };
 }
 
-fn read<R>(f: impl FnOnce(&Recorder) -> R) -> R {
-    RECORDER.with(|r| f(&r.borrow()))
+fn read<R>(id: InstanceId, f: impl FnOnce(&Recorder) -> R) -> R {
+    RECORDERS.with(|r| match r.borrow().get(&id) {
+        Some(recorder) => f(recorder),
+        None => f(&Recorder::default()),
+    })
 }
 
-fn write<R>(f: impl FnOnce(&mut Recorder) -> R) -> R {
-    RECORDER.with(|r| f(&mut r.borrow_mut()))
+fn write<R>(id: InstanceId, f: impl FnOnce(&mut Recorder) -> R) -> R {
+    RECORDERS.with(|r| f(r.borrow_mut().entry(id).or_default()))
 }
+
+/// Counts finished recordings across inspectors, so the cached flame graph
+/// knows which recording it was built from.
+static SESSIONS: AtomicU64 = AtomicU64::new(0);
 
 impl Recorder {
     /// Closes the frame in progress. Returns its duration in nanoseconds, or
@@ -146,29 +156,25 @@ impl Recorder {
     }
 }
 
-/// Feeds the tab from the plugin hook. Call for every event the hook gets.
-/// `inspector` is true when the event belongs to the inspector's own window,
-/// whose frames are not the application's. Frame durations are pushed to
-/// `history` too, for the accessibility checks.
-pub fn on_event(event: &PluginEvent<'_>, inspector: bool, history: &mut FrameHistory) {
-    if inspector {
-        return;
-    }
+/// Feeds the tab of inspector `id` from the plugin hook, for an event of the
+/// window it watches. Frame durations are pushed to `history` too, for the
+/// accessibility checks.
+pub fn on_event(id: InstanceId, event: &PluginEvent<'_>, history: &mut FrameHistory) {
     match event {
         PluginEvent::BeforeMeasuringLayout { .. } | PluginEvent::BeforeRender { .. } => {
             let now = perf_sample::now_ns();
-            write(|r| {
+            write(id, |r| {
                 r.frame_start.get_or_insert(now);
             });
         }
         PluginEvent::AfterRedraw { .. } => {
             let now = perf_sample::now_ns();
-            if let Some(ns) = write(|r| r.end_frame(now)) {
+            if let Some(ns) = write(id, |r| r.end_frame(now)) {
                 history.record_frame(Instant::now(), Duration::from_nanos(ns), &[]);
             }
             // The sampler stops itself when its buffer fills; keep the tab in step.
-            if is_recording() && !perf_sample::is_active() {
-                finish();
+            if is_recording(id) && !perf_sample::is_active() {
+                finish(id);
             }
         }
         _ => {}
@@ -177,13 +183,24 @@ pub fn on_event(event: &PluginEvent<'_>, inspector: bool, history: &mut FrameHis
 
 /// Starts a recording: times every frame and samples the stacks of the
 /// application until [`stop`]. Returns false when sampling is unavailable.
-pub fn start() -> bool {
+pub fn start(id: InstanceId) -> bool {
+    // The stack sampler is one per process: a second recording would reset the
+    // first one's samples.
+    let busy = RECORDERS.with(|r| {
+        r.borrow()
+            .iter()
+            .any(|(other, recorder)| *other != id && recorder.recording.is_some())
+    });
+    if busy {
+        write(id, |r| r.error = Some("Another inspector is recording."));
+        return false;
+    }
     if !perf_sample::start() {
-        write(|r| r.error = Some("Stack sampling is not available here."));
+        write(id, |r| r.error = Some("Stack sampling is not available here."));
         return false;
     }
     let now = perf_sample::now_ns();
-    write(|r| {
+    write(id, |r| {
         r.recording = Some(Recording {
             started: now,
             frames: Vec::new(),
@@ -197,30 +214,38 @@ pub fn start() -> bool {
     true
 }
 
+/// Drops inspector `id`'s recorder, as the inspector closes. A recording in
+/// progress is ended, so the sampler stops.
+pub fn forget(id: InstanceId) {
+    if is_recording(id) {
+        perf_sample::stop();
+    }
+    RECORDERS.with(|r| r.borrow_mut().remove(&id));
+}
+
 /// Ends the recording in progress and builds its session. Does nothing when
 /// no recording is running.
-pub fn stop() {
-    if is_recording() {
-        finish();
+pub fn stop(id: InstanceId) {
+    if is_recording(id) {
+        finish(id);
     }
 }
 
 /// Whether a recording is in progress.
-pub fn is_recording() -> bool {
-    read(|r| r.recording.is_some())
+pub fn is_recording(id: InstanceId) -> bool {
+    read(id, |r| r.recording.is_some())
 }
 
-fn finish() {
+fn finish(id: InstanceId) {
     let profile = perf_sample::stop();
     let now = perf_sample::now_ns();
-    let Some(recording) = write(|r| r.recording.take()) else {
+    let Some(recording) = write(id, |r| r.recording.take()) else {
         return;
     };
     let (names, samples) = intern(&profile, recording.started);
-    write(|r| {
-        r.sessions += 1;
+    write(id, |r| {
         r.session = Some(Rc::new(Session {
-            id: r.sessions,
+            id: SESSIONS.fetch_add(1, Ordering::Relaxed) + 1,
             secs: now.saturating_sub(recording.started) as f64 / 1.0e9,
             truncated: profile.truncated,
             frames: Rc::new(recording.frames),
@@ -255,8 +280,8 @@ fn intern(profile: &Profile, started: u64) -> (Vec<Box<str>>, Vec<Stamp>) {
     (names, samples)
 }
 
-fn version() -> u64 {
-    read(|r| r.version)
+fn version(id: InstanceId) -> u64 {
+    read(id, |r| r.version)
 }
 
 /// What the tab shows.
@@ -270,9 +295,9 @@ enum View {
     Done(Rc<Session>),
 }
 
-fn view_now() -> View {
+fn view_now(id: InstanceId) -> View {
     let now = perf_sample::now_ns();
-    read(|r| {
+    read(id, |r| {
         if let Some(recording) = &r.recording {
             View::Recording {
                 elapsed: now.saturating_sub(recording.started) as f64 / 1.0e9,
@@ -457,17 +482,21 @@ impl Stats {
 }
 
 /// The tab, for the inspector window.
-pub fn view() -> Element {
-    PerfTab.into()
+pub fn view(id: InstanceId) -> Element {
+    PerfTab { id }.into()
 }
 
 #[derive(PartialEq)]
-struct PerfTab;
+struct PerfTab {
+    id: InstanceId,
+}
 
 impl Component for PerfTab {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let id = self.id;
         let mut seen = use_state(|| 0u64);
+        let mut errors_seen = use_state(crate::resilience::error_count);
         let mut selection = use_state::<Option<(f64, f64)>>(|| None);
         let mut area = use_state(|| (0.0f32, 0.0f32));
 
@@ -481,17 +510,23 @@ impl Component for PerfTab {
             spawn(async move {
                 loop {
                     timer(POLL).await;
-                    let current = version();
+                    let current = version(id);
                     let changed = current != *seen.peek();
                     if changed {
                         seen.set(current);
                     }
-                    let recording_now = is_recording();
+                    // A failure the runtime caught since the last poll.
+                    let failures = crate::resilience::error_count();
+                    let failed = failures != *errors_seen.peek();
+                    if failed {
+                        errors_seen.set(failures);
+                    }
+                    let recording_now = is_recording(id);
                     if recording_now {
                         let next = *tick.peek() + 1;
                         tick.set(next);
                     }
-                    if changed || recording_now {
+                    if changed || failed || recording_now {
                         Platform::get().with_window(window, |w| w.request_redraw());
                     }
                 }
@@ -499,20 +534,21 @@ impl Component for PerfTab {
         });
         let _ = *seen.read();
         let _ = *tick.read();
+        let errors = *errors_seen.read();
 
-        let view = view_now();
+        let view = view_now(id);
         let recording = matches!(view, View::Recording { .. });
         let range = *selection.read();
 
         let record = action_button(if recording { "Stop" } else { "Record" }, move |()| {
             let mut seen = seen;
-            if is_recording() {
-                stop();
+            if is_recording(id) {
+                stop(id);
             } else {
                 selection.set(None);
-                let _ = start();
+                let _ = start(id);
             }
-            seen.set(version());
+            seen.set(version(id));
         });
         let record = if recording {
             record.destructive()
@@ -528,7 +564,7 @@ impl Component for PerfTab {
             .child(status(&tokens, &view))
             .maybe_child(matches!(view, View::Done(_)).then(|| {
                 action_button("Clear", move |()| {
-                    write(|r| {
+                    write(id, |r| {
                         r.session = None;
                         r.error = None;
                         r.version += 1;
@@ -572,6 +608,8 @@ impl Component for PerfTab {
             .width(Size::fill())
             .tw(&tokens, &[flex_col(), gap(S3), p(S4)])
             .child(toolbar)
+            // Failures the runtime caught; absent while there are none.
+            .child(super::errors::ErrorsCard { count: errors })
             .child(body);
         rect()
             .component("PerformanceTab")
@@ -763,7 +801,7 @@ fn summary(tokens: &Tokens, stats: &Stats, narrow: bool) -> Element {
     };
     let mut long = stat_tile(
         if has {
-            format!("{}  ({share:.0} %)", stats.long)
+            format!("{}  ({share:.0}%)", stats.long)
         } else {
             none()
         },

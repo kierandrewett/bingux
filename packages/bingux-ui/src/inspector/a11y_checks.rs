@@ -7,6 +7,8 @@ use std::time::{Duration, Instant};
 
 use freya::prelude::Color;
 
+use crate::contrast;
+
 use super::snapshot::{Kind, Node, Props, Snapshot};
 
 /// A move counts as a layout shift only if no input arrived this recently.
@@ -31,6 +33,10 @@ const SHIFT_HISTORY: usize = 256;
 const DEFAULT_FONT_SIZE: f32 = 14.0;
 /// Text at or above this size is large text, held to 3:1 instead of 4.5:1.
 const LARGE_TEXT: f32 = 24.0;
+/// The weight from which text counts as bold (CSS 700).
+const BOLD_WEIGHT: i32 = 700;
+/// Bold text at or above this size (18.66 px, 14 pt) is also large text.
+const LARGE_BOLD_TEXT: f32 = 18.66;
 
 /// Roles that take input from the keyboard or the pointer.
 const INTERACTIVE_ROLES: &[&str] = &[
@@ -147,6 +153,8 @@ pub struct Issue {
     pub what: String,
     /// How to fix it.
     pub fix: &'static str,
+    /// The measured colours of a Contrast issue.
+    pub contrast: Option<ContrastDetail>,
 }
 
 /// An animation the application is running, as the frame loop reports it.
@@ -311,6 +319,7 @@ fn node_checks(snapshot: &Snapshot, node: &Node, history: &FrameHistory, out: &m
             target: describe(snapshot, Some(node.id)),
             what: what.into(),
             fix: "Give the element a role and an accessible name.",
+            contrast: None,
         });
     }
 
@@ -323,6 +332,7 @@ fn node_checks(snapshot: &Snapshot, node: &Node, history: &FrameHistory, out: &m
             target: describe(snapshot, Some(node.id)),
             what: "Interactive control cannot take keyboard focus".into(),
             fix: "Make the control focusable and give it a visible focus ring.",
+            contrast: None,
         });
     }
 
@@ -335,6 +345,7 @@ fn node_checks(snapshot: &Snapshot, node: &Node, history: &FrameHistory, out: &m
             target: describe(snapshot, Some(node.id)),
             what: "Button has no name and no text, so it is probably icon-only".into(),
             fix: "Give it an accessible name, or a text label. A tooltip is not read by every reader.",
+            contrast: None,
         });
     }
 
@@ -347,6 +358,7 @@ fn node_checks(snapshot: &Snapshot, node: &Node, history: &FrameHistory, out: &m
             target: describe(snapshot, Some(node.id)),
             what: "Image has no alternative text".into(),
             fix: "Give the image a name that says what it shows, or hide it from readers if it is decoration.",
+            contrast: None,
         });
     }
 
@@ -360,6 +372,7 @@ fn node_checks(snapshot: &Snapshot, node: &Node, history: &FrameHistory, out: &m
                 target: describe(snapshot, Some(node.id)),
                 what: "Interactive element has zero width or height".into(),
                 fix: "Give it a size, or remove it when it is not in use.",
+                contrast: None,
             });
         } else {
             if width < MIN_TARGET || height < MIN_TARGET {
@@ -373,6 +386,7 @@ fn node_checks(snapshot: &Snapshot, node: &Node, history: &FrameHistory, out: &m
                         MIN_TARGET, MIN_TARGET
                     ),
                     fix: "Grow the hit area to at least 24 × 24 px, even if the visible mark is smaller.",
+                    contrast: None,
                 });
             }
             if let Some((window_width, window_height)) = history.window_size {
@@ -388,19 +402,90 @@ fn node_checks(snapshot: &Snapshot, node: &Node, history: &FrameHistory, out: &m
                         target: describe(snapshot, Some(node.id)),
                         what: "Interactive element lies outside the window".into(),
                         fix: "Bring it into view, or check that it is meant to be off screen.",
+                        contrast: None,
                     });
                 }
             }
         }
     }
 
-    if node.kind == Kind::Label {
+    if matches!(node.kind, Kind::Label | Kind::Paragraph) {
         contrast_check(snapshot, node, out);
     }
 }
 
-/// The text colour and the nearest painted background above a label must
-/// reach 4.5:1, or 3:1 for large text.
+/// What a Contrast issue measured: the colours as drawn, so the tab can show
+/// them as chips.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ContrastDetail {
+    /// The text colour as it reaches the screen: its own alpha and every
+    /// ancestor's opacity applied, composited over `background`.
+    pub foreground: Color,
+    /// The opaque colour under the text: the ancestors' fills composited from
+    /// the nearest opaque one down to the text.
+    pub background: Color,
+    pub ratio: f32,
+    pub needed: f32,
+    /// APCA Lc, advisory.
+    pub apca: f32,
+}
+
+/// The foreground and background a label actually draws with, resolved from
+/// the tree: the text colour (its own alpha times every ancestor's opacity),
+/// and the background composited from the nearest opaque fill above the text
+/// down through every translucent one, each at its own cumulative opacity.
+/// `None` when no opaque fill is found above the text, so the background is
+/// not knowable here.
+pub fn resolved_colours(snapshot: &Snapshot, node: &Node) -> Option<(Color, Color)> {
+    let foreground = first_in_chain(snapshot, node, |props| props.text_color)?;
+    // Walk up, noting each fill with the opacity in force at its box.
+    let mut chain = Vec::new();
+    let mut current = Some(node);
+    while let Some(here) = current {
+        chain.push(here);
+        current = here.parent.and_then(|parent| snapshot.node(parent));
+    }
+    // Cumulative opacity at each chain entry: its own times all above it.
+    let mut opacity_above = vec![1.0_f32; chain.len() + 1];
+    for index in (0..chain.len()).rev() {
+        let own = chain[index]
+            .props
+            .as_ref()
+            .and_then(|props| props.opacity)
+            .unwrap_or(1.0);
+        opacity_above[index] = opacity_above[index + 1] * own;
+    }
+    let mut fills: Vec<Color> = Vec::new();
+    let mut opaque = false;
+    for (index, here) in chain.iter().enumerate() {
+        let Some(fill) = here.props.as_ref().and_then(|props| props.background) else {
+            continue;
+        };
+        if fill.a() == 0 {
+            continue;
+        }
+        let alpha = f32::from(fill.a()) / 255.0 * opacity_above[index];
+        fills.push(fill.with_af32(alpha));
+        if fill.a() == 255 && opacity_above[index] >= 0.999 {
+            opaque = true;
+            break;
+        }
+    }
+    if !opaque {
+        return None;
+    }
+    // Composite from the bottom (the last pushed, the opaque one) upward.
+    let mut background = *fills.last()?;
+    background = background.with_a(255);
+    for fill in fills.iter().rev().skip(1) {
+        background = contrast::composite(*fill, background);
+    }
+    let alpha = f32::from(foreground.a()) / 255.0 * opacity_above[0];
+    Some((foreground.with_af32(alpha), background))
+}
+
+/// The text colour and the background it is drawn on, both as rendered, must
+/// reach 4.5:1 (3:1 for large text), WCAG 1.4.3 AA.
 fn contrast_check(snapshot: &Snapshot, node: &Node, out: &mut Vec<Issue>) {
     if node
         .text
@@ -409,26 +494,37 @@ fn contrast_check(snapshot: &Snapshot, node: &Node, out: &mut Vec<Issue>) {
     {
         return;
     }
-    let Some(foreground) = first_in_chain(snapshot, node, |props| props.text_color) else {
-        return;
-    };
-    let Some(background) = first_in_chain(snapshot, node, |props| {
-        props.background.filter(|colour| colour.a() > 0)
-    }) else {
+    let Some((foreground, background)) = resolved_colours(snapshot, node) else {
         return;
     };
     let size = first_in_chain(snapshot, node, |props| props.font_size).unwrap_or(DEFAULT_FONT_SIZE);
-    let needed = if size >= LARGE_TEXT { 3.0 } else { 4.5 };
-    let background = channels(background);
-    let ratio = contrast_ratio(over(foreground, background), background);
+    let bold = first_in_chain(snapshot, node, |props| props.font_weight)
+        .is_some_and(|weight| i32::from(weight) >= BOLD_WEIGHT);
+    let needed = if size >= LARGE_TEXT || (bold && size >= LARGE_BOLD_TEXT) {
+        contrast::AA_LARGE
+    } else {
+        contrast::AA_TEXT
+    };
+    let shown = contrast::composite(foreground, background);
+    let ratio = contrast::ratio_opaque(shown, background);
     if ratio < needed {
+        let apca = contrast::apca(shown, background);
         out.push(Issue {
             kind: IssueKind::Contrast,
             severity: Severity::Error,
             node: Some(node.id),
             target: describe(snapshot, Some(node.id)),
-            what: format!("Text contrast is {ratio:.2}:1; it needs {needed:.1}:1"),
-            fix: "Darken the text or lighten the background until the ratio meets the minimum.",
+            what: format!(
+                "Text contrast is {ratio:.2}:1; AA needs {needed:.1}:1 (APCA Lc {apca:.0}, advisory)"
+            ),
+            fix: "Darken the text or lighten the background until the ratio meets the minimum; use the on-colour tokens on a filled surface.",
+            contrast: Some(ContrastDetail {
+                foreground: shown,
+                background,
+                ratio,
+                needed,
+                apca,
+            }),
         });
     }
 }
@@ -456,6 +552,7 @@ fn sibling_checks(snapshot: &Snapshot, out: &mut Vec<Issue>) {
                         target: describe(snapshot, Some(first.id)),
                         what: format!("{twins} sibling controls share the name \"{name}\""),
                         fix: "Give each control a name that says what it does, or group them under a label.",
+                        contrast: None,
                     });
                 }
             }
@@ -480,6 +577,7 @@ fn sibling_checks(snapshot: &Snapshot, out: &mut Vec<Issue>) {
                             describe(snapshot, Some(second.id))
                         ),
                         fix: "Separate the controls, or make one of them a child of the other.",
+                        contrast: None,
                     });
                 }
             }
@@ -504,6 +602,7 @@ fn history_checks(snapshot: &Snapshot, history: &FrameHistory, out: &mut Vec<Iss
                 run.len()
             ),
             fix: "Reserve space for content that loads later, and animate with transforms instead of layout.",
+            contrast: None,
         });
     }
 
@@ -517,6 +616,7 @@ fn history_checks(snapshot: &Snapshot, history: &FrameHistory, out: &mut Vec<Iss
                 target: describe(snapshot, target),
                 what: "Animation runs while reduced motion is on".into(),
                 fix: "Skip or shorten the animation when reduced motion is on.",
+                contrast: None,
             });
         }
         if animation.duration > LONG_ANIMATION {
@@ -527,6 +627,7 @@ fn history_checks(snapshot: &Snapshot, history: &FrameHistory, out: &mut Vec<Iss
                 target: describe(snapshot, target),
                 what: format!("Animation lasts {} ms", animation.duration.as_millis()),
                 fix: "Keep UI transitions under 500 ms.",
+                contrast: None,
             });
         }
     }
@@ -539,6 +640,7 @@ fn history_checks(snapshot: &Snapshot, history: &FrameHistory, out: &mut Vec<Iss
             target: describe(snapshot, Some(id)),
             what: format!("Re-rendered on {count} idle frames while nothing was happening"),
             fix: "Memoise the component, or move the state it reads out of the render path.",
+            contrast: None,
         });
     }
 
@@ -565,6 +667,7 @@ fn history_checks(snapshot: &Snapshot, history: &FrameHistory, out: &mut Vec<Iss
                 history.frames.len()
             ),
             fix: "Profile the slow frames and move the heavy work out of the render path.",
+            contrast: None,
         });
     }
 }
@@ -626,7 +729,7 @@ fn first_in_chain<T>(
 
 /// `node`'s description for a reader: the component that built it (else its
 /// role), its id, and its name or text.
-fn describe(snapshot: &Snapshot, id: Option<u64>) -> String {
+pub(super) fn describe(snapshot: &Snapshot, id: Option<u64>) -> String {
     let Some(id) = id else {
         return "Application window".into();
     };
@@ -660,37 +763,4 @@ fn overlaps(a: [f32; 4], b: [f32; 4]) -> bool {
     let width = (a[0] + a[2]).min(b[0] + b[2]) - a[0].max(b[0]);
     let height = (a[1] + a[3]).min(b[1] + b[3]) - a[1].max(b[1]);
     width > 1.0 && height > 1.0
-}
-
-/// The colour's channels as fractions of full scale.
-fn channels(colour: Color) -> [f32; 3] {
-    [colour.r(), colour.g(), colour.b()].map(|channel| f32::from(channel) / 255.0)
-}
-
-/// `foreground` painted over an opaque `background`.
-fn over(foreground: Color, background: [f32; 3]) -> [f32; 3] {
-    let alpha = f32::from(foreground.a()) / 255.0;
-    let top = channels(foreground);
-    [0, 1, 2].map(|index| top[index] * alpha + background[index] * (1.0 - alpha))
-}
-
-/// The WCAG contrast ratio between two opaque colours, from 1 to 21.
-fn contrast_ratio(a: [f32; 3], b: [f32; 3]) -> f32 {
-    let (lighter, darker) = {
-        let (la, lb) = (luminance(a), luminance(b));
-        (la.max(lb), la.min(lb))
-    };
-    (lighter + 0.05) / (darker + 0.05)
-}
-
-/// Relative luminance per WCAG 2.x.
-fn luminance(colour: [f32; 3]) -> f32 {
-    fn linear(channel: f32) -> f32 {
-        if channel <= 0.03928 {
-            channel / 12.92
-        } else {
-            ((channel + 0.055) / 1.055).powf(2.4)
-        }
-    }
-    0.2126 * linear(colour[0]) + 0.7152 * linear(colour[1]) + 0.0722 * linear(colour[2])
 }

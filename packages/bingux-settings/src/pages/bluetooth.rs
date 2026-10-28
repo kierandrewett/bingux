@@ -11,10 +11,12 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
-use crate::routes::{Navigator, Route, use_navigator};
+use crate::pages::loading::revealed;
+use crate::routes;
+use bingux_ui::prelude::{Router, use_router};
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
-    Group, Overlays, PageHead, ResponseKind, Row, SpinnerSize, Status, Tokens, action_strip,
+    CANCEL_ID, Group, Overlays, PageHead, ResponseKind, Row, SpinnerSize, Status, Tokens, action_strip,
     caption, centered_caption, dialog, entry_row, heading, page_column, row, skeleton_shape,
     spinner, status, status_page, strip_action, switch_row, use_overlays, use_page_busy,
     use_tokens,
@@ -159,20 +161,20 @@ fn battery(value: &str) -> Option<u8> {
 /// Whether the kernel has a Bluetooth controller. Without one, and without
 /// bluetoothd, `bluetoothctl` waits for its whole timeout, so check first.
 fn has_controller() -> bool {
-    std::fs::read_dir("/sys/class/bluetooth").is_ok_and(|mut entries| entries.next().is_some())
+    crate::system::read_dir("/sys/class/bluetooth").is_ok_and(|mut entries| entries.next().is_some())
 }
 
 /// Bluetooth blocked by a switch or by a system setting, from the radio
 /// kill switches the kernel reports.
 fn radio_block() -> Option<Block> {
-    for entry in std::fs::read_dir("/sys/class/rfkill").ok()?.flatten() {
+    for entry in crate::system::read_dir("/sys/class/rfkill").ok()?.flatten() {
         let path = entry.path();
-        let kind = std::fs::read_to_string(path.join("type")).unwrap_or_default();
+        let kind = crate::system::read_to_string(path.join("type")).unwrap_or_default();
         if kind.trim() != "bluetooth" {
             continue;
         }
         let set =
-            |name: &str| std::fs::read_to_string(path.join(name)).is_ok_and(|v| v.trim() == "1");
+            |name: &str| crate::system::read_to_string(path.join(name)).is_ok_and(|v| v.trim() == "1");
         if set("hard") {
             return Some(Block::Hardware);
         }
@@ -184,14 +186,51 @@ fn radio_block() -> Option<Block> {
 }
 
 fn hostname() -> String {
-    std::fs::read_to_string("/etc/hostname")
+    crate::system::read_to_string("/etc/hostname")
         .map(|name| name.trim().to_string())
         .ok()
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| "This computer".to_string())
 }
 
+/// Snapshot builds only: `BINGUX_SETTINGS_FAKE_BLUETOOTH=1` stands in a
+/// computer with Bluetooth on and two paired devices, so the page can be
+/// checked, and its layout held still, without an adapter.
+#[cfg(feature = "snapshot")]
+fn fake_model() -> Option<Model> {
+    std::env::var_os("BINGUX_SETTINGS_FAKE_BLUETOOTH")?;
+    let device = |mac: &str, name: &str, icon: &str, connected: bool| Device {
+        mac: mac.to_string(),
+        name: bingux_ui::stress::data(name),
+        paired: true,
+        connected,
+        trusted: true,
+        battery: None,
+        icon: icon.to_string(),
+    };
+    Some(Model {
+        adapter: Some(Adapter {
+            powered: true,
+            discoverable: false,
+            alias: "This computer".to_string(),
+        }),
+        blocked: None,
+        devices: vec![
+            device("00:11:22:33:44:55", "Headphones", "audio-headset", true),
+            device("00:11:22:33:44:66", "Keyboard", "input-keyboard", false),
+        ],
+    })
+}
+
+#[cfg(not(feature = "snapshot"))]
+fn fake_model() -> Option<Model> {
+    None
+}
+
 fn load() -> Result<Model, CommandError> {
+    if let Some(model) = fake_model() {
+        return Ok(model);
+    }
     let empty = Model {
         adapter: None,
         blocked: None,
@@ -767,12 +806,9 @@ fn device_row(
     device: &Device,
     busy: Option<&Busy>,
     tokens: Tokens,
-    navigator: Navigator,
+    router: Router,
 ) -> Row {
-    let route = Route::Device {
-        mac: device.mac.clone(),
-        name: device_name(device),
-    };
+    let route = routes::device(&device.mac.clone(), &device_name(device));
     let busy_label = busy
         .filter(|busy| busy.mac == device.mac)
         .map(|busy| busy.label.clone());
@@ -802,7 +838,7 @@ fn device_row(
         .leading(device_icon(&device.icon))
         .trailing(Element::from(glyphs))
         .navigates()
-        .on_press(move |_| navigator.push(route.clone()))
+        .on_press(move |_| router.open(route.clone()))
         .context_menu(device_menu(ctx, device))
 }
 
@@ -834,7 +870,7 @@ impl Component for BluetoothPage {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let overlays = use_overlays();
-        let navigator = use_navigator();
+        let router = use_router();
         let model = system::use_cached_persistent("bluetooth", load);
         let busy_state = use_state::<Option<Busy>>(|| None);
         let power_pending = use_state::<Option<bool>>(|| None);
@@ -883,10 +919,11 @@ impl Component for BluetoothPage {
             });
         }
 
+        // How many devices are paired is not known before the read lands, so
+        // the lists are not drawn from a guess: the page shows its head, then
+        // fades the lists in at their final places.
         let Some(loaded) = model.read().clone() else {
-            return page_column()
-                .child(head.clone())
-                .child(skeleton_shape(&[1, 3, 1]));
+            return revealed(page_column().child(head.clone()), true);
         };
         let data = match loaded {
             Ok(data) => data,
@@ -941,7 +978,7 @@ impl Component for BluetoothPage {
         if !no_mine {
             page = page.child(
                 Group::titled("My devices").rows(mine.into_iter().map(|device| {
-                    Element::from(device_row(ctx, device, busy.as_ref(), tokens, navigator))
+                    Element::from(device_row(ctx, device, busy.as_ref(), tokens, router))
                 })),
             );
         }
@@ -957,7 +994,7 @@ impl Component for BluetoothPage {
                 group.row(status(Status::Empty("Looking for nearby devices.".into())))
             } else {
                 group.rows(nearby.into_iter().map(|device| {
-                    Element::from(device_row(ctx, device, busy.as_ref(), tokens, navigator))
+                    Element::from(device_row(ctx, device, busy.as_ref(), tokens, router))
                 }))
             });
         } else if no_mine {
@@ -965,7 +1002,7 @@ impl Component for BluetoothPage {
                 "No devices found. Turn on the device and make it visible.".into(),
             ))));
         }
-        page
+        revealed(page, false)
     }
 }
 
@@ -979,7 +1016,7 @@ pub struct BluetoothDevicePage {
 impl Component for BluetoothDevicePage {
     fn render(&self) -> impl IntoElement {
         let overlays = use_overlays();
-        let navigator = use_navigator();
+        let router = use_router();
         let tokens = use_tokens();
         let model = system::use_cached_persistent("bluetooth", load);
         let busy_state = use_state::<Option<Busy>>(|| None);
@@ -992,7 +1029,7 @@ impl Component for BluetoothDevicePage {
             if let Some(Ok(data)) = &*model.read()
                 && !data.devices.iter().any(|device| device.mac == mac)
             {
-                navigator.pop();
+                router.pop();
             }
         });
 
@@ -1048,7 +1085,10 @@ impl Component for BluetoothDevicePage {
 
         page_column()
             .child(identity)
-            .maybe_child((adapter_on && busy.is_none()).then(|| device_strip(device, ctx)))
+            .child(bingux_ui::motion::reveal_block_if(
+                S10,
+                (adapter_on && busy.is_none()).then(|| device_strip(device, ctx)),
+            ))
             .child(details)
     }
 }
@@ -1062,6 +1102,7 @@ fn confirm_forget(ctx: Ctx, device: &Device) {
             "This computer forgets the pairing. Pair again to use the device.",
         )
         .cancel("Cancel")
+        .default_action(CANCEL_ID)
         .response("Forget", ResponseKind::Destructive, move |_| {
             run_job(ctx, job.clone())
         }),

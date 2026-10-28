@@ -14,7 +14,7 @@
 use freya::prelude::{Color, FontWeight};
 
 use super::*;
-use crate::theme::Tokens;
+use crate::theme::{BannerKind, Tokens};
 use crate::typography::{
     BADGE, BODY, CAPTION, CODE, EMPHASIS, HEADING, HERO, LINK, NUMERIC, OVERLINE, PAGE_TITLE,
     SECTION, TITLE, TextStyle, VALUE,
@@ -51,6 +51,7 @@ pub const RADII: &[(&str, Radius)] = &[
 /// The box sizes, by name. Sorted by value at lookup time with [`dims`].
 const DIMS: &[(&str, Dim)] = &[
     ("Hairline", Dim::Hairline),
+    ("SafeBottom", Dim::SafeBottom),
     ("Indicator", Dim::Indicator),
     ("Ring", Dim::Ring),
     ("DashHeight", Dim::DashHeight),
@@ -81,6 +82,7 @@ const DIMS: &[(&str, Dim)] = &[
     ("Dense", Dim::Dense),
     ("Box7", Dim::Box7),
     ("StepperHalf", Dim::StepperHalf),
+    ("InlineButton", Dim::InlineButton),
     ("WindowControlTarget", Dim::WindowControlTarget),
     ("TreeIndent", Dim::TreeIndent),
     ("Control", Dim::Control),
@@ -99,9 +101,11 @@ const DIMS: &[(&str, Dim)] = &[
     ("Row", Dim::Row),
     ("RowSubtitle", Dim::RowSubtitle),
     ("RowTall", Dim::RowTall),
+    ("RowButton", Dim::RowButton),
     ("StripCell", Dim::StripCell),
     ("Timeline", Dim::Timeline),
     ("Box24", Dim::Box24),
+    ("TabMin", Dim::TabMin),
     ("Label", Dim::Label),
     ("PropLabel", Dim::PropLabel),
     ("SkeletonTitle", Dim::SkeletonTitle),
@@ -116,6 +120,7 @@ const DIMS: &[(&str, Dim)] = &[
     ("CaptionLine", Dim::CaptionLine),
     ("Field", Dim::Field),
     ("FieldApps", Dim::FieldApps),
+    ("FieldMin", Dim::FieldMin),
     ("ArrangementHint", Dim::ArrangementHint),
     ("Menu", Dim::Menu),
     ("MenuWide", Dim::MenuWide),
@@ -127,13 +132,15 @@ const DIMS: &[(&str, Dim)] = &[
     ("ArrangementWidth", Dim::ArrangementWidth),
     ("DropdownMax", Dim::DropdownMax),
     ("Dialog", Dim::Dialog),
+    ("DialogMin", Dim::DialogMin),
     ("FieldWide", Dim::FieldWide),
     ("PreviewRow", Dim::PreviewRow),
-    ("SpeakerPopupHeight", Dim::SpeakerPopupHeight),
     ("SpeakerPopupWidth", Dim::SpeakerPopupWidth),
     ("PopupWidth", Dim::PopupWidth),
+    ("PopupNarrow", Dim::PopupNarrow),
     ("PopupHeight", Dim::PopupHeight),
     ("Page", Dim::Page),
+    ("PagePhone", Dim::PagePhone),
 ];
 
 /// The box sizes at `class`, smallest first, so a list of them reads as a
@@ -158,8 +165,15 @@ pub const PAINTS: &[(&str, Paint)] = &[
     ("Popover", Paint::Popover),
     ("Frosted", Paint::Frosted),
     ("Accent", Paint::Accent),
+    ("FocusRing", Paint::FocusRing),
+    ("ErrorRing", Paint::ErrorRing),
+    ("ErrorHalo", Paint::ErrorHalo),
     ("AccentSoft", Paint::AccentSoft),
     ("OnAccent", Paint::OnAccent),
+    ("OnDanger", Paint::OnDanger),
+    ("OnSuccess", Paint::OnSuccess),
+    ("OnWarning", Paint::OnWarning),
+    ("OnFloating", Paint::OnFloating),
     ("Selection", Paint::Selection),
     ("Hover", Paint::Hover),
     ("Pressed", Paint::Pressed),
@@ -177,9 +191,11 @@ pub const PAINTS: &[(&str, Paint)] = &[
     ("Scrim", Paint::Scrim),
     ("Knob", Paint::Knob),
     ("Track", Paint::Track),
-    ("Tint(Accent)", Paint::Tint(Tone::Accent)),
-    ("Tint(Warning)", Paint::Tint(Tone::Warning)),
-    ("Tint(Danger)", Paint::Tint(Tone::Danger)),
+    ("NoticeFill(Neutral)", Paint::NoticeFill(BannerKind::Neutral)),
+    ("NoticeFill(Info)", Paint::NoticeFill(BannerKind::Info)),
+    ("NoticeFill(Success)", Paint::NoticeFill(BannerKind::Success)),
+    ("NoticeFill(Warning)", Paint::NoticeFill(BannerKind::Warning)),
+    ("NoticeFill(Error)", Paint::NoticeFill(BannerKind::Error)),
     ("SyntaxTag", Paint::SyntaxTag),
     ("SyntaxAttr", Paint::SyntaxAttr),
     ("SyntaxValue", Paint::SyntaxValue),

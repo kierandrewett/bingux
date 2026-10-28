@@ -45,3 +45,7 @@ avatar-default user-info
 web-browser x-office-calendar mail-unread image-generic video-generic applications-multimedia
 accessories-calculator addon application-x-executable preferences-other
 preferences-desktop-keyboard-shortcuts
+
+[default-apps]
+web-browser mail-unread x-office-calendar folder default-app-text default-app-documents
+image-generic applications-multimedia video-generic

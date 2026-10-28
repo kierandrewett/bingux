@@ -37,7 +37,7 @@ struct Defaults {
 
 /// The name for a new hotspot: the computer's own.
 fn hostname() -> String {
-    std::fs::read_to_string("/etc/hostname")
+    crate::system::read_to_string("/etc/hostname")
         .ok()
         .map(|text| text.trim().to_string())
         .filter(|name| !name.is_empty())
@@ -428,7 +428,6 @@ impl Component for RunningGroup {
             None => "—".to_string(),
         };
         Group::titled("Hotspot is on")
-            .description("Devices that join share this computer's connection.")
             .row(row("Network name").value(self.ap.ssid.clone()))
             .row(password_row)
             .row(row("Band").value(band))

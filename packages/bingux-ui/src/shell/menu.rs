@@ -30,6 +30,7 @@ use freya::prelude::*;
 
 use crate::component::ComponentName;
 use crate::controls::press::{is_touch, use_press};
+use crate::focus::step_focus;
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
 use crate::style::*;
@@ -326,7 +327,7 @@ fn pointer_moved(overlays: Overlays, point: (f32, f32)) {
 /// closes one submenu, then closes the menu and returns focus to its owner.
 fn escape_menu(overlays: Overlays, root: &[MenuItem]) {
     let mut state = overlays.menu_nav;
-    let outcome = state.write().press(root, NavKey::Escape, now_ms());
+    let outcome = state.write().press(root, NavKey::Escape);
     schedule(overlays);
     if outcome == Outcome::Dismiss {
         overlays.dismiss_menu_by_key();
@@ -351,7 +352,7 @@ fn handle_key(overlays: Overlays, root: &[MenuItem], event: Event<KeyboardEventD
     }
     let open = read_nav(overlays).open().to_vec();
     let mut state = overlays.menu_nav;
-    let outcome = state.write().press(root, key, now_ms());
+    let outcome = state.write().press(root, key);
     schedule(overlays);
     match outcome {
         Outcome::Ignored => {}
@@ -360,7 +361,14 @@ fn handle_key(overlays: Overlays, root: &[MenuItem], event: Event<KeyboardEventD
             event.stop_propagation();
             overlays.dismiss_menu_by_key();
         }
-        Outcome::Leave => overlays.dismiss_menu_by_key(),
+        Outcome::Leave => {
+            // Tab leaves the menu: focus returns to the owner (see
+            // `close_menu`), and the same key then moves on from the owner
+            // to the next stop, as Tab does from any control.
+            event.stop_propagation();
+            overlays.dismiss_menu_by_key();
+            step_focus(event.modifiers.contains(Modifiers::SHIFT));
+        }
         Outcome::Activate { level, index } => {
             event.stop_propagation();
             let Some(item) = panel_items(root, &open, level).get(index) else {
@@ -385,7 +393,14 @@ impl Component for MenuLayer {
     fn render(&self) -> impl IntoElement {
         let overlays = self.overlays;
         let a11y_id = overlays.menu_panel;
-        use_side_effect(move || a11y_id.request_focus());
+        // A closing menu has already handed focus back to its owner, so it
+        // must not take it again when it renders its exit.
+        let closing = self.closing;
+        use_side_effect(move || {
+            if !closing {
+                a11y_id.request_focus();
+            }
+        });
 
         let nav = read_nav(overlays);
         let window = *Platform::get().current_window().root_size.read();
@@ -654,6 +669,7 @@ impl Component for MenuButton {
         let mut area = use_state(Area::default);
         let items = self.items.clone();
         let open = overlays.menu_owned_by(a11y_id);
+        let size = crate::controls::button::header_size(Dim::Button);
         rect()
             .a11y_id(a11y_id)
             .a11y_focusable(true)
@@ -672,7 +688,7 @@ impl Component for MenuButton {
             })
             .maybe(self.icon.is_some(), |button| {
                 button
-                    .tw(&tokens, &[w(Dim::Button), h(Dim::Button)])
+                    .tw(&tokens, &[w(size), h(size)])
                     .a11y_alt(self.label.clone())
             })
             .tw(

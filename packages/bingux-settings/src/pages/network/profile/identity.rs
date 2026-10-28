@@ -16,10 +16,9 @@ use super::store;
 use super::{Page, options};
 use crate::pages::connection_editor::{
     CLONED_MAC_CHOICES, Changes, Choices, Kind, MAC_RANDOMIZATION_CHOICES, ProfileData,
-    WAKE_ON_LAN_CHOICES, cloned_mac_caption, connection_name, diff, join_cloned_mac,
-    mac_randomization_caption, mtu, split_cloned_mac, wake_on_lan_caption,
+    WAKE_ON_LAN_CHOICES, connection_name, diff, join_cloned_mac, mtu, split_cloned_mac,
 };
-use crate::routes::Route;
+use crate::routes;
 use crate::ui::{Group, choice_row, page_column, row};
 
 /// How the MTU is chosen: left to the network, or set in bytes.
@@ -220,7 +219,6 @@ impl Component for IdentityBody {
             if !bssid.is_empty() {
                 identity = identity.row(
                     row("BSSID")
-                        .subtitle("This profile only connects to this access point.")
                         .mono_value(bssid),
                 );
             }
@@ -240,7 +238,6 @@ impl Component for IdentityBody {
                     draft.set("mac_mode", value);
                 },
             )
-            .subtitle(cloned_mac_caption(&form.mac_mode))
         };
         let mtu_row = {
             let (draft, saved) = (draft.clone(), page.saved.clone());
@@ -255,27 +252,20 @@ impl Component for IdentityBody {
                     draft.set("mtu_mode", value);
                 },
             )
-            .subtitle("The largest packet size in bytes. Leave it automatic unless a network needs another.")
         };
 
-        let mut hardware = Group::titled("Hardware").row(mac_row);
-        if form.mac_mode == "address" {
-            hardware = hardware.row(
-                form_field("MAC address", draft.text("mac_address"))
-                    .placeholder("00:1A:2B:3C:4D:5E")
-                    .monospace()
-                    .validate(validate::mac),
-            );
-        }
-        hardware = hardware.row(mtu_row);
-        if form.mtu_mode == "custom" {
-            hardware = hardware.row(
-                form_field("MTU size", draft.text("mtu_value"))
-                    .placeholder("1500")
-                    .suffix("bytes")
-                    .validate(mtu),
-            );
-        }
+        // The fields that depend on a choice slide in under it.
+        let mac_field = form_field("MAC address", draft.text("mac_address"))
+            .placeholder("00:1A:2B:3C:4D:5E")
+            .monospace()
+            .validate(validate::mac);
+        let mtu_field = form_field("MTU size", draft.text("mtu_value"))
+            .placeholder("1500")
+            .suffix("bytes")
+            .validate(mtu);
+        let mut hardware = Group::titled("Hardware")
+            .row(mac_row.nested(form.mac_mode == "address", vec![mac_field.into()]))
+            .row(mtu_row.nested(form.mtu_mode == "custom", vec![mtu_field.into()]));
         hardware = hardware.row(match kind {
             Kind::Wifi => {
                 let selected = match page.saved.get("802-11-wireless.mac-address-randomization") {
@@ -294,7 +284,6 @@ impl Component for IdentityBody {
                         ))
                     },
                 )
-                .subtitle(mac_randomization_caption(selected))
             }
             _ => {
                 let selected = wake_on_lan_of(&page.saved).to_string();
@@ -307,12 +296,11 @@ impl Component for IdentityBody {
                         page.apply_now(Changes::one("802-3-ethernet.wake-on-lan", value))
                     },
                 )
-                .subtitle(wake_on_lan_caption(&selected))
             }
         });
 
         page_column()
-            .maybe_child(pending_bar(dirty, ok && !*busy.read(), apply, revert))
+            .child(pending_bar(dirty, ok && !*busy.read(), apply, revert))
             .child(identity)
             .child(hardware)
     }
@@ -325,14 +313,11 @@ fn open_renamed(page: &Page, renamed: Option<String>) {
     else {
         return;
     };
-    page.ctx.navigator.push(Route::Section {
-        owner: Owner::Wired {
-            device: device.clone(),
-            profile,
-            in_use: false,
-        },
-        section: Section::Identity,
-    });
+    page.ctx.router.open(routes::section(&Owner::Wired {
+        device: device.clone(),
+        profile,
+        in_use: false,
+    }, &Section::Identity));
 }
 
 #[cfg(test)]

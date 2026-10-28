@@ -311,7 +311,7 @@ impl Component for FlameGraph {
                             .label(
                                 &tokens,
                                 format!(
-                                    "{:.1} % of all  ·  {:.1} % in the call itself  ·  {}  ·  depth {}",
+                                    "{:.1}% of all  ·  {:.1}% in the call itself  ·  {}  ·  depth {}",
                                     value / total * 100.0,
                                     own / total * 100.0,
                                     format_value(value, self.unit),

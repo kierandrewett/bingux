@@ -79,7 +79,7 @@ pub fn payload(ssid: &str, kind: Kind, password: Option<&str>) -> String {
 pub fn open(window: Window, target: Target) {
     window.open(
         popup("Share network", ShareBody { target })
-            .size(420.0, 500.0)
+            .width(Dim::PopupNarrow)
             .flags(PopupFlags::GRABBER | PopupFlags::OK),
     );
 }

@@ -1,8 +1,28 @@
-//! The settings the search finds. Each entry names the page the setting is
-//! on, its title as the page shows it, and plain words a person might search
-//! for instead. Add a row when a page gains a setting.
+//! What Settings registers with bingux-ui's search: one document per page
+//! and per setting, and one per installed application.
+//!
+//! [`SETTINGS`] names, for each setting, the page it is on, its title as the
+//! page shows it, and plain words a person might search for instead. Add a
+//! row when a page gains a setting. The search itself (matching, typo
+//! tolerance, ranking, highlights, Spotlight) is `bingux_ui::search`; this file
+//! only describes the documents.
+//!
+//! A document's `uri` is where choosing it goes: the page, the subpage when
+//! the setting lives on one, and a `#fragment` naming the row (the slug of its
+//! title, which the row anchors itself to).
+
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use bingux_ui::prelude::Location;
+use bingux_ui::search::{self, Document, Schema, Searchable};
 
 use crate::pages::PageId;
+
+/// The index of pages and settings.
+pub const INDEX: &str = "settings";
+/// The index of installed applications.
+pub const APPS_INDEX: &str = "settings-applications";
+
 
 /// Page, visible title, and extra words to match.
 const SETTINGS: &[(PageId, &str, &str)] = &[
@@ -213,8 +233,13 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
     ),
     (
         PageId::Sound,
-        "Applications",
-        "app volume per app mute playing",
+        "Application volumes",
+        "applications app volume per app mute playing recording stream meter output",
+    ),
+    (
+        PageId::Sound,
+        "Effects",
+        "equalizer eq compressor limiter reverb preset easyeffects plugin spectrum bass treble noise gate",
     ),
     (
         PageId::Power,
@@ -634,65 +659,260 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
     (PageId::About, "Bingux version", "release system version"),
 ];
 
-/// The index with each entry's title and words folded to lower case once, so
-/// a keystroke only folds the query.
-static FOLDED: std::sync::LazyLock<Vec<(PageId, &'static str, String)>> =
-    std::sync::LazyLock::new(|| {
-        SETTINGS
+/// The subpage a setting lives on, when it is not on the page itself.
+fn subpage(page: PageId, title: &str) -> Option<&'static str> {
+    Some(match (page, title) {
+        (PageId::Network, "Wi-Fi") => "wifi",
+        (PageId::Network, "Saved networks") => "wifi/saved",
+        (PageId::Network, "Wi-Fi hotspot") => "hotspot",
+        (PageId::Network, "Add VPN") => "add-vpn",
+        (PageId::Network, "Proxy") => "proxy",
+        (PageId::Network, "Data usage") => "usage",
+        (PageId::Network, "Mobile network") => "mobile",
+        (PageId::Keyboard, "Shortcuts") => "shortcuts",
+        (PageId::DateTime, "Time zone") => "timezone",
+        (PageId::Appearance, "Font") => "font",
+        (PageId::Sound, "Application volumes") => "applications",
+        (PageId::Sound, "Effects") => "effects",
+        (PageId::Applications, "Default applications" | "Open by default") => "default",
+        _ => return None,
+    })
+}
+
+/// A title as a fragment: lower case words joined with `-`.
+pub fn slug(title: &str) -> String {
+    let mut out = String::with_capacity(title.len());
+    let mut gap = false;
+    for c in title.chars() {
+        if c.is_alphanumeric() {
+            if gap && !out.is_empty() {
+                out.push('-');
+            }
+            gap = false;
+            out.extend(c.to_lowercase());
+        } else {
+            gap = true;
+        }
+    }
+    out
+}
+
+/// The address of a setting: its page and subpage, and its row as the fragment.
+fn uri(page: PageId, title: &str) -> String {
+    let mut at: Location = page.location();
+    if let Some(path) = subpage(page, title) {
+        for segment in path.split('/') {
+            at = at.join(segment);
+        }
+    }
+    at.with_fragment(slug(title)).to_string()
+}
+
+fn page_document(page: PageId) -> Document {
+    Document::new(page.panel_name())
+        .title(page.title())
+        .keywords(page.keywords())
+        .breadcrumb([page.title()])
+        .category(page.group())
+        .field("page", page.panel_name())
+        .field("kind", "page")
+        .icon("bingux-settings")
+        .uri(&page.location().to_string())
+}
+
+fn setting_document(page: PageId, title: &str, keywords: &str) -> Document {
+    Document::new(format!("{}/{}", page.panel_name(), slug(title)))
+        .title(title)
+        .keywords(keywords)
+        .breadcrumb([page.title()])
+        .category(page.group())
+        .field("page", page.panel_name())
+        .field("kind", "setting")
+        .icon("bingux-settings")
+        .uri(&uri(page, title))
+}
+
+/// The pages and settings of Bingux Settings. Exposed to Spotlight: the
+/// documents are static and say nothing about the person or the machine.
+pub struct SettingsIndex;
+
+impl Searchable for SettingsIndex {
+    fn name(&self) -> &str {
+        INDEX
+    }
+
+    fn schema(&self) -> Schema {
+        Schema::new()
+            .title("Settings")
+            .searchable("title", 10.0)
+            .searchable("keywords", 5.0)
+            .searchable("breadcrumb", 3.0)
+            .filterable(["page", "category", "kind"])
+            .displayed(["title", "breadcrumb", "icon", "uri", "page", "category", "kind"])
+            .synonym_group(&["colour", "color"])
+            .synonym_group(&["wallpaper", "background"])
+            .synonym_group(&["display", "monitor", "screen"])
+            .synonym_group(&["sound", "audio"])
+            .external(true)
+    }
+
+    fn documents(&self) -> Box<dyn Iterator<Item = Document> + Send + '_> {
+        Box::new(
+            PageId::ALL
+                .iter()
+                .copied()
+                .chain(std::iter::once(PageId::Users))
+                .map(page_document)
+                .chain(
+                    SETTINGS
+                        .iter()
+                        .map(|(page, title, keywords)| setting_document(*page, title, keywords)),
+                ),
+        )
+    }
+}
+
+/// The installed applications, each opening its page. Private: Spotlight has
+/// its own application search, and the list is the person's.
+pub struct ApplicationsIndex;
+
+impl Searchable for ApplicationsIndex {
+    fn name(&self) -> &str {
+        APPS_INDEX
+    }
+
+    fn schema(&self) -> Schema {
+        Schema::new()
+            .title("Installed applications")
+            .searchable("title", 10.0)
+            .searchable("keywords", 5.0)
+            .searchable("breadcrumb", 3.0)
+            .filterable(["page", "kind"])
+            .displayed(["title", "breadcrumb", "icon", "uri", "page", "category", "kind"])
+    }
+
+    fn documents(&self) -> Box<dyn Iterator<Item = Document> + Send + '_> {
+        let location = PageId::Applications.location();
+        Box::new(crate::apps::installed().into_iter().map(move |app| {
+            Document::new(app.id.clone())
+                .title(&app.name)
+                .keywords(&format!("{} {}", app.comment, app.category))
+                .breadcrumb([PageId::Applications.title()])
+                .category(PageId::Applications.group())
+                .field("page", PageId::Applications.panel_name())
+                .field("kind", "application")
+                .icon(&app.icon)
+                .uri(&location.clone().join(app.id.as_str()).to_string())
+        }))
+    }
+}
+
+/// Starts search in the window's process: registers the indexes and shares the
+/// external one with Spotlight. Called by the window root, so a second launch,
+/// which only hands its address to the running copy, never takes the socket.
+pub fn start() {
+    register();
+    #[cfg(not(feature = "snapshot"))]
+    if let Err(error) = search::serve_external(search::ExternalConfig {
+        app_id: "bingux-settings".into(),
+        app_version: env!("CARGO_PKG_VERSION").into(),
+    }) {
+        eprintln!("bingux-settings: search is not shared with Spotlight: {error}");
+    }
+}
+
+/// Registers what Settings searches. The documents load on a worker.
+pub fn register() {
+    static DONE: AtomicBool = AtomicBool::new(false);
+    if DONE.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    for result in [search::register(SettingsIndex), search::register(ApplicationsIndex)] {
+        if let Err(error) = result {
+            eprintln!("bingux-settings: search index did not register: {error}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::routes::SCHEME;
+    use bingux_ui::search::{Cancel, Index, Search};
+
+    fn index() -> Index {
+        let index = Index::new(INDEX, SettingsIndex.schema()).unwrap();
+        index.upsert(SettingsIndex.documents()).unwrap();
+        index
+    }
+
+    fn top(index: &Index, text: &str) -> Vec<(String, String)> {
+        let found = index
+            .search(&Search::new(text).limit(15), &Cancel::new())
+            .unwrap();
+        found
+            .hits
             .iter()
-            .map(|(page, title, keywords)| {
-                (*page, *title, format!("{title} {keywords}").to_lowercase())
-            })
+            .map(|h| (h.title().unwrap_or_default().to_string(), h.uri().unwrap_or_default().to_string()))
             .collect()
-    });
-
-/// The words of `query`, folded to lower case.
-fn query_words(query: &str) -> Vec<String> {
-    query.split_whitespace().map(str::to_lowercase).collect()
-}
-
-/// Whether `haystack` contains every word of `words`.
-fn contains_all(haystack: &str, words: &[String]) -> bool {
-    words.iter().all(|word| haystack.contains(word.as_str()))
-}
-
-/// The settings whose title or words contain every word of `query`, ignoring
-/// case, in index order. An empty query matches nothing.
-pub fn matching(query: &str) -> Vec<(PageId, &'static str)> {
-    let words = query_words(query);
-    if words.is_empty() {
-        return Vec::new();
     }
-    FOLDED
-        .iter()
-        .filter(|(_, _, haystack)| contains_all(haystack, &words))
-        .map(|(page, title, _)| (*page, *title))
-        .collect()
-}
 
-/// Each page's title and sidebar words folded to lower case once.
-static PAGES_FOLDED: std::sync::LazyLock<Vec<(PageId, String)>> = std::sync::LazyLock::new(|| {
-    PageId::ALL
-        .iter()
-        .map(|page| {
-            (
-                *page,
-                format!("{} {}", page.title(), page.keywords()).to_lowercase(),
-            )
-        })
-        .collect()
-});
-
-/// The pages whose own title or words contain every word of `query`, ignoring
-/// case. An empty query matches nothing.
-pub fn matching_pages(query: &str) -> Vec<PageId> {
-    let words = query_words(query);
-    if words.is_empty() {
-        return Vec::new();
+    #[test]
+    fn every_document_opens_a_route_of_the_window() {
+        let table = crate::routes::table();
+        let index = index();
+        let docs = index.export(false);
+        assert!(docs.len() > 150, "{} documents", docs.len());
+        for doc in docs {
+            let uri = doc.fields["uri"].as_str().expect("uri");
+            let location = Location::parse(uri).unwrap_or_else(|| panic!("{uri} is not an address"));
+            assert_eq!(location.scheme(), SCHEME, "{uri}");
+            assert!(
+                table.resolve(&location).is_some(),
+                "`{}` has the address {uri}, which no route opens",
+                doc.id
+            );
+        }
     }
-    PAGES_FOLDED
-        .iter()
-        .filter(|(_, haystack)| contains_all(haystack, &words))
-        .map(|(page, _)| *page)
-        .collect()
+
+    #[test]
+    fn ids_are_unique_and_slugs_are_fragments() {
+        let docs = index().export(false);
+        let mut ids: Vec<&str> = docs.iter().map(|d| d.id.as_str()).collect();
+        let total = ids.len();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), total, "two settings share an id");
+        assert_eq!(slug("Use this connection only for resources on its network"), "use-this-connection-only-for-resources-on-its-network");
+        assert_eq!(slug("Wi-Fi"), "wi-fi");
+    }
+
+    #[test]
+    fn typing_finds_the_setting_and_its_subpage() {
+        let index = index();
+        let hits = top(&index, "proxy");
+        assert_eq!(hits[0].0, "Proxy");
+        assert_eq!(hits[0].1, "bingux-settings://network/proxy#proxy");
+        // Typos, prefixes and compounds, as a person types them.
+        assert_eq!(top(&index, "blutooth")[0].0, "Bluetooth");
+        assert_eq!(top(&index, "prxoy")[0].0, "Proxy");
+        assert_eq!(top(&index, "wifi")[0].0, "Wi-Fi");
+        assert_eq!(top(&index, "time zo")[0].0, "Time zone");
+        assert_eq!(top(&index, "accent colour")[0].1, "bingux-settings://background#accent-colour");
+        // The American spelling finds the British one through a synonym.
+        assert!(top(&index, "color").iter().any(|h| h.0 == "Accent colour"));
+        // A synonym.
+        assert!(top(&index, "monitor").iter().any(|h| h.1.starts_with("bingux-settings://display")));
+        // A page name finds the page before its settings.
+        assert_eq!(top(&index, "keyboard")[0].0, "Keyboard");
+    }
+
+    #[test]
+    fn the_index_is_external_and_private_data_is_not_in_it() {
+        assert!(SettingsIndex.schema().external, "Spotlight may search the settings");
+        assert!(!ApplicationsIndex.schema().external, "the application list is the person's");
+        for doc in SettingsIndex.documents() {
+            assert_ne!(doc.external, Some(true));
+        }
+    }
 }

@@ -33,11 +33,13 @@
 //! | ----- | ----- | ---------- |
 //! | Filesystem model, request and answer types, selection and accept logic | the `bingux-files` crate, re-exported here | `libc` only |
 //! | Views: [`PlacesSidebar`], [`AddressBar`], [`FileView`] (list and grid), [`use_directory`] | this module | the model, bingux-ui controls |
-//! | The dialog: [`choose`] | this module | the views |
+//! | The dialog: [`choose`], and the same body in a window: [`browse`] | this module | the views |
 //!
-//! The model has no UI, so the future Files app, a command-line tool and a
+//! The model has no UI, so the Files app, a command-line tool and a
 //! `bingux-contrib-portals` backend share it. The views are ordinary
-//! bingux-ui components and work in any window, not only in the chooser.
+//! bingux-ui components and work in any window, not only in the chooser:
+//! [`browse`] is the dialog's body hosted in an application window, which is
+//! how the Files app (`packages/bingux-files-app`) is built.
 //!
 //! # Versions
 //!
@@ -60,18 +62,29 @@ mod chooser;
 mod columns;
 mod context_menu;
 mod directory;
+mod drag;
 mod drives;
 mod file_grid;
 mod file_list;
+mod folder_table;
 mod glyphs;
 mod interaction;
 mod preview;
 mod preview_stage;
 mod properties;
+mod properties_access;
+mod properties_basic;
+mod properties_contents;
+mod properties_details;
 mod properties_permissions;
+mod properties_tabs;
+mod properties_words;
 mod places_model;
 mod places_view;
 mod rename_field;
+mod scroll_memory;
+#[cfg(all(test, feature = "testing"))]
+mod scroll_tests;
 mod search;
 mod skeleton;
 mod states;
@@ -89,15 +102,19 @@ pub use bingux_files::{
 };
 pub use address_bar::AddressBar;
 pub use search::{Deep, DeepResults, DeepStatus, Find, SearchLink, SearchView, use_subfolder_search};
-pub use browser::{Browse, TabMemory, Trail, browse};
+pub use browser::{Browse, TabMemory, browse};
 pub use chooser::choose;
 pub use directory::{Load, Where, home_folder, use_directory, use_places};
-pub use glyphs::{entry_icon, folder_icon, place_icon};
+pub use folder_table::{
+    APP_SCHEME, FOLDER_SCHEME, RECENT_SCHEME, folder_table, location_of, place_of,
+};
+pub use glyphs::{category_icon, entry_icon, folder_icon, place_icon};
 pub use places_view::{PlacesMenu, PlacesSidebar};
 pub use skeleton::skeleton;
 pub use states::{empty_state, error_state, loading_state};
 pub use view::FileView;
 pub use actions::Capabilities;
+pub use drag::{FileDrag, file_drag, provide_file_drag};
 pub use view_state::{load as remembered, save as remember};
 pub use context_menu::{PlaceEnv, place_menu, place_menu_with};
 

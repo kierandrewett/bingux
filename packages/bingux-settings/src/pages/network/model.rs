@@ -11,7 +11,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
-use crate::routes::{Navigator, use_navigator};
+use bingux_ui::prelude::{Router, use_router};
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{Overlays, Tokens, Window, centered_caption, heading, use_overlays, use_window};
 use bingux_ui::style::*;
@@ -258,12 +258,12 @@ pub fn airplane_blocked() -> bool {
     if let Some(value) = std::env::var_os("BINGUX_SETTINGS_FAKE_AIRPLANE") {
         return value == "1";
     }
-    let Ok(entries) = std::fs::read_dir("/sys/class/rfkill") else {
+    let Ok(entries) = crate::system::read_dir("/sys/class/rfkill") else {
         return false;
     };
     let mut any = false;
     for entry in entries.flatten() {
-        let soft = std::fs::read_to_string(entry.path().join("soft")).unwrap_or_default();
+        let soft = crate::system::read_to_string(entry.path().join("soft")).unwrap_or_default();
         any = true;
         if soft.trim() != "1" {
             return false;
@@ -628,7 +628,13 @@ pub fn reload_overview(state: State<Option<Result<Overview, CommandError>>>) {
 pub fn use_overview() -> State<Option<Result<Overview, CommandError>>> {
     use_hook(|| {
         let state = system::cached_persistent::<Overview, CommandError>("network-overview");
-        reload_overview(state);
+        // A subpage mounting while it slides in shows what the page has and
+        // reads again only when that is a few seconds old: every screen of the
+        // Network pages calls this, and each would otherwise start its own
+        // read of every `nmcli` view at the start of the slide.
+        if now_ms().saturating_sub(LAST_READ.load(Ordering::SeqCst)) >= 4000 {
+            reload_overview(state);
+        }
         let focus = system::window_focus();
         spawn(async move {
             loop {
@@ -649,12 +655,12 @@ pub fn prefetch() {
     system::prefetch_persistent("network-overview", load_overview);
 }
 
-/// What a row on the Network page needs to act: the navigator, the toast and
+/// What a row on the Network page needs to act: the router, the toast and
 /// popup surfaces, and the shared overview to reload after a change. Copy, so
 /// every event handler owns one.
 #[derive(Clone, Copy)]
 pub struct NetCtx {
-    pub navigator: Navigator,
+    pub router: Router,
     pub overlays: Overlays,
     pub window: Window,
     pub overview: State<Option<Result<Overview, CommandError>>>,
@@ -676,7 +682,7 @@ impl NetCtx {
 /// The context for this screen. Call from `render`.
 pub fn use_net_ctx() -> NetCtx {
     NetCtx {
-        navigator: use_navigator(),
+        router: use_router(),
         overlays: use_overlays(),
         window: use_window(),
         overview: use_overview(),

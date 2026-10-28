@@ -5,6 +5,7 @@
 //! switch, slider, choice or text field.
 
 use std::cell::RefCell;
+use std::ops::Range;
 use std::rc::Rc;
 
 use accesskit::Toggled;
@@ -17,11 +18,15 @@ use crate::controls::press::{Press, use_press};
 use crate::controls::radio::{RadioMark, next_enabled};
 use crate::controls::segmented::segmented;
 use crate::controls::slider::slider;
-use crate::controls::switch::switch;
+use crate::controls::switch::{Switch, switch};
+use crate::controls::{ActionButton, Checkbox, Dropdown, IconButton, RowButton, Segmented, SplitButton, Stepper};
 use crate::controls::text_field::text_field;
 use crate::group::{SlotFilter, card_rows, use_row_lit, use_row_match};
 use crate::icons::{self, Icon};
-use crate::motion::{Focusable, MOVE_MS, RingFit, use_tween};
+use crate::focus::use_focus_core;
+use crate::motion::{
+    MOVE_MS, RingSize, use_ring_size, use_tween, wrap_focusable_with,
+};
 use crate::search_highlight::{self, MatchSink};
 use crate::shell::menu::{MenuItem, menu_item};
 use crate::shell::overlays::Overlays;
@@ -33,6 +38,18 @@ use crate::typography::{BADGE, BODY, CAPTION, Ink, VALUE};
 /// `ValueText` and by any selectable text through [`use_in_pressable_row`].
 #[derive(Clone, Copy, PartialEq)]
 struct RowPressable(State<bool>);
+/// Whether the trailing control of the row around it is a button, dropdown or
+/// segmented control that fills the row (see [`Dim::RowButton`]).
+#[derive(Clone, Copy, PartialEq)]
+struct RowFit(State<bool>);
+
+/// Whether this control is the trailing button of a row. It then is
+/// [`Dim::RowButton`] tall, so [`ROW_INSET`] is left above and below it, and
+/// its radius is the group's less that inset ([`Radius::Inner`]). Every
+/// control that can trail a row calls this once.
+pub(crate) fn use_row_fitted() -> bool {
+    use_try_consume::<RowFit>().is_some_and(|flag| (flag.0)())
+}
 /// The title of the [`Row`] being rendered, for its descendants. A dropdown
 /// with no explicit `.title()` uses it as its phone sheet header.
 #[derive(Clone, Copy, PartialEq)]
@@ -69,6 +86,16 @@ pub struct Row {
     context_menu: Vec<MenuItem>,
     nested: Option<(bool, Vec<Element>)>,
     font: Option<String>,
+    /// Whether the trailing content is a control (a switch, button, checkbox
+    /// or dropdown). With a chevron it is set apart by a divider and the
+    /// chevron becomes its own target. See [`Row::trailing`].
+    trailing_control: bool,
+    /// Whether the trailing content is a button-like control that fills the
+    /// row with [`ROW_INSET`] on every side. See [`Row::trailing`].
+    trailing_fit: bool,
+    /// Whether the trailing content is a switch, which sits [`SWITCH_INSET`]
+    /// from the row's trailing edge, the same as above and below it.
+    trailing_switch: bool,
     /// Whether the trailing content is a read-only value. The title and the
     /// value then share the row evenly, and a long value is cut to its half.
     value_trailing: bool,
@@ -77,6 +104,10 @@ pub struct Row {
     subtitle_one_line: bool,
     /// The radio of a radio row, set by [`radio_row`].
     radio: Option<RadioChoice>,
+    /// Byte ranges of the title drawn on the search mark, from a search hit.
+    title_marks: Option<Vec<Range<usize>>>,
+    /// Byte ranges of the subtitle drawn on the search mark.
+    subtitle_marks: Option<Vec<Range<usize>>>,
 }
 
 pub fn row(title: impl Into<String>) -> Row {
@@ -102,11 +133,31 @@ pub fn row(title: impl Into<String>) -> Row {
         font: None,
         value_trailing: false,
         subtitle_one_line: false,
+        trailing_control: false,
+        trailing_fit: false,
+        trailing_switch: false,
         radio: None,
+        title_marks: None,
+        subtitle_marks: None,
     }
 }
 
 impl Row {
+    /// Draws these byte ranges of the title on the search mark: where a search
+    /// hit (`bingux_ui::search`) matched. The row then does not look for the
+    /// pane's query itself, so a hit list marks what the engine matched, with
+    /// typo tolerance, not what a substring test would.
+    pub fn title_marks(mut self, ranges: Vec<Range<usize>>) -> Self {
+        self.title_marks = Some(ranges);
+        self
+    }
+
+    /// Draws these byte ranges of the subtitle on the search mark.
+    pub fn subtitle_marks(mut self, ranges: Vec<Range<usize>>) -> Self {
+        self.subtitle_marks = Some(ranges);
+        self
+    }
+
     /// Rows set in under this one, indented by a gutter and shown while
     /// `shown` is true, with the reveal an expander uses. They are not mounted
     /// while hidden, and a row among them that matches a search also makes this
@@ -135,14 +186,53 @@ impl Row {
         self
     }
 
-    pub fn trailing(mut self, trailing: impl Into<Element>) -> Self {
+    /// Trailing content. A switch, checkbox, dropdown or button passed here
+    /// directly counts as a control: in a row that also navigates, a divider
+    /// then separates it from the chevron, and the chevron is a target of its
+    /// own that opens the page, while the control only acts. Wrap a control
+    /// in a container and call [`Row::trailing_control`] to get the same.
+    pub fn trailing<E: Into<Element> + 'static>(mut self, trailing: E) -> Self {
+        use std::any::TypeId;
+        let id = TypeId::of::<E>();
+        self.trailing_control = [
+            TypeId::of::<Switch>(),
+            TypeId::of::<Checkbox>(),
+            TypeId::of::<Dropdown>(),
+            TypeId::of::<ActionButton>(),
+            TypeId::of::<IconButton>(),
+            TypeId::of::<RowButton>(),
+            TypeId::of::<Stepper>(),
+            TypeId::of::<Segmented>(),
+            TypeId::of::<SplitButton>(),
+        ]
+        .contains(&id);
+        self.trailing_fit = [
+            TypeId::of::<Dropdown>(),
+            TypeId::of::<ActionButton>(),
+            TypeId::of::<IconButton>(),
+            TypeId::of::<RowButton>(),
+            TypeId::of::<Segmented>(),
+            TypeId::of::<SplitButton>(),
+        ]
+        .contains(&id);
+        self.trailing_switch = id == TypeId::of::<Switch>();
         self.trailing = Some(trailing.into());
+        self
+    }
+
+    /// Marks the trailing content as a control, for one that is not passed
+    /// directly, such as a switch beside a spinner.
+    pub fn trailing_control(mut self) -> Self {
+        self.trailing_control = true;
         self
     }
 
     /// Trailing content when there is any; a row without it has none.
     pub fn maybe_trailing(mut self, trailing: Option<impl Into<Element>>) -> Self {
         self.trailing = trailing.map(Into::into);
+        self.trailing_control = false;
+        self.trailing_fit = false;
+        self.trailing_switch = false;
         self
     }
 
@@ -183,8 +273,8 @@ impl Row {
         self
     }
 
-    /// The row is pressed as a whole. Such a row also gets the hover fill and
-    /// the pointer cursor, as it opens something.
+    /// The row is pressed as a whole. Such a row also gets the hover and
+    /// pressed fill, as it opens something.
     pub fn on_press(mut self, on_press: impl Into<EventHandler<()>>) -> Self {
         self.activatable = true;
         self.pressed(on_press)
@@ -254,6 +344,18 @@ impl Row {
             text: value,
             mono: true,
         })
+    }
+
+    /// Like [`Row::value`] for a path: when it does not fit it is shortened
+    /// by what matters least (see `path_label`), the full path is the
+    /// tooltip, and a right click offers Copy path.
+    pub fn path_value(mut self, path: impl Into<String>) -> Self {
+        let path = path.into();
+        if path.is_empty() {
+            return self;
+        }
+        self.value_trailing = true;
+        self.trailing(PathValue { path })
     }
 
     /// Right click opens `items` as a context menu at the pointer. Use it for
@@ -376,6 +478,25 @@ impl Component for ValueText {
     }
 }
 
+/// The trailing path of [`Row::path_value`]: the half of the row that a
+/// value gets, aligned to its end.
+#[derive(PartialEq)]
+struct PathValue {
+    path: String,
+}
+
+impl Component for PathValue {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        rect().component("ValuePath").tw(&tokens, &[w_flex()]).child(
+            crate::controls::path_label(self.path.clone())
+                .style(VALUE)
+                .end()
+                .copyable(true),
+        )
+    }
+}
+
 /// Copies `text` to the clipboard and says so, or says that it could not.
 fn copy_text(overlays: Overlays, text: String) {
     match freya::clipboard::Clipboard::set(text) {
@@ -390,6 +511,11 @@ impl Component for Row {
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
         let mut face_size = use_state(|| (0.0f32, 0.0f32));
+        let mut body_size = use_state(|| (0.0f32, 0.0f32));
+        let mut zone_hovering = use_state(|| false);
+        let mut zone_pressing = use_state(|| false);
+        let zone_id = use_a11y();
+        let zone_focus = use_focus(zone_id);
         let press = use_press();
         let generated_id = use_a11y();
         let radio = self.radio.as_ref();
@@ -397,11 +523,53 @@ impl Component for Row {
             .and_then(|choice| choice.a11y_id)
             .unwrap_or(generated_id);
         let focus = use_focus(a11y_id);
+        // The focus rings of the body, the chevron zone and the face are made
+        // through hooks, and which of them a row draws depends on its props
+        // (a row split in two draws two, any other one). A row takes the hooks
+        // of all three every render, so its hook count never changes.
+        let ring_core = use_focus_core();
+        let body_ring = use_ring_size();
+        let zone_ring = use_ring_size();
+        let face_ring = use_ring_size();
         provide_enabled(self.enabled);
         let interactive = self.on_press.is_some() && self.enabled;
         let focusable = interactive && radio.is_none_or(|choice| choice.tab_stop);
         let mut pressable = use_provide_context(|| RowPressable(State::create(interactive)));
         pressable.0.set_if_modified(interactive);
+        let mut trailing_width = use_state(|| 0.0f32);
+        // A control that cannot shrink (a segmented control, a button) beside
+        // a title that would get less than its floor goes under the title, as
+        // in `controls::adaptive`. Only a row of title, control and nothing
+        // that navigates is laid out this way.
+        let stackable = self.trailing_control
+            && self.trailing.is_some()
+            && !self.navigates
+            && !self.value_trailing
+            && radio.is_none();
+        let stacked = stackable && {
+            use crate::controls::adaptive::{ControlFacts, LabelFacts, LineMode, choose_line};
+            let leading = if self.leading.is_some() || self.leading_space || self.leading_signal.is_some() {
+                Dim::IconRow.px() + S3.px()
+            } else if self.leading_avatar.is_some() || self.leading_app.is_some() {
+                Dim::Box9.px() + S3.px()
+            } else {
+                0.0
+            };
+            let inner = (face_size().0 - 2.0 * GUTTER.px() - leading).max(0.0);
+            let control = ControlFacts {
+                natural: trailing_width(),
+                least: None,
+            };
+            choose_line(
+                inner,
+                S3.px() + S1.px(),
+                LabelFacts::measure(&self.title, BODY),
+                control,
+            ) == LineMode::Stacked
+        };
+        let fit = self.trailing_fit && !stacked;
+        let mut fitting = use_provide_context(|| RowFit(State::create(fit)));
+        fitting.0.set_if_modified(fit);
         let mut row_title = use_provide_context(|| RowTitle(State::create(self.title.clone())));
         row_title.0.set_if_modified(self.title.clone());
         // Only a row that opens something, such as one with a chevron, lights
@@ -410,6 +578,9 @@ impl Component for Row {
         let overlays = try_consume_context::<Overlays>();
         let menu = self.context_menu.clone();
         use_row_lit((activatable && (hovering() || pressing())) || self.selected);
+        // A location's `#fragment` equal to the title's slug scrolls here and
+        // flashes the row (see `nav::anchor`).
+        let anchor = crate::nav::use_anchor(&crate::nav::slug(&self.title));
         let query = search_highlight::current();
         let row_hit = query.as_deref().is_some_and(|query| {
             search_highlight::hits(query, &self.title)
@@ -421,10 +592,9 @@ impl Component for Row {
         let nested_shown = self.nested.as_ref().is_some_and(|(shown, _)| *shown);
         let nested_lit = use_state(Vec::<usize>::new);
         let nested_matched = use_state(Vec::<usize>::new);
-        let reveal = use_tween(if nested_shown { 1.0 } else { 0.0 }, tokens.motion(MOVE_MS));
         let nested_hit = !nested_matched.read().is_empty();
         use_row_match(row_hit || nested_hit);
-        let single_line = self.subtitle.is_none();
+        let single_line = self.subtitle.is_none() && !stacked;
         let ink = if !self.enabled {
             Ink::Muted
         } else if self.destructive {
@@ -446,11 +616,20 @@ impl Component for Row {
                 .max_lines(1)
                 .text_overflow(TextOverflow::Ellipsis)
                 .into(),
-            None => search_highlight::label(BODY.in_ink(ink), &tokens, &self.title),
+            None => match &self.title_marks {
+                Some(ranges) => {
+                    search_highlight::highlighted_label(BODY.in_ink(ink), &tokens, &self.title, ranges)
+                        .into()
+                }
+                None => search_highlight::label(BODY.in_ink(ink), &tokens, &self.title),
+            },
         };
         // On a phone a long title wraps onto a second line rather than
         // being cut, as a narrow row has little room beside its control.
-        let wrapped = is_compact() && self.badge.is_none() && self.font.is_none();
+        let wrapped = is_compact()
+            && self.badge.is_none()
+            && self.font.is_none()
+            && self.title_marks.is_none();
         let title_line: Element = match &self.badge {
             None if wrapped => search_highlight::marked(BODY.in_ink(ink), &tokens, &self.title)
                 .unwrap_or_else(|| BODY.in_ink(ink).paragraph(&tokens, self.title.clone()))
@@ -485,6 +664,16 @@ impl Component for Row {
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis)
                     .into(),
+                None if self.subtitle_marks.is_some() => search_highlight::highlighted_label(
+                    CAPTION,
+                    &tokens,
+                    subtitle,
+                    self.subtitle_marks.as_deref().unwrap_or_default(),
+                )
+                .max_lines(subtitle_lines)
+                .text_overflow(TextOverflow::Ellipsis)
+                .width(Size::fill())
+                .into(),
                 None => match search_highlight::marked(CAPTION, &tokens, subtitle) {
                     Some(marked) => marked
                         .max_lines(subtitle_lines)
@@ -501,13 +690,33 @@ impl Component for Row {
                         .into(),
                 },
             });
+        // A tall row with a trailing button keeps the button's inset above and
+        // below, and its text takes the rest of the row's usual padding, so
+        // the row is no taller than one without the button.
         let text_column = rect()
             .tw(&tokens, ROW_TEXT)
+            .maybe(fit && !single_line, |text| {
+                text.tw(&tokens, &[py(S1)])
+            })
             .child(title_line)
-            .maybe_child(subtitle_line);
-        let trailing = (self.trailing.is_some() || self.selected || self.navigates).then(|| {
+            .maybe_child(subtitle_line)
+            .maybe_child(stacked.then(|| {
+                rect()
+                    .tw(&tokens, &[flex_row(), w_full(), mt(S2)])
+                    .maybe_child(self.trailing.clone())
+            }));
+        // A row with a control and a chevron is split in two: the body, which
+        // holds the text and the control and opens the page when its text is
+        // pressed, and the chevron zone, a target of its own beyond a divider.
+        let split =
+            self.navigates && self.trailing_control && self.trailing.is_some() && radio.is_none();
+        let trailing = (!stacked && (self.trailing.is_some() || self.selected || (self.navigates && !split)))
+            .then(|| {
             rect()
                 .tw(&tokens, ROW_TRAILING)
+                .on_sized(move |event: Event<SizedEventData>| {
+                    trailing_width.set_if_modified(event.area.width());
+                })
                 // A value takes the same share of the row as the title and
                 // fills it, so a long value is cut before the chevron. Any
                 // other trailing control keeps its own width. Freya's layout
@@ -520,11 +729,192 @@ impl Component for Row {
                 .maybe_child((self.selected && !self.navigates).then(|| {
                     icons::icon(Icon::Check, IconSize::Mark, Paint::Accent.color(&tokens))
                 }))
-                .maybe_child(self.navigates.then(|| {
+                .maybe_child((self.navigates && !split).then(|| {
                     icons::icon(Icon::GoNext, IconSize::Mark, Paint::Muted.color(&tokens))
                 }))
         });
 
+        let mut content: Vec<Element> = Vec::new();
+        if let Some(choice) = radio {
+            content.push(
+                rect()
+                    .opacity(if self.enabled { 1.0 } else { DISABLED_OPACITY })
+                    .child(RadioMark {
+                        selected: choice.selected,
+                        hover: hovering() && self.enabled,
+                        press: pressing() && self.enabled,
+                    })
+                    .into(),
+            );
+        }
+        let leading: Option<Element> = match self.leading {
+            Some(leading) => {
+                let glyph_colour = match self.leading_tone {
+                    Some(tone) => tone.color(&tokens),
+                    None => icon_paint.color(&tokens),
+                };
+                let glyph = icons::icon(leading, IconSize::Row, glyph_colour);
+                // With a subtitle the icon sits beside the text lines,
+                // centred on them. The column fills the row's height
+                // only once the row has been sized by its text
+                // (`fill_minimum`); a plain fill measured as all the
+                // space the row's parent had left, and stretched the
+                // first such row of a list.
+                Some(if single_line {
+                    glyph.into()
+                } else if split {
+                    // The body centres its children, and it is not the row's
+                    // own box, so there is no height to fill.
+                    rect().tw(&tokens, &[flex_col(), pt(S0_5)]).child(glyph).into()
+                } else {
+                    rect()
+                        .height(Size::fill_minimum())
+                        .tw(&tokens, &[flex_col(), pt(S0_5)])
+                        .child(glyph)
+                        .into()
+                })
+            }
+            None => self.leading_space.then(|| {
+                rect()
+                    .tw(&tokens, &[w(Dim::IconRow), h(Dim::IconRow)])
+                    .into()
+            }),
+        };
+        content.extend(leading);
+        content.extend(
+            self.leading_signal.map(|(level, secured)| {
+                crate::controls::signal_bars(level, secured, &tokens).into_element()
+            }),
+        );
+        content.extend(
+            self.leading_avatar
+                .as_ref()
+                .map(|user| crate::controls::avatar(user.clone(), Dim::Box9).into_element()),
+        );
+        content.extend(
+            self.leading_app
+                .as_ref()
+                .map(|name| app_icon(name.clone(), IconSize::App).into_element()),
+        );
+        content.push(text_column.into_element());
+        content.extend(trailing.map(|trailing| trailing.into_element()));
+        let parts: Vec<Element> = if split {
+            // A one-line row has a fixed height, which the zone fills. A tall
+            // row is as high as its text, so the zone takes the height its
+            // body was measured at: `fill_minimum` here took all the room the
+            // card had left.
+            let zone_height = if single_line {
+                Size::fill()
+            } else {
+                Size::px(body_size().1)
+            };
+            let lit_body = !zone_hovering();
+            let mut body = rect()
+                .component("RowBody")
+                .tw(
+                    &tokens,
+                    if single_line {
+                        ROW_SPLIT_BODY
+                    } else {
+                        ROW_TALL_SPLIT_BODY
+                    },
+                )
+                .maybe(self.trailing_fit, |body| body.tw(&tokens, &[pr(ROW_INSET)]))
+                .maybe(self.trailing_fit && !single_line, |body| {
+                    body.tw(&tokens, &[py(S2)])
+                })
+                .maybe(single_line, |body| body.height(Size::fill()))
+                .tw(
+                    &tokens,
+                    &[surface(
+                        Paint::Transparent,
+                        activatable && lit_body && hovering(),
+                        activatable && lit_body && pressing(),
+                        self.selected,
+                    )],
+                )
+                .children(content)
+                .on_sized(move |event: Event<SizedEventData>| {
+                    body_size.set_if_modified((event.area.width(), event.area.height()));
+                });
+            body = wrap_focusable_with(
+                &tokens,
+                ring_core.clone(),
+                body,
+                focus(),
+                Radius::Control,
+                true,
+                RingSize::Measured(body_ring),
+            )
+            // The focus wrapper is what the face lays out: it takes the
+            // body's share of the width, and the body fills it.
+            .tw(&tokens, &[w_flex()])
+            .maybe(single_line, |wrapper| wrapper.height(Size::fill()));
+            // One hairline, 60% of a one-line row: the row's height less
+            // a gap above and below. The height is measured, not a token.
+            let divider_height = (face_size().1 - 2.0 * S3.px()).max(0.0);
+            let divider = rect()
+                .tw(&tokens, &[w(Dim::Hairline), bg(Paint::Separator)])
+                .height(Size::px(divider_height));
+            let open = self.on_press.clone();
+            let zone_title = self.title.clone();
+            let zone = rect()
+                .component("RowChevron")
+                .a11y_id(zone_id)
+                .a11y_focusable(interactive)
+                .a11y_role(AccessibilityRole::Button)
+                .a11y_builder(move |builder| builder.set_label(format!("Open {zone_title}")))
+                .tw(&tokens, ROW_CHEVRON_ZONE)
+                .height(Size::fill())
+                .tw(
+                    &tokens,
+                    &[surface(
+                        Paint::Transparent,
+                        interactive && zone_hovering(),
+                        interactive && zone_pressing(),
+                        false,
+                    )],
+                )
+                .on_global_pointer_up(move |_| zone_pressing.set_if_modified(false))
+                .maybe(interactive, |element| {
+                    element
+                        .on_pointer_down(move |_| zone_pressing.set(true))
+                        .on_pointer_enter(move |_| zone_hovering.set(true))
+                        .on_pointer_leave(move |_| {
+                            zone_hovering.set(false);
+                            zone_pressing.set_if_modified(false);
+                        })
+                        .on_press(move |event: Event<PressEventData>| {
+                            event.stop_propagation();
+                            if !press.tap(&event) {
+                                return;
+                            }
+                            if let Some(open) = &open {
+                                open.call(());
+                            }
+                            zone_id.request_focus();
+                        })
+                })
+                .child(icons::icon(
+                    Icon::GoNext,
+                    IconSize::Mark,
+                    Paint::Muted.color(&tokens),
+                ));
+            let zone = wrap_focusable_with(
+                &tokens,
+                ring_core.clone(),
+                zone,
+                zone_focus(),
+                Radius::Inner,
+                true,
+                RingSize::Measured(zone_ring),
+            )
+            // The wrapper takes the height; the zone fills it.
+            .height(zone_height);
+            vec![body.into(), divider.into(), zone.into()]
+        } else {
+            content
+        };
         let on_press = self.on_press.clone();
         let face = rect()
             .component("Row")
@@ -557,14 +947,31 @@ impl Component for Row {
                 let checked = radio.is_some_and(|choice| choice.selected);
                 element.a11y_builder(move |builder| builder.set_toggled(Toggled::from(checked)))
             })
-            .tw(&tokens, if single_line { ROW } else { ROW_TALL })
+            .tw(
+                &tokens,
+                match (split, single_line) {
+                    (true, true) => ROW_SPLIT,
+                    (true, false) => ROW_TALL_SPLIT,
+                    (false, true) => ROW,
+                    (false, false) => ROW_TALL,
+                },
+            )
+            .maybe(fit && !split, |element| {
+                element.tw(&tokens, &[pr(ROW_INSET)])
+            })
+            .maybe(fit && !split && !single_line, |element| {
+                element.tw(&tokens, &[py(S2)])
+            })
+            .maybe(self.trailing_switch && !split && single_line, |element| {
+                element.tw(&tokens, &[pr(SWITCH_INSET)])
+            })
             .tw(
                 &tokens,
                 &[surface(
                     Paint::Transparent,
-                    activatable && hovering(),
-                    activatable && pressing(),
-                    self.selected,
+                    activatable && !split && hovering(),
+                    activatable && !split && pressing(),
+                    self.selected && !split,
                 )],
             )
             .on_pointer_down(move |event: Event<PointerEventData>| {
@@ -598,81 +1005,32 @@ impl Component for Row {
                         a11y_id.request_focus();
                     })
             })
-            .maybe_child(radio.map(|choice| {
+            .children(parts)
+            .maybe_child((anchor.flash() > 0.01).then(|| {
                 rect()
-                    .opacity(if self.enabled { 1.0 } else { DISABLED_OPACITY })
-                    .child(RadioMark {
-                        selected: choice.selected,
-                        hover: hovering() && self.enabled,
-                        press: pressing() && self.enabled,
-                    })
+                    .position(Position::new_absolute().top(0.0).left(0.0))
+                    .width(Size::fill())
+                    .height(Size::fill())
+                    .tw(&tokens, &[bg(Paint::Accent)])
+                    .opacity(anchor.flash() * 0.22)
             }))
-            .maybe_child({
-                let leading: Option<Element> = match self.leading {
-                    Some(leading) => {
-                        let glyph_colour = match self.leading_tone {
-                            Some(tone) => tone.color(&tokens),
-                            None => icon_paint.color(&tokens),
-                        };
-                        let glyph = icons::icon(leading, IconSize::Row, glyph_colour);
-                        // With a subtitle the icon sits beside the text lines,
-                        // centred on them. The column fills the row's height
-                        // only once the row has been sized by its text
-                        // (`fill_minimum`); a plain fill measured as all the
-                        // space the row's parent had left, and stretched the
-                        // first such row of a list.
-                        Some(if single_line {
-                            glyph.into()
-                        } else {
-                            rect()
-                                .height(Size::fill_minimum())
-                                .tw(&tokens, &[flex_col(), pt(S0_5)])
-                                .child(glyph)
-                                .into()
-                        })
-                    }
-                    None => self.leading_space.then(|| {
-                        rect()
-                            .tw(&tokens, &[w(Dim::IconRow), h(Dim::IconRow)])
-                            .into()
-                    }),
-                };
-                leading
-            })
-            .maybe_child(
-                self.leading_signal
-                    .map(|(level, secured)| crate::controls::signal_bars(level, secured, &tokens)),
-            )
-            .maybe_child(
-                self.leading_avatar
-                    .as_ref()
-                    .map(|user| crate::controls::avatar(user.clone(), Dim::Box9)),
-            )
-            .maybe_child(
-                self.leading_app
-                    .as_ref()
-                    .map(|name| app_icon(name.clone(), IconSize::App)),
-            )
-            .child(text_column)
-            .maybe_child(trailing)
             .on_sized(move |event: Event<SizedEventData>| {
                 face_size.set_if_modified((event.area.width(), event.area.height()));
+                anchor.on_sized().call(event);
             });
-        // A row with a subtitle takes its height from its text and pads it,
-        // so the ring is given the measured height. A one-line row has a
-        // fixed height and needs no measuring.
-        let face = if single_line {
-            face.focusable_inside(focus(), Radius::Control)
+        // The ring is measured from the face, so a padded row that takes its
+        // height from its text needs no special case.
+        let face = if split {
+            face
         } else {
-            face.focusable_fitted(
+            wrap_focusable_with(
+                &tokens,
+                ring_core.clone(),
+                face,
                 focus(),
                 Radius::Control,
-                RingFit {
-                    left: GUTTER.px(),
-                    top: S3.px(),
-                    width: face_size().0,
-                    height: face_size().1,
-                },
+                true,
+                RingSize::Measured(face_ring),
             )
         }
         .tw(&tokens, &[w_full()]);
@@ -694,14 +1052,17 @@ impl Component for Row {
             .component("RowWithNested")
             .tw(&tokens, &[flex_col(), w_full()])
             .child(face)
-            .maybe_child((reveal > 0.0).then(|| {
-                Element::from(NestedRows {
-                    rows: rows.clone(),
-                    lit: nested_lit,
-                    filter,
-                    opacity: reveal,
-                })
-            }))
+            .child(
+                crate::motion::reveal(
+                    nested_shown,
+                    NestedRows {
+                        rows: rows.clone(),
+                        lit: nested_lit,
+                        filter,
+                    },
+                )
+                .lazy(),
+            )
             .into_element()
     }
 }
@@ -715,7 +1076,6 @@ struct NestedRows {
     rows: Vec<Element>,
     lit: State<Vec<usize>>,
     filter: SlotFilter,
-    opacity: f32,
 }
 
 impl Component for NestedRows {
@@ -726,7 +1086,6 @@ impl Component for NestedRows {
         rect()
             .component("NestedRows")
             .tw(&tokens, &[flex_col(), w_full(), pl(GUTTER)])
-            .opacity(self.opacity)
             .children(card_rows(self.rows.clone(), self.lit, self.filter))
     }
 }
@@ -1332,12 +1691,12 @@ impl Component for ExpanderRow {
             .component("ExpanderRow")
             .tw(&tokens, &[flex_col(), w_full()])
             .child(header)
-            .maybe_child((progress > 0.0).then(|| {
+            .child(crate::motion::reveal(
+                open(),
                 rect()
                     .tw(&tokens, &[flex_col(), w_full(), pl(GUTTER)])
-                    .opacity(progress)
-                    .children(children)
-            }))
+                    .children(children),
+            ))
     }
 }
 
@@ -1432,5 +1791,207 @@ impl Component for ChoiceList {
                         format!("{hidden} more. Keep typing to narrow the list."),
                     ))
             }))
+    }
+}
+
+#[cfg(test)]
+mod fit_tokens {
+    use super::*;
+
+    #[test]
+    fn a_trailing_button_fills_the_row_less_the_inset_on_both_sides() {
+        for class in [SizeClass::Regular, SizeClass::Compact] {
+            assert_eq!(
+                Dim::RowButton.px_in(class),
+                Dim::Row.px_in(class) - 2.0 * ROW_INSET.px_in(class),
+                "{class:?}",
+            );
+            assert!(Dim::RowButton.px_in(class) >= if class.is_compact() { TOUCH_MIN } else { 0.0 });
+        }
+    }
+
+    #[test]
+    fn a_trailing_button_rounds_as_the_card_less_the_inset() {
+        assert_eq!(
+            Radius::Inner.px(),
+            Radius::Card.px() - ROW_INSET.fixed_px(),
+        );
+    }
+
+    #[test]
+    fn a_trailing_switch_is_the_same_distance_from_every_edge() {
+        for class in [SizeClass::Regular, SizeClass::Compact] {
+            assert_eq!(
+                SWITCH_INSET.px_in(class),
+                (Dim::Row.px_in(class) - Dim::SwitchHeight.px_in(class)) / 2.0,
+                "{class:?}",
+            );
+        }
+    }
+}
+
+#[cfg(all(test, feature = "testing"))]
+mod fit_layout {
+    use std::time::Duration;
+
+    use super::*;
+    use crate::group::Group;
+    use crate::snapshot::Snapshot;
+
+    #[derive(Clone, Copy, PartialEq)]
+    enum Trailing {
+        Button,
+        Switch,
+    }
+
+    #[derive(PartialEq)]
+    struct Scene(Trailing);
+
+    impl Component for Scene {
+        fn render(&self) -> impl IntoElement {
+            let tokens = crate::theme::provide_tokens();
+            let row = match self.0 {
+                Trailing::Button => row("Default")
+                    .trailing(crate::controls::action_button("Action", |_| {}).compact()),
+                Trailing::Switch => row("Default").trailing(switch(true, |_: bool| {})),
+            };
+            rect()
+                .expanded()
+                .tw(&tokens, &[p(S4)])
+                .child(crate::shell::OverlayHost::new(
+                    Group::new(None::<String>).rows(vec![row.into_element()]),
+                ))
+        }
+    }
+
+    /// Every box in the scene as (min x, max x, min y, max y).
+    fn boxes(scene: Trailing, size: (f32, f32)) -> Vec<[f32; 4]> {
+        let mut shot = Snapshot::new(move || Scene(scene).into(), size);
+        shot.settle(Duration::from_millis(300));
+        shot.runner().find_many(|node, _| {
+            let area = node.layout().area;
+            Some([area.min_x(), area.max_x(), area.min_y(), area.max_y()])
+        })
+    }
+
+    fn near(a: f32, b: f32) -> bool {
+        (a - b).abs() < 0.51
+    }
+
+    /// A row box sits `inset` outside `child` on the top, bottom and right.
+    fn row_around(boxes: &[[f32; 4]], child: [f32; 4], row_height: f32, inset: f32) -> bool {
+        boxes.iter().any(|row| {
+            near(row[3] - row[2], row_height)
+                && near(row[2], child[2] - inset)
+                && near(row[3], child[3] + inset)
+                && near(row[1], child[1] + inset)
+        })
+    }
+
+    #[test]
+    fn a_trailing_button_is_inset_equally_from_the_top_bottom_and_trailing_edge() {
+        for (class, size) in [
+            (SizeClass::Regular, (900.0, 400.0)),
+            (SizeClass::Compact, (390.0, 600.0)),
+        ] {
+            let boxes = boxes(Trailing::Button, size);
+            let height = Dim::RowButton.px_in(class);
+            let button = boxes
+                .iter()
+                .copied()
+                .filter(|b| near(b[3] - b[2], height) && b[1] - b[0] > height)
+                .max_by(|a, b| a[1].total_cmp(&b[1]))
+                .unwrap_or_else(|| panic!("{class:?}: no button {height} px tall"));
+            assert!(
+                row_around(&boxes, button, Dim::Row.px_in(class), ROW_INSET.px_in(class)),
+                "{class:?}: the button is not {} px from the row's top, bottom and right",
+                ROW_INSET.px_in(class),
+            );
+        }
+    }
+
+    #[test]
+    fn a_trailing_switch_is_inset_equally_from_the_top_bottom_and_trailing_edge() {
+        for (class, size) in [
+            (SizeClass::Regular, (900.0, 400.0)),
+            (SizeClass::Compact, (390.0, 600.0)),
+        ] {
+            let boxes = boxes(Trailing::Switch, size);
+            let switch = boxes
+                .iter()
+                .copied()
+                .find(|b| {
+                    near(b[3] - b[2], Dim::SwitchHeight.px_in(class))
+                        && near(b[1] - b[0], Dim::SwitchWidth.px_in(class))
+                })
+                .unwrap_or_else(|| panic!("{class:?}: no switch"));
+            assert!(
+                row_around(&boxes, switch, Dim::Row.px_in(class), SWITCH_INSET.px_in(class)),
+                "{class:?}: the switch is not {} px from the row's top, bottom and right",
+                SWITCH_INSET.px_in(class),
+            );
+        }
+    }
+}
+
+#[cfg(all(test, feature = "testing"))]
+mod narrow_rows {
+    use std::time::Duration;
+
+    use super::*;
+    /// 'Security' in the body face is about 60 px; a squeezed title is 0 to 15.
+    const TITLE_MIN: f32 = 45.0;
+    use crate::group::Group;
+    use crate::snapshot::Snapshot;
+
+    #[derive(PartialEq)]
+    struct Scene;
+
+    impl Component for Scene {
+        fn render(&self) -> impl IntoElement {
+            let tokens = crate::theme::provide_tokens();
+            let options = ["None", "WPA2", "WPA3 Enterprise"]
+                .map(|name| (name.to_string(), name.to_string()))
+                .to_vec();
+            rect()
+                .expanded()
+                .tw(&tokens, &[p(S4)])
+                .child(crate::shell::OverlayHost::new(
+                    rect().tw(&tokens, &[w(Dim::Field)]).child(
+                        Group::new(None::<String>).rows(vec![
+                            row("Security")
+                                .trailing(segmented(options, "WPA2", |_: String| {}))
+                                .into_element(),
+                        ]),
+                    ),
+                ))
+        }
+    }
+
+    /// A control that cannot shrink goes under the title instead of taking
+    /// its width: the title stays whole and on one line.
+    #[test]
+    fn a_title_beside_a_wide_control_keeps_its_width_or_the_control_stacks() {
+        let mut shot = Snapshot::new(|| Scene.into(), (900.0, 400.0));
+        shot.settle(Duration::from_millis(400));
+        let labels: Vec<(String, f32)> = shot.runner().find_many(|node, element| {
+            let text = match Label::try_downcast(element) {
+                Some(label) => label.text.to_string(),
+                None => Paragraph::try_downcast(element)?
+                    .spans
+                    .iter()
+                    .map(|span| span.text.to_string())
+                    .collect(),
+            };
+            Some((text, node.layout().area.width()))
+        });
+        let (_, width) = labels
+            .iter()
+            .find(|(text, _)| text == "Security")
+            .expect("the title");
+        assert!(
+            *width >= TITLE_MIN,
+            "the title is {width} px wide, under {TITLE_MIN}",
+        );
     }
 }

@@ -174,6 +174,113 @@ pub fn chmod(path: &Path, mode: u32) -> Result<(), OpError> {
     fs::set_permissions(path, fs::Permissions::from_mode(mode & 0o7777)).map_err(OpError::from)
 }
 
+/// The ownership and permissions of one item, which is all the Permissions
+/// tab needs: one `statx` and two name lookups, with no drive or folder
+/// walk. A link is described by its target, as [`chmod`] acts on it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Permissions {
+    /// Permission bits, `0o755` style, including setuid, setgid and sticky.
+    pub mode: u32,
+    pub is_dir: bool,
+    pub uid: u32,
+    pub gid: u32,
+    /// The owner's name, or the number if it has no name.
+    pub owner: String,
+    pub group: String,
+    /// The person running this may change `mode`: the owner, and root.
+    pub can_chmod: bool,
+}
+
+/// Read the [`Permissions`] of `path`.
+pub fn permissions(path: &Path) -> Result<Permissions, OpError> {
+    let info = stat::stat_entry(path)?;
+    // SAFETY: `geteuid` has no preconditions and cannot fail.
+    let euid = unsafe { libc::geteuid() };
+    Ok(Permissions {
+        mode: info.mode & 0o7777,
+        is_dir: info.kind == Kind::Directory,
+        uid: info.uid,
+        gid: info.gid,
+        owner: user_name(info.uid).unwrap_or_else(|| info.uid.to_string()),
+        group: group_name(info.gid).unwrap_or_else(|| info.gid.to_string()),
+        can_chmod: euid == 0 || euid == info.uid,
+    })
+}
+
+/// The mode that "apply to enclosed items" gives one item under a folder
+/// whose mode is now `folder`. Folders take the folder's bits as they are.
+/// A file takes its read and write bits, and keeps an execute bit it had only
+/// where the folder allows that class to execute, so a script stays a script
+/// and a plain file never becomes a program. Setuid, setgid and sticky are
+/// not passed on to files.
+pub fn tree_mode(folder: u32, is_dir: bool, current: u32) -> u32 {
+    let folder = folder & 0o7777;
+    if is_dir {
+        folder
+    } else {
+        (folder & 0o666) | (current & folder & 0o111)
+    }
+}
+
+/// What [`chmod_tree`] did.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TreeChange {
+    /// Files and folders whose mode was set (or already was).
+    pub changed: u64,
+    /// Items that could not be changed or read: not owned, a folder that
+    /// cannot be entered, a drive that is read-only.
+    pub failed: u64,
+}
+
+/// Give everything under `root` (not `root` itself) the mode that
+/// [`tree_mode`] works out from `folder`. Links are skipped, never followed.
+/// A folder's own mode is set after its contents', so a folder that loses
+/// the owner's access is still walked. Returns [`OpError::Cancelled`] if
+/// `cancel` is set meanwhile; what was changed stays changed.
+pub fn chmod_tree(root: &Path, folder: u32, cancel: &Cancel) -> Result<TreeChange, OpError> {
+    let mut change = TreeChange::default();
+    tree_step(root, folder, cancel, &mut change, false)?;
+    Ok(change)
+}
+
+fn tree_step(
+    path: &Path,
+    folder: u32,
+    cancel: &Cancel,
+    change: &mut TreeChange,
+    set_self: bool,
+) -> Result<(), OpError> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    if cancel.is_cancelled() {
+        return Err(OpError::Cancelled);
+    }
+    let Ok(meta) = fs::symlink_metadata(path) else {
+        change.failed += 1;
+        return Ok(());
+    };
+    if meta.file_type().is_symlink() {
+        return Ok(());
+    }
+    if meta.is_dir() {
+        match fs::read_dir(path) {
+            Ok(children) => {
+                for child in children.flatten() {
+                    tree_step(&child.path(), folder, cancel, change, true)?;
+                }
+            }
+            Err(_) => change.failed += 1,
+        }
+    }
+    if set_self {
+        let mode = tree_mode(folder, meta.is_dir(), meta.mode() & 0o7777);
+        match fs::set_permissions(path, fs::Permissions::from_mode(mode)) {
+            Ok(()) => change.changed += 1,
+            Err(_) => change.failed += 1,
+        }
+    }
+    Ok(())
+}
+
 struct Totals {
     bytes: u64,
     items: u64,
@@ -490,5 +597,70 @@ mod tests {
             chmod(&temp.path().join("missing"), 0o644),
             Err(OpError::NotFound)
         );
+    }
+
+    #[test]
+    fn permissions_are_one_stat_with_names() {
+        let temp = Temp::new("props-perms");
+        let file = temp.write("a", "x");
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o640)).unwrap();
+        let perms = permissions(&file).unwrap();
+        assert_eq!((perms.mode, perms.is_dir, perms.can_chmod), (0o640, false, true));
+        assert_eq!(perms.uid, unsafe { libc::getuid() });
+        assert!(!perms.owner.is_empty() && !perms.group.is_empty());
+        assert!(permissions(temp.path()).unwrap().is_dir);
+        assert_eq!(permissions(&temp.path().join("gone")), Err(OpError::NotFound));
+    }
+
+    #[test]
+    fn a_file_under_a_folder_keeps_only_the_execute_bits_it_had() {
+        // A plain file never becomes a program.
+        assert_eq!(tree_mode(0o755, false, 0o644), 0o644);
+        // A script stays one, for the classes the folder lets execute.
+        assert_eq!(tree_mode(0o755, false, 0o755), 0o755);
+        assert_eq!(tree_mode(0o750, false, 0o755), 0o750);
+        assert_eq!(tree_mode(0o700, false, 0o755), 0o700);
+        // Read and write follow the folder; special bits are not passed on.
+        assert_eq!(tree_mode(0o2770, false, 0o644), 0o660);
+        // A folder takes the folder's mode whole.
+        assert_eq!(tree_mode(0o2770, true, 0o755), 0o2770);
+    }
+
+    #[test]
+    fn recursive_chmod_walks_before_it_locks_and_skips_links() {
+        let temp = Temp::new("props-tree");
+        let outside = temp.write("outside/keep", "x");
+        fs::set_permissions(&outside, fs::Permissions::from_mode(0o644)).unwrap();
+        let root = temp.dir("root");
+        let script = temp.write("root/sub/run.sh", "#!/bin/sh");
+        let note = temp.write("root/note.txt", "n");
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+        fs::set_permissions(&note, fs::Permissions::from_mode(0o644)).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("link")).unwrap();
+        // Owner-only: the sub folder loses nothing, but others lose everything.
+        let change = chmod_tree(&root, 0o700, &Cancel::new()).unwrap();
+        assert_eq!(change, TreeChange { changed: 3, failed: 0 });
+        let mode = |path: &Path| permissions(path).unwrap().mode;
+        assert_eq!(mode(&script), 0o700);
+        assert_eq!(mode(&note), 0o600);
+        assert_eq!(mode(&root.join("sub")), 0o700);
+        assert_eq!(mode(&outside), 0o644, "a link is not followed");
+        // The root itself is the caller's to set.
+        assert_ne!(mode(&root), 0);
+        // A folder made unreadable (0o000 here) is still walked first.
+        let locked = chmod_tree(&root, 0o000, &Cancel::new()).unwrap();
+        assert_eq!(locked, TreeChange { changed: 3, failed: 0 });
+        assert_eq!(mode(&root.join("sub")), 0o000);
+        // Restore so the scratch folder can be removed.
+        fs::set_permissions(root.join("sub"), fs::Permissions::from_mode(0o700)).unwrap();
+    }
+
+    #[test]
+    fn a_cancelled_recursive_chmod_changes_nothing_more() {
+        let temp = Temp::new("props-tree-cancel");
+        temp.write("d/a", "x");
+        let cancel = Cancel::new();
+        cancel.cancel();
+        assert_eq!(chmod_tree(&temp.path().join("d"), 0o600, &cancel), Err(OpError::Cancelled));
     }
 }

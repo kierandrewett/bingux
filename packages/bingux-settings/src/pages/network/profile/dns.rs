@@ -164,7 +164,6 @@ impl Component for DnsBody {
                 changes.set("ipv6.ignore-auto-dns", yes_no(!on));
                 page.apply_now(changes);
             })
-            .subtitle("Use the DNS servers the network provides.")
         };
         let tls_row = {
             let page = page.clone();
@@ -175,7 +174,6 @@ impl Component for DnsBody {
                 &selected,
                 move |value: String| page.apply_now(Changes::one("connection.dns-over-tls", value)),
             )
-            .subtitle("Encrypts DNS questions when the server supports it.")
         };
 
         let servers = list_rows(
@@ -199,20 +197,14 @@ impl Component for DnsBody {
             },
         );
         page_column()
-            .maybe_child(pending_bar(dirty, ok && !*busy.read(), apply, revert))
+            .child(pending_bar(dirty, ok && !*busy.read(), apply, revert))
             .child(Group::titled("DNS").row(automatic_row).row(tls_row))
             .child(
                 Group::titled("Servers")
-                    .description(if automatic {
-                        "Used in addition to the servers the network provides."
-                    } else {
-                        "The only servers this connection asks."
-                    })
                     .rows(servers),
             )
             .child(
                 Group::titled("Search domains")
-                    .description("Short names are tried with each of these added.")
                     .rows(search),
             )
     }

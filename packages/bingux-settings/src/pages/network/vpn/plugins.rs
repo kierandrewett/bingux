@@ -113,7 +113,7 @@ pub fn display_name(short: &str) -> String {
 pub fn discover_in(dirs: &[&Path], installed: impl Fn(&Path) -> bool) -> Vec<Plugin> {
     let mut found: Vec<Plugin> = Vec::new();
     for dir in dirs {
-        let Ok(entries) = std::fs::read_dir(dir) else {
+        let Ok(entries) = crate::system::read_dir(dir) else {
             continue;
         };
         let mut files: Vec<PathBuf> = entries
@@ -123,7 +123,7 @@ pub fn discover_in(dirs: &[&Path], installed: impl Fn(&Path) -> bool) -> Vec<Plu
             .collect();
         files.sort();
         for path in files {
-            let Some(plugin) = std::fs::read_to_string(&path)
+            let Some(plugin) = crate::system::read_to_string(&path)
                 .ok()
                 .and_then(|text| parse_name_file(&text))
             else {

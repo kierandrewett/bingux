@@ -1,0 +1,25 @@
+[Desktop Entry]
+Type=Application
+Name=Files
+Comment=Browse and organise files and folders
+Exec=bingux-files %U
+Icon=bingux-files
+Terminal=false
+Categories=System;FileTools;FileManager;
+Keywords=Folder;Directory;Browse;Explore;Disk;Drive;USB;Documents;Trash;
+MimeType=inode/directory;x-scheme-handler/bingux-files;
+StartupWMClass=bingux-files
+StartupNotify=true
+Actions=NewTab;Downloads;Recent;
+
+[Desktop Action NewTab]
+Name=New Tab
+Exec=bingux-files "~"
+
+[Desktop Action Downloads]
+Name=Downloads
+Exec=bingux-files "~/Downloads"
+
+[Desktop Action Recent]
+Name=Recent
+Exec=bingux-files recent:///

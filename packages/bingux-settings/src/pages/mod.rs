@@ -51,6 +51,7 @@ pub enum PageId {
 /// Load every page's data in the background, so each page is filled in by
 /// the time it is opened.
 pub fn prefetch_all() {
+    loading::warm_hints();
     about::prefetch();
     appearance::prefetch();
     accessibility::prefetch();

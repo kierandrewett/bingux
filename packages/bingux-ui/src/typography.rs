@@ -37,8 +37,18 @@ pub enum Ink {
     Danger,
     /// Text on an accent fill.
     OnAccent,
+    /// Text on a danger, success or warning fill, and on the floating
+    /// surface of a tooltip or toast.
+    OnDanger,
+    OnSuccess,
+    OnWarning,
+    OnFloating,
+    /// Errors on the floating surface.
+    DangerOnFloating,
     Success,
     Warning,
+    /// Text and icons on the fill of a banner or toast of this kind.
+    Notice(crate::theme::BannerKind),
 }
 
 impl Ink {
@@ -46,11 +56,17 @@ impl Ink {
         match self {
             Ink::Text => tokens.text,
             Ink::Muted => tokens.muted,
-            Ink::Accent => tokens.accent,
-            Ink::Danger => tokens.danger,
-            Ink::OnAccent => tokens.accent_foreground,
-            Ink::Success => tokens.success,
-            Ink::Warning => tokens.warning,
+            Ink::Accent => tokens.accent_ink,
+            Ink::Danger => tokens.danger_ink,
+            Ink::OnAccent => tokens.on_accent,
+            Ink::OnDanger => tokens.on_danger,
+            Ink::OnSuccess => tokens.on_success,
+            Ink::OnWarning => tokens.on_warning,
+            Ink::OnFloating => tokens.on_floating,
+            Ink::DangerOnFloating => tokens.danger_on_floating,
+            Ink::Success => tokens.success_ink,
+            Ink::Warning => tokens.warning_ink,
+            Ink::Notice(kind) => tokens.notice(kind).ink,
         }
     }
 }
@@ -106,7 +122,7 @@ impl TextStyle {
 
     fn label_in_color(self, color: Color, text: String) -> Label {
         let label = label()
-            .text(text)
+            .text(crate::stress::localised(text))
             .color(color)
             .font_size(self.size.px())
             .font_weight(self.weight)
@@ -130,7 +146,7 @@ impl TextStyle {
             .letter_spacing(self.tracking)
             // A span, not a child: paragraph highlights (search marks) are
             // only painted for the paragraph's own spans.
-            .span(text.into());
+            .span(crate::stress::localised(text.into()));
         let paragraph = if self.mono { paragraph.font_family(mono_family()) } else { paragraph };
         if self.tabular {
             paragraph.font_tabular()
@@ -152,7 +168,7 @@ impl TextStyle {
     }
 
     fn span_in_color(self, color: Color, text: String) -> Span<'static> {
-        let span = Span::new(text)
+        let span = Span::new(crate::stress::localised(text))
             .color(color)
             .font_size(self.size.px())
             .font_weight(self.weight)

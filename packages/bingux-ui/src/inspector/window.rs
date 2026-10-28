@@ -12,9 +12,10 @@ use super::details::DetailsPane;
 use super::dom_tree::{DomTree, Shot, ancestors};
 use super::nav::{Tab, provide_nav, use_nav};
 use super::snapshot::Snapshot;
+use super::target::InstanceId;
 use crate::controls::{SpinnerSize, spinner, split_pane};
 use crate::icons::Icon;
-use crate::shell::overlays::OverlayHost;
+use crate::shell::overlays::{OverlayHost, Overlays};
 use crate::shell::status_page;
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -25,12 +26,14 @@ use crate::theme::{Tokens, provide_tokens};
 const NARROW_BELOW: f32 = 760.0;
 
 /// The window's root. Installs the tokens and the body below them.
-pub fn root() -> Element {
-    InspectorWindow.into()
+pub fn root(id: InstanceId) -> Element {
+    InspectorWindow { id }.into()
 }
 
 #[derive(PartialEq)]
-struct InspectorWindow;
+struct InspectorWindow {
+    id: InstanceId,
+}
 
 impl Component for InspectorWindow {
     fn render(&self) -> impl IntoElement {
@@ -45,17 +48,22 @@ impl Component for InspectorWindow {
                 Some((SizeClass::Regular, PointerKind::Mouse)),
             );
         });
+        // Bind before anything below renders: the components find their
+        // instance, and so the window they watch, by this window.
+        super::bind_current(self.id);
         let tokens = provide_tokens();
         provide_nav();
         super::set_tokens(tokens);
         rect()
             .tw(&tokens, &[w_full(), h_full(), bg(Paint::Bg)])
-            .child(OverlayHost::new(InspectorBody))
+            .child(OverlayHost::new(InspectorBody { id: self.id }))
     }
 }
 
 #[derive(PartialEq)]
-struct InspectorBody;
+struct InspectorBody {
+    id: InstanceId,
+}
 
 impl Component for InspectorBody {
     fn render(&self) -> impl IntoElement {
@@ -69,6 +77,7 @@ impl Component for InspectorBody {
         let mut snapshot = use_state::<Option<Rc<Snapshot>>>(|| None);
         let mut inspect_on = use_state(super::picking);
         let mut paused_on = use_state(super::paused);
+        let overlays = try_consume_context::<Overlays>();
 
         // Re-read the snapshot whenever the plugin has taken a new one.
         use_hook(move || {
@@ -78,6 +87,12 @@ impl Component for InspectorBody {
                 let mut head_seen = head_seen;
                 loop {
                     timer(Duration::from_millis(200)).await;
+                    if let Some(message) = super::take_notice()
+                        && let Some(overlays) = overlays
+                    {
+                        overlays.toast(message);
+                    }
+                    super::catch_up();
                     if let Some(node) = super::take_pick() {
                         nav.reveal(node);
                     }
@@ -144,8 +159,9 @@ impl Component for InspectorBody {
                 snapshot.read().clone(),
                 narrow,
             ),
-            Tab::Performance => super::perf::view(),
+            Tab::Performance => super::perf::view(self.id),
             Tab::Accessibility => super::a11y::view(&tokens, &super::issues(), nav),
+            Tab::Layout => super::layout_tab::view(&super::layout_findings(), nav),
         };
         let root: Element = rect()
             .tw(
@@ -158,6 +174,16 @@ impl Component for InspectorBody {
                     bg(Paint::Bg),
                 ],
             )
+            .on_pointer_enter(|_| {
+                // Keyboard focus follows the pointer into an inspector window.
+                let window = Platform::window_id();
+                if Platform::get()
+                    .try_window(u64::from(window))
+                    .is_some_and(|w| !*w.is_app_focused.peek())
+                {
+                    Platform::get().focus_window(window);
+                }
+            })
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
                 let control = event.modifiers == Modifiers::CONTROL;
                 if event.key == Key::Named(NamedKey::F5) {

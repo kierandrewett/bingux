@@ -1,0 +1,65 @@
+# What bingux-ui exports that the taxonomy app does not show, and why.
+#
+# scripts/taxonomy-check.py and `cargo test` fail for a public item of
+# bingux-ui that no registry entry covers (`covers` in src/registry.rs) and that
+# is not listed here. An entry here needs a reason, and is removed as soon as an
+# entry covers the item. Nothing visible belongs on this list: a component,
+# icon, token or behaviour a person can see gets an entry, not a line here.
+#
+# Syntax, one per line:
+#   name                      # reason     an exported item by name
+#   file:path/in/bingux-ui/src # reason    every public item of a file
+
+# Background work and the system, with no pixels of their own. Every app
+# uses them; the taxonomy's Files and Data pages run on them.
+file:runtime.rs   # commands, caches, optimistic writes and gsettings helpers: system backends, not UI
+file:task.rs      # the background task pool and `use_resource`: plumbing under every loader
+
+# The headless renderer: the taxonomy's own `--snapshot` mode is its user.
+file:snapshot.rs  # test tooling; this app's snapshot mode renders every page with it
+
+# The focus model behind Tab, Shift+Tab and F6. Its only visible result is the
+# focus ring, which the "Focus stop" entry shows; the regions and traps have no
+# appearance to put in a stage.
+file:focus.rs     # focus regions, traps and the Tab walk: behaviour without pixels, seen as the focus ring
+
+# The inspector's registry of component names and prop overrides.
+file:component.rs # inspector wiring (component names, prop overrides): the Inspector page covers the tool
+
+# Theme plumbing that reads the desktop.
+read_gsettings    # reads one GNOME interface key with gsettings: no pixels
+watch_appearance  # follows `gsettings monitor` for accent and scheme changes: no pixels
+
+# Hook helpers for a custom control; the controls built on them are shown.
+Interaction       # hover and press tracker a custom control embeds; every control shows its result
+is_activation_key # the Enter and Space test of a custom control's key handler
+
+# The navigation internals: pure logic, unit-tested in bingux-ui, with no
+# pixels of their own. Their results are what the "Navigation split view" and
+# "Back, history and the stack" entries show.
+file:nav/pattern.rs # route pattern matching (`:id` segments): parsing, no appearance
+file:nav/gesture.rs # the predictive-back swipe maths; drag from the left edge in a phone-density split view
+file:nav/table.rs   # RouteDef, QuerySpec, Resolved, Title: the route table's internals (RouteTable is covered)
+file:nav/location.rs # InvalidLocation: the error of Location::parse (Location is covered)
+
+# The stress switches of the overflow checks (pseudo-locale, text scale, long data, popup width).
+file:stress.rs   # debug/testing-only switches; seen through the header switcher's Text size and Strings choices, not a component
+
+# Focus internals added with the measured focus ring: tooling and rules, no pixels of their own.
+file:focus/ring_check.rs # ring-versus-face check, tooling
+file:focus/owner.rs      # focus-owner rules: behaviour, seen as the focus ring
+
+# The owner of the `gsettings monitor` child that `watch_appearance` starts.
+AppearanceMonitor # kills and reaps the monitor process on drop: lifetime handle, no pixels
+
+# Hand-reorder and drag arithmetic. `sortable` (covered) feeds it measured
+# heights and pointer distances and draws what it says.
+file:reorder.rs   # where a dragged item lands, how the others slide, the keyboard move and the spring: pure arithmetic behind "Sortable list"
+file:drag.rs      # pointer capture and the per-frame timer a custom draggable embeds; the controls built on it are shown
+
+# The route table of a file view: scheme names and the maths from a folder to
+# its URI, title and history entry. Its results are what "File manager" shows.
+file:files/folder_table.rs # folder_table(), the `file:`/`recent:`/`bingux-files:` schemes and the Where/Location mapping: data, no appearance
+
+# The chat app's icon fork, behind the `chat-icons` feature.
+file:chat_icons.rs # ChatWeight and the fork's glyph data for choosing icons; an application ships `Icon`'s named set, which "Icon set" shows

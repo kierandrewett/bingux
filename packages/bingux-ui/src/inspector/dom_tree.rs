@@ -1,29 +1,29 @@
 //! The Elements tree: every element of the application's snapshot as one
-//! outline line, indented by depth. A line gives the element's name (the
-//! component that built it, else its accessibility role, else its layout
-//! role), its text in quotes, and muted chips for its size, layout and state.
-//! A closed branch shows its child count. The arrow keys move the selection,
-//! Ctrl+F opens a find bar, a breadcrumb trail shows the selected element's
-//! ancestors, and a right click opens a menu.
+//! outline line, indented by depth, in the `tree_view` control. A line gives
+//! the element's name (the component that built it, else its accessibility
+//! role, else its layout role), its text in quotes, and muted chips for its
+//! size, layout and state. A closed branch shows its child count. The arrow
+//! keys move the selection, Ctrl+F opens a find bar, a breadcrumb trail shows
+//! the selected element's ancestors, and a right click opens a menu.
 //!
 //! The selection and the open branches live in the window's state, so a
 //! reveal from the picker opens the element's ancestors and scrolls to it.
 
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
-use crate::motion::Focusable;
 use freya::prelude::*;
 
 use super::snapshot::{Node, Props, Snapshot};
-use crate::controls::{breadcrumb, icon_button, text_field};
-use crate::icons::{self, Icon};
+use crate::controls::{TreeNode, breadcrumb, icon_button, text_field, tree_view};
+use crate::icons::Icon;
 use crate::shell::menu::{MenuItem, menu_item, menu_separator};
 use crate::shell::overlays::Overlays;
 use crate::style::*;
-use crate::surface::{Interaction, is_activation_key, use_tokens};
+use crate::surface::use_tokens;
 use crate::theme::Tokens;
-use crate::typography::{CAPTION, CODE, Ink};
+use crate::typography::{CAPTION, Ink};
 
 /// The longest run of element text shown on an outline line.
 const TEXT_LIMIT: usize = 60;
@@ -49,101 +49,36 @@ pub struct DomTree {
     pub wrappers: State<bool>,
 }
 
-/// Whether a row has children and whether they are shown.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Branch {
-    Leaf,
-    Closed,
-    Open,
-}
-
-/// How a row matches the find bar: the current match, another match, or none.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Mark {
-    None,
-    Hit,
-    Current,
-}
-
-/// One visible row: an element with its depth, as the tree shows it.
-#[derive(Clone, Copy, PartialEq, Eq)]
-struct Flat {
-    id: u64,
-    depth: usize,
-    branch: Branch,
-}
-
 impl Component for DomTree {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let a11y_id = use_hook(AccessibilityId::new_unique);
-        let focus = use_focus(a11y_id);
-        let mut scroll = use_scroll_controller(ScrollConfig::default);
-        let mut viewport = use_state(Area::default);
         let mut query = use_state(String::new);
         let mut find_open = use_state(|| false);
         let mut hit = use_state(|| 0usize);
-        let mut revealed = use_state(|| None::<u64>);
-        let mut expanded = self.expanded;
-        let mut selected = self.selected;
-
-        // A newly selected element opens its ancestors. Only a change of
-        // selection does this, so a branch the user closed stays closed when
-        // the snapshot refreshes.
-        let chosen = *selected.read();
-        let shot = self.snap.clone();
-        use_side_effect_with_deps(&(chosen, shot), move |dep: &(Option<u64>, Shot)| {
-            let previous = *revealed.peek();
-            revealed.set(dep.0);
-            let Some(id) = dep.0 else {
-                return;
-            };
-            if previous == Some(id) {
-                return;
-            }
-            let mut open = expanded.write();
-            for ancestor in ancestors(&dep.1.0, id).iter().rev().skip(1) {
-                open.insert(*ancestor);
-            }
-        });
+        let selected = self.selected;
+        let expanded = self.expanded;
+        let overlays = try_consume_context::<Overlays>();
 
         let snap = self.snap.0.clone();
-        let open = self.expanded.read().clone();
-        let mut rows = Vec::new();
         let show_wrappers = *self.wrappers.read();
-        flatten(&snap, &snap.roots, 0, &open, show_wrappers, &mut rows);
         let selected_id = *selected.read();
-        let selected_index = selected_id.and_then(|id| rows.iter().position(|row| row.id == id));
 
-        // Keeps the selected row in view when the selection, the row count or
-        // the measured viewport height changes. Below one row the viewport is
-        // not measured yet and `offset_for` flips between two offsets, so the
-        // effect waits for a real height rather than looping.
-        let viewport_height = viewport.read().height() as i32;
-        // The effect must not read the scroll state: a read inside an effect
-        // subscribes it, and its own scroll_to_y would wake it again in a loop
-        // that never yields to the event loop (input and redraws stop), and a
-        // user scroll would snap back to the selection. Render reads the
-        // offset and leaves it in a plain cell for the effect.
-        let scroll_y = use_hook(|| Rc::new(std::cell::Cell::new(0_i32)));
-        scroll_y.set(<(i32, i32)>::from(scroll).1);
-        let last_y = scroll_y.clone();
-        use_side_effect_with_deps(
-            &(selected_index, rows.len(), viewport_height),
-            move |dep: &(Option<usize>, usize, i32)| {
-                let (Some(index), count, height) = *dep else {
-                    return;
-                };
-                if (height as f32) < Dim::CodeRow.px() {
-                    return;
+        // The tree's nodes are built once for a snapshot and a wrapper
+        // setting, not for every selection or open branch.
+        let cache = use_hook(|| Rc::new(RefCell::new(None::<(Shot, bool, Rc<[TreeNode]>)>)));
+        let roots = {
+            let mut cached = cache.borrow_mut();
+            match cached.as_ref() {
+                Some((shot, wrappers, nodes)) if *shot == self.snap && *wrappers == show_wrappers => {
+                    nodes.clone()
                 }
-                let current = last_y.get();
-                let offset = offset_for(index, current, count, height as f32);
-                if offset != current {
-                    scroll.scroll_to_y(offset);
+                _ => {
+                    let nodes: Rc<[TreeNode]> = tree_nodes(&snap, &snap.roots, show_wrappers).into();
+                    *cached = Some((self.snap.clone(), show_wrappers, nodes.clone()));
+                    nodes
                 }
-            },
-        );
+            }
+        };
 
         let needle = if find_open() {
             query.read().clone()
@@ -151,62 +86,22 @@ impl Component for DomTree {
             String::new()
         };
         let matches = find_matches(&snap, &needle, show_wrappers);
-        let matched: HashSet<u64> = matches.iter().copied().collect();
         let hit_index = (*hit.read()).min(matches.len().saturating_sub(1));
         let current = matches.get(hit_index).copied();
 
-        let on_key_down = {
-            let rows = rows.clone();
-            move |event: Event<KeyboardEventData>| {
-                if is_activation_key(&event.key) {
-                    if let Some(row) = selected_index.and_then(|index| rows.get(index)) {
-                        event.stop_propagation();
-                        if row.branch != Branch::Leaf {
-                            toggle(&mut expanded.write(), row.id);
-                        }
+        let tree = tree_view(roots, expanded, selected)
+            .code()
+            .child_counts()
+            .find(needle, current)
+            .on_hover(EventHandler::new(|id: Option<u64>| super::set_hover(id)))
+            .on_context({
+                let snap = snap.clone();
+                EventHandler::new(move |(id, at): (u64, (f32, f32))| {
+                    if let Some(overlays) = overlays {
+                        overlays.show_menu(at, row_menu(snap.clone(), id, expanded, Some(overlays)));
                     }
-                    return;
-                }
-                let Key::Named(named) = &event.key else {
-                    return;
-                };
-                let target = match named {
-                    NamedKey::ArrowRight => {
-                        let Some(row) = selected_index.and_then(|index| rows.get(index)) else {
-                            return;
-                        };
-                        match row.branch {
-                            Branch::Closed => {
-                                event.stop_propagation();
-                                expanded.write().insert(row.id);
-                                return;
-                            }
-                            Branch::Open => selected_index.map(|index| index + 1),
-                            Branch::Leaf => None,
-                        }
-                    }
-                    NamedKey::ArrowLeft => {
-                        let Some(index) = selected_index else {
-                            return;
-                        };
-                        let row = rows[index];
-                        event.stop_propagation();
-                        if row.branch == Branch::Open {
-                            expanded.write().remove(&row.id);
-                            return;
-                        }
-                        rows[..index]
-                            .iter()
-                            .rposition(|earlier| earlier.depth + 1 == row.depth)
-                    }
-                    other => next_index(other, selected_index, rows.len()),
-                };
-                event.stop_propagation();
-                if let Some(row) = target.and_then(|index| rows.get(index)) {
-                    selected.set(Some(row.id));
-                }
-            }
-        };
+                })
+            });
 
         let breadcrumb: Element = match selected_id {
             Some(id) if snap.node(id).is_some() => {
@@ -244,51 +139,10 @@ impl Component for DomTree {
             )
         });
 
-        let rows_element = rows.iter().map(|row| {
-            Element::from(DomRow {
-                snap: snap.clone(),
-                id: row.id,
-                depth: row.depth,
-                branch: row.branch,
-                selected: selected_id == Some(row.id),
-                mark: match () {
-                    _ if current == Some(row.id) => Mark::Current,
-                    _ if matched.contains(&row.id) => Mark::Hit,
-                    _ => Mark::None,
-                },
-                needle: needle.clone(),
-                selection: selected,
-                expanded: self.expanded,
-                focus_id: a11y_id,
-            })
-        });
-
         let body = rect()
-            .a11y_id(a11y_id)
-            .a11y_focusable(true)
-            .a11y_enabled(true)
-            .a11y_role(AccessibilityRole::Tree)
             .tw(&tokens, &[w_full(), h_flex(), flex_col(), grow_children()])
             .min_height(Size::px(0.))
-            .on_sized(move |event: Event<SizedEventData>| viewport.set(event.area))
-            .on_key_down(on_key_down)
-            .child(
-                rect()
-                    .width(Size::fill())
-                    .height(Size::flex(1.0))
-                    .min_height(Size::px(0.0))
-                    .child(
-                        ScrollView::new_controlled(scroll)
-                            .height(Size::fill())
-                            .children(rows_element),
-                    ),
-            )
-            // `focusable_inside` returns a wrapper that sizes to its content;
-            // the wrapper takes the body's flex share so the breadcrumb below
-            // keeps its row.
-            .focusable_inside(focus(), Radius::Card)
-            .tw(&tokens, &[w_full(), h_flex(), flex_col(), grow_children()])
-            .min_height(Size::px(0.));
+            .child(tree);
 
         let mut root = rect()
             .tw(&tokens, &[w_full(), h_full(), flex_col(), grow_children()])
@@ -334,71 +188,29 @@ impl Component for DomTree {
     }
 }
 
-/// Toggles one branch open or closed.
-fn toggle(open: &mut HashSet<u64>, id: u64) {
-    if !open.remove(&id) {
-        open.insert(id);
-    }
-}
-
-/// The visible rows, depth first, skipping the children of closed branches.
-/// Wrapper boxes are left out, and their children take their depth, unless
-/// `wrappers` asks for them.
-fn flatten(
-    snap: &Snapshot,
-    ids: &[u64],
-    depth: usize,
-    open: &HashSet<u64>,
-    wrappers: bool,
-    out: &mut Vec<Flat>,
-) {
+/// The tree control's nodes for the elements `ids`. Wrapper boxes are left
+/// out, and their children take their place, unless `wrappers` asks for them.
+fn tree_nodes(snap: &Snapshot, ids: &[u64], wrappers: bool) -> Vec<TreeNode> {
+    let mut out = Vec::new();
     for &id in ids {
         let Some(node) = snap.node(id) else {
             continue;
         };
         if !wrappers && snap.is_wrapper(id) {
-            flatten(snap, &node.children, depth, open, wrappers, out);
+            out.extend(tree_nodes(snap, &node.children, wrappers));
             continue;
         }
-        let branch = match (node.children.is_empty(), open.contains(&id)) {
-            (true, _) => Branch::Leaf,
-            (false, true) => Branch::Open,
-            (false, false) => Branch::Closed,
-        };
-        out.push(Flat { id, depth, branch });
-        if branch == Branch::Open {
-            flatten(snap, &node.children, depth + 1, open, wrappers, out);
+        let line = line_of(node);
+        let mut tree = TreeNode::new(id, line.name)
+            .paints(Paint::SyntaxTag, Paint::SyntaxText)
+            .chips(line.chips)
+            .children(tree_nodes(snap, &node.children, wrappers));
+        if let Some(text) = line.text {
+            tree = tree.detail(format!("\"{text}\""));
         }
+        out.push(tree);
     }
-}
-
-/// Scroll offset that keeps row `index` in view. The offset is negative, as
-/// the scroll controller stores it.
-fn offset_for(index: usize, current: i32, count: usize, viewport: f32) -> i32 {
-    let row = Dim::CodeRow.px();
-    let top = index as f32 * row;
-    let furthest = (count as f32 * row - viewport).max(0.0);
-    let shown_top = -(current as f32);
-    let want = if top < shown_top {
-        top
-    } else if top + row > shown_top + viewport {
-        top + row - viewport
-    } else {
-        shown_top
-    };
-    -(want.clamp(0.0, furthest) as i32)
-}
-
-/// The row an arrow, Home or End moves to from `from`.
-fn next_index(key: &NamedKey, from: Option<usize>, count: usize) -> Option<usize> {
-    let last = count.checked_sub(1)?;
-    match key {
-        NamedKey::ArrowDown => Some(from.map_or(0, |index| (index + 1).min(last))),
-        NamedKey::ArrowUp => Some(from.map_or(0, |index| index.saturating_sub(1))),
-        NamedKey::Home => Some(0),
-        NamedKey::End => Some(last),
-        _ => None,
-    }
+    out
 }
 
 /// The element and its ancestors, root first.
@@ -436,8 +248,7 @@ fn find_matches(snap: &Snapshot, text: &str, wrappers: bool) -> Vec<u64> {
 
 fn matches_node(node: &Node, needle: &str) -> bool {
     let line = line_of(node);
-    node.kind.name().contains(needle)
-        || node.title().to_lowercase().contains(needle)
+    node.title().to_lowercase().contains(needle)
         || node
             .a11y
             .name
@@ -465,7 +276,8 @@ struct OutlineLine {
 /// carry its size, layout and state.
 fn line_of(node: &Node) -> OutlineLine {
     let mut chips = Vec::new();
-    match node.area {
+    // The border box the layout measured: `area` also holds the margin.
+    match node.used.border.or(node.area) {
         Some(area) => chips.push(format!(
             "{}×{}",
             area.width().round(),
@@ -473,11 +285,24 @@ fn line_of(node: &Node) -> OutlineLine {
         )),
         None => chips.push("hidden".to_string()),
     }
+    // An error card is the place a component failed and was replaced: say so in
+    // red at the front of the line, where the label chip carries the message.
+    if node.a11y.component.as_deref() == Some("ErrorCard") {
+        chips.insert(0, "! failed".to_string());
+    }
     if node.a11y.selected == Some(true) {
         chips.push("selected".to_string());
     }
     if node.a11y.focused {
         chips.push("focused".to_string());
+    }
+    if node.a11y.modal {
+        chips.push("modal".to_string());
+    }
+    if node.a11y.inert && node.a11y.focusable == Some(true) {
+        // Only the stops: every box behind a modal is inert, and a chip on
+        // each would bury the tree.
+        chips.push("inert".to_string());
     }
     if let Some(props) = &node.props {
         sizing_chips(props, node.repeats_fill, &mut chips);
@@ -662,274 +487,6 @@ fn row_menu(
     items
 }
 
-/// One line of the tree: indent, the chevron, then the element's outline line.
-#[derive(Clone)]
-struct DomRow {
-    snap: Rc<Snapshot>,
-    id: u64,
-    depth: usize,
-    branch: Branch,
-    selected: bool,
-    mark: Mark,
-    needle: String,
-    selection: State<Option<u64>>,
-    expanded: State<HashSet<u64>>,
-    focus_id: AccessibilityId,
-}
-
-impl PartialEq for DomRow {
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.snap, &other.snap)
-            && self.id == other.id
-            && self.depth == other.depth
-            && self.branch == other.branch
-            && self.selected == other.selected
-            && self.mark == other.mark
-            && self.needle == other.needle
-            && self.focus_id == other.focus_id
-    }
-}
-
-impl Component for DomRow {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let interaction = Interaction::use_interaction();
-        let overlays = try_consume_context::<Overlays>();
-        let id = self.id;
-        let branch = self.branch;
-        let selection = self.selection;
-        let expanded = self.expanded;
-        let focus_id = self.focus_id;
-
-        let Some(node) = self.snap.node(id) else {
-            return Element::from(rect());
-        };
-
-        let indent = (0..self.depth).map(|_| {
-            rect().tw(
-                &tokens,
-                &[w(Dim::TreeIndent), h_full(), border(Line::HairlineRight)],
-            )
-        });
-        let chevron = match branch {
-            Branch::Leaf => None,
-            Branch::Closed => Some(Icon::PanEnd),
-            Branch::Open => Some(Icon::PanDown),
-        };
-        let mut toggle_slot = rect().tw(
-            &tokens,
-            &[
-                w(Dim::IconControl),
-                h_full(),
-                center(),
-                rounded(Radius::Mark),
-            ],
-        );
-        if let Some(icon) = chevron {
-            let mut expanded = expanded;
-            let snap = self.snap.clone();
-            toggle_slot = toggle_slot
-                .child(icons::icon(icon, IconSize::Text, Ink::Muted.color(&tokens)))
-                .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
-                .on_press(move |event: Event<PressEventData>| {
-                    event.stop_propagation();
-                    let mut open = expanded.write();
-                    if freya_winit::modifiers::live().contains(Modifiers::ALT) {
-                        // Alt-click opens or shuts the whole subtree, as Chrome does.
-                        if open.contains(&id) {
-                            collapse_below(&snap, id, &mut open);
-                            open.remove(&id);
-                        } else {
-                            expand_all(&snap, id, &mut open);
-                        }
-                    } else {
-                        toggle(&mut open, id);
-                    }
-                });
-        }
-
-        let outline_line = line_of(node);
-        let segments = outline(&outline_line);
-        let plain: String = segments.iter().map(|(text, _)| text.as_str()).collect();
-        let highlight = match self.mark {
-            Mark::Current => Paint::SearchCurrent,
-            Mark::Hit | Mark::None => Paint::SearchHit,
-        };
-        let mut line_text = paragraph()
-            .max_lines(1)
-            .text_overflow(TextOverflow::Ellipsis)
-            .highlights(match_ranges(&plain, &self.needle))
-            .highlight_color(highlight.color(&tokens));
-        for (text, paint) in segments {
-            line_text = line_text.span(CODE.span_in_paint(&tokens, text, paint));
-        }
-        let chips = outline_line
-            .chips
-            .iter()
-            .map(|chip| chip_element(&tokens, chip, &self.needle, highlight));
-
-        let line = rect()
-            .tw(
-                &tokens,
-                &[
-                    flex_row(),
-                    items(Align::Center),
-                    w_full(),
-                    gap(S1),
-                    px(S2),
-                    clip(),
-                ],
-            )
-            .children(indent)
-            .child(toggle_slot)
-            .child(
-                rect()
-                    .tw(
-                        &tokens,
-                        &[flex_row(), items(Align::Center), gap(S1), w_flex(), clip()],
-                    )
-                    .child(rect().tw(&tokens, &[clip()]).child(line_text))
-                    .children(chips)
-                    .children(count_badge(&tokens, node.children.len(), branch)),
-            );
-
-        let snap = self.snap.clone();
-        let mut selection_state = selection;
-        let mut hover = interaction.hovering;
-        let mut press = interaction.pressing;
-        let selected = self.selected;
-
-        let row = rect()
-            .a11y_role(AccessibilityRole::TreeItem)
-            .a11y_builder(move |builder| builder.set_selected(selected))
-            .tw(
-                &tokens,
-                &[
-                    w_full(),
-                    h(Dim::CodeRow),
-                    surface(
-                        Paint::Transparent,
-                        interaction.hovering(),
-                        interaction.pressing(),
-                        self.selected,
-                    ),
-                ],
-            );
-        row.child(line)
-            .on_pointer_enter(move |_| {
-                hover.set(true);
-                super::set_hover(Some(id));
-            })
-            .on_pointer_leave(move |_| {
-                hover.set(false);
-                press.set_if_modified(false);
-                super::set_hover(None);
-            })
-            .on_pointer_down(move |event: Event<PointerEventData>| {
-                let right = matches!(
-                    event.data(),
-                    PointerEventData::Mouse(mouse) if mouse.button == Some(MouseButton::Right)
-                );
-                if right {
-                    event.stop_propagation();
-                    selection_state.set(Some(id));
-                    if let Some(overlays) = overlays {
-                        let at = event.global_location();
-                        let items = row_menu(snap.clone(), id, expanded, Some(overlays));
-                        overlays.show_menu((at.x as f32, at.y as f32), items);
-                    }
-                    return;
-                }
-                if !event.data().is_primary() {
-                    return;
-                }
-                event.stop_propagation();
-                press.set(true);
-            })
-            .on_global_pointer_up(move |_| interaction.pressing.clone().set_if_modified(false))
-            .on_press(move |event: Event<PressEventData>| {
-                event.stop_propagation();
-                focus_id.request_focus();
-                selection_state.set(Some(id));
-            })
-            .into()
-    }
-}
-
-/// The name and the quoted text of an element as coloured segments. Its chips
-/// are drawn as separate elements beside them.
-fn outline(line: &OutlineLine) -> Vec<(String, Paint)> {
-    let mut out = vec![(line.name.clone(), Paint::SyntaxTag)];
-    if let Some(text) = &line.text {
-        out.push((format!("  \"{text}\""), Paint::SyntaxText));
-    }
-    out
-}
-
-/// The chip for one attribute or state value: muted type on a rounded control
-/// fill, with the find bar's matches highlighted inside it.
-fn chip_element(tokens: &Tokens, chip: &str, needle: &str, highlight: Paint) -> Element {
-    rect()
-        .tw(
-            tokens,
-            &[px(S1), rounded(Radius::Mark), center(), bg(Paint::Control)],
-        )
-        .child(
-            paragraph()
-                .max_lines(1)
-                .highlights(match_ranges(chip, needle))
-                .highlight_color(highlight.color(tokens))
-                .span(CAPTION.span_in_paint(tokens, chip, Paint::Muted)),
-        )
-        .into()
-}
-
-/// The child count a closed branch shows at the end of its line.
-fn count_badge(tokens: &Tokens, count: usize, branch: Branch) -> Vec<Element> {
-    if branch != Branch::Closed {
-        return Vec::new();
-    }
-    vec![
-        rect()
-            .tw(
-                tokens,
-                &[
-                    px(S1),
-                    rounded(Radius::Mark),
-                    center(),
-                    bg(Paint::MutedFaint),
-                ],
-            )
-            .child(CODE.label(tokens, &count.to_string()))
-            .into(),
-    ]
-}
-
-/// The character ranges of `plain` where the find needle matches, ignoring case.
-fn match_ranges(plain: &str, needle: &str) -> Vec<(usize, usize)> {
-    let needle: Vec<char> = needle.trim().chars().map(lower).collect();
-    if needle.is_empty() {
-        return Vec::new();
-    }
-    let text: Vec<char> = plain.chars().map(lower).collect();
-    let mut out = Vec::new();
-    let mut at = 0;
-    while at + needle.len() <= text.len() {
-        if text[at..at + needle.len()] == needle[..] {
-            out.push((at, at + needle.len()));
-            at += needle.len();
-        } else {
-            at += 1;
-        }
-    }
-    out
-}
-
-/// Lower-cases one character, keeping the character count of the text.
-fn lower(c: char) -> char {
-    c.to_lowercase().next().unwrap_or(c)
-}
-
 /// The find bar: the query, the match count, previous and next, and close.
 #[allow(clippy::too_many_arguments)]
 fn find_bar(
@@ -1034,20 +591,138 @@ fn step_match(
     selected.set(Some(matches[next]));
 }
 
-#[cfg(test)]
-mod tests {
-    use super::match_ranges;
 
-    #[test]
-    fn finds_every_case_insensitive_substring() {
-        assert_eq!(match_ranges("row  \"Box\"", "box"), vec![(6, 9)]);
-        assert_eq!(match_ranges("aaaa", "aa"), vec![(0, 2), (2, 4)]);
+/// Rows are laid out for real: a row with dozens of chips stays one line.
+#[cfg(all(test, feature = "testing"))]
+mod layout_tests {
+    use std::collections::HashSet;
+    use std::rc::Rc;
+
+    use freya::prelude::*;
+
+    use super::super::snapshot::{A11y, Kind, Node, Props, Snapshot as Tree, Used};
+    use super::{DomTree, Shot};
+    use crate::style::Dim;
+    use crate::theme::provide_tokens;
+
+    fn props(many: bool) -> Props {
+        Props {
+            width: "fill".into(),
+            height: if many { "fill".into() } else { "auto".into() },
+            min_width: if many { "100".into() } else { "auto".into() },
+            min_height: if many { "20".into() } else { "auto".into() },
+            max_width: if many { "900".into() } else { "auto".into() },
+            max_height: if many { "900".into() } else { "auto".into() },
+            gap: if many { 2.0 } else { 0.0 },
+            padding: if many { [8.0, 8.0, 16.0, 8.0] } else { [0.0; 4] },
+            margin: if many { [1.0, 2.0, 3.0, 4.0] } else { [0.0; 4] },
+            main_align: if many { "space-between" } else { "start" },
+            cross_align: if many { "center" } else { "start" },
+            corner_radius: if many { 6.0 } else { 0.0 },
+            font_size: many.then_some(13.0),
+            direction: "vertical",
+            ..Props::default()
+        }
     }
 
+    fn node(id: u64, parent: Option<u64>, children: Vec<u64>, many: bool) -> Node {
+        Node {
+            id,
+            parent,
+            kind: Kind::Rect,
+            text: None,
+            area: Some(torin::prelude::Area::new(
+                (0.0, 0.0).into(),
+                (280.0, 774.0).into(),
+            )),
+            used: Used::default(),
+            children,
+            props: Some(props(many)),
+            a11y: A11y {
+                name: many.then(|| "a long accessible label that is not the text".to_string()),
+                role: String::new(),
+                ..A11y::default()
+            },
+            repeats_fill: false,
+        }
+    }
+
+    #[derive(PartialEq)]
+    struct Host {
+        snap: Shot,
+    }
+
+    impl Component for Host {
+        fn render(&self) -> impl IntoElement {
+            let _tokens = provide_tokens();
+            let expanded = use_state(|| HashSet::from([1, 2, 3]));
+            let selected = use_state(|| Some(4));
+            let wrappers = use_state(|| true);
+            rect()
+                .expanded()
+                .child(DomTree {
+                    snap: self.snap.clone(),
+                    selected,
+                    expanded,
+                    wrappers,
+                })
+        }
+    }
+
+    /// A chain of four boxes; the fourth, a closed branch at depth 3, has more
+    /// chips than any width shows.
+    fn chain() -> Shot {
+        let nodes = vec![
+            node(1, None, vec![2], false),
+            node(2, Some(1), vec![3], false),
+            node(3, Some(2), vec![4], false),
+            node(4, Some(3), (5..23).collect(), true),
+        ]
+        .into_iter()
+        .chain((5..23).map(|id| node(id, Some(4), vec![], false)))
+        .collect();
+        Shot(Rc::new(Tree::from_nodes(vec![1], nodes)))
+    }
+
+    /// Every row is one line: no box of a row leaves the row's vertical
+    /// extent, and the chevron slot is centred on it.
     #[test]
-    fn empty_or_absent_needle_matches_nothing() {
-        assert!(match_ranges("row", "").is_empty());
-        assert!(match_ranges("row", "   ").is_empty());
-        assert!(match_ranges("row", "circle").is_empty());
+    fn a_row_with_many_chips_stays_one_centred_line() {
+        // The host has no WindowHost, so the tree renders at the regular class.
+        let row = Dim::CodeRow.px_in(crate::style::SizeClass::Regular);
+        let slot = Dim::IconControl.px_in(crate::style::SizeClass::Regular);
+        for width in [260.0_f32, 420.0, 900.0] {
+            let snap = chain();
+            let mut shot = crate::snapshot::Snapshot::new(
+                move || Host { snap: snap.clone() }.into(),
+                (width, 300.0),
+            );
+            shot.settle(std::time::Duration::from_millis(300));
+            if let Ok(dir) = std::env::var("BINGUX_TREE_SHOTS") {
+                std::fs::create_dir_all(&dir).unwrap();
+                shot.save(format!("{dir}/rows-{width}.png"));
+            }
+            // The chevron slots: the only boxes exactly an icon control wide
+            // and a row tall.
+            let slots = shot.runner().find_many(|node, _| {
+                let area = node.layout().area;
+                ((area.width() - slot).abs() < 0.01 && (area.height() - row).abs() < 0.01)
+                    .then_some((area.min_y(), area.height()))
+            });
+            assert!(
+                slots.len() >= 4,
+                "width {width}: expected a slot per row, found {}",
+                slots.len()
+            );
+            for (top, height) in &slots {
+                // Every slot starts on a row boundary and is one row tall.
+                let into_row = (top / row).fract();
+                assert!(
+                    into_row < 0.01 || into_row > 0.99,
+                    "width {width}: a chevron slot at y {top} is not on a row boundary"
+                );
+                assert!((height - row).abs() < 0.01, "slot is {height} tall");
+            }
+        }
     }
 }

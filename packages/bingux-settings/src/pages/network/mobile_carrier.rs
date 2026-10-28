@@ -154,7 +154,6 @@ impl Component for MobileNetworkPage {
                     },
                 );
             })
-            .subtitle("Connect to the carrier of your SIM, or to its partners when abroad.")
         };
 
         let mut page = page_column()
@@ -222,10 +221,6 @@ impl Component for MobileNetworkPage {
             page = page.child(list_group).child(
                 Group::new(None::<String>).row(
                     row("Search again")
-                        .subtitle(
-                            "Searching can interrupt mobile data for a minute or two, and some \
-                             modems cannot search while they are connected.",
-                        )
                         .navigates()
                         .enabled(!searching && busy.is_none())
                         .on_press(move |_| start_search()),

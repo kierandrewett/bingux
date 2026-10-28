@@ -67,6 +67,11 @@ impl Component for PropertiesPane {
             }
             body = body.child(Group::titled(group.title()).rows(rows));
         }
+        // The window's navigation stack: Back, the history menu and the
+        // title read it, so a wrong one is visible here.
+        if let Some(section) = super::route::section(&tokens, window) {
+            body = body.child(section);
+        }
         ScrollView::new()
             .drag_scrolling(false)
             .width(Size::fill())
@@ -137,13 +142,17 @@ fn header(
         .into()
 }
 
-/// What is under the node's name: its kind, size and id.
+/// What is under the node's name: its size and id.
 fn subtitle(node: &Node) -> String {
+    // The border box the layout measured: the area it keeps for the node also
+    // holds the node's margin.
     let size = node
-        .area
+        .used
+        .border
+        .or(node.area)
         .map(|area| format!("{:.0} × {:.0}", area.width(), area.height()))
         .unwrap_or_else(|| "not laid out".to_string());
-    format!("{} · {size} · #{}", node.kind.name(), node.id)
+    format!("{size} · #{}", node.id)
 }
 
 /// Whether the node, or the text a published prop of it shows, is edited.

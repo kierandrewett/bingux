@@ -1,52 +1,74 @@
+//! The inspector: a devtools window that watches one other window.
 //!
+//! [`plugin`] is installed by [`crate::app`]'s single launch function, so every
+//! bingux-ui window has it and no application writes any code for it.
+//! Ctrl+Alt+Shift+I, pressed in any window (the main window, an inspector,
+//! whichever has keyboard focus) opens an inspector over that window, or
+//! closes the one that is open. The plugin sees the key before the window's
+//! content does, so a focused text field cannot swallow it.
 //!
-//! [`plugin`] is registered by [`crate::app::Application`]. Ctrl+Alt+Shift+I
-//! opens or closes the inspector, a separate window. While it is open the
-//! plugin takes a [`snapshot::Snapshot`] of each application window's element
-//! tree after layout, and draws the hovered node's box on the application
-//! canvas. `BINGUX_INSPECT_OPEN=1` opens it when the first window appears, for
-//! tests.
+//! Each inspector is bound to one target window ([`target`]): its element
+//! tree, inspect mode, Properties, Performance, Accessibility and phone
+//! preview all act on that window. An inspector's own window can be the
+//! target of another inspector, to any depth up to [`target::MAX_DEPTH`].
+//! While no inspector exists the plugin only looks up empty tables: nothing
+//! is captured, timed or sampled.
+//!
+//! `BINGUX_INSPECT_OPEN=1` opens an inspector over the first window that
+//! appears, for tests.
 
 mod a11y;
 mod a11y_checks;
 mod box_model;
+mod computed;
 mod details;
 mod dom_tree;
+mod errors;
 mod editor;
 mod highlight;
+pub(crate) mod layout_checks;
+mod layout_tab;
 mod nav;
 mod overrides;
 mod perf;
 mod perf_log;
 mod perf_sample;
+mod watchdog;
 mod props;
+mod route;
 mod shot;
-mod snapshot;
+pub(crate) mod snapshot;
+mod target;
 mod toolbar;
 mod window;
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context, Poll, Waker};
+use std::time::Instant;
 
 use freya::prelude::*;
 
 use crate::style::{PointerKind, SizeClass, force_density};
 use crate::theme::{PHONE_PREVIEW_SIZE, Tokens};
-use freya::winit::window::{Window, WindowId};
+use freya::winit::window::WindowId;
+use freya_core::tree::Tree;
 use freya_winit::plugins::{FreyaPlugin, Key, Modifiers, PluginEvent, PluginHandle};
 use freya_winit::renderer::{NativeEvent, NativeWindowEvent, NativeWindowEventAction};
 
 use snapshot::Snapshot;
+use target::{InstanceId, Registry, Throttle, Toggle};
 
-/// The plugin that carries the inspector in every application.
-pub fn plugin() -> InspectorPlugin {
+/// The plugin that carries the inspector in every application. Only
+/// [`crate::app`] installs it.
+pub(crate) fn plugin() -> InspectorPlugin {
     InspectorPlugin
 }
 
 /// The inspector's plugin hook. It holds no state: the state lives in the
-/// thread-local store, which the window and the hook share on the UI thread.
+/// thread-local store, which the windows and the hook share on the UI thread.
 pub struct InspectorPlugin;
 
 impl FreyaPlugin for InspectorPlugin {
@@ -59,53 +81,76 @@ impl FreyaPlugin for InspectorPlugin {
         // The launch request resolves on the event loop, which may be idle (an
         // application at rest never measures layout), so every event checks it.
         poll_pending();
-        let inspector = match event {
+        let event_window = match &*event {
             PluginEvent::AfterRedraw { window, .. }
             | PluginEvent::BeforeRender { window, .. }
-            | PluginEvent::BeforeMeasuringLayout { window, .. } => is_inspector(window.id()),
-            _ => false,
+            | PluginEvent::BeforeMeasuringLayout { window, .. } => Some(window.id()),
+            _ => None,
         };
-        STORE.with(|store| perf::on_event(&*event, inspector, &mut store.borrow_mut().history));
-        if !inspector {
+        if let Some(id) = event_window {
+            // Frames are timed only for a window an inspector watches.
+            for instance in watching(id) {
+                with(instance, |instance| {
+                    perf::on_event(instance.id, &*event, &mut instance.history)
+                });
+            }
+        }
+        // The frame log and the watchdog follow application windows, not the
+        // inspector's own.
+        if !event_window.is_some_and(is_inspector_window) {
             perf_log::on_event(&*event);
+            watchdog::on_event(&*event);
         }
         match event {
             PluginEvent::WindowCreated { window, .. } => {
-                let id = window.id();
-                if !is_inspector(id) && open_at_start() {
-                    STORE.with(|store| store.borrow_mut().auto_opened = true);
-                    toggle_window();
+                let first = STORE.with(|store| !std::mem::replace(&mut store.borrow_mut().seen_window, true));
+                if first && open_at_start() {
+                    let title = window.title();
+                    let _ = open_inspector(window.id(), &title);
                 }
             }
             PluginEvent::KeyboardInput {
                 window,
                 key,
+                code,
                 modifiers,
                 is_pressed,
-                ..
             } => {
+                let id = window.id();
+                // The modifiers the window reported with the key, and those the
+                // process saw held: a window that just got focus can lag behind.
+                let modifiers = *modifiers | freya_winit::modifiers::live();
+                if key_log() {
+                    eprintln!(
+                        "[inspector-key] window {id:?} {} key={key:?} code={code:?} mods={modifiers:?}",
+                        if *is_pressed { "down" } else { "up" },
+                    );
+                }
                 STORE.with(|store| {
                     store.borrow_mut().shift_held = modifiers.contains(Modifiers::SHIFT);
                 });
-                if *is_pressed && is_toggle_key(key, *modifiers) && !is_inspector(window.id()) {
-                    toggle_window();
+                if !*is_pressed && is_letter(key, *code, Code::KeyI, "i") {
+                    STORE.with(|store| store.borrow_mut().toggle_down = false);
                 }
-                if *is_pressed && is_inspect_key(key, *modifiers) {
-                    if !is_open() {
-                        toggle_window();
+                // One toggle per physical press: a held key repeats.
+                if *is_pressed
+                    && is_toggle_key(key, *code, modifiers)
+                    && !STORE.with(|store| std::mem::replace(&mut store.borrow_mut().toggle_down, true))
+                {
+                    toggle_in(id, &window.title());
+                }
+                if *is_pressed && is_inspect_key(key, *code, modifiers) {
+                    toggle_picking_in(id, &window.title());
+                }
+                if !*is_pressed && matches!(key, Key::Named(NamedKey::Escape)) {
+                    cancel_picking_in(id);
+                }
+                if *is_pressed {
+                    for instance in watching(id) {
+                        with(instance, |instance| {
+                            instance.history.record_input(Instant::now())
+                        });
                     }
-                    set_picking(!picking());
-                }
-                if !*is_pressed && matches!(key, Key::Named(NamedKey::Escape)) && picking() {
-                    set_picking(false);
-                }
-                if *is_pressed && is_open() {
-                    STORE.with(|store| {
-                        store
-                            .borrow_mut()
-                            .history
-                            .record_input(std::time::Instant::now())
-                    });
                 }
             }
             PluginEvent::PointerInput {
@@ -114,14 +159,11 @@ impl FreyaPlugin for InspectorPlugin {
                 pressed,
                 consumed,
             } => {
-                if is_open() && !is_inspector(window.id()) {
-                    STORE.with(|store| {
-                        store
-                            .borrow_mut()
-                            .history
-                            .record_input(std::time::Instant::now())
+                for instance in watching(window.id()) {
+                    with(instance, |instance| {
+                        instance.history.record_input(Instant::now())
                     });
-                    **consumed = pick_at(window, *position, *pressed);
+                    **consumed |= pick_at(instance, effective_scale(window.id()), *position, *pressed);
                 }
             }
             PluginEvent::BeforeMeasuringLayout { window, tree } => {
@@ -129,60 +171,75 @@ impl FreyaPlugin for InspectorPlugin {
                 STORE.with(|store| store.borrow().overrides.apply(window.id(), tree, scale));
             }
             PluginEvent::FinishedMeasuringLayout { window, tree } => {
-                if !is_inspector(window.id()) {
-                    STORE.with(|store| store.borrow_mut().last_app = Some(window.id()));
-                }
-                if is_open() && !is_inspector(window.id()) && !paused() {
-                    let mut snapshot = Snapshot::capture(tree);
-                    if let Some(focus) = Platform::get().try_window(u64::from(window.id())) {
-                        snapshot.mark_focused(*focus.focused_accessibility_id.peek());
-                    }
-                    STORE.with(|store| {
-                        let mut store = store.borrow_mut();
-                        store.history.observe(&snapshot, std::time::Instant::now());
-                        store.app_window = Some(window.id());
-                        store.snapshot = Some(Rc::new(snapshot));
-                        store.version += 1;
-                    });
+                for instance in watching(window.id()) {
+                    capture(instance, window.id(), tree);
                 }
             }
             PluginEvent::AfterRender { window, canvas, .. } => {
-                if is_inspector(window.id()) {
-                    shot::after_render(true, canvas);
-                } else if is_open() {
-                    highlight::draw(canvas);
-                    shot::after_render(false, canvas);
+                let id = window.id();
+                let depth = STORE.with(|store| store.borrow().registry.depth_of(id));
+                if depth > 0 {
+                    shot::after_render(depth, canvas);
+                }
+                let mut watched = false;
+                for instance in watching(id) {
+                    watched = true;
+                    highlight::draw(canvas, instance);
+                }
+                if watched && depth == 0 {
+                    shot::after_render(0, canvas);
                 }
             }
-            PluginEvent::WindowClosed { window, .. } => {
-                if is_inspector(window.id()) {
-                    STORE.with(|store| {
-                        let mut store = store.borrow_mut();
-                        store.inspector = None;
-                        store.hover = None;
-                        store.picking = false;
-                    });
-                    set_phone_preview(false);
-                }
-            }
+            PluginEvent::WindowClosed { window, .. } => window_closed(window.id()),
             _ => {}
         }
     }
 }
 
-/// Ctrl+Alt+Shift+I, in either letter case.
-fn is_toggle_key(key: &Key, modifiers: Modifiers) -> bool {
+/// Whether the key is the letter `letter` (lower case): by the physical key
+/// (`code`, whatever the layout) or by the character it produced. With Ctrl
+/// held some layouts report a control character, so the character alone is
+/// not enough. Lock keys are not modifiers here, and the order the keys went
+/// down in does not matter: only which are held.
+fn is_letter(key: &Key, code: Code, want: Code, letter: &str) -> bool {
+    code == want || matches!(key, Key::Character(text) if text.eq_ignore_ascii_case(letter))
+}
+
+/// Ctrl+Alt+Shift+I. Extra modifiers (Super) do not matter.
+fn is_toggle_key(key: &Key, code: Code, modifiers: Modifiers) -> bool {
     let chord = Modifiers::CONTROL | Modifiers::ALT | Modifiers::SHIFT;
-    modifiers == chord && matches!(key, Key::Character(text) if text.eq_ignore_ascii_case("i"))
+    modifiers.contains(chord) && is_letter(key, code, Code::KeyI, "i")
 }
 
-/// Ctrl+Shift+C, in either letter case: turns inspect mode on or off.
-fn is_inspect_key(key: &Key, modifiers: Modifiers) -> bool {
+/// Ctrl+Shift+C: turns inspect mode on or off. Not with Alt, which is the
+/// toggle chord's.
+fn is_inspect_key(key: &Key, code: Code, modifiers: Modifiers) -> bool {
     let chord = Modifiers::CONTROL | Modifiers::SHIFT;
-    modifiers == chord && matches!(key, Key::Character(text) if text.eq_ignore_ascii_case("c"))
+    modifiers.contains(chord)
+        && !modifiers.contains(Modifiers::ALT)
+        && is_letter(key, code, Code::KeyC, "c")
 }
 
-/// `BINGUX_INSPECT_OPEN=1` opens the inspector with the first application window.
+/// `BINGUX_INSPECT_KEYLOG=1` prints every key event the plugin sees.
+fn key_log() -> bool {
+    static ON: std::sync::LazyLock<bool> =
+        std::sync::LazyLock::new(|| std::env::var_os("BINGUX_INSPECT_KEYLOG").is_some_and(|v| v == "1"));
+    *ON
+}
+
+/// The inspector window's own entry point for "inspect this inspector": the
+/// header button calls it, for a desktop where the shortcut does not arrive.
+pub(crate) fn inspect_self() {
+    let window = Platform::window_id();
+    let title = Platform::get()
+        .try_window(u64::from(window))
+        .and_then(|_| me())
+        .and_then(|id| with(id, |instance| instance.title.clone()))
+        .unwrap_or_else(|| "Inspector".to_string());
+    toggle_in(window, &title);
+}
+
+/// `BINGUX_INSPECT_OPEN=1` opens an inspector over the first window.
 fn open_at_start() -> bool {
     std::env::var_os("BINGUX_INSPECT_OPEN").is_some_and(|value| value == "1")
 }
@@ -190,19 +247,13 @@ fn open_at_start() -> bool {
 /// A window launch waiting for the event loop to create the window.
 type Pending = Pin<Box<dyn Future<Output = WindowId>>>;
 
-#[derive(Default)]
-struct Store {
-    /// The window the inspector is in, once it has opened.
-    inspector: Option<WindowId>,
-    /// The inspector is launching and its id is not known yet.
-    opening: bool,
-    /// The environment asked for the inspector at start-up, and it has opened.
-    auto_opened: bool,
-    /// The application window that last measured a tree, and its tree.
-    app_window: Option<WindowId>,
-    /// The last application window that measured, kept even while the inspector
-    /// is closed, so opening can ask it for a first snapshot at once.
-    last_app: Option<WindowId>,
+/// One inspector's state. Its window and target are in the [`Registry`].
+struct Instance {
+    id: InstanceId,
+    /// The launch request sent to the event loop, until its window exists.
+    pending: Option<Pending>,
+    /// The window's title, naming the target. Set once the window exists.
+    title: String,
     snapshot: Option<Rc<Snapshot>>,
     /// Bumped on every new snapshot, so the window knows to re-read it.
     version: u64,
@@ -217,207 +268,492 @@ struct Store {
     paused: bool,
     /// The inspector window's tokens, for the hover box colour.
     tokens: Option<Tokens>,
-    /// The launch request sent to the event loop, until its window exists.
-    pending: Option<Pending>,
+    /// Input and frame timings of the target the accessibility checks read.
+    history: a11y::FrameHistory,
+    /// Holds snapshots of a target that redraws every frame to a few a second.
+    throttle: Throttle,
+    /// A press in pick mode was swallowed, so its release is swallowed too.
+    swallow_release: bool,
+    /// What the user should be told, shown once by the window.
+    notice: Option<String>,
+    /// Whether the target is shown at phone size, and the size to go back to.
+    phone: Option<State<bool>>,
+    phone_saved: Option<freya::winit::dpi::LogicalSize<f64>>,
+}
+
+impl Instance {
+    fn new(id: InstanceId, title: String) -> Self {
+        Instance {
+            id,
+            title,
+            pending: None,
+            snapshot: None,
+            version: 0,
+            hover: None,
+            picking: false,
+            picked: None,
+            paused: false,
+            tokens: None,
+            history: a11y::FrameHistory::default(),
+            throttle: Throttle::default(),
+            swallow_release: false,
+            notice: None,
+            phone: None,
+            phone_saved: None,
+        }
+    }
+}
+
+#[derive(Default)]
+struct Store {
+    /// Which window each inspector watches.
+    registry: Registry<WindowId>,
+    instances: HashMap<InstanceId, Instance>,
+    /// A window has been created, so the start-up request has been honoured.
+    seen_window: bool,
     /// Live property edits, re-applied before every layout pass.
     overrides: overrides::Overrides,
-    /// Input and frame timings the accessibility checks read.
-    history: a11y::FrameHistory,
-    /// The plugin handle, used to ask the application window to lay out again.
+    /// The plugin handle, used to ask a window to lay out again.
     handle: Option<PluginHandle>,
     /// Shift is held: a press in pick mode keeps the mode on for the next pick.
     shift_held: bool,
-    /// A press in pick mode was swallowed, so its release is swallowed too.
-    swallow_release: bool,
+    /// The toggle's key is down, so its auto-repeat does not toggle again.
+    toggle_down: bool,
+    /// How to read each window's navigation stack, registered by the window's
+    /// router. A reader, not a copy: the pane shows the stack as it is when
+    /// it renders.
+    navigation: HashMap<WindowId, Rc<dyn Fn() -> crate::nav::Snapshot>>,
 }
 
 thread_local! {
     static STORE: RefCell<Store> = RefCell::new(Store::default());
 }
 
-fn is_open() -> bool {
-    STORE.with(|store| {
-        let store = store.borrow();
-        store.inspector.is_some() || store.opening
-    })
+/// Runs `f` on one instance, if it still exists.
+fn with<R>(id: InstanceId, f: impl FnOnce(&mut Instance) -> R) -> Option<R> {
+    STORE.with(|store| store.borrow_mut().instances.get_mut(&id).map(f))
 }
 
-/// The accessibility issues of the application tree last measured.
-pub(crate) fn issues() -> Vec<a11y::Issue> {
-    STORE.with(|store| {
-        let store = store.borrow();
-        match &store.snapshot {
-            Some(snapshot) => a11y::check(snapshot, &store.history),
-            None => Vec::new(),
-        }
-    })
+/// The inspectors watching `window`: none for nearly every window.
+fn watching(window: WindowId) -> Vec<InstanceId> {
+    STORE.with(|store| store.borrow().registry.watching(window).collect())
 }
 
-fn is_inspector(id: WindowId) -> bool {
-    STORE.with(|store| store.borrow().inspector == Some(id))
+fn is_inspector_window(window: WindowId) -> bool {
+    STORE.with(|store| store.borrow().registry.is_inspector_window(window))
 }
 
-/// Opens the inspector if it is closed, closes it if it is open.
-fn toggle_window() {
-    let (inspector, opening) = STORE.with(|store| {
+/// The inspector the calling component, event handler or task belongs to.
+/// Only the inspector's own windows call this.
+fn me() -> Option<InstanceId> {
+    let window = Platform::window_id();
+    STORE.with(|store| store.borrow().registry.instance_of_window(window))
+}
+
+/// Runs `f` on the calling window's instance. `None` before the window has
+/// been bound to one.
+fn with_me<R>(f: impl FnOnce(&mut Instance) -> R) -> Option<R> {
+    me().and_then(|id| with(id, f))
+}
+
+/// Called by a window's router: the inspector reads its stack with `reader`.
+/// Registering again replaces the reader.
+pub(crate) fn register_navigation(window: WindowId, reader: Rc<dyn Fn() -> crate::nav::Snapshot>) {
+    STORE.with(|store| store.borrow_mut().navigation.insert(window, reader));
+}
+
+/// Called when a window's router goes away.
+pub(crate) fn unregister_navigation(window: WindowId) {
+    STORE.with(|store| store.borrow_mut().navigation.remove(&window));
+}
+
+/// The navigation stack of `window`, if its router registered one.
+pub(crate) fn navigation(window: WindowId) -> Option<crate::nav::Snapshot> {
+    // Cloned out first: the reader reads a Freya state and must not run
+    // with the store borrowed.
+    let reader = STORE.with(|store| store.borrow().navigation.get(&window).cloned())?;
+    Some(reader())
+}
+
+/// The window the calling inspector watches.
+pub(crate) fn app_window() -> Option<WindowId> {
+    let id = me()?;
+    STORE.with(|store| store.borrow().registry.target_of(id))
+}
+
+/// Binds an inspector window to its instance. An instance whose target
+/// closed meanwhile no longer exists: its window is closed at once.
+fn bind_window(id: InstanceId, window: WindowId) {
+    let (known, bound_to) = STORE.with(|store| {
         let store = store.borrow();
-        (store.inspector, store.opening)
+        (store.registry.contains(id), store.registry.window_of(id))
     });
-    if let Some(id) = inspector {
-        Platform::get().close_window(id);
-    } else if !opening {
-        STORE.with(|store| store.borrow_mut().opening = true);
-        // Launching is only a request to the event loop, and `spawn` needs a
-        // Freya scope that plugin callbacks do not have. The request is sent
-        // now; `poll_pending` collects the window id on later layout passes.
-        let pending: Pending = Box::pin(async move {
-            Platform::get()
-                .launch_window(
-                    WindowConfig::new(window::root)
-                        .with_title("Inspector")
-                        .with_size(1000.0, 680.0)
-                        .with_min_size(640.0, 420.0),
-                )
-                .await
-        });
-        STORE.with(|store| store.borrow_mut().pending = Some(pending));
-        poll_pending();
-        // An idle application never measures layout on its own, so without this
-        // the inspector would wait for an unrelated repaint before its first tree.
-        if let Some(app) = STORE.with(|store| store.borrow().last_app) {
-            request_layout(app);
-        }
+    if bound_to == Some(window) {
+        return;
+    }
+    if !known {
+        Platform::get().close_window(window);
+        return;
+    }
+    if !STORE.with(|store| store.borrow_mut().registry.bind(id, window)) {
+        return;
+    }
+    // Logged so a launch can be confirmed from stderr without a screenshot.
+    let (target, depth) = STORE.with(|store| {
+        let store = store.borrow();
+        (store.registry.target_of(id), store.registry.depth(id))
+    });
+    if let Some(title) = with(id, |instance| instance.title.clone()) {
+        Platform::get().set_window_title(window, title);
+    }
+    // A new window may not get keyboard focus from the compositor; ask, so the
+    // shortcut works in it without a click first.
+    Platform::get().focus_window(window);
+    eprintln!(
+        "[inspector] window open (depth {}, target {:?})",
+        depth.unwrap_or(0),
+        target
+    );
+}
+
+/// Called by an inspector window's root on render, so its components find
+/// their instance before the plugin has seen the window created.
+fn bind_current(id: InstanceId) {
+    let window = Platform::window_id();
+    if STORE.with(|store| store.borrow().registry.window_of(id)) != Some(window) {
+        bind_window(id, window);
     }
 }
 
-/// Polls the launch request, if one is waiting, and records the window once
+/// Opens an inspector over `target`, whose title is `target_title`.
+fn open_inspector(target: WindowId, target_title: &str) -> Result<InstanceId, target::OpenError> {
+    let id = STORE.with(|store| store.borrow_mut().registry.open(target))?;
+    // Launching is only a request to the event loop, and `spawn` needs a
+    // Freya scope that plugin callbacks do not have. The request is sent
+    // now; `poll_pending` collects the window id on later events.
+    let pending: Pending = Box::pin(async move {
+        Platform::get()
+            .launch_window(
+                WindowConfig::new({
+                    // The inspector is a window like any other: it fails into
+                    // its own error card, never the target's.
+                    let root: Rc<dyn Fn() -> Element> = Rc::new(move || window::root(id));
+                    move || crate::resilience::window_boundary("The inspector", root.clone())
+                })
+                    .with_title("Inspector")
+                    .with_size(1000.0, 680.0)
+                    .with_min_size(640.0, 420.0),
+            )
+            .await
+    });
+    let mut instance = Instance::new(id, target::window_title(target_title));
+    instance.pending = Some(pending);
+    STORE.with(|store| store.borrow_mut().instances.insert(id, instance));
+    poll_pending();
+    // An idle target never measures layout on its own, so without this the
+    // inspector would wait for an unrelated repaint before its first tree.
+    request_layout(target);
+    Ok(id)
+}
+
+/// Ctrl+Alt+Shift+I in `window`: opens an inspector over it, or closes the
+/// one that is open. In an inspector's window that is an inspector of the
+/// inspector.
+fn toggle_in(window: WindowId, title: &str) {
+    let toggle = STORE.with(|store| store.borrow().registry.toggle_for(window));
+    match toggle {
+        Toggle::Open => {
+            let _ = open_inspector(window, title);
+        }
+        Toggle::Close(id) => {
+            // An inspector still waiting for its window is left to open.
+            let own = STORE.with(|store| store.borrow().registry.window_of(id));
+            if let Some(own) = own {
+                Platform::get().close_window(own);
+            }
+        }
+        Toggle::Refuse(error) => notify(window, error.message()),
+    }
+}
+
+/// Tells the user something in `window`, which is an inspector's.
+fn notify(window: WindowId, message: String) {
+    eprintln!("[inspector] {message}");
+    let instance = STORE.with(|store| store.borrow().registry.instance_of_window(window));
+    if let Some(instance) = instance {
+        with(instance, |instance| instance.notice = Some(message));
+    }
+}
+
+/// What the calling inspector window should tell its user. Returns it once.
+pub(crate) fn take_notice() -> Option<String> {
+    with_me(|instance| instance.notice.take()).flatten()
+}
+
+/// Ctrl+Shift+C in `window`. In an inspector's window it is that inspector's
+/// own inspect button. In any other window it turns inspect mode on in the
+/// inspector watching it, opening one first when there is none.
+fn toggle_picking_in(window: WindowId, title: &str) {
+    let own = STORE.with(|store| store.borrow().registry.instance_of_window(window));
+    let instance = own
+        .or_else(|| STORE.with(|store| store.borrow().registry.inspector_of(window)))
+        .or_else(|| open_inspector(window, title).ok());
+    if let Some(instance) = instance {
+        let on = with(instance, |instance| instance.picking).unwrap_or(false);
+        set_picking_of(instance, !on);
+    }
+}
+
+/// Escape cancels inspect mode, whichever of the two windows has focus.
+fn cancel_picking_in(window: WindowId) {
+    let picking: Vec<InstanceId> = STORE.with(|store| {
+        let store = store.borrow();
+        store
+            .instances
+            .values()
+            .filter(|instance| {
+                instance.picking
+                    && (store.registry.target_of(instance.id) == Some(window)
+                        || store.registry.window_of(instance.id) == Some(window))
+            })
+            .map(|instance| instance.id)
+            .collect()
+    });
+    for instance in picking {
+        set_picking_of(instance, false);
+    }
+}
+
+/// Polls the launch requests, if any are waiting, and binds each window once
 /// the event loop has created it.
 fn poll_pending() {
-    let Some(mut pending) = STORE.with(|store| store.borrow_mut().pending.take()) else {
-        return;
-    };
-    let mut cx = Context::from_waker(Waker::noop());
-    match pending.as_mut().poll(&mut cx) {
-        Poll::Ready(id) => STORE.with(|store| {
-            // Logged so a launch can be confirmed from stderr without a screenshot.
-            eprintln!("[inspector] window open");
-            let mut store = store.borrow_mut();
-            store.opening = false;
-            store.inspector = Some(id);
-        }),
-        Poll::Pending => STORE.with(|store| store.borrow_mut().pending = Some(pending)),
+    let waiting: Vec<InstanceId> = STORE.with(|store| {
+        let store = store.borrow();
+        if store.instances.is_empty() {
+            return Vec::new();
+        }
+        store
+            .instances
+            .values()
+            .filter(|instance| instance.pending.is_some())
+            .map(|instance| instance.id)
+            .collect()
+    });
+    for id in waiting {
+        let Some(mut pending) = with(id, |instance| instance.pending.take()).flatten() else {
+            continue;
+        };
+        let mut cx = Context::from_waker(Waker::noop());
+        match pending.as_mut().poll(&mut cx) {
+            Poll::Ready(window) => bind_window(id, window),
+            Poll::Pending => {
+                with(id, |instance| instance.pending = Some(pending));
+            }
+        }
     }
 }
 
-/// The current snapshot and its version.
-fn snapshot() -> (u64, Option<Rc<Snapshot>>) {
-    STORE.with(|store| {
-        let store = store.borrow();
-        (store.version, store.snapshot.clone())
-    })
-}
-
-/// The hovered node of the latest snapshot, with that snapshot.
-fn hovered() -> Option<(Rc<Snapshot>, u64)> {
-    STORE.with(|store| {
-        let store = store.borrow();
-        Some((store.snapshot.clone()?, store.hover?))
-    })
-}
-
-/// Sets the hovered node and redraws the application window, so the box shows
-/// on the canvas.
-fn set_hover(node: Option<u64>) {
-    let app = STORE.with(|store| {
+/// A window closed. Its own inspector goes, and so do the inspectors over it,
+/// and over those: their windows are closed, so the process ends when the
+/// application's window does.
+fn window_closed(window: WindowId) {
+    // An inspector closing while the target is at phone size gives the target
+    // its own size back.
+    if let Some(id) = STORE.with(|store| store.borrow().registry.instance_of_window(window))
+        && with(id, |instance| instance.phone.is_some_and(|phone| *phone.peek())).unwrap_or(false)
+    {
+        apply_phone(id, false);
+    }
+    let closed = STORE.with(|store| {
         let mut store = store.borrow_mut();
-        if store.hover == node {
-            return None;
+        let closed = store.registry.close(window);
+        for id in &closed.removed {
+            store.instances.remove(id);
+            perf::forget(*id);
         }
-        store.hover = node;
-        store.app_window
+        closed
     });
-    if let Some(app) = app {
-        Platform::get().with_window(app, |window| window.request_redraw());
+    for own in closed.close {
+        Platform::get().close_window(own);
+    }
+}
+
+/// Copies the target's tree for the inspector watching it, at most once per
+/// [`target::CAPTURE_GAP`]. A refused capture is remembered, and the
+/// inspector asks for one more layout when its window next polls.
+fn capture(id: InstanceId, window: WindowId, tree: &Tree) {
+    let due = with(id, |instance| !instance.paused && instance.throttle.due(Instant::now()));
+    if due != Some(true) {
+        return;
+    }
+    let mut snapshot = Snapshot::capture(tree, effective_scale(window));
+    if let Some(focus) = Platform::get().try_window(u64::from(window)) {
+        snapshot.mark_focused(*focus.focused_accessibility_id.peek());
+    }
+    with(id, |instance| {
+        instance.history.observe(&snapshot, Instant::now());
+        instance.snapshot = Some(Rc::new(snapshot));
+        instance.version += 1;
+    });
+}
+
+/// The scale factor `window` lays out and renders at.
+fn effective_scale(window: WindowId) -> f32 {
+    Platform::get()
+        .try_window(u64::from(window))
+        .map(|window| *window.scale_factor.peek() as f32)
+        .filter(|scale| *scale > 0.0)
+        .unwrap_or(1.0)
+}
+
+/// The calling window's current snapshot and its version.
+fn snapshot() -> (u64, Option<Rc<Snapshot>>) {
+    with_me(|instance| (instance.version, instance.snapshot.clone())).unwrap_or((0, None))
+}
+
+/// The accessibility issues of the target tree last measured.
+pub(crate) fn issues() -> Vec<a11y::Issue> {
+    with_me(|instance| match &instance.snapshot {
+        Some(snapshot) => a11y::check(snapshot, &instance.history),
+        None => Vec::new(),
+    })
+    .unwrap_or_default()
+}
+
+/// The layout findings of the target tree last measured: visual defects, not
+/// accessibility problems.
+pub(crate) fn layout_findings() -> Vec<layout_checks::Finding> {
+    with_me(|instance| {
+        instance
+            .snapshot
+            .as_deref()
+            .map(layout_checks::check)
+            .unwrap_or_default()
+    })
+    .unwrap_or_default()
+}
+
+/// The hovered node of the inspector's snapshot, with that snapshot.
+fn hovered(id: InstanceId) -> Option<(Rc<Snapshot>, u64)> {
+    with(id, |instance| Some((instance.snapshot.clone()?, instance.hover?))).flatten()
+}
+
+/// Sets the hovered node and redraws the target, so the box shows on its
+/// canvas.
+fn set_hover(node: Option<u64>) {
+    if let Some(id) = me() {
+        set_hover_of(id, node);
+    }
+}
+
+fn set_hover_of(id: InstanceId, node: Option<u64>) {
+    let changed = with(id, |instance| {
+        if instance.hover == node {
+            return false;
+        }
+        instance.hover = node;
+        true
+    });
+    if changed == Some(true) {
+        redraw_target(id);
+    }
+}
+
+fn redraw_target(id: InstanceId) {
+    let target = STORE.with(|store| store.borrow().registry.target_of(id));
+    if let Some(target) = target {
+        Platform::get().with_window(target, |window| window.request_redraw());
+    }
+}
+
+/// Turns pick mode on or off for the calling inspector.
+pub(crate) fn set_picking(picking: bool) {
+    if let Some(id) = me() {
+        set_picking_of(id, picking);
     }
 }
 
 /// Turns pick mode on or off. Either way the hover box is cleared, and the
-/// application window is redrawn at once so the box leaves the canvas.
-pub(crate) fn set_picking(picking: bool) {
-    let (inspector, app) = STORE.with(|store| {
-        let mut store = store.borrow_mut();
-        store.picking = picking;
-        store.picked = None;
-        store.hover = None;
-        (store.inspector, store.app_window)
+/// target is redrawn at once so the box leaves its canvas.
+fn set_picking_of(id: InstanceId, picking: bool) {
+    with(id, |instance| {
+        instance.picking = picking;
+        instance.picked = None;
+        instance.hover = None;
     });
-    if let Some(app) = app {
-        Platform::get().with_window(app, |window| window.request_redraw());
-    }
-    if let Some(window) = inspector {
-        Platform::get().with_window(window, |w| w.request_redraw());
+    redraw_target(id);
+    if let Some(own) = STORE.with(|store| store.borrow().registry.window_of(id)) {
+        Platform::get().with_window(own, |window| window.request_redraw());
     }
 }
 
-/// Whether pick mode is on.
+/// Whether the calling inspector is in pick mode.
 pub(crate) fn picking() -> bool {
-    STORE.with(|store| store.borrow().picking)
+    with_me(|instance| instance.picking).unwrap_or(false)
 }
 
 /// The node a press chose in pick mode. Returns it once.
 pub(crate) fn take_pick() -> Option<u64> {
-    STORE.with(|store| store.borrow_mut().picked.take())
+    with_me(|instance| instance.picked.take()).flatten()
 }
 
 /// Pick mode: a move under the cursor previews the node there, and a press on a
 /// node chooses it and ends pick mode. While pick mode is on, a press and its
-/// release are swallowed, so the click never reaches the application. Returns
+/// release are swallowed, so the click never reaches the target. Returns
 /// whether this event was swallowed. `position` is in physical pixels.
-fn pick_at(window: &Window, position: (f64, f64), pressed: Option<bool>) -> bool {
+fn pick_at(id: InstanceId, scale: f32, position: (f64, f64), pressed: Option<bool>) -> bool {
     if pressed == Some(false) {
         // The release of a swallowed press is swallowed too, even if the press
         // ended pick mode.
-        return STORE.with(|store| std::mem::take(&mut store.borrow_mut().swallow_release));
+        return with(id, |instance| std::mem::take(&mut instance.swallow_release))
+            .unwrap_or(false);
     }
-    let (picking, snapshot) = STORE.with(|store| {
-        let store = store.borrow();
-        (store.picking, store.snapshot.clone())
-    });
+    let Some((picking, snapshot)) =
+        with(id, |instance| (instance.picking, instance.snapshot.clone()))
+    else {
+        return false;
+    };
     if !picking {
         return false;
     }
-    let scale = window.scale_factor() as f32;
     let hit = snapshot
         .and_then(|snapshot| snapshot.hit(position.0 as f32 / scale, position.1 as f32 / scale));
     let press = pressed == Some(true);
+    let shift = STORE.with(|store| store.borrow().shift_held);
     // A press on a node ends pick mode unless shift is held. No hover box may
     // outlive that: later moves return early and would never clear it.
     let stays_picking = if press {
-        STORE.with(|store| {
-            let mut store = store.borrow_mut();
-            store.swallow_release = true;
+        with(id, |instance| {
+            instance.swallow_release = true;
             if let Some(node) = hit {
-                store.picking = store.shift_held;
-                store.picked = Some(node);
+                instance.picking = shift;
+                instance.picked = Some(node);
             }
-            store.picking
+            instance.picking
         })
+        .unwrap_or(false)
     } else {
         true
     };
-    set_hover(if stays_picking { hit } else { None });
+    set_hover_of(id, if stays_picking { hit } else { None });
+    if press && !stays_picking {
+        // The inspector window shows the inspect button as on or off.
+        if let Some(own) = STORE.with(|store| store.borrow().registry.window_of(id)) {
+            Platform::get().with_window(own, |window| window.request_redraw());
+        }
+    }
     press
 }
 
-/// The inspector window's tokens, if it has rendered.
-fn tokens() -> Option<Tokens> {
-    STORE.with(|store| store.borrow().tokens)
+/// The calling inspector window's tokens, called by the window whenever it
+/// renders, so the hover box follows the accent.
+fn set_tokens(tokens: Tokens) {
+    with_me(|instance| instance.tokens = Some(tokens));
 }
 
-/// Called by the inspector window whenever it renders, so the hover box
-/// follows the accent.
-fn set_tokens(tokens: Tokens) {
-    STORE.with(|store| store.borrow_mut().tokens = Some(tokens));
+/// The inspector window's tokens, if it has rendered.
+fn tokens_of(id: InstanceId) -> Option<Tokens> {
+    with(id, |instance| instance.tokens).flatten()
 }
 
 /// Remembers the plugin handle, the first time the hook runs.
@@ -430,8 +766,8 @@ fn remember_handle(handle: &PluginHandle) {
     });
 }
 
-/// Asks the application window to run layout on its next frame. Overrides are
-/// applied in that pass, so an edit shows at once.
+/// Asks a window to run layout on its next frame. Overrides are applied in
+/// that pass, so an edit shows at once.
 fn request_layout(window: WindowId) {
     let handle = STORE.with(|store| store.borrow().handle.clone());
     if let Some(handle) = handle {
@@ -442,27 +778,40 @@ fn request_layout(window: WindowId) {
     }
 }
 
-/// Whether snapshots are frozen.
+/// Whether the calling inspector's snapshots are frozen.
 pub(crate) fn paused() -> bool {
-    STORE.with(|store| store.borrow().paused)
+    with_me(|instance| instance.paused).unwrap_or(false)
 }
 
-/// Freezes or resumes snapshots of the application window.
+/// Freezes or resumes the calling inspector's snapshots.
 pub(crate) fn set_paused(paused: bool) {
-    STORE.with(|store| store.borrow_mut().paused = paused);
+    with_me(|instance| instance.paused = paused);
 }
 
-/// Lays out the application window again, applying edits and taking a new
-/// snapshot even while paused.
-pub(crate) fn refresh() {
-    let app = STORE.with(|store| store.borrow().app_window);
-    if let Some(app) = app {
-        request_layout(app);
+/// Called by the inspector window's poll: when a snapshot was refused by the
+/// throttle, the target is laid out once more so the tree catches up.
+pub(crate) fn catch_up() {
+    let Some(id) = me() else { return };
+    let stale = with(id, |instance| instance.throttle.stale() && !instance.paused);
+    if stale == Some(true)
+        && let Some(target) = app_window()
+    {
+        request_layout(target);
     }
 }
 
-/// Sets one property override on a node of the application window. `original`
-/// is the text the property had before, kept with the first override.
+/// Lays out the target again, applying edits and taking a new snapshot, even
+/// when the throttle would hold one back.
+pub(crate) fn refresh() {
+    let Some(id) = me() else { return };
+    if let Some(target) = app_window() {
+        with(id, |instance| instance.throttle = Throttle::default());
+        request_layout(target);
+    }
+}
+
+/// Sets one property override on a node of the target. `original` is the text
+/// the property had before, kept with the first override.
 pub(crate) fn edit(
     window: WindowId,
     node: u64,
@@ -486,67 +835,82 @@ pub(crate) fn reset(window: WindowId, node: u64, property: Option<&'static str>)
     request_layout(window);
 }
 
-/// Whether a property of a node of the application window is overridden.
+/// Whether a property of a node of the target is overridden.
 pub(crate) fn has_override(window: WindowId, node: u64, property: &'static str) -> bool {
     STORE.with(|store| store.borrow().overrides.has(window, node, property))
 }
 
-/// Every override on a node of the application window, sorted by property.
+/// Every override on a node of the target, sorted by property.
 pub(crate) fn overrides_of(window: WindowId, node: u64) -> Vec<(&'static str, overrides::Entry)> {
     STORE.with(|store| store.borrow().overrides.list(window, node))
 }
 
-/// The application window the inspector is showing.
-pub(crate) fn app_window() -> Option<WindowId> {
-    STORE.with(|store| store.borrow().app_window)
-}
-
-/// The density the application window renders at, so the inspector reads sizes
-/// as the tokens they are there, not at its own density.
+/// The density the target renders at, so the inspector reads sizes as the
+/// tokens they are there, not at its own density.
 pub(crate) fn app_density(window: WindowId) -> SizeClass {
     crate::style::window_density(u64::from(window)).class()
 }
 
-thread_local! {
-    static PHONE: State<bool> = State::create_global(false);
-    /// The application window's logical size before the phone preview, so
-    /// turning the preview off can restore it.
-    static PHONE_SAVED_SIZE: RefCell<Option<freya::winit::dpi::LogicalSize<f64>>> =
-        const { RefCell::new(None) };
-}
-
-/// Whether the application window is shown at phone size.
+/// Whether the calling inspector's target is shown at phone size.
 pub(crate) fn phone_preview() -> bool {
-    PHONE.with(|phone| *phone.read())
+    let Some(state) = with_me(|instance| {
+        *instance
+            .phone
+            .get_or_insert_with(|| State::create_global(false))
+    }) else {
+        return false;
+    };
+    *state.read()
 }
 
-/// Shows the application window at phone size (compact, touch), or releases
-/// it. Only the application window changes; the inspector keeps its own
-/// density.
+/// Shows the calling inspector's target at phone size (compact, touch), or
+/// releases it. Only the target changes; no other window does.
 pub(crate) fn set_phone_preview(on: bool) {
-    PHONE.with(|phone| {
-        let mut phone = *phone;
-        phone.set(on);
-    });
-    let Some(app) = app_window() else {
+    if let Some(id) = me() {
+        apply_phone(id, on);
+    }
+}
+
+fn apply_phone(id: InstanceId, on: bool) {
+    let Some(state) = with(id, |instance| {
+        *instance
+            .phone
+            .get_or_insert_with(|| State::create_global(false))
+    }) else {
         return;
     };
-    force_density(app, on.then_some((SizeClass::Compact, PointerKind::Touch)));
+    let mut state = state;
+    state.set(on);
+    let Some(target) = STORE.with(|store| store.borrow().registry.target_of(id)) else {
+        return;
+    };
+    // An inspector window keeps its own fixed density when released.
+    let base = STORE
+        .with(|store| store.borrow().registry.is_inspector_window(target))
+        .then_some((SizeClass::Regular, PointerKind::Mouse));
+    force_density(
+        target,
+        if on {
+            Some((SizeClass::Compact, PointerKind::Touch))
+        } else {
+            base
+        },
+    );
     let (width, height) = PHONE_PREVIEW_SIZE;
     if on {
         // Remember the size the user chose so turning the preview off restores it.
-        Platform::get().with_window(app, move |window| {
+        Platform::get().with_window(target, move |window| {
             let size = window.inner_size().to_logical::<f64>(window.scale_factor());
-            PHONE_SAVED_SIZE.with(|slot| *slot.borrow_mut() = Some(size));
+            with(id, |instance| instance.phone_saved = Some(size));
             let _ = window.request_inner_size(freya::winit::dpi::LogicalSize::new(
                 f64::from(width),
                 f64::from(height),
             ));
         });
-    } else if let Some(size) = PHONE_SAVED_SIZE.with(|slot| slot.borrow_mut().take()) {
-        Platform::get().with_window(app, move |window| {
+    } else if let Some(size) = with(id, |instance| instance.phone_saved.take()).flatten() {
+        Platform::get().with_window(target, move |window| {
             let _ = window.request_inner_size(size);
         });
     }
-    request_layout(app);
+    request_layout(target);
 }

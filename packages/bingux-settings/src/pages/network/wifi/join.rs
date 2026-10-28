@@ -8,10 +8,11 @@ use freya::prelude::*;
 use super::nm::{self, HiddenSecurity, Security};
 use crate::system::{CommandError, background_then};
 use crate::ui::{
-    Group, PopupAction, PopupActions, Status, Window, caption, choice_row, form_field, popup,
-    popup_column, status, use_popup_actions, use_window,
+    Group, PopupAction, PopupActions, Status, Window, choice_row, form_field, popup, popup_column,
+    status, use_popup_actions, use_window,
 };
 use bingux_ui::controls::form::validate;
+use bingux_ui::style::{Dim, S6};
 use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 
 /// Where a join stands, shown under the fields.
@@ -95,7 +96,7 @@ fn password_check(security: Security) -> fn(&str) -> Result<(), String> {
 pub fn open_password(window: Window, ssid: String, security: Security) {
     window.open(
         popup(ssid.clone(), PasswordBody { ssid, security })
-            .size(440.0, 340.0)
+            .width(Dim::PopupNarrow)
             .flags(PopupFlags::FORM | PopupFlags::NO_DISMISS_OUTSIDE),
     );
 }
@@ -137,12 +138,13 @@ impl Component for PasswordBody {
             .validate(check)
             .on_submit(move |_: ()| start(submit_ssid.clone()));
         popup_column()
-            .child(Group::new(None::<String>).row(field))
-            .child(caption(format!(
-                "{} network. Passwords are case sensitive.",
-                self.security.label()
-            )))
-            .maybe_child(phase_line(&phase.read(), &ssid))
+            .child(
+                Group::new(None::<String>).row(field).footer(format!(
+                    "{} network. Passwords are case sensitive.",
+                    self.security.label()
+                )),
+            )
+            .child(bingux_ui::motion::reveal_block_if(S6, phase_line(&phase.read(), &ssid)))
     }
 }
 
@@ -150,7 +152,7 @@ impl Component for PasswordBody {
 pub fn open_enterprise(window: Window, ssid: String) {
     window.open(
         popup(ssid.clone(), EnterpriseBody { ssid })
-            .size(440.0, 400.0)
+            .width(Dim::PopupNarrow)
             .flags(PopupFlags::FORM | PopupFlags::NO_DISMISS_OUTSIDE),
     );
 }
@@ -196,13 +198,13 @@ impl Component for EnterpriseBody {
                         form_field("Password", password)
                             .password()
                             .on_submit(move |_: ()| start(submit_ssid.clone())),
+                    )
+                    .footer(
+                        "Signs in with PEAP and MSCHAPv2, and checks the network's certificate \
+                         against the system's. Other methods are set in the network's Security settings.",
                     ),
             )
-            .child(caption(
-                "Signs in with PEAP and MSCHAPv2, and checks the network's certificate \
-                 against the system's. Other methods are set in the network's Security settings.",
-            ))
-            .maybe_child(phase_line(&phase.read(), &ssid))
+            .child(bingux_ui::motion::reveal_block_if(S6, phase_line(&phase.read(), &ssid)))
     }
 }
 
@@ -210,7 +212,7 @@ impl Component for EnterpriseBody {
 pub fn open_hidden(window: Window) {
     window.open(
         popup("Hidden network", HiddenBody)
-            .size(440.0, 420.0)
+            .width(Dim::PopupNarrow)
             .flags(PopupFlags::FORM | PopupFlags::NO_DISMISS_OUTSIDE),
     );
 }
@@ -299,7 +301,7 @@ impl Component for HiddenBody {
         let ssid = name.read().trim().to_string();
         popup_column()
             .child(fields)
-            .maybe_child(phase_line(&phase.read(), &ssid))
+            .child(bingux_ui::motion::reveal_block_if(S6, phase_line(&phase.read(), &ssid)))
     }
 }
 

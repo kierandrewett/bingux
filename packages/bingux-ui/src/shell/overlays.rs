@@ -9,164 +9,80 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
-use crate::address::Address;
-use crate::app::current_address;
-use crate::controls::button::{ActionButton, action_button, primary_button};
-use crate::controls::press::use_press;
+use crate::component::ComponentName;
+use crate::focus::owner::{OverlayPhase, Restore, keeps_focus, restore_on_close};
 use crate::motion::use_presence;
+use crate::nav::try_router;
+use crate::shell::banner::{Banner, BannerKind};
+use crate::shell::dialog::{Dialog, DialogLayer};
 use crate::shell::menu::{Menu, MenuItem, MenuLayer, MenuNav};
-use crate::shell::panel::{Panel, PanelTrigger};
+use crate::shell::panel::{PanelTrigger, use_sheet_pull};
 use crate::style::*;
-use crate::surface::{is_activation_key, use_tokens};
-use crate::typography::{BODY, EMPHASIS, Ink, SECTION};
+use crate::surface::use_tokens;
 
-/// The toast pill: 44 px tall, text then action and dismiss, on the same dark
-/// floating surface as a tooltip.
-const TOAST: Recipe = &[
-    flex_row(),
-    items(Align::Center),
-    h(Dim::Box11),
-    pl(S4),
-    pr(S1),
-    gap(S3),
-    rounded(Radius::Pill),
-    bg(Paint::Floating),
-    border(Line::Stroke(Dim::Hairline, Paint::FloatingOutline)),
-    shadow(Elevation::Raised),
-];
-
-/// How a dialog response is styled.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ResponseKind {
-    /// A plain elevated button.
-    Default,
-    /// The accent-filled button for the action the user most likely wants.
-    Suggested,
-    /// The danger-filled button for actions that lose data.
-    Destructive,
-}
-
-/// One button at the bottom of a dialog.
-#[derive(Clone, PartialEq)]
-pub struct DialogResponse {
-    pub label: String,
-    pub kind: ResponseKind,
-    pub on_press: EventHandler<()>,
-}
-
-/// An alert: title, body and one to three responses. Escape and the scrim
-/// close it (the first `Default` response, or nothing, is treated as the
-/// cancel action).
-#[derive(Clone, PartialEq)]
-pub struct Dialog {
-    pub title: String,
-    pub body: String,
-    pub responses: Vec<DialogResponse>,
-    /// Extra content between the body and the responses, such as a field.
-    pub content: Option<Element>,
-    /// Set by [`framed_dialog`]: the card is the content alone, at this size.
-    pub frame: Option<DialogFrame>,
-    /// The response that has the keyboard focus when the dialog opens, by
-    /// index. `None` focuses the card itself, so Enter chooses nothing.
-    pub focus: Option<usize>,
-    /// Runs once the dialog has faded out and is gone. A dialog opened from
-    /// the keyboard gives the keyboard back to its owner here.
-    pub on_closed: Option<EventHandler<()>>,
-}
-
-/// The size of a [`framed_dialog`], in logical pixels. The card never grows
-/// past the window: it keeps a margin on a phone and a small window.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct DialogFrame {
-    pub width: f32,
-    pub height: f32,
-}
-
-pub fn dialog(title: impl Into<String>, body: impl Into<String>) -> Dialog {
-    Dialog {
-        title: title.into(),
-        body: body.into(),
-        responses: Vec::new(),
-        content: None,
-        frame: None,
-        focus: None,
-        on_closed: None,
-    }
-}
-
-/// A dialog that is only `content`: no title, text or buttons of its own, on
-/// the same card, scrim and motion as an alert, `width` by `height` px (cut
-/// down to fit the window). Escape and a press on the scrim close it. The
-/// content draws its own header, scrolls itself and handles its own keys,
-/// with `title` for assistive technology.
-///
-/// This is for a dialog whose body is the point: a Quick Look preview, a
-/// properties sheet, an image viewer. An alert with a question uses
-/// [`dialog`].
-pub fn framed_dialog(
-    title: impl Into<String>,
-    content: impl Into<Element>,
-    width: f32,
-    height: f32,
-) -> Dialog {
-    Dialog {
-        title: title.into(),
-        body: String::new(),
-        responses: Vec::new(),
-        content: Some(content.into()),
-        frame: Some(DialogFrame { width, height }),
-        focus: None,
-        on_closed: None,
-    }
-}
-
-impl Dialog {
-    /// Call `handler` when the dialog has closed and gone, whichever way it
-    /// closed. Use it to put the keyboard focus back where it was.
-    pub fn on_closed(mut self, handler: impl Into<EventHandler<()>>) -> Self {
-        self.on_closed = Some(handler.into());
-        self
-    }
-
-    pub fn response(
-        mut self,
-        label: impl Into<String>,
-        kind: ResponseKind,
-        on_press: impl Into<EventHandler<()>>,
-    ) -> Self {
-        self.responses.push(DialogResponse {
-            label: label.into(),
-            kind,
-            on_press: on_press.into(),
-        });
-        self
-    }
-
-    /// A plain "Cancel"-style response that only closes the dialog.
-    pub fn cancel(self, label: impl Into<String>) -> Self {
-        self.response(label, ResponseKind::Default, |_| {})
-    }
-
-    pub fn content(mut self, content: impl Into<Element>) -> Self {
-        self.content = Some(content.into());
-        self
-    }
-
-    /// Give the response added last the keyboard focus when the dialog opens,
-    /// so Enter chooses it. Put it on the safe answer of a question that
-    /// loses data: the destructive button never has the focus by default.
-    pub fn focus_response(mut self) -> Self {
-        self.focus = self.responses.len().checked_sub(1);
-        self
-    }
-}
-
-/// A queued toast.
+/// A queued toast: a [`Banner`] that floats. It takes the banner's builders
+/// (kind, title, icon, actions) and adds the part that makes it float: the
+/// time it stays up. The pill, its colours and its buttons are the banner's,
+/// drawn by one code path for an inline banner and a toast alike.
 #[derive(Clone, PartialEq)]
 pub struct Toast {
-    pub text: String,
-    pub action: Option<(String, EventHandler<()>)>,
-    pub timeout: Duration,
+    banner: Banner,
+    timeout: Option<Duration>,
+}
+
+impl Toast {
+    /// A neutral toast with `text`: the dark floating pill.
+    pub fn new(text: impl Into<String>) -> Self {
+        Self {
+            banner: Banner::new(text).kind(BannerKind::Neutral).floating(),
+            timeout: None,
+        }
+    }
+
+    pub fn kind(mut self, kind: BannerKind) -> Self {
+        self.banner = self.banner.kind(kind);
+        self
+    }
+
+    pub fn title(mut self, title: impl Into<String>) -> Self {
+        self.banner = self.banner.title(title);
+        self
+    }
+
+    pub fn icon(mut self, icon: crate::icons::Icon) -> Self {
+        self.banner = self.banner.icon(icon);
+        self
+    }
+
+    pub fn without_icon(mut self) -> Self {
+        self.banner = self.banner.without_icon();
+        self
+    }
+
+    /// A button such as "Undo"; pressing it also dismisses the toast.
+    pub fn action(
+        mut self,
+        label: impl Into<String>,
+        on_press: impl Into<EventHandler<()>>,
+    ) -> Self {
+        self.banner = self.banner.action(label, on_press);
+        self
+    }
+
+    /// How long it stays up while nothing holds it: four seconds, six with an
+    /// action.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
+    fn timeout_or_default(&self) -> Duration {
+        self.timeout.unwrap_or(if self.banner.action_count() > 0 {
+            Duration::from_secs(6)
+        } else {
+            Duration::from_secs(4)
+        })
+    }
 }
 
 /// The shared handle. Copy it into closures; `show` and `dismiss` work
@@ -182,9 +98,9 @@ pub struct Overlays {
     /// still holds it.
     pub(crate) menu_panel: AccessibilityId,
     pub(crate) menu_nav: State<MenuNav>,
-    /// The window address the open menu was opened on. A menu belongs to that
-    /// page, so the window stops drawing it once the address moves on.
-    menu_page: State<Option<Address>>,
+    /// The stack entry the open menu was opened on. A menu belongs to that
+    /// page, so the window stops drawing it once the page changes.
+    menu_page: State<Option<u64>>,
     toasts: State<Vec<(u64, Toast)>>,
     toast_closing: State<Option<u64>>,
     next_toast: State<u64>,
@@ -220,6 +136,12 @@ impl Overlays {
         self.dialog.read().is_some()
     }
 
+    /// Whether a menu is open or fading out. A hover tooltip stays hidden
+    /// meanwhile, so it never covers the menu.
+    pub(crate) fn menu_open(self) -> bool {
+        self.menu.read().is_some()
+    }
+
     /// Close the open dialog. It animates out before it leaves the window.
     pub fn dismiss_dialog(mut self) {
         if self.dialog.read().is_some() && !*self.dialog_closing.read() {
@@ -227,7 +149,12 @@ impl Overlays {
         }
     }
 
-    fn finish_dialog(mut self) {
+    /// Whether the open dialog is fading out. Its responses have run by then.
+    pub(crate) fn dialog_closing(self) -> bool {
+        *self.dialog_closing.peek()
+    }
+
+    pub(crate) fn finish_dialog(mut self) {
         if *self.dialog_closing.read() {
             let closed = self
                 .dialog
@@ -259,7 +186,8 @@ impl Overlays {
         keyboard: bool,
     ) {
         self.menu_closing.set(false);
-        self.menu_page.set(current_address());
+        self.menu_page
+            .set(try_router().map(|router| router.current_id()));
         self.menu_nav.set(MenuNav::new(owner, &items, keyboard));
         self.menu.set(Some(Menu { trigger, items }));
     }
@@ -269,38 +197,68 @@ impl Overlays {
         self.menu.read().is_some() && self.menu_nav.read().owner == Some(owner)
     }
 
+    /// Whether `owner` still counts as focused for the menu it opened: while
+    /// the menu is up, and while it closes back to `owner`. See
+    /// [`crate::focus::owner`]; controls read this through
+    /// [`use_visual_focus`](crate::focus::owner::use_visual_focus).
+    pub(crate) fn keeps_focus(self, owner: AccessibilityId) -> bool {
+        let phase = if !self.menu_owned_by(owner) {
+            OverlayPhase::Closed
+        } else if *self.menu_closing.read() {
+            OverlayPhase::Closing
+        } else {
+            OverlayPhase::Open
+        };
+        let holds = *Platform::get()
+            .current_window()
+            .focused_accessibility_id
+            .read()
+            == self.menu_panel;
+        keeps_focus(phase, holds)
+    }
+
     /// Close the open menu from the keyboard. Focus returns to the owner when
     /// the menu finishes closing.
     pub(crate) fn dismiss_menu_by_key(self) {
         self.close_menu();
     }
 
-    /// Close the open menu.
+    /// Close the open menu. Focus goes back to its owner at once, if the
+    /// menu still holds it, so the owner is really focused again before the
+    /// menu has finished fading out; an item that opens a popup or moves
+    /// focus afterwards keeps its new focus.
     pub(crate) fn close_menu(mut self) {
         if self.menu.read().is_some() && !*self.menu_closing.read() {
             self.menu_closing.set(true);
+            self.restore_focus();
         }
     }
 
-    /// Remove the menu once it has animated out. Focus goes back to the owner
-    /// only if the panel still holds it, so an item that opened a popup or
-    /// moved focus keeps its new focus.
-    pub(crate) fn finish_menu(mut self) {
-        if !*self.menu_closing.read() {
-            return;
-        }
+    /// Gives focus back to the menu's owner when the menu still holds it.
+    fn restore_focus(self) {
         let owner = self.menu_nav.peek().owner;
-        let panel_focused = *Platform::get()
+        let holds = *Platform::get()
             .current_window()
             .focused_accessibility_id
             .peek()
             == self.menu_panel;
+        if let (Some(owner), Restore::ToOwner) = (owner, restore_on_close(owner.is_some(), holds))
+        {
+            owner.request_focus();
+        }
+    }
+
+    /// Remove the menu once it has animated out. Focus has already gone back
+    /// to the owner (see [`close_menu`](Self::close_menu)); this covers a
+    /// menu whose panel only took focus while it was fading.
+    pub(crate) fn finish_menu(mut self) {
+        if !*self.menu_closing.read() {
+            return;
+        }
+        self.restore_focus();
         self.menu.set(None);
         self.menu_nav.set(MenuNav::default());
         self.menu_closing.set(false);
-        if let (Some(owner), true) = (owner, panel_focused) {
-            owner.request_focus();
-        }
     }
 
     /// Drop the open menu at once, with no exit animation. The window's address
@@ -316,11 +274,7 @@ impl Overlays {
 
     /// Queue a toast that dismisses itself after four seconds.
     pub fn toast(self, text: impl Into<String>) {
-        self.push(Toast {
-            text: text.into(),
-            action: None,
-            timeout: Duration::from_secs(4),
-        });
+        self.show_toast(Toast::new(text));
     }
 
     /// Queue a toast with a button, such as "Undo".
@@ -330,14 +284,12 @@ impl Overlays {
         label: impl Into<String>,
         on_press: impl Into<EventHandler<()>>,
     ) {
-        self.push(Toast {
-            text: text.into(),
-            action: Some((label.into(), on_press.into())),
-            timeout: Duration::from_secs(6),
-        });
+        self.show_toast(Toast::new(text).action(label, on_press));
     }
 
-    fn push(mut self, toast: Toast) {
+    /// Queue a built [`Toast`]: a kind, a title, several actions. Toasts show
+    /// one at a time, in the order they were queued.
+    pub fn show_toast(mut self, toast: Toast) {
         let id = *self.next_toast.read();
         self.next_toast.set(id + 1);
         self.toasts.write().push((id, toast));
@@ -384,12 +336,21 @@ impl OverlayHost {
 
 impl Component for OverlayHost {
     fn render(&self) -> impl IntoElement {
+        // The window host below uses this core too, so the menus and dialogs
+        // drawn beside it share the page's focus state.
+        let _ = crate::focus::provide_focus_core();
         let scope = current_scope_id();
         let overlays = use_hook(move || Overlays::in_scope(scope));
         use_provide_context(|| overlays);
-        // The menu belongs to the window's page. Without a window address (a
-        // gallery or the inspector) both sides are None and the menu stays.
-        let page = use_try_consume::<State<Address>>().map(|address| (*address.read()).clone());
+        // A vetoed pop asks its question through these overlays.
+        use_hook(move || {
+            if let Some(router) = try_router() {
+                router.attach_overlays(overlays);
+            }
+        });
+        // The menu belongs to the window's page. Without a router (a gallery
+        // or the inspector) both sides are None and the menu stays.
+        let page = use_try_consume::<crate::nav::Router>().map(|router| router.use_current_id());
         use_side_effect_with_deps(&page, move |_| overlays.forget_menu());
 
         rect()
@@ -442,9 +403,9 @@ impl OverlayStack {
 pub(crate) struct OverlayLayers {
     pub(crate) overlays: Overlays,
     pub(crate) stack: OverlayStack,
-    /// The window address the window's menu must still be on. A popup has no
-    /// window address, so its menu is never filtered by it.
-    pub(crate) page: Option<Address>,
+    /// The entry of the window's stack the window's menu must still be on. A
+    /// popup has no stack, so its menu is never filtered by it.
+    pub(crate) page: Option<u64>,
 }
 
 impl Component for OverlayLayers {
@@ -487,129 +448,18 @@ impl Component for OverlayLayers {
     }
 }
 
-/// The widest a dialog gets, as a share of the window width, so it keeps a
-/// margin on a phone.
-const DIALOG_MAX_WIDTH_PERCENT: f32 = 94.0;
-/// The tallest a framed dialog gets, as a share of the window height.
-const DIALOG_MAX_HEIGHT_PERCENT: f32 = 90.0;
+/// How far a finger drags a toast sideways before letting go dismisses it.
+const SWIPE_DISMISS: f32 = 72.0;
+/// The sideways drag at which a toast has faded out completely.
+const SWIPE_FADE: f32 = 160.0;
+/// How often a toast's timer looks at whether it is held.
+const TOAST_TICK: Duration = Duration::from_millis(100);
 
-/// The card of a [`framed_dialog`]: the alert card without its padding and
-/// gap, clipped so the content's corners follow the card's.
-const DIALOG_FRAME: Recipe = &[
-    flex_col(),
-    rounded(Radius::Overlay),
-    bg(Paint::Bg),
-    border(Line::Hairline),
-    shadow(Elevation::Floating),
-    clip(),
-];
-
-#[derive(PartialEq)]
-struct DialogLayer {
-    overlays: Overlays,
-    dialog: Dialog,
-    closing: bool,
-    layer: Layer,
-}
-
-impl Component for DialogLayer {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let overlays = self.overlays;
-        let a11y_id = use_a11y();
-        // The card takes the focus unless a response was asked to.
-        let focus_card = self.dialog.focus.is_none();
-        use_side_effect(move || {
-            if focus_card {
-                a11y_id.request_focus();
-            }
-        });
-
-        let responses = self.dialog.responses.clone();
-        let focused = self.dialog.focus;
-        let buttons = responses.iter().enumerate().map(|(index, response)| {
-            let on_press = response.on_press.clone();
-            let press = move |_: ()| {
-                on_press.call(());
-                overlays.dismiss_dialog();
-            };
-            let button: ActionButton = match response.kind {
-                ResponseKind::Suggested => primary_button(response.label.clone(), press),
-                ResponseKind::Destructive => {
-                    action_button(response.label.clone(), press).destructive()
-                }
-                ResponseKind::Default => action_button(response.label.clone(), press),
-            };
-            let button = if focused == Some(index) {
-                button.autofocus()
-            } else {
-                button
-            };
-            Element::from(button.grow())
-        });
-
-        if let Some(frame) = self.dialog.frame {
-            let card = rect()
-                .a11y_id(a11y_id)
-                .a11y_focusable(true)
-                .a11y_role(AccessibilityRole::Dialog)
-                .a11y_alt(self.dialog.title.clone())
-                .tw(&tokens, DIALOG_FRAME)
-                .width(Size::px(frame.width))
-                .height(Size::px(frame.height))
-                .max_width(Size::window_percent(DIALOG_MAX_WIDTH_PERCENT))
-                .max_height(Size::window_percent(DIALOG_MAX_HEIGHT_PERCENT))
-                // A press on the card never reaches the panel's scrim.
-                .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
-                .maybe_child(self.dialog.content.clone());
-            return Element::from(
-                Panel::dialog(!self.closing, self.layer, vec![card.into_element()])
-                    .on_dismiss(EventHandler::new(move |_: ()| overlays.dismiss_dialog()))
-                    .on_closed(EventHandler::new(move |_: ()| overlays.finish_dialog())),
-            );
-        }
-
-        let card = rect()
-            .a11y_id(a11y_id)
-            .a11y_focusable(true)
-            .a11y_role(AccessibilityRole::AlertDialog)
-            .a11y_alt(self.dialog.title.clone())
-            .tw(&tokens, DIALOG)
-            .tw(&tokens, &[w(Dim::Dialog)])
-            .max_width(Size::window_percent(DIALOG_MAX_WIDTH_PERCENT))
-            // A press on the card never reaches the panel's scrim.
-            .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
-            .child(
-                SECTION
-                    .label(&tokens, self.dialog.title.clone())
-                    .text_align(TextAlign::Center)
-                    .width(Size::fill()),
-            )
-            .maybe_child((!self.dialog.body.is_empty()).then(|| {
-                BODY.in_ink(Ink::Muted)
-                    .paragraph(&tokens, self.dialog.body.clone())
-                    .width(Size::fill())
-                    .text_align(TextAlign::Center)
-            }))
-            .maybe_child(self.dialog.content.clone())
-            .child(
-                rect()
-                    .tw(&tokens, &[w_full(), flex_row(), grow_children(), gap(S2)])
-                    .children(buttons),
-            );
-
-        Element::from(
-            Panel::dialog(!self.closing, self.layer, vec![card.into_element()])
-                .on_dismiss(EventHandler::new(move |_: ()| overlays.dismiss_dialog()))
-                .on_closed(EventHandler::new(move |_: ()| overlays.finish_dialog())),
-        )
-    }
-}
-
-/// The widest a toast's text gets, as a share of the window width, so the
-/// action and the close button stay on a phone.
-const TOAST_TEXT_MAX_WIDTH_PERCENT: f32 = 60.0;
-
+/// The floating shell of a toast: places the [`Banner`] it holds at the
+/// bottom of the window above the content, slides and fades it in and out,
+/// runs its timer (paused while the pointer is over it, a finger is on it or
+/// one of its buttons has keyboard focus) and dismisses it on a sideways
+/// swipe. It draws nothing of its own: the pill is the banner.
 #[derive(PartialEq)]
 struct ToastLayer {
     overlays: Overlays,
@@ -628,107 +478,90 @@ impl Component for ToastLayer {
         let tokens = use_tokens();
         let overlays = self.overlays;
         let id = self.id;
-        let timeout = self.toast.timeout;
+        let timeout = self.toast.timeout_or_default();
+        let mut hovering = use_state(|| false);
+        // Where a finger went down, and how far it has dragged since.
+        let mut grab = use_state(|| None::<f32>);
+        let mut pull = use_state(|| 0.0_f32);
+        // One id per action and one for the dismiss cross.
+        let buttons = self.toast.banner.action_count() + 1;
+        let button_ids =
+            use_hook(move || (0..buttons).map(|_| AccessibilityId::new_unique()).collect::<Vec<_>>());
         let progress = use_presence(!self.closing, tokens.motion(140), move || {
             overlays.finish_toast(id)
         });
-        // Each toast that takes over the layer gets its own timer.
+        let dx = use_sheet_pull(pull, grab().is_some(), tokens.motion(140));
+        let focused = Platform::get().current_window().focused_accessibility_id;
+        // Each toast that takes over the layer gets its own timer. It counts
+        // down only while nothing holds the toast.
+        let timer_ids = button_ids.clone();
         use_side_effect_with_deps(&(id, timeout), move |&(id, timeout): &(u64, Duration)| {
+            let ids = timer_ids.clone();
             spawn(async move {
-                timer(timeout).await;
+                let mut left = timeout;
+                while !left.is_zero() {
+                    timer(TOAST_TICK).await;
+                    let held = *hovering.peek()
+                        || grab.peek().is_some()
+                        || ids.contains(&*focused.peek());
+                    if !held {
+                        left = left.saturating_sub(TOAST_TICK);
+                    }
+                }
                 overlays.dismiss_toast(id);
             });
         });
-        let action = self
+        let dismiss = EventHandler::new(move |_: ()| overlays.dismiss_toast(id));
+        let banner = self
             .toast
-            .action
+            .banner
             .clone()
-            .map(|(text, on_press)| ToastAction {
-                text,
-                on_press: EventHandler::new(move |_: ()| {
-                    on_press.call(());
-                    overlays.dismiss_toast(id);
-                }),
-            });
+            .after_action(dismiss.clone())
+            .dismissible(dismiss)
+            .button_ids(button_ids);
+        let fade = progress * (1.0 - (dx.abs() / SWIPE_FADE).min(1.0));
 
+        // `offset_y` shifts an element's children, not the element: the toast
+        // slides inside a wrapper, so its background moves with its text.
         rect()
-            .position(Position::new_absolute().bottom(S6.px()).left(0.0))
+            .position(
+                Position::new_absolute().bottom(S6.px() + Dim::SafeBottom.px()).left(0.0),
+            )
             .layer(self.layer)
             .tw(&tokens, &[w_screen(), flex_col(), items(Align::Center)])
             .child(
                 rect()
-                    .a11y_role(AccessibilityRole::Status)
-                    .a11y_alt(self.toast.text.clone())
-                    .tw(&tokens, TOAST)
-                    .opacity(progress)
+                    .component("Toast")
                     .offset_y(S2.px() * (1.0 - progress))
-                    .child(
-                        BODY.label(&tokens, self.toast.text.clone())
-                            .max_lines(1)
-                            .text_overflow(TextOverflow::Ellipsis)
-                            .max_width(Size::window_percent(TOAST_TEXT_MAX_WIDTH_PERCENT)),
-                    )
-                    .maybe_child(action)
-                    .child(
-                        crate::controls::icon_button(crate::icons::Icon::WindowClose, move |_| {
-                            overlays.dismiss_toast(id)
-                        })
-                        .size(Dim::Box7)
-                        .tooltip("Dismiss"),
-                    ),
-            )
-    }
-}
-
-#[derive(PartialEq)]
-struct ToastAction {
-    text: String,
-    on_press: EventHandler<()>,
-}
-
-impl Component for ToastAction {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let mut hovering = use_state(|| false);
-        let press = use_press();
-        let on_press = self.on_press.clone();
-        let on_key = on_press.clone();
-        rect()
-            .a11y_role(AccessibilityRole::Button)
-            .a11y_focusable(true)
-            .tw(
-                &tokens,
-                &[
-                    h(Dim::Box7),
-                    px(S2),
-                    rounded(Radius::Card),
-                    center(),
-                    surface(Paint::Transparent, hovering(), false, false),
-                ],
-            )
-            .on_pointer_enter(move |_| hovering.set(true))
-            .on_pointer_leave(move |_| hovering.set(false))
-            .on_pointer_down(move |event: Event<PointerEventData>| press.begin(&event, None))
-            .on_global_pointer_move(move |event: Event<PointerEventData>| press.moved(&event))
-            .on_global_pointer_up(move |_| press.release())
-            .on_press(move |event: Event<PressEventData>| {
-                event.stop_propagation();
-                // A touch that scrolled off the action is not a tap.
-                if !press.tap(&event) {
-                    return;
-                }
-                on_press.call(());
-            })
-            .on_key_down(move |event: Event<KeyboardEventData>| {
-                if is_activation_key(&event.key) {
-                    on_key.call(());
-                }
-            })
-            .child(
-                EMPHASIS
-                    .in_ink(Ink::Accent)
-                    .label(&tokens, self.text.clone())
-                    .max_lines(1),
+                    .offset_x(dx)
+                    .opacity(fade)
+                    .on_pointer_enter(move |_| hovering.set(true))
+                    .on_pointer_leave(move |_| hovering.set(false))
+                    .on_pointer_down(move |event: Event<PointerEventData>| {
+                        if matches!(event.data(), PointerEventData::Touch(_)) {
+                            pull.set(0.0);
+                            grab.set(Some(event.global_location().x as f32));
+                        }
+                    })
+                    .on_global_pointer_move(move |event: Event<PointerEventData>| {
+                        if let Some(start) = *grab.peek() {
+                            pull.set(event.global_location().x as f32 - start);
+                        }
+                    })
+                    .on_global_pointer_up(move |_| {
+                        if grab.peek().is_none() {
+                            return;
+                        }
+                        grab.set(None);
+                        // A long enough swipe dismisses and leaves the toast
+                        // where the finger let go; a short one springs back.
+                        if pull.peek().abs() >= SWIPE_DISMISS {
+                            overlays.dismiss_toast(id);
+                        } else {
+                            pull.set(0.0);
+                        }
+                    })
+                    .child(banner),
             )
     }
 }

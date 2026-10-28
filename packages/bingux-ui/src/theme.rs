@@ -6,6 +6,8 @@
 //! Nothing outside this module hard-codes a colour, size, radius or duration;
 //! components read them from [`Tokens`].
 
+pub use crate::contrast::on_colour;
+use crate::contrast::{AA_LARGE, AA_TEXT, composite, ensure_contrast, on_colour_over};
 use crate::task::use_resource;
 use freya::prelude::*;
 
@@ -142,7 +144,36 @@ pub struct Tokens {
     pub success: Color,
     pub warning: Color,
     pub danger: Color,
-    pub accent_foreground: Color,
+    /// Text and icons on a filled surface: the surface colour darkened (or,
+    /// on a dark fill, near-white) by [`on_colour_over`] to reach AA, and AAA
+    /// where the hue allows, at rest, hover and press. They follow the
+    /// accent, so they follow the user's choice.
+    pub on_accent: Color,
+    pub on_danger: Color,
+    pub on_success: Color,
+    pub on_warning: Color,
+    /// Text on the floating surface (tooltips, toasts, the status line).
+    pub on_floating: Color,
+    /// The accent, danger, success and warning colours as text and icons on
+    /// the layers of the scheme: the same hue, moved in lightness until
+    /// every layer gives 4.5:1. The plain tokens stay for fills.
+    pub accent_ink: Color,
+    pub danger_ink: Color,
+    pub success_ink: Color,
+    pub warning_ink: Color,
+    /// The danger colour as text on the floating surface.
+    pub danger_on_floating: Color,
+    /// The colours of a banner or toast of each [`BannerKind`]; read one with
+    /// [`Tokens::notice`].
+    pub notice: [NoticePalette; 5],
+    /// The keyboard focus ring and the error ring: accent and danger moved
+    /// until they show 3:1 on every layer and on the raised control fill.
+    /// The fills behind a search hit and the current hit: the warning colour
+    /// kept dark (or light) enough that `text` reads on them.
+    pub search_hit: Color,
+    pub search_current: Color,
+    pub focus_ring: Color,
+    pub error_ring: Color,
     pub floating: Color,
     pub floating_outline: Color,
     /// Opaque surface for menus and popovers that float over content.
@@ -163,12 +194,40 @@ impl Tokens {
     /// up from there. Hover, press and selection are white (dark) or black
     /// (light) overlays, so they read on every layer.
     pub fn new(accent_name: &'static str, scheme: Scheme, reduced_motion: bool) -> Self {
+        // Deriving the contrast-safe colours searches lightness, so each
+        // accent and scheme is derived once.
+        static DERIVED: std::sync::OnceLock<
+            std::sync::Mutex<std::collections::HashMap<(&'static str, bool), Tokens>>,
+        > = std::sync::OnceLock::new();
+        let key = (accent_name, scheme.is_dark());
+        let cache = DERIVED.get_or_init(Default::default);
+        let cached = cache.lock().ok().and_then(|map| map.get(&key).copied());
+        let derived = cached.unwrap_or_else(|| {
+            let fresh = Self::derive(accent_name, scheme, false);
+            if let Ok(mut map) = cache.lock() {
+                map.insert(key, fresh);
+            }
+            fresh
+        });
+        Self { scheme, reduced_motion, ..derived }
+    }
+
+    pub(crate) fn derive(accent_name: &'static str, scheme: Scheme, reduced_motion: bool) -> Self {
         let accent = accent_for(accent_name, scheme.is_dark());
         let p = if scheme.is_dark() {
             Palette::dark()
         } else {
             Palette::light()
         };
+        let floating = rgba(0.12, 0.12, 0.13, 1.0);
+        // Fills that stand for state (accent, status colours) and the edges
+        // of controls must show against every layer: 3:1 (WCAG 1.4.11). The
+        // hue stays; only lightness moves, and only where it has to.
+        let layers = p.layers();
+        let fill = |colour: Color| fit_fill(ensure_contrast(colour, &layers, AA_LARGE), &p);
+        let accent = fill(accent);
+        let (success, warning, danger) = (fill(p.success), fill(p.warning), fill(p.danger));
+        let outline = ensure_contrast(p.outline, &layers, AA_LARGE);
         Self {
             accent,
             accent_name,
@@ -186,22 +245,46 @@ impl Tokens {
             pressed: p.pressed,
             selection: p.selection,
             border: p.border,
-            outline: p.outline,
+            outline,
             text: p.text,
-            muted: p.muted,
+            muted: p.readable(p.muted),
             bar_divider: p.separator,
-            success: p.success,
-            warning: p.warning,
-            danger: p.danger,
-            accent_foreground: rgba(1.0, 1.0, 1.0, 1.0),
-            floating: rgba(0.12, 0.12, 0.13, 0.82),
+            success,
+            warning,
+            danger,
+            on_accent: on_fill(accent, &p),
+            on_danger: on_fill(danger, &p),
+            on_success: on_fill(success, &p),
+            on_warning: on_fill(warning, &p),
+            on_floating: on_colour(composite(floating, p.content)),
+            notice: notice_palettes(
+                &p,
+                scheme.is_dark(),
+                [accent, success, warning, danger],
+                floating,
+                on_colour(composite(floating, p.content)),
+            ),
+            danger_on_floating: ensure_contrast(
+                danger,
+                &[composite(floating, p.content)],
+                AA_TEXT,
+            ),
+            accent_ink: text_ink(accent, &p),
+            danger_ink: text_ink(danger, &p),
+            success_ink: text_ink(success, &p),
+            warning_ink: text_ink(warning, &p),
+            search_hit: highlight(warning, 0.30, &p),
+            search_current: highlight(warning, 0.65, &p),
+            focus_ring: ring_colour(accent, &p),
+            error_ring: ring_colour(danger, &p),
+            floating,
             floating_outline: rgba(1.0, 1.0, 1.0, 0.16),
             popover: p.popup,
-            syntax_tag: p.syntax_tag,
-            syntax_attr: p.syntax_attr,
-            syntax_value: p.syntax_value,
-            syntax_text: p.syntax_text,
-            syntax_comment: p.syntax_comment,
+            syntax_tag: p.readable(p.syntax_tag),
+            syntax_attr: p.readable(p.syntax_attr),
+            syntax_value: p.readable(p.syntax_value),
+            syntax_text: p.readable(p.syntax_text),
+            syntax_comment: p.readable(p.syntax_comment),
         }
     }
 
@@ -209,42 +292,255 @@ impl Tokens {
     pub fn motion(&self, ms: u64) -> u64 {
         if self.reduced_motion { 0 } else { ms }
     }
+
+    /// The colours of a notice of `kind`.
+    pub fn notice(&self, kind: BannerKind) -> NoticePalette {
+        self.notice[kind.index()]
+    }
+}
+
+/// The kind of notice a banner or toast carries. It sets every colour of
+/// the notice: the fill, the ink, the edge and the action button.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BannerKind {
+    /// The dark floating surface of a toast, with a light action button.
+    Neutral,
+    /// The accent hue.
+    Info,
+    Success,
+    Warning,
+    Error,
+}
+
+impl BannerKind {
+    pub const ALL: [BannerKind; 5] = [
+        BannerKind::Neutral,
+        BannerKind::Info,
+        BannerKind::Success,
+        BannerKind::Warning,
+        BannerKind::Error,
+    ];
+
+    const fn index(self) -> usize {
+        match self {
+            BannerKind::Neutral => 0,
+            BannerKind::Info => 1,
+            BannerKind::Success => 2,
+            BannerKind::Warning => 3,
+            BannerKind::Error => 4,
+        }
+    }
+}
+
+/// The colours of one [`BannerKind`] in one scheme and accent. The fill is an
+/// opaque low-chroma tint of the kind's hue, so the notice reads over any
+/// content it floats on. The ink (text, icon and dismiss glyph) is the same
+/// hue moved in lightness: darker than the fill on a light scheme, lighter on
+/// a dark one, until it reaches AAA (7:1) on the fill. The edge is the hue
+/// itself at 3:1 on the fill. The action button is filled with the hue and
+/// carries its own on-colour.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NoticePalette {
+    pub fill: Color,
+    pub ink: Color,
+    pub edge: Color,
+    pub action: Color,
+    pub on_action: Color,
+}
+
+/// The lightness of the tinted fill, how much of the hue's chroma it keeps
+/// and its chroma ceiling (OKLab), on a light and on a dark scheme.
+const NOTICE_FILL_LIGHT: (f32, f32, f32) = (0.95, 0.30, 0.05);
+const NOTICE_FILL_DARK: (f32, f32, f32) = (0.30, 0.35, 0.07);
+/// The most chroma the ink seed keeps, so a saturated hue stays readable.
+const NOTICE_INK_CHROMA_MAX: f32 = 0.13;
+
+/// The palettes of every kind, indexed by [`BannerKind::index`]: `hues` are the
+/// accent, success, warning and danger fills.
+fn notice_palettes(
+    p: &Palette,
+    dark: bool,
+    hues: [Color; 4],
+    floating: Color,
+    on_floating: Color,
+) -> [NoticePalette; 5] {
+    use crate::contrast::{AAA_TEXT, Oklch};
+    let layers = p.layers();
+    let (fill_l, keep, max) = if dark { NOTICE_FILL_DARK } else { NOTICE_FILL_LIGHT };
+    let tinted = |hue: Color| {
+        let h = Oklch::from_colour(hue);
+        let fill = Oklch { l: fill_l, c: (h.c * keep).min(max), h: h.h }.to_colour();
+        let seed = Oklch {
+            l: if dark { 0.88 } else { 0.42 },
+            c: h.c.min(NOTICE_INK_CHROMA_MAX),
+            h: h.h,
+        }
+        .to_colour();
+        let ink = ensure_contrast(seed, &[fill], AAA_TEXT);
+        let edge = ensure_contrast(hue, &[fill], AA_LARGE);
+        let mut surfaces = layers.to_vec();
+        surfaces.push(fill);
+        let action = fit_fill(ensure_contrast(hue, &surfaces, AA_LARGE), p);
+        NoticePalette { fill, ink, edge, action, on_action: on_fill(action, p) }
+    };
+    let [info, success, warning, error] = hues.map(tinted);
+    let neutral = NoticePalette {
+        fill: floating,
+        ink: on_floating,
+        edge: composite(rgba(1.0, 1.0, 1.0, 0.16), floating),
+        action: on_floating,
+        on_action: on_colour(on_floating),
+    };
+    [neutral, info, success, warning, error]
+}
+
+/// The ink for text and icons on `fill`, holding at rest and under the hover,
+/// press and selection layers of the scheme.
+fn on_fill(fill: Color, p: &Palette) -> Color {
+    on_colour_over(&fill_states(fill, p))
+}
+
+/// A filled surface at rest and under the hover, press and selection layers.
+fn fill_states(fill: Color, p: &Palette) -> [Color; 4] {
+    [
+        fill,
+        composite(p.hover, fill),
+        composite(p.pressed, fill),
+        composite(p.selection, fill),
+    ]
+}
+
+/// The most the lightness of a fill moves to make its ink reach AA.
+const FILL_NUDGE_MAX: f32 = 0.12;
+const FILL_NUDGE_STEP: f32 = 0.004;
+
+/// `fill` as it is drawn: unchanged when its on-colour reaches AA in every
+/// state, else moved the least in lightness (lighter for dark ink, darker for
+/// light ink) that makes it so while it still shows 3:1 on every layer.
+fn fit_fill(fill: Color, p: &Palette) -> Color {
+    let layers = p.layers();
+    let reads = |candidate: Color| {
+        let states = fill_states(candidate, p);
+        crate::contrast::worst_ratio(on_colour_over(&states), &states) >= AA_TEXT
+            && crate::contrast::worst_ratio(candidate, &layers) >= AA_LARGE
+    };
+    if reads(fill) {
+        return fill;
+    }
+    let base = crate::contrast::Oklch::from_colour(fill);
+    let mut step = FILL_NUDGE_STEP;
+    while step <= FILL_NUDGE_MAX {
+        for direction in [-1.0, 1.0] {
+            let candidate = crate::contrast::Oklch { l: base.l + direction * step, ..base }.to_colour();
+            if reads(candidate) {
+                return candidate;
+            }
+        }
+        step += FILL_NUDGE_STEP;
+    }
+    fill
+}
+
+/// `colour` at `alpha` over the card, then moved in lightness until the
+/// scheme's text reads on it at AA: the fill behind a search hit.
+fn highlight(colour: Color, alpha: f32, p: &Palette) -> Color {
+    let fill = composite(colour.with_af32(alpha), p.card);
+    ensure_contrast(fill, &[p.text, p.syntax_text], AA_TEXT)
+}
+
+/// A ring colour that shows on every layer and on the raised fill.
+fn ring_colour(colour: Color, p: &Palette) -> Color {
+    let mut surfaces = p.layers().to_vec();
+    surfaces.push(p.raised);
+    ensure_contrast(colour, &surfaces, AA_LARGE)
+}
+
+/// `colour` as text: moved in lightness until it reads at AA on every layer
+/// of the scheme and on its own 16% tint over a card and a control, which is
+/// where badges and banners set it.
+fn text_ink(colour: Color, p: &Palette) -> Color {
+    let tint = |under: Color| composite(colour.with_af32(0.18), under);
+    let surfaces = [
+        p.content,
+        p.sidebar,
+        p.card,
+        p.control,
+        p.raised,
+        p.popup,
+        tint(p.card),
+        tint(p.control),
+        tint(p.content),
+        tint(p.popup),
+    ];
+    ensure_contrast(colour, &surfaces, AA_TEXT)
 }
 
 /// The surface and ink colours of one colour scheme.
-struct Palette {
+pub(crate) struct Palette {
     /// Page content and the header bar: the base layer.
-    content: Color,
+    pub(crate) content: Color,
     /// Sidebar, one step off the content.
-    sidebar: Color,
+    pub(crate) sidebar: Color,
     /// Group cards on a page.
-    card: Color,
+    pub(crate) card: Color,
     /// Buttons, fields and dropdowns sitting on a card.
-    control: Color,
-    raised: Color,
+    pub(crate) control: Color,
+    pub(crate) raised: Color,
     /// Dialogs, popovers and menus: the topmost opaque layer, the
     /// `Tokens::popover` surface.
-    popup: Color,
-    separator: Color,
-    hover: Color,
-    pressed: Color,
-    selection: Color,
-    border: Color,
-    outline: Color,
-    text: Color,
-    muted: Color,
-    success: Color,
-    warning: Color,
-    danger: Color,
-    syntax_tag: Color,
-    syntax_attr: Color,
-    syntax_value: Color,
-    syntax_text: Color,
-    syntax_comment: Color,
+    pub(crate) popup: Color,
+    pub(crate) separator: Color,
+    pub(crate) hover: Color,
+    pub(crate) pressed: Color,
+    pub(crate) selection: Color,
+    pub(crate) border: Color,
+    pub(crate) outline: Color,
+    pub(crate) text: Color,
+    pub(crate) muted: Color,
+    pub(crate) success: Color,
+    pub(crate) warning: Color,
+    pub(crate) danger: Color,
+    pub(crate) syntax_tag: Color,
+    pub(crate) syntax_attr: Color,
+    pub(crate) syntax_value: Color,
+    pub(crate) syntax_text: Color,
+    pub(crate) syntax_comment: Color,
 }
 
 impl Palette {
-    fn dark() -> Self {
+    /// The opaque layers a control or text can sit on.
+    fn layers(&self) -> [Color; 5] {
+        [self.content, self.sidebar, self.card, self.control, self.popup]
+    }
+
+    /// The layers and each of them under the hover, press and selection
+    /// layers, which is every ground ordinary text sits on.
+    fn grounds(&self) -> Vec<Color> {
+        let mut layers = self.layers().to_vec();
+        layers.push(self.raised);
+        let mut grounds = layers.clone();
+        for layer in layers {
+            for state in [self.hover, self.pressed, self.selection] {
+                grounds.push(composite(state, layer));
+            }
+        }
+        grounds
+    }
+
+    /// Ink that must read on every ground: secondary text and the code face.
+    fn readable(&self, ink: Color) -> Color {
+        let grounds = self.grounds();
+        if ink.a() == 255 {
+            return ensure_contrast(ink, &grounds, AA_TEXT);
+        }
+        // A translucent ink gains opacity until it reads on every ground.
+        (ink.a()..=255)
+            .map(|alpha| Color::from((ink.r(), ink.g(), ink.b(), alpha)))
+            .find(|candidate| crate::contrast::worst_ratio(*candidate, &grounds) >= AA_TEXT)
+            .unwrap_or_else(|| Color::from((ink.r(), ink.g(), ink.b(), 255u8)))
+    }
+
+    pub(crate) fn dark() -> Self {
         Self {
             content: hex(0x222226),
             sidebar: hex(0x2e2e32),
@@ -257,7 +553,7 @@ impl Palette {
             pressed: rgba(1.0, 1.0, 1.0, 0.10),
             selection: rgba(1.0, 1.0, 1.0, 0.10),
             border: rgba(1.0, 1.0, 1.0, 1.0),
-            outline: rgba(0.314, 0.314, 0.314, 0.75),
+            outline: hex(0x8c8c92),
             text: rgba(0.980, 0.980, 0.980, 0.98),
             muted: rgba(1.0, 1.0, 1.0, 0.69),
             success: hex(0x8ff0a4),
@@ -271,7 +567,7 @@ impl Palette {
         }
     }
 
-    fn light() -> Self {
+    pub(crate) fn light() -> Self {
         Self {
             content: hex(0xfafafb),
             sidebar: hex(0xebebed),
@@ -284,7 +580,7 @@ impl Palette {
             pressed: rgba(0.0, 0.0, 0.0, 0.08),
             selection: rgba(0.0, 0.0, 0.0, 0.08),
             border: rgba(0.0, 0.0, 0.0, 1.0),
-            outline: rgba(0.0, 0.0, 0.0, 0.20),
+            outline: hex(0x8c8c92),
             text: hex(0x2e2e32),
             muted: hex(0x6b6b70),
             success: hex(0x26a269),
@@ -460,10 +756,10 @@ fn appearance_monitor_enabled() -> bool {
     }
 }
 
-/// Owns the `gsettings monitor` child of [`watch_appearance`]. Dropping the
-/// last clone (the window root unmounts, the window closes) kills and reaps
-/// the child. The child also carries `PR_SET_PDEATHSIG(SIGTERM)`, so it dies
-/// with this process even when no destructor runs.
+/// Owns the `gsettings monitor` child of [`watch_appearance`]. Dropping it
+/// (the window root unmounts, the window closes) kills and reaps the child.
+/// The child also carries `PR_SET_PDEATHSIG(SIGTERM)`, so it dies with this
+/// process even when no destructor runs.
 #[derive(Clone)]
 pub struct AppearanceMonitor(std::sync::Arc<MonitorInner>);
 
@@ -500,12 +796,14 @@ impl Drop for MonitorInner {
 /// [`appearance_monitor_enabled`] says no.
 pub fn watch_appearance(mut tokens: State<Tokens>) -> AppearanceMonitor {
     use std::io::{BufRead, BufReader};
+
     use std::process::{Command, Stdio};
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::{Arc, Mutex, mpsc};
-    use std::time::Duration;
+    use std::sync::{Arc, Mutex};
 
-    let (sender, receiver) = mpsc::channel::<(String, String)>();
+    use crate::task::Feed;
+
+    let feed = Arc::new(Feed::<(String, String)>::default());
     let stop = Arc::new(AtomicBool::new(false));
     let slot: Arc<Mutex<Option<std::process::Child>>> = Arc::default();
     let guard = AppearanceMonitor(Arc::new(MonitorInner {
@@ -513,8 +811,10 @@ pub fn watch_appearance(mut tokens: State<Tokens>) -> AppearanceMonitor {
         child: Arc::clone(&slot),
     }));
     if !appearance_monitor_enabled() {
+        feed.close();
         return guard;
     }
+    let sender = Arc::clone(&feed);
     std::thread::spawn(move || {
         let mut command = Command::new("gsettings");
         command
@@ -526,6 +826,7 @@ pub fn watch_appearance(mut tokens: State<Tokens>) -> AppearanceMonitor {
         // that thread lives as long as the child.
         crate::runtime::die_with_parent(&mut command);
         let Ok(mut child) = command.spawn() else {
+            sender.close();
             return;
         };
         let stdout = child.stdout.take();
@@ -535,6 +836,7 @@ pub fn watch_appearance(mut tokens: State<Tokens>) -> AppearanceMonitor {
             if stop.load(Ordering::SeqCst) {
                 let _ = child.kill();
                 let _ = child.wait();
+                sender.close();
                 return;
             }
             *held = Some(child);
@@ -544,12 +846,8 @@ pub fn watch_appearance(mut tokens: State<Tokens>) -> AppearanceMonitor {
                 if stop.load(Ordering::SeqCst) {
                     break;
                 }
-                if let Some((key, value)) = line.split_once(':')
-                    && sender
-                        .send((key.trim().to_string(), value.trim().to_string()))
-                        .is_err()
-                {
-                    break;
+                if let Some((key, value)) = line.split_once(':') {
+                    sender.push((key.trim().to_string(), value.trim().to_string()));
                 }
             }
         }
@@ -561,30 +859,27 @@ pub fn watch_appearance(mut tokens: State<Tokens>) -> AppearanceMonitor {
             let _ = child.kill();
             let _ = child.wait();
         }
+        sender.close();
     });
+    // The task sleeps until the monitor says something: no timer runs while
+    // the appearance does not change.
     spawn(async move {
-        loop {
-            match receiver.try_recv() {
-                Ok((key, value)) => {
-                    let current = *tokens.read();
-                    let next = match key.as_str() {
-                        "accent-color" => Tokens::new(
-                            normalise_accent(&value),
-                            current.scheme,
-                            current.reduced_motion,
-                        ),
-                        "color-scheme" => Tokens::new(
-                            current.accent_name,
-                            Scheme::from_gsettings(&value),
-                            current.reduced_motion,
-                        ),
-                        _ => continue,
-                    };
-                    tokens.set_if_modified(next);
-                }
-                Err(mpsc::TryRecvError::Empty) => timer(Duration::from_millis(200)).await,
-                Err(mpsc::TryRecvError::Disconnected) => return,
-            }
+        while let Some((key, value)) = feed.next().await {
+            let current = *tokens.read();
+            let next = match key.as_str() {
+                "accent-color" => Tokens::new(
+                    normalise_accent(&value),
+                    current.scheme,
+                    current.reduced_motion,
+                ),
+                "color-scheme" => Tokens::new(
+                    current.accent_name,
+                    Scheme::from_gsettings(&value),
+                    current.reduced_motion,
+                ),
+                _ => continue,
+            };
+            tokens.set_if_modified(next);
         }
     });
     guard
@@ -675,7 +970,7 @@ pub fn font_files(family: &str, limit: usize) -> Vec<Vec<u8>> {
 /// the weight by smearing the outlines, which looks heavy and blotchy.
 /// Loading the files gives real instances for every weight. When the family
 /// has no file, Freya falls back to its own system lookup by name.
-pub fn with_font(config: LaunchConfig) -> LaunchConfig {
+pub(crate) fn with_font(config: LaunchConfig) -> LaunchConfig {
     let family = font_family();
     let mut config = config;
     let mut found = false;

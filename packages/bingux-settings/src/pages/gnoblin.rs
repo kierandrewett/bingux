@@ -344,7 +344,7 @@ pub fn has_touchpad() -> bool {
                             })
                 })
             }),
-        None => std::fs::read_to_string("/proc/bus/input/devices").is_ok_and(|text| {
+        None => crate::system::read_to_string("/proc/bus/input/devices").is_ok_and(|text| {
             text.lines().any(|line| {
                 line.starts_with("N: Name=") && line.to_ascii_lowercase().contains("touchpad")
             })

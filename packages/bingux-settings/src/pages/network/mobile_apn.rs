@@ -10,10 +10,10 @@ use freya::prelude::*;
 use crate::icons::Icon;
 use crate::pages::loading::veiled;
 use crate::pages::network::model::{CONNECT, NetCtx, QUICK, nmcli, split_terse, use_net_ctx};
-use crate::routes::Route;
+use crate::routes;
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
-    Group, PageHead, ResponseKind, Status, action_row, choice_row, dialog, form_field, icon_button,
+    CANCEL_ID, Group, PageHead, ResponseKind, Status, action_row, choice_row, dialog, form_field, icon_button,
     page_column, pending_bar, primary_button, radio_row, radio_rows, row, status, switch_row,
     use_page_busy,
 };
@@ -654,9 +654,7 @@ impl Component for ApnListPage {
                     .subtitle(profile.summary())
                     .trailing(Element::from(
                         icon_button(Icon::PreferencesSystem, move |_| {
-                            ctx.navigator.push(Route::MobileApn {
-                                name: Some(edit.clone()),
-                            })
+                            ctx.router.open(routes::mobile_apn(Some(&edit.clone())))
                         })
                         .tooltip("Edit access point"),
                     ))
@@ -669,7 +667,7 @@ impl Component for ApnListPage {
                 Group::new(None::<String>).row(
                     row("Add access point...")
                         .navigates()
-                        .on_press(move |_| ctx.navigator.push(Route::MobileApn { name: None })),
+                        .on_press(move |_| ctx.router.open(routes::mobile_apn(None))),
                 ),
             ),
             false,
@@ -836,7 +834,7 @@ impl Component for ApnForm {
                                 // name (the address of this page is its name),
                                 // goes back to the list.
                                 if !existing || renamed {
-                                    ctx.navigator.pop();
+                                    ctx.router.pop();
                                 } else {
                                     background(loaded, move || load_editing(Some(refreshed)));
                                 }
@@ -880,18 +878,18 @@ impl Component for ApnForm {
                         let mut auto_config = auto_config;
                         auto_config.set(on);
                     },
-                )
-                .subtitle("Use the carrier's settings from the mobile broadband provider list."),
+                ),
             );
         }
 
         let mut page = page_column()
             .child(PageHead::new())
-            .maybe_child(if existing {
-                pending_bar(dirty, valid, apply.clone(), revert)
-            } else {
-                None
-            })
+            .child(pending_bar(
+                existing && dirty,
+                valid,
+                apply.clone(),
+                revert,
+            ))
             .child(general);
 
         if !draft.auto_config {
@@ -958,6 +956,7 @@ fn confirm_delete(ctx: NetCtx, profiles: Profiles, profile: Profile) {
             "Mobile data stops working if no other access point is left.",
         )
         .cancel("Cancel")
+        .default_action(CANCEL_ID)
         .response("Delete", ResponseKind::Destructive, move |_| {
             let gone = profile.clone();
             background_then(
@@ -966,7 +965,7 @@ fn confirm_delete(ctx: NetCtx, profiles: Profiles, profile: Profile) {
                     Ok(()) => {
                         reload(profiles);
                         ctx.reload();
-                        ctx.navigator.pop();
+                        ctx.router.pop();
                     }
                     Err(error) => ctx.overlays.toast(error.0),
                 },

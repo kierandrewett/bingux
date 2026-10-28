@@ -5,9 +5,12 @@
 //! At rest it is a bare icon, a hairline and a chevron with no fill. Under the
 //! pointer the whole control becomes one `Control`-radius box with a hover fill
 //! and the hairline fades out; the segment under the pointer takes a second
-//! hover layer of its own. The segments sit `S1` inside the box, so their
-//! corners are `Inner`, the box radius less that inset. Each segment is its own
-//! tab stop with its own hover, press and focus ring.
+//! hover layer of its own. The two segments are flush: they fill the box edge
+//! to edge, so each segment's fill reaches the box's edge. A segment rounds
+//! only its outer corners (the box's own radius) and the corners at the seam
+//! are square; the hairline sits on the seam. Each segment is its own tab stop
+//! with its own hover, press and focus ring, and the ring follows the
+//! segment's visible shape. The box does not clip, so the ring is never cut.
 //!
 //! The primary segment runs `on_press`. The chevron opens `menu` against the
 //! whole control, below it (above when there is no room), its edge aligned
@@ -150,9 +153,21 @@ fn route_key(segment: Segment, key: &Key, has_menu: bool) -> Option<KeyAction> {
     }
 }
 
+/// The corners the primary segment rounds: all of them when it stands alone,
+/// only the outer ones when the chevron segment sits flush against it.
+fn primary_corners(has_menu: bool) -> Corners {
+    if has_menu { Corners::Left } else { Corners::All }
+}
+
+/// The top of a hairline of `line` pixels centred in a segment of `control`.
+fn divider_top(control: f32, line: f32) -> f32 {
+    (control - line) / 2.0
+}
+
 impl Component for SplitButton {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let fitted = crate::rows::use_row_fitted();
         let overlays = use_overlays();
         let core = use_focus_core();
         let usable = use_enabled(self.enabled);
@@ -195,9 +210,21 @@ impl Component for SplitButton {
             }
         };
 
-        // The segments are as tall as the box less its inset, and the
-        // primary one is square unless it carries a label.
-        let segment_height = Dim::Button.px() - 2.0 * S1.px();
+        // Both segments are as tall as the box and the primary one is square
+        // unless it carries a label. In a fitted row the box is the row's
+        // control height and its radius the group's less its inset.
+        let height = if fitted {
+            Dim::RowButton
+        } else {
+            HEADER_BUTTON
+        };
+        let outer = if fitted {
+            Radius::Inner
+        } else {
+            Radius::Control
+        };
+        let corners = primary_corners(has_menu);
+        let seam_top = divider_top(height.px(), Dim::Box5.px());
         let name = self.label.clone().or_else(|| self.tooltip.clone());
 
         let primary = {
@@ -215,21 +242,18 @@ impl Component for SplitButton {
                 .maybe(name.is_some(), |element| {
                     element.a11y_alt(name.clone().unwrap_or_default())
                 })
-                .height(Size::px(segment_height))
-                .maybe(!has_label, |element| {
-                    element.width(Size::px(segment_height))
-                })
                 .tw(
                     &tokens,
                     &[
+                        h(height),
                         flex_row(),
                         center(),
                         gap(S2),
-                        rounded(Radius::Inner),
+                        rounded_on(outer, corners, 0.0),
                         surface(Paint::Transparent, primary_hover(), primary_down(), false),
                     ],
                 )
-                .maybe(has_label, |element| element.tw(&tokens, &[px(S3)]))
+                .tw(&tokens, &[if has_label { px(S3) } else { w(height) }])
                 .maybe(usable, |element| {
                     element
                         .on_pointer_enter(move |_| primary_hover.set(true))
@@ -281,7 +305,7 @@ impl Component for SplitButton {
                         .clone()
                         .map(|text| BODY.in_ink(Ink::Text).label(&tokens, text).max_lines(1)),
                 )
-                .focusable(primary_focus(), Radius::Inner)
+                .focusable_on(primary_focus(), outer, corners)
         };
         let primary = match &self.tooltip {
             Some(text) => hover_tip(primary, text.clone()),
@@ -304,13 +328,13 @@ impl Component for SplitButton {
                         builder.set_expanded(open);
                     }
                 })
-                .height(Size::px(segment_height))
                 .tw(
                     &tokens,
                     &[
                         w(Dim::StepperHalf),
+                        h(height),
                         center(),
-                        rounded(Radius::Inner),
+                        rounded_on(outer, Corners::Right, 0.0),
                         surface(Paint::Transparent, menu_hover() || open, menu_down(), false),
                     ],
                 )
@@ -360,21 +384,37 @@ impl Component for SplitButton {
                             }
                         })
                 })
+                // The hairline sits on the seam: the chevron segment's first
+                // column, centred on its height. It fades out as the box fills.
+                .child(
+                    rect()
+                        .interactive(false)
+                        .position(Position::new_absolute().top(seam_top).left(0.0))
+                        .opacity(divider)
+                        .tw(
+                            &tokens,
+                            &[w(Dim::Hairline), h(Dim::Box5), bg(Paint::Separator)],
+                        ),
+                )
                 .child(icons::icon(
                     Icon::PanDown,
                     IconSize::Control,
                     Paint::Text.color(&tokens),
                 ))
-                .focusable(
+                .focusable_on(
                     // The open menu owns the keyboard; the ring would run under it.
                     if open { Focus::Not } else { menu_focus() },
-                    Radius::Inner,
+                    outer,
+                    Corners::Right,
                 );
             // No tooltip: the shield over an open menu hides the pointer's
             // leave from it, so it would stay on screen beside the menu.
             Element::from(button)
         });
 
+        // The segments fill the box edge to edge. The box does not clip, so a
+        // segment's focus ring can leave it; each segment rounds its own outer
+        // corners instead and keeps the corners at the seam square.
         rect()
             .component("SplitButton")
             .on_sized(move |event: Event<SizedEventData>| {
@@ -385,9 +425,8 @@ impl Component for SplitButton {
                 &[
                     flex_row(),
                     items(Align::Center),
-                    p(S1),
-                    h(Dim::Button),
-                    rounded(Radius::Control),
+                    h(height),
+                    rounded(outer),
                     surface(Paint::Transparent, lit, false, false),
                 ],
             )
@@ -395,26 +434,11 @@ impl Component for SplitButton {
             .maybe(usable, |element| {
                 element
                     // The bubbling pair: the box stays hovered while the
-                    // pointer is over either segment, not only its padding.
+                    // pointer is over either segment.
                     .on_pointer_over(move |_| control_hover.set(true))
                     .on_pointer_out(move |_| control_hover.set(false))
             })
             .child(primary)
-            .maybe_child(has_menu.then(|| {
-                // The hairline sits in the gap between the segments, so the
-                // layout is the same filled and unfilled.
-                rect()
-                    .tw(
-                        &tokens,
-                        &[
-                            w(Dim::Hairline),
-                            h(Dim::Box5),
-                            mx(S0_5),
-                            bg(Paint::Separator),
-                        ],
-                    )
-                    .opacity(divider)
-            }))
             .maybe_child(menu)
     }
 }
@@ -482,5 +506,78 @@ mod tests {
             assert_eq!(route_key(Segment::Primary, &key, true), None);
             assert_eq!(route_key(Segment::Menu, &key, true), None);
         }
+    }
+
+    #[test]
+    fn the_primary_segment_rounds_only_its_outer_corners_beside_a_chevron() {
+        assert_eq!(primary_corners(true), Corners::Left);
+        // Alone it is a whole button.
+        assert_eq!(primary_corners(false), Corners::All);
+    }
+
+    #[test]
+    fn the_hairline_is_centred_on_the_seam() {
+        assert_eq!(divider_top(36.0, 20.0), 8.0);
+        assert_eq!(divider_top(44.0, 20.0), 12.0);
+    }
+
+    /// The segments meet exactly: no padding between the box and a segment,
+    /// no gap between the segments, and the box is their sum.
+    #[cfg(feature = "testing")]
+    #[test]
+    fn the_segments_fill_the_box_edge_to_edge() {
+        use std::time::Duration;
+
+        use crate::snapshot::Snapshot;
+        use crate::style::SizeClass;
+
+        #[derive(PartialEq)]
+        struct Scene;
+
+        impl Component for Scene {
+            fn render(&self) -> impl IntoElement {
+                let tokens = crate::theme::provide_tokens();
+                rect()
+                    .expanded()
+                    .tw(&tokens, &[p(S4)])
+                    .child(crate::shell::OverlayHost::new(
+                        split_button(Icon::ViewList)
+                            .tooltip("Switch view")
+                            .menu(vec![crate::shell::menu_item("List", |_| {})]),
+                    ))
+            }
+        }
+
+        let height = HEADER_BUTTON.px_in(SizeClass::Regular);
+        let chevron = Dim::StepperHalf.px_in(SizeClass::Regular);
+        // Wider than NARROW_BELOW, so the window is a desktop one.
+        let mut shot = Snapshot::new(|| Scene.into(), (crate::theme::NARROW_BELOW + 60.0, 200.0));
+        shot.settle(Duration::from_millis(300));
+        let boxes = shot.runner().find_many(|node, _| {
+            let area = node.layout().area;
+            ((area.height() - height).abs() < 0.01).then_some((
+                area.min_x(),
+                area.max_x(),
+                area.min_y(),
+            ))
+        });
+        let near = |a: f32, b: f32| (a - b).abs() < 0.01;
+        let width = |&(min, max, _): &(f32, f32, f32)| max - min;
+        let outer = boxes
+            .iter()
+            .find(|b| near(width(b), height + chevron))
+            .expect("the box is a square segment and a chevron wide");
+        let primary = boxes
+            .iter()
+            .find(|b| near(width(b), height))
+            .expect("the primary segment is square");
+        let menu = boxes
+            .iter()
+            .find(|b| near(width(b), chevron))
+            .expect("the chevron segment is its token wide");
+        assert!(near(primary.0, outer.0), "the primary starts at the box's edge");
+        assert!(near(primary.1, menu.0), "the segments meet on the seam");
+        assert!(near(menu.1, outer.1), "the chevron ends at the box's edge");
+        assert!(near(primary.2, outer.2) && near(menu.2, outer.2), "no inset above");
     }
 }

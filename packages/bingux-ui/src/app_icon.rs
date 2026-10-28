@@ -31,7 +31,7 @@ pub struct IconFile {
 impl IconFile {
     fn new(path: PathBuf, vector: bool) -> Option<Self> {
         let svg = if vector {
-            Some(Bytes::from(with_view_box(std::fs::read(&path).ok()?)))
+            Some(Bytes::from(with_view_box(crate::runtime::read_file(&path).ok()?)))
         } else {
             None
         };
@@ -156,7 +156,7 @@ fn parse_theme(name: &str, roots: &[PathBuf]) -> Theme {
     let mut theme = Theme::default();
     let Some(text) = roots
         .iter()
-        .find_map(|root| std::fs::read_to_string(root.join(name).join("index.theme")).ok())
+        .find_map(|root| crate::runtime::read_to_string(root.join(name).join("index.theme")).ok())
     else {
         return theme;
     };
@@ -227,6 +227,7 @@ fn parse_theme(name: &str, roots: &[PathBuf]) -> Theme {
 /// The icon theme GTK applications use, from GSettings; Adwaita otherwise.
 fn current_theme() -> String {
     static NAME: LazyLock<String> = LazyLock::new(|| {
+        crate::runtime::assert_off_ui_thread("gsettings icon-theme");
         std::process::Command::new("gsettings")
             .args(["get", "org.gnome.desktop.interface", "icon-theme"])
             .output()
@@ -274,7 +275,7 @@ fn find(name: &str, size: u32) -> Option<IconFile> {
         // An AppImage icon often has no extension: look at the first bytes.
         let vector = match path.extension() {
             Some(ext) => ext == "svg",
-            None => std::fs::read(&path)
+            None => crate::runtime::read_file(&path)
                 .map(|bytes| bytes.starts_with(b"<?xml") || bytes.starts_with(b"<svg"))
                 .unwrap_or(false),
         };

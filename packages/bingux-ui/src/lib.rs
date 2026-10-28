@@ -9,25 +9,35 @@
 //! [`theme::provide_tokens`] at the window root and read with
 //! [`surface::use_tokens`].
 
-pub mod address;
 pub mod app;
+pub mod nav;
 pub mod app_icon;
 pub mod charts;
+pub mod contrast;
+pub mod contrast_matrix;
 pub mod controls;
+pub mod elide;
 pub mod files;
 pub mod focus;
 pub mod group;
 pub mod icons;
-pub mod inspector;
+#[cfg(feature = "chat-icons")]
+pub mod chat_icons;
+pub(crate) mod inspector;
 pub mod component;
 pub mod layout;
+pub mod drag;
 pub mod motion;
+pub mod resilience;
+pub mod reorder;
 pub mod rows;
 pub mod runtime;
+pub mod search;
 pub mod search_highlight;
 pub mod shell;
 #[cfg(feature = "testing")]
 pub mod snapshot;
+pub mod stress;
 pub mod style;
 pub mod surface;
 pub mod task;
@@ -37,8 +47,12 @@ pub mod window;
 
 /// Everything an application window normally needs.
 pub mod prelude {
-    pub use crate::address::Address;
-    pub use crate::app::{Application, current_address, navigate, use_address};
+    pub use crate::app::Application;
+    pub use crate::nav::{
+        Confirmation, Location, Mode, ModalKind, NavModel, Params, PopGuard, RouteKind, RouteTable,
+        Router, Target, Transition, navigate, use_location, use_page_title, use_pop_guard,
+        use_retained_state, use_router,
+    };
     pub use crate::app_icon::{AppIcon, app_icon};
     pub use crate::charts::{
         Curve, Segment, Series, Unit, bar_chart, donut, line_chart, ring, sparkline,
@@ -46,7 +60,7 @@ pub mod prelude {
     pub use crate::controls::*;
     pub use crate::files::{self, ChooserRequest, Chosen};
     pub use crate::group::{
-        Group, Status, StatusBlock, action_row, caption, centered_caption, form_row, heading,
+        Group, Status, StatusBlock, action_row, caption, centered_caption, form_row, group_head, heading,
         section_label, skeleton, skeleton_row, skeleton_rows, skeleton_shape, status,
     };
     pub use crate::icons::{Icon, icon};
@@ -54,20 +68,24 @@ pub mod prelude {
         boxed, clamp, divider, hstack, page_column, popup_column, spacer, tile_rows, vstack,
     };
     pub use crate::motion::{
-        AnimatedNumber, Crossfade, Presence, Reveal, animated_number, crossfade, presence, reveal,
+        AnimatedNumber, Crossfade, Presence, Reveal, RevealBlock, animated_number, crossfade, presence, reveal,
+        reveal_block,
         use_presence, use_tween,
     };
+    pub use crate::resilience::{ErrorBoundary, Look as BoundaryLook, error_boundary, error_boundary_with};
     pub use crate::rows::{
         ChoiceList, EntryRow, ExpanderRow, LevelRow, Row, choice_list, choice_row, entry_row,
         expander_row, level_row, property_row, radio_row, radio_rows, row, slider_row, switch_row,
         text_row,
     };
     pub use crate::shell::{
-        Banner, BannerKind, Dialog, HeaderBar, MenuButton, MenuItem, NavItem, NavigationSplitView,
-        OverlayHost, Overlays, PageAction, PageHead, Profile, ResponseKind, SearchField,
-        StatusPage, WindowControls, banner, dialog, framed_dialog, menu_button, menu_item, menu_separator,
-        status_page, submenu, use_overlays, use_page_busy,
+        BackButton, Banner, BannerKind, CANCEL_ID, Dialog, DialogIcon, ForwardButton, HeaderBar,
+        MenuButton, MenuItem,
+        NavigationSplitView, OverlayHost, Overlays, PageAction, PageHead, Profile, ResponseKind,
+        SearchField, StatusPage, Toast, WindowControls, banner, dialog, framed_dialog, history_menu,
+        menu_button, menu_item, menu_separator, status_page, submenu, use_overlays, use_page_busy,
     };
+    pub use crate::search::{SearchState, use_search};
     pub use crate::style::*;
     pub use crate::surface::use_tokens;
     pub use crate::theme::{Scheme, SharedTokens, Tokens, provide_tokens};

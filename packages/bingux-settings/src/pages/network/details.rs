@@ -10,9 +10,10 @@ use freya::prelude::*;
 
 use super::model::{DeviceKind, nmcli, split_terse, unescape};
 use super::{Owner, Section};
-use crate::routes::{Route, use_navigator};
+use crate::routes;
+use bingux_ui::prelude::use_router;
 use crate::system::{self, CommandError, background_then};
-use crate::ui::{Group, PageHead, Status, page_column, row, status};
+use crate::ui::{Group, PageHead, Status, page_column, row, skeleton_rows, status};
 use bingux_ui::style::*;
 
 const QUICK: Duration = Duration::from_secs(5);
@@ -609,7 +610,7 @@ impl Component for TechnicalDetails {
 
         let column = rect().tw_layout(&[flex_col(), w_full(), gap(S6)]);
         match loaded.read().clone() {
-            None => column.child(status(Status::Loading("Reading connection.".into()))),
+            None => column.child(skeleton_rows(&["==--", "----"])),
             Some(Err(error)) => column.child(status(Status::Error(error.0)).action("Try again", {
                 let name = self.connection.clone();
                 move |_| reload(loaded, name.clone())
@@ -628,7 +629,7 @@ pub struct DetailsPage {
 
 impl Component for DetailsPage {
     fn render(&self) -> impl IntoElement {
-        let navigator = use_navigator();
+        let router = use_router();
         let owner = use_state(|| None::<Result<Option<Owner>, CommandError>>);
         use_hook({
             let name = self.connection.clone();
@@ -645,10 +646,7 @@ impl Component for DetailsPage {
         let found = owner.read().clone();
         use_side_effect_with_deps(&found, move |found| {
             if let Some(Ok(Some(owner))) = found {
-                navigator.push(Route::Section {
-                    owner: owner.clone(),
-                    section: Section::Advanced,
-                });
+                router.open(routes::section(&owner.clone(), &Section::Advanced));
             }
         });
 

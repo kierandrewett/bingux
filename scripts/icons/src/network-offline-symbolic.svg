@@ -1,7 +1,7 @@
 <svg viewBox="0 0 16 16">
-  <path d="M1.68 6.81A8.5 8.5 0 0 1 14.32 6.81" stroke="black" stroke-width="2"/>
-  <path d="M4.66 9.49A4.5 4.5 0 0 1 11.34 9.49" stroke="black" stroke-width="2"/>
-  <circle cx="12.5" cy="12" r="4.5" stroke="none" fill="black" data-op="cut"/>
-  <line x1="10.5" y1="10" x2="14.5" y2="14" stroke="black" stroke-width="2"/>
-  <line x1="14.5" y1="10" x2="10.5" y2="14" stroke="black" stroke-width="2"/>
+  <path d="M1.28 5.28A9.5 9.5 0 0 1 14.72 5.28" stroke="black" stroke-width="1"/>
+  <path d="M4.11 8.11A5.5 5.5 0 0 1 11.89 8.11" stroke="black" stroke-width="1"/>
+  <circle cx="12" cy="12" r="4.5" stroke="none" fill="black" data-op="cut"/>
+  <line x1="10" y1="10" x2="14" y2="14" stroke="black" stroke-width="1"/>
+  <line x1="14" y1="10" x2="10" y2="14" stroke="black" stroke-width="1"/>
 </svg>

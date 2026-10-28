@@ -8,15 +8,16 @@ use freya::prelude::*;
 use freya::winit::window::WindowId;
 
 use super::box_model;
+use super::computed::{self, Entry, Value};
 use super::props::PropertiesPane;
-use super::snapshot::{Kind, Node, Snapshot};
+use super::snapshot::{Node, Snapshot};
 use crate::controls::colour_picker::colour_chip;
 use crate::controls::{property_row, search_field, segmented};
 use crate::group::Group;
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
-use crate::typography::{CAPTION, CODE};
+use crate::typography::{CAPTION, CODE, Ink};
 
 #[derive(Clone, Copy, PartialEq)]
 enum DetailsTab {
@@ -80,7 +81,7 @@ impl Component for DetailsPane {
                 }
                 .into(),
                 DetailsTab::Layout => box_model::view(&tokens, self.window, self.id, node, class),
-                DetailsTab::Computed => computed_tab(&tokens, node, filter),
+                DetailsTab::Computed => computed_tab(&tokens, &self.snap, node, filter),
             },
             None => rect()
                 .tw(&tokens, &[w_full(), h_full(), p(S4)])
@@ -113,144 +114,33 @@ impl Component for DetailsPane {
     }
 }
 
-/// One line of the Computed tab: a name, and a value that may be a colour.
-struct Line_ {
-    name: &'static str,
-    value: String,
-    colour: Option<Color>,
-}
-
-fn line(name: &'static str, value: impl Into<String>) -> Line_ {
-    Line_ {
-        name,
-        value: value.into(),
-        colour: None,
-    }
-}
-
-fn colour_line(name: &'static str, colour: Color) -> Line_ {
-    Line_ {
-        name,
-        value: colour_to_hex(colour),
-        colour: Some(colour),
-    }
-}
-
-/// Every value the node resolved to, grouped as the Properties pane groups them.
-fn computed_groups(node: &Node) -> Vec<(&'static str, Vec<Line_>)> {
-    let mut element = vec![
-        line("element", node.title()),
-        line("kind", node.kind.name()),
-        line("node id", node.id.to_string()),
-        line(
-            "parent",
-            node.parent.map_or("none".to_string(), |id| id.to_string()),
-        ),
-        line("children", node.children.len().to_string()),
-    ];
-    if let Some(area) = node.area {
-        element.push(line(
-            "position",
-            format!("{:.0}, {:.0}", area.min_x(), area.min_y()),
-        ));
-        element.push(line(
-            "size",
-            format!("{:.0} × {:.0}", area.width(), area.height()),
-        ));
-    }
-    if let Some(text) = &node.text {
-        element.push(line("text", text.clone()));
-    }
-    let mut groups = vec![("Element", element)];
-    if let Some(props) = &node.props {
-        let sides = |edges: &[f32; 4]| {
-            format!(
-                "{} {} {} {}",
-                super::editor::number_text(edges[0]),
-                super::editor::number_text(edges[1]),
-                super::editor::number_text(edges[2]),
-                super::editor::number_text(edges[3])
-            )
-        };
-        groups.push((
-            "Box",
-            vec![
-                line("width", props.width.clone()),
-                line("height", props.height.clone()),
-                line("min width", props.min_width.clone()),
-                line("min height", props.min_height.clone()),
-                line("max width", props.max_width.clone()),
-                line("max height", props.max_height.clone()),
-                line("padding", sides(&props.padding)),
-                line("margin", sides(&props.margin)),
-                line("gap", super::editor::number_text(props.gap)),
-            ],
-        ));
-        groups.push((
-            "Layout",
-            vec![
-                line("direction", props.direction),
-                line("main axis", props.main_align),
-                line("cross axis", props.cross_align),
-                line("clip", props.clip.to_string()),
-            ],
-        ));
-        if node.kind == Kind::Rect {
-            let mut paint = Vec::new();
-            match props.background {
-                Some(colour) => paint.push(colour_line("background", colour)),
-                None => paint.push(line("background", "gradient")),
-            }
-            paint.push(line(
-                "corner radius",
-                super::editor::number_text(props.corner_radius),
-            ));
-            paint.push(line("shadows", props.shadows.len().to_string()));
-            paint.push(line("borders", props.borders.len().to_string()));
-            groups.push(("Paint", paint));
-        }
-        let mut text = Vec::new();
-        text.push(line(
-            "font size",
-            props
-                .font_size
-                .map_or("inherited".to_string(), super::editor::number_text),
-        ));
-        text.push(line(
-            "font weight",
-            props
-                .font_weight
-                .map_or("inherited".to_string(), |weight| format!("{weight:?}")),
-        ));
-        text.push(match props.text_color {
-            Some(colour) => colour_line("colour", colour),
-            None => line("colour", "inherited"),
-        });
-        text.push(line(
-            "typeface",
-            if props.mono { "monospace" } else { "default" },
-        ));
-        groups.push(("Text", text));
-    }
-    groups
-}
-
-/// The Computed tab: every resolved value, under a filter. The list scrolls.
-fn computed_tab(tokens: &Tokens, node: &Node, filter: State<String>) -> Element {
+/// The Computed tab: every used value, under a filter. The list scrolls.
+/// It re-renders with each new snapshot of the target, so the numbers follow
+/// the layout; while another tab is shown nothing here runs.
+fn computed_tab(tokens: &Tokens, snap: &Snapshot, node: &Node, filter: State<String>) -> Element {
     let query = filter.read().trim().to_lowercase();
     let mut column = rect().tw(tokens, &[w_full(), flex_col(), gap(S4), p(S4)]);
-    for (title, lines) in computed_groups(node) {
-        let rows: Vec<Element> = lines
+    for group in computed::groups(snap, node) {
+        let rows: Vec<Element> = group
+            .entries
             .into_iter()
             .filter(|found| {
                 query.is_empty()
                     || found.name.to_lowercase().contains(&query)
-                    || found.value.to_lowercase().contains(&query)
+                    || match &found.value {
+                        Value::Text(text) => text.to_lowercase().contains(&query),
+                        Value::Colour(colour) => colour_to_hex(*colour).contains(&query),
+                        Value::Unknown => false,
+                    }
+                    || found
+                        .declared
+                        .as_ref()
+                        .is_some_and(|declared| declared.to_lowercase().contains(&query))
             })
             .map(|found| value_row(tokens, found))
             .collect();
         if !rows.is_empty() {
-            column = column.child(Group::titled(title).rows(rows).unfiltered());
+            column = column.child(Group::titled(group.title).rows(rows).unfiltered());
         }
     }
     let scroll = ScrollView::new()
@@ -269,17 +159,49 @@ fn computed_tab(tokens: &Tokens, node: &Node, filter: State<String>) -> Element 
         .into()
 }
 
-/// A resolved value: its name at the left and the value, with a swatch for a
-/// colour, at the right.
-fn value_row(tokens: &Tokens, found: Line_) -> Element {
+/// A small muted chip beside a value.
+fn chip(tokens: &Tokens, text: String, paint: Paint) -> Element {
+    rect()
+        .tw(
+            tokens,
+            &[px(S1), rounded(Radius::Mark), center(), bg(paint)],
+        )
+        .child(
+            CAPTION
+                .in_ink(Ink::Muted)
+                .label(tokens, text)
+                .max_lines(1),
+        )
+        .into()
+}
+
+/// A used value: its name at the left, and at the right the value (a swatch
+/// first for a colour), then a `declared` chip when the node asked for
+/// something else. A value the engine does not expose is an em dash with a
+/// faint marker.
+fn value_row(tokens: &Tokens, found: Entry) -> Element {
     let mut value = rect().tw(tokens, &[flex_row(), items(Align::Center), gap(S2)]);
-    if let Some(colour) = found.colour {
-        value = value.child(colour_chip(*tokens, colour, Dim::Swatch.px()));
+    match found.value {
+        Value::Text(text) => {
+            value = value.child(
+                CODE.label(tokens, text)
+                    .max_lines(1)
+                    .text_overflow(TextOverflow::Ellipsis),
+            );
+        }
+        Value::Colour(colour) => {
+            value = value
+                .child(colour_chip(*tokens, colour, Dim::Swatch.px()))
+                .child(CODE.label(tokens, colour_to_hex(colour)).max_lines(1));
+        }
+        Value::Unknown => {
+            value = value
+                .child(CODE.in_ink(Ink::Muted).label(tokens, "—".to_string()))
+                .child(chip(tokens, "not exposed".to_string(), Paint::MutedFaint));
+        }
     }
-    let value = value.child(
-        CODE.label(tokens, found.value)
-            .max_lines(1)
-            .text_overflow(TextOverflow::Ellipsis),
-    );
+    if let Some(declared) = found.declared {
+        value = value.child(chip(tokens, format!("declared {declared}"), Paint::Control));
+    }
     property_row(found.name).control(value).into()
 }

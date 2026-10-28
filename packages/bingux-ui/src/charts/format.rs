@@ -40,6 +40,11 @@ impl Formatter {
     pub fn new(format: impl Fn(f64) -> String + 'static) -> Self {
         Self(Rc::new(format))
     }
+
+    /// The text for `value`.
+    pub fn apply(&self, value: f64) -> String {
+        (self.0)(value)
+    }
 }
 
 impl PartialEq for Formatter {

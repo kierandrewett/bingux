@@ -55,6 +55,87 @@ pub fn run(program: &str, args: &[&str], timeout: Duration) -> CommandResult {
     run_with_stdin(program, args, None, timeout)
 }
 
+static UI_THREAD: std::sync::OnceLock<std::thread::ThreadId> = std::sync::OnceLock::new();
+
+/// Record the calling thread as the UI thread. [`crate::app::Application::run`]
+/// does it first thing; a test or snapshot that renders on its own thread may
+/// call it too.
+pub fn mark_ui_thread() {
+    let _ = UI_THREAD.set(std::thread::current().id());
+}
+
+/// Whether the caller is the UI thread.
+pub fn on_ui_thread() -> bool {
+    UI_THREAD.get() == Some(&std::thread::current().id())
+}
+
+/// Report a blocking call made on the UI thread: `what` names it. Every
+/// blocking helper in this module calls this first. The report goes to stderr
+/// once per call site, with a backtrace, as
+/// `[ui-blocking] <what> on the UI thread` (the frame-time harness fails on
+/// that line). It never panics: a freeze is bad, a crash is worse.
+pub fn assert_off_ui_thread(what: &str) {
+    if !on_ui_thread() {
+        return;
+    }
+    static SEEN: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+    let trace = std::backtrace::Backtrace::force_capture().to_string();
+    // The first frame outside this module and std is the call site.
+    let site = trace
+        .lines()
+        .find(|line| line.contains("bingux_") && !line.contains("assert_off_ui_thread"))
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let key = format!("{what}@{site}");
+    let mut seen = SEEN.lock().unwrap_or_else(|e| e.into_inner());
+    if seen.contains(&key) {
+        return;
+    }
+    seen.push(key);
+    eprintln!("[ui-blocking] {what} on the UI thread\n{trace}");
+}
+
+/// `std::fs::read_to_string` for worker code: the same call, with the UI-thread
+/// check. Use these four instead of `std::fs` so a read that slips into
+/// `render` is reported.
+pub fn read_to_string(path: impl AsRef<std::path::Path>) -> std::io::Result<String> {
+    assert_off_ui_thread("fs::read_to_string");
+    std::fs::read_to_string(path)
+}
+
+/// `std::fs::read` with the UI-thread check.
+pub fn read_file(path: impl AsRef<std::path::Path>) -> std::io::Result<Vec<u8>> {
+    assert_off_ui_thread("fs::read");
+    std::fs::read(path)
+}
+
+/// `std::fs::read_dir` with the UI-thread check.
+pub fn read_dir(path: impl AsRef<std::path::Path>) -> std::io::Result<std::fs::ReadDir> {
+    assert_off_ui_thread("fs::read_dir");
+    std::fs::read_dir(path)
+}
+
+/// `std::fs::metadata` with the UI-thread check.
+pub fn metadata(path: impl AsRef<std::path::Path>) -> std::io::Result<std::fs::Metadata> {
+    assert_off_ui_thread("fs::metadata");
+    std::fs::metadata(path)
+}
+
+/// `BINGUX_SLOW_SOURCES_MS=N` makes every command run through [`run`] wait N
+/// milliseconds before it starts, as a slow `nmcli` or `wpctl` would. The wait
+/// is inside the call, so a call that wrongly runs on the UI thread freezes
+/// the window for N ms and shows up in the watchdog and in the frame-time
+/// harness (`scripts/frame-time.py --slow-sources`). Unset, it costs nothing.
+static SLOW_SOURCES: std::sync::LazyLock<Option<Duration>> = std::sync::LazyLock::new(|| {
+    std::env::var("BINGUX_SLOW_SOURCES_MS")
+        .ok()?
+        .parse::<u64>()
+        .ok()
+        .filter(|ms| *ms > 0)
+        .map(Duration::from_millis)
+});
+
 /// Like [`run`] with data written to the command's stdin.
 pub fn run_with_stdin(
     program: &str,
@@ -62,6 +143,11 @@ pub fn run_with_stdin(
     stdin: Option<&str>,
     timeout: Duration,
 ) -> CommandResult {
+    assert_off_ui_thread(&format!("command `{program}`"));
+    if let Some(delay) = *SLOW_SOURCES {
+        // A debug knob, not behaviour: see `SLOW_SOURCES`.
+        std::thread::sleep(delay);
+    }
     let mut child = Command::new(program)
         .args(args)
         .stdin(if stdin.is_some() {
@@ -625,6 +711,7 @@ pub fn unquote(value: &str) -> String {
 
 /// A value row-sized summary of a command's availability.
 pub fn which(program: &str) -> bool {
+    assert_off_ui_thread("which");
     std::env::var_os("PATH")
         .map(|path| std::env::split_paths(&path).any(|dir| dir.join(program).is_file()))
         .unwrap_or(false)
@@ -664,10 +751,20 @@ pub fn locate(program: &str) -> String {
 /// as the child.
 pub fn die_with_parent(command: &mut Command) -> &mut Command {
     use std::os::unix::process::CommandExt;
-    // SAFETY: the closure only calls prctl, which is async-signal-safe.
+    // The parent's pid, read before the fork. If the parent has already
+    // gone when the child runs prctl, no signal will ever arrive, so the
+    // child checks its parent after prctl and exits at once when it changed.
+    let parent = std::process::id() as libc::pid_t;
+    // SAFETY: the closure only calls prctl, getppid and _exit, which are
+    // async-signal-safe.
     unsafe {
-        command.pre_exec(|| {
-            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM);
+        command.pre_exec(move || {
+            if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            if libc::getppid() != parent {
+                libc::_exit(1);
+            }
             Ok(())
         });
     }

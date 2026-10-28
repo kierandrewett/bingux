@@ -1,0 +1,33 @@
+[Desktop Entry]
+Type=Application
+Name=Taxonomy
+Comment=Every Bingux UI component, icon and token, running
+Exec=bingux-taxonomy %u
+Icon=bingux-taxonomy
+Terminal=false
+Categories=Development;Utility;
+Keywords=Bingux;UI;Components;Design;Icons;Controls;Tokens;Widgets;Styleguide;
+MimeType=x-scheme-handler/bingux-taxonomy;
+StartupWMClass=bingux-taxonomy
+StartupNotify=true
+Actions=Foundations;Icons;Controls;Containers;Files;
+
+[Desktop Action Foundations]
+Name=Foundations
+Exec=bingux-taxonomy bingux-taxonomy://foundations/colour
+
+[Desktop Action Icons]
+Name=Icons
+Exec=bingux-taxonomy bingux-taxonomy://icons/icon-set
+
+[Desktop Action Controls]
+Name=Controls
+Exec=bingux-taxonomy bingux-taxonomy://controls/buttons
+
+[Desktop Action Containers]
+Name=Containers
+Exec=bingux-taxonomy bingux-taxonomy://containers/rows
+
+[Desktop Action Files]
+Name=Files
+Exec=bingux-taxonomy bingux-taxonomy://files/file-views

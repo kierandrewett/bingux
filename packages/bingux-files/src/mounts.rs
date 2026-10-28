@@ -394,7 +394,7 @@ fn label_from_text(mount_point: &str, device: &str, kind: MountKind) -> String {
 }
 
 /// `by-label` names escape awkward characters as `\xNN`.
-fn unescape_udev(text: &str) -> String {
+pub(crate) fn unescape_udev(text: &str) -> String {
     let bytes = text.as_bytes();
     let mut raw = Vec::with_capacity(bytes.len());
     let mut index = 0;
@@ -442,7 +442,7 @@ fn volume_labels() -> HashMap<String, String> {
 
 /// Whether the kernel calls the block device `major:minor` removable. A
 /// partition asks its disk.
-fn sysfs_removable(device_number: (u32, u32)) -> bool {
+pub(crate) fn sysfs_removable(device_number: (u32, u32)) -> bool {
     let base = format!("/sys/dev/block/{}:{}", device_number.0, device_number.1);
     let read = |path: String| fs::read_to_string(path).ok().map(|text| text.trim() == "1");
     read(format!("{base}/removable"))
@@ -843,9 +843,12 @@ pub struct MountWatcher {
     thread: Option<JoinHandle<()>>,
 }
 
-/// Watch `/proc/self/mountinfo`. `on_change` runs on the watcher's own
-/// thread once the table has been quiet for 100 ms, so plugging in a disk
-/// that mounts three partitions calls it once.
+/// Watch `/proc/self/mountinfo` and `/dev/disk/by-uuid` (udev adds and removes
+/// a link there when a drive with a file system is plugged in or pulled
+/// out, mounted or not, so a stick that has not been opened shows up). Both
+/// are waited for in the kernel, so an idle watcher uses no CPU. `on_change`
+/// runs on the watcher's own thread once things have been quiet for 100 ms,
+/// so plugging in a disk that mounts three partitions calls it once.
 pub fn watch_mounts(on_change: impl Fn() + Send + 'static) -> io::Result<MountWatcher> {
     let file = fs::File::open("/proc/self/mountinfo")?;
     // SAFETY: a plain syscall; the descriptor is checked and owned once.
@@ -857,16 +860,45 @@ pub fn watch_mounts(on_change: impl Fn() + Send + 'static) -> io::Result<MountWa
         OwnedFd::from_raw_fd(fd)
     };
     let stop_fd = stop.as_raw_fd();
+    let devices = watch_devices();
     let thread = thread::Builder::new()
         .name("bingux-files-mounts".into())
-        .spawn(move || watch_loop(file, stop_fd, on_change))?;
+        .spawn(move || watch_loop(file, stop_fd, devices, on_change))?;
     Ok(MountWatcher {
         stop,
         thread: Some(thread),
     })
 }
 
-fn watch_loop(mut file: fs::File, stop: i32, on_change: impl Fn()) {
+/// An inotify descriptor on `/dev/disk/by-uuid`, or `None` where there is
+/// none (a container, a machine with no udev).
+fn watch_devices() -> Option<OwnedFd> {
+    // SAFETY: plain syscalls; the descriptor is checked and owned once.
+    unsafe {
+        let fd = libc::inotify_init1(libc::IN_CLOEXEC | libc::IN_NONBLOCK);
+        if fd < 0 {
+            return None;
+        }
+        let owned = OwnedFd::from_raw_fd(fd);
+        let path = CString::new("/dev/disk/by-uuid").ok()?;
+        let mask = libc::IN_CREATE | libc::IN_DELETE | libc::IN_MOVED_FROM | libc::IN_MOVED_TO;
+        (libc::inotify_add_watch(fd, path.as_ptr(), mask) >= 0).then_some(owned)
+    }
+}
+
+/// Read and drop whatever inotify has queued.
+fn drain_events(fd: i32) {
+    let mut sink = [0_u8; 4096];
+    loop {
+        // SAFETY: `sink` is a live buffer of the length given.
+        let read = unsafe { libc::read(fd, sink.as_mut_ptr().cast(), sink.len()) };
+        if read <= 0 {
+            return;
+        }
+    }
+}
+
+fn watch_loop(mut file: fs::File, stop: i32, devices: Option<OwnedFd>, on_change: impl Fn()) {
     use std::io::{Read, Seek, SeekFrom};
     let drain = |file: &mut fs::File| {
         let _ = file.seek(SeekFrom::Start(0));
@@ -874,6 +906,8 @@ fn watch_loop(mut file: fs::File, stop: i32, on_change: impl Fn()) {
         let _ = file.read_to_end(&mut sink);
     };
     drain(&mut file);
+    // A negative descriptor is skipped by `poll`.
+    let device_fd = devices.as_ref().map_or(-1, AsRawFd::as_raw_fd);
     loop {
         let mut fds = [
             libc::pollfd {
@@ -886,9 +920,14 @@ fn watch_loop(mut file: fs::File, stop: i32, on_change: impl Fn()) {
                 events: libc::POLLIN,
                 revents: 0,
             },
+            libc::pollfd {
+                fd: device_fd,
+                events: libc::POLLIN,
+                revents: 0,
+            },
         ];
-        // SAFETY: `fds` is a valid array of two `pollfd`s.
-        let ready = unsafe { libc::poll(fds.as_mut_ptr(), 2, -1) };
+        // SAFETY: `fds` is a valid array of three `pollfd`s.
+        let ready = unsafe { libc::poll(fds.as_mut_ptr(), 3, -1) };
         if ready < 0 {
             if io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
                 continue;
@@ -909,6 +948,9 @@ fn watch_loop(mut file: fs::File, stop: i32, on_change: impl Fn()) {
             return;
         }
         drain(&mut file);
+        if device_fd >= 0 {
+            drain_events(device_fd);
+        }
         on_change();
     }
 }

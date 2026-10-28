@@ -90,7 +90,7 @@ pub fn read() -> Result<SourcesConfig, String> {
         return Ok(config);
     }
     let path = gnoblin::config_path().map_err(|e| e.0)?;
-    let text = std::fs::read_to_string(&path).map_err(|_| UNREADABLE.to_string())?;
+    let text = crate::system::read_to_string(&path).map_err(|_| UNREADABLE.to_string())?;
     parse(&text)
 }
 
@@ -152,7 +152,7 @@ fn apply_now(edit: Edit) -> Result<(), String> {
     let path = config_file()?;
     let path =
         std::fs::canonicalize(&path).map_or(path, |real| real.to_string_lossy().into_owned());
-    let original = std::fs::read_to_string(&path).map_err(|_| UNREADABLE.to_string())?;
+    let original = crate::system::read_to_string(&path).map_err(|_| UNREADABLE.to_string())?;
     let current = parse(&original)?;
     let next = current.apply(&edit)?;
     if next == current {
@@ -195,7 +195,7 @@ fn write_file(path: &str, text: &str) -> Result<(), String> {
 /// Variants are named `layout+variant`, as Gnoblin names them. Empty when the
 /// XKB database is not installed.
 fn xkb_layouts() -> Vec<(Source, String)> {
-    let Ok(rules) = std::fs::read_to_string(XKB_EVDEV) else {
+    let Ok(rules) = crate::system::read_to_string(XKB_EVDEV) else {
         return Vec::new();
     };
     let mut layouts = Vec::new();
@@ -325,7 +325,7 @@ fn config_file() -> Result<String, String> {
 #[cfg(feature = "snapshot")]
 fn fake_config() -> Option<SourcesConfig> {
     if let Some(path) = fake_path() {
-        let text = std::fs::read_to_string(path).ok()?;
+        let text = crate::system::read_to_string(path).ok()?;
         return parse(&text).ok();
     }
     std::env::var_os("BINGUX_SETTINGS_FAKE_INPUT")?;

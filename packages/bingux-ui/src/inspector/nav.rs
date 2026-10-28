@@ -3,22 +3,30 @@
 
 use freya::prelude::*;
 
-/// The three tabs, in header order.
+/// The four tabs, in header order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tab {
     Elements,
     Performance,
     Accessibility,
+    /// The visual defects of the layout: not an accessibility concern.
+    Layout,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 3] = [Tab::Elements, Tab::Performance, Tab::Accessibility];
+    pub const ALL: [Tab; 4] = [
+        Tab::Elements,
+        Tab::Performance,
+        Tab::Accessibility,
+        Tab::Layout,
+    ];
 
     pub fn title(self) -> &'static str {
         match self {
             Tab::Elements => "Elements",
             Tab::Performance => "Performance",
             Tab::Accessibility => "Accessibility",
+            Tab::Layout => "Layout",
         }
     }
 

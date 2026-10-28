@@ -103,6 +103,13 @@ impl Press {
         self.cancel_timer();
     }
 
+    /// Whether a touch that began on this element is still a tap: it has not
+    /// strayed past the slop and has not lifted. A control that shows a
+    /// pressed state clears it when this turns false.
+    pub(crate) fn pending(self) -> bool {
+        self.origin.read().is_some()
+    }
+
     /// Whether a press on the element should act. Mouse, keyboard and
     /// assistive presses always do. A touch does only if it began on this
     /// element and stayed a tap.
@@ -129,6 +136,91 @@ impl Press {
     }
 
     fn cancel_timer(self) {
+        let mut timer_state = self.timer;
+        if let Some(handle) = timer_state.write().take() {
+            handle.cancel();
+        }
+    }
+}
+
+/// How long a button is held, with the primary button or a finger, before its
+/// context menu opens.
+pub(crate) const HOLD: Duration = Duration::from_millis(450);
+
+/// Whether a pointer event is the secondary mouse button.
+pub(crate) fn is_right_click(event: &Event<PointerEventData>) -> bool {
+    matches!(event.data(), PointerEventData::Mouse(mouse) if mouse.button == Some(MouseButton::Right))
+}
+
+/// A button held down: after [`HOLD`] it runs an action once, and the press
+/// that ends the hold must not also act ([`Hold::fired`]). The hold is
+/// cancelled by lifting, or by moving past the tap slop.
+#[derive(Clone, Copy)]
+pub(crate) struct Hold {
+    origin: State<Option<(f32, f32)>>,
+    timer: State<Option<TaskHandle>>,
+    fired: State<bool>,
+}
+
+/// The hold state for the calling component. Call it during render.
+pub(crate) fn use_hold() -> Hold {
+    Hold {
+        origin: use_state(|| None),
+        timer: use_state(|| None),
+        fired: use_state(|| false),
+    }
+}
+
+impl Hold {
+    /// The pointer went down on the element: start the timer. Only the
+    /// primary button or a finger holds.
+    pub(crate) fn begin(self, event: &Event<PointerEventData>, run: EventHandler<()>) {
+        let mut fired = self.fired;
+        fired.set(false);
+        if !event.data().is_primary() {
+            return;
+        }
+        self.cancel();
+        let mut origin = self.origin;
+        origin.set(Some(point_of(event)));
+        let mut fired = self.fired;
+        let task = spawn(async move {
+            timer(HOLD).await;
+            if origin.write().take().is_some() {
+                fired.set(true);
+                run.call(());
+            }
+        });
+        let mut timer_state = self.timer;
+        timer_state.set(Some(task));
+    }
+
+    /// The pointer moved anywhere: past the slop it is a drag, not a hold.
+    pub(crate) fn moved(self, event: &Event<PointerEventData>) {
+        let pending = *self.origin.read();
+        let Some(origin) = pending else { return };
+        let (x, y) = point_of(event);
+        if (x - origin.0).hypot(y - origin.1) > TAP_SLOP {
+            self.cancel();
+        }
+    }
+
+    /// The pointer went up: a hold that has not fired will not.
+    pub(crate) fn release(self) {
+        self.cancel();
+    }
+
+    /// Whether the hold that is ending fired its action. The press that ends
+    /// a hold asks, and must not act when this is true.
+    pub(crate) fn fired(self) -> bool {
+        *self.fired.peek()
+    }
+
+    fn cancel(self) {
+        let mut origin = self.origin;
+        if origin.peek().is_some() {
+            origin.set(None);
+        }
         let mut timer_state = self.timer;
         if let Some(handle) = timer_state.write().take() {
             handle.cancel();

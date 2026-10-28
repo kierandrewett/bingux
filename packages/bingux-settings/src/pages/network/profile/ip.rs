@@ -4,12 +4,14 @@ use freya::prelude::*;
 
 use bingux_ui::controls::form::validate;
 use bingux_ui::controls::{form_field, pending_bar};
+use bingux_ui::motion::reveal_block;
+use bingux_ui::style::S10;
 
 use super::draft::{Draft, ListLook, Values, list_rows, remove_slot, use_draft};
 use super::store;
 use super::{Page, options};
 use crate::pages::connection_editor::{
-    Changes, IP6_PRIVACY_CHOICES, ProfileData, diff, ip_methods, join_list, method_caption, route4,
+    Changes, IP6_PRIVACY_CHOICES, ProfileData, diff, ip_methods, join_list, route4,
     route6, shown, yes_no,
 };
 use crate::ui::{Group, choice_row, page_column, switch_row};
@@ -199,14 +201,13 @@ impl Component for IpBody {
             choice_row("Method", options(methods), &method, move |value: String| {
                 draft.set("method", value)
             })
-            .subtitle(method_caption(version, &method))
         };
 
         let mut column = page_column()
-            .maybe_child(pending_bar(dirty, ok && !*busy.read(), apply, revert))
+            .child(pending_bar(dirty, ok && !*busy.read(), apply, revert))
             .child(Group::titled(if version == 4 { "IPv4" } else { "IPv6" }).row(method_row));
 
-        if visible.addresses {
+        {
             let (placeholder, gateway_placeholder, address_check, gateway_check): (
                 &str,
                 &str,
@@ -237,21 +238,20 @@ impl Component for IpBody {
                     monospace: true,
                 },
             );
-            column = column.child(
-                Group::titled("Addresses")
-                    .description("Each address needs its prefix length, such as /24.")
-                    .rows(addresses)
-                    .row(
-                        form_field("Gateway", draft.text("gateway"))
-                            .placeholder(gateway_placeholder)
-                            .optional()
-                            .monospace()
-                            .trailing(remove_slot())
-                            .validate(gateway_check),
-                    ),
-            );
+            column = column.child(reveal_block(
+                visible.addresses,
+                S10,
+                Group::titled("Addresses").rows(addresses).row(
+                    form_field("Gateway", draft.text("gateway"))
+                        .placeholder(gateway_placeholder)
+                        .optional()
+                        .monospace()
+                        .trailing(remove_slot())
+                        .validate(gateway_check),
+                ),
+            ));
         }
-        if visible.routes {
+        {
             let routes = list_rows(
                 draft.list("routes"),
                 ListLook {
@@ -266,11 +266,11 @@ impl Component for IpBody {
                     monospace: true,
                 },
             );
-            column = column.child(
-                Group::titled("Static routes")
-                    .description("Network and prefix, then the next hop and an optional metric.")
-                    .rows(routes),
-            );
+            column = column.child(reveal_block(
+                visible.routes,
+                S10,
+                Group::titled("Static routes").rows(routes),
+            ));
         }
 
         let mut behaviour = Group::new(None::<String>);
@@ -286,8 +286,7 @@ impl Component for IpBody {
                             yes_no(!on),
                         ))
                     },
-                )
-                .subtitle("Off ignores the routes the network hands out."),
+                ),
             );
         }
         if visible.never_default {
@@ -299,8 +298,7 @@ impl Component for IpBody {
                     move |on: bool| {
                         page.apply_now(Changes::one(&format!("{prefix}.never-default"), yes_no(on)))
                     },
-                )
-                .subtitle("Internet traffic goes through another connection."),
+                ),
             );
         }
         if visible.privacy {
@@ -312,9 +310,6 @@ impl Component for IpBody {
                     options(IP6_PRIVACY_CHOICES),
                     &selected,
                     move |value: String| page.apply_now(Changes::one("ipv6.ip6-privacy", value)),
-                )
-                .subtitle(
-                    "Temporary addresses make it harder to follow this computer between networks.",
                 ),
             );
         }

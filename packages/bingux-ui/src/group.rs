@@ -30,33 +30,12 @@ pub fn action_row(note: Option<&str>, action: impl IntoElement) -> Element {
 
 /// A form row for a popup or page: the label at the left and a control at the
 /// right, on the row height and the gutter. Put rows in a [`Group`].
+///
+/// The row is an [`AdaptiveLine`](crate::controls::adaptive::AdaptiveLine):
+/// the label keeps its natural width, a text field or dropdown shrinks to what
+/// is left, and a row that cannot fit both stacks the label above the control.
 pub fn form_row(label: impl Into<String>, control: impl Into<Element>) -> Element {
-    FormRow {
-        label: label.into(),
-        control: control.into(),
-    }
-    .into()
-}
-
-#[derive(PartialEq)]
-struct FormRow {
-    label: String,
-    control: Element,
-}
-
-impl Component for FormRow {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        rect()
-            .component("FormRow")
-            .tw(&tokens, ROW)
-            .child(
-                rect()
-                    .tw(&tokens, &[w_flex()])
-                    .child(BODY.label(&tokens, self.label.clone())),
-            )
-            .child(self.control.clone())
-    }
+    crate::controls::adaptive::AdaptiveLine::new("FormRow", label, control).into()
 }
 
 /// A short muted explanation under a title or group.
@@ -115,6 +94,7 @@ pub struct Group {
     description: Option<String>,
     trailing: Option<Element>,
     below_title: Option<Element>,
+    footer: Option<String>,
     filtered: bool,
     rows: Vec<Element>,
 }
@@ -126,6 +106,7 @@ impl Group {
             description: None,
             trailing: None,
             below_title: None,
+            footer: None,
             filtered: true,
             rows: Vec::new(),
         }
@@ -148,6 +129,16 @@ impl Group {
     /// that belongs to the group's list.
     pub fn below_title(mut self, element: impl Into<Element>) -> Self {
         self.below_title = Some(element.into());
+        self
+    }
+
+    /// A caption under the card, at the card's edge and the group's gap from
+    /// it: the note that belongs to this group, such as the kind of network
+    /// under its password. A caption set as a sibling of the group sits a
+    /// whole page gap away and reads as detached.
+    pub fn footer(mut self, text: impl Into<String>) -> Self {
+        let text = text.into();
+        self.footer = (!text.is_empty()).then_some(text);
         self
     }
 
@@ -246,7 +237,8 @@ impl Component for Group {
                 .tw(&tokens, GROUP)
                 .maybe_child(heading)
                 .maybe_child(self.below_title.clone())
-                .child(rect().tw(&tokens, BOX).children(children)),
+                .child(rect().tw(&tokens, BOX).children(children))
+                .maybe_child(self.footer.as_ref().map(|text| caption(text.clone()))),
         )
     }
 }
@@ -431,6 +423,38 @@ impl Component for SectionLabel {
         rect()
             .component("Section")
             .child(search_highlight::label(SECTION, &tokens, &self.text))
+    }
+}
+
+/// The title block of a group, with `trailing` controls at its right, and no
+/// card. A page that sets several cards under one name uses it for that name
+/// and its toolbar, then lists the cards below.
+pub fn group_head(title: impl Into<String>, trailing: impl Into<Element>) -> Element {
+    GroupHead {
+        title: title.into(),
+        trailing: trailing.into(),
+    }
+    .into()
+}
+
+#[derive(PartialEq)]
+struct GroupHead {
+    title: String,
+    trailing: Element,
+}
+
+impl Component for GroupHead {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        rect()
+            .tw(&tokens, GROUP_HEAD)
+            .tw(&tokens, &[items(Align::Center)])
+            .child(
+                rect()
+                    .tw(&tokens, GROUP_HEAD_TEXT)
+                    .child(section_label(self.title.clone())),
+            )
+            .child(self.trailing.clone())
     }
 }
 

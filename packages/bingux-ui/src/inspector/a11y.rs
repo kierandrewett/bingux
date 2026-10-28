@@ -11,14 +11,16 @@ use std::collections::HashSet;
 
 use freya::prelude::*;
 
-pub use super::a11y_checks::{FrameHistory, Issue, IssueKind, Severity, check};
+pub use super::a11y_checks::{ContrastDetail, FrameHistory, Issue, IssueKind, Severity, check};
 use super::nav::Nav;
+use crate::controls::colour_picker::colour_chip;
 use crate::controls::{SpinnerSize, action_button, segmented, spinner, stat_tile};
 use crate::focus::step_focus;
 use crate::group::{Group, Status, caption, heading, status};
 use crate::icons::{self, Icon};
 use crate::rows::{Row, row};
 use crate::style::*;
+use crate::style::colour_to_hex;
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
 use crate::typography::{CAPTION, Ink, styled_label};
@@ -258,10 +260,13 @@ fn issue_group(
 /// it. The row reveals the element; the chevron says so.
 fn issue_row(tokens: &Tokens, issue: &Issue, nav: Nav) -> Element {
     let detail = format!("{}\n{}", issue.target, issue.fix);
-    let item: Row = row(issue.what.clone())
+    let mut item: Row = row(issue.what.clone())
         .leading(severity_icon(issue.severity))
         .leading_tone(severity_tone(issue.severity))
         .subtitle(detail);
+    if let Some(measured) = issue.contrast {
+        item = item.trailing(contrast_chips(tokens, measured));
+    }
     let Some(node) = issue.node else {
         return item.into();
     };
@@ -278,6 +283,29 @@ fn issue_row(tokens: &Tokens, issue: &Issue, nav: Nav) -> Element {
 fn jump(nav: Nav, node: u64) {
     nav.reveal(node);
     super::set_hover(Some(node));
+}
+
+/// The measured text and background as two colour chips with their hex, then
+/// the ratio against what AA needs, and the APCA reading, labelled advisory.
+fn contrast_chips(tokens: &Tokens, measured: ContrastDetail) -> Element {
+    let chip = |colour: Color| {
+        rect()
+            .tw(tokens, &[flex_row(), items(Align::Center), gap(S1)])
+            .child(colour_chip(*tokens, colour, Dim::Swatch.px()))
+            .child(styled_label(CAPTION, colour_to_hex(colour)))
+    };
+    rect()
+        .tw(tokens, &[flex_row(), items(Align::Center), gap(S3)])
+        .child(chip(measured.foreground))
+        .child(chip(measured.background))
+        .child(styled_label(
+            CAPTION,
+            format!(
+                "{:.2}:1 of {:.1}:1 · APCA {:.0} (advisory)",
+                measured.ratio, measured.needed, measured.apca
+            ),
+        ))
+        .into()
 }
 
 fn severity_icon(severity: Severity) -> Icon {

@@ -84,6 +84,40 @@ Bluetooth, Displays, Sound, Appearance or Power. These are the desktop
 entry's actions; each one runs `bingux-settings` with that panel, and the
 dock shows an application's actions only while it has a window.
 
+## Navigation
+
+Where Settings is, is a URI (`bingux-settings://network/wifi/network/Home`), and
+the window's Back list is a list of those. The header's Back button, the page
+title, the window title and the history menu all read that one list. The route
+table is `packages/bingux-settings/src/routes.rs`; a page does not write its own
+Back. See [Navigation](bingux-ui.md#navigation) for the system.
+
+- **Back** goes to the page you came from, which is not always the page's parent:
+  opening a Wi-Fi network from the Network page and pressing Back returns to
+  Network. Alt+Left, the mouse Back button and the Back button do the same.
+- **Escape and Back close a menu or dialog first.** A menu or dialog that is open
+  never changes what the header shows, so the Back button does not appear or
+  disappear when you open one.
+- **The history menu.** Right-click the Back button, or hold it for about half a
+  second with a finger or the primary button. A menu opens under it listing the
+  pages Back would reach, nearest first. Choosing one goes there in a single
+  slide. A page with one page below it shows one row.
+- **Swipe back.** On a phone-sized window (and with a finger on any window), drag
+  from the left edge. The page you are on shrinks and follows your finger over
+  the page below, which grows into place. Let go past about a third of the width,
+  or flick right, and it goes back. Let go sooner, flick left or drag back to the
+  edge and it springs back. A swipe while a menu is open closes the menu.
+- **Opening a URI** (`xdg-open bingux-settings://network/wifi/network/Home`, a
+  search result, a second `bingux-settings` launch) builds the Back list from the
+  page's parents, so Back from `network/wifi/network/Home` goes to Wi-Fi, then
+  Network. A URI that names no page shows a Not found page with Up and Settings.
+- **A `#fragment` is a row in the page.** Search results use it to scroll to the
+  setting and highlight it.
+- **On a phone-sized window** a row in the page list shows a pressed state the
+  moment a finger lands on it. Scrolling the list clears it, and a scroll that
+  ends over a row does not open that row. The page ends with a bottom margin that
+  clears the window edge.
+
 ## App identity
 
 The dock, the window switcher, search results and notifications find the
@@ -116,7 +150,7 @@ default for every type in that kind. The choice shows at once and is written
 with `gio mime` in the background, so GTK applications and `xdg-open` see it.
 If the write fails, the previous default comes back and a message says why.
 Each kind's list shows each application once, even when the system lists it under several desktop files.
-Default applications also has an Other file types group: one row for each content type that no kind covers, with a dropdown of the applications that can open it. A Show more row pages the group.
+Default applications also has an Other file types section for the content types that no kind covers. They are grouped under Images, Audio, Video, Documents, Archives, Fonts, Code and Other. A row has the type's icon, its name from the shared-mime-info database (such as Bzip2 archive), its extensions (or the MIME type, when two types share a name, or when it has no extension) and a dropdown of the applications that can open it. Every dropdown is the same width and shows each application's icon. The section header has the search toggle and a Filter and sort menu, as the Installed list does: filter by category and by whether a default is set; sort by name or by application. The names are read in the background when the page loads. Rows load as the list is scrolled; there is no Show more button. The Installed list loads the same way.
 
 ### Start at login
 
@@ -167,6 +201,10 @@ fades into the centre of the header bar. On a phone the large title also fades
 out as the page scrolls, and the header title rises into its place. Back, Alt+Left and the mouse
 Back button return to the page below; choosing another page in the sidebar
 closes the subpage.
+
+## Copy
+
+A subtitle or a group description states a state or a value: a device name, a connection state, a count, a setting's current value. It never gives an instruction, explains what a setting does, or says again what its title says. A row with nothing to state has no subtitle and is the compact height. Rows and fields that only appear while another setting is on or has a certain value slide in under the row that controls them (`Row::nested`, or `reveal_block` for a whole group) and never move what is above them.
 
 ## Where each setting lives
 
@@ -414,11 +452,37 @@ disconnects, adds, changes or deletes. `BINGUX_SETTINGS_FAKE_WIRED=many` gives
 
 ## Search
 
-The sidebar search finds pages first, then settings. Each settings row shows
-the page it lives on under its title. Up and Down move through the results,
-Enter opens the highlighted one, and Esc clears the search. A query that matches a page's own name or keywords, such as "sound", lists that page as a block with a row that opens it, followed by its matching index entries (at most eight in all); its controls are not filtered. Pages that list their index entries (Network, Bluetooth, Displays and Applications) show at most eight per page; a longer query narrows them. Other pages show the controls whose labels match. Ctrl+F moves focus to the search field. The list of searchable settings
-is `src/settings_index.rs`; add a row there when a page gains a setting, with
-plain words a person might type in the keywords column.
+The search field in the sidebar (Ctrl+F) finds pages, settings and installed
+applications as you type. Results are one list, grouped under the page they
+belong to, best match first. Each row shows its name with the matched letters
+marked and, below it, where it lives (`Network › Wi-Fi`). Spelling mistakes
+are forgiven: `blutooth`, `prxoy` and `kayboard` find Bluetooth, Proxy and
+Keyboard. A word matches the start of a longer one while you type (`bluet`),
+`wifi`, `wi-fi` and `wi fi` are the same, and accents and capital letters do
+not matter. Up and Down move through the results, Enter opens the best one,
+and Esc clears the search.
+
+Choosing a result opens its page or subpage, scrolls to the row and flashes
+it, and clears the search. The sidebar lists the pages that have results while
+you search.
+
+Spotlight finds the same pages and settings (not the installed applications)
+whether or not Settings is open: choosing one starts Settings on that page. The
+index holds only fixed page and setting names; nothing about you or this
+machine. To keep Spotlight from listing Settings, run
+`bingux-config set search.disabled_providers '["bingux-settings"]'` (see
+[Search presentation](search-presentation.md)).
+
+`bingux-settings --search-provider` serves the search without a window, for
+testing: `socat - UNIX-CONNECT:$XDG_RUNTIME_DIR/bingux/search/bingux-settings.sock`
+and send `{"v":1,"type":"search","id":"1","index":"settings","body":{"q":"proxy"}}`.
+
+The searchable settings are listed in `src/settings_index.rs`: add a row there
+when a page gains a setting, with plain words a person might type in the
+keywords column, and the subpage it lives on if it is not on the page itself.
+The row's address ends in `#` and the row's title in lower case words joined
+by `-`; the row of that title flashes when it is opened. See "Search" in
+[Bingux UI](bingux-ui.md#search).
 
 ## Related pages
 
@@ -471,8 +535,30 @@ channel's freedesktop voice sample ("Front left", "Rear right" and so on) throug
 channel only, and rings the button while it plays. The centre label names the channel
 while it plays. The output device's right-click menu offers the same test.
 
-Each application that plays or records sound is a row with its own volume
-slider and meter. Right-clicking the row offers Mute and Reset to 100%.
+Under the devices, three rows open or switch more:
+
+- **Application volumes** (value such as "2 playing, 1 recording") opens the
+  Application volumes subpage, `bingux-settings://sound/applications`. Each
+  application that plays or records sound is a row with its icon, volume
+  slider, mute button and a level meter. Right-clicking the row offers Mute,
+  Reset to 100% and, with two or more devices, "Play to" or "Record from" a
+  device. Rows keep their place while the page is open: a new application is
+  added at the end, and one that stops stays dimmed as "Stopped" for about 15
+  seconds, so nothing above a changing row moves.
+- **Effects** opens `bingux-settings://sound/effects`; see
+  [Sound effects](audio-effects.md). Its value is the preset in use, or Off.
+- **Output effects** switches the output effects on or off. While the effects
+  are on they are the default device, and the Output device list shows and
+  changes the real device behind them.
+
+The meters on the Sound page and the Application volumes subpage read the
+PipeWire graph with `pw-record`, only while their rows are on screen in a
+focused window: leaving the page or losing focus ends every capture. While
+there is sound a meter updates on the window's frame clock, at most 30 times
+a second; when everything is silent it asks for no frames. The Sound page
+itself reads one `wpctl status` every five seconds, and the per-stream
+volumes and icons only while the Application volumes subpage or an
+application page is open.
 
 Volume and mute changes apply at once. The backend applies them in the
 background, and a failure puts the slider back and shows a toast.
@@ -614,11 +700,27 @@ placeholder model behind a veil (`pages/loading.rs`), with the same row count
 and row heights as the loaded page, so only values change when data lands. A
 slider row reserves its value text and its mark label from the first frame.
 
+What a placeholder needs from the machine (a battery, a touchpad, the power
+profiles service) is a hint read once on its own thread at start-up
+(`loading::warm_hints`, one cell per hint so a slow command does not hold back
+a file read); `render` only looks the answer up. A page whose shape follows
+what the machine reports (paired Bluetooth devices, a sound card's speakers)
+cannot place its rows before the read lands, so it is wrapped in
+`loading::revealed`: hidden and taking presses while it loads, then faded in
+at its final layout. The head of a page (its subtitle line included) comes from
+the placeholder model too, so nothing below it moves. Anything with a focus
+stop or another hook is a `Component` of its own, because the placeholder and
+the loaded page often differ in how many of them they draw.
+
 `scripts/layout-stability.py` holds the pages to this. It opens each page and a
 few subpages at desktop and 390x800 size with no saved values and every
 background result held back 1.5 seconds (`BINGUX_UI_RESULT_DELAY_MS`, testing
 builds), records every frame and fails when a row separator or card border
-moves by 4 px or more between frames. Build with `--features snapshot` first.
+moves by 4 px or more between frames, or when a page shows its error card
+because of a hook mismatch. Data that comes from the machine is replaced by
+fakes (`BINGUX_SETTINGS_FAKE_NETWORK`, `_MODEM`, `_DISPLAYS`, `_BLUETOOTH`,
+`_INPUT`; snapshot builds only), so a run says the same on every computer.
+Build with `--features snapshot` first.
 
 ## Profiling
 
@@ -685,6 +787,16 @@ python3 scripts/frame-walk.py                  # every page
 python3 scripts/frame-walk.py --pages network,sound --timeout 300
 python3 scripts/frame-walk.py --skip-run       # re-analyse frames already kept
 ```
+
+`scripts/mobile-walk.py` does the same for the phone layout and its transitions: page push and pop, the list of pages, search, a toast, a dropdown sheet opened, closed by Escape or the scrim, pulled by its grabber with a mouse and with a finger (released short, past the threshold, flung, lifted above rest) and its list dragged by a finger. It runs at 390x800, 360x640 and 800x390, saves a frame strip per scenario under `--out` (default `/tmp/MobileWalk`) and checks the frames by pixel analysis: no blank frame, no A B A flash, the sheet's grabber and title keep their distance from its top edge (it moves as one piece), the sheet reaches the bottom edge, the scrim follows the drag, a released sheet rests or is gone, nothing touches the bottom edge of a resting sheet, and the page margins stay clear. It runs gsettings on a throw-away backend, so nothing on the desktop changes. Exit status 1 when a check fails.
+
+```sh
+python3 scripts/mobile-walk.py                                   # all scenarios, three sizes
+python3 scripts/mobile-walk.py --sizes 390x800 --only sheet-fling-touch
+python3 scripts/mobile-walk.py --skip-run                        # re-analyse kept frames
+```
+
+A page column is at most `Dim::Page` (720 px) wide beside the sidebar and `Dim::PagePhone` (520 px) on a narrow window, centred, with the compact page margin at the sides; between a phone and a tablet the cards grow with the window up to the cap and stop. Pages end `S8` plus `Dim::SafeBottom` above the bottom edge.
 
 Frames before the walk's first `idle start` marker are the load phase and are
 reported as load shifts. Live clocks and spinners can also show up, so check

@@ -229,20 +229,13 @@ impl Component for LimitsGroup {
             limit_on.set(saved.monthly_limit_bytes.is_some());
         };
 
-        let description = match &self.connection {
-            Some(name) => format!(
-                "Applies to {name} only. Other connections use the limit for all connections."
-            ),
-            None => "Applies to every connection that has no limit of its own.".to_string(),
-        };
-        let mut group = Group::titled("Limit").description(description).row(
+        let mut group = Group::titled("Limit").row(
             row("Billing cycle starts on day")
                 .subtitle(format!("This cycle: {}", self.cycle))
                 .trailing(stepper(i64::from(current.billing_day), on_day).range(1, 31)),
         );
         group = group.row(
-            switch_row("Monthly limit", on, on_toggle)
-                .subtitle("Received and sent data both count towards it."),
+            switch_row("Monthly limit", on, on_toggle),
         );
         if on {
             group = group
@@ -269,7 +262,6 @@ impl Component for LimitsGroup {
         }
         group = group.row(
             row("Warn at")
-                .subtitle("Shows a warning when this much of the limit is used.")
                 .trailing(
                     stepper(i64::from(current.warn_percent), on_warn)
                         .range(1, 100)
@@ -283,7 +275,6 @@ impl Component for LimitsGroup {
             let changed = changed.clone();
             group = group.row(
                 row("Use the limit for all connections")
-                    .subtitle("Forget the cycle day, limit and warning set for this connection.")
                     .navigates()
                     .on_press(move |_| {
                         let connection = connection.clone();
@@ -300,7 +291,7 @@ impl Component for LimitsGroup {
         }
 
         let bar = pending_bar(dirty, parsed.is_ok(), move |_| apply(), move |_| revert());
-        page_column().maybe_child(bar).child(group)
+        page_column().child(bar).child(group)
     }
 }
 

@@ -1,3 +1,3 @@
 <svg viewBox="0 0 16 16">
-  <fork name="EyeSlash" weight="bold" mode="exact"/>
+  <fork name="EyeSlash" weight="regular" mode="exact" scale="1.015" dy="-0.03"/>
 </svg>

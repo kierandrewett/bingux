@@ -497,7 +497,6 @@ fn dot1x_groups(draft: &Draft, window: Window) -> Vec<Element> {
             draft.get("system_ca") == "yes",
             move |on: bool| draft.set("system_ca", if on { "yes" } else { "no" }),
         )
-        .subtitle("Check the network's certificate against the ones this computer already trusts.")
     };
     let mut certificates = Group::titled("Certificates").row(system_ca).row(
         form_field("CA certificate", draft.text("ca"))
@@ -585,7 +584,7 @@ impl Component for SecurityBody {
             move |_: ()| draft.reset(&page.saved)
         };
         let column =
-            page_column().maybe_child(pending_bar(dirty, ok && !*busy.read(), apply, revert));
+            page_column().child(pending_bar(dirty, ok && !*busy.read(), apply, revert));
 
         if kind == Kind::Wired {
             wired_page(column, &draft, page.ctx.window)
@@ -607,9 +606,6 @@ fn wired_page(column: Rect, draft: &Draft, window: Window) -> Rect {
                 draft.set("eap", "");
             }
         })
-        .subtitle(
-            "Some company and campus networks ask each device to sign in before it can connect.",
-        )
     };
     let mut column = column.child(Group::titled("802.1X").row(toggle));
     if on {
@@ -639,28 +635,19 @@ fn wifi_page(column: Rect, draft: &Draft, window: Window) -> Rect {
     };
     let mut group = Group::titled("Security");
     match kind.as_str() {
-        "none" => {
-            group = group.description(
-                "This is an open network: no password is needed and what you send is not encrypted.",
-            );
-        }
-        "wep" => {
-            group = group.description(
-                "WEP is old and easy to break. Use WPA2 or WPA3 if the network allows it.",
-            );
-        }
+        "none" => group = group.description("Open network: traffic is not encrypted."),
+        "wep" => group = group.description("WEP is easy to break."),
         _ => {}
     }
-    group = group.row(kind_row);
-    match kind.as_str() {
-        "wpa-psk" | "sae" => {
-            group = group.row(
-                form_field("Password", draft.text("psk"))
-                    .hint("8 to 63 characters, or 64 hexadecimal digits.")
-                    .password()
-                    .validate(validate::wpa_passphrase),
-            );
-        }
+    // What the key type needs slides in under it.
+    let needs: Vec<Element> = match kind.as_str() {
+        "wpa-psk" | "sae" => vec![
+            form_field("Password", draft.text("psk"))
+                .hint("8 to 63 characters, or 64 hexadecimal digits.")
+                .password()
+                .validate(validate::wpa_passphrase)
+                .into(),
+        ],
         "wep" => {
             let wep_type = draft.get("wep_type");
             let type_row = {
@@ -672,14 +659,17 @@ fn wifi_page(column: Rect, draft: &Draft, window: Window) -> Rect {
                     move |value: String| draft.set("wep_type", value),
                 )
             };
-            group = group.row(type_row).row(
+            vec![
+                type_row.into(),
                 form_field("WEP key", draft.text("wep_key"))
                     .password()
-                    .validate(wep_check(&wep_type)),
-            );
+                    .validate(wep_check(&wep_type))
+                    .into(),
+            ]
         }
-        _ => {}
-    }
+        _ => Vec::new(),
+    };
+    group = group.row(kind_row.nested(!needs.is_empty(), needs));
     let mut column = column.child(group);
     if kind == "wpa-eap" {
         for group in dot1x_groups(draft, window) {

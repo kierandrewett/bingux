@@ -12,13 +12,14 @@ use freya::prelude::*;
 use crate::icons::Icon;
 use crate::pages::gnoblin::{self, Json};
 use crate::pages::loading::veiled;
-use crate::routes::{Navigator, Route, use_navigator};
+use crate::routes;
+use bingux_ui::prelude::{Router, use_router};
 use crate::system::{
     self, CommandError, CommandResult, background, background_then, optimistic_then,
 };
 use crate::ui::{
     Group, Overlays, PageHead, Status, caption, choice_row, page_column, popup_column, row,
-    row_button, search_field, skeleton, slider_row, status, switch_row, text_field, use_overlays,
+    row_button, search_field, skeleton, skeleton_shape, slider_row, status, switch_row, text_field, use_overlays,
 };
 use bingux_ui::prelude::{Window, popup, use_window};
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
@@ -491,19 +492,16 @@ fn source_row(
     count: usize,
     source: &Source,
     edits: SourceEdits,
-    navigator: Navigator,
+    router: Router,
     catalog: &[(Source, String)],
 ) -> Element {
     let name = source_name(source, catalog);
-    let open = Route::InputSource {
-        source: source.clone(),
-        name: name.clone(),
-    };
+    let open = routes::input_source(&source.clone(), &name.clone());
     row(name)
         .leading(Icon::Keyboard)
         .subtitle(kind_label(&source.kind))
         .navigates()
-        .on_press(move |_| navigator.push(open.clone()))
+        .on_press(move |_| router.open(open.clone()))
         .context_menu(source_menu(index, count, edits))
         .into()
 }
@@ -601,7 +599,7 @@ impl Component for KeyboardPage {
         let sources_busy = use_state(|| false);
         let overlays = use_overlays();
         let window = use_window();
-        let navigator = use_navigator();
+        let router = use_router();
         let try_text = use_state(String::new);
         // Snapshot only: BINGUX_SETTINGS_SNAPSHOT_OPEN=add-input opens the
         // add sheet once the page has loaded, so it can be captured.
@@ -710,7 +708,6 @@ impl Component for KeyboardPage {
                 .into(),
             };
             let try_it: Element = row("Try it")
-                .subtitle("Hold a key in this box to test the repeat.")
                 .trailing(text_field(try_text, |_| {}))
                 .into();
             vec![delay, interval, try_it]
@@ -826,7 +823,6 @@ impl Component for KeyboardPage {
                         commit_xkb(loaded, overlays, next);
                     },
                 )
-                .subtitle("Type two keys to make accented letters and symbols.")
             }
         };
         // The blink speed only matters while the cursor blinks, so it is nested
@@ -890,7 +886,6 @@ impl Component for KeyboardPage {
                         commit_xkb(loaded, overlays, next);
                     },
                 )
-                .subtitle("Types the third-level characters, such as symbols.")
             }
         };
         let special_group = Group::titled("Special character entry")
@@ -919,7 +914,7 @@ impl Component for KeyboardPage {
                     sources_group.row(status(Status::Empty("No input sources are set up.".into())))
                 } else {
                     sources_group.rows(config.sources.iter().enumerate().map(|(index, source)| {
-                        source_row(index, count, source, edits, navigator, &catalog)
+                        source_row(index, count, source, edits, router, &catalog)
                     }))
                 };
                 group
@@ -950,7 +945,7 @@ impl Component for KeyboardPage {
         let mut shortcuts_row = row("View and customise shortcuts")
             .leading(Icon::PreferencesDesktopKeyboardShortcuts)
             .navigates()
-            .on_press(move |_| navigator.push(Route::Shortcuts));
+            .on_press(move |_| router.open(routes::shortcuts()));
         if let Some(count) = shortcut_count {
             shortcuts_row = shortcuts_row.value(format!("{count} shortcuts"));
         }
@@ -978,8 +973,16 @@ impl Component for ShortcutsPage {
         let overlays = use_overlays();
         let query = use_state(String::new);
 
+        // The first frame has the search field where the loaded page has it,
+        // under the veil, so only the rows below change when the list lands.
         let Some(result) = loaded.read().clone() else {
-            return page_column().child(PageHead::new()).child(skeleton());
+            return veiled(
+                page_column()
+                    .child(PageHead::new())
+                    .child(search_field(query, |_| {}))
+                    .child(skeleton_shape(&[3, 3])),
+                true,
+            );
         };
         let list = match result {
             Ok(list) => list,
@@ -1028,7 +1031,6 @@ impl Component for ShortcutsPage {
             page = page.child(
                 Group::titled("Configuration").row(
                     row("Configuration file")
-                        .subtitle("Shortcuts are set in this file.")
                         .trailing(row_button("Open file", move |_| {
                             open_config(path.clone(), overlays)
                         })),

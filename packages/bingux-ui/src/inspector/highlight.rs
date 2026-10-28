@@ -9,6 +9,7 @@ use freya::engine::prelude::{
 use freya::prelude::Color;
 
 use super::snapshot::Node;
+use crate::theme::Tokens;
 use crate::style;
 
 /// Type size of the hover card, in logical pixels.
@@ -36,17 +37,26 @@ const EDGE: f32 = 8.0;
 const MIN_WIDTH: f32 = 232.0;
 
 /// Draws the hovered node of the latest snapshot, if it has an area.
-pub fn draw(canvas: &Canvas) {
-    let Some((snapshot, id)) = super::hovered() else {
+pub fn draw(canvas: &Canvas, inspector: super::InstanceId) {
+    let Some((snapshot, id)) = super::hovered(inspector) else {
         return;
     };
-    let Some(tokens) = super::tokens() else {
+    let Some(tokens) = super::tokens_of(inspector) else {
         return;
     };
+    // The snapshot is in logical pixels; the canvas is in physical ones.
+    let layer = canvas.save();
+    canvas.scale((snapshot.scale, snapshot.scale));
+    draw_node(canvas, &snapshot, id, &tokens);
+    canvas.restore_to_count(layer);
+}
+
+fn draw_node(canvas: &Canvas, snapshot: &super::snapshot::Snapshot, id: u64, tokens: &Tokens) {
     let Some(node) = snapshot.node(id) else {
         return;
     };
-    let Some(area) = node.area else {
+    // The border box: the layout's area includes the margin.
+    let Some(area) = node.used.border.or(node.area) else {
         return;
     };
     let accent = style::Paint::Accent.color(&tokens);
@@ -80,10 +90,7 @@ pub fn draw(canvas: &Canvas) {
 /// The padding and margin of a node as `[top, right, bottom, left]`; zero when
 /// the node has no editable box.
 fn edges(node: &Node) -> ([f32; 4], [f32; 4]) {
-    match &node.props {
-        Some(props) => (props.padding, props.margin),
-        None => ([0.0; 4], [0.0; 4]),
-    }
+    (node.used.padding.unwrap_or([0.0; 4]), node.used.margin)
 }
 
 fn rect(left: f32, top: f32, right: f32, bottom: f32) -> Rect {
@@ -157,7 +164,7 @@ enum Value {
 
 /// One row of the card.
 enum Line {
-    /// The element's tag name and its `W × H` size.
+    /// The element's component or role title and its `W × H` size.
     Header(String, String),
     Rule,
     Heading(&'static str),
@@ -167,24 +174,25 @@ enum Line {
 fn card_lines(node: &Node, border: Rect) -> Vec<Line> {
     let mut lines = vec![
         Line::Header(
-            node.kind.name().to_string(),
+            node.title().to_string(),
             format!("{} × {}", border.width().round(), border.height().round()),
         ),
         Line::Rule,
     ];
     if let Some(props) = &node.props {
+        // The resolved text style, after inheritance, not what the node declares.
         lines.push(Line::Row(
             "Color",
-            match props.text_color {
+            match node.used.text.as_ref().and_then(|text| text.colour) {
                 Some(color) => Value::Swatch(color, css_colour(color)),
-                None => Value::Text("inherited".to_string()),
+                None => Value::Text("—".to_string()),
             },
         ));
         lines.push(Line::Row(
             "Font",
-            Value::Text(match props.font_size {
-                Some(size) => format!("{}px", size.round()),
-                None => "inherited".to_string(),
+            Value::Text(match &node.used.text {
+                Some(text) => format!("{}px", text.size.round()),
+                None => "—".to_string(),
             }),
         ));
         lines.push(Line::Row(
@@ -194,8 +202,9 @@ fn card_lines(node: &Node, border: Rect) -> Vec<Line> {
                 None => Value::Text("none".to_string()),
             },
         ));
-        lines.push(Line::Row("Padding", Value::Text(sides(props.padding))));
-        lines.push(Line::Row("Margin", Value::Text(sides(props.margin))));
+        let (padding, margin) = edges(node);
+        lines.push(Line::Row("Padding", Value::Text(sides(padding))));
+        lines.push(Line::Row("Margin", Value::Text(sides(margin))));
         lines.push(Line::Rule);
     }
     lines.push(Line::Heading("ACCESSIBILITY"));
@@ -311,7 +320,7 @@ fn draw_value(
     }
 }
 
-/// The hover card: the element's tag and size in its header, then its style
+/// The hover card: the element's title and size in its header, then its style
 /// and accessibility facts, one line each. It sits just below the element, or
 /// above it when there is no room, and its arrow points at the element.
 fn card(canvas: &Canvas, tokens: &crate::theme::Tokens, border: Rect, node: &Node) {

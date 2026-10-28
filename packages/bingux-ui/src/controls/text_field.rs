@@ -18,6 +18,8 @@ use crate::controls::button::icon_button;
 use crate::controls::press::{is_touch, point_of, use_press};
 use crate::controls::text_edit::{self, DOUBLE_TAP};
 use crate::icons::{self, Icon};
+use crate::focus::owner::use_visual_focus;
+use crate::focus::{press_claimed, use_focus_core};
 use crate::motion::Focusable;
 use crate::shell::menu::{MenuItem, menu_item, menu_separator};
 use crate::shell::overlays::Overlays;
@@ -25,6 +27,10 @@ use crate::shell::panel::{Panel, PanelRect, PanelTrigger, text_bar_rect};
 use crate::style::*;
 use crate::surface::{use_enabled, use_tokens};
 use crate::typography::{BODY, CAPTION, Ink, mono_family};
+
+/// What a password field shows for each character: a bullet, as the system's
+/// password fields do. Freya's own default is an asterisk.
+const MASK: char = '\u{2022}';
 
 /// A multiline field is this many controls high.
 const MULTILINE_ROWS: f32 = 3.0;
@@ -53,6 +59,8 @@ pub struct TextField {
     /// A muted unit inside the field's right end, such as `bytes`.
     suffix: Option<String>,
     enabled: bool,
+    /// The text can be selected and copied but not edited.
+    read_only: bool,
     leading: Option<Icon>,
     leading_column: Option<Dim>,
     /// A removable token before the text; see [`TextField::leading_chip`].
@@ -96,6 +104,7 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         danger_outline: false,
         suffix: None,
         enabled: true,
+        read_only: false,
         leading: None,
         leading_column: None,
         leading_chip: None,
@@ -200,6 +209,15 @@ impl TextField {
 
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
+        self
+    }
+
+    /// A field whose text can be selected and copied but not changed: it
+    /// keeps its focus, caret and selection, its right-click menu offers
+    /// Copy and Select all, and Cut and Paste are greyed out. Use it for a
+    /// value the person may copy, such as an address or a key.
+    pub fn read_only(mut self) -> Self {
+        self.read_only = true;
         self
     }
 
@@ -335,6 +353,9 @@ fn edit_item(label: &str, enabled: bool, on_press: impl FnMut(()) + 'static) -> 
 impl Component for TextField {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        // A form line that is too narrow for the field's width asks it to
+        // fill what it has instead.
+        let fills = self.fill || crate::controls::adaptive::use_line_fill();
         let mut value = self.value;
         let on_submit = self.on_submit.clone();
         let on_change = self.on_change.clone();
@@ -346,7 +367,8 @@ impl Component for TextField {
         let invalid = self.invalid.is_some() || self.danger_outline;
         let own_id = use_a11y();
         let input_id = self.a11y_id.unwrap_or(own_id);
-        let focus = use_focus(input_id);
+        let visual = use_visual_focus(input_id);
+        let enabled = use_enabled(self.enabled);
         let mut revealed = use_state(|| false);
         let mut command = use_state::<Option<InputCommand>>(|| None);
         let touch = use_press();
@@ -370,6 +392,7 @@ impl Component for TextField {
         let mut pressed_at = use_state(|| (0.0_f32, 0.0_f32));
         let mut last_tap = use_state::<Option<(Instant, (f32, f32))>>(|| None);
         let overlays: Option<Overlays> = try_consume_context::<Overlays>();
+        let focus_core = use_focus_core();
         // Freya's Input takes its look as theme values, not a box style, so
         // the tokens are resolved here: the CONTROL recipe's radius and
         // inset, the control or well fill, and the danger edge when invalid.
@@ -381,34 +404,15 @@ impl Component for TextField {
         } else {
             Paint::Control
         };
-        // While the field's own menu is open, focus sits on the menu, so the
-        // edge keeps the focus colour rather than flickering unfocused.
-        let menu_open = overlays.is_some_and(|overlays| overlays.menu_owned_by(input_id));
-        let edge = if invalid {
-            Paint::Danger
-        } else {
-            Paint::Accent
-        };
+        // Focus and the invalid state are both the ring the field is wrapped in
+        // (see `Focusable`), so the field draws no edge of its own, and the
+        // look while its context menu is open comes from `visual`, the one
+        // source of truth for "is this focused".
         let colors = InputColorsThemePartial {
             background: Some(paint(fill)),
             focus_background: Some(paint(fill)),
-            border_fill: Some(paint(if menu_open {
-                edge
-            } else if invalid {
-                Paint::Danger
-            } else {
-                Paint::Transparent
-            })),
-            // Keyboard focus is the animated ring, so the field draws no border of
-            // its own for it. While the field's own menu is open, the edge keeps
-            // the accent colour.
-            focus_border_fill: Some(paint(if invalid {
-                Paint::Danger
-            } else if menu_open {
-                Paint::Accent
-            } else {
-                Paint::Transparent
-            })),
+            border_fill: Some(paint(Paint::Transparent)),
+            focus_border_fill: Some(paint(Paint::Transparent)),
             color: Some(paint(Paint::Text)),
             placeholder_color: Some(paint(Paint::Muted)),
         };
@@ -444,22 +448,71 @@ impl Component for TextField {
         let has_text = !value.read().is_empty();
         let masked = self.password && !revealed();
         let mode = if masked {
-            InputMode::new_password()
+            InputMode::Hidden(MASK)
         } else {
             InputMode::Shown
         };
 
+        // Right click and the Menu key: the edit commands, greyed out when
+        // they do not apply. A password is never copied out, so Cut and Copy
+        // stay off for it, and a read-only field cannot be cut into or pasted
+        // over.
+        let changes_text = !self.read_only;
+        let copyable = has_text && !self.password;
+        let edit_menu = vec![
+            edit_item("Cut", copyable && changes_text, move |_| {
+                command.set(Some(InputCommand::Cut))
+            }),
+            edit_item("Copy", copyable, move |_| {
+                command.set(Some(InputCommand::Copy));
+            }),
+            edit_item("Paste", changes_text, move |_| {
+                command.set(Some(InputCommand::Paste));
+            }),
+            menu_separator(),
+            edit_item("Select all", has_text, move |_| {
+                command.set(Some(InputCommand::SelectAll));
+            }),
+        ];
+        // The Menu key and Shift+F10 open the same menu against the caret, or
+        // against the field when it shows none. The menu is highlighted from
+        // the keyboard, and the field stays the focus owner behind it.
+        let key_menu = {
+            let edit_menu = edit_menu.clone();
+            move || {
+                let Some(overlays) = overlays else {
+                    return;
+                };
+                let Some((x0, y0, x1, y1)) = *field_area.peek() else {
+                    return;
+                };
+                let field = PanelRect {
+                    x: x0,
+                    y: y0,
+                    width: x1 - x0,
+                    height: y1 - y0,
+                };
+                let trigger = match text_edit::anchor(&probe.peek()) {
+                    Some(caret) => PanelTrigger::Text { field, caret },
+                    None => PanelTrigger::Control(field),
+                };
+                input_id.request_focus();
+                overlays.show_menu_from(Some(input_id), trigger, edit_menu.clone(), true);
+            }
+        };
+
         let mut input = Input::new(value)
-            .width(if self.fill {
+            .width(if fills {
                 Size::fill()
             } else {
                 Size::px(width)
             })
-            .enabled(use_enabled(self.enabled))
+            .enabled(enabled)
             .theme_colors(colors)
             .theme_layout(layout)
             .mode(mode)
-            .keep_selection(menu_open)
+            .focus_within(visual.within_owner)
+            .read_only(self.read_only)
             .command(command)
             .probe(probe)
             .request(request)
@@ -511,6 +564,19 @@ impl Component for TextField {
                             on_enter.call(event.modifiers);
                         }
                         true
+                    }
+                    // The Menu key and Shift+F10 open the edit menu.
+                    Key::Named(NamedKey::ContextMenu) => {
+                        event.stop_propagation();
+                        event.prevent_default();
+                        key_menu();
+                        false
+                    }
+                    Key::Named(NamedKey::F10) if event.modifiers.contains(Modifiers::SHIFT) => {
+                        event.stop_propagation();
+                        event.prevent_default();
+                        key_menu();
+                        false
                     }
                     // Tab moves focus, as Freya's own field does.
                     Key::Named(NamedKey::Tab) => false,
@@ -587,7 +653,7 @@ impl Component for TextField {
                 )
                 .child(
                     icon_button(Icon::WindowClose, move |_| on_remove.call(()))
-                        .size(Dim::Box5)
+                        .size(Dim::InlineButton)
                         .tooltip(remove_label),
                 );
             leading = Some(
@@ -604,9 +670,25 @@ impl Component for TextField {
         let clear = self.clearable && has_text;
         if clear || self.password || self.suffix.is_some() {
             let on_change = on_change.clone();
+            // Every action in a field is the standard icon button, one
+            // field height less twice the inset on each side, centred on
+            // the field's cross axis and the same distance from its
+            // trailing edge. Its corner is the field's less the inset.
+            let small = self.flat || self.dense;
+            let (button, inset, nested) = if small {
+                (Dim::Box5, S0_5, Radius::Mark)
+            } else {
+                (
+                    Dim::InlineButton,
+                    FIELD_INSET,
+                    Radius::Control.nested(FIELD_INSET.px()),
+                )
+            };
+            let has_button = clear || self.password;
             let mut trailing = rect()
                 .cursor(CursorIcon::default())
-                .tw(&tokens, &[flex_row(), center(), gap(S1)]);
+                .tw(&tokens, &[flex_row(), center(), gap(S1)])
+                .tw(&tokens, &[pr(if has_button { inset } else { pad_horizontal })]);
             if let Some(suffix) = &self.suffix {
                 trailing = trailing.child(
                     BODY.in_ink(Ink::Muted)
@@ -616,27 +698,16 @@ impl Component for TextField {
             }
             if clear {
                 trailing = trailing.child(
-                    rect()
-                        .tw(
-                            &tokens,
-                            &[w(Dim::Box5), h(Dim::Box5), rounded(Radius::Mark), center()],
-                        )
-                        .on_pointer_down(move |event: Event<PointerEventData>| {
-                            let left = matches!(event.data(), PointerEventData::Mouse(mouse) if mouse.button == Some(MouseButton::Left));
-                            if !left {
-                                return;
-                            }
-                            event.stop_propagation();
-                            value.set(String::new());
-                            if let Some(on_change) = &on_change {
-                                on_change.call(String::new());
-                            }
-                        })
-                        .child(icons::icon(
-                            Icon::EditClear,
-                            IconSize::Mark,
-                            Paint::Muted.color(&tokens),
-                        )),
+                    icon_button(Icon::EditClear, move |_| {
+                        value.set(String::new());
+                        if let Some(on_change) = &on_change {
+                            on_change.call(String::new());
+                        }
+                    })
+                    .size(button)
+                    .radius(nested)
+                    .refocus(input_id)
+                    .tooltip("Clear"),
                 );
             }
             if self.password {
@@ -647,7 +718,9 @@ impl Component for TextField {
                 };
                 trailing = trailing.child(
                     icon_button(icon, move |_| revealed.set(!revealed()))
-                        .size(Dim::Box5)
+                        .size(button)
+                        .radius(nested)
+                        .refocus(input_id)
                         .tooltip(tip),
                 );
             }
@@ -665,24 +738,6 @@ impl Component for TextField {
             validator.set_valid(true);
         });
 
-        // Right click: the edit commands, greyed out when they do not apply.
-        // A password is never copied out, so Cut and Copy stay off for it.
-        let copyable = has_text && !self.password;
-        let items = vec![
-            edit_item("Cut", copyable, move |_| {
-                command.set(Some(InputCommand::Cut))
-            }),
-            edit_item("Copy", copyable, move |_| {
-                command.set(Some(InputCommand::Copy));
-            }),
-            edit_item("Paste", true, move |_| {
-                command.set(Some(InputCommand::Paste));
-            }),
-            menu_separator(),
-            edit_item("Select all", has_text, move |_| {
-                command.set(Some(InputCommand::SelectAll));
-            }),
-        ];
         // Touch: the bar's entries follow the selection, and its chevron opens the
         // full menu. Mouse keeps the right-click menu on the field.
         let seen = *probe.read();
@@ -723,8 +778,16 @@ impl Component for TextField {
             .filter(|_| show_bar)
             .map(text_edit::area)
             .collect();
-        input = input.keep_focus_in(companions);
-        let cut = edit_item("Cut", copyable, move |_| {
+        // The release of a press the menu's shield took (an outside click that
+        // dismisses this field's menu) is not a click outside the field: the
+        // field keeps its focus. The shield claims that press with the focus
+        // core, or the menu is still up for a quick click.
+        let press_core = focus_core.clone();
+        input = input.keep_focus_in(companions).keep_focus_when(move |_: ()| {
+            press_claimed(&press_core)
+                || overlays.is_some_and(|overlays| overlays.menu_owned_by(input_id))
+        });
+        let cut = edit_item("Cut", copyable && changes_text, move |_| {
             command.set(Some(InputCommand::Cut));
             bar_open.set(false);
         });
@@ -732,7 +795,7 @@ impl Component for TextField {
             command.set(Some(InputCommand::Copy));
             bar_open.set(false);
         });
-        let paste = edit_item("Paste", true, move |_| {
+        let paste = edit_item("Paste", changes_text, move |_| {
             command.set(Some(InputCommand::Paste));
             bar_open.set(false);
         });
@@ -752,7 +815,7 @@ impl Component for TextField {
         .into_iter()
         .flatten()
         .collect();
-        let mut full_menu = items.clone();
+        let mut full_menu = edit_menu.clone();
         full_menu.extend(self.edit_extra.clone());
         let on_more = EventHandler::new(move |_: ()| {
             bar_open.set(false);
@@ -762,7 +825,7 @@ impl Component for TextField {
             }
         });
         let field = rect()
-            .width(if self.fill {
+            .width(if fills {
                 Size::fill()
             } else {
                 Size::px(width)
@@ -780,7 +843,8 @@ impl Component for TextField {
             })
             .on_pointer_down(move |event: Event<PointerEventData>| {
                 let right = matches!(event.data(), PointerEventData::Mouse(mouse) if mouse.button == Some(MouseButton::Right));
-                if !right {
+                // A disabled field is inert: no menu, and it takes no focus.
+                if !right || !enabled {
                     return;
                 }
                 event.stop_propagation();
@@ -792,7 +856,7 @@ impl Component for TextField {
                     overlays.show_menu_from(
                         Some(input_id),
                         PanelTrigger::Pointer((at.x as f32, at.y as f32)),
-                        items.clone(),
+                        edit_menu.clone(),
                         false,
                     );
                 }
@@ -856,8 +920,20 @@ impl Component for TextField {
                     text_edit::bar(&tokens, bar_entries, on_more),
                 )
             }))
-            .focusable(focus(), Radius::Control)
-            .maybe(self.fill, |wrapper| wrapper.tw(&tokens, &[w_flex()]));
+            .focusable_invalid(
+                // A text field shows its ring for any focus, pointer or key, and
+                // while its own menu is open (the owner keeps the focus look).
+                if visual.is_focused() {
+                    Focus::Keyboard
+                } else {
+                    Focus::Not
+                },
+                Radius::Control,
+                // A flat field is a line with no radius: its ring is square.
+                if self.flat { Corners::None } else { Corners::All },
+                invalid,
+            )
+            .maybe(fills, |wrapper| wrapper.tw(&tokens, &[w_flex()]));
 
         rect()
             .component("TextField")
@@ -886,3 +962,77 @@ pub fn search_field(value: State<String>, on_change: impl Into<EventHandler<Stri
         .clearable()
         .on_change(on_change)
 }
+
+/// The search well's text starts a fixed distance from its glyph at any width.
+#[cfg(all(test, feature = "testing"))]
+mod search_offset_tests {
+    use freya::prelude::*;
+
+    use super::*;
+    use crate::snapshot::Snapshot;
+    use crate::theme::provide_tokens;
+
+    #[derive(PartialEq)]
+    struct Host {
+        width: f32,
+        typed: &'static str,
+    }
+
+    impl Component for Host {
+        fn render(&self) -> impl IntoElement {
+            let _tokens = provide_tokens();
+            let value = use_state(|| self.typed.to_string());
+            rect()
+                .width(Size::px(self.width))
+                .child(search_field(value, |_| {}).fill_width())
+        }
+    }
+
+    /// The text's start from the glyph's right edge, the glyph's distance
+    /// from the field's left edge, and the widest gap the tokens allow.
+    fn offsets(width: f32, typed: &'static str) -> (f32, f32, f32) {
+        let mut shot = Snapshot::new(
+            move || Host { width, typed }.into_element(),
+            (width + 40.0, 120.0),
+        );
+        shot.settle(std::time::Duration::from_millis(200));
+        let (glyph, limit) = shot
+            .runner()
+            .run_in(|| (IconSize::Control.px(), S1.px() + S3.px() + 8.0 + 1.0));
+        let glyphs = shot.runner().find_many(|node, _| {
+            let area = node.layout().area;
+            ((area.width() - glyph).abs() < 0.01 && (area.height() - glyph).abs() < 0.01)
+                .then_some((area.min_x(), area.max_x()))
+        });
+        let texts = shot.runner().find_many(|node, element| {
+            Paragraph::try_downcast(element)?;
+            Some(node.layout().area.min_x())
+        });
+        let glyph = glyphs.first().copied().expect("the search glyph");
+        let text = texts.first().copied().expect("the field's text");
+        eprintln!("width {width} typed {typed:?}: glyph {glyph:?} text {text}");
+        (text - glyph.1, glyph.0, limit)
+    }
+
+    #[test]
+    fn the_text_starts_a_fixed_offset_from_the_glyph_at_any_width() {
+        let mut seen = Vec::new();
+        for width in [96.0, 150.0, 220.0, 289.0, 420.0, 640.0] {
+            for typed in ["", "wifi"] {
+                seen.push(offsets(width, typed));
+            }
+        }
+        let (first_gap, first_edge, limit) = seen[0];
+        for (gap, edge, _) in &seen {
+            assert!((gap - first_gap).abs() < 0.5, "text gap {gap} differs from {first_gap}");
+            assert!((edge - first_edge).abs() < 0.5, "glyph edge {edge} differs from {first_edge}");
+        }
+        // The gap is the glyph's own margin plus the input's padding: never
+        // more than a few tokens, however wide the field is.
+        assert!(first_gap <= limit, "text starts {first_gap} px after the glyph, limit {limit}");
+    }
+}
+
+#[cfg(all(test, feature = "testing"))]
+#[path = "text_field_focus_tests.rs"]
+mod focus_tests;

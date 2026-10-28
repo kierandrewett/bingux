@@ -630,7 +630,7 @@ impl Component for Chevron {
                             selectable: true,
                         })
                         .collect();
-                    match ahead.key(&event, &items, highlighted()) {
+                    match ahead.key(&event, &items, highlighted(), true) {
                         Reaction::Ignored => {}
                         Reaction::Handled => {
                             event.stop_propagation();

@@ -11,7 +11,8 @@ use super::format;
 use super::limits::{self, Level};
 use super::model;
 use crate::pages::network::model::NetCtx;
-use crate::routes::Route;
+use crate::routes;
+use bingux_ui::prelude::Target;
 use crate::system;
 use crate::ui::{Row, row};
 use bingux_ui::style::is_compact;
@@ -74,7 +75,7 @@ fn value(summary: Option<&Summary>) -> String {
 }
 
 /// The row for `summary`, which opens `open`.
-fn entry(ctx: NetCtx, summary: Option<&Summary>, open: Route) -> Row {
+fn entry(ctx: NetCtx, summary: Option<&Summary>, open: Target) -> Row {
     let badge = match summary.and_then(|summary| summary.level) {
         Some(Level::Warn) => "Near limit",
         Some(Level::Over) => "Over limit",
@@ -91,7 +92,7 @@ fn entry(ctx: NetCtx, summary: Option<&Summary>, open: Route) -> Row {
     };
     entry
         .navigates()
-        .on_press(move |_| ctx.navigator.push(open.clone()))
+        .on_press(move |_| ctx.router.open(open.clone()))
 }
 
 /// The Data usage row of the Network page: everything, today.
@@ -101,12 +102,12 @@ pub fn usage_row(ctx: NetCtx) -> Element {
 
 /// The Data usage row of a connection's page: that connection, today. It opens `open`, the
 /// connection's own usage page, so Back returns to the connection.
-pub fn connection_usage_row(ctx: NetCtx, connection: String, open: Route) -> Element {
+pub fn connection_usage_row(ctx: NetCtx, connection: String, open: Target) -> Element {
     scope_usage_row(ctx, UsageScope::Connection(connection), open)
 }
 
 /// A Data usage row for any `scope`, today. It opens `open`.
-pub fn scope_usage_row(ctx: NetCtx, scope: UsageScope, open: Route) -> Element {
+pub fn scope_usage_row(ctx: NetCtx, scope: UsageScope, open: Target) -> Element {
     Element::from(ScopedUsageRow { ctx, scope, open })
 }
 
@@ -133,9 +134,7 @@ impl Component for UsageRow {
         entry(
             self.ctx,
             summary.as_ref(),
-            Route::Usage {
-                scope: UsageScope::All,
-            },
+            routes::usage(&UsageScope::All),
         )
     }
 }
@@ -144,7 +143,7 @@ impl Component for UsageRow {
 struct ScopedUsageRow {
     ctx: NetCtx,
     scope: UsageScope,
-    open: Route,
+    open: Target,
 }
 
 impl Component for ScopedUsageRow {

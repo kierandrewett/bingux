@@ -9,59 +9,63 @@
 //! tab.
 //!
 //! The host (the Files application) owns the tabs. Each tab gives its body a
-//! [`TabMemory`], where the body keeps the folder shown and the Back and
-//! Forward lists, so a tab that is hidden and shown again, or restored from a
-//! session, is where the person left it.
+//! [`TabMemory`], where the body keeps the tab's [`NavModel`] (the folder
+//! shown and the Back and Forward history, on [`folder_table`]), so a tab
+//! that is hidden and shown again, or restored from a session, is where the
+//! person left it.
 
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use freya::prelude::*;
 
 use super::chooser::browse_body;
 use super::directory::Where;
+use super::folder_table::{folder_table, location_of};
+use crate::nav::NavModel;
 
-/// Where one tab is: the folder on show and the folders before and after it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Trail {
-    pub at: Where,
-    pub back: Vec<Where>,
-    pub forward: Vec<Where>,
+/// A tab's navigation history, shared between the host and the body that
+/// shows it.
+#[derive(Clone)]
+pub struct TabMemory {
+    id: u64,
+    model: Rc<RefCell<NavModel>>,
 }
-
-impl Trail {
-    pub fn new(at: Where) -> Self {
-        Self {
-            at,
-            back: Vec::new(),
-            forward: Vec::new(),
-        }
-    }
-}
-
-/// A tab's [`Trail`], shared between the host and the body that shows it.
-#[derive(Clone, Debug)]
-pub struct TabMemory(Rc<RefCell<Trail>>);
 
 impl TabMemory {
     pub fn new(at: Where) -> Self {
-        Self(Rc::new(RefCell::new(Trail::new(at))))
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        let model = NavModel::new(Arc::new(folder_table()), &location_of(&at));
+        Self {
+            id: NEXT.fetch_add(1, Ordering::Relaxed),
+            model: Rc::new(RefCell::new(model)),
+        }
     }
 
-    /// A copy of the trail now.
-    pub fn trail(&self) -> Trail {
-        self.0.borrow().clone()
+    /// A copy of the tab's history now.
+    pub(super) fn model(&self) -> NavModel {
+        self.model.borrow().clone()
     }
 
-    pub(super) fn set(&self, trail: Trail) {
-        *self.0.borrow_mut() = trail;
+    pub(super) fn set(&self, model: NavModel) {
+        *self.model.borrow_mut() = model;
+    }
+
+    /// A number no other tab's memory has. The view keys what it remembers
+    /// of each folder (where it was scrolled, what was selected) by it, so a
+    /// tab shown again comes back to its own place, also when another tab
+    /// shows the same folder.
+    pub(super) fn id(&self) -> u64 {
+        self.id
     }
 }
 
 impl PartialEq for TabMemory {
     fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
+        Rc::ptr_eq(&self.model, &other.model)
     }
 }
 

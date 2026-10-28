@@ -1,8 +1,12 @@
 //! Buttons: `ActionButton`, the accent primary button, the small row pill
 //! and the square `IconButton`.
 
-use super::press::use_press;
+use super::press::{is_right_click, use_hold, use_press};
 use super::tooltip::hover_tip;
+use super::default_mark::{Face, default_mark};
+use crate::shell::menu::MenuItem;
+use crate::shell::overlays::Overlays;
+use crate::shell::panel::{PanelRect, PanelTrigger};
 use freya::prelude::*;
 
 use crate::component::{ComponentName, Prop, Published};
@@ -26,8 +30,11 @@ pub struct ActionButton {
     enabled: bool,
     loading: bool,
     grow: bool,
+    fill: bool,
     compact: bool,
     autofocus: bool,
+    default_action: bool,
+    radius: Option<Radius>,
     on_press: EventHandler<()>,
 }
 
@@ -44,8 +51,11 @@ pub fn action_button(
         enabled: true,
         loading: false,
         grow: false,
+        fill: false,
         compact: false,
         autofocus: false,
+        default_action: false,
+        radius: None,
         on_press: on_press.into(),
     }
 }
@@ -72,6 +82,31 @@ impl ActionButton {
     /// Share the parent's width equally with sibling buttons (dialogs).
     pub fn grow(mut self) -> Self {
         self.grow = true;
+        self
+    }
+
+    /// Fill the parent's width, for a button stacked in a column (a dialog at
+    /// compact density).
+    pub fn fill_width(mut self) -> Self {
+        self.fill = true;
+        self
+    }
+
+    /// Mark this button as the default action of the dialog or form it is in:
+    /// the one that Enter presses when no button has the keyboard focus. A
+    /// key cap with the Return glyph after the label shows it on a desktop,
+    /// on every fill (see [`crate::controls::default_mark`]), and a phone
+    /// shows nothing. The dialog sets it, so call this only for a button
+    /// that really is Enter's target.
+    pub fn default_action(mut self) -> Self {
+        self.default_action = true;
+        self
+    }
+
+    /// The corner radius of the face, for a button inset in a rounded card:
+    /// the card's radius less the inset ([`Radius::nested`]).
+    pub fn radius(mut self, radius: Radius) -> Self {
+        self.radius = Some(radius);
         self
     }
 
@@ -107,6 +142,7 @@ impl ActionButton {
 impl Component for ActionButton {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let fitted = crate::rows::use_row_fitted();
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
         let a11y_id = use_a11y();
@@ -138,6 +174,8 @@ impl Component for ActionButton {
         };
         let ink = if !usable {
             Ink::Muted
+        } else if self.destructive {
+            Ink::OnDanger
         } else if filled {
             Ink::OnAccent
         } else {
@@ -146,11 +184,27 @@ impl Component for ActionButton {
         let color = ink.color(&tokens);
         let ink_paint = if !usable {
             Paint::Muted
+        } else if self.destructive {
+            Paint::OnDanger
         } else if filled {
             Paint::OnAccent
         } else {
             Paint::Text
         };
+        let face = if self.destructive {
+            Face::Danger
+        } else if self.accent {
+            Face::Accent
+        } else {
+            Face::Plain
+        };
+        let corner = self
+            .radius
+            .unwrap_or(if fitted { Radius::Inner } else { Radius::Control });
+        // The keycap is for a window with a keyboard: a phone shows the focus
+        // ring alone.
+        let mark = (self.default_action && enabled && !is_compact())
+            .then(|| default_mark(&tokens, face));
         rect()
             .component("ActionButton")
             .published(|| {
@@ -165,6 +219,12 @@ impl Component for ActionButton {
             .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::Button)
             .tw(&tokens, if self.compact { BUTTON_COMPACT } else { BUTTON })
+            .maybe(fitted, |element| {
+                element.tw(&tokens, &[h(Dim::RowButton), rounded(Radius::Inner)])
+            })
+            .maybe(self.radius.is_some(), |element| {
+                element.tw(&tokens, &[rounded(corner)])
+            })
             .tw(
                 &tokens,
                 &[
@@ -181,7 +241,7 @@ impl Component for ActionButton {
             .maybe(!self.flat, |element| {
                 element.tw(&tokens, &[min_w(Dim::Box9)])
             })
-            .maybe(self.grow, |element| element.tw(&tokens, &[w_flex()]))
+            .maybe(self.grow || self.fill, |element| element.tw(&tokens, &[w_flex()]))
             .maybe(!usable, |element| element.opacity(0.5))
             .maybe(enabled, |element| {
                 element
@@ -234,10 +294,14 @@ impl Component for ActionButton {
                     .label(&tokens, self.text.clone())
                     .max_lines(1),
             )
-            .focusable(focus(), Radius::Control)
+            .maybe_child(mark)
+            .focusable(focus(), corner)
             // The focus wrapper is what the row lays out, so it grows too.
             .maybe(self.grow, |wrapper| {
                 wrapper.tw(&tokens, &[w_flex(), grow_children()])
+            })
+            .maybe(self.fill, |wrapper| {
+                wrapper.tw(&tokens, &[w_full(), grow_children()])
             })
     }
 }
@@ -279,6 +343,7 @@ impl RowButton {
 impl Component for RowButton {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let fitted = crate::rows::use_row_fitted();
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
         let a11y_id = use_a11y();
@@ -302,6 +367,9 @@ impl Component for RowButton {
             .a11y_role(AccessibilityRole::Button)
             .maybe(!enabled, |element| element.opacity(0.5))
             .tw(&tokens, BUTTON_COMPACT)
+            .maybe(fitted, |element| {
+                element.tw(&tokens, &[h(Dim::RowButton), rounded(Radius::Inner)])
+            })
             .tw(
                 &tokens,
                 &[
@@ -350,7 +418,7 @@ impl Component for RowButton {
                     .label(&tokens, self.text.clone())
                     .max_lines(1),
             )
-            .focusable(focus(), Radius::Control)
+            .focusable(focus(), if fitted { Radius::Inner } else { Radius::Control })
     }
 }
 
@@ -358,7 +426,8 @@ impl Component for RowButton {
 #[derive(PartialEq)]
 pub struct IconButton {
     icon: Icon,
-    size: Dim,
+    /// `None` takes the header's size inside a header bar, else a button's.
+    size: Option<Dim>,
     tooltip: Option<String>,
     on_press: EventHandler<()>,
     danger: bool,
@@ -367,12 +436,19 @@ pub struct IconButton {
     enabled: bool,
     busy: bool,
     radius: Radius,
+    menu: Vec<MenuItem>,
+    refocus: Option<AccessibilityId>,
+    pointer_only: bool,
+    /// The glyph's colour instead of the text colour, for a button on a
+    /// tinted notice.
+    ink: Option<Ink>,
+    id: Option<AccessibilityId>,
 }
 
 pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconButton {
     IconButton {
         icon,
-        size: Dim::Button,
+        size: None,
         tooltip: None,
         on_press: on_press.into(),
         danger: false,
@@ -381,6 +457,11 @@ pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconBut
         enabled: true,
         busy: false,
         radius: Radius::Control,
+        menu: Vec::new(),
+        refocus: None,
+        pointer_only: false,
+        ink: None,
+        id: None,
     }
 }
 
@@ -391,7 +472,7 @@ impl IconButton {
     }
 
     pub fn size(mut self, size: Dim) -> Self {
-        self.size = size;
+        self.size = Some(size);
         self
     }
 
@@ -423,6 +504,20 @@ impl IconButton {
         self
     }
 
+    /// Draw the glyph in `ink` instead of the text colour, for a button on a
+    /// tinted surface such as a banner.
+    pub fn ink(mut self, ink: Ink) -> Self {
+        self.ink = Some(ink);
+        self
+    }
+
+    /// Use `id` as the button's focus id, so the caller can tell when it holds
+    /// focus.
+    pub fn a11y_id(mut self, id: AccessibilityId) -> Self {
+        self.id = Some(id);
+        self
+    }
+
     /// Dim the button and ignore presses, for an action that is not
     /// available yet. It stays on screen so a header keeps its shape.
     pub fn enabled(mut self, enabled: bool) -> Self {
@@ -436,14 +531,64 @@ impl IconButton {
         self.busy = busy;
         self
     }
+
+    /// Right click, or a hold of the primary button or a finger (450 ms),
+    /// opens `items` as a menu anchored under the button. The press that ends
+    /// a hold does not also run the button's action. The back button's history
+    /// is one; any icon button with a secondary list (a split button's, a
+    /// zoom control's) can use it.
+    pub fn context_menu(mut self, items: Vec<MenuItem>) -> Self {
+        self.menu = items;
+        self
+    }
+
+    /// After a press, give the keyboard focus to `id` and not to the button.
+    /// A button inside a text field (the clear button, the password reveal)
+    /// hands the focus back to the field, so typing carries on.
+    pub fn refocus(mut self, id: AccessibilityId) -> Self {
+        self.refocus = Some(id);
+        self
+    }
+
+    /// Keep the button out of the Tab order and out of arrow-key walks: for
+    /// a button at the end of a row or a tab whose own keyboard stop already
+    /// offers the same action. The pointer and touch use it as any icon
+    /// button, with the same hover and pressed fill and tooltip.
+    pub fn pointer_only(mut self) -> Self {
+        self.pointer_only = true;
+        self
+    }
+}
+
+/// Marks the subtree of a header bar: icon buttons in it are
+/// [`HEADER_BUTTON`] tall, whoever builds them.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) struct InHeader;
+
+/// The size an icon button takes when its caller sets none: [`HEADER_BUTTON`]
+/// inside a header bar, `outside` elsewhere.
+pub(crate) fn header_size(outside: Dim) -> Dim {
+    if try_consume_context::<InHeader>().is_some() {
+        HEADER_BUTTON
+    } else {
+        outside
+    }
 }
 
 impl Component for IconButton {
     fn render(&self) -> impl IntoElement {
+        let fitted = crate::rows::use_row_fitted();
+        let size = if fitted {
+            Dim::RowButton
+        } else {
+            self.size.unwrap_or_else(|| header_size(Dim::Button))
+        };
+        let radius = if fitted { Radius::Inner } else { self.radius };
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
-        let a11y_id = use_a11y();
+        let own_id = use_a11y();
+        let a11y_id = self.id.unwrap_or(own_id);
         let core = use_focus_core();
         let focus = use_focus(a11y_id);
         let usable = use_enabled(self.enabled);
@@ -454,7 +599,27 @@ impl Component for IconButton {
             self.on_press.clone()
         };
         let on_key = on_press.clone();
+        // Where the keyboard focus goes once the press has run: the button
+        // itself unless the caller named another control.
+        let focus_after = self.refocus.unwrap_or(a11y_id);
         let press = use_press();
+        let hold = use_hold();
+        let overlays = use_try_consume::<Overlays>();
+        let mut area = use_state(Area::default);
+        let has_menu = !self.menu.is_empty();
+        let open_menu: EventHandler<()> = {
+            let items = self.menu.clone();
+            EventHandler::new(move |_: ()| {
+                if let Some(overlays) = overlays {
+                    overlays.show_menu_from(
+                        Some(a11y_id),
+                        PanelTrigger::Control(PanelRect::from_area(&area.read())),
+                        items.clone(),
+                        false,
+                    );
+                }
+            })
+        };
         // Only a hovered danger button takes the danger fill; the state
         // layer from `surface` then sits over it.
         let base = if self.danger && hovering() {
@@ -469,7 +634,7 @@ impl Component for IconButton {
         let button = rect()
             .component("IconButton")
             .a11y_id(a11y_id)
-            .a11y_focusable(usable)
+            .a11y_focusable(usable && !self.pointer_only)
             .a11y_enabled(usable)
             .a11y_role(AccessibilityRole::Button)
             .maybe(self.tooltip.is_some(), |element| {
@@ -479,12 +644,13 @@ impl Component for IconButton {
             .tw(
                 &tokens,
                 &[
-                    w(self.size),
-                    h(self.size),
+                    w(size),
+                    h(size),
                     surface(base, hovering(), pressing(), false),
-                    rounded(self.radius),
+                    rounded(radius),
                 ],
             )
+            .on_sized(move |event: Event<SizedEventData>| area.set_if_modified(event.area))
             .maybe(!usable, |element| element.opacity(0.5))
             .maybe(usable, |element| {
                 element
@@ -495,23 +661,35 @@ impl Component for IconButton {
                     })
                     .on_pointer_down(move |event: Event<PointerEventData>| {
                         event.stop_propagation();
+                        if has_menu {
+                            // A right click opens the menu at once; a hold of the
+                            // primary button (or a finger) opens it after a beat.
+                            if is_right_click(&event) {
+                                open_menu.call(());
+                                return;
+                            }
+                            hold.begin(&event, open_menu.clone());
+                        }
                         pressing.set(true);
                         press.begin(&event, None);
                     })
                     .on_global_pointer_move(move |event: Event<PointerEventData>| {
                         press.moved(&event);
+                        hold.moved(&event);
                     })
                     .on_global_pointer_up(move |_| {
                         press.release();
+                        hold.release();
                         pressing.set_if_modified(false);
                     })
                     .on_press(move |event: Event<PressEventData>| {
                         event.stop_propagation();
-                        if !press.tap(&event) {
+                        // The press that ends a hold already opened the menu.
+                        if hold.fired() || !press.tap(&event) {
                             return;
                         }
                         on_press.call(());
-                        press_focus(&core, a11y_id);
+                        press_focus(&core, focus_after);
                     })
                     .on_key_down(move |event: Event<KeyboardEventData>| {
                         if is_activation_key(&event.key) {
@@ -526,18 +704,42 @@ impl Component for IconButton {
                 icons::icon(
                     self.icon,
                     IconSize::Control,
-                    if self.active {
-                        Paint::Accent.color(&tokens)
+                    if self.danger && hovering() {
+                        Paint::OnDanger.color(&tokens)
+                    } else if self.active {
+                        Ink::Accent.color(&tokens)
                     } else {
-                        Paint::Text.color(&tokens)
+                        self.ink.unwrap_or(Ink::Text).color(&tokens)
                     },
                 )
                 .into()
             })
-            .focusable(focus(), self.radius);
+            .focusable(focus(), radius);
         match &self.tooltip {
             Some(text) => hover_tip(button, text.clone()),
             None => Element::from(button),
+        }
+    }
+}
+
+#[cfg(test)]
+mod header_button_tests {
+    use super::*;
+    use crate::style::SizeClass;
+
+    #[test]
+    fn a_header_button_is_the_control_height_at_both_densities() {
+        // The segmented control and the split button stand on the same token,
+        // so a row of header controls lines up on one height.
+        assert_eq!(HEADER_BUTTON, Dim::Control);
+        assert_eq!(HEADER_BUTTON.px_in(SizeClass::Regular), 36.0);
+        assert_eq!(HEADER_BUTTON.px_in(SizeClass::Compact), 44.0);
+    }
+
+    #[test]
+    fn a_header_button_fits_its_bar_with_room_to_spare() {
+        for class in [SizeClass::Regular, SizeClass::Compact] {
+            assert!(HEADER_BUTTON.px_in(class) + 2.0 * S1.px_in(class) <= Dim::Header.px_in(class));
         }
     }
 }

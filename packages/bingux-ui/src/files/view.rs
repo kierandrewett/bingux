@@ -56,11 +56,13 @@ use bingux_files::{Entry, Listing, Selection, Sort, SortKey, display};
 use freya::prelude::*;
 
 use super::actions::{self, Capabilities, Command, Env, ViewControls, use_ui};
+use super::drag::FileDrag;
 use super::columns::{ColumnHeaders, ColumnLayout, plan_in, row_padding};
 use super::context_menu;
 use super::directory::Wants;
 use super::file_grid::GridView;
 use super::search::SearchView;
+use super::scroll_memory::{Owner, SearchTop, came_from, recall, remember};
 use super::file_list::ListView;
 use super::interaction::{DRAG_SLOP, Hits, Lattice, Span, reveal_offset};
 use super::status_line::{SearchLine, StatusInfo, status_line};
@@ -81,64 +83,8 @@ const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 const DRAG_SETTLE: Duration = Duration::from_millis(120);
 /// The pointer rests this long on a row before its detail card shows.
 const CARD_DELAY: Duration = Duration::from_millis(700);
-/// How many folders keep their scroll position and selection.
-const MEMORY_FOLDERS: usize = 32;
 /// The edge of a view where a band or drag scrolls it, as a share of one row.
 const AUTOSCROLL_EDGE: f32 = 1.0;
-
-// ---------------------------------------------------------------------------
-// What the view remembers of a folder it left
-// ---------------------------------------------------------------------------
-
-#[derive(Clone)]
-struct Remembered {
-    path: PathBuf,
-    /// The scroll offset, as the controller stores it (zero or negative).
-    scroll: i32,
-    selection: Vec<PathBuf>,
-}
-
-#[derive(Default)]
-struct Memory {
-    /// Most recent last.
-    folders: Vec<Remembered>,
-    /// The folder the person left last.
-    left: Option<PathBuf>,
-}
-
-thread_local! {
-    static MEMORY: RefCell<Memory> = RefCell::new(Memory::default());
-}
-
-fn remember(path: &Path, scroll: i32, selection: Vec<PathBuf>) {
-    MEMORY.with_borrow_mut(|memory| {
-        memory.folders.retain(|entry| entry.path != path);
-        memory.folders.push(Remembered {
-            path: path.to_path_buf(),
-            scroll,
-            selection,
-        });
-        if memory.folders.len() > MEMORY_FOLDERS {
-            memory.folders.remove(0);
-        }
-        memory.left = Some(path.to_path_buf());
-    });
-}
-
-fn recall(path: &Path) -> Option<Remembered> {
-    MEMORY.with_borrow(|memory| memory.folders.iter().find(|entry| entry.path == path).cloned())
-}
-
-/// The folder left last, if it lies directly in `folder`: going up selects
-/// the folder you came out of.
-fn came_from(folder: &Path) -> Option<PathBuf> {
-    MEMORY.with_borrow(|memory| {
-        memory
-            .left
-            .clone()
-            .filter(|left| left.parent() == Some(folder))
-    })
-}
 
 // ---------------------------------------------------------------------------
 // The rows a view shows
@@ -241,10 +187,14 @@ pub(super) struct Gestures {
     pub hover: State<Option<Hover>>,
     /// When the last drag ended.
     pub ended: State<Option<Instant>>,
+    /// The window's file drag, when its host shares one with drop targets
+    /// outside this view (see [`super::drag`]).
+    pub session: Option<FileDrag>,
 }
 
 fn use_gestures() -> Gestures {
     Gestures {
+        session: super::drag::file_drag(),
         pending: use_state(|| None),
         drag: use_state(|| None),
         over: use_state(|| None),
@@ -623,6 +573,9 @@ impl Ctx {
                 gestures.band.set_if_modified(None);
                 gestures.pending.set_if_modified(None);
                 gestures.over.set_if_modified(None);
+                if let Some(session) = gestures.session {
+                    session.end();
+                }
                 return busy;
             }
             Key::Named(NamedKey::ContextMenu) => {
@@ -752,6 +705,14 @@ impl Ctx {
                     row,
                 }));
             }
+            // A middle click opens a folder in a tab of its own, as in a
+            // browser, where the host has tabs.
+            Some(MouseButton::Middle) if self.env.caps.new_tab && row < self.rows.len() => {
+                let entry = self.rows.entry(row);
+                if entry.is_dir() {
+                    self.env.open_new_tab.call(entry.path.clone());
+                }
+            }
             _ => {}
         }
     }
@@ -872,6 +833,9 @@ impl Ctx {
         };
         let mut gestures = self.gestures;
         gestures.drag.set(Some(Drag { paths, label }));
+        if let Some(session) = gestures.session {
+            session.begin();
+        }
     }
 
     /// Scroll while a band or a drag is held past the top or bottom edge.
@@ -935,25 +899,32 @@ impl Ctx {
         gestures.band.set_if_modified(None);
         let drag = gestures.drag.peek().clone();
         let over = *gestures.over.peek();
+        // A folder outside the list that the pointer was released over: a
+        // place of the sidebar, a tab.
+        let outside = gestures.session.and_then(|session| session.end());
         if let Some(drag) = drag {
             gestures.drag.set(None);
             gestures.over.set_if_modified(None);
             gestures.ended.set(Some(Instant::now()));
-            if let Some(row) = over.filter(|row| *row < self.rows.len()) {
-                let target = self.rows.entry(row);
-                if target.is_dir() {
-                    let copy = freya_winit::modifiers::live().contains(Modifiers::CONTROL);
-                    let selected = self.selected_owned();
-                    actions::run(
-                        &self.env,
-                        &selected,
-                        Command::MoveInto {
-                            paths: drag.paths,
-                            dest: target.path.clone(),
-                            copy,
-                        },
-                    );
+            let dest = match over.filter(|row| *row < self.rows.len()) {
+                Some(row) if self.rows.entry(row).is_dir() => {
+                    Some(self.rows.entry(row).path.clone())
                 }
+                Some(_) => None,
+                None => outside,
+            };
+            if let Some(dest) = dest {
+                let copy = freya_winit::modifiers::live().contains(Modifiers::CONTROL);
+                let selected = self.selected_owned();
+                actions::run(
+                    &self.env,
+                    &selected,
+                    Command::MoveInto {
+                        paths: drag.paths,
+                        dest,
+                        copy,
+                    },
+                );
             }
         }
     }
@@ -1012,7 +983,6 @@ pub struct FileView {
     folders_only: bool,
     autofocus: bool,
     show_hidden: bool,
-    filtered_out: usize,
     search: Option<SearchView>,
     on_search: Option<EventHandler<String>>,
     caps: Capabilities,
@@ -1020,6 +990,7 @@ pub struct FileView {
     focus: Option<State<u32>>,
     bookmarks: Arc<Vec<PathBuf>>,
     thumbnails: bool,
+    owner: Owner,
     placeholder: Option<Element>,
     on_sort: EventHandler<SortKey>,
     on_sort_set: EventHandler<Sort>,
@@ -1028,7 +999,7 @@ pub struct FileView {
     on_show_hidden: EventHandler<bool>,
     on_refresh: EventHandler<()>,
     on_open_folder: EventHandler<PathBuf>,
-    on_open_new_window: EventHandler<PathBuf>,
+    on_open_new_tab: EventHandler<PathBuf>,
     on_bookmarks_changed: EventHandler<()>,
     on_problem: EventHandler<String>,
 }
@@ -1046,7 +1017,6 @@ impl FileView {
             folders_only: false,
             autofocus: false,
             show_hidden: false,
-            filtered_out: 0,
             search: None,
             on_search: None,
             caps: Capabilities::CHOOSER,
@@ -1054,6 +1024,7 @@ impl FileView {
             focus: None,
             bookmarks: Arc::new(Vec::new()),
             thumbnails: true,
+            owner: 0,
             placeholder: None,
             on_sort: EventHandler::new(|_: SortKey| {}),
             on_sort_set: EventHandler::new(|_: Sort| {}),
@@ -1062,7 +1033,7 @@ impl FileView {
             on_show_hidden: EventHandler::new(|_: bool| {}),
             on_refresh: EventHandler::new(|_: ()| {}),
             on_open_folder: EventHandler::new(|_: PathBuf| {}),
-            on_open_new_window: EventHandler::new(|_: PathBuf| {}),
+            on_open_new_tab: EventHandler::new(|_: PathBuf| {}),
             on_bookmarks_changed: EventHandler::new(|_: ()| {}),
             on_problem: EventHandler::new(|_: String| {}),
         }
@@ -1107,12 +1078,6 @@ impl FileView {
     /// Hidden files are shown. Only the menu's check mark reads this.
     pub fn show_hidden(mut self, show_hidden: bool) -> Self {
         self.show_hidden = show_hidden;
-        self
-    }
-
-    /// How many entries the active filter keeps out, for the status line.
-    pub fn filtered_out(mut self, filtered_out: usize) -> Self {
-        self.filtered_out = filtered_out;
         self
     }
 
@@ -1170,6 +1135,15 @@ impl FileView {
         self
     }
 
+    /// Whose remembered scroll position and selection this view keeps. A
+    /// host with several views of one folder, like the tabs of the Files app,
+    /// gives each its own number, so each comes back to its own place.
+    /// Without one the view is owner 0.
+    pub(super) fn remember_for(mut self, owner: Owner) -> Self {
+        self.owner = owner;
+        self
+    }
+
     /// What to draw, centred, when there is nothing to list, such as an
     /// empty-folder message. The menu of empty space, drops and the rubber
     /// band still work, so a person can make the first folder.
@@ -1222,9 +1196,9 @@ impl FileView {
         self
     }
 
-    /// A menu asked to open a folder in a new window.
-    pub fn on_open_new_window(mut self, handler: impl Into<EventHandler<PathBuf>>) -> Self {
-        self.on_open_new_window = handler.into();
+    /// A menu asked to open a folder in a new tab.
+    pub fn on_open_new_tab(mut self, handler: impl Into<EventHandler<PathBuf>>) -> Self {
+        self.on_open_new_tab = handler.into();
         self
     }
 
@@ -1294,9 +1268,10 @@ impl Component for FileView {
 
         // Where this folder left off, when the person was here before.
         let key = self.listing.path.clone();
+        let owner = self.owner;
         let restored = use_hook({
             let key = key.clone();
-            move || recall(&key)
+            move || recall(owner, &key)
         });
         let scroll = use_hook({
             let saved = restored.as_ref().map_or(0, |remembered| remembered.scroll);
@@ -1324,7 +1299,7 @@ impl Component for FileView {
                         return;
                     }
                 }
-                if let Some(child) = came_from(&folder)
+                if let Some(child) = came_from(owner, &folder)
                     && listing.entries.iter().any(|entry| entry.path == child)
                 {
                     selection.write().select_only(&child);
@@ -1340,7 +1315,7 @@ impl Component for FileView {
                     return;
                 }
                 let paths = selection.peek().paths().to_vec();
-                remember(&path, <(i32, i32)>::from(scroll).1, paths);
+                remember(owner, &path, <(i32, i32)>::from(scroll).1, paths);
             }
         });
         // Rows that come and go under a resting pointer leave no hover to
@@ -1355,20 +1330,31 @@ impl Component for FileView {
                 hover.set_if_modified(None);
             },
         );
-        // A new search starts at the top; one that keeps its text (results
-        // streaming in) leaves the scroll alone.
-        use_side_effect_with_deps(
-            &self.search.as_ref().map(|search| (search.query.text().to_string(), in_results)),
-            move |_| {
-                let mut scroll = scroll;
-                scroll.scroll_to_y(0);
-            },
-        );
 
         let rows = Rows {
             listing: self.listing.clone(),
             order: self.order.clone(),
         };
+        // A search that changes the rows starts at the top; one that keeps its
+        // text (results streaming in) leaves the scroll alone. Decided here,
+        // from what the view is given, and not in an effect: `scroll_to_y`
+        // reads the controller's bounds, which the scroll view rewrites on
+        // every layout, so an effect calling it ran again after each wheel
+        // notch or key and threw the list back to the top.
+        let search_key = self
+            .search
+            .as_ref()
+            .map(|search| (search.query.text().to_string(), in_results));
+        let search_top = use_hook({
+            let (key, rows) = (search_key.clone(), rows.clone());
+            move || Rc::new(RefCell::new(SearchTop::new(key, rows)))
+        });
+        if search_top.borrow_mut().moves(search_key, &rows) {
+            spawn(async move {
+                let mut scroll = scroll;
+                scroll.scroll_to_y(0);
+            });
+        }
         let on_activate = self.on_activate.clone();
         // Quick Look is opened through the environment, from a menu as well
         // as from the keyboard; the handler reaches the view's context
@@ -1393,7 +1379,7 @@ impl Component for FileView {
             },
             open_folder: self.on_open_folder.clone(),
             activate: EventHandler::new(move |index: usize| on_activate.call(index)),
-            open_new_window: self.on_open_new_window.clone(),
+            open_new_tab: self.on_open_new_tab.clone(),
             bookmarks: self.bookmarks.clone(),
             bookmarks_changed: self.on_bookmarks_changed.clone(),
             view: ViewControls {
@@ -1688,7 +1674,9 @@ impl Component for FileView {
                 pointer: gestures.pointer,
                 origin,
             })
-            .focusable(focus(), Radius::Control)
+            // The view fills its pane up to the window's edge, so the ring is
+            // drawn inside it: outside, the window would cut it off.
+            .focusable_inside(focus(), Radius::Control)
     }
 }
 
@@ -1700,22 +1688,11 @@ fn status_info(view: &FileView, ctx: &Ctx) -> StatusInfo {
         .filter(|entry| !entry.is_dir())
         .map(|entry| entry.size)
         .sum();
-    let hidden_files = if view.show_hidden {
-        0
-    } else {
-        view.listing
-            .entries
-            .iter()
-            .filter(|entry| entry.hidden)
-            .count()
-    };
     StatusInfo {
         shown: view.order.len(),
         total_listed: view.listing.entries.len(),
         selected: selected.len(),
         selected_bytes,
-        hidden_files,
-        filtered_out: view.filtered_out,
         search: view.search.as_ref().map(|search| match &search.deep {
             Some(deep) => SearchLine::Subfolders {
                 found: deep.found,
@@ -1812,7 +1789,7 @@ impl Component for DragChip {
                 &[border(Line::Stroke(Dim::Hairline, Paint::FloatingOutline))],
             )
             .child(
-                BODY.in_ink(Ink::OnAccent)
+                BODY.in_ink(Ink::OnFloating)
                     .label(&tokens, label)
                     .max_lines(1),
             )
@@ -1911,7 +1888,7 @@ impl Component for HoverCard {
                 ],
             );
         for (index, line) in lines.into_iter().enumerate() {
-            let style = if index == 0 { BODY } else { CAPTION }.in_ink(Ink::OnAccent);
+            let style = if index == 0 { BODY } else { CAPTION }.in_ink(Ink::OnFloating);
             card = card.child(style.label(&tokens, line).max_lines(1));
         }
         card.into_element()

@@ -18,12 +18,16 @@
 //! Durations go through [`Tokens::motion`], so reduced motion turns every
 //! animation into an instant change.
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::time::Duration;
 
 use freya::animation::*;
 use freya::prelude::*;
 
-use crate::focus::{FocusCore, claim_press, use_focus_core};
+use crate::component::ComponentName;
+use crate::focus::note_press;
+use crate::focus::{FocusCore, InsideScope, claim_press, use_focus_core};
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
@@ -32,20 +36,48 @@ use crate::typography::{NUMERIC, TextStyle, styled_label};
 /// The default duration of a motion, in milliseconds, before reduced motion.
 pub const MOVE_MS: u64 = 160;
 
+/// How long an [`animated_number`] rolls, in milliseconds.
+const ROLL_MS: u64 = 320;
+/// How far below its place an [`animated_number`] starts, in pixels.
+const ROLL_LIFT: f32 = 8.0;
+
 /// A [`presence`] starts this far scaled down and grows to full size.
 pub const PRESENCE_SCALE: f32 = 0.96;
 
-/// The value tweening towards `target` over `ms` milliseconds. When `target`
-/// changes, the tween starts from the value it has reached, so nothing snaps.
+/// The value tweening towards `target` over `ms` milliseconds. It starts at
+/// `target`, so nothing animates on the first frame. When `target` changes,
+/// the tween starts from the value on screen, so reversing a motion part-way
+/// continues from where it is and never snaps. With `ms` of 0 (reduced
+/// motion) it jumps.
 pub fn use_tween(target: f32, ms: u64) -> f32 {
-    use_animation_transition(target, move |from, to| {
-        AnimNum::new(from, to)
-            .time(ms)
-            .function(Function::Quad)
-            .ease(Ease::Out)
-    })
-    .get()
-    .value()
+    let animation = use_animation(move |conf| {
+        conf.on_creation(OnCreation::Finish);
+        ease_between(target, target, ms)
+    });
+    use_side_effect_with_deps(&(target.to_bits(), ms), move |&(bits, ms): &(u32, u64)| {
+        let mut animation = animation;
+        let mut state = *animation;
+        let target = f32::from_bits(bits);
+        let from = state.peek().value();
+        if from == target {
+            return;
+        }
+        if ms == 0 {
+            *state.write() = ease_between(target, target, 0);
+            return;
+        }
+        *state.write() = ease_between(from, target, ms);
+        animation.start();
+    });
+    animation.get().value()
+}
+
+/// The standard motion curve: quadratic, ease out.
+fn ease_between(from: f32, to: f32, ms: u64) -> AnimNum {
+    AnimNum::new(from, to)
+        .time(ms)
+        .function(Function::Quad)
+        .ease(Ease::Out)
 }
 
 /// Progress from 0 to 1 while `open`, and back to 0 when it closes. `on_exit`
@@ -103,12 +135,78 @@ pub fn use_presence(open: bool, motion: u64, on_exit: impl Fn() + Clone + 'stati
     appear.get().value()
 }
 
+/// How far a [`reveal`]'s content sits above its place while closed, in
+/// pixels. It settles down as the box opens, under the fade.
+pub const REVEAL_LIFT: f32 = 6.0;
+
+/// The box height of a reveal at `progress` (0 closed, 1 open) when its
+/// content is `natural` pixels tall. Linear in `progress`: the easing is in
+/// the progress itself.
+pub fn reveal_height(natural: f32, progress: f32) -> f32 {
+    natural.max(0.0) * progress.clamp(0.0, 1.0)
+}
+
+/// The opacity and vertical offset of a reveal's content at `progress`. The
+/// content fades in over the second half of the opening, so the box is
+/// already moving when the first rows appear, and the lift settles with it.
+pub fn reveal_layers(progress: f32) -> (f32, f32) {
+    let progress = progress.clamp(0.0, 1.0);
+    let fade = ((progress - 0.25) / 0.75).clamp(0.0, 1.0);
+    (fade, -(1.0 - progress) * REVEAL_LIFT)
+}
+
+/// The height a reveal lays out with. A settled open reveal is auto-sized, so
+/// content that changes (async rows, wrapped text) never waits on a
+/// measurement; a moving one is the measured height times its progress; a
+/// settled closed one is empty. Until the content is measured, an open
+/// reveal is auto-sized and a closed one is empty.
+fn reveal_size(open: bool, progress: f32, measured: Option<f32>, lazy: bool) -> Size {
+    if open && progress >= 1.0 {
+        return Size::auto();
+    }
+    match measured {
+        Some(natural) => Size::px(reveal_height(natural, progress)),
+        None if open && !lazy => Size::auto(),
+        None => Size::px(0.0),
+    }
+}
+
+/// The shared state of [`Reveal`] and [`RevealBlock`]: the eased progress,
+/// and the content's natural height as measured while laid out. The tween
+/// starts from the value on screen when `open` flips mid-motion, so a
+/// reversal continues from the current height. It starts at its target, so a
+/// reveal that mounts closed (or open) never animates on the first frame.
+fn use_reveal(open: bool) -> (f32, State<Option<f32>>) {
+    let tokens = use_tokens();
+    let progress = use_tween(if open { 1.0 } else { 0.0 }, tokens.motion(MOVE_MS));
+    (progress, use_state(|| None::<f32>))
+}
+
+/// The measuring wrapper around a reveal's content: tracks the natural
+/// height, and lays the content out with the fade and lift of `progress`.
+fn reveal_content(mut measured: State<Option<f32>>, progress: f32, child: Element) -> Rect {
+    let (fade, lift) = reveal_layers(progress);
+    rect()
+        .width(Size::fill())
+        .on_sized(move |event: Event<SizedEventData>| {
+            let next = event.area.height();
+            if *measured.peek() != Some(next) {
+                measured.set(Some(next));
+            }
+        })
+        .offset_y(lift)
+        .opacity(fade)
+        .child(child)
+}
+
 /// Shows or hides `child` by animating its height. The box clips the child,
-/// so the content below moves with the edge instead of jumping.
+/// so the content below moves with the edge instead of jumping. This is the
+/// one primitive for every conditional row or section.
 #[derive(Clone, PartialEq)]
 pub struct Reveal {
     open: bool,
     child: Element,
+    lazy: bool,
 }
 
 /// A [`Reveal`] of `child`, open or closed.
@@ -116,33 +214,132 @@ pub fn reveal(open: bool, child: impl Into<Element>) -> Reveal {
     Reveal {
         open,
         child: child.into(),
+        lazy: false,
+    }
+}
+
+impl Reveal {
+    /// Unmount the child once the reveal has settled closed, so nothing in a
+    /// hidden section can take focus or work. The child mounts again as the
+    /// reveal opens.
+    pub fn lazy(mut self) -> Self {
+        self.lazy = true;
+        self
     }
 }
 
 impl Component for Reveal {
     fn render(&self) -> impl IntoElement {
+        let (progress, measured) = use_reveal(self.open);
+        if self.lazy && !self.open && progress <= 0.001 {
+            return rect().tw_layout(&[clip(), w_full()]).height(Size::px(0.0));
+        }
+        let natural = *measured.read();
+        let height = reveal_size(self.open, progress, natural, self.lazy);
+        rect()
+            .tw_layout(&[clip(), w_full()])
+            .height(height)
+            .child(reveal_content(measured, progress, self.child.clone()))
+    }
+}
+
+/// A [`reveal`] for a whole block, such as a group, in a column that spaces
+/// its children `gap` pixels apart. The block fades and grows to its height
+/// together with the gap it brings, so the content below moves smoothly and the
+/// content above never moves. Closed, it is out of the flow: it takes no gap.
+#[derive(Clone, PartialEq)]
+pub struct RevealBlock {
+    open: bool,
+    gap: Space,
+    child: Element,
+    lazy: bool,
+}
+
+/// A [`RevealBlock`] of `child`, open or closed, in a column with the space
+/// token `gap` between its children.
+pub fn reveal_block(open: bool, gap: Space, child: impl Into<Element>) -> RevealBlock {
+    RevealBlock {
+        open,
+        gap,
+        child: child.into(),
+        lazy: false,
+    }
+}
+
+impl RevealBlock {
+    /// As [`Reveal::lazy`]: unmount the child while settled closed.
+    pub fn lazy(mut self) -> Self {
+        self.lazy = true;
+        self
+    }
+}
+
+impl Component for RevealBlock {
+    fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let progress = use_tween(if self.open { 1.0 } else { 0.0 }, tokens.motion(MOVE_MS));
-        // The child's natural height, measured while it is laid out inside the
-        // clip. Until it is known, an open reveal is auto-sized and a closed
-        // one is empty.
-        let mut measured = use_state(|| None::<f32>);
-        let height = match *measured.read() {
-            Some(height) => Size::px(height * progress),
-            None if self.open => Size::auto(),
-            None => Size::px(0.0),
-        };
-        rect().tw_layout(&[clip(), w_full()]).height(height).child(
-            rect()
-                .width(Size::fill())
-                .on_sized(move |event: Event<SizedEventData>| {
-                    let next = event.area.height();
-                    if *measured.peek() != Some(next) {
-                        measured.set(Some(next));
-                    }
-                })
-                .child(self.child.clone()),
-        )
+        let (progress, measured) = use_reveal(self.open);
+        // Unless lazy, the child stays mounted while closed, so its natural
+        // height is known when it opens.
+        let settled_closed = !self.open && progress <= 0.001;
+        if self.lazy && settled_closed {
+            return rect()
+                .tw_layout(&[clip(), w_full()])
+                .position(Position::new_absolute().top(0.0).left(0.0))
+                .height(Size::px(0.0));
+        }
+        let moving = !settled_closed && progress < 1.0;
+        let natural = *measured.read();
+        let height = reveal_size(self.open, progress, natural, self.lazy);
+        rect()
+            .tw_layout(&[clip(), w_full()])
+            .maybe(settled_closed, |element| {
+                element.position(Position::new_absolute().top(0.0).left(0.0))
+            })
+            .maybe(moving, |element| {
+                element.tw(&tokens, &[pull_up(self.gap, 1.0 - progress)])
+            })
+            .height(height)
+            .child(reveal_content(measured, progress, self.child.clone()))
+    }
+}
+
+/// A conditional child: shown, with its height animating in, while it is
+/// `Some`; kept for the closing motion after it becomes `None`, then
+/// unmounted. This is what replaces `.maybe_child(..)` for a row, banner or
+/// section whose presence follows state. With `gap` it is a [`RevealBlock`]
+/// for a column that spaces its children; without, a [`Reveal`].
+#[derive(Clone, PartialEq)]
+pub struct RevealIf {
+    child: Option<Element>,
+    gap: Option<Space>,
+}
+
+/// A [`RevealIf`] of `child` in a column without a gap.
+pub fn reveal_if(child: Option<Element>) -> RevealIf {
+    RevealIf { child, gap: None }
+}
+
+/// A [`RevealIf`] of `child` in a column that spaces its children by `gap`.
+pub fn reveal_block_if(gap: Space, child: Option<Element>) -> RevealIf {
+    RevealIf {
+        child,
+        gap: Some(gap),
+    }
+}
+
+impl Component for RevealIf {
+    fn render(&self) -> impl IntoElement {
+        // The last child shown, so the closing motion still has content.
+        let last = use_hook(|| Rc::new(RefCell::new(None::<Element>)));
+        let open = self.child.is_some();
+        if open {
+            *last.borrow_mut() = self.child.clone();
+        }
+        let shown = last.borrow().clone().unwrap_or_else(|| rect().into());
+        match self.gap {
+            Some(gap) => Element::from(reveal_block(open, gap, shown).lazy()),
+            None => Element::from(reveal(open, shown).lazy()),
+        }
     }
 }
 
@@ -332,14 +529,41 @@ impl AnimatedNumber {
 impl Component for AnimatedNumber {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let shown = use_tween(self.value, tokens.motion(MOVE_MS));
-        styled_label(self.style, format!("{:.*}", self.decimals, shown))
+        // The digits count through the values between, and each change also
+        // lifts the number in from below while it fades up, so a step of one
+        // (which counts through no value at all) still reads as a change.
+        let shown = use_tween(self.value, tokens.motion(ROLL_MS));
+        let bump_ms = tokens.motion(ROLL_MS);
+        let bump = use_animation(move |_| {
+            AnimNum::new(0.0, 1.0)
+                .time(bump_ms)
+                .function(Function::Quad)
+                .ease(Ease::Out)
+        });
+        use_side_effect_with_deps(&self.value.to_bits(), move |_| {
+            let mut bump = bump;
+            bump.start();
+        });
+        let progress = if *bump.has_run_yet().read() {
+            bump.get().value()
+        } else {
+            1.0
+        };
+        rect()
+            .offset_y((1.0 - progress) * ROLL_LIFT)
+            .opacity(0.35 + 0.65 * progress)
+            .child(styled_label(
+                self.style,
+                format!("{:.*}", self.decimals, shown),
+            ))
     }
 }
 
 /// The gap, in pixels, between a control's edge and the inner edge of its
 /// focus ring once the ring has settled.
 pub const FOCUS_GAP: f32 = 2.0;
+/// The ring's own width: the shared `Ring` dimension.
+pub const FOCUS_WIDTH: f32 = 2.0;
 /// How far outside its settled place the ring starts, in pixels. The ring
 /// travels this far inward as focus arrives and outward as it leaves.
 pub const FOCUS_TRAVEL: f32 = 4.0;
@@ -349,10 +573,17 @@ pub const FOCUS_IN_MS: u64 = 160;
 /// lingers after the control has lost focus.
 pub const FOCUS_OUT_MS: u64 = 120;
 
-/// Wraps a control so that its keyboard focus ring hugs the control's own
-/// outer box. The ring is measured from the wrapper, which has no padding or
-/// border, so its absolute offsets start at exactly the control's top-left
-/// corner and its size is exactly the control's size.
+/// Wraps a control so that its keyboard focus ring is drawn around the
+/// control's own painted box, its **face**.
+///
+/// The control passed to `focusable` is the face: the node that carries the
+/// fill and the corner radius. The wrapper hugs it (it has no padding, no
+/// border and no margin of its own) and measures it after layout, and the ring
+/// is laid out from that measured box, never from the face's padding or
+/// content. A padded face whose ring was its child ended up inset by the
+/// padding (the dropdown's ring ran inside its fill, 12 px short on the left);
+/// measuring the wrapper makes the padding irrelevant. A face must not carry a
+/// margin: the margin would sit inside the wrapper's box and outside the face.
 ///
 /// Only keyboard focus draws the ring. On arrival it grows in from outside and
 /// fades in; on departure it grows back out and fades away. The ring ignores
@@ -368,48 +599,115 @@ pub trait Focusable: Sized {
     fn focusable(self, focus: Focus, radius: Radius) -> Rect;
 
     /// Wraps a row whose edges may sit on a clipped container edge, such as a
-    /// card's. The ring is drawn just inside the wrapper, so the clip cannot
+    /// card's. The ring is drawn just inside the face's box, so the clip cannot
     /// cut it off. Return the wrapper from `render`.
     fn focusable_inside(self, focus: Focus, radius: Radius) -> Rect;
 
-    /// [`focusable_inside`](Self::focusable_inside) for a control whose height
-    /// comes from its content and whose padding offsets its children, such as
-    /// a row with a subtitle. `fit` is its measured height (from `on_sized`)
-    /// and its padding; without it the ring is sized to the control's
-    /// first layout pass and comes out short.
-    fn focusable_fitted(self, focus: Focus, radius: Radius, fit: RingFit) -> Rect;
+    /// [`focusable`](Self::focusable) for a control that sits flush against a
+    /// neighbour: the ring is rounded on `corners` only and square at the
+    /// seam, so it follows the control's visible shape. The ring is drawn
+    /// outside the control, so the control's container must not clip it.
+    fn focusable_on(self, focus: Focus, radius: Radius, corners: Corners) -> Rect;
+
+    /// [`focusable`](Self::focusable) for a control that can be invalid: while
+    /// `invalid` the ring is drawn in the error colour, always, and not only
+    /// on focus; a focused invalid control shows both (see the focus section
+    /// of docs/bingux-ui.md). `corners` is as for [`focusable_on`](Self::focusable_on):
+    /// `Corners::None` for a square face such as a flat field's line.
+    fn focusable_invalid(self, focus: Focus, radius: Radius, corners: Corners, invalid: bool) -> Rect;
 }
 
 impl Focusable for Rect {
     fn focusable(self, focus: Focus, radius: Radius) -> Rect {
-        wrap_focusable(self, focus, radius, false, None)
+        wrap_focusable(self, focus, radius, false)
     }
 
     fn focusable_inside(self, focus: Focus, radius: Radius) -> Rect {
-        wrap_focusable(self, focus, radius, true, None)
+        wrap_focusable(self, focus, radius, true)
     }
 
-    fn focusable_fitted(self, focus: Focus, radius: Radius, fit: RingFit) -> Rect {
-        wrap_focusable(self, focus, radius, true, Some(fit))
+    fn focusable_on(self, focus: Focus, radius: Radius, corners: Corners) -> Rect {
+        let tokens = use_tokens();
+        let core = use_focus_core();
+        let size = use_ring_size();
+        wrap_ring(
+            &tokens,
+            core,
+            self,
+            FocusRing {
+                focus,
+                radius,
+                corners,
+                inside: false,
+                size: RingSize::Measured(size),
+                invalid: false,
+            },
+        )
+    }
+
+    fn focusable_invalid(self, focus: Focus, radius: Radius, corners: Corners, invalid: bool) -> Rect {
+        let tokens = use_tokens();
+        let core = use_focus_core();
+        let size = use_ring_size();
+        wrap_ring(
+            &tokens,
+            core,
+            self,
+            FocusRing {
+                focus,
+                radius,
+                corners,
+                inside: false,
+                size: RingSize::Measured(size),
+                invalid,
+            },
+        )
+    }
+}
+
+/// The measured box of a ring's face, in logical pixels. The wrapper writes
+/// it after layout and the ring reads it.
+pub(crate) fn use_ring_size() -> State<(f32, f32)> {
+    use_state(|| (0.0, 0.0))
+}
+
+/// Where a ring gets its face's size.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum RingSize {
+    /// Measured from the wrapper after layout; see [`use_ring_size`].
+    Measured(State<(f32, f32)>),
+    /// The caller sets the face's size itself, in logical pixels.
+    Known(f32, f32),
+}
+
+impl RingSize {
+    fn get(self) -> (f32, f32) {
+        match self {
+            Self::Measured(size) => *size.read(),
+            Self::Known(width, height) => (width, height),
+        }
     }
 }
 
 /// Builds the wrapper for [`Focusable`]: the press claim and the ring.
-fn wrap_focusable(
-    control: Rect,
-    focus: Focus,
-    radius: Radius,
-    inside: bool,
-    fit: Option<RingFit>,
-) -> Rect {
+fn wrap_focusable(control: Rect, focus: Focus, radius: Radius, inside: bool) -> Rect {
     let tokens = use_tokens();
     let core = use_focus_core();
-    wrap_focusable_with(&tokens, core, control, focus, radius, inside, fit)
+    let size = use_ring_size();
+    wrap_focusable_with(
+        &tokens,
+        core,
+        control,
+        focus,
+        radius,
+        inside,
+        RingSize::Measured(size),
+    )
 }
 
-/// [`wrap_focusable`] with its hooks already taken. A caller whose focus
-/// wrapper is conditional takes the hooks every render and calls this, so
-/// the hook count never changes.
+/// [`wrap_focusable`] with its hooks already taken and the face's size given.
+/// A caller whose focus wrapper is conditional takes the hooks every render and
+/// calls this, so the hook count never changes.
 pub(crate) fn wrap_focusable_with(
     tokens: &Tokens,
     core: FocusCore,
@@ -417,113 +715,214 @@ pub(crate) fn wrap_focusable_with(
     focus: Focus,
     radius: Radius,
     inside: bool,
-    fit: Option<RingFit>,
+    size: RingSize,
 ) -> Rect {
-    let ring = FocusRing {
-        focus,
-        radius,
-        inside,
-        fit,
-    };
-    // The ring is a child of the control, so it sizes to the control's own
-    // box. A wrapper of unknown height (a row in a scrolled or stretched
-    // column) would hand the ring its available space instead, so the ring
-    // ran down to the container's edge. The wrapper only claims presses.
-    rect()
-        .tw(tokens, &[flex_row()])
-        .on_press(move |_: Event<PressEventData>| claim_press(&core))
-        .child(control.child(ring))
+    wrap_ring(
+        tokens,
+        core,
+        control,
+        FocusRing {
+            focus,
+            radius,
+            corners: Corners::All,
+            inside,
+            size,
+            invalid: false,
+        },
+    )
 }
 
-/// The measured box of a content-sized control, for [`Focusable::focusable_fitted`].
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct RingFit {
-    /// The control's padding left of its content, which the ring reaches back over.
-    pub left: f32,
-    /// The control's padding above its content, which the ring reaches back over.
-    pub top: f32,
-    /// The control's measured size.
-    pub width: f32,
-    pub height: f32,
+/// Wraps `control` (the face) with the press claim and `ring`.
+fn wrap_ring(tokens: &Tokens, core: FocusCore, mut control: Rect, ring: FocusRing) -> Rect {
+    // The wrapper claims presses, and records the pressed control, so whatever
+    // modal scope the press opens returns focus to it. It measures itself,
+    // which is the face's box, for the ring.
+    let face = control.get_accessibility_data().a11y_id;
+    let measured = match ring.size {
+        RingSize::Measured(size) => Some(size),
+        RingSize::Known(..) => None,
+    };
+    rect()
+        .tw(tokens, &[flex_row()])
+        .maybe(measured.is_some(), |wrapper| {
+            let mut size = measured.expect("checked by maybe");
+            wrapper.on_sized(move |event: Event<SizedEventData>| {
+                size.set_if_modified((event.area.width(), event.area.height()));
+            })
+        })
+        .on_press(move |_: Event<PressEventData>| {
+            claim_press(&core);
+            if let Some(id) = face {
+                note_press(&core, id);
+            }
+        })
+        .child(control)
+        .child(ring)
 }
 
 /// The ring itself, drawn as the last child of a [`Focusable::focusable`]
-/// wrapper.
+/// wrapper, after the face.
 #[derive(Clone, PartialEq)]
 struct FocusRing {
     focus: Focus,
     radius: Radius,
     inside: bool,
-    fit: Option<RingFit>,
+    /// The corners that are rounded; the others are square, for a segment
+    /// that sits flush against a neighbour.
+    corners: Corners,
+    size: RingSize,
+    /// The control is invalid: the ring shows in the error colour, always.
+    invalid: bool,
+}
+
+/// One concentric band of a ring: `gap` pixels off the face, `FOCUS_WIDTH`
+/// thick, in `paint`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Band {
+    gap: f32,
+    paint: Paint,
+}
+
+impl Band {
+    /// How far the band's outer edge is from the face, at `travel`.
+    fn outset(self, travel: f32) -> f32 {
+        self.gap + FOCUS_WIDTH + travel
+    }
+}
+
+/// The bands of a ring, the main one first. This is the one place the ring's
+/// look is decided: a 2 px ring `FOCUS_GAP` off the face, in the focus colour,
+/// or in the error colour for an invalid control. An invalid control adds a
+/// second, fainter band just outside the first, which arrives with focus, so a
+/// focused invalid control reads differently from an invalid one at rest.
+fn bands(invalid: bool) -> Vec<Band> {
+    if invalid {
+        vec![
+            Band { gap: FOCUS_GAP, paint: Paint::ErrorRing },
+            Band { gap: FOCUS_GAP + FOCUS_WIDTH, paint: Paint::ErrorHalo },
+        ]
+    } else {
+        vec![Band { gap: FOCUS_GAP, paint: Paint::FocusRing }]
+    }
+}
+
+impl FocusRing {
+    /// A band's node. `step` is how far its outer edge is outside its parent's
+    /// (the wrapper, which is the face's box, or the band inside it): the node
+    /// is the parent's box grown by that on every side, so every band is
+    /// concentric with the face and follows its shape. The first band is sized
+    /// from the face's measured box, the others from the band inside them.
+    fn band(
+        &self,
+        tokens: &Tokens,
+        band: Band,
+        step: f32,
+        travel: f32,
+        face: Option<(f32, f32)>,
+        main: bool,
+    ) -> Rect {
+        let outset = band.outset(travel);
+        let (width, height) = match face {
+            Some((width, height)) => (
+                Size::px(width + step + step),
+                Size::px(height + step + step),
+            ),
+            None => (
+                Size::func(move |ctx| Some(ctx.parent + step + step)),
+                Size::func(move |ctx| Some(ctx.parent + step + step)),
+            ),
+        };
+        let node = rect()
+            .interactive(false)
+            .position(Position::new_absolute().top(-step).left(-step))
+            .width(width)
+            .height(height)
+            .tw(
+                tokens,
+                &[
+                    border(Line::Ring(band.paint)),
+                    rounded_on(self.radius, self.corners, outset),
+                ],
+            );
+        if main { node.component("FocusRing") } else { node.component("FocusBand") }
+    }
 }
 
 impl Component for FocusRing {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let target = if self.focus == Focus::Keyboard {
-            1.0
-        } else {
-            0.0
-        };
+        // A ring on the page behind a modal scope is not drawn: the page is
+        // inert, whatever still holds the window's focus.
+        let inert = use_focus_core().page_inert(try_consume_context::<InsideScope>().is_some());
+        let focused = self.focus == Focus::Keyboard && !inert;
         let in_ms = tokens.motion(FOCUS_IN_MS);
         let out_ms = tokens.motion(FOCUS_OUT_MS);
-        // One progress value drives both the offset and the opacity, so the
-        // ring grows and fades together in each direction.
-        let progress = use_animation_transition(target, move |from: f32, to: f32| {
+        let ease = move |from: f32, to: f32| {
             AnimNum::new(from, to)
                 .time(if to > from { in_ms } else { out_ms })
                 .function(Function::Quad)
                 .ease(Ease::Out)
-        })
+        };
+        // One progress value drives both the offset and the opacity, so the
+        // ring grows and fades together in each direction. An invalid
+        // control keeps its ring whether or not it is focused.
+        let shown = use_animation_transition(
+            if focused || self.invalid { 1.0 } else { 0.0 },
+            ease,
+        )
         .get()
         .value();
-        // The ring's outer edge sits this far outside the control, so the
-        // ring's corner radius is the control's plus this distance.
-        let travel = FOCUS_TRAVEL * (1.0 - progress);
+        let arrived = use_animation_transition(if focused { 1.0 } else { 0.0 }, ease)
+            .get()
+            .value();
+        let (width, height) = self.size.get();
+        // Until the face has been measured there is nothing to ring.
+        let measured = width > 0.0 && height > 0.0;
+        // The ring's outer edge sits this far outside the face, so the ring's
+        // corner radius is the face's plus this distance.
+        let travel = FOCUS_TRAVEL * (1.0 - shown);
         if self.inside {
-            // The ring is drawn within the wrapper's own box, so a clipped
-            // container edge cannot cut it off. A box that is sized by its
-            // content and padded, so its first-pass size is not its final one,
-            // hands its measured size in (`fit`); a percentage would resolve
-            // against the first pass.
-            let (left, top, width, height) = match self.fit {
-                Some(fit) => (
-                    -fit.left,
-                    -fit.top,
-                    Size::px(fit.width),
-                    Size::px(fit.height),
-                ),
-                None => (0., 0., Size::percent(100.), Size::percent(100.)),
-            };
+            // The ring is drawn within the face's own box, so a clipped
+            // container edge cannot cut it off.
+            let paint = if self.invalid { Paint::ErrorRing } else { Paint::FocusRing };
             return rect()
+                .component("FocusRingInside")
                 .interactive(false)
-                .position(Position::new_absolute().top(top).left(left))
-                .width(width)
-                .height(height)
-                .opacity(progress)
+                .position(Position::new_absolute().top(0.0).left(0.0))
+                .width(Size::px(width))
+                .height(Size::px(height))
+                .opacity(if measured { shown } else { 0.0 })
                 .tw(
                     &tokens,
                     &[
-                        rounded_by(self.radius, 0.),
-                        border(Line::Ring(Paint::Accent)),
+                        border(Line::Ring(paint)),
+                        rounded_on(self.radius, self.corners, 0.),
                     ],
                 );
         }
-        let outset = FOCUS_GAP + travel + Dim::Ring.px();
-        // The wrapper has no padding, so the ring's top-left corner is the
-        // control's top-left corner and its size is the control's size.
-        rect()
-            .interactive(false)
-            .position(Position::new_absolute().top(-outset).left(-outset))
-            .width(Size::func(move |ctx| Some(ctx.parent + outset + outset)))
-            .height(Size::func(move |ctx| Some(ctx.parent + outset + outset)))
-            .opacity(progress)
-            .tw(
-                &tokens,
-                &[
-                    rounded_by(self.radius, outset),
-                    border(Line::Ring(Paint::Accent)),
-                ],
-            )
+        let bands = bands(self.invalid);
+        let outsets: Vec<f32> = bands.iter().map(|band| band.outset(travel)).collect();
+        // Build from the outermost band in, so each is its parent's child.
+        let mut nested: Option<Rect> = None;
+        for (index, band) in bands.iter().enumerate().rev() {
+            let step = outsets[index] - if index == 0 { 0.0 } else { outsets[index - 1] };
+            let face = (index == 0).then_some((width, height));
+            let mut node = self
+                .band(&tokens, *band, step, travel, face, index == 0)
+                .maybe_child(nested.take());
+            if index > 0 {
+                // The outer band arrives with focus; the ring itself stays for
+                // as long as the control is invalid.
+                node = node.opacity(arrived);
+            }
+            nested = Some(node);
+        }
+        nested
+            .unwrap_or_else(rect)
+            .opacity(if measured { shown } else { 0.0 })
     }
 }
+
+#[cfg(all(test, feature = "testing"))]
+#[path = "motion_tests.rs"]
+mod reveal_frames;

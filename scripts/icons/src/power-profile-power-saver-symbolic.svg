@@ -1,3 +1,3 @@
 <svg viewBox="0 0 16 16">
-  <fork name="Leaf" weight="fill" mode="exact"/>
+  <fork name="Leaf" weight="fill" mode="exact" scale="1.125" dx="-0.01" dy="-0.18"/>
 </svg>

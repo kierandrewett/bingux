@@ -30,6 +30,8 @@ pub enum PlaceKind {
     Music,
     Pictures,
     Videos,
+    /// `~/.local/share/Trash/files`, listed once the folder exists.
+    Trash,
     /// `/`.
     Computer,
     /// A mounted volume.
@@ -156,6 +158,14 @@ impl Places {
                     path: Some(path),
                 });
             }
+        }
+        let trash = home.join(".local/share/Trash/files");
+        if is_dir(&trash) {
+            standard.push(Place {
+                kind: PlaceKind::Trash,
+                name: "Trash".into(),
+                path: Some(trash),
+            });
         }
 
         let mut devices = vec![Place {
@@ -354,7 +364,7 @@ impl Place {
             PlaceKind::Pictures => Some(SpecialFolder::Pictures),
             PlaceKind::Videos => Some(SpecialFolder::Videos),
             PlaceKind::Bookmark => self.path.as_deref().and_then(special_folder),
-            PlaceKind::Recent | PlaceKind::Computer | PlaceKind::Volume => None,
+            PlaceKind::Recent | PlaceKind::Computer | PlaceKind::Volume | PlaceKind::Trash => None,
         }
     }
 }
@@ -642,7 +652,8 @@ mod tests {
                 "Desktop",
                 "Downloads",
                 "Pictures",
-                "Videos"
+                "Videos",
+                "Trash"
             ]
         );
         assert_eq!(
@@ -660,6 +671,23 @@ mod tests {
             Some(PlaceKind::Pictures)
         );
         assert_eq!(places.containing(Path::new("/usr")).map(|p| p.kind), None);
+    }
+
+    #[test]
+    fn trash_is_listed_only_once_its_folder_exists() {
+        let sources = Sources {
+            home: PathBuf::from("/home/a"),
+            ..Sources::default()
+        };
+        let trash = Path::new("/home/a/.local/share/Trash/files");
+        let none = Places::build(&sources, |_| false);
+        assert!(none.standard.iter().all(|p| p.kind != PlaceKind::Trash));
+        let some = Places::build(&sources, |path| path == trash);
+        let place = some.standard.last().unwrap();
+        assert_eq!(place.kind, PlaceKind::Trash);
+        assert_eq!(place.name, "Trash");
+        assert_eq!(place.path.as_deref(), Some(trash));
+        assert_eq!(place.special(), None);
     }
 
     #[test]

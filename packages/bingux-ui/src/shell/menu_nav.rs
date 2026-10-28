@@ -1,8 +1,9 @@
 //! The state machine of an open menu: which row is highlighted in each panel,
 //! which submenus are open, and how the pointer and the keyboard move that.
-//! It reads no clock and draws nothing: callers pass the time of each event,
-//! so the open delay, the safe triangle and the type-ahead timeout are tested
-//! without a window. [`super::menu`] draws it and schedules the wake-ups.
+//! It reads no clock and draws nothing: callers pass the time of each pointer
+//! event, so the open delay and the safe triangle are tested without a window.
+//! The keyboard needs no time: [`super::menu`] draws it and schedules the
+//! wake-ups.
 //!
 //! # Submenus and the pointer
 //!
@@ -25,11 +26,15 @@
 //! over the rows that can be picked. Right, Enter and Space open a submenu;
 //! Left and Escape close it; Escape and Tab at the top level close the menu.
 //! Typing builds a [`TypeAhead`] query, which takes Down, Up, Tab, Shift+Tab,
-//! Enter, Backspace, Space and Escape while it is active (see
-//! [`super::menu_query`]).
+//! Enter, Backspace, Ctrl+Backspace, Delete, Ctrl+A, Space and Escape while
+//! it is active (see [`super::menu_query`]). It never times out.
 
-use super::menu_query::{self, Candidate, Ms, Reaction, TypeAhead};
+use super::menu_query::{self, Candidate, Reaction, TypeAhead};
 use super::panel::PanelRect;
+
+/// A time in milliseconds on any clock that only moves forward. The caller
+/// supplies it, so a test can use a clock it controls.
+pub type Ms = u64;
 
 /// How long a pointer must rest on a row with a submenu before it opens.
 pub(crate) const SUBMENU_OPEN_DELAY_MS: Ms = 150;
@@ -74,6 +79,10 @@ pub(crate) enum NavKey {
     Enter,
     Space,
     Backspace,
+    /// Ctrl+Backspace.
+    CtrlBackspace,
+    Delete,
+    CtrlA,
     /// A printable character other than Space.
     Char(char),
 }
@@ -86,6 +95,8 @@ impl NavKey {
             NavKey::Char(c) => Key::Char(c),
             NavKey::Space => Key::Char(' '),
             NavKey::Backspace => Key::Backspace,
+            NavKey::CtrlBackspace => Key::BackWord,
+            NavKey::Delete | NavKey::CtrlA => Key::Clear,
             NavKey::Down | NavKey::Tab | NavKey::CtrlN => Key::Next,
             NavKey::Up | NavKey::ShiftTab | NavKey::CtrlP => Key::Previous,
             NavKey::Enter => Key::Enter,
@@ -454,7 +465,6 @@ impl NavState {
         [
             self.pending.map(|pending| pending.due),
             self.cone.map(|cone| cone.last_move + CONE_REST_MS),
-            self.ahead.expires_at(),
         ]
         .into_iter()
         .flatten()
@@ -462,8 +472,7 @@ impl NavState {
     }
 
     /// Runs what is due at `now`: a submenu waiting for its delay, a rest in
-    /// the safe triangle, a query that ran out. It returns whether anything
-    /// changed.
+    /// the safe triangle. It returns whether anything changed.
     pub(crate) fn poll(&mut self, now: Ms) -> bool {
         let mut changed = false;
         if let Some(pending) = self.pending
@@ -485,18 +494,15 @@ impl NavState {
             self.replay_held(now);
             changed = true;
         }
-        if self.ahead.expire(now) {
-            changed = true;
-        }
         changed
     }
 
     // -----------------------------------------------------------------
     // The keyboard
 
-    /// A key was pressed at `now` while the menu was open. `root` is the
-    /// menu's rows; the keys act on the active panel.
-    pub(crate) fn press<T: Node>(&mut self, root: &[T], key: NavKey, now: Ms) -> Outcome {
+    /// A key was pressed while the menu was open. `root` is the menu's rows;
+    /// the keys act on the active panel.
+    pub(crate) fn press<T: Node>(&mut self, root: &[T], key: NavKey) -> Outcome {
         let level = self.active;
         let items = panel_items(root, &self.open, level);
         let focused = self.highlighted(level);
@@ -506,7 +512,7 @@ impl NavState {
             && (self.ahead.is_active() || matches!(key, NavKey::Char(_)))
         {
             let rows = candidates(items);
-            match self.ahead.key(query_key, now, &rows, focused) {
+            match self.ahead.key(query_key, &rows, focused) {
                 Reaction::Ignored => {}
                 Reaction::Handled => return Outcome::Handled,
                 Reaction::Focus(index) => {
@@ -571,7 +577,13 @@ impl NavState {
                 Some(index) => self.activate(items, level, index),
                 None => Outcome::Handled,
             },
-            NavKey::CtrlN | NavKey::CtrlP | NavKey::Backspace | NavKey::Char(_) => Outcome::Ignored,
+            NavKey::CtrlN
+            | NavKey::CtrlP
+            | NavKey::CtrlA
+            | NavKey::Backspace
+            | NavKey::CtrlBackspace
+            | NavKey::Delete
+            | NavKey::Char(_) => Outcome::Ignored,
         }
     }
 
@@ -873,20 +885,20 @@ mod tests {
         let rows = menu();
         let mut nav = NavState::new(&rows, true);
         assert_eq!(nav.highlighted(0), Some(0));
-        nav.press(&rows, NavKey::Down, 0);
+        nav.press(&rows, NavKey::Down);
         assert_eq!(nav.highlighted(0), Some(1));
-        nav.press(&rows, NavKey::Down, 0);
+        nav.press(&rows, NavKey::Down);
         assert_eq!(nav.highlighted(0), Some(SORT));
-        nav.press(&rows, NavKey::Down, 0);
-        nav.press(&rows, NavKey::Down, 0);
+        nav.press(&rows, NavKey::Down);
+        nav.press(&rows, NavKey::Down);
         assert_eq!(nav.highlighted(0), Some(REFRESH), "Paste is disabled");
-        nav.press(&rows, NavKey::Down, 0);
+        nav.press(&rows, NavKey::Down);
         assert_eq!(nav.highlighted(0), Some(0), "wraps");
-        nav.press(&rows, NavKey::Up, 0);
+        nav.press(&rows, NavKey::Up);
         assert_eq!(nav.highlighted(0), Some(REFRESH));
-        nav.press(&rows, NavKey::Home, 0);
+        nav.press(&rows, NavKey::Home);
         assert_eq!(nav.highlighted(0), Some(0));
-        nav.press(&rows, NavKey::End, 0);
+        nav.press(&rows, NavKey::End);
         assert_eq!(nav.highlighted(0), Some(REFRESH));
     }
 
@@ -895,25 +907,25 @@ mod tests {
         let rows = menu();
         let mut nav = NavState::new(&rows, false);
         nav.set_highlight(0, Some(SORT));
-        assert_eq!(nav.press(&rows, NavKey::Right, 0), Outcome::Handled);
+        assert_eq!(nav.press(&rows, NavKey::Right), Outcome::Handled);
         assert_eq!(nav.open_row(0), Some(SORT));
         assert_eq!(nav.active(), 1);
         assert_eq!(nav.highlighted(1), Some(0));
-        nav.press(&rows, NavKey::Down, 0);
+        nav.press(&rows, NavKey::Down);
         assert_eq!(nav.highlighted(1), Some(1));
-        assert_eq!(nav.press(&rows, NavKey::Left, 0), Outcome::Handled);
+        assert_eq!(nav.press(&rows, NavKey::Left), Outcome::Handled);
         assert_eq!(nav.open_row(0), None);
         assert_eq!(nav.active(), 0);
         assert_eq!(nav.highlighted(0), Some(SORT), "the parent row stays lit");
         // Left at the top level is not the menu's.
-        assert_eq!(nav.press(&rows, NavKey::Left, 0), Outcome::Ignored);
+        assert_eq!(nav.press(&rows, NavKey::Left), Outcome::Ignored);
     }
 
     #[test]
     fn right_on_a_plain_row_does_nothing() {
         let rows = menu();
         let mut nav = NavState::new(&rows, true);
-        assert_eq!(nav.press(&rows, NavKey::Right, 0), Outcome::Ignored);
+        assert_eq!(nav.press(&rows, NavKey::Right), Outcome::Ignored);
     }
 
     #[test]
@@ -921,21 +933,21 @@ mod tests {
         let rows = menu();
         let mut nav = NavState::new(&rows, false);
         nav.set_highlight(0, Some(VIEW));
-        assert_eq!(nav.press(&rows, NavKey::Enter, 0), Outcome::Handled);
+        assert_eq!(nav.press(&rows, NavKey::Enter), Outcome::Handled);
         assert_eq!(nav.open_row(0), Some(VIEW));
         assert_eq!(
-            nav.press(&rows, NavKey::Space, 0),
+            nav.press(&rows, NavKey::Space),
             Outcome::Activate { level: 1, index: 0 }
         );
         nav.close_deepest();
         nav.set_highlight(0, Some(1));
         assert_eq!(
-            nav.press(&rows, NavKey::Enter, 0),
+            nav.press(&rows, NavKey::Enter),
             Outcome::Activate { level: 0, index: 1 }
         );
         // Nothing highlighted: the key is taken and does nothing.
         let mut idle = NavState::new(&rows, false);
-        assert_eq!(idle.press(&rows, NavKey::Enter, 0), Outcome::Handled);
+        assert_eq!(idle.press(&rows, NavKey::Enter), Outcome::Handled);
     }
 
     #[test]
@@ -943,17 +955,17 @@ mod tests {
         let rows = menu();
         let mut nav = NavState::new(&rows, false);
         nav.open_sub(0, SORT, Some(0));
-        assert_eq!(nav.press(&rows, NavKey::Escape, 0), Outcome::Handled);
+        assert_eq!(nav.press(&rows, NavKey::Escape), Outcome::Handled);
         assert_eq!(nav.open_row(0), None);
-        assert_eq!(nav.press(&rows, NavKey::Escape, 0), Outcome::Dismiss);
+        assert_eq!(nav.press(&rows, NavKey::Escape), Outcome::Dismiss);
     }
 
     #[test]
     fn tab_leaves_the_menu_and_goes_on() {
         let rows = menu();
         let mut nav = NavState::new(&rows, true);
-        assert_eq!(nav.press(&rows, NavKey::Tab, 0), Outcome::Leave);
-        assert_eq!(nav.press(&rows, NavKey::ShiftTab, 0), Outcome::Leave);
+        assert_eq!(nav.press(&rows, NavKey::Tab), Outcome::Leave);
+        assert_eq!(nav.press(&rows, NavKey::ShiftTab), Outcome::Leave);
     }
 
     // -- type-ahead in a menu ---------------------------------------------
@@ -962,7 +974,7 @@ mod tests {
     fn typing_focuses_the_best_match_and_marks_the_panel() {
         let rows = menu();
         let mut nav = NavState::new(&rows, false);
-        assert_eq!(nav.press(&rows, NavKey::Char('r'), 0), Outcome::Handled);
+        assert_eq!(nav.press(&rows, NavKey::Char('r')), Outcome::Handled);
         assert_eq!(nav.highlighted(0), Some(REFRESH));
         assert!(nav.ahead().is_active());
         assert_eq!(
@@ -976,21 +988,21 @@ mod tests {
     fn with_a_query_the_arrows_walk_the_matches_and_enter_picks() {
         let rows = menu();
         let mut nav = NavState::new(&rows, false);
-        nav.press(&rows, NavKey::Char('n'), 0);
+        nav.press(&rows, NavKey::Char('n'));
         assert_eq!(nav.highlighted(0), Some(0));
         // Matches: New folder, New file, Sort by? no; "n" in "Sort by"? no.
-        nav.press(&rows, NavKey::Down, 10);
+        nav.press(&rows, NavKey::Down);
         assert_eq!(nav.highlighted(0), Some(1));
-        nav.press(&rows, NavKey::Down, 20);
+        nav.press(&rows, NavKey::Down);
         assert_eq!(nav.highlighted(0), Some(0), "wraps over the matches only");
-        nav.press(&rows, NavKey::CtrlP, 30);
+        nav.press(&rows, NavKey::CtrlP);
         assert_eq!(nav.highlighted(0), Some(1));
-        nav.press(&rows, NavKey::ShiftTab, 40);
+        nav.press(&rows, NavKey::ShiftTab);
         assert_eq!(nav.highlighted(0), Some(0));
-        nav.press(&rows, NavKey::Tab, 50);
+        nav.press(&rows, NavKey::Tab);
         assert_eq!(nav.highlighted(0), Some(1));
         assert_eq!(
-            nav.press(&rows, NavKey::Enter, 60),
+            nav.press(&rows, NavKey::Enter),
             Outcome::Activate { level: 0, index: 1 }
         );
     }
@@ -999,9 +1011,9 @@ mod tests {
     fn a_query_that_finds_a_submenu_enters_it_on_enter() {
         let rows = menu();
         let mut nav = NavState::new(&rows, false);
-        nav.press(&rows, NavKey::Char('v'), 0);
+        nav.press(&rows, NavKey::Char('v'));
         assert_eq!(nav.highlighted(0), Some(VIEW));
-        assert_eq!(nav.press(&rows, NavKey::Enter, 5), Outcome::Handled);
+        assert_eq!(nav.press(&rows, NavKey::Enter), Outcome::Handled);
         assert_eq!(nav.open_row(0), Some(VIEW));
         assert_eq!(nav.active(), 1);
         // The query belonged to the root panel.
@@ -1012,42 +1024,79 @@ mod tests {
     fn escape_clears_the_query_first_and_only_then_closes() {
         let rows = menu();
         let mut nav = NavState::new(&rows, false);
-        nav.press(&rows, NavKey::Char('r'), 0);
-        assert_eq!(nav.press(&rows, NavKey::Escape, 10), Outcome::Handled);
+        nav.press(&rows, NavKey::Char('r'));
+        assert_eq!(nav.press(&rows, NavKey::Escape), Outcome::Handled);
         assert!(!nav.ahead().is_active());
-        assert_eq!(nav.press(&rows, NavKey::Escape, 20), Outcome::Dismiss);
+        assert_eq!(nav.press(&rows, NavKey::Escape), Outcome::Dismiss);
     }
 
     #[test]
     fn space_types_inside_a_query_and_picks_otherwise() {
         let rows = menu();
         let mut nav = NavState::new(&rows, false);
-        nav.press(&rows, NavKey::Char('n'), 0);
-        nav.press(&rows, NavKey::Char('e'), 1);
-        nav.press(&rows, NavKey::Char('w'), 2);
-        assert_eq!(nav.press(&rows, NavKey::Space, 3), Outcome::Handled);
+        nav.press(&rows, NavKey::Char('n'));
+        nav.press(&rows, NavKey::Char('e'));
+        nav.press(&rows, NavKey::Char('w'));
+        assert_eq!(nav.press(&rows, NavKey::Space), Outcome::Handled);
         assert_eq!(nav.ahead().query(), "new ");
-        nav.press(&rows, NavKey::Char('f'), 4);
+        nav.press(&rows, NavKey::Char('f'));
         assert_eq!(nav.ahead().query(), "new f");
         assert_eq!(nav.highlighted(0), Some(0));
         assert_eq!(nav.ahead().matches().count(), 2);
     }
 
     #[test]
-    fn the_query_runs_out_on_the_clock_and_the_menu_stays_where_it_was() {
+    fn the_query_never_runs_out_however_long_the_menu_waits() {
         let rows = menu();
         let mut nav = NavState::new(&rows, false);
-        nav.press(&rows, NavKey::Char('r'), 100);
-        assert_eq!(nav.wake_at(), Some(100 + menu_query::RESET_MS));
-        assert!(!nav.poll(100 + menu_query::RESET_MS - 1));
-        assert!(nav.poll(100 + menu_query::RESET_MS));
+        nav.press(&rows, NavKey::Char('r'));
+        // Nothing is scheduled for a query, and no later time touches it.
+        assert_eq!(nav.wake_at(), None);
+        for later in [1_100, 5_000, 60_000, 3_600_000] {
+            assert!(!nav.poll(later));
+            assert!(nav.ahead().is_active());
+            assert_eq!(nav.ahead().query(), "r");
+            assert_eq!(nav.highlighted(0), Some(REFRESH));
+        }
+        // Typing goes on from where it was, and Space types rather than picks.
+        nav.press(&rows, NavKey::Char('e'));
+        assert_eq!(nav.ahead().query(), "re");
+        assert_eq!(nav.press(&rows, NavKey::Space), Outcome::Handled);
+        assert_eq!(nav.ahead().query(), "re ");
+    }
+
+    #[test]
+    fn backspace_takes_a_character_and_ctrl_backspace_a_word() {
+        let rows = menu();
+        let mut nav = NavState::new(&rows, false);
+        for key in "new f".chars().map(|c| if c == ' ' { NavKey::Space } else { NavKey::Char(c) }) {
+            nav.press(&rows, key);
+        }
+        assert_eq!(nav.ahead().query(), "new f");
+        assert_eq!(nav.press(&rows, NavKey::Backspace), Outcome::Handled);
+        assert_eq!(nav.ahead().query(), "new ");
+        assert_eq!(nav.press(&rows, NavKey::Char('f')), Outcome::Handled);
+        assert_eq!(nav.press(&rows, NavKey::CtrlBackspace), Outcome::Handled);
+        assert_eq!(nav.ahead().query(), "new ");
+        assert_eq!(nav.press(&rows, NavKey::CtrlBackspace), Outcome::Handled);
         assert!(!nav.ahead().is_active());
-        assert_eq!(nav.highlighted(0), Some(REFRESH));
-        // Space now picks again.
-        assert_eq!(
-            nav.press(&rows, NavKey::Space, 2000),
-            Outcome::Activate { level: 0, index: REFRESH }
-        );
+        // With no query, those keys are not the menu's.
+        assert_eq!(nav.press(&rows, NavKey::Backspace), Outcome::Ignored);
+        assert_eq!(nav.press(&rows, NavKey::CtrlBackspace), Outcome::Ignored);
+    }
+
+    #[test]
+    fn delete_and_ctrl_a_clear_the_whole_query() {
+        let rows = menu();
+        for clear in [NavKey::Delete, NavKey::CtrlA] {
+            let mut nav = NavState::new(&rows, false);
+            nav.press(&rows, NavKey::Char('n'));
+            nav.press(&rows, NavKey::Char('e'));
+            assert_eq!(nav.press(&rows, clear), Outcome::Handled);
+            assert!(!nav.ahead().is_active());
+            // The menu stays open: only Escape with no query closes it.
+            assert_eq!(nav.press(&rows, clear), Outcome::Ignored);
+        }
     }
 
     #[test]
@@ -1055,15 +1104,15 @@ mod tests {
         let rows = menu();
         let mut nav = NavState::new(&rows, false);
         nav.set_highlight(0, Some(SORT));
-        nav.press(&rows, NavKey::Right, 0);
-        nav.press(&rows, NavKey::Char('s'), 1);
+        nav.press(&rows, NavKey::Right);
+        nav.press(&rows, NavKey::Char('s'));
         assert_eq!(nav.highlighted(1), Some(1), "Size in the submenu");
-        nav.press(&rows, NavKey::Escape, 2);
+        nav.press(&rows, NavKey::Escape);
         assert!(!nav.ahead().is_active());
         assert_eq!(nav.active(), 1, "Escape cleared the query only");
-        nav.press(&rows, NavKey::Char('m'), 3);
+        nav.press(&rows, NavKey::Char('m'));
         assert_eq!(nav.highlighted(1), Some(3));
-        nav.press(&rows, NavKey::Left, 4);
+        nav.press(&rows, NavKey::Left);
         assert!(!nav.ahead().is_active());
         assert_eq!(nav.active(), 0);
     }
@@ -1072,7 +1121,7 @@ mod tests {
     fn disabled_rows_are_never_found() {
         let rows = menu();
         let mut nav = NavState::new(&rows, false);
-        nav.press(&rows, NavKey::Char('p'), 0);
+        nav.press(&rows, NavKey::Char('p'));
         assert_eq!(nav.highlighted(0), None, "Paste is disabled");
         assert_eq!(nav.ahead().matches().count(), 0);
         assert_eq!(nav.ahead().mark(PASTE), menu_query::Mark::Plain);

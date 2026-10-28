@@ -169,7 +169,7 @@ fn entries_plan(facts: &Facts, folder: Option<&Path>, apps: &[App], permanent: b
     join(vec![
         vec![
             Row::command("Open", facts, Command::Open),
-            Row::command("Open in new window", facts, Command::OpenInNewWindow),
+            Row::command("Open in new tab", facts, Command::OpenInNewTab),
             open_with,
             Row::command("Preview", facts, Command::Preview),
         ],
@@ -517,7 +517,7 @@ pub struct PlaceEnv {
     pub overlays: Overlays,
     pub caps: Capabilities,
     pub on_open: EventHandler<Where>,
-    pub on_open_new_window: EventHandler<Where>,
+    pub on_open_new_tab: EventHandler<Where>,
     pub on_remove_bookmark: EventHandler<PathBuf>,
     pub on_properties: EventHandler<PathBuf>,
 }
@@ -525,7 +525,7 @@ pub struct PlaceEnv {
 #[derive(Clone, Debug, PartialEq)]
 enum PlaceAct {
     Open,
-    OpenNewWindow,
+    OpenNewTab,
     RemoveBookmark,
     Properties,
 }
@@ -534,8 +534,8 @@ enum PlaceAct {
 /// `None`.
 fn place_plan(caps: Capabilities, kind: PlaceKind, has_folder: bool) -> Vec<Option<(&'static str, PlaceAct)>> {
     let mut groups: Vec<Vec<(&'static str, PlaceAct)>> = vec![vec![("Open", PlaceAct::Open)]];
-    if caps.new_window && has_folder {
-        groups[0].push(("Open in new window", PlaceAct::OpenNewWindow));
+    if caps.new_tab && has_folder {
+        groups[0].push(("Open in new tab", PlaceAct::OpenNewTab));
     }
     if caps.bookmarks && kind == PlaceKind::Bookmark && has_folder {
         groups.push(vec![("Remove from bookmarks", PlaceAct::RemoveBookmark)]);
@@ -578,7 +578,7 @@ pub fn place_menu_with(env: PlaceEnv, place: &Place, extra: Vec<MenuItem>) -> Ve
             let path = place.path.clone();
             menu_item(label, move |_| match (&act, &path) {
                 (PlaceAct::Open, _) => env.on_open.call(target.clone()),
-                (PlaceAct::OpenNewWindow, _) => env.on_open_new_window.call(target.clone()),
+                (PlaceAct::OpenNewTab, _) => env.on_open_new_tab.call(target.clone()),
                 (PlaceAct::RemoveBookmark, Some(path)) => env.on_remove_bookmark.call(path.clone()),
                 (PlaceAct::Properties, Some(path)) => env.on_properties.call(path.clone()),
                 _ => {}
@@ -667,7 +667,7 @@ mod tests {
         let labels = labels(&rows);
         for wanted in [
             "Open",
-            "Open in new window",
+            "Open in new tab",
             "Paste into folder",
             "Add to bookmarks",
             "Properties",
@@ -705,7 +705,7 @@ mod tests {
         assert!(file.iter().any(|label| label == "Rename"));
         assert!(!file.iter().any(|label| label.starts_with("Open with")));
         let folder = labels(&ordinary(&facts(Capabilities::CHOOSER, 1, 1), None, &[]));
-        assert!(!folder.iter().any(|label| label == "Open in new window"));
+        assert!(!folder.iter().any(|label| label == "Open in new tab"));
         assert!(folder.iter().any(|label| label == "Add to bookmarks"));
     }
 
@@ -1076,13 +1076,13 @@ mod tests {
         assert_eq!(place(PlaceKind::Recent, false), ["Open"]);
         assert_eq!(
             place(PlaceKind::Home, true),
-            ["Open", "Open in new window", "---", "Properties"]
+            ["Open", "Open in new tab", "---", "Properties"]
         );
         assert_eq!(
             place(PlaceKind::Bookmark, true),
             [
                 "Open",
-                "Open in new window",
+                "Open in new tab",
                 "---",
                 "Remove from bookmarks",
                 "---",
@@ -1090,6 +1090,6 @@ mod tests {
             ]
         );
         let chooser = place_plan(Capabilities::CHOOSER, PlaceKind::Bookmark, true);
-        assert!(chooser.iter().flatten().all(|(label, _)| *label != "Open in new window"));
+        assert!(chooser.iter().flatten().all(|(label, _)| *label != "Open in new tab"));
     }
 }

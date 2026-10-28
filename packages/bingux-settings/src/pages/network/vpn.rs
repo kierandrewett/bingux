@@ -22,10 +22,10 @@ use super::profile::ProfileSettings;
 use super::{Owner, Section, usage};
 use crate::icons::Icon;
 use crate::pages::loading::veiled;
-use crate::routes::Route;
+use crate::routes;
 use crate::system::{self, CommandError};
 use crate::ui::{
-    Group, ResponseKind, SpinnerSize, Status, action_strip, dialog, page_column, row, spinner,
+    CANCEL_ID, Group, ResponseKind, SpinnerSize, Status, action_strip, dialog, page_column, row, spinner,
     status, strip_action, switch, use_tokens,
 };
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
@@ -190,6 +190,7 @@ fn confirm_delete(ctx: NetCtx, name: String) {
             "The VPN is deleted from this computer, with the keys and passwords saved in it.",
         )
         .cancel("Cancel")
+        .default_action(CANCEL_ID)
         .response("Delete", ResponseKind::Destructive, move |_| {
             let target = name.clone();
             system::background_then(
@@ -208,9 +209,7 @@ fn confirm_delete(ctx: NetCtx, name: String) {
 /// The right-click menu for one VPN.
 fn vpn_menu(ctx: NetCtx, name: &str, up: bool) -> Vec<MenuItem> {
     let toggle_name = name.to_string();
-    let edit = Route::Vpn {
-        name: name.to_string(),
-    };
+    let edit = routes::vpn(&name.to_string());
     let delete = name.to_string();
     let toggle = if up {
         menu_item("Disconnect", move |_| {
@@ -223,7 +222,7 @@ fn vpn_menu(ctx: NetCtx, name: &str, up: bool) -> Vec<MenuItem> {
     };
     vec![
         toggle,
-        menu_item("Edit", move |_| ctx.navigator.push(edit.clone())).icon(Icon::PreferencesSystem),
+        menu_item("Edit", move |_| ctx.router.open(edit.clone())).icon(Icon::PreferencesSystem),
         menu_separator(),
         menu_item("Delete", move |_| confirm_delete(ctx, delete.clone()))
             .icon(Icon::UserTrash)
@@ -234,9 +233,7 @@ fn vpn_menu(ctx: NetCtx, name: &str, up: bool) -> Vec<MenuItem> {
 fn vpn_row(ctx: NetCtx, ov: &Overview, vpn: &Vpn) -> Element {
     let link = link_of(ov, vpn);
     let name = vpn.name.clone();
-    let route = Route::Vpn {
-        name: vpn.name.clone(),
-    };
+    let route = routes::vpn(&vpn.name.clone());
     let toggle_name = vpn.name.clone();
     let mut trailing = rect().tw_layout(&[flex_row(), gap(S2), items(Align::Center)]);
     if link == Link::Connecting {
@@ -250,8 +247,9 @@ fn vpn_row(ctx: NetCtx, ov: &Overview, vpn: &Vpn) -> Element {
         .subtitle(link.line())
         .subtitle_one_line()
         .trailing(trailing)
+        .trailing_control()
         .navigates()
-        .on_press(move |_| ctx.navigator.push(route.clone()))
+        .on_press(move |_| ctx.router.open(route.clone()))
         .context_menu(vpn_menu(ctx, &name, link.on()));
     if matches!(link, Link::Connected(_)) {
         item = item.leading_tone(Tone::Accent);
@@ -271,7 +269,7 @@ pub fn vpn_group(ctx: NetCtx, ov: &Overview) -> Element {
         row("Add VPN...")
             .leading(Icon::ListAdd)
             .navigates()
-            .on_press(move |_| ctx.navigator.push(Route::AddVpn { kind: None })),
+            .on_press(move |_| ctx.router.open(routes::add_vpn(None))),
     ));
     Element::from(Group::titled("VPN").rows(rows))
 }
@@ -369,7 +367,7 @@ impl Component for VpnPage {
             if let Some(Ok(ov)) = &*ctx.overview.read()
                 && ov.vpn(&gone).is_none()
             {
-                ctx.navigator.pop();
+                ctx.router.pop();
             }
         });
 
@@ -448,10 +446,7 @@ impl Component for VpnPage {
         info = info.row(usage::connection_usage_row(
             ctx,
             name.clone(),
-            Route::Section {
-                owner: owner.clone(),
-                section: Section::Usage,
-            },
+            routes::section(&owner.clone(), &Section::Usage),
         ));
 
         veiled(

@@ -1,9 +1,9 @@
 //! Bingux Settings: a Freya application for the Bingux desktop shell.
 //!
-//! Every page and subpage has an address (see `routes`), such as
-//! `bingux-settings://wifi/saved`. The window opens on the address given on
-//! the command line, and a second launch hands its address to the running
-//! window and exits.
+//! Every page and subpage is a location (see `routes`), a URI such as
+//! `bingux-settings://network/wifi/saved`. The window opens on the location
+//! given on the command line (or by `xdg-open`), and a second launch hands its
+//! location to the running window and exits.
 
 mod app;
 mod apps;
@@ -39,26 +39,62 @@ fn main() {
         snapshot_pages(&dir, &only);
         return;
     }
-    // No argument opens the window at its root address: the list of pages on
-    // a narrow window, the first page on a wide one. An address opens that
-    // page or subpage.
+    if std::env::args().nth(1).as_deref() == Some("--search-provider") {
+        search_provider();
+        return;
+    }
+    // No argument opens the window at its root location: the list of pages on
+    // a narrow window, the first page on a wide one. A location opens that
+    // page or subpage, with Back leading to the pages above it.
     Application::new("bingux-settings")
-        .scheme(routes::SCHEME)
+        .routes(routes::table())
         .title("Settings")
         .borderless()
         .usage(usage())
         .run(|| app::App);
 }
 
-/// The text `--help` prints: the address forms the window understands.
+/// `bingux-settings --search-provider`: no window. Registers the search
+/// indexes and serves them on the app search socket until killed, so Spotlight
+/// (or `socat`) can search Settings without it being open. An activation prints
+/// the address instead of opening a window.
+fn search_provider() {
+    use bingux_ui::search;
+    settings_index::register();
+    search::wait_loaded(std::time::Duration::from_secs(30));
+    let config = search::ExternalConfig {
+        app_id: "bingux-settings".into(),
+        app_version: env!("CARGO_PKG_VERSION").into(),
+    };
+    match search::serve_external_with(config, |uri| {
+        println!("activate {uri}");
+        true
+    }) {
+        Ok(path) => println!("listening {}", path.display()),
+        Err(error) => {
+            eprintln!("bingux-settings: cannot serve search: {error}");
+            std::process::exit(1);
+        }
+    }
+    loop {
+        std::thread::park();
+    }
+}
+
+/// The text `--help` prints: the locations the window understands.
 fn usage() -> String {
     let panels: Vec<&str> = PageId::ALL.iter().map(|id| id.panel_name()).collect();
     let mut text = format!(
-        "Usage: bingux-settings [ADDRESS]\n\
+        "Usage: bingux-settings [LOCATION]\n\
          \n\
-         ADDRESS is bingux-settings://PATH, or the bare PATH. Opening an address\n\
-         while Settings runs raises the running window on it; a second launch\n\
-         exits at once.\n\
+         LOCATION is a URI, bingux-settings://PATH[?QUERY][#ROW], or the bare PATH.\n\
+         Path segments go into the hierarchy, a query holds one-off state, and the\n\
+         fragment names a row on the page to scroll to. Opening a location while\n\
+         Settings runs raises the running window on it; a second launch exits at\n\
+         once. `xdg-open bingux-settings://network/proxy` does the same.\n\
+         \n\
+         bingux-settings --search-provider\n\
+         \x20   serve the search indexes without a window (see docs/bingux-ui.md, Search)\n\
          \n\
          Pages: {}\n\
          \n\
@@ -89,6 +125,8 @@ fn usage() -> String {
          \x20 keyboard/input/<kind>/<id>       one input source\n\
          \x20 datetime/timezone                time zone list\n\
          \x20 background/font                  installed fonts\n\
+         \x20 sound/applications               volume of each application\n\
+         \x20 sound/effects                    sound effects\n\
          \x20 users/<path>                     one user account\n\
          \x20 applications/default             default applications\n\
          \x20 applications/default/<kind>      one kind of file or link\n\
@@ -99,8 +137,8 @@ fn usage() -> String {
         text.push_str(
             "\n\
              Snapshot (feature snapshot):\n\
-             \x20 bingux-settings --snapshot DIR [ADDRESS,...]\n\
-             \x20                                  render pages to DIR/<address>.png\n",
+             \x20 bingux-settings --snapshot DIR [LOCATION,...]\n\
+             \x20                                  render pages to DIR/<location>.png\n",
         );
     }
     text
@@ -111,32 +149,32 @@ fn usage() -> String {
 /// so the images show what the machine running this reports.
 #[cfg(feature = "snapshot")]
 fn snapshot_pages(dir: &str, only: &[String]) {
-    use bingux_ui::app::provide_address;
-    use bingux_ui::prelude::Address;
+    use bingux_ui::prelude::Location;
     use bingux_ui::style::{Paint, Tw, bg, h_full, w_full};
     use freya::prelude::*;
-    // Each name is an address, as on the command line: `wifi`, `wifi/saved`.
-    // BINGUX_SETTINGS_SNAPSHOT_ADDRESS="wifi/saved" renders that one address
-    // (it overrides the list), so a page can be captured without a list.
-    let addresses: Vec<Address> =
+    // Each name is a location, as on the command line: `network`,
+    // `network/wifi/saved`. BINGUX_SETTINGS_SNAPSHOT_ADDRESS="network/wifi/saved"
+    // renders that one location (it overrides the list), so a page can be
+    // captured without a list.
+    let addresses: Vec<Location> =
         if let Ok(text) = std::env::var("BINGUX_SETTINGS_SNAPSHOT_ADDRESS") {
-            match Address::parse_in(routes::SCHEME, &text) {
-                Some(address) => vec![address],
+            match Location::parse_in(routes::SCHEME, &text) {
+                Some(location) => vec![location],
                 None => {
-                    eprintln!("[snapshot] not an address: {text}");
+                    eprintln!("[snapshot] not a location: {text}");
                     return;
                 }
             }
         } else if only.is_empty() {
-            PageId::ALL.iter().map(|id| id.address()).collect()
+            PageId::ALL.iter().map(|id| id.location()).collect()
         } else {
             only.iter()
                 .filter_map(|name| {
-                    let address = Address::parse_in(routes::SCHEME, name);
-                    if address.is_none() {
-                        eprintln!("[snapshot] not an address: {name}");
+                    let location = Location::parse_in(routes::SCHEME, name);
+                    if location.is_none() {
+                        eprintln!("[snapshot] not a location: {name}");
                     }
-                    address
+                    location
                 })
                 .collect()
         };
@@ -172,14 +210,14 @@ fn snapshot_pages(dir: &str, only: &[String]) {
         // The root address is the list of pages; a page address is that page.
         let list = std::env::var_os("BINGUX_SETTINGS_SNAPSHOT_LIST").is_some();
         let page = if list {
-            Address::new(routes::SCHEME)
+            bingux_ui::prelude::Location::new(routes::SCHEME)
         } else {
             address.clone()
         };
         let mut shot = bingux_ui::snapshot::Snapshot::new(
             move || {
                 let tokens = theme::load_tokens();
-                provide_address(page.clone());
+                bingux_ui::nav::provide_router(std::sync::Arc::new(routes::table()), &page);
                 Element::from(
                     rect()
                         .tw(&tokens, &[w_full(), h_full(), bg(Paint::Bg)])
@@ -286,7 +324,7 @@ fn snapshot_pages(dir: &str, only: &[String]) {
         // `Snapshot::run_script` for the commands.
         if let Ok(script) = std::env::var("BINGUX_SETTINGS_SNAPSHOT_SCRIPT") {
             let script = match script.strip_prefix('@') {
-                Some(file) => std::fs::read_to_string(file).unwrap_or_else(|error| {
+                Some(file) => system::read_to_string(file).unwrap_or_else(|error| {
                     eprintln!("[snapshot] cannot read {file}: {error}");
                     String::new()
                 }),
@@ -301,14 +339,14 @@ fn snapshot_pages(dir: &str, only: &[String]) {
     }
 }
 
-/// The file name of an address's snapshot: its segments joined by `_`, so
-/// `wifi` is `wifi.png` and `wifi/saved` is `wifi_saved.png`.
+/// The file name of a location's snapshot: its segments joined by `_`, so
+/// `network` is `network.png` and `network/wifi/saved` is `network_wifi_saved.png`.
 #[cfg(feature = "snapshot")]
-fn snapshot_name(address: &bingux_ui::prelude::Address) -> String {
-    if address.segments().is_empty() {
+fn snapshot_name(location: &bingux_ui::prelude::Location) -> String {
+    if location.segments().is_empty() {
         return "root".to_string();
     }
-    address.segments().join("_")
+    location.segments().join("_")
 }
 
 /// `N` comma-separated numbers from an environment variable, if it holds them.

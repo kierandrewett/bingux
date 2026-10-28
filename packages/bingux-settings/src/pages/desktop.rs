@@ -284,7 +284,6 @@ fn privacy_group(ctx: Ctx, public_ip: bool, gnome: Option<&Gnome>) -> Group {
         switch_row("Show my public IP address", public_ip, move |on: bool| {
             write(ctx, Change::Set("privacy.public_ip_lookup", on.to_string()))
         })
-        .subtitle("Looks it up with an online service. Shown in the Control Centre.")
         .leading(Icon::ViewConceal),
     );
     if let Some(gnome) = gnome {
@@ -505,7 +504,6 @@ impl Component for DesktopPage {
         let page = page.child(dock)
             .child(
                 Group::titled("Dock mouse actions")
-                    .description("Click and scroll actions for app icons in the dock.")
                     .row(menu_row(
                         "Click",
                         vec![
@@ -555,8 +553,7 @@ impl Component for DesktopPage {
                     .row(
                         switch_row("Show system usage", m.metrics, move |on: bool| {
                             write(ctx, Change::Set("desktop.metrics", on.to_string()))
-                        })
-                        .subtitle("Processor, memory and network load."),
+                        }),
                     )
                     .row(switch_row(
                         "Show seconds in the clock",
@@ -568,7 +565,6 @@ impl Component for DesktopPage {
             )
             .child(
                 Group::titled("Control Centre")
-                    .description("Choose which tiles the Control Centre shows.")
                     .rows(TILES.iter().enumerate().map(|(index, (_, label, icon))| {
                         let tiles = m.tiles;
                         Element::from(

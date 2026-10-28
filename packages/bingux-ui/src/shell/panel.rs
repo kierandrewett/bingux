@@ -8,9 +8,13 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use super::menu_query::Pill;
+use super::sheet_gesture::{Claim, Metrics, Outcome, Seconds, SheetGesture};
 use crate::component::ComponentName;
+use crate::nav::ModalKind;
+use crate::nav::router::use_modal;
 use crate::motion::{PRESENCE_SCALE, use_presence};
 use crate::style::*;
+use crate::focus::{FocusCore, claim_press, release_press, use_focus_core};
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
 use crate::typography::{BODY, CAPTION, EMPHASIS, Ink};
@@ -33,10 +37,11 @@ pub(crate) const GRABBER_HEIGHT: f32 = 4.0;
 /// The tallest a phone sheet grows, as a share of the window height.
 pub(crate) const SHEET_MAX_HEIGHT_PERCENT: f32 = 92.0;
 /// The tallest a choice sheet grows, so the dimmed page shows above it.
-pub(crate) const CHOICE_SHEET_MAX_HEIGHT_PERCENT: f32 = 60.0;
+pub(crate) const CHOICE_SHEET_MAX_HEIGHT_PERCENT: f32 = 70.0;
 /// How tall the fade at the bottom of a sheet's rows is.
 pub(crate) const SHEET_FADE: f32 = 28.0;
-/// How far a sheet is dragged down before it dismisses on release.
+/// How far a sheet is dragged down before it dismisses on release, or half
+/// its height when that is less (see [`Metrics::new`]).
 pub(crate) const SHEET_DISMISS_DISTANCE: f32 = 96.0;
 
 /// How far a sheet extends past the bottom edge, so its bottom corners sit
@@ -45,9 +50,25 @@ pub(crate) fn sheet_overhang() -> f32 {
     Radius::Overlay.px()
 }
 
+/// The padding below a popup sheet's content: the card's overhang under the
+/// window edge and the window's bottom inset, so the content ends clear of
+/// both.
+pub(crate) fn sheet_foot() -> f32 {
+    sheet_overhang() + Dim::SafeBottom.px()
+}
+
+/// The padding that ends a dropdown sheet's scroll content: the sheet's own
+/// bottom space and the window's bottom inset. A list ends with it, so its
+/// last row can scroll clear of the window edge and is never cut by it.
+pub(crate) fn sheet_bottom() -> f32 {
+    SHEET_BOTTOM.px() + Dim::SafeBottom.px()
+}
+
 /// The grabber row at the top of a sheet: a short pill. A press calls
-/// `on_press` with the pointer's y, so the caller can start a drag.
-pub(crate) fn grabber(tokens: &Tokens, mut on_press: impl FnMut(f32) + 'static) -> Rect {
+/// `on_press` with the pointer's y, so the caller can start a drag. A touch
+/// press does not stop propagating: Freya drops the global release of a
+/// touch whose press was stopped, and the sheet needs it to end the drag.
+pub(crate) fn grabber(tokens: &Tokens, on_press: impl FnMut(f32) + 'static) -> Rect {
     rect()
         .width(Size::fill())
         .height(Size::px(GRABBER_ROW))
@@ -59,10 +80,7 @@ pub(crate) fn grabber(tokens: &Tokens, mut on_press: impl FnMut(f32) + 'static) 
                 justify(crate::style::Align::Center),
             ],
         )
-        .on_pointer_down(move |event: Event<PointerEventData>| {
-            event.stop_propagation();
-            on_press(event.global_location().y as f32);
-        })
+        .on_pointer_down(grab_handler(on_press))
         .child(
             rect()
                 .width(Size::px(GRABBER_WIDTH))
@@ -71,12 +89,33 @@ pub(crate) fn grabber(tokens: &Tokens, mut on_press: impl FnMut(f32) + 'static) 
         )
 }
 
-/// The sheet's pull, eased. It follows the pointer while the sheet is dragged
-/// and springs back to rest on release; a dismiss keeps it where it was.
-pub(crate) fn use_sheet_pull(pull: State<f32>, motion: u64) -> f32 {
+/// The pointer-down handler that starts a sheet drag: calls `on_press` with
+/// the pointer's y. Used by the grabber and by a sheet's header strip.
+pub(crate) fn grab_handler(
+    mut on_press: impl FnMut(f32) + 'static,
+) -> impl FnMut(Event<PointerEventData>) + 'static {
+    move |event: Event<PointerEventData>| {
+        if !matches!(event.data(), PointerEventData::Touch(_)) {
+            event.stop_propagation();
+        }
+        on_press(event.global_location().y as f32);
+    }
+}
+
+/// Seconds on the sheet gesture's clock: monotonic, from the first read.
+fn gesture_clock() -> Seconds {
+    thread_local! {
+        static EPOCH: std::time::Instant = std::time::Instant::now();
+    }
+    EPOCH.with(|epoch| epoch.elapsed().as_secs_f64())
+}
+
+/// The sheet's pull, eased. It follows the pointer exactly while `dragging`,
+/// and eases to its new value otherwise: the spring back to rest uses the same
+/// curve and time as the sheet opening. A dismiss keeps the pull where it was.
+pub(crate) fn use_sheet_pull(pull: State<f32>, dragging: bool, motion: u64) -> f32 {
     use_animation_transition(*pull.read(), move |from: f32, to: f32| {
-        // Only the spring back eases: a drag follows the pointer exactly.
-        let time = if to <= 0.0 { motion } else { 0 };
+        let time = if dragging { 0 } else { motion };
         AnimNum::new(from, to)
             .time(time)
             .function(Function::Quad)
@@ -84,6 +123,105 @@ pub(crate) fn use_sheet_pull(pull: State<f32>, motion: u64) -> f32 {
     })
     .get()
     .value()
+}
+
+/// One sheet's drag: the pure gesture ([`SheetGesture`]) and the pull target
+/// the sheet is eased to. Both are state, so a change redraws the sheet.
+#[derive(Clone, Copy)]
+pub(crate) struct SheetDrag {
+    gesture: State<SheetGesture>,
+    pull: State<f32>,
+}
+
+/// The drag state of the calling sheet. `pull` is where the sheet's pull
+/// target lives: a popup's lives on the window, so the window can inset with it.
+pub(crate) fn use_sheet_drag(pull: State<f32>) -> SheetDrag {
+    SheetDrag {
+        gesture: use_state(SheetGesture::default),
+        pull,
+    }
+}
+
+impl SheetDrag {
+    /// The pointer went down on the grabber at `y`.
+    pub(crate) fn grab(mut self, y: f32) {
+        self.gesture.write().grab(y, gesture_clock());
+    }
+
+    /// A finger went down in the list at `y`.
+    pub(crate) fn press_content(mut self, y: f32) {
+        self.gesture.write().press_content(y, gesture_clock());
+    }
+
+    /// Whether the sheet follows the pointer. Reading it subscribes.
+    pub(crate) fn dragging(self) -> bool {
+        self.gesture.read().is_dragging()
+    }
+
+    /// The pointer moved to `y`. Returns who moves for it.
+    pub(crate) fn moved(mut self, y: f32, at_top: bool, metrics: &Metrics) -> Claim {
+        if !self.gesture.peek().is_active() {
+            return Claim::Content;
+        }
+        let claim = self
+            .gesture
+            .write()
+            .move_to(y, gesture_clock(), at_top, metrics);
+        let pull = self.gesture.peek().pull();
+        self.pull.set_if_modified(pull);
+        claim
+    }
+
+    /// The pointer went up. A sheet that is let go springs back; one that
+    /// is to be dismissed keeps its pull while it leaves.
+    pub(crate) fn released(mut self, metrics: &Metrics) -> Outcome {
+        if !self.gesture.peek().is_active() {
+            return Outcome::None;
+        }
+        let outcome = self.gesture.write().release(gesture_clock(), metrics);
+        self.settle(outcome);
+        outcome
+    }
+
+    /// The pointer was cancelled: a dragged sheet springs back.
+    pub(crate) fn cancelled(mut self) -> Outcome {
+        if !self.gesture.peek().is_active() {
+            return Outcome::None;
+        }
+        let outcome = self.gesture.write().cancel();
+        self.settle(outcome);
+        outcome
+    }
+
+    fn settle(mut self, outcome: Outcome) {
+        if outcome == Outcome::Rest {
+            self.gesture.write().settle_to(0.0);
+            self.pull.set_if_modified(0.0);
+        }
+    }
+
+    /// Forgets the pull, for a sheet that has left.
+    pub(crate) fn reset(mut self) {
+        self.gesture.write().reset();
+        self.pull.set_if_modified(0.0);
+    }
+}
+
+/// How far a sheet of `travel` px has left the window, from its presence
+/// `progress` (1 when open) and `pull` (how far it is dragged down). Rest is
+/// zero and gone is `travel`; a sheet dismissed from a pull continues from
+/// where it is, so it spends no travel off screen.
+pub(crate) fn sheet_offset(progress: f32, pull: f32, travel: f32) -> f32 {
+    pull + (1.0 - progress) * (travel - pull).max(0.0)
+}
+
+/// How much of a sheet's scrim shows: all of it at rest, none once the
+/// sheet is gone, following the sheet's drag.
+pub(crate) fn scrim_amount(offset: f32, travel: f32) -> f32 {
+    if travel <= 0.0 {
+        return 1.0;
+    }
+    (1.0 - offset / travel).clamp(0.0, 1.0)
 }
 
 /// A rectangle in window coordinates: its top-left corner and its size.
@@ -345,10 +483,12 @@ pub(crate) fn text_bar_rect(anchor: PanelRect, size: (f32, f32), window: (f32, f
 /// anywhere in the window, runs `on_dismiss`. Its children draw over it.
 pub(crate) fn shield(
     tokens: &Tokens,
+    core: FocusCore,
     on_dismiss: EventHandler<()>,
     on_escape: EventHandler<()>,
 ) -> Rect {
     let press = on_dismiss;
+    let release = core.clone();
     rect()
         .position(Position::new_global().top(0.0).left(0.0))
         .tw(tokens, &[w_screen(), h_screen()])
@@ -361,9 +501,17 @@ pub(crate) fn shield(
         .on_pointer_down(move |event: Event<PointerEventData>| {
             event.stop_propagation();
             event.prevent_default();
+            // Closing the panel takes the shield away, so the release lands on
+            // the page: claim the press, or the page's region would take it as
+            // a press on empty space and move focus off the control that opened
+            // the panel.
+            claim_press(&core);
             press.call(());
         })
-        .on_press(|event: Event<PressEventData>| event.stop_propagation())
+        .on_press(move |event: Event<PressEventData>| {
+            event.stop_propagation();
+            release_press(&release);
+        })
         .on_wheel(|event: Event<WheelEventData>| event.stop_propagation())
 }
 
@@ -562,13 +710,33 @@ impl Panel {
 impl Component for Panel {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let core = use_focus_core();
+        // An open menu, choice or dialog is part of the navigation stack, so
+        // Back (Alt+Left, the mouse button, a swipe) dismisses it as Escape
+        // does. A submenu is part of its menu, and the text bar is no modal.
+        use_modal(
+            self.open && !self.nested && self.kind != PanelKind::Bar,
+            match self.kind {
+                PanelKind::Dialog => ModalKind::Dialog,
+                PanelKind::Choice => ModalKind::Choice,
+                PanelKind::Menu | PanelKind::Bar => ModalKind::Menu,
+            },
+            self.title.as_deref().unwrap_or_default(),
+            self.on_dismiss.clone(),
+        );
         let on_closed = self.on_closed.clone();
         let motion = if self.kind == PanelKind::Dialog {
             DIALOG_MOTION_MS
         } else {
             90
         };
-        let progress = use_presence(self.open, tokens.motion(motion), move || on_closed.call(()));
+        let pull = use_state(|| 0.0_f32);
+        let drag = use_sheet_drag(pull);
+        // A sheet that has left forgets its pull, so it opens at rest again.
+        let progress = use_presence(self.open, tokens.motion(motion), move || {
+            on_closed.call(());
+            drag.reset();
+        });
         let visible = self.open || progress > 0.0;
         let root = *Platform::get().current_window().root_size.read();
         let window = (root.width, root.height);
@@ -580,36 +748,31 @@ impl Component for Panel {
             .on_escape
             .clone()
             .unwrap_or_else(|| dismiss.clone());
-        let grab = use_state(|| None::<f32>);
-        let pull = use_state(|| 0.0_f32);
-        let eased = use_sheet_pull(pull, tokens.motion(MOTION_MS));
+        let eased = use_sheet_pull(pull, drag.dragging(), tokens.motion(MOTION_MS));
 
         let backdrop = if self.kind == PanelKind::Dialog {
-            self.centred(&tokens, dismiss, progress)
+            self.centred(&tokens, core, dismiss, progress)
         } else if sheet {
-            shield(&tokens, dismiss.clone(), escape.clone())
+            let layout = self.sheet_layout(window);
+            let offset = sheet_offset(progress, eased, layout.metrics.travel);
+            // The scrim is a sibling of the sheet, not its parent: a press on
+            // the sheet never reaches it, so the sheet needs no handler that
+            // stops a touch (which would drop the touch's release).
+            sheet_shield(&tokens, escape.clone())
                 .layer(self.layer)
-                .child(
-                    rect()
-                        .position(Position::new_global().top(0.0).left(0.0))
-                        .tw(&tokens, &[w_screen(), h_screen(), bg(Paint::Scrim)])
-                        .opacity(progress),
-                )
-                .child(self.sheet(
+                .child(sheet_scrim(
                     &tokens,
-                    window,
-                    progress,
-                    grab,
-                    pull,
-                    eased,
+                    core.clone(),
+                    scrim_amount(offset, layout.metrics.travel),
                     dismiss.clone(),
                 ))
+                .child(self.sheet(&tokens, &layout, offset, drag, dismiss.clone()))
         } else if self.kind == PanelKind::Bar {
             self.edit_bar(&tokens, window, progress)
         } else if self.nested {
             self.menu(&tokens, window, progress)
         } else {
-            shield(&tokens, dismiss.clone(), escape.clone())
+            shield(&tokens, core, dismiss.clone(), escape.clone())
                 .layer(self.layer)
                 .child(self.menu(&tokens, window, progress))
                 .children(self.overlaid.clone())
@@ -698,8 +861,8 @@ impl Panel {
     /// The centred dialog: a scrim over the window and the card centred on
     /// it. The scrim and the card fade and scale in separately. A press on the
     /// scrim, or Escape, dismisses; the card stops its own presses.
-    fn centred(&self, tokens: &Tokens, dismiss: EventHandler<()>, progress: f32) -> Rect {
-        shield(tokens, dismiss.clone(), dismiss)
+    fn centred(&self, tokens: &Tokens, core: FocusCore, dismiss: EventHandler<()>, progress: f32) -> Rect {
+        shield(tokens, core, dismiss.clone(), dismiss)
             .layer(self.layer)
             .child(
                 rect()
@@ -739,9 +902,21 @@ impl Panel {
     }
 
     /// The rows, scrolled inside `viewport` when the panel scrolls, with a
-    /// hairline at each edge the rows continue past.
-    fn body(&self, tokens: &Tokens, viewport: f32, inset: bool) -> Rect {
-        let column = rect().width(Size::fill()).children(self.children.clone());
+    /// hairline at each edge the rows continue past. `tail` is padding that
+    /// ends the rows, inside the scroll content. A sheet passes its `drag`: a
+    /// finger drags the list, and a press in it can become the sheet's drag.
+    fn body(
+        &self,
+        tokens: &Tokens,
+        viewport: f32,
+        inset: bool,
+        tail: f32,
+        drag: Option<SheetDrag>,
+    ) -> Rect {
+        let column = rect()
+            .width(Size::fill())
+            .children(self.children.clone())
+            .maybe_child((tail > 0.0).then(|| rect().height(Size::px(tail))));
         let padding = [px(S4)];
         let column = if inset {
             column.tw(tokens, &padding)
@@ -752,29 +927,26 @@ impl Panel {
             return column;
         };
         let offset = <(i32, i32)>::from(scroll.clone()).1 as f32;
-        let above = offset < -0.5;
-        let below = -offset + viewport < self.content_height - 0.5;
-        let edge = |bottom: bool| {
-            rect()
-                .position(if bottom {
-                    Position::new_absolute().bottom(0.0).left(0.0)
-                } else {
-                    Position::new_absolute().top(0.0).left(0.0)
-                })
-                .layer(Layer::Relative(1))
-                .tw(tokens, &[w_full(), h(Dim::Hairline), bg(Paint::Separator)])
-        };
-        rect()
-            .width(Size::fill())
-            .height(Size::px(viewport))
+        let below = -offset + viewport < self.content_height + tail - 0.5;
+        // A floating list shows that it continues with its scrollbar alone.
+        // An edge hairline under the last visible row read as a stray line
+        // at the bottom of the panel. A sheet fades its rows out instead.
+        let mut region = rect().width(Size::fill()).height(Size::px(viewport));
+        if let Some(drag) = drag {
+            // Only a finger drags the list: a mouse scrolls it with the wheel.
+            region = region.on_pointer_down(move |event: Event<PointerEventData>| {
+                if matches!(event.data(), PointerEventData::Touch(_)) {
+                    drag.press_content(event.global_location().y as f32);
+                }
+            });
+        }
+        region
             .child(
                 ScrollView::new_controlled(scroll)
-                    .drag_scrolling(false)
+                    .drag_scrolling(drag.is_some())
                     .child(column),
             )
-            .maybe_child(above.then(|| edge(false)))
             .maybe_child((below && inset).then(|| Self::sheet_fade(tokens)))
-            .maybe_child((below && !inset).then(|| edge(true)))
     }
 
     /// The anchored surface: a menu or popover placed against its trigger.
@@ -806,7 +978,7 @@ impl Panel {
             // A press or wheel turn inside the panel never reaches the shield.
             .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
             .on_wheel(|event: Event<WheelEventData>| event.stop_propagation())
-            .child(self.body(tokens, viewport, false));
+            .child(self.body(tokens, viewport, false, 0.0, None));
         if let Some(focus) = self.focus {
             surface = surface.a11y_id(focus).a11y_focusable(true);
         }
@@ -858,40 +1030,57 @@ impl Panel {
             .children(self.children.clone())
     }
 
-    /// The sheet at the bottom edge: a grabber, the title and the rows. Its
-    /// bottom corners sit below the window, so only the top corners show. It
-    /// slides up with `progress` and follows a drag. Releasing a drag past
-    /// [`SHEET_DISMISS_DISTANCE`] dismisses; otherwise it springs back.
-    fn sheet(
-        &self,
-        tokens: &Tokens,
-        window: (f32, f32),
-        progress: f32,
-        mut grab: State<Option<f32>>,
-        mut pull: State<f32>,
-        eased: f32,
-        dismiss: EventHandler<()>,
-    ) -> Rect {
+    /// The sheet's geometry in a window of `window`: it is as tall as its
+    /// rows, the grabber and the title, and the bottom padding that ends its
+    /// scroll content, up to the share of the window it may take. The rows
+    /// scroll inside what is left.
+    fn sheet_layout(&self, window: (f32, f32)) -> SheetLayout {
         let overhang = sheet_overhang();
         let header = if self.title.is_some() {
             Dim::Control.px()
         } else {
             0.0
         };
-        let chrome = GRABBER_ROW + header + overhang;
+        let tail = sheet_bottom();
+        let chrome = GRABBER_ROW + header;
         let percent = if self.kind == PanelKind::Choice {
             CHOICE_SHEET_MAX_HEIGHT_PERCENT
         } else {
             SHEET_MAX_HEIGHT_PERCENT
         };
         let cap = (window.1 * percent / 100.0 - chrome).max(0.0);
-        let viewport = self.content_height.min(cap);
-        let slide = (1.0 - progress) * (chrome + viewport + overhang) + eased;
-        rect()
-            .position(Position::new_absolute().bottom(-overhang).left(0.0))
-            .layer(Layer::Overlay)
-            .width(Size::fill())
-            .offset_y(slide)
+        let viewport = (self.content_height + tail).min(cap);
+        SheetLayout {
+            header,
+            tail,
+            viewport,
+            metrics: Metrics::new(chrome + viewport, overhang, SHEET_DISMISS_DISTANCE),
+        }
+    }
+
+    /// The sheet at the bottom edge: a grabber, the title and the rows. Its
+    /// bottom corners sit below the window, so only the top corners show.
+    ///
+    /// The slot is positioned once and carries the motion: `offset` shifts
+    /// the card inside it, background and rows together, so the sheet moves
+    /// as one piece and nothing inside it reflows. (An offset on the card
+    /// itself would shift its rows and leave its background behind.) The
+    /// grabber, the title strip and a finger dragging the list down from its
+    /// top pull the sheet through `drag`; a release past the threshold, or a
+    /// fling, calls `dismiss`, and anything else springs back.
+    fn sheet(
+        &self,
+        tokens: &Tokens,
+        layout: &SheetLayout,
+        offset: f32,
+        drag: SheetDrag,
+        dismiss: EventHandler<()>,
+    ) -> Rect {
+        let overhang = sheet_overhang();
+        let metrics = layout.metrics;
+        let scroll = self.scroll;
+        let card = rect()
+            .component("Sheet")
             .tw(
                 tokens,
                 &[
@@ -902,33 +1091,46 @@ impl Panel {
                     clip(),
                 ],
             )
-            .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
             .on_wheel(|event: Event<WheelEventData>| event.stop_propagation())
             .on_global_pointer_move(move |event: Event<PointerEventData>| {
-                if let Some(start) = *grab.peek() {
-                    pull.set_if_modified((event.global_location().y as f32 - start).max(0.0));
+                let at_top = scroll.is_none_or(scrolled_to_top);
+                let y = event.global_location().y as f32;
+                if drag.moved(y, at_top, &metrics) == Claim::Sheet
+                    && let Some(mut scroll) = scroll
+                {
+                    // The sheet has the gesture, so the list holds its top.
+                    scroll.scroll_to_y(0);
                 }
             })
-            .on_global_pointer_up(move |_| {
-                if grab.peek().is_none() {
-                    return;
-                }
-                grab.set(None);
-                if *pull.peek() > SHEET_DISMISS_DISTANCE {
-                    dismiss.call(());
+            .on_global_pointer_up(move |event: Event<PointerEventData>| {
+                let cancelled = matches!(
+                    event.data(),
+                    PointerEventData::Touch(touch) if touch.phase == TouchPhase::Cancelled
+                );
+                let outcome = if cancelled {
+                    drag.cancelled()
                 } else {
-                    pull.set_if_modified(0.0);
+                    drag.released(&metrics)
+                };
+                if outcome == Outcome::Dismiss {
+                    dismiss.call(());
                 }
             })
-            .child(grabber(tokens, move |y| grab.set(Some(y))))
+            .on_touch_cancel(move |_: Event<TouchEventData>| {
+                drag.cancelled();
+            })
+            .child(grabber(tokens, move |y| drag.grab(y)))
             .maybe_child(self.title.clone().map(|title| {
+                // The title strip pulls the sheet as the grabber does: a
+                // pill alone is a small thing to hit with a finger.
                 rect()
                     .width(Size::fill())
-                    .height(Size::px(header))
+                    .height(Size::px(layout.header))
                     .tw(
                         tokens,
                         &[flex_row(), items(crate::style::Align::Center), px(S4)],
                     )
+                    .on_pointer_down(grab_handler(move |y| drag.grab(y)))
                     .child(
                         EMPHASIS
                             .in_ink(Ink::Text)
@@ -937,7 +1139,65 @@ impl Panel {
                             .text_overflow(TextOverflow::Ellipsis),
                     )
             }))
-            .child(self.body(tokens, viewport, true))
-            .child(rect().height(Size::px(overhang)))
+            .child(self.body(tokens, layout.viewport, true, layout.tail, Some(drag)))
+            .child(rect().height(Size::px(overhang)));
+        rect()
+            .component("SheetSlot")
+            .position(Position::new_absolute().bottom(-overhang).left(0.0))
+            .layer(Layer::Overlay)
+            .width(Size::fill())
+            .offset_y(offset)
+            .child(card)
     }
+}
+
+/// What a sheet's size is made of.
+struct SheetLayout {
+    /// The title strip's height, or zero without a title.
+    header: f32,
+    /// The padding that ends the scroll content, below the last row.
+    tail: f32,
+    /// The visible height of the rows.
+    viewport: f32,
+    metrics: Metrics,
+}
+
+/// Whether the list is scrolled to its top.
+fn scrolled_to_top(scroll: ScrollController) -> bool {
+    <(i32, i32)>::from(scroll).1 >= 0
+}
+
+/// The clear layer under a sheet: it takes the wheel and presses over the
+/// window and hears Escape, and dismisses nothing itself. The scrim beside
+/// the sheet does that.
+fn sheet_shield(tokens: &Tokens, on_escape: EventHandler<()>) -> Rect {
+    rect()
+        .position(Position::new_global().top(0.0).left(0.0))
+        .tw(tokens, &[w_screen(), h_screen()])
+        .on_global_key_down(move |event: Event<KeyboardEventData>| {
+            if event.key == Key::Named(NamedKey::Escape) {
+                event.stop_propagation();
+                on_escape.call(());
+            }
+        })
+        .on_press(|event: Event<PressEventData>| event.stop_propagation())
+        .on_wheel(|event: Event<WheelEventData>| event.stop_propagation())
+}
+
+/// The dim layer behind a sheet, `amount` of it showing. A press on it dismisses.
+fn sheet_scrim(tokens: &Tokens, core: FocusCore, amount: f32, on_dismiss: EventHandler<()>) -> Rect {
+    let release = core.clone();
+    rect()
+        .position(Position::new_global().top(0.0).left(0.0))
+        .tw(tokens, &[w_screen(), h_screen(), bg(Paint::Scrim)])
+        .opacity(amount)
+        .on_pointer_down(move |event: Event<PointerEventData>| {
+            event.stop_propagation();
+            event.prevent_default();
+            // The release that follows lands on the page once the sheet has
+            // gone: it must not take focus off the control the sheet belongs to.
+            claim_press(&core);
+            on_dismiss.call(());
+        })
+        .on_press(move |_: Event<PressEventData>| release_press(&release))
 }

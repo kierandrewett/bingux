@@ -24,10 +24,10 @@ use freya::prelude::*;
 
 use super::loading::veiled;
 use crate::icons::Icon;
-use crate::routes::Route;
+use crate::routes;
 use crate::system::{self, CommandError};
 use crate::ui::{Group, PageHead, Status, page_column, row, status, switch_row};
-use bingux_ui::prelude::Address;
+use bingux_ui::prelude::{Location, Target};
 
 pub use ethernet::cached_ethernet_title;
 pub use model::{Device, DeviceKind, NetCtx, Overview, QUICK, prefetch, use_net_ctx};
@@ -64,9 +64,9 @@ impl Owner {
         }
     }
 
-    /// The address of the page that shows this connection.
-    pub fn address(&self) -> Address {
-        let root = crate::pages::PageId::Network.address();
+    /// The location of the page that shows this connection.
+    pub fn location(&self) -> Location {
+        let root = crate::pages::PageId::Network.location();
         match self {
             Self::Wifi {
                 ssid,
@@ -131,9 +131,9 @@ impl Section {
         }
     }
 
-    /// The address of this page below the connection page at `base`. The
+    /// The location of this page below the connection page at `base`. The
     /// editors sit one level down, below Advanced.
-    pub fn address(&self, base: Address) -> Address {
+    pub fn location(&self, base: Location) -> Location {
         match self {
             Self::Advanced => base.join("advanced"),
             Self::Ipv4 => base.join("advanced").join("ipv4"),
@@ -147,24 +147,6 @@ impl Section {
             Self::Tunnel => base.join("tunnel"),
             Self::Peer(index) => base.join("tunnel").join("peer").join(index.to_string()),
         }
-    }
-
-    /// The page named by the address segments below a connection page.
-    pub fn parse(segments: &[&str]) -> Option<Self> {
-        Some(match segments {
-            ["advanced"] => Self::Advanced,
-            ["advanced", "ipv4"] => Self::Ipv4,
-            ["advanced", "ipv6"] => Self::Ipv6,
-            ["advanced", "dns"] => Self::Dns,
-            ["advanced", "security"] => Self::Security,
-            ["advanced", "identity"] => Self::Identity,
-            ["advanced", "proxy"] => Self::Proxy,
-            ["advanced", "options"] => Self::Options,
-            ["usage"] => Self::Usage,
-            ["tunnel"] => Self::Tunnel,
-            ["tunnel", "peer", index] => Self::Peer(index.parse().ok()?),
-            _ => return None,
-        })
     }
 }
 
@@ -272,17 +254,11 @@ fn open_portal(ctx: NetCtx) {
 }
 
 /// Where the active connection's row leads: the page of that connection.
-fn connection_route(ov: &Overview, device: &Device) -> Route {
+fn connection_target(ov: &Overview, device: &Device) -> Target {
     match device.kind {
-        DeviceKind::Wifi => Route::WifiNetwork {
-            ssid: device.connection.clone(),
-            saved_list: false,
-        },
-        DeviceKind::Modem => Route::Mobile,
-        _ => Route::Ethernet {
-            device: device.name.clone(),
-            name: ethernet::title_of(ov, device),
-        },
+        DeviceKind::Wifi => routes::wifi_network(&device.connection, false),
+        DeviceKind::Modem => routes::mobile(),
+        _ => routes::ethernet(&device.name, &ethernet::title_of(ov, device)),
     }
 }
 
@@ -292,7 +268,7 @@ fn status_group(ctx: NetCtx, ov: &Overview, airplane: bool) -> Element {
     let mut group = Group::new(None::<String>);
     match (ov.primary(), airplane) {
         (Some(device), false) => {
-            let route = connection_route(ov, device);
+            let target = connection_target(ov, device);
             let internet = match ov.connectivity.as_str() {
                 "limited" => "Limited",
                 "portal" => "Sign-in required",
@@ -309,7 +285,7 @@ fn status_group(ctx: NetCtx, ov: &Overview, airplane: bool) -> Element {
                 })
                 .value(internet)
                 .navigates()
-                .on_press(move |_| ctx.navigator.push(route.clone()));
+                .on_press(move |_| ctx.router.open(target.clone()));
             if internet.is_empty() {
                 line = line.leading_tone(crate::ui::Tone::Accent);
             }
@@ -317,7 +293,6 @@ fn status_group(ctx: NetCtx, ov: &Overview, airplane: bool) -> Element {
             if ov.connectivity == "portal" {
                 group = group.row(
                     row("Sign-in required")
-                        .subtitle("Open the network's sign-in page to get internet access.")
                         .navigates()
                         .on_press(move |_| open_portal(ctx)),
                 );
@@ -325,14 +300,11 @@ fn status_group(ctx: NetCtx, ov: &Overview, airplane: bool) -> Element {
         }
         (_, true) => {
             group = group.row(
-                row("Airplane mode is on")
-                    .subtitle("Every radio is off. Turn airplane mode off to connect."),
+                row("Airplane mode is on"),
             );
         }
         _ => {
-            group = group.row(
-                row("Not connected").subtitle("Choose a connection below, or plug in a cable."),
-            );
+            group = group.row(row("Not connected"));
         }
     }
     group = group.row(usage::usage_row(ctx));

@@ -85,6 +85,7 @@ pub struct LineChart {
     series: Vec<Series>,
     y: ValueText,
     x_unit: Unit,
+    x_custom: Option<Formatter>,
     curve: Curve,
     area: bool,
     label: Option<String>,
@@ -139,6 +140,7 @@ pub fn line_chart(series: impl IntoIterator<Item = Series>) -> LineChart {
         series: series.into_iter().collect(),
         y: ValueText::new(Unit::Number),
         x_unit: Unit::Number,
+        x_custom: None,
         curve: Curve::Monotone,
         area: false,
         label: None,
@@ -227,6 +229,14 @@ impl LineChart {
     /// How the x values are written. Use [`Unit::Clock`] for Unix seconds.
     pub fn x_unit(mut self, unit: Unit) -> Self {
         self.x_unit = unit;
+        self
+    }
+
+    /// Writes the x values with `format` instead of a unit, on the axis and
+    /// in tooltips. Use it for an axis that is not linear: plot the logarithm
+    /// of the value and let `format` raise it back, as a frequency response does.
+    pub fn x_format(mut self, format: impl Fn(f64) -> String + 'static) -> Self {
+        self.x_custom = Some(Formatter::new(format));
         self
     }
 
@@ -733,7 +743,7 @@ pub(super) fn focus_outline(
         focus,
         Radius::Card,
         false,
-        None,
+        crate::motion::RingSize::Known(width, height),
     )
     .position(Position::new_absolute().top(0.0).left(0.0))
     .layer(Layer::Relative(TIP_LAYER))
@@ -1246,7 +1256,13 @@ fn line_scene(
         x_domain
             .ticks
             .iter()
-            .map(|&tick| (x.map(tick), format_tick(tick, chart.x_unit, x_domain.step)))
+            .map(|&tick| {
+                let text = match &chart.x_custom {
+                    Some(custom) => custom.apply(tick),
+                    None => format_tick(tick, chart.x_unit, x_domain.step),
+                };
+                (x.map(tick), text)
+            })
             .collect(),
     );
 
@@ -1349,7 +1365,10 @@ fn line_scene(
             anchor: ax,
             reach: ACTIVE_RADIUS,
             top: plot.top,
-            title: format_value(value, chart.x_unit),
+            title: match &chart.x_custom {
+                Some(custom) => custom.apply(value),
+                None => format_value(value, chart.x_unit),
+            },
             rows,
             total: None,
         })

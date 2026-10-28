@@ -4,11 +4,20 @@
 //! muted icon and a normal-weight title; the selected row carries the accent
 //! selection layer, and hover and press are token layers drawn over it.
 //!
-//! Below [`NARROW_BELOW`] the window is a phone: the list of pages is a
-//! screen of its own, a page opens over it with a Back button in the header,
-//! and the window buttons are hidden.
+//! The view draws the window's navigation stack ([`crate::nav`]): the sidebar
+//! lists the root routes of the app's route table, the page is the route of
+//! the current location, the header's Back button, title and history menu come
+//! from the stack, and a page change is animated from the change the router
+//! recorded. Pages never wire Back themselves.
+//!
+//! Below [`NARROW_BELOW`] the window is a phone: the index (the list of pages)
+//! is a screen of its own, a page opens over it with a Back button in the
+//! header, the window buttons are hidden, and an edge swipe from the left goes
+//! back: predictive back, with the previous screen live beneath the current
+//! one (see `design/navigation.md`, section 4).
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -16,10 +25,15 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use crate::component::{ComponentName, Prop, Published};
-use crate::controls::{action_button, icon_button, search_field};
+use crate::controls::{action_button, search_field};
+use crate::controls::press::{is_touch, use_press};
 use crate::focus::{RegionKind, claim_press, use_focus_core, use_region};
 use crate::icons::{self, Icon};
 use crate::motion::{Focusable, crossfade};
+use crate::nav::gesture::{BackGesture, Pose, Release, Update};
+use crate::nav::router::EntryContext;
+use crate::nav::{Change, Entry, Location, NavModel, RouteKind, RouteTable, Transition, use_router};
+use crate::shell::back_button::BackButton;
 use crate::shell::sections::{self, SearchHit};
 use crate::shell::window::{HeaderBar, WindowControls};
 use crate::style::*;
@@ -27,36 +41,15 @@ use crate::surface::{is_activation_key, use_tokens};
 use crate::theme::{NARROW_BELOW, Tokens};
 use crate::typography::{BODY, CAPTION, EMPHASIS, Ink, PAGE_TITLE};
 
-/// One sidebar destination.
-pub trait NavItem: Copy + PartialEq + 'static {
-    fn title(self) -> &'static str;
-    fn icon(self) -> Icon;
-    /// The sidebar section this item is listed under.
-    fn group(self) -> &'static str {
-        ""
-    }
-    /// Extra words the search field matches, space separated.
-    fn keywords(self) -> &'static str {
-        ""
-    }
-}
-
-/// The split view. `content` renders the selected item's page.
+/// The split view. It reads the window's router: the sidebar lists the roots
+/// of its route table and the content is the page of the current location.
 #[derive(PartialEq)]
-pub struct NavigationSplitView<T: NavItem> {
+pub struct NavigationSplitView {
     pub app_title: String,
-    pub items: Vec<T>,
-    pub selected: T,
-    /// Called with the page a sidebar row or the profile chooses.
-    pub on_select: EventHandler<T>,
-    pub content: Element,
     pub page_width: Dim,
-    /// Set while a subpage is open: its title and what Back does.
-    pub subpage: Option<Subpage>,
-    /// Narrow windows: whether the list of pages is the screen, and the request
-    /// to show or hide it. Without it the split view keeps that state itself.
-    pub list: Option<(bool, EventHandler<bool>)>,
-    pub profile: Option<Profile<T>>,
+    /// An element in the header bar, before the window buttons.
+    pub header_trailing: Option<Element>,
+    pub profile: Option<Profile>,
     /// While the search has text, `results` replaces the page content, and
     /// Enter in the search field calls `on_submit`. See
     /// [`NavigationSplitView::search`].
@@ -64,11 +57,11 @@ pub struct NavigationSplitView<T: NavItem> {
 }
 
 /// The signed-in person at the top of the sidebar: an avatar and the name,
-/// laid out like a sidebar item. Pressing it opens `target`.
+/// laid out like a sidebar item. Pressing it switches to the root at `target`.
 #[derive(Clone, PartialEq)]
-pub struct Profile<T> {
+pub struct Profile {
     pub name: String,
-    pub target: T,
+    pub target: Location,
 }
 
 #[derive(Clone, PartialEq)]
@@ -98,6 +91,7 @@ impl Component for SidebarRow {
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
+        let press = use_press();
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
         let selected = self.selected;
@@ -134,14 +128,40 @@ impl Component for SidebarRow {
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Tab)
             .a11y_builder(move |builder| builder.set_selected(selected))
-            .on_pointer_enter(move |_| hovering.set(true))
+            // A finger that lands on a row is not hovering it: the highlight
+            // is the pressed state only, so it cannot stay behind.
+            .on_pointer_enter(move |event: Event<PointerEventData>| {
+                if !is_touch(&event) {
+                    hovering.set(true);
+                }
+            })
             .on_pointer_leave(move |_| {
                 hovering.set(false);
                 pressing.set_if_modified(false);
             })
-            .on_pointer_down(move |_: Event<PointerEventData>| pressing.set(true))
-            .on_global_pointer_up(move |_| pressing.set_if_modified(false))
-            .on_press(move |_: Event<PressEventData>| {
+            // Press feedback on touch-down. It clears when the finger lifts,
+            // leaves the row, is cancelled, or strays far enough to be
+            // scrolling the list: that touch is not a tap.
+            .on_pointer_down(move |event: Event<PointerEventData>| {
+                press.begin(&event, None);
+                pressing.set(true);
+            })
+            .on_global_pointer_move(move |event: Event<PointerEventData>| {
+                press.moved(&event);
+                if is_touch(&event) && !press.pending() {
+                    pressing.set_if_modified(false);
+                }
+            })
+            .on_global_pointer_up(move |_| {
+                press.release();
+                pressing.set_if_modified(false);
+            })
+            .on_press(move |event: Event<PressEventData>| {
+                // A touch that scrolled the list and lifted over this row
+                // does not choose it.
+                if !press.tap(&event) {
+                    return;
+                }
                 claim_press(&core);
                 on_press.call(());
                 core.focus_region(RegionKind::Content, false);
@@ -167,32 +187,21 @@ impl Component for SidebarRow {
 }
 
 #[derive(PartialEq)]
-struct ProfileCard<T: NavItem> {
-    profile: Profile<T>,
-    selected: T,
-    on_select: EventHandler<T>,
-    on_show_list: EventHandler<bool>,
-    full_page: bool,
+struct ProfileCard {
+    profile: Profile,
+    selected: bool,
 }
 
-impl<T: NavItem> Component for ProfileCard<T> {
+impl Component for ProfileCard {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let target = self.profile.target;
-        let on_select = self.on_select.clone();
-        let on_show_list = self.on_show_list.clone();
-        let full_page = self.full_page;
+        let router = use_router();
+        let target = self.profile.target.clone();
         let row = SidebarRow {
             mark: SidebarMark::Avatar(crate::controls::avatar::current_user()),
             label: self.profile.name.clone(),
-            selected: self.selected == target,
-            on_press: (move |_: ()| {
-                on_select.call(target);
-                if full_page {
-                    on_show_list.call(false);
-                }
-            })
-            .into(),
+            selected: self.selected,
+            on_press: (move |_: ()| router.switch_root(&target)).into(),
             on_key: None,
         };
         rect()
@@ -200,14 +209,6 @@ impl<T: NavItem> Component for ProfileCard<T> {
             .tw(&tokens, &[w_full(), px(S2), pt(S1), pb(S2)])
             .child(Element::from(row))
     }
-}
-
-/// An open subpage. The header shows a Back button and the title in place of
-/// the empty header; Alt+Left and the mouse Back button go back too.
-#[derive(PartialEq)]
-pub struct Subpage {
-    pub title: String,
-    pub on_back: EventHandler<()>,
 }
 
 /// The ids of the pages that are busy. The split view provides it, and a page
@@ -330,12 +331,13 @@ struct CurrentPage {
     title: String,
 }
 
-/// The page as the split view draws it: its name, its scroll, and whether a
-/// phone draws it, provided to the page content. The split view keeps the
-/// frame of a page that is sliding out, so that page keeps its own name while
-/// it moves.
+/// The page as the split view draws it: its entry, its name, its scroll, and
+/// whether a phone draws it, provided to the page content. The split view
+/// keeps the frame of a page that is sliding out, so that page keeps its own
+/// name and entry while it moves.
 #[derive(Clone, PartialEq)]
 struct PageFrame {
+    entry: u64,
     title: String,
     content: Element,
     scroll: ScrollController,
@@ -344,6 +346,7 @@ struct PageFrame {
 
 impl Component for PageFrame {
     fn render(&self) -> impl IntoElement {
+        provide_context(EntryContext { id: self.entry });
         provide_context(CurrentPage {
             title: self.title.clone(),
         });
@@ -355,48 +358,36 @@ impl Component for PageFrame {
     }
 }
 
-/// The page's scroll and size class, provided by the frame. A compact
-/// [`PageHead`] reads the scroll to shrink and fade its large title.
-#[derive(Clone, Copy, PartialEq)]
-struct PageScroll {
-    scroll: ScrollController,
-    compact: bool,
-}
-
-/// Where a page sits: its index in the sidebar, the title of its open subpage,
-/// and whether the narrow list of pages is the screen.
-type PageKey = (usize, Option<String>, bool);
-
-/// The kind of move between two pages.
-#[derive(Clone, Copy, PartialEq)]
-enum PageMotion {
+/// The kind of move the view draws.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Motion {
     Push,
     Pop,
     Fade,
+    /// A compact pop: the current screen shrinks and slides away while the
+    /// previous one grows beneath it ([`Pose`]).
+    Predictive,
 }
 
-impl PageMotion {
+impl Motion {
     fn ms(self) -> u64 {
         match self {
-            PageMotion::Fade => 120,
-            PageMotion::Push | PageMotion::Pop => 320,
+            Motion::Fade => 120,
+            Motion::Push | Motion::Pop => 320,
+            Motion::Predictive => 280,
         }
     }
 }
 
-/// The move from `previous` to `next`, or none when the page did not change.
-fn page_motion(previous: &PageKey, next: &PageKey) -> Option<PageMotion> {
-    // Showing or hiding the list of pages is not a page move: the list replaces
-    // the page at once, and only a different page slides.
-    if previous.2 != next.2 {
-        return (previous.0 != next.0).then_some(PageMotion::Fade);
-    }
-    match (previous.1.is_some(), next.1.is_some()) {
-        (false, true) => Some(PageMotion::Push),
-        (true, false) => Some(PageMotion::Pop),
-        _ if previous.0 != next.0 => Some(PageMotion::Fade),
-        _ if previous.1 != next.1 => Some(PageMotion::Push),
-        _ => None,
+/// The motion for a transition the router recorded. A pop on a compact window
+/// is the predictive-back animation; elsewhere it is the page sliding out.
+fn motion_for(transition: Transition, compact: bool) -> Option<Motion> {
+    match transition {
+        Transition::None => None,
+        Transition::Push => Some(Motion::Push),
+        Transition::Fade => Some(Motion::Fade),
+        Transition::Pop if compact => Some(Motion::Predictive),
+        Transition::Pop => Some(Motion::Pop),
     }
 }
 
@@ -406,6 +397,11 @@ fn page_motion(previous: &PageKey, next: &PageKey) -> Option<PageMotion> {
 /// covers as it moves; its own header strip sits above the sheet's rows.
 const SLIDE_SHEET_LAYER: i16 = 1600;
 const SLIDE_HEADER_LAYER: i16 = 500;
+/// The layer of the veil over the screen beneath a predictive-back drag: above
+/// that screen's rows, below the screen that moves.
+const BACK_VEIL_LAYER: i16 = 1000;
+/// The layer of the shield that takes the touch while a back drag runs.
+const BACK_SHIELD_LAYER: i16 = 3000;
 /// The layer of the window buttons lifted over a moving sheet, above the
 /// sheet's own header strip.
 const SLIDE_CONTROLS_LAYER: i16 = 2600;
@@ -415,9 +411,15 @@ const SLIDE_CONTROLS_LAYER: i16 = 2600;
 /// frame drawn, so a move that starts mid-slide continues from there.
 #[derive(Clone)]
 struct Slide {
-    motion: PageMotion,
+    motion: Motion,
+    /// The drag progress a predictive pop continues from: 0 for a pop that
+    /// was not a swipe.
+    d0: f32,
     outgoing: Element,
     outgoing_header: Option<Element>,
+    /// A compact window moves whole screens: the one that went away, with its
+    /// header.
+    outgoing_screen: Option<Element>,
     start_x: f32,
     /// The outgoing page's own scroll, so it holds still as it slides.
     scroll: ScrollController,
@@ -427,23 +429,25 @@ impl Slide {
     /// A slide from what is on screen: `shown` is the last frame's slide, when
     /// one was running, so a move that interrupts it continues from there.
     fn start(
-        motion: PageMotion,
+        motion: Motion,
         outgoing: Element,
         outgoing_header: Option<Element>,
-        shown: Option<(PageMotion, f32)>,
+        shown: Option<(Motion, f32)>,
         scroll: ScrollController,
     ) -> Self {
         let start_x = match (motion, shown) {
-            (PageMotion::Push, Some((PageMotion::Pop, x))) => x,
-            (PageMotion::Push, _) => 1.0,
-            (PageMotion::Pop, Some((PageMotion::Push, x))) => x,
-            (PageMotion::Pop, _) => 0.0,
-            (PageMotion::Fade, _) => 0.0,
+            (Motion::Push, Some((Motion::Pop, x))) => x,
+            (Motion::Push, _) => 1.0,
+            (Motion::Pop, Some((Motion::Push, x))) => x,
+            (Motion::Pop, _) => 0.0,
+            (Motion::Fade | Motion::Predictive, _) => 0.0,
         };
         Self {
             motion,
+            d0: 0.0,
             outgoing,
             outgoing_header,
+            outgoing_screen: None,
             start_x,
             scroll,
         }
@@ -452,9 +456,9 @@ impl Slide {
     /// The moving page's offset, as a fraction of the width, at `progress`.
     fn at(&self, progress: f32) -> f32 {
         match self.motion {
-            PageMotion::Push => self.start_x * (1.0 - progress),
-            PageMotion::Pop => self.start_x + (1.0 - self.start_x) * progress,
-            PageMotion::Fade => 0.0,
+            Motion::Push => self.start_x * (1.0 - progress),
+            Motion::Pop => self.start_x + (1.0 - self.start_x) * progress,
+            Motion::Fade | Motion::Predictive => 0.0,
         }
     }
 }
@@ -462,13 +466,22 @@ impl Slide {
 /// How far a moving page is in its card look at `progress`. A push is a card
 /// while it slides in and flat over its last 15 %; a pop is flat, then a card
 /// over its first 15 %.
-fn card_amount(motion: PageMotion, progress: f32) -> f32 {
+fn card_amount(motion: Motion, progress: f32) -> f32 {
     const EDGE: f32 = 0.15;
     match motion {
-        PageMotion::Push => ((1.0 - progress) / EDGE).clamp(0.0, 1.0),
-        PageMotion::Pop => (progress / EDGE).clamp(0.0, 1.0),
-        PageMotion::Fade => 0.0,
+        Motion::Push => ((1.0 - progress) / EDGE).clamp(0.0, 1.0),
+        Motion::Pop => (progress / EDGE).clamp(0.0, 1.0),
+        Motion::Fade | Motion::Predictive => 0.0,
     }
+}
+
+
+/// The page's scroll and size class, provided by the frame. A compact
+/// [`PageHead`] reads the scroll to shrink and fade its large title.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) struct PageScroll {
+    pub(crate) scroll: ScrollController,
+    pub(crate) compact: bool,
 }
 
 /// Makes a moving sheet a card: rounded on its leading edge and casting a
@@ -538,11 +551,12 @@ fn lifted_controls(tokens: &Tokens) -> Rect {
 /// The header strip a sheet carries while it moves on a desktop window: its
 /// Back button. The window buttons are not on it; they are lifted above the
 /// sheet instead (see `lifted_controls`).
-fn sheet_header(page: PageKey, back: Option<EventHandler<()>>) -> Element {
+fn sheet_header(back: bool) -> Element {
     let header = HeaderBar::new(String::new()).fill(Paint::Bg);
-    let header = match back {
-        Some(on_back) => header.leading(PageBack { page, on_back }),
-        None => header,
+    let header = if back {
+        header.leading(BackButton)
+    } else {
+        header
     };
     Element::from(
         rect()
@@ -555,74 +569,180 @@ fn sheet_header(page: PageKey, back: Option<EventHandler<()>>) -> Element {
 
 /// What the split view remembers between renders to run page motion.
 #[derive(Default)]
-struct PageMemory {
-    key: Option<PageKey>,
+struct ViewMemory {
+    /// The router's journal sequence this view has drawn.
+    seen: u64,
+    /// The page last drawn (desktop), kept so it can slide away.
     element: Option<Element>,
+    /// The header strip the page on screen carries, when it is a sheet.
+    element_header: Option<Element>,
+    /// The whole screen last drawn on a compact window: header and page.
+    screen: Option<Element>,
     pending: bool,
     duration: u64,
     /// The animation run count when the queued slide was set up.
     start_runs: Option<usize>,
     active: Option<Slide>,
     /// The moving page's offset in the last frame drawn, when that frame was a slide.
-    shown: Option<(PageMotion, f32)>,
-    /// The header strip the page on screen carries, when it is a sheet.
-    element_header: Option<Element>,
-    /// The subpages opened in a row from the page, oldest first.
-    trail: Vec<PageKey>,
-    /// Each page's scroll, kept while the page can still be returned to.
-    controllers: std::collections::HashMap<PageKey, ScrollController>,
+    shown: Option<(Motion, f32)>,
+    /// Each page's scroll, kept while its entry is on the stack.
+    scrolls: HashMap<u64, ScrollController>,
+    /// The screen under a back swipe, built once when the swipe starts.
+    preview: Option<(u64, Element)>,
+    /// How far a back swipe had gone when it committed, for the pop's slide.
+    commit_from: Option<f32>,
 }
 
-impl PageMemory {
-    /// The scroll of `key`, made at the top when the page has none.
-    fn scroll_for(&mut self, key: &PageKey) -> ScrollController {
+impl ViewMemory {
+    /// The scroll of entry `id`, made at the top when the page has none.
+    fn scroll_for(&mut self, id: u64) -> ScrollController {
         *self
-            .controllers
-            .entry(key.clone())
+            .scrolls
+            .entry(id)
             .or_insert_with(|| ScrollController::new(0, 0))
     }
 
-    /// Moves to `page_key`. When the page changed, returns the page it
-    /// replaced, the motion between them and the replaced page's scroll.
-    fn enter(
-        &mut self,
-        page_key: &PageKey,
-    ) -> Option<(PageKey, Option<PageMotion>, ScrollController)> {
-        let previous = self.key.clone().filter(|previous| previous != page_key)?;
-        // A subpage key is only its title, so a move from one subpage to
-        // another reads as a push. The trail of subpages opened from the
-        // page tells a step back (to one already on the trail) from a
-        // step in.
-        let mut kind = page_motion(&previous, page_key);
-        if page_key.1.is_none() || previous.0 != page_key.0 || previous.2 != page_key.2 {
-            self.trail.clear();
+    /// The change the router recorded since the last render, if any. Scroll
+    /// controllers of entries that left every stack are dropped, except the
+    /// page that is leaving, which holds still while it slides.
+    fn enter(&mut self, journal: &crate::nav::router::Journal, model: &NavModel) -> Option<Change> {
+        if journal.seq == self.seen {
+            return None;
         }
-        if page_key.1.is_some() {
-            if let Some(at) = self.trail.iter().position(|key| key == page_key) {
-                self.trail.truncate(at + 1);
-                kind = Some(PageMotion::Pop);
-            } else {
-                if self.trail.is_empty() && previous.1.is_some() {
-                    self.trail.push(previous.clone());
-                }
-                self.trail.push(page_key.clone());
-            }
+        self.seen = journal.seq;
+        let change = journal.change.clone()?;
+        let alive: Vec<u64> = model
+            .back_entries()
+            .iter()
+            .chain(model.forward_entries())
+            .map(|entry| entry.id)
+            .chain([model.current().id, change.from.id])
+            .collect();
+        self.scrolls.retain(|id, _| alive.contains(id));
+        if let Some((id, _)) = &self.preview
+            && !alive.contains(id)
+        {
+            self.preview = None;
         }
-        let outgoing = self.scroll_for(&previous);
-        // Only a step back finds the page as it was left. Any other move
-        // starts the page at the top.
-        if kind != Some(PageMotion::Pop) {
-            self.controllers.remove(page_key);
-        }
-        // Keep the pages Back can reach: the page and its subpages. The page
-        // just left stays while its slide runs.
-        self.controllers
-            .retain(|key, _| (key.0 == page_key.0 && key.2 == page_key.2) || *key == previous);
-        Some((previous, kind, outgoing))
+        Some(change)
     }
 }
 
+/// The sidebar's destinations: the root routes of the table.
+#[derive(Clone, PartialEq)]
+struct RootItem {
+    route: usize,
+    title: String,
+    icon: Icon,
+    group: &'static str,
+    keywords: &'static str,
+    location: Location,
+}
+
+fn root_items(table: &RouteTable) -> Vec<RootItem> {
+    table
+        .sidebar()
+        .filter_map(|(route, def)| {
+            Some(RootItem {
+                route,
+                title: table.title_of(&table.pattern_location(route)?),
+                icon: def.icon.unwrap_or(Icon::Folder),
+                group: def.group,
+                keywords: def.keywords,
+                location: table.pattern_location(route)?,
+            })
+        })
+        .collect()
+}
+
+/// A compact screen: its header over its content.
+fn compact_screen(tokens: &Tokens, header: Element, content: Element) -> Element {
+    rect()
+        .width(Size::fill())
+        .height(Size::fill())
+        .tw(tokens, &[flex_col(), bg(Paint::Bg)])
+        .child(header)
+        .child(content)
+        .into()
+}
+
+/// A screen that predictive back is lifting: scaled, shifted toward the
+/// finger, rounded and shadowed, over the screen beneath it.
+fn lifted_screen(tokens: &Tokens, screen: Element, pose: &Pose, width: f32) -> Rect {
+    let sheet = rect()
+        .width(Size::fill())
+        .height(Size::fill())
+        .layer(Layer::Relative(SLIDE_SHEET_LAYER))
+        .tw(
+            tokens,
+            &[
+                bg(Paint::Bg),
+                rounded_scaled(Radius::Window, pose.current_round),
+                lift_shadow(pose.current_shadow),
+            ],
+        )
+        .child(
+            rect()
+                .width(Size::fill())
+                .height(Size::fill())
+                .tw(
+                    tokens,
+                    &[clip(), rounded_scaled(Radius::Window, pose.current_round)],
+                )
+                .child(screen),
+        );
+    rect()
+        .position(Position::new_absolute().top(0.0).left(0.0))
+        .width(Size::fill())
+        .height(Size::fill())
+        .offset_x(pose.current_dx * width)
+        .scale(pose.current_scale)
+        .opacity(pose.current_opacity)
+        .child(sheet)
+}
+
+/// The screen beneath a back gesture: grown from behind as the other leaves.
+fn receding_screen(screen: Element, pose: &Pose) -> Rect {
+    rect()
+        .position(Position::new_absolute().top(0.0).left(0.0))
+        .width(Size::fill())
+        .height(Size::fill())
+        .scale(pose.previous_scale)
+        .child(screen)
+}
+
+/// The black veil over the beneath screen, fading as it is revealed: the
+/// opaque backdrop fill at the veil's strength.
+fn back_veil(tokens: &Tokens, pose: &Pose) -> Rect {
+    rect()
+        .position(Position::new_absolute().top(0.0).left(0.0))
+        .width(Size::fill())
+        .height(Size::fill())
+        .layer(Layer::Relative(BACK_VEIL_LAYER))
+        .tw(tokens, &[bg(Paint::Backdrop)])
+        .opacity(BACK_VEIL_OPACITY * pose.previous_dim)
+}
+
+/// How dark the veil over the previous screen is at the start of a drag.
+const BACK_VEIL_OPACITY: f32 = 0.12;
+
+/// A clear layer over the window while a back swipe runs: it takes the touch,
+/// so the control under the finger is not pressed when the swipe lifts.
+fn back_shield() -> Rect {
+    rect()
+        .position(Position::new_absolute().top(0.0).left(0.0))
+        .width(Size::fill())
+        .height(Size::fill())
+        .layer(Layer::Relative(BACK_SHIELD_LAYER))
+        .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
+        .on_press(|event: Event<PressEventData>| event.stop_propagation())
+        .on_wheel(|event: Event<WheelEventData>| event.stop_propagation())
+}
+
 /// The page column: centred, at most `page_width` wide, with the page margins.
+/// A compact page ends with the bottom safe area (`Dim::SafeBottom`, nothing
+/// on a desktop window), so its last row clears the window edge and the home
+/// indicator.
 fn page_column(content: Element, side: Space, page_width: Dim, inset: bool) -> impl IntoElement {
     rect()
         .component("Page")
@@ -636,6 +756,7 @@ fn page_column(content: Element, side: Space, page_width: Dim, inset: bool) -> i
                 .max_width(Size::fill())
                 .child(content),
         )
+        .child(rect().tw_layout(&[h(Dim::SafeBottom)]))
 }
 
 /// The title row at the top of a page: the page name large, the page's status
@@ -697,40 +818,15 @@ fn status_line(tokens: &Tokens, status: &str) -> Element {
         .into()
 }
 
-impl<T: NavItem> NavigationSplitView<T> {
-    pub fn new(
-        app_title: impl Into<String>,
-        items: Vec<T>,
-        selected: T,
-        on_select: impl Into<EventHandler<T>>,
-        content: impl Into<Element>,
-    ) -> Self {
+impl NavigationSplitView {
+    pub fn new(app_title: impl Into<String>) -> Self {
         Self {
             app_title: app_title.into(),
-            items,
-            selected,
-            on_select: on_select.into(),
-            content: content.into(),
             page_width: Dim::Page,
-            subpage: None,
-            list: None,
+            header_trailing: None,
             profile: None,
             search: None,
         }
-    }
-
-    /// Show `content` as a subpage called `title`; `on_back` returns to the
-    /// page below it.
-    pub fn subpage(
-        mut self,
-        title: impl Into<String>,
-        on_back: impl Into<EventHandler<()>>,
-    ) -> Self {
-        self.subpage = Some(Subpage {
-            title: title.into(),
-            on_back: on_back.into(),
-        });
-        self
     }
 
     pub fn page_width(mut self, width: Dim) -> Self {
@@ -738,18 +834,17 @@ impl<T: NavItem> NavigationSplitView<T> {
         self
     }
 
-    /// Narrow windows only: whether the list of pages is the screen. `on_show_list`
-    /// is called with `true` when the list is asked for (Back from a page, Ctrl+F)
-    /// and with `false` when a page is chosen. Without this the split view keeps
-    /// the state itself.
-    pub fn list(mut self, shown: bool, on_show_list: impl Into<EventHandler<bool>>) -> Self {
-        self.list = Some((shown, on_show_list.into()));
+    /// An element at the right of the header bar, before the window buttons:
+    /// a tool that belongs to the window rather than to one page (the
+    /// taxonomy's display switcher, a view menu).
+    pub fn header_trailing(mut self, element: impl Into<Element>) -> Self {
+        self.header_trailing = Some(element.into());
         self
     }
 
     /// The signed-in person, shown at the top of the sidebar. Pressing it
-    /// opens `profile.target`.
-    pub fn profile(mut self, profile: Profile<T>) -> Self {
+    /// switches to the root at `profile.target`.
+    pub fn profile(mut self, profile: Profile) -> Self {
         self.profile = Some(profile);
         self
     }
@@ -769,9 +864,11 @@ impl<T: NavItem> NavigationSplitView<T> {
     }
 }
 
-impl<T: NavItem> Component for NavigationSplitView<T> {
+impl Component for NavigationSplitView {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let router = use_router();
+        let table = router.table();
         let fallback_query = use_state(String::new);
         let mut query = self
             .search
@@ -782,57 +879,65 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let busy_pages = use_provide_context(|| BusyPages(State::create(Vec::new())));
         let section_registry = sections::provide();
         let busy = !busy_pages.0.read().is_empty();
-        // On a narrow window this is true while the list of pages is the screen.
+        // On a narrow window the index, the list of pages, is the screen.
         let width = Platform::get().current_window().root_size.read().width;
         let narrow = width < NARROW_BELOW || device_preview();
+        use_side_effect_with_deps(&narrow, move |narrow| router.set_wide(!*narrow));
+        let mut model = router.read();
+        model.set_wide(!narrow);
 
-        let fallback_list = use_state(|| false);
-        let (list_shown, on_show_list) = match &self.list {
-            Some((shown, on_show_list)) => (*shown, on_show_list.clone()),
-            None => {
-                let mut fallback = fallback_list;
-                (
-                    fallback_list(),
-                    EventHandler::new(move |shown: bool| fallback.set(shown)),
-                )
-            }
-        };
         let side = if narrow { S4 } else { S8 };
+        // A narrow window caps the column at the phone width, so cards stop
+        // growing before a label and its value drift apart.
+        let page_width = if narrow && self.page_width == Dim::Page {
+            Dim::PagePhone
+        } else {
+            self.page_width
+        };
         let header_region = use_region(RegionKind::Header);
-        let selected = self.selected;
-        // The page on screen. Its key tells a subpage from the page it was
-        // opened from.
-        let index = self
-            .items
-            .iter()
-            .position(|item| *item == selected)
-            .unwrap_or(0);
-        // On a narrow window the list of pages is the screen.
-        let list_key = narrow && list_shown;
-        let page_key: PageKey = (
-            index,
-            self.subpage.as_ref().map(|s| s.title.clone()),
-            list_key,
-        );
-        // The page being replaced stays on screen in `memory` while a motion
-        // runs. Each page owns its scroll controller, so a page left and
-        // reached again by Back is still where it was, and a page reached any
-        // other way starts at the top.
-        let memory = use_hook(|| Rc::new(RefCell::new(PageMemory::default())));
-        let entered = memory.borrow_mut().enter(&page_key);
-        let scroll = memory.borrow_mut().scroll_for(&page_key);
+        let content_region = use_region(RegionKind::Content);
+
+        // The page on screen: the current entry. On the index a wide window
+        // shows the first root and a narrow one the list.
+        let current = model.current().clone();
+        let at_index = table.kind(&current.location) == RouteKind::Index;
+        let list_key = narrow && at_index;
+        let roots = root_items(&table);
+        let selected_root = model.selected_root();
+        let shown_location = match table.default_root().and_then(|root| table.pattern_location(root)) {
+            Some(first) if at_index && !narrow => first,
+            _ => current.location.clone(),
+        };
+        let title = if at_index && !narrow {
+            table.title_of(&shown_location)
+        } else {
+            model.title(&current)
+        };
+        let can_back = model.can_go_back();
+        let window_title = model.window_title(&self.app_title);
+        use_side_effect_with_deps(&window_title, |title| {
+            let title = title.clone();
+            crate::shell::window::with_window(move |window| window.set_title(&title));
+        });
+
+        // Each page owns its scroll controller, so a page reached by Back is
+        // still where it was, and a page reached any other way starts at the
+        // top. The page being replaced stays in `memory` while a motion runs.
+        let memory = use_hook(|| Rc::new(RefCell::new(ViewMemory::default())));
+        let journal = router.journal();
+        let entered = memory.borrow_mut().enter(&journal, &model);
+        let scroll = memory.borrow_mut().scroll_for(current.id);
+
         // The pages with results, when the split view searches.
         let search_hits = self
             .search
             .as_ref()
             .map(|_| sections::hits(&section_registry.0.read()));
         let sidebar = |full_page: bool, results: Option<Element>| Sidebar {
-            items: self.items.clone(),
-            selected,
+            roots: roots.clone(),
+            selected: selected_root,
             query,
             search_id,
-            on_select: self.on_select.clone(),
-            on_show_list: on_show_list.clone(),
             full_page,
             profile: self.profile.clone(),
             hits: search_hits.clone(),
@@ -845,34 +950,8 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             .map(|(_, results, on_submit)| (results.clone(), on_submit.clone()));
         let searching = results.is_some() && !query.read().trim().is_empty();
         let submit = results.as_ref().map(|(_, on_submit)| on_submit.clone());
-        // On a narrow window the list screen stays while searching: its search
-        // field keeps the focus, and the results fill the screen below it.
-        let show_list = list_key;
-        // The header is the drag region. It carries Back, the spinner while a
-        // page is busy and the window buttons. The page title shows here once
-        // the title in the page scrolls under the header.
-        // On a narrow window a page goes back to the list of pages.
-        let to_list: EventHandler<()> = {
-            let on_show_list = on_show_list.clone();
-            (move |_: ()| on_show_list.call(true)).into()
-        };
-        let clear_search: EventHandler<()> = (move |_: ()| {
-            let mut query = query;
-            query.set(String::new());
-        })
-        .into();
-        let back = match &self.subpage {
-            Some(subpage) => Some(subpage.on_back.clone()),
-            None if searching && !show_list => narrow.then(|| clear_search.clone()),
-            None => (narrow && !show_list).then(|| to_list.clone()),
-        };
         // A desktop header floats over the page and blurs what scrolls under it.
-        let overlay = !narrow && !show_list;
-        let title = match &self.subpage {
-            Some(subpage) => subpage.title.clone(),
-            None if searching => "Search results".to_string(),
-            None => selected.title().to_string(),
-        };
+        let overlay = !narrow;
         // Results replace the page content while the search has text. Results
         // carry their own page head, as a page does.
         let shown: Element = match results {
@@ -881,23 +960,22 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 .child(PageHead::new())
                 .child(results)
                 .into(),
-            _ => self.content.clone(),
+            _ => table.render(&shown_location),
         };
         // The page as the split view draws it, framed with its name. The page
         // head reads that name, and a page sliding out keeps its own frame.
         let body: Element = PageFrame {
-            title: title.clone(),
+            entry: current.id,
+            title: if searching { "Search results".to_string() } else { title.clone() },
             content: shown,
             scroll,
             compact: narrow,
         }
         .into();
-        // Alt+Left and the mouse Back button go back one step.
-        let back_key = back.clone();
-        let request_list = on_show_list.clone();
-        let back_pointer = back_key.clone();
+
         // Page changes move the content. A subpage slides in from the right, a
-        // pop slides it out to the right, and a sidebar switch cross-fades.
+        // pop slides it out to the right (a compact pop is predictive back),
+        // and a sidebar switch cross-fades.
         let mut generation = use_state(|| 0u64);
         let anim_memory = memory.clone();
         let anim = use_animation_transition(generation(), move |_, _| {
@@ -906,45 +984,57 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 .function(Function::Expo)
                 .ease(Ease::Out)
         });
+        let runs = anim.runs();
         let effect_memory = memory.clone();
         // The slide starts after the render that queued it.
-        use_side_effect_with_deps(&page_key, move |_| {
+        use_side_effect_with_deps(&journal.seq, move |_| {
             if effect_memory.borrow().pending {
                 effect_memory.borrow_mut().pending = false;
                 *generation.write() += 1;
             }
         });
+
+        // The back swipe.
+        let gesture = use_hook(|| Rc::new(RefCell::new(BackGesture::default())));
+        let clock = use_hook(std::time::Instant::now);
+        let mut redraw = use_state(|| 0u32);
+        let _ = redraw();
+
         let mut changed = false;
         {
             let mut memory = memory.borrow_mut();
-            if let Some((_, kind, outgoing_scroll)) = entered {
+            if let Some(change) = entered {
                 changed = true;
-                let motion = kind.filter(|motion| tokens.motion(motion.ms()) > 0);
+                let motion = motion_for(change.transition, narrow)
+                    .filter(|motion| tokens.motion(motion.ms()) > 0);
                 let shown = memory.shown.take();
-                let runs = *anim.runs().peek();
+                let outgoing_scroll = memory.scroll_for(change.from.id);
+                let started = *runs.peek();
                 memory.active = match (motion, memory.element.clone()) {
                     (Some(motion), Some(outgoing)) => {
                         memory.duration = tokens.motion(motion.ms());
                         memory.pending = true;
-                        memory.start_runs = Some(runs);
-                        Some(Slide::start(
+                        memory.start_runs = Some(started);
+                        let mut slide = Slide::start(
                             motion,
                             outgoing,
                             memory.element_header.clone(),
                             shown,
                             outgoing_scroll,
-                        ))
+                        );
+                        if motion == Motion::Predictive {
+                            slide.d0 = memory.commit_from.unwrap_or(0.0);
+                        }
+                        slide.outgoing_screen = memory.screen.clone();
+                        Some(slide)
                     }
                     _ => {
                         memory.start_runs = None;
                         None
                     }
                 };
+                memory.commit_from = None;
             }
-            memory.key = Some(page_key.clone());
-            memory.element = Some(body.clone());
-            memory.element_header =
-                overlay.then(|| sheet_header(page_key.clone(), back_key.clone()));
         }
         // The animation restarts after this render, so until its run count
         // moves the last run's value is stale and the slide holds at its start.
@@ -952,7 +1042,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             && memory
                 .borrow()
                 .start_runs
-                .is_some_and(|start| *anim.runs().peek() <= start);
+                .is_some_and(|start| *runs.peek() <= start);
         // Read the value on every render, even when it is not used this frame:
         // the read is what subscribes this component to the animation's ticks.
         // Without it a slide that restarts while waiting never re-renders.
@@ -966,35 +1056,76 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             }
             memory.active.clone()
         };
-        // The moving page is a sheet while it slides. The sheet takes the slide
-        // layer, above the window header, so it covers the header as it moves.
-        // Each frame is recorded so an interrupting move starts from there.
+
+        // The gesture's own clock: a cancel springs back, and a commit has
+        // finished once the pop's slide has.
+        let now = clock.elapsed();
+        {
+            let mut gesture = gesture.borrow_mut();
+            if matches!(gesture.phase(), crate::nav::gesture::Phase::Settling { commit: true, .. })
+                && active.is_none()
+            {
+                gesture.finish();
+            }
+            gesture.tick(now);
+        }
+        let (drag_phase, drag_value) = {
+            let gesture = gesture.borrow();
+            (gesture.phase(), gesture.value(now))
+        };
+        let swiping = narrow
+            && active.is_none()
+            && model.has_previous()
+            && model.modals().is_empty()
+            && matches!(
+                drag_phase,
+                crate::nav::gesture::Phase::Dragging
+                    | crate::nav::gesture::Phase::Settling { commit: false, .. }
+            );
+        let reduced = tokens.motion(Motion::Predictive.ms()) == 0;
+        crate::task::set_sliding(active.is_some() || swiping);
+
+        // ---- the desktop page ------------------------------------------------
+        let page_scroll = |scroll: ScrollController, content: Element, origin: bool, inset: bool| {
+            ScrollView::new_controlled(scroll)
+                .scrollbar_inset_top(if inset { Dim::Header.px() } else { 0.0 })
+                .scrollbar_inset_bottom(Radius::Window.px() + 3.0)
+                .drag_scrolling(false)
+                .child(
+                    rect()
+                        .width(Size::fill())
+                        .maybe(origin, |wrapper| {
+                            wrapper.on_sized(sections::origin_handler(section_registry))
+                        })
+                        .child(page_column(content, side, page_width, inset)),
+                )
+        };
+
         let (page_offset, page_opacity, page_sheet, page_header, outgoing) = match active.clone() {
-            None => (0.0, 1.0, None, None, None),
-            Some(slide) => {
+            Some(slide) if !narrow => {
                 let x = slide.at(progress);
                 let moved = x * width;
                 // The sheet is rounded and shadowed while it moves, and flat at rest.
                 let card = card_amount(slide.motion, progress);
                 match slide.motion {
-                    PageMotion::Fade => (
+                    Motion::Fade | Motion::Predictive => (
                         0.0,
                         progress,
                         None,
                         None,
                         Some((0.0, 1.0 - progress, slide.outgoing, None, None, slide.scroll)),
                     ),
-                    PageMotion::Push => {
+                    Motion::Push => {
                         memory.borrow_mut().shown = Some((slide.motion, x));
                         (
                             moved,
                             1.0,
                             Some(card),
-                            overlay.then(|| sheet_header(page_key.clone(), back_key.clone())),
+                            overlay.then(|| sheet_header(can_back)),
                             Some((0.0, 1.0, slide.outgoing, None, None, slide.scroll)),
                         )
                     }
-                    PageMotion::Pop => {
+                    Motion::Pop => {
                         memory.borrow_mut().shown = Some((slide.motion, x));
                         (
                             0.0,
@@ -1013,86 +1144,46 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                     }
                 }
             }
+            _ => (0.0, 1.0, None, None, None),
         };
-        let page = rect()
+        let wide_page = rect()
             .position(Position::new_absolute().top(0.0).left(0.0))
             .width(Size::fill())
             .height(Size::fill())
-            .child(
-                // Bingux patch: keep the bar clear of the floating header and of
-                // the rounded window corner.
-                ScrollView::new_controlled(scroll)
-                    .scrollbar_inset_top(if overlay { Dim::Header.px() } else { 0.0 })
-                    .scrollbar_inset_bottom(Radius::Window.px() + 3.0)
-                    .drag_scrolling(false)
-                    .child(
-                        rect()
-                            .width(Size::fill())
-                            .on_sized(sections::origin_handler(section_registry))
-                            .child(page_column(body, side, self.page_width, overlay)),
-                    ),
-            )
+            .child(page_scroll(scroll, body.clone(), true, overlay))
             .maybe_child(page_header);
-        let page = slide_frame(page_offset, page_opacity, page_sheet, &tokens, page);
-        let outgoing = outgoing.map(|(offset, opacity, element, sheet, header, scroll)| {
+        let wide_page = slide_frame(page_offset, page_opacity, page_sheet, &tokens, wide_page);
+        let wide_outgoing = outgoing.map(|(offset, opacity, element, sheet, header, scroll)| {
             let outgoing_page = rect()
                 .position(Position::new_absolute().top(0.0).left(0.0))
                 .width(Size::fill())
                 .height(Size::fill())
-                .child(
-                    ScrollView::new_controlled(scroll)
-                        .scrollbar_inset_top(if overlay { Dim::Header.px() } else { 0.0 })
-                        .scrollbar_inset_bottom(Radius::Window.px() + 3.0)
-                        .drag_scrolling(false)
-                        .child(rect().width(Size::fill()).child(page_column(
-                            element,
-                            side,
-                            self.page_width,
-                            overlay,
-                        ))),
-                )
+                .child(page_scroll(scroll, element, false, overlay))
                 .maybe_child(header);
             slide_frame(offset, opacity, sheet, &tokens, outgoing_page)
         });
         let edge_top = if overlay { Dim::Header.px() } else { 0.0 };
-        let content_region = use_region(RegionKind::Content);
-        let content = rect()
+        let wide_content = rect()
             .width(Size::fill())
             .height(Size::flex(1.0))
             .on_press({
                 let press = content_region.clone();
                 move |event: Event<PressEventData>| press.press(&event)
-            });
-        let content = content
+            })
             .child(content_region.sentinel())
-            .child(page)
-            .maybe_child(outgoing);
-        let content_area = content.child(ScrollEdge {
-            scroll,
-            top: edge_top,
-        });
+            .child(wide_page)
+            .maybe_child(wide_outgoing)
+            .child(ScrollEdge {
+                scroll,
+                top: edge_top,
+            });
+
         // A page that slides in over a desktop header brings its own Back on the
         // sheet. The header's Back waits until the slide settles, so one chevron
         // shows at a time and it does not appear before the page arrives.
         let pushing = overlay
-            && matches!(active.as_ref(), Some(slide) if matches!(slide.motion, PageMotion::Push));
-        let back = back.filter(|_| !pushing);
-        let header = if show_list {
-            HeaderBar::new(self.app_title.clone()).fill(Paint::Bg)
-        } else {
-            let header = HeaderBar::new(String::new()).busy(busy).fill(if overlay {
-                Paint::Frosted
-            } else {
-                Paint::Bg
-            });
-            match &back {
-                Some(on_back) => header.leading(PageBack {
-                    page: page_key.clone(),
-                    on_back: on_back.clone(),
-                }),
-                None => header,
-            }
-        };
+            && matches!(active.as_ref(), Some(slide) if matches!(slide.motion, Motion::Push));
+        let show_back = can_back && !pushing;
         // A phone has no window buttons. A desktop window dragged narrow keeps
         // them, so a mouse user can still close it: the buttons go only while
         // a finger drives a narrow window.
@@ -1101,21 +1192,230 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         // above it, so the header keeps none and the buttons stay put.
         let lifted = overlay
             && show_controls
-            && matches!(active.as_ref(), Some(slide) if !matches!(slide.motion, PageMotion::Fade));
+            && matches!(active.as_ref(), Some(slide) if !matches!(slide.motion, Motion::Fade));
+
+        // ---- the compact screens ----------------------------------------------
+        let trailing = self.header_trailing.clone();
+        let page_header_bar = |back: bool, busy: bool, title_slot: Option<Element>, controls: bool| {
+            let header = HeaderBar::new(String::new()).busy(busy).fill(Paint::Bg);
+            let header = if back { header.leading(BackButton) } else { header };
+            let header = match &trailing {
+                Some(trailing) => header.trailing(trailing.clone()),
+                None => header,
+            };
+            let header = if controls { header.trailing(WindowControls) } else { header };
+            match title_slot {
+                Some(slot) => header.title_slot(slot),
+                None => header,
+            }
+        };
+        // One page's area under its header: the page and the hairline.
+        let compact_area = |scroll: ScrollController, content: Element, current: bool| -> Element {
+            let area = rect()
+                .width(Size::fill())
+                .height(Size::flex(1.0))
+                .maybe(current, |area| {
+                    area.on_press({
+                        let press = content_region.clone();
+                        move |event: Event<PressEventData>| press.press(&event)
+                    })
+                    .child(content_region.sentinel())
+                })
+                .child(
+                    rect()
+                        .position(Position::new_absolute().top(0.0).left(0.0))
+                        .width(Size::fill())
+                        .height(Size::fill())
+                        .child(page_scroll(scroll, content, current, false)),
+                )
+                .child(ScrollEdge { scroll, top: 0.0 });
+            area.into()
+        };
+        // The screen of an entry other than the current one: what predictive
+        // back reveals beneath the swipe.
+        let preview_of = |entry: &Entry, back_below: bool| -> Element {
+            if table.kind(&entry.location) == RouteKind::Index {
+                let header = HeaderBar::new(self.app_title.clone()).fill(Paint::Bg);
+                return compact_screen(&tokens, header.into(), sidebar(true, None).into());
+            }
+            let entry_scroll = memory.borrow_mut().scroll_for(entry.id);
+            let entry_title = model.title(entry);
+            let content: Element = PageFrame {
+                entry: entry.id,
+                title: entry_title.clone(),
+                content: table.render(&entry.location),
+                scroll: entry_scroll,
+                compact: true,
+            }
+            .into();
+            let header = page_header_bar(
+                back_below,
+                false,
+                Some(
+                    ScrolledTitle {
+                        scroll: entry_scroll,
+                        title: entry_title,
+                    }
+                    .into(),
+                ),
+                false,
+            );
+            compact_screen(&tokens, header.into(), compact_area(entry_scroll, content, false))
+        };
+
+        let current_screen: Option<Element> = narrow.then(|| {
+            if list_key {
+                let header = HeaderBar::new(self.app_title.clone()).fill(Paint::Bg);
+                let header = match &trailing {
+                    Some(trailing) => header.trailing(trailing.clone()),
+                    None => header,
+                };
+                let header = if show_controls { header.trailing(WindowControls) } else { header };
+                let list: Element = if searching {
+                    sidebar(true, Some(compact_area(scroll, body.clone(), true))).into()
+                } else {
+                    sidebar(true, None).into()
+                };
+                compact_screen(&tokens, header.into(), list)
+            } else {
+                let header = page_header_bar(
+                    show_back,
+                    busy,
+                    Some(
+                        ScrolledTitle {
+                            scroll,
+                            title: if searching { "Search results".to_string() } else { title.clone() },
+                        }
+                        .into(),
+                    ),
+                    show_controls,
+                );
+                compact_screen(&tokens, header.into(), compact_area(scroll, body.clone(), true))
+            }
+        });
+
+        // The stage: what the compact window draws under the window edge.
+        let stage: Option<Element> = current_screen.clone().map(|screen| {
+            let at_rest = |screen: Element| -> Rect { slide_frame(0.0, 1.0, None, &tokens, rect().width(Size::fill()).height(Size::fill()).child(screen)) };
+            let stage = rect()
+                .width(Size::fill())
+                .height(Size::flex(1.0))
+                .tw(&tokens, &[clip(), bg(Paint::Bg)]);
+            let width = width.max(1.0);
+            let pose_of = |d: f32, k: f32| {
+                if reduced { Pose::cross_fade(d, k) } else if k > 0.0 { Pose::committing(d, k) } else { Pose::at(d, 0.0) }
+            };
+            let built: Rect = match &active {
+                Some(slide) if slide.motion == Motion::Predictive => {
+                    let pose = pose_of(slide.d0, progress);
+                    let outgoing = slide
+                        .outgoing_screen
+                        .clone()
+                        .unwrap_or_else(|| rect().into());
+                    stage
+                        .child(back_veil(&tokens, &pose))
+                        .child(receding_screen(screen, &pose))
+                        .child(lifted_screen(&tokens, outgoing, &pose, width))
+                }
+                Some(slide) if slide.motion == Motion::Push => {
+                    let moved = slide.at(progress) * width;
+                    let card = card_amount(slide.motion, progress);
+                    memory.borrow_mut().shown = Some((slide.motion, slide.at(progress)));
+                    let outgoing = slide.outgoing_screen.clone().unwrap_or_else(|| rect().into());
+                    stage.child(at_rest(outgoing)).child(slide_frame(
+                        moved,
+                        1.0,
+                        Some(card),
+                        &tokens,
+                        rect().width(Size::fill()).height(Size::fill()).child(screen),
+                    ))
+                }
+                Some(slide) => {
+                    let outgoing = slide.outgoing_screen.clone().unwrap_or_else(|| rect().into());
+                    stage
+                        .child(slide_frame(0.0, 1.0 - progress, None, &tokens, rect().width(Size::fill()).height(Size::fill()).child(outgoing)))
+                        .child(slide_frame(0.0, progress, None, &tokens, rect().width(Size::fill()).height(Size::fill()).child(screen)))
+                }
+                None if swiping => {
+                    let previous = model.previous().cloned();
+                    let back_below = model.visible_back().len() >= 2;
+                    match previous {
+                        Some(previous) => {
+                            let cached = memory
+                                .borrow()
+                                .preview
+                                .as_ref()
+                                .filter(|(id, _)| *id == previous.id)
+                                .map(|(_, element)| element.clone());
+                            let preview = cached.unwrap_or_else(|| {
+                                let element = preview_of(&previous, back_below);
+                                memory.borrow_mut().preview = Some((previous.id, element.clone()));
+                                element
+                            });
+                            let pose = if reduced { Pose::cross_fade(drag_value, 0.0) } else { Pose::at(drag_value, 0.0) };
+                            stage
+                                .child(back_veil(&tokens, &pose))
+                                .child(receding_screen(preview, &pose))
+                                .child(lifted_screen(&tokens, screen, &pose, width))
+                                .child(back_shield())
+                        }
+                        None => stage.child(at_rest(screen)),
+                    }
+                }
+                None => stage.child(at_rest(screen)),
+            };
+            built.into()
+        });
+        if narrow {
+            memory.borrow_mut().screen = current_screen.clone();
+        }
+        {
+            let mut memory = memory.borrow_mut();
+            memory.element = Some(body.clone());
+            memory.element_header = overlay.then(|| sheet_header(can_back));
+        }
+
+        // ---- the window --------------------------------------------------------
+        let header = HeaderBar::new(String::new())
+            .busy(busy)
+            .fill(if overlay { Paint::Frosted } else { Paint::Bg });
+        let header = if show_back { header.leading(BackButton) } else { header };
+        let header = match &self.header_trailing {
+            Some(trailing) => header.trailing(trailing.clone()),
+            None => header,
+        };
         let header = if show_controls && !lifted {
             header.trailing(WindowControls)
         } else {
             header
         };
-        let header = if show_list {
-            header
-        } else {
-            header.title_slot(crossfade(PageTitle {
-                page: page_key.clone(),
-                scroll,
-                title,
-            }))
+        let header = header.title_slot(crossfade(PageTitle {
+            entry: current.id,
+            scroll,
+            title: if searching { "Search results".to_string() } else { title.clone() },
+        }));
+
+        let back_router = router;
+        let back_gesture = gesture.clone();
+        let back_memory = memory.clone();
+        let move_gesture = gesture.clone();
+        let up_gesture = gesture.clone();
+        let up_memory = memory.clone();
+        let settle_memory = memory.clone();
+        let mut generation_tick = generation;
+        let start_settle = move |ms: u64| {
+            // Frames for a spring back: the animation only ticks the view, the
+            // gesture's clock says where the screen is.
+            settle_memory.borrow_mut().duration = ms;
+            settle_memory.borrow_mut().start_runs = Some(*runs.peek());
+            *generation_tick.write() += 1;
         };
+        let mut up_settle = start_settle.clone();
+        let mut move_settle = start_settle;
+        let cancel_ms = gesture.borrow().config.cancel_ms;
+        let reduced_cancel = tokens.motion(cancel_ms) == 0;
+        let motion_cancel_ms = tokens.motion(cancel_ms);
+
         rect()
             .component("NavigationSplitView")
             .expanded()
@@ -1133,15 +1433,18 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                     Key::Character(text) if control => text.to_lowercase(),
                     _ => String::new(),
                 };
-                if let Some(on_back) = &back_key
-                    && event.modifiers == Modifiers::ALT
+                if event.modifiers == Modifiers::ALT
                     && event.key == Key::Named(NamedKey::ArrowLeft)
                 {
-                    on_back.call(());
+                    router.back();
+                } else if event.modifiers == Modifiers::ALT
+                    && event.key == Key::Named(NamedKey::ArrowRight)
+                {
+                    router.forward();
                 } else if control && letter == "f" {
                     // Focus the search. A narrow window shows the list first.
                     if narrow {
-                        request_list.call(true);
+                        router.switch_root(&router.table().home());
                     }
                     search_id.request_focus();
                 } else if control && (letter == "q" || letter == "w") {
@@ -1157,10 +1460,76 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 }
             })
             .on_global_pointer_down(move |event: Event<PointerEventData>| {
-                if let Some(on_back) = &back_pointer
-                    && matches!(event.data(), PointerEventData::Mouse(mouse) if mouse.button == Some(MouseButton::Back))
-                {
-                    on_back.call(());
+                if let PointerEventData::Mouse(mouse) = event.data() {
+                    match mouse.button {
+                        Some(MouseButton::Back) => return back_router.back(),
+                        Some(MouseButton::Forward) => return back_router.forward(),
+                        _ => {}
+                    }
+                }
+                // An edge swipe from the left starts a back gesture on a phone
+                // window, and for a finger on any window.
+                if !event.data().is_primary() {
+                    return;
+                }
+                let touch = matches!(event.data(), PointerEventData::Touch(_));
+                if !(narrow || touch) {
+                    return;
+                }
+                let at = event.global_location();
+                let allowed = back_router.model().can_go_back() && back_memory.borrow().active.is_none();
+                back_gesture.borrow_mut().down(
+                    clock.elapsed(),
+                    (at.x as f32, at.y as f32),
+                    width,
+                    allowed,
+                );
+            })
+            .on_global_pointer_move(move |event: Event<PointerEventData>| {
+                let at = event.global_location();
+                let update = {
+                    let mut gesture = move_gesture.borrow_mut();
+                    if !gesture.is_pressed() {
+                        return;
+                    }
+                    gesture.moved(clock.elapsed(), (at.x as f32, at.y as f32))
+                };
+                match update {
+                    Update::Started | Update::Progress(_) => *redraw.write() += 1,
+                    Update::Cancelled => {
+                        if reduced_cancel {
+                            move_gesture.borrow_mut().finish();
+                            *redraw.write() += 1;
+                        } else {
+                            move_settle(motion_cancel_ms);
+                        }
+                    }
+                    Update::None | Update::Aborted => {}
+                }
+            })
+            .on_global_pointer_up(move |_| {
+                let release = up_gesture.borrow_mut().up(clock.elapsed());
+                match release {
+                    Release::Commit { from } => {
+                        up_memory.borrow_mut().commit_from = Some(from);
+                        let outcome = router.run(crate::nav::Op::Back, false);
+                        if !matches!(outcome, crate::nav::Outcome::Changed(_)) {
+                            // A modal closed, or the page vetoed leaving: nothing
+                            // popped, so the screen springs back.
+                            up_memory.borrow_mut().commit_from = None;
+                            up_gesture.borrow_mut().abort();
+                            *redraw.write() += 1;
+                        }
+                    }
+                    Release::Cancel { .. } => {
+                        if reduced_cancel {
+                            up_gesture.borrow_mut().finish();
+                            *redraw.write() += 1;
+                        } else {
+                            up_settle(motion_cancel_ms);
+                        }
+                    }
+                    Release::Tap | Release::Ignored => {}
                 }
             })
             .maybe_child((!narrow).then(|| sidebar(false, None)))
@@ -1175,7 +1544,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                         move |event: Event<PressEventData>| press.press(&event)
                     })
                     .child(header_region.sentinel())
-                    .child(if overlay {
+                    .maybe_child((!narrow).then(|| {
                         Element::from(
                             rect()
                                 .position(Position::new_absolute().top(0.0).left(0.0))
@@ -1184,19 +1553,14 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                                 .backdrop_blur(HEADER_BLUR)
                                 .child(header),
                         )
-                    } else {
-                        Element::from(header)
-                    })
-                    .maybe_child(lifted.then(|| lifted_controls(&tokens)))
-                    .child(if show_list {
-                        // Results are the content area itself, below the field.
-                        Element::from(sidebar(true, searching.then(|| Element::from(content_area))))
-                    } else {
-                        Element::from(content_area)
-                    }),
+                    }))
+                    .maybe_child((!narrow && lifted).then(|| lifted_controls(&tokens)))
+                    .maybe_child((!narrow).then(|| Element::from(wide_content)))
+                    .maybe_child(stage),
             )
     }
 }
+
 
 /// How much the content behind a floating header bar is blurred.
 const HEADER_BLUR: f32 = 20.0;
@@ -1262,11 +1626,11 @@ impl Component for ScrolledTitle {
     }
 }
 
-/// The page title in the header bar. Crossfade compares it by page and title,
-/// so the title fades when the page changes and not on every scroll.
+/// The page title in the header bar. Crossfade compares it by entry and
+/// title, so the title fades when the page changes and not on every scroll.
 #[derive(Clone, PartialEq)]
 struct PageTitle {
-    page: PageKey,
+    entry: u64,
     scroll: ScrollController,
     title: String,
 }
@@ -1280,28 +1644,169 @@ impl Component for PageTitle {
     }
 }
 
-/// The header's Back button. It stays in place when the page changes, so the
-/// chevron does not jump while a page slides; only its action moves.
-#[derive(Clone)]
-struct PageBack {
-    page: PageKey,
-    on_back: EventHandler<()>,
+#[derive(PartialEq)]
+struct Sidebar {
+    roots: Vec<RootItem>,
+    /// The root route of the page on screen.
+    selected: Option<usize>,
+    query: State<String>,
+    search_id: AccessibilityId,
+    /// Drawn as the whole window below the header, not as a column.
+    full_page: bool,
+    profile: Option<Profile>,
+    /// The pages with search results, when the split view searches. While
+    /// the search has text, the sidebar lists these instead of its pages.
+    hits: Option<Vec<SearchHit>>,
+    /// The results screen, drawn in place of the list under the search field
+    /// while a narrow window searches.
+    results: Option<Element>,
+    scroll: ScrollController,
 }
 
-impl PartialEq for PageBack {
-    fn eq(&self, other: &Self) -> bool {
-        self.page == other.page
+impl Component for Sidebar {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let router = use_router();
+        let region = use_region(RegionKind::Sidebar);
+        let selected = self.selected;
+        let query = self.query;
+        let needle = query.read().trim().to_lowercase();
+        let typing = !needle.is_empty();
+        let visible: Vec<RootItem> = self
+            .roots
+            .iter()
+            .filter(|item| {
+                needle.is_empty()
+                    || item.title.to_lowercase().contains(&needle)
+                    || item
+                        .keywords
+                        .split_whitespace()
+                        .any(|word| word.starts_with(&needle))
+            })
+            .cloned()
+            .collect();
+        // While searching, the list is the pages with results: the same set
+        // the results pane shows, one block each.
+        let hit_list = self.hits.as_ref().filter(|_| typing);
+        let mut entries: Vec<Element> = Vec::new();
+        let no_matches = typing && hit_list.map_or(visible.is_empty(), |hits| hits.is_empty());
+        if let Some(hits) = hit_list {
+            entries.extend(hits.iter().map(|hit| {
+                Element::from(SearchHitRow {
+                    hit: hit.clone(),
+                    scroll: self.scroll,
+                })
+            }));
+        }
+        let mut last_group = "";
+        for item in visible.iter().filter(|_| hit_list.is_none()) {
+            let group = item.group;
+            if group != last_group && !group.is_empty() {
+                entries.push(group_label(&tokens, group));
+            }
+            last_group = group;
+            entries.push(Element::from(NavEntry {
+                item: item.clone(),
+                siblings: visible.clone(),
+                selected,
+            }));
+        }
+
+        let shell = if self.full_page {
+            rect()
+                .component("Sidebar")
+                .width(Size::fill())
+                .height(Size::flex(1.0))
+                .tw(&tokens, &[flex_col(), bg(Paint::Bg)])
+        } else {
+            rect().tw(&tokens, SIDEBAR).component("Sidebar")
+        };
+        let table = router.table();
+        let card = self
+            .profile
+            .clone()
+            .filter(|_| !typing && self.results.is_none())
+            .map(|profile| {
+                let on_profile = table
+                    .root_of(&profile.target)
+                    .is_some_and(|root| Some(root) == selected);
+                Element::from(ProfileCard {
+                    profile,
+                    selected: on_profile,
+                })
+            });
+        let list = rect()
+            .width(Size::fill())
+            .height(Size::flex(1.0))
+            .min_height(Size::px(0.0))
+            .child(
+                ScrollView::new().drag_scrolling(false).child(
+                    rect()
+                        .tw(&tokens, SIDEBAR_LIST)
+                        .tw(&tokens, &[pt(S2)])
+                        .children(entries)
+                        .maybe_child(no_matches.then(|| {
+                            rect()
+                                .tw(&tokens, &[pt(S3), px(S3)])
+                                .child(BODY.in_ink(Ink::Muted).label(&tokens, "Nothing matches."))
+                        })),
+                ),
+            );
+        shell
+            .on_press({
+                let press = region.clone();
+                move |event: Event<PressEventData>| press.press(&event)
+            })
+            .child(search_band(query, self.search_id))
+            .child(region.sentinel())
+            .maybe_child(card)
+            .child(self.results.clone().unwrap_or_else(|| list.into()))
     }
 }
 
-impl Component for PageBack {
+#[derive(PartialEq)]
+struct NavEntry {
+    item: RootItem,
+    /// The items currently listed, for Up and Down.
+    siblings: Vec<RootItem>,
+    selected: Option<usize>,
+}
+
+impl Component for NavEntry {
     fn render(&self) -> impl IntoElement {
-        let on_back = self.on_back.clone();
-        let button: Element = icon_button(Icon::GoPrevious, move |_| on_back.call(()))
-            .size(Dim::WindowControlTarget)
-            .tooltip("Back")
-            .into();
-        button
+        let router = use_router();
+        let item = self.item.clone();
+        let siblings = self.siblings.clone();
+        let selected = self.selected;
+        let target = item.location.clone();
+        Element::from(SidebarRow {
+            mark: SidebarMark::Icon(item.icon),
+            label: item.title.clone(),
+            selected: selected == Some(item.route),
+            on_press: (move |_: ()| router.switch_root(&target)).into(),
+            on_key: Some(
+                (move |event: Event<KeyboardEventData>| {
+                    // Walk from the selected item, the page on screen.
+                    let position = siblings.iter().position(|other| Some(other.route) == selected);
+                    let target = match &event.key {
+                        Key::Named(NamedKey::ArrowDown) => {
+                            position.and_then(|index| siblings.get(index + 1))
+                        }
+                        Key::Named(NamedKey::ArrowUp) => position
+                            .and_then(|index| index.checked_sub(1))
+                            .and_then(|index| siblings.get(index)),
+                        Key::Named(NamedKey::Home) => siblings.first(),
+                        Key::Named(NamedKey::End) => siblings.last(),
+                        _ => None,
+                    };
+                    if let Some(target) = target {
+                        event.stop_propagation();
+                        router.switch_root(&target.location);
+                    }
+                })
+                .into(),
+            ),
+        })
     }
 }
 
@@ -1334,26 +1839,6 @@ impl Component for ScrollEdge {
     }
 }
 
-#[derive(PartialEq)]
-struct Sidebar<T: NavItem> {
-    items: Vec<T>,
-    selected: T,
-    on_select: EventHandler<T>,
-    query: State<String>,
-    search_id: AccessibilityId,
-    on_show_list: EventHandler<bool>,
-    /// Drawn as the whole window below the header, not as a column.
-    full_page: bool,
-    profile: Option<Profile<T>>,
-    /// The pages with search results, when the split view searches. While
-    /// the search has text, the sidebar lists these instead of its pages.
-    hits: Option<Vec<SearchHit>>,
-    /// The results screen, drawn in place of the list under the search field
-    /// while a narrow window searches.
-    results: Option<Element>,
-    scroll: ScrollController,
-}
-
 /// The name of a group of pages, in small muted type above its first page.
 fn group_label(tokens: &Tokens, group: &str) -> Element {
     let mut name = group.to_string();
@@ -1364,111 +1849,6 @@ fn group_label(tokens: &Tokens, group: &str) -> Element {
         .tw_layout(NAV_LABEL)
         .child(CAPTION.label(tokens, name))
         .into()
-}
-
-impl<T: NavItem> Component for Sidebar<T> {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let region = use_region(RegionKind::Sidebar);
-        let selected = self.selected;
-        let on_select = self.on_select.clone();
-        let on_show_list = self.on_show_list.clone();
-        let query = self.query;
-        let full_page = self.full_page;
-        let needle = query.read().trim().to_lowercase();
-        let typing = !needle.is_empty();
-        let visible: Vec<T> = self
-            .items
-            .iter()
-            .copied()
-            .filter(|item| {
-                needle.is_empty()
-                    || item.title().to_lowercase().contains(&needle)
-                    || item
-                        .keywords()
-                        .split_whitespace()
-                        .any(|word| word.starts_with(&needle))
-            })
-            .collect();
-        // While searching, the list is the pages with results: the same set
-        // the results pane shows, one block each.
-        let hit_list = self.hits.as_ref().filter(|_| typing);
-        let mut entries: Vec<Element> = Vec::new();
-        let no_matches = typing && hit_list.map_or(visible.is_empty(), |hits| hits.is_empty());
-        if let Some(hits) = hit_list {
-            entries.extend(hits.iter().map(|hit| {
-                Element::from(SearchHitRow {
-                    hit: hit.clone(),
-                    scroll: self.scroll,
-                })
-            }));
-        }
-        let mut last_group = "";
-        for item in visible.iter().filter(|_| hit_list.is_none()) {
-            let group = item.group();
-            if group != last_group && !group.is_empty() {
-                entries.push(group_label(&tokens, group));
-            }
-            last_group = group;
-            entries.push(Element::from(NavEntry {
-                item: *item,
-                siblings: visible.clone(),
-                selected,
-                on_select: on_select.clone(),
-                on_show_list: on_show_list.clone(),
-                full_page,
-            }));
-        }
-
-        let shell = if full_page {
-            rect()
-                .component("Sidebar")
-                .width(Size::fill())
-                .height(Size::flex(1.0))
-                .tw(&tokens, &[flex_col(), bg(Paint::Bg)])
-        } else {
-            rect().tw(&tokens, SIDEBAR).component("Sidebar")
-        };
-        let card = self
-            .profile
-            .clone()
-            .filter(|_| !typing && self.results.is_none())
-            .map(|profile| {
-                Element::from(ProfileCard {
-                    profile,
-                    selected,
-                    on_select: on_select.clone(),
-                    on_show_list: on_show_list.clone(),
-                    full_page,
-                })
-            });
-        let list = rect()
-            .width(Size::fill())
-            .height(Size::flex(1.0))
-            .min_height(Size::px(0.0))
-            .child(
-                ScrollView::new().drag_scrolling(false).child(
-                    rect()
-                        .tw(&tokens, SIDEBAR_LIST)
-                        .tw(&tokens, &[pt(S2)])
-                        .children(entries)
-                        .maybe_child(no_matches.then(|| {
-                            rect()
-                                .tw(&tokens, &[pt(S3), px(S3)])
-                                .child(BODY.in_ink(Ink::Muted).label(&tokens, "Nothing matches."))
-                        })),
-                ),
-            );
-        shell
-            .on_press({
-                let press = region.clone();
-                move |event: Event<PressEventData>| press.press(&event)
-            })
-            .child(search_band(query, self.search_id))
-            .child(region.sentinel())
-            .maybe_child(card)
-            .child(self.results.clone().unwrap_or_else(|| list.into()))
-    }
 }
 
 /// A page with search results, listed in the sidebar while searching.
@@ -1496,8 +1876,13 @@ impl Component for SearchHitRow {
     }
 }
 
+/// The scroll of the page the caller is on, when a split view draws it.
+pub(crate) fn use_page_scroll() -> Option<ScrollController> {
+    use_try_consume::<PageScroll>().map(|page| page.scroll)
+}
+
 /// Where a search hit's block top sits when it is opened: just under the frosted header.
-fn section_top() -> f32 {
+pub(crate) fn section_top() -> f32 {
     Dim::Header.px() + S2.px()
 }
 
@@ -1526,62 +1911,4 @@ fn search_band(query: State<String>, search_id: AccessibilityId) -> impl IntoEle
             .leading_column(Dim::NavIcon)
             .fill_width(),
     )
-}
-
-#[derive(PartialEq)]
-struct NavEntry<T: NavItem> {
-    item: T,
-    /// The items currently listed, for Up and Down.
-    siblings: Vec<T>,
-    selected: T,
-    on_select: EventHandler<T>,
-    on_show_list: EventHandler<bool>,
-    full_page: bool,
-}
-
-impl<T: NavItem> Component for NavEntry<T> {
-    fn render(&self) -> impl IntoElement {
-        let item = self.item;
-        let siblings = self.siblings.clone();
-        let selected = self.selected;
-        let full_page = self.full_page;
-        let press_select = self.on_select.clone();
-        let press_list = self.on_show_list.clone();
-        let key_select = self.on_select.clone();
-        Element::from(SidebarRow {
-            mark: SidebarMark::Icon(item.icon()),
-            label: item.title().to_string(),
-            selected: selected == item,
-            on_press: (move |_: ()| {
-                press_select.call(item);
-                if full_page {
-                    press_list.call(false);
-                }
-            })
-            .into(),
-            on_key: Some(
-                (move |event: Event<KeyboardEventData>| {
-                    // Walk from the selected item, the page on screen.
-                    let position = siblings.iter().position(|other| *other == selected);
-                    let target = match &event.key {
-                        Key::Named(NamedKey::ArrowDown) => {
-                            position.and_then(|index| siblings.get(index + 1)).copied()
-                        }
-                        Key::Named(NamedKey::ArrowUp) => position
-                            .and_then(|index| index.checked_sub(1))
-                            .and_then(|index| siblings.get(index))
-                            .copied(),
-                        Key::Named(NamedKey::Home) => siblings.first().copied(),
-                        Key::Named(NamedKey::End) => siblings.last().copied(),
-                        _ => None,
-                    };
-                    if let Some(target) = target {
-                        event.stop_propagation();
-                        key_select.call(target);
-                    }
-                })
-                .into(),
-            ),
-        })
-    }
 }

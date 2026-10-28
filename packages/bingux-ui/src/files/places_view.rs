@@ -1,5 +1,5 @@
-//! The places list: Recent, Home and the user folders, the user's bookmarks,
-//! and the drives with how full each one is.
+//! The places list: Recent, Home, the user folders and the Trash, the user's
+//! bookmarks, and the drives with how full each one is.
 //!
 //! [`PlacesSidebar`] is the column beside a file view. [`PlacesMenu`] is the
 //! same list in a sheet behind one button, for a phone. Both draw a
@@ -13,7 +13,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -26,7 +26,7 @@ use super::drives::{Drives, use_drives};
 use super::glyphs::folder_icon;
 use super::places_model::{
     Item, ItemKind, Release, Section, UsageLine, current_name, release_for, sections, selected,
-    type_ahead, usage_line,
+    type_ahead, usage_line, volume_text,
 };
 use crate::component::ComponentName;
 use crate::controls::{StopRing, focus_stop, focus_stop_with, path_label, text_field, usage_bar};
@@ -53,7 +53,7 @@ pub struct PlacesSidebar {
     current: Where,
     recent: bool,
     on_open: EventHandler<Where>,
-    on_open_new_window: Option<EventHandler<Where>>,
+    on_open_new_tab: Option<EventHandler<Where>>,
     on_properties: Option<EventHandler<Where>>,
     reload: Option<State<u32>>,
 }
@@ -66,7 +66,7 @@ impl PlacesSidebar {
             current,
             recent: true,
             on_open: on_open.into(),
-            on_open_new_window: None,
+            on_open_new_tab: None,
             on_properties: None,
             reload: None,
         }
@@ -79,10 +79,10 @@ impl PlacesSidebar {
         self
     }
 
-    /// Adds "Open in a new window" to the row menus. The handler receives the
+    /// Adds "Open in new tab" to the row menus. The handler receives the
     /// place. Without it the item is left out.
-    pub fn on_open_new_window(mut self, handler: impl Into<EventHandler<Where>>) -> Self {
-        self.on_open_new_window = Some(handler.into());
+    pub fn on_open_new_tab(mut self, handler: impl Into<EventHandler<Where>>) -> Self {
+        self.on_open_new_tab = Some(handler.into());
         self
     }
 
@@ -108,7 +108,7 @@ impl Component for PlacesSidebar {
         let list = drives.list();
         let bookmarks = use_bookmarks(self.reload);
         let shown = bookmarks.current(&self.places.bookmarks);
-        let groups = sections(&self.places, &shown, &list.mounts, self.recent);
+        let groups = sections(&self.places, &shown, &list.mounts, &list.volumes, self.recent);
         let chosen = selected(&groups, &self.current, &list.mounts);
         rect()
             .component("PlacesSidebar")
@@ -130,7 +130,7 @@ impl Component for PlacesSidebar {
                                 bookmark_source: self.places.bookmarks.clone(),
                                 actions: Actions {
                                     on_open: self.on_open.clone(),
-                                    on_open_new_window: self.on_open_new_window.clone(),
+                                    on_open_new_tab: self.on_open_new_tab.clone(),
                                     on_properties: self.on_properties.clone(),
                                 },
                                 measure: None,
@@ -150,7 +150,7 @@ pub struct PlacesMenu {
     current: Where,
     recent: bool,
     on_open: EventHandler<Where>,
-    on_open_new_window: Option<EventHandler<Where>>,
+    on_open_new_tab: Option<EventHandler<Where>>,
     on_properties: Option<EventHandler<Where>>,
     reload: Option<State<u32>>,
 }
@@ -163,7 +163,7 @@ impl PlacesMenu {
             current,
             recent: true,
             on_open: on_open.into(),
-            on_open_new_window: None,
+            on_open_new_tab: None,
             on_properties: None,
             reload: None,
         }
@@ -175,9 +175,9 @@ impl PlacesMenu {
         self
     }
 
-    /// See [`PlacesSidebar::on_open_new_window`].
-    pub fn on_open_new_window(mut self, handler: impl Into<EventHandler<Where>>) -> Self {
-        self.on_open_new_window = Some(handler.into());
+    /// See [`PlacesSidebar::on_open_new_tab`].
+    pub fn on_open_new_tab(mut self, handler: impl Into<EventHandler<Where>>) -> Self {
+        self.on_open_new_tab = Some(handler.into());
         self
     }
 
@@ -206,7 +206,7 @@ impl Component for PlacesMenu {
         let list = drives.list();
         let bookmarks = use_bookmarks(self.reload);
         let shown = bookmarks.current(&self.places.bookmarks);
-        let groups = sections(&self.places, &shown, &list.mounts, self.recent);
+        let groups = sections(&self.places, &shown, &list.mounts, &list.volumes, self.recent);
         let chosen = selected(&groups, &self.current, &list.mounts);
         let row = chosen.map(|(group, item)| &groups[group].items[item]);
         let name = current_name(&self.current, row);
@@ -286,7 +286,7 @@ impl Component for PlacesMenu {
             bookmark_source: self.places.bookmarks.clone(),
             actions: Actions {
                 on_open: close,
-                on_open_new_window: wrap(&self.on_open_new_window),
+                on_open_new_tab: wrap(&self.on_open_new_tab),
                 on_properties: wrap(&self.on_properties),
             },
             measure: Some(measured),
@@ -431,7 +431,7 @@ impl Bookmarks {
 #[derive(Clone, PartialEq)]
 struct Actions {
     on_open: EventHandler<Where>,
-    on_open_new_window: Option<EventHandler<Where>>,
+    on_open_new_tab: Option<EventHandler<Where>>,
     on_properties: Option<EventHandler<Where>>,
 }
 
@@ -457,21 +457,21 @@ impl PlaceList {
     fn menu(
         &self,
         item: &Item,
+        open: EventHandler<()>,
         release: Option<Release>,
         busy: bool,
         draft: State<String>,
     ) -> Vec<MenuItem> {
         let actions = &self.actions;
         let target = item.target.clone();
-        let mut menu = vec![menu_item("Open", {
-            let on_open = actions.on_open.clone();
-            let target = target.clone();
-            move |_: ()| on_open.call(target.clone())
-        })];
-        if let Some(handler) = &actions.on_open_new_window {
+        let mut menu = vec![menu_item(
+            if item.volume.is_some() { "Mount" } else { "Open" },
+            move |_: ()| open.call(()),
+        )];
+        if let Some(handler) = &actions.on_open_new_tab {
             let handler = handler.clone();
             let target = target.clone();
-            menu.push(menu_item("Open in new window", move |_: ()| {
+            menu.push(menu_item("Open in new tab", move |_: ()| {
                 handler.call(target.clone())
             }));
         }
@@ -624,7 +624,9 @@ impl Component for PlaceList {
                 let busy = item
                     .mount
                     .as_ref()
-                    .is_some_and(|mount| self.drives.is_busy(mount.id));
+                    .map(|mount| mount.id)
+                    .or_else(|| item.volume.as_ref().map(|volume| volume.busy_id()))
+                    .is_some_and(|id| self.drives.is_busy(id));
                 labels.push(item.label.clone());
                 removable.push(match (item.kind, item.path()) {
                     (ItemKind::Bookmark, Some(path)) => {
@@ -635,7 +637,16 @@ impl Component for PlaceList {
                 let on_open = {
                     let handler = self.actions.on_open.clone();
                     let target = item.target.clone();
-                    EventHandler::new(move |_: ()| handler.call(target.clone()))
+                    match &item.volume {
+                        // A drive that is not mounted is mounted, then opened.
+                        Some(volume) => {
+                            let (drives, volume) = (self.drives, volume.clone());
+                            EventHandler::new(move |_: ()| {
+                                drives.mount(volume.clone(), handler.clone())
+                            })
+                        }
+                        None => EventHandler::new(move |_: ()| handler.call(target.clone())),
+                    }
                 };
                 column = column.child(Element::from(PlaceRow {
                     key: row_key(item),
@@ -644,9 +655,13 @@ impl Component for PlaceList {
                     label: item.label.clone(),
                     kind: item.kind,
                     selected: self.selected == Some((group_index, item_index)),
-                    usage: usage_line(item.mount.as_ref(), self.settled),
-                    menu: self.menu(item, release, busy, rename_draft),
+                    usage: match &item.volume {
+                        Some(volume) => UsageLine::Text(volume_text(volume)),
+                        None => usage_line(item.mount.as_ref(), self.settled),
+                    },
+                    menu: self.menu(item, on_open.clone(), release, busy, rename_draft),
                     on_open,
+                    drop: item.path().map(Path::to_path_buf),
                 }));
                 index += 1;
             }
@@ -745,6 +760,8 @@ struct PlaceRow {
     usage: UsageLine,
     menu: Vec<MenuItem>,
     on_open: EventHandler<()>,
+    /// The folder files dragged onto the row go into, if it takes any.
+    drop: Option<PathBuf>,
 }
 
 impl Component for PlaceRow {
@@ -757,6 +774,11 @@ impl Component for PlaceRow {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
+        let session = use_hook(super::drag::file_drag);
+        let drop_here = match (&session, &self.drop) {
+            (Some(session), Some(folder)) => session.is_over(folder),
+            _ => false,
+        };
         let silent = matches!(self.usage, UsageLine::NotResponding);
         let icon_paint = if self.selected {
             Paint::Accent
@@ -812,6 +834,16 @@ impl Component for PlaceRow {
                 Some(CAPTION.label(&tokens, "Not responding").max_lines(1).into()),
                 Some("Not responding".to_string()),
             ),
+            UsageLine::Text(text) => (
+                Some(
+                    CAPTION
+                        .label(&tokens, text.clone())
+                        .max_lines(1)
+                        .text_overflow(TextOverflow::Ellipsis)
+                        .into(),
+                ),
+                Some(text.clone()),
+            ),
         };
         let tall = line.is_some();
 
@@ -824,14 +856,34 @@ impl Component for PlaceRow {
             .tw(
                 &tokens,
                 &[surface(
-                    Paint::Transparent,
+                    if drop_here {
+                        Paint::AccentSoft
+                    } else {
+                        Paint::Transparent
+                    },
                     hovering(),
                     false,
                     self.selected,
                 )],
             )
-            .on_pointer_enter(move |_| hovering.set(true))
-            .on_pointer_leave(move |_| hovering.set(false))
+            .on_pointer_enter({
+                let (session, folder) = (session, self.drop.clone());
+                move |_| {
+                    hovering.set(true);
+                    if let (Some(session), Some(folder)) = (session, &folder) {
+                        session.hover(folder);
+                    }
+                }
+            })
+            .on_pointer_leave({
+                let (session, folder) = (session, self.drop.clone());
+                move |_| {
+                    hovering.set(false);
+                    if let (Some(session), Some(folder)) = (session, &folder) {
+                        session.leave(folder);
+                    }
+                }
+            })
             .a11y_builder({
                 let selected = self.selected;
                 move |builder| builder.set_selected(selected)
@@ -862,16 +914,7 @@ impl Component for PlaceRow {
             Radius::Control,
             move |_: ()| on_open.call(()),
             self.menu.clone(),
-            // A row with a figure under its name takes its height from its
-            // content, so its ring is told the padding it reaches back over.
-            if tall {
-                StopRing::Fitted {
-                    left: NAV_INSET.px(),
-                    top: S1.px(),
-                }
-            } else {
-                StopRing::Inside
-            },
+            StopRing::Inside,
         )
         .tw(&tokens, &[w_full()])
     }

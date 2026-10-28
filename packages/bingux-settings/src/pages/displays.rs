@@ -10,7 +10,8 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::pages::gnoblin;
-use crate::routes::{Navigator, Route, use_navigator};
+use crate::routes;
+use bingux_ui::prelude::{Router, use_router};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
     Group, Icon, Overlays, PageHead, ResponseKind, Status, Tokens, action_row, caption, choice_row,
@@ -571,7 +572,7 @@ fn fake_layout() -> Option<Displays> {
     };
     let monitor = |connector: &str, modes: Vec<Mode>, primary: bool, x: i32, y: i32| Monitor {
         connector: connector.to_string(),
-        name: format!("Test display {connector}"),
+        name: bingux_ui::stress::data(format!("Test display {connector}")),
         modes,
         mode: 0,
         enabled: true,
@@ -1393,7 +1394,11 @@ fn start_keep_prompt(ctx: Ctx, draft: Vec<Monitor>, before: Vec<Monitor>) {
         .response("Keep", ResponseKind::Suggested, move |_| {
             close_prompt(ctx);
             keep_layout(ctx, draft.clone());
-        }),
+        })
+        // A stray Enter or Escape reverts, as the countdown does: only a
+        // press on Keep keeps a layout the person may not be able to see.
+        .default_action("revert")
+        .cancel_action("revert"),
     );
     spawn(async move {
         loop {
@@ -1781,7 +1786,7 @@ impl Component for Tile {
             .text_overflow(TextOverflow::Ellipsis);
 
         let ctx = self.ctx;
-        let navigator = use_navigator();
+        let router = use_router();
         let index = self.index;
         let origin = (monitor.x, monitor.y);
         let menu_monitor = monitor.clone();
@@ -1793,7 +1798,7 @@ impl Component for Tile {
                 let at = event.global_location();
                 ctx.overlays.show_menu(
                     (at.x as f32, at.y as f32),
-                    monitor_menu(ctx, navigator, index, &menu_monitor),
+                    monitor_menu(ctx, router, index, &menu_monitor),
                 );
                 return;
             }
@@ -1831,7 +1836,7 @@ impl Component for Tile {
 
 /// The right-click menu for a display box. Each action stages a change in the
 /// draft, the same as the controls below it, so it waits for Apply.
-fn monitor_menu(ctx: Ctx, navigator: Navigator, index: usize, monitor: &Monitor) -> Vec<MenuItem> {
+fn monitor_menu(ctx: Ctx, router: Router, index: usize, monitor: &Monitor) -> Vec<MenuItem> {
     let mut make_main = menu_item("Make main", move |_| {
         edit(ctx.model, ctx.error, move |monitors| {
             set_primary(monitors, index)
@@ -1856,10 +1861,7 @@ fn monitor_menu(ctx: Ctx, navigator: Navigator, index: usize, monitor: &Monitor)
         }),
         menu_separator(),
         menu_item("Settings...", move |_| {
-            navigator.push(Route::Display {
-                index,
-                name: label.clone(),
-            })
+            router.open(routes::display(index, &label))
         }),
     ]
 }
@@ -1872,7 +1874,6 @@ fn arrangement_group(
     tokens: Tokens,
 ) -> Group {
     Group::titled("Arrangement")
-        .description("Each box is one display, placed as it is on the desktop.")
         .row(
             Arrangement {
                 ctx,
@@ -2133,13 +2134,8 @@ fn use_page_ctx(model: State<Option<Page>>) -> Ctx {
 
 /// With several displays, the main page lists them. Each row opens that
 /// display's own page, so the arrangement stays the only shared control.
-fn monitor_list_group(ctx: Ctx, monitors: &[Monitor], navigator: Navigator) -> Group {
-    let description = if monitors.len() > 1 {
-        "Choose a display to change its resolution, scale or orientation. Identify numbers each display in list order."
-    } else {
-        "Choose a display to change its resolution, scale and orientation."
-    };
-    let mut group = Group::titled("Displays").description(description);
+fn monitor_list_group(ctx: Ctx, monitors: &[Monitor], router: Router) -> Group {
+    let mut group = Group::titled("Displays");
     if monitors.len() > 1 {
         group = group.trailing(identify_button(ctx.overlays, monitors));
     }
@@ -2151,12 +2147,9 @@ fn monitor_list_group(ctx: Ctx, monitors: &[Monitor], navigator: Navigator) -> G
                 .value(monitor_state(monitor))
                 .navigates()
                 .on_press(move |_| {
-                    navigator.push(Route::Display {
-                        index,
-                        name: label.clone(),
-                    })
+                    router.open(routes::display(index, &label.clone()))
                 })
-                .context_menu(monitor_menu(ctx, navigator, index, monitor)),
+                .context_menu(monitor_menu(ctx, router, index, monitor)),
         );
     }
     group
@@ -2190,18 +2183,15 @@ impl Component for DisplaysPage {
     fn render(&self) -> impl IntoElement {
         let model = system::use_cached_saved("displays", load);
         let ctx = use_page_ctx(model);
-        let navigator = use_navigator();
+        let router = use_router();
         let tokens = use_tokens();
 
         let mut page = page_column().child(PageHead::new());
         let Some(loaded) = model.read().clone() else {
-            // One display, the arrangement canvas over its list, then the
-            // night light group, as a typical machine shows them.
-            return page.child(skeleton_rows(&[
-                "~Each box is one display, placed as it is on the desktop.|#",
-                "~Choose a display to change its resolution, scale and orientation.|=",
-                "-=---",
-            ]));
+            // One display: the arrangement canvas, the display's row, then the
+            // night light group, as a typical machine shows them. The groups
+            // have titles and no descriptions, as the loaded page does.
+            return page.child(skeleton_rows(&["#", "=", "-=-"]));
         };
 
         page = match loaded.displays {
@@ -2217,19 +2207,13 @@ impl Component for DisplaysPage {
                     let title = record.title.clone();
                     let open = title.clone();
                     let menu = vec![menu_item("Open display details", move |_| {
-                        navigator.push(Route::Display {
-                            index,
-                            name: open.clone(),
-                        })
+                        router.open(routes::display(index, &open))
                     })];
                     group = group.row(
                         row(record.title.clone())
                             .navigates()
                             .on_press(move |_| {
-                                navigator.push(Route::Display {
-                                    index,
-                                    name: title.clone(),
-                                })
+                                router.open(routes::display(index, &title.clone()))
                             })
                             .context_menu(menu),
                     );
@@ -2243,7 +2227,7 @@ impl Component for DisplaysPage {
                 let changed = monitors != saved;
                 let chosen = (*ctx.selected.read()).min(monitors.len().saturating_sub(1));
                 page.child(arrangement_group(ctx, &monitors, chosen, changed, tokens))
-                    .child(monitor_list_group(ctx, &monitors, navigator))
+                    .child(monitor_list_group(ctx, &monitors, router))
             }
         };
 

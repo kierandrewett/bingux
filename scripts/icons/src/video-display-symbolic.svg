@@ -1,3 +1,3 @@
 <svg viewBox="0 0 16 16">
-  <fork name="Monitor" weight="fill" mode="exact"/>
+  <fork name="Monitor" weight="regular" mode="exact" scale="1.025" dy="-0.59" symmetric="true"/>
 </svg>

@@ -1,157 +1,177 @@
 # file | where the user sees it (label, surface) | the conventional metaphor | chat fork glyph + weight, or custom
-# Read by sheets.py (labelled mapping sheet) and by map-fork.py (writes the <fork/> sources). Names are Adwaita file names without -symbolic.svg.
-network-wireless | Wi-Fi (sidebar), top-bar wireless | Wi-Fi fan | custom: two arcs and a dot
-network-wireless-signal-none | Wi-Fi list row: no signal | dot only | custom: a dot, centre (8, 12.5)
-network-wireless-signal-weak | Wi-Fi list row: weak | one arc | custom: one arc and a dot
-network-wireless-signal-ok | Wi-Fi list row: ok | two arcs | custom: two arcs and a dot
-network-wireless-signal-good | Wi-Fi list row: good | two arcs | custom: two arcs and a dot
-network-wireless-signal-excellent | Wi-Fi list row, hero, top bar: full | full fan | custom: two arcs and a dot
-network-wireless-disabled | Wi-Fi off | fan with slash | custom: two arcs and a dot, plus a slash
-network-wireless-encrypted | Wi-Fi list row: secured network | padlock | LockKey fill
-network-wireless-hotspot | Hotspot | broadcasting dot with arcs | Broadcast bold
-network-offline | top bar: no network | fan with x | custom: two arcs and an x where the dot is
-network-error | top bar: network problem | network with x | NetworkX bold
-network-wired | Network (sidebar), wired connection row, top-bar wired | wired network | Network bold
-network-vpn | VPN (rows, Control Centre) | shield | Shield fill
-network-server | Server / share | server stack | HardDrives fill
-airplane-mode | Airplane mode (top bar, Control Centre) | aeroplane | Airplane fill
-bluetooth-active | Bluetooth (sidebar, hero, top bar) | Bluetooth rune | Bluetooth bold scaled 1.1
-bluetooth-disabled | Bluetooth off (top bar) | rune with slash | BluetoothSlash bold scaled 1.1
-audio-volume-high | Sound (sidebar), volume high (top bar) | speaker with two waves | SpeakerHigh fill
-audio-volume-medium | volume medium (top bar) | speaker with one wave | SpeakerLow fill
-audio-volume-low | volume low (top bar) | speaker, no waves | SpeakerNone fill
-audio-volume-muted | volume muted (top bar) | speaker with x | SpeakerX fill
+# Read by build.py (checks), map-fork.py (writes the <fork/> sources) and review.py (sheets). Names are Adwaita file names without -symbolic.svg.
+# The glyph column is `custom: ..` or `ForkName weight [scale=.. dx=.. dy=.. mirror=.. stroke=..]`; scale, dx and dy
+# come from `build.py --suggest` and are what makes the icon meet the size, centre and crispness rules in docs/bingux-ui.md.
+# Directives below (read by labels.py): #policy <category>: files (fill/outline policy), #symmetric, #mark, #exempt <rule>.
+
+#policy action: document-edit edit-copy edit-delete find-location object-rotate-right send-to sidebar-show view-filter view-grid view-list view-refresh
+#policy control: list-drag-handle go-next go-previous list-add list-remove non-starred object-select open-menu pan-down pan-end pan-up system-shutdown view-more window-close window-maximize window-minimize window-new window-restore
+#policy detail: default-app-documents default-app-text focus-top-bar input-tablet input-touchpad mail-unread phone preferences-desktop-keyboard-shortcuts preferences-other view-conceal view-reveal web-browser x-office-calendar
+#policy drawn: network-offline network-wireless network-wireless-disabled network-wireless-signal-excellent network-wireless-signal-good network-wireless-signal-none network-wireless-signal-ok network-wireless-signal-weak
+#policy indicator: audio-card audio-volume-high audio-volume-low audio-volume-medium audio-volume-muted battery-level-0 battery-level-0-charging battery-level-10 battery-level-10-charging battery-level-100 battery-level-100-charged battery-level-100-charging battery-level-20 battery-level-20-charging battery-level-30 battery-level-30-charging battery-level-40 battery-level-40-charging battery-level-50 battery-level-50-charging battery-level-60 battery-level-60-charging battery-level-70 battery-level-70-charging battery-level-80 battery-level-80-charging battery-level-90 battery-level-90-charging battery-missing bluetooth-active bluetooth-disabled network-error network-wired network-wireless-hotspot
+#policy object: accessories-calculator addon airplane-mode application-x-executable applications-multimedia audio-headphones audio-input-microphone audio-speakers audio-x-generic avatar-default bookmarks camera-web changes-prevent computer dialog-password display-brightness document-open drive-harddisk emblem-system folder folder-desktop folder-documents folder-download folder-music folder-new folder-pictures folder-publicshare folder-templates folder-videos go-up image-generic input-gaming media-optical media-removable network-server night-light notifications-disabled package-x-generic power-profile-balanced power-profile-performance power-profile-power-saver preferences-system preferences-system-notifications printer system-lock-screen text-x-generic user-home user-info user-trash video-generic weather-clear-night
+#policy section: applications-graphics help-about input-keyboard input-mouse preferences-desktop-accessibility preferences-desktop-wallpaper preferences-system-time system-search system-users video-display view-app-grid
+#policy status: dialog-error dialog-information dialog-warning edit-clear help-browser media-eject media-playback-pause network-vpn network-wireless-encrypted security-high security-low starred
+#symmetric: avatar-default network-wireless network-wireless-signal-weak network-wireless-signal-ok network-wireless-signal-good network-wireless-signal-excellent network-wireless-signal-none preferences-desktop-accessibility dialog-error dialog-warning edit-clear view-app-grid view-grid window-close window-maximize list-add list-remove pan-up pan-down system-shutdown display-brightness video-display input-mouse audio-input-microphone audio-headphones bookmarks system-lock-screen starred non-starred computer phone input-tablet preferences-system emblem-system web-browser window-minimize
+#mark: list-drag-handle go-next go-previous pan-up pan-down pan-end object-select list-add list-remove window-close window-minimize window-maximize window-restore view-more
+#exempt size: network-wireless-signal-none network-wireless-signal-weak audio-volume-low audio-volume-medium
+#exempt centre: audio-volume-low audio-volume-medium network-wireless-signal-none network-wireless-signal-weak network-offline
+
+network-wireless | Wi-Fi (sidebar), top-bar wireless | Wi-Fi fan | custom: two 1 px arcs and a dot
+network-wireless-signal-none | Wi-Fi list row: no signal | dot only | custom: a 3 px dot, centre (8, 12)
+network-wireless-signal-weak | Wi-Fi list row: weak | one arc | custom: one 1 px arc and a dot
+network-wireless-signal-ok | Wi-Fi list row: ok | two arcs | custom: two 1 px arcs and a dot
+network-wireless-signal-good | Wi-Fi list row: good | two arcs | custom: two 1 px arcs and a dot
+network-wireless-signal-excellent | Wi-Fi list row, hero, top bar: full | full fan | custom: two 1 px arcs and a dot
+network-wireless-disabled | Wi-Fi off | fan with slash | custom: two 1 px arcs and a dot, plus a slash
+network-wireless-encrypted | Wi-Fi list row: secured network | padlock | LockKey fill scale=1.02 dx=-0.03 dy=0.94
+network-wireless-hotspot | Hotspot | broadcasting dot with arcs | Broadcast regular scale=1.01 dx=-0.1
+network-offline | top bar: no network | fan with x | custom: two 1 px arcs and an x where the dot is
+network-error | top bar: network problem | network with x | NetworkX regular dx=0.02 dy=0.02
+network-wired | Network (sidebar), wired connection row, top-bar wired | wired network | Network regular dx=0.02 dy=0.02
+network-vpn | VPN (rows, Control Centre) | shield | ShieldCheckered fill scale=1.115 dx=0.02 dy=-0.97
+network-server | Server / share | server stack | HardDrives fill scale=1.14 dx=0.17 dy=-0.43
+airplane-mode | Airplane mode (top bar, Control Centre) | aeroplane | Airplane fill dx=0.02 dy=0.02
+bluetooth-active | Bluetooth (sidebar, hero, top bar) | Bluetooth rune | Bluetooth regular scale=1.2
+bluetooth-disabled | Bluetooth off (top bar) | rune with slash | BluetoothSlash regular scale=1.2 dx=-0.2 dy=0.1
+audio-volume-high | Sound (sidebar), volume high (top bar) | speaker with two waves | SpeakerHigh regular dy=0.02
+audio-volume-medium | volume medium (top bar) | speaker with one wave | SpeakerLow regular dy=0.02
+audio-volume-low | volume low (top bar) | speaker, no waves | SpeakerNone regular dy=0.02
+audio-volume-muted | volume muted (top bar) | speaker with x | SpeakerX regular dy=0.02
 audio-input-microphone | Microphone device, Sound page | microphone | Microphone fill
-audio-headphones | Headphones device (Sound, Bluetooth) | headphones | Headphones fill
-audio-speakers | Speakers device (Sound, Bluetooth) | box speaker | SpeakerHifi fill
-audio-card | Sound card device (Sound page) | audio device / waveform | Waveform bold
-media-playback-pause | Pause (inspector toolbar) | two bars | Pause fill
-preferences-system-notifications | Notifications (top bar) | bell | Bell fill
-notifications-disabled | Do not disturb (top bar, Control Centre) | bell with slash | BellSlash fill
-view-app-grid | Applications (sidebar), top-bar launcher | grid of nine dots | DotsNine bold
-system-shutdown | Power (top bar, power menu) | power symbol | Power bold
-battery-level-100 | Power (sidebar), battery full | horizontal battery | BatteryFull bold
-battery-level-50 | battery half | horizontal battery | BatteryMedium bold
-battery-level-0 | battery empty (top bar, Power) | empty battery | BatteryEmpty bold
-battery-level-10 | battery 10% | battery low | BatteryLow bold
-battery-level-20 | battery 20% | battery low | BatteryLow bold
-battery-level-30 | battery 30% | battery medium | BatteryMedium bold
-battery-level-40 | battery 40% | battery medium | BatteryMedium bold
-battery-level-60 | battery 60% | battery high | BatteryHigh bold
-battery-level-70 | battery 70% | battery high | BatteryHigh bold
-battery-level-80 | battery 80% | battery high | BatteryHigh bold
-battery-level-90 | battery 90% | battery full | BatteryFull bold
-battery-level-100-charged | battery charged, plugged in | full battery | BatteryFull bold
-battery-level-0-charging | charging (any level) | battery with bolt | BatteryCharging bold
-battery-level-10-charging | charging | battery with bolt | BatteryCharging bold
-battery-level-20-charging | charging | battery with bolt | BatteryCharging bold
-battery-level-30-charging | charging | battery with bolt | BatteryCharging bold
-battery-level-40-charging | charging | battery with bolt | BatteryCharging bold
-battery-level-50-charging | charging | battery with bolt | BatteryCharging bold
-battery-level-60-charging | charging | battery with bolt | BatteryCharging bold
-battery-level-70-charging | charging | battery with bolt | BatteryCharging bold
-battery-level-80-charging | charging | battery with bolt | BatteryCharging bold
-battery-level-90-charging | charging | battery with bolt | BatteryCharging bold
-battery-level-100-charging | charging | battery with bolt | BatteryCharging bold
-battery-missing | no battery found | battery with warning | BatteryWarning bold
-power-profile-power-saver | Power mode: power saver | leaf | Leaf fill
-power-profile-balanced | Power mode: balanced | speedometer | Speedometer fill
-power-profile-performance | Power mode: performance | lightning bolt | Lightning fill
-display-brightness | Brightness | sun | Sun fill
-night-light | Night light | moon and stars | MoonStars fill
-weather-clear-night | Dark style | moon | Moon fill
-preferences-desktop-accessibility | Accessibility (sidebar) | person in circle | PersonSimpleCircle fill
-applications-graphics | Appearance (sidebar) | palette | Palette fill
-preferences-desktop-wallpaper | Desktop (sidebar), wallpaper | landscape picture | ImageSquare bold
-video-display | Displays (sidebar), display device | monitor | Monitor fill
-system-search | Search (sidebar, search fields) | magnifier | MagnifyingGlass bold
-input-keyboard | Keyboard (sidebar, device) | keyboard | Keyboard bold
-preferences-desktop-keyboard-shortcuts | Keyboard shortcuts row | keyboard | Keyboard bold
-input-mouse | Mouse (sidebar, device) | mouse | Mouse bold
-preferences-system-time | Date & time (sidebar) | clock | Clock fill
-system-users | Users (sidebar) | two people | Users fill
-help-about | About (sidebar) | circled i | Info fill
-computer | Computer (device, About hero) | laptop | Laptop fill
-preferences-system | Details button, Control Centre | gear | Gear fill
-emblem-system | Settings action | gear | Gear fill
-avatar-default | Account avatar placeholder | person | User fill
-user-info | Account details | ID card | IdentificationCard fill
-preferences-other | Other settings | sliders | SlidersHorizontal bold
-object-select | Checkbox, selected row/option | tick | Check bold
-go-next | Row chevron, breadcrumb | chevron right | CaretRight bold
-go-previous | Back button | chevron left | CaretLeft bold
-pan-up | Move up, expanders | chevron up | CaretUp bold
-pan-down | Dropdown arrow, expanders | chevron down | CaretDown bold
-pan-end | Submenu arrow, tree branch | chevron right | CaretRight bold
-edit-clear | Clear text in a search field | circled x | XCircle fill
-list-add | Add, stepper plus | plus | Plus bold
-list-remove | Stepper minus | minus | Minus bold
-view-reveal | Show password | eye | Eye bold
-view-conceal | Hide password | eye with slash | EyeSlash bold
-starred | Preferred display mode | filled star | Star fill
-non-starred | Favourite (off) | outline star | Star bold
-window-close | Window close, dialogs | x | X bold
-window-minimize | Window minimize | bar | Minus bold
-window-maximize | Window maximize | square | Square bold
-window-restore | Window restore | two squares | CopySimple bold
-open-menu | Main menu button | hamburger | List bold
-view-more | More actions | three dots | DotsThreeVertical bold
-view-refresh | Refresh | circular arrow | ArrowClockwise bold
-object-rotate-right | Rotate | circular arrow | ArrowClockwise bold
-sidebar-show | Show sidebar | window with side pane | SidebarSimple fill
-focus-top-bar | Top bar | window with title bar | AppWindow fill
-edit-copy | Copy | two sheets | Copy bold
-edit-delete | Delete | trash can | Trash fill
-user-trash | Forget, Trash | trash can | Trash fill
-view-filter | Filter | funnel | Funnel fill
-find-location | Inspect element (inspector toolbar) | cursor clicking | CursorClick bold
-document-edit | Text editor (Applications) | pencil on page | NotePencil fill
-document-open | Open | open folder | FolderOpen fill
-send-to | Share | square with arrow up | Export bold
-view-list | List view | bulleted list | ListBullets bold
-view-grid | Grid view | four squares | SquaresFour fill
-folder | Folder, Files | folder | Folder fill
+audio-headphones | Headphones device (Sound, Bluetooth) | headphones | Headphones fill scale=1.025 dy=0.64
+audio-speakers | Speakers device (Sound, Bluetooth) | box speaker | SpeakerHifi fill scale=1.05 dx=0.42 dy=0.17
+audio-card | Sound card device (Sound page) | audio device / waveform | Waveform regular scale=1.075 dx=-0.13 dy=0.27
+media-playback-pause | Pause (inspector toolbar) | two bars | Pause fill scale=1.14 dx=0.02 dy=0.12
+preferences-system-notifications | Notifications (top bar) | bell | Bell fill scale=1.06 dx=0.32 dy=0.22
+notifications-disabled | Do not disturb (top bar, Control Centre) | bell with slash | BellSlash fill scale=1.06 dx=0.32 dy=0.22
+view-app-grid | Applications (sidebar), top-bar launcher | grid of nine dots | DotsNine bold scale=1.26 dy=-0.03
+system-shutdown | Power (top bar, power menu) | power symbol | Power bold scale=1.11 dy=-0.11
+battery-level-100 | Power (sidebar), battery full | horizontal battery | BatteryFull regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-50 | battery half | horizontal battery | BatteryMedium regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-0 | battery empty (top bar, Power) | empty battery | BatteryEmpty regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-10 | battery 10% | battery low | BatteryLow regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-20 | battery 20% | battery low | BatteryLow regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-30 | battery 30% | battery medium | BatteryMedium regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-40 | battery 40% | battery medium | BatteryMedium regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-60 | battery 60% | battery high | BatteryHigh regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-70 | battery 70% | battery high | BatteryHigh regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-80 | battery 80% | battery high | BatteryHigh regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-90 | battery 90% | battery full | BatteryFull regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-100-charged | battery charged, plugged in | full battery | BatteryFull regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-0-charging | charging (any level) | battery with bolt | BatteryCharging regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-10-charging | charging | battery with bolt | BatteryCharging regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-20-charging | charging | battery with bolt | BatteryCharging regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-30-charging | charging | battery with bolt | BatteryCharging regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-40-charging | charging | battery with bolt | BatteryCharging regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-50-charging | charging | battery with bolt | BatteryCharging regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-60-charging | charging | battery with bolt | BatteryCharging regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-70-charging | charging | battery with bolt | BatteryCharging regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-80-charging | charging | battery with bolt | BatteryCharging regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-90-charging | charging | battery with bolt | BatteryCharging regular scale=0.905 dx=-0.31 dy=0.02
+battery-level-100-charging | charging | battery with bolt | BatteryCharging regular scale=0.905 dx=-0.31 dy=0.02
+battery-missing | no battery found | battery with warning | BatteryWarning regular scale=0.905 dx=-0.31 dy=0.02
+power-profile-power-saver | Power mode: power saver | leaf | Leaf fill scale=1.125 dx=-0.01 dy=-0.18
+power-profile-balanced | Power mode: balanced | speedometer | Speedometer fill scale=1.005 dx=0.02 dy=0.47
+power-profile-performance | Power mode: performance | lightning bolt | Lightning fill dx=0.32
+display-brightness | Brightness | sun | Sun fill scale=0.955 dy=-0.48
+night-light | Night light | moon and stars | MoonStars fill scale=1.045 dx=-0.66 dy=0.63
+weather-clear-night | Dark style | moon | Moon fill scale=1.025 dx=-0.86
+preferences-desktop-accessibility | Accessibility (sidebar) | person in circle | PersonSimpleCircle regular scale=1.09 dy=-0.38
+applications-graphics | Appearance (sidebar) | palette | Palette regular scale=1.055 dx=0.17 dy=-0.17
+preferences-desktop-wallpaper | Desktop (sidebar), wallpaper | landscape picture | Mountains regular scale=1.015 dx=-0.01 dy=0.93
+video-display | Displays (sidebar), display device | monitor | Monitor regular scale=1.025 dy=-0.59
+system-search | Search (sidebar, search fields) | magnifier | MagnifyingGlass regular dx=0.48 dy=0.48
+input-keyboard | Keyboard (sidebar, device) | keyboard | Keyboard regular scale=0.97 dx=-0.13 dy=-0.48
+preferences-desktop-keyboard-shortcuts | Keyboard shortcuts row | keyboard | Keyboard regular scale=0.97 dx=-0.13 dy=-0.48
+input-mouse | Mouse (sidebar, device) | mouse | Mouse regular dy=0.02
+preferences-system-time | Date & time (sidebar) | clock | Clock regular scale=1.105 dx=-0.48 dy=0.47
+system-users | Users (sidebar) | two people | Users regular dy=-0.48
+help-about | About (sidebar) | circled i | Info regular scale=1.05 dx=0.22 dy=0.12
+computer | Computer (device, About hero) | laptop | Laptop fill dy=-0.48
+preferences-system | Details button, Control Centre | gear | Gear fill scale=1.06 dy=0.17
+emblem-system | Settings action | gear | Gear fill scale=1.06 dy=0.17
+avatar-default | Account avatar placeholder | person | User fill scale=1.095 dy=0.44 mirror=left
+user-info | Account details | ID card | IdentificationCard fill scale=1.1 dx=0.02 dy=-0.38
+preferences-other | Other settings | sliders | SlidersHorizontal regular scale=1.15 dx=-0.08 dy=0.02
+object-select | Checkbox, selected row/option | tick | Check bold scale=0.95 dx=-0.02 dy=-0.02
+go-next | Row chevron, breadcrumb | chevron right | CaretRight bold dx=0.02 dy=0.02
+go-previous | Back button | chevron left | CaretLeft bold dx=0.02 dy=0.02
+pan-up | Move up, expanders | chevron up | CaretUp bold dy=0.02
+pan-down | Dropdown arrow, expanders | chevron down | CaretDown bold dy=0.02
+pan-end | Submenu arrow, tree branch | chevron right | CaretRight bold dx=0.02 dy=0.02
+edit-clear | Clear text in a search field | circled x | XCircle fill scale=1.005 dy=-0.48
+list-add | Add, stepper plus | plus | Plus bold dy=0.02
+list-drag-handle | Reorder grip of sortable lists | six dots | DotsSixVertical bold dx=0.02 dy=0.02
+list-remove | Stepper minus | minus | Minus bold dy=0.02
+view-reveal | Show password | eye | Eye regular dy=0.02
+view-conceal | Hide password | eye with slash | EyeSlash regular scale=1.015 dy=-0.03
+starred | Preferred display mode | filled star | Star fill dy=0.02
+non-starred | Favourite (off) | outline star | Star bold scale=0.995 dy=0.01
+window-close | Window close, dialogs | x | X bold dy=0.02
+window-minimize | Window minimize | bar | Minus bold dy=0.02
+window-maximize | Window maximize | square | Square bold scale=0.965 dy=0.32
+window-restore | Window restore | two squares | CopySimple bold scale=0.96 dx=-0.13 dy=0.12
+open-menu | Main menu button | hamburger | List bold scale=1.06 dx=-0.13 dy=0.02
+view-more | More actions | three dots | DotsThreeVertical bold dx=-0.23 dy=0.02
+view-refresh | Refresh | circular arrow | ArrowClockwise regular scale=1.055 dx=-0.36 dy=0.07
+object-rotate-right | Rotate | circular arrow | ArrowClockwise regular scale=1.055 dx=-0.36 dy=0.07
+sidebar-show | Show sidebar | window with side pane | SidebarSimple regular scale=1.065 dx=0.12 dy=0.17
+focus-top-bar | Top bar | window with title bar | AppWindow regular scale=1.055 dx=0.17 dy=-0.23
+edit-copy | Copy | two sheets | Copy regular scale=1.11 dx=-0.2 dy=-0.2
+edit-delete | Delete | trash can | Trash regular scale=1.04 dx=0.02 dy=0.18
+user-trash | Forget, Trash | trash can | Trash fill scale=1.06 dx=0.02 dy=0.3
+view-filter | Filter | funnel | Funnel regular scale=1.01 dx=0.02 dy=-0.44
+find-location | Inspect element (inspector toolbar) | cursor clicking | CursorClick regular scale=1.025 dx=0.54 dy=0.54
+document-edit | Text editor (Applications) | pencil on page | NotePencil regular scale=1.04 dx=-0.43 dy=0.42
+document-open | Open | open folder | FolderOpen fill dx=-0.52 dy=-0.48
+send-to | Share | square with arrow up | Export regular scale=1.07 dx=-0.13 dy=0.08
+view-list | List view | bulleted list | ListBullets regular scale=1.18 dx=0.37 dy=-0.48
+view-grid | Grid view | four squares | SquaresFour regular scale=1.245 dy=-0.28
+folder | Folder, Files | folder | Folder fill scale=1.065 dx=-0.08 dy=-0.18
 go-up | Parent folder (file chooser toolbar: Up) | folder with an arrow out of it | custom: Folder fill with an up arrow cut out
 folder-download | Downloads folder (file chooser list, sidebar, address bar) | folder with a down arrow | custom: Folder fill with a down arrow cut out
-bookmarks | Website shortcuts | bookmark | BookmarkSimple fill
-dialog-error | Error status | circled x | XCircle fill
-dialog-information | Information status, notes | circled i | Info fill
-dialog-warning | Warning status | triangle with ! | Warning fill
-help-browser | Help | circled ? | Question fill
-security-high | Secure | shield with tick | ShieldCheck fill
-security-low | Insecure | shield with ! | ShieldWarning fill
-system-lock-screen | Lock | padlock | Lock fill
-dialog-password | Password | key | Key fill
-changes-prevent | Keep awake | coffee cup | Coffee fill
-input-gaming | Game controller (Bluetooth) | game pad | GameController fill
-input-tablet | Tablet (Bluetooth) | tablet | DeviceTablet fill
-input-touchpad | Touchpad | finger tapping | HandTap bold
-phone | Phone (Bluetooth), phone preview | phone | DeviceMobile fill
-camera-web | Webcam (Sound page, Bluetooth) | webcam | Webcam fill
-media-removable | USB drive | USB symbol | Usb fill
-printer | Printer (Bluetooth) | printer | Printer fill
-web-browser | Web (Applications, search) | globe | Globe fill
-x-office-calendar | Calendar (Applications) | calendar | CalendarBlank fill
-mail-unread | Mail (Applications) | envelope | EnvelopeSimple fill
-image-generic | Image viewer (Applications), wallpapers | picture | Image fill
-video-generic | Video (Applications) | video camera | VideoCamera fill
-applications-multimedia | Music (Applications) | music note | MusicNotesSimple fill
-accessories-calculator | Calculation (search) | calculator | Calculator fill
-addon | Add-on sources (search) | plug-in | Plugs fill
-application-x-executable | Generic application tile | box | Cube fill
-user-home | Home (file chooser) | house | House fill
+bookmarks | Website shortcuts | bookmark | BookmarkSimple fill scale=1.14 dy=-0.15
+dialog-error | Error status | circled x | XCircle fill scale=1.005 dy=-0.48
+dialog-information | Information status, notes | circled i | Info fill scale=1.025 dx=0.37 dy=-0.38
+dialog-warning | Warning status | triangle with ! | Warning fill scale=1.01 dy=-0.08 snap=none
+help-browser | Help | circled ? | Question fill scale=1.09 dx=-0.43 dy=-0.28
+security-high | Secure | shield with tick | ShieldCheck fill scale=1.125 dx=0.02 dy=-0.82
+security-low | Insecure | shield with ! | ShieldWarning fill scale=1.145 dx=0.17 dy=-1.04
+system-lock-screen | Lock | padlock | Lock fill scale=1.015 dy=0.93
+dialog-password | Password | key | Key fill dx=-0.48 dy=0.47
+changes-prevent | Keep awake | coffee cup | Coffee fill dx=-0.98 dy=0.02
+input-gaming | Game controller (Bluetooth) | game pad | GameController fill dy=0.02
+input-tablet | Tablet (Bluetooth) | tablet | DeviceTablet regular scale=1.03 dy=-0.2
+input-touchpad | Touchpad | finger tapping | HandPointing regular scale=1.01 dx=-0.08 dy=-0.48
+phone | Phone (Bluetooth), phone preview | phone | DeviceMobile regular scale=1.05 dy=-0.1
+camera-web | Webcam (Sound page, Bluetooth) | webcam | Webcam fill scale=1.07 dx=-0.48 dy=0.15
+media-removable | USB drive | USB symbol | Usb fill scale=0.99 dx=0.3 dy=0.1
+printer | Printer (Bluetooth) | printer | Printer fill scale=1.02 dx=-0.43 dy=-0.13
+web-browser | Web (Applications, search) | globe | Globe regular scale=1.07 dy=-0.38
+x-office-calendar | Calendar (Applications) | calendar | CalendarBlank regular scale=1.125 dx=0.02 dy=0.66
+mail-unread | Mail (Applications) | envelope | EnvelopeSimple regular scale=1.035 dx=-0.33 dy=-0.13
+image-generic | Image viewer (Applications), wallpapers | picture | Image fill scale=1.06 dx=-0.08 dy=0.17
+video-generic | Video (Applications) | video camera | VideoCamera fill scale=0.96 dx=-0.81 dy=0.32
+applications-multimedia | Music (Applications) | music note | MusicNotesSimple fill dx=0.52 dy=0.02
+accessories-calculator | Calculation (search) | calculator | Calculator fill scale=1.06 dx=-0.13 dy=0.02
+addon | Add-on sources (search) | plug-in | Plugs fill dx=0.02 dy=0.01
+application-x-executable | Generic application tile | box | Cube fill scale=0.97 dx=-0.33 dy=0.02
+user-home | Home (file chooser) | house | House fill scale=1.135 dx=0.02 dy=0.19
 folder-documents | Documents folder (file chooser list, sidebar, address bar) | folder with a page of text | custom: Folder fill with a page of text lines cut out
 folder-music | Music folder (file chooser list, sidebar, address bar) | folder with a music note | custom: Folder fill with a music note cut out
 folder-pictures | Pictures folder (file chooser list, sidebar, address bar) | folder with a picture | custom: Folder fill with a picture of a hill cut out
 folder-videos | Videos folder (file chooser list, sidebar, address bar) | folder with a play button | custom: Folder fill with a framed play triangle cut out
-drive-harddisk | Drive (file chooser) | hard disk | HardDrive fill
-text-x-generic | Text file (file chooser) | page with lines | FileText fill
-audio-x-generic | Audio file (file chooser) | page with audio | FileAudio fill
-package-x-generic | Archive file (file chooser) | box | Package fill
-folder-new | New folder (file chooser) | folder with plus | FolderPlus fill
-media-eject | Eject drive (file chooser sidebar) | eject mark | Eject fill
-media-optical | Optical disc (file chooser sidebar) | disc | Disc fill
+drive-harddisk | Drive (file chooser) | hard disk | HardDrive fill dx=0.02 dy=0.02
+text-x-generic | Text file (file chooser) | page with lines | FileText fill scale=1.065 dx=0.12 dy=-0.08
+audio-x-generic | Audio file (file chooser) | page with audio | FileAudio fill scale=1.045 dx=-0.28 dy=0.12
+package-x-generic | Archive file (file chooser) | box | Package fill scale=0.96 dx=-0.38 dy=0.07
+folder-new | New folder (file chooser) | folder with plus | FolderPlus fill scale=1.07 dx=-0.13 dy=-0.23
+media-eject | Eject drive (file chooser sidebar) | eject mark | Eject fill scale=1.13 dx=0.02 dy=1.29
+media-optical | Optical disc (file chooser sidebar) | disc | Disc fill scale=1.02 dx=0.4 dy=0.48
 folder-templates | Templates folder (file chooser list, sidebar, address bar) | folder with a blank page | custom: Folder fill with a page with a folded corner cut out
 folder-publicshare | Public folder (file chooser list, sidebar, address bar) | folder with a person | custom: Folder fill with a person cut out
 folder-desktop | Desktop folder (file chooser list, sidebar, address bar) | folder with a screen | custom: Folder fill with a monitor cut out
-window-new | Open in new window (menus) | window with arrow | ArrowSquareOut bold
+window-new | Open in new window (menus) | window with arrow | ArrowSquareOut bold scale=1.065 dx=0.12 dy=-0.13
+default-app-text | Default applications: Text (plain text files) | page with lines | FileText regular scale=1.04 dx=-0.33 dy=-0.03
+default-app-documents | Default applications: Documents (PDF, office documents) | document file, DOC | FileDoc regular scale=1.15 dx=-0.04 dy=0.74

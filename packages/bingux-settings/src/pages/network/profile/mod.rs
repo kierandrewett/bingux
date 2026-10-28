@@ -37,7 +37,7 @@ use crate::pages::connection_editor::{
     wifi_security_kind, yes_no,
 };
 use crate::pages::loading::veiled;
-use crate::routes::Route;
+use crate::routes;
 use crate::ui::{
     Group, PageHead, Status, choice_row, page_column, row, status, stepper, switch_row,
 };
@@ -129,7 +129,6 @@ fn everyday_group(page: &Page) -> Element {
             saved.get("connection.metered"),
             move |value: String| page.apply_now(Changes::one("connection.metered", value)),
         )
-        .subtitle("Apps may use less data on a metered connection.")
     };
     let mut group = Group::new(None::<String>).row(autoconnect).row(metered);
     match page.kind() {
@@ -172,7 +171,7 @@ impl Component for PasswordRow {
         if self.password.is_empty() {
             return Element::from(
                 row("Password")
-                    .subtitle("Not saved here. It is asked for when connecting.")
+                    .subtitle("Not saved")
                     .subtitle_one_line(),
             );
         }
@@ -196,11 +195,8 @@ fn options(choices: &[(&str, &str)]) -> Vec<(String, String)> {
 /// A row that opens `section` of the connection, with the current value at its right, or under
 /// the title on a phone, where there is no room beside it.
 fn section_row(page: &Page, section: Section, value: impl Into<String>) -> Element {
-    let route = Route::Section {
-        owner: page.owner.clone(),
-        section: section.clone(),
-    };
-    let navigator = page.ctx.navigator;
+    let route = routes::section(&page.owner.clone(), &section.clone());
+    let router = page.ctx.router;
     let value = value.into();
     let line = row(section.title());
     let line = if is_compact() {
@@ -209,23 +205,20 @@ fn section_row(page: &Page, section: Section, value: impl Into<String>) -> Eleme
         line.value(value)
     };
     line.navigates()
-        .on_press(move |_| navigator.push(route.clone()))
+        .on_press(move |_| router.open(route.clone()))
         .into()
 }
 
 /// The one row to everything else, with what differs from the defaults under it.
 fn advanced_row(page: &Page) -> Element {
-    let route = Route::Section {
-        owner: page.owner.clone(),
-        section: Section::Advanced,
-    };
-    let navigator = page.ctx.navigator;
+    let route = routes::section(&page.owner.clone(), &Section::Advanced);
+    let router = page.ctx.router;
     Group::new(None::<String>)
         .row(
             row("Advanced")
                 .subtitle(advanced_summary(&page.saved, page.kind()))
                 .navigates()
-                .on_press(move |_| navigator.push(route.clone())),
+                .on_press(move |_| router.open(route.clone())),
         )
         .into()
 }
@@ -382,7 +375,6 @@ fn advanced_page(page: &Page, extra: Option<Element>) -> Element {
     let priority = {
         let page = page.clone();
         row("Priority")
-            .subtitle("Higher priorities connect first when several connections are available.")
             .trailing(
                 stepper(
                     saved.int("connection.autoconnect-priority").unwrap_or(0),

@@ -717,7 +717,7 @@ impl Component for ZoomHud {
                     )
                     .child(
                         NUMERIC
-                            .in_ink(Ink::OnAccent)
+                            .in_ink(Ink::OnFloating)
                             .label(&tokens, hud_text(*shown.read()))
                             .max_lines(1),
                     ),

@@ -245,6 +245,74 @@ const SCENARIOS: &[Scenario] = &[
         grid: false,
         script: "wait 500; click-text Meeting notes; wait 300; key shift+delete; wait 700; key return; wait 500",
     },
+    // The Properties dialog, one scenario per tab. Alt+Enter opens it on the
+    // selection, or on the folder when nothing is selected.
+    Scenario {
+        name: "props-basic",
+        folder: "Documents",
+        grid: false,
+        script: "wait 500; click-text Quarterly report.pdf; wait 200; key alt+return; wait 900; key ctrl+1; wait 500",
+    },
+    Scenario {
+        name: "props-permissions",
+        folder: "Documents",
+        grid: false,
+        script: "wait 500; click-text Quarterly report.pdf; wait 200; key alt+return; wait 900; key ctrl+2; wait 700",
+    },
+    Scenario {
+        name: "props-details",
+        folder: "Documents",
+        grid: false,
+        script: "wait 500; click-text Quarterly report.pdf; wait 200; key alt+return; wait 900; key ctrl+3; wait 700",
+    },
+    Scenario {
+        name: "props-details-image",
+        folder: "Pictures",
+        grid: false,
+        script: "wait 700; click-text Aurora.png; wait 200; key alt+return; wait 900; key ctrl+3; wait 700",
+    },
+    Scenario {
+        name: "props-checksum",
+        folder: "Pictures",
+        grid: false,
+        script: "wait 700; click-text Aurora.png; wait 200; key alt+return; wait 900; key ctrl+3; wait 500; click-text Calculate; wait 900",
+    },
+    Scenario {
+        name: "props-folder-basic",
+        folder: "",
+        grid: false,
+        script: "wait 900; click-text Projects; wait 200; key alt+return; wait 900; key ctrl+1; wait 500",
+    },
+    Scenario {
+        name: "props-folder-permissions",
+        folder: "",
+        grid: false,
+        script: "wait 900; click-text Projects; wait 200; key alt+return; wait 900; key ctrl+2; wait 700",
+    },
+    Scenario {
+        name: "props-folder-apply-ask",
+        folder: "",
+        grid: false,
+        script: "wait 900; click-text Projects; wait 200; key alt+return; wait 900; key ctrl+2; wait 600; scroll 400,500,-600; wait 400; click-text Apply…; wait 500 | wait 900; click-text Projects; wait 200; key alt+return; wait 900; key ctrl+2; wait 600; scroll 300,500,-600; wait 400; click-text Apply…; wait 500",
+    },
+    Scenario {
+        name: "props-folder-contents",
+        folder: "",
+        grid: false,
+        script: "wait 900; click-text Projects; wait 200; key alt+return; wait 900; key ctrl+4; wait 1200",
+    },
+    Scenario {
+        name: "props-multi-basic",
+        folder: "Documents",
+        grid: false,
+        script: "wait 500; click-text Meeting notes; key ctrl+a; wait 300; key alt+return; wait 900; key ctrl+1; wait 500",
+    },
+    Scenario {
+        name: "props-multi-permissions",
+        folder: "Documents",
+        grid: false,
+        script: "wait 500; click-text Meeting notes; key ctrl+a; wait 300; key alt+return; wait 900; key ctrl+2; wait 700",
+    },
 ];
 
 fn main() {

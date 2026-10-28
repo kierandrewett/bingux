@@ -10,11 +10,14 @@ The full guide, component table and rules are in
 [`docs/bingux-ui.md`](../../docs/bingux-ui.md).
 
 ```sh
-# Every component, live
-cargo run --example gallery
+# Every component, icon and token, live, with a theme/density/scale switcher
+cargo run --manifest-path ../bingux-taxonomy/Cargo.toml
 
-# Every gallery page rendered headlessly to /tmp/bingux-ui-gallery
-cargo run --features testing --example snapshot
+# Every taxonomy page rendered headlessly to /tmp/bingux-taxonomy
+cargo run --manifest-path ../bingux-taxonomy/Cargo.toml -- --snapshot /tmp/bingux-taxonomy
 ```
+
+Every change to bingux-ui adds or updates its entry in `../bingux-taxonomy`
+(see "Taxonomy app" in the guide).
 
 Icons under `icons/` come from the chat icon fork of Phosphor (MIT); see `icons/COPYING` and the Icons section of the guide.

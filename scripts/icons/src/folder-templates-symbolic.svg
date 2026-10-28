@@ -1,5 +1,5 @@
 <svg viewBox="0 0 16 16">
-  <fork name="Folder" weight="fill" mode="exact"/>
+  <fork name="Folder" weight="fill" mode="exact" scale="1.065" dx="-0.08" dy="-0.18"/>
   <polygon points="5,6 9,6 11,8 11,12 5,12" fill="black" data-op="cut"/>
   <polygon points="9,6 9,8 11,8" fill="black"/>
 </svg>

@@ -6,6 +6,7 @@ use std::path::Path;
 
 use bingux_files::display;
 use bingux_files::mounts::{Mount, MountKind, Usage, mount_for};
+use bingux_files::volumes::Volume;
 use bingux_files::{Place, PlaceKind, Places};
 
 use super::directory::Where;
@@ -32,6 +33,9 @@ pub(crate) struct Item {
     pub kind: ItemKind,
     /// The mount behind a drive row. Computer carries the mount of `/`.
     pub mount: Option<Mount>,
+    /// The drive behind a row that is plugged in and not mounted yet.
+    /// Opening the row mounts it.
+    pub volume: Option<Volume>,
     /// Whether the folder is in the bookmarks already.
     pub bookmarked: bool,
 }
@@ -39,6 +43,9 @@ pub(crate) struct Item {
 impl Item {
     /// The folder, for a row that has one.
     pub fn path(&self) -> Option<&Path> {
+        if self.volume.is_some() {
+            return None;
+        }
         match &self.target {
             Where::Folder(path) => Some(path),
             Where::Recent => None,
@@ -58,12 +65,14 @@ pub(crate) struct Section {
 ///
 /// `places` supplies the standard places (and the name of Computer). The
 /// drives come from `mounts`, which knows their sizes, so any volumes in
-/// `places.devices` are ignored. A mount of `/` is the Computer row. Recent
+/// `places.devices` are ignored; `volumes` are the drives plugged in and not
+/// mounted, listed after them. A mount of `/` is the Computer row. Recent
 /// is left out when `recent` is false.
 pub(crate) fn sections(
     places: &Places,
     bookmarks: &[Place],
     mounts: &[Mount],
+    volumes: &[Volume],
     recent: bool,
 ) -> Vec<Section> {
     let bookmarked = |path: &Path| {
@@ -80,6 +89,7 @@ pub(crate) fn sections(
         },
         kind,
         mount: None,
+        volume: None,
         bookmarked: place.path.as_deref().is_some_and(bookmarked),
     };
 
@@ -120,6 +130,7 @@ pub(crate) fn sections(
             .iter()
             .find(|mount| mount.mount_point == root)
             .cloned(),
+        volume: None,
         bookmarked: bookmarked(root),
     }];
     drives.extend(
@@ -132,9 +143,20 @@ pub(crate) fn sections(
                 target: Where::Folder(mount.mount_point.clone()),
                 kind: ItemKind::Drive,
                 mount: Some(mount.clone()),
+                volume: None,
                 bookmarked: bookmarked(&mount.mount_point),
             }),
     );
+    drives.extend(volumes.iter().map(|volume| Item {
+        icon: drive_icon(volume.kind),
+        label: volume.label.clone(),
+        // Not a folder: the device, so two volumes never look alike.
+        target: Where::Folder(volume.device.clone().into()),
+        kind: ItemKind::Drive,
+        mount: None,
+        volume: Some(volume.clone()),
+        bookmarked: false,
+    }));
     out.push(Section {
         title: Some("Drives"),
         items: drives,
@@ -184,6 +206,13 @@ pub(crate) enum UsageLine {
         warn: bool,
     },
     NotResponding,
+    /// One line of words and no bar: a drive that is not mounted yet.
+    Text(String),
+}
+
+/// `Not mounted, 16 GB`.
+pub(crate) fn volume_text(volume: &Volume) -> String {
+    format!("Not mounted \u{b7} {}", display::size(volume.size))
 }
 
 /// `230 GB free of 465 GB`.
@@ -348,7 +377,7 @@ mod tests {
             mount("/", "root", MountKind::Local, known(100, 50)),
             mount("/mnt/nas", "nas", MountKind::Network, Usage::Unknown),
         ];
-        let out = sections(&sample(), &bookmarks, &mounts, true);
+        let out = sections(&sample(), &bookmarks, &mounts, &[], true);
         let titles: Vec<_> = out.iter().map(|section| section.title).collect();
         assert_eq!(titles, [None, Some("Bookmarks"), Some("Drives")]);
         let drives: Vec<_> = out[2]
@@ -368,10 +397,28 @@ mod tests {
 
     #[test]
     fn recent_is_left_out_on_request_and_empty_groups_vanish() {
-        let out = sections(&sample(), &[], &[], false);
+        let out = sections(&sample(), &[], &[], &[], false);
         assert_eq!(out[0].items.len(), 2);
         assert_eq!(out.len(), 2);
         assert_eq!(out[1].title, Some("Drives"));
+    }
+
+    #[test]
+    fn trash_is_a_standard_row_with_the_trash_icon() {
+        let mut places = sample();
+        places.standard.push(place(
+            PlaceKind::Trash,
+            "Trash",
+            Some("/home/a/.local/share/Trash/files"),
+        ));
+        let out = sections(&places, &[], &[], &[], true);
+        let trash = out[0].items.last().unwrap();
+        assert_eq!(trash.label, "Trash");
+        assert_eq!(trash.icon, Icon::UserTrash);
+        assert_eq!(
+            trash.path(),
+            Some(Path::new("/home/a/.local/share/Trash/files"))
+        );
     }
 
     #[test]
@@ -380,7 +427,7 @@ mod tests {
             mount("/", "root", MountKind::Local, Usage::Unknown),
             mount("/mnt/nas", "nas", MountKind::Network, Usage::Unknown),
         ];
-        let out = sections(&sample(), &[], &mounts, true);
+        let out = sections(&sample(), &[], &mounts, &[], true);
         let at = |path: &str| selected(&out, &Where::Folder(path.into()), &mounts);
         assert_eq!(at("/home/a/Documents"), Some((0, 2)));
         assert_eq!(at("/mnt/nas/deep/er"), Some((1, 1)));

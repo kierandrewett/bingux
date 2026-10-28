@@ -8,9 +8,10 @@
 //! Zooming changes the icon and nothing else. The icon slot is `icon_px`
 //! wide and tall; the row is as tall as the sidebar's rows (`Dim::NavItem`)
 //! and grows only as far as the icon needs. The text, its size and the column
-//! widths are the same at every level (see `columns.rs`). From
-//! [`LIST_PICTURE_PX`] up, the slot of an image, video or document shows its
-//! picture (see `thumbnails.rs`). The header is mounted by
+//! widths are the same at every level (see `columns.rs`). The slot of an
+//! image, video or document shows its picture (see `thumbnails.rs`): at the
+//! default size only a cached one, from [`LIST_DECODE_PX`] up a decoded one
+//! too, with the icon as the placeholder. The header is mounted by
 //! [`FileView`](super::view::FileView), which makes the one [`Plan`] header
 //! and rows share.
 //!
@@ -35,7 +36,7 @@ use super::columns::{
 };
 use super::interaction::Lattice;
 use super::rename_field::RenameField;
-use super::thumbnails::{LIST_PICTURE_PX, face};
+use super::thumbnails::{LIST_DECODE_PX, Preview, face};
 use super::view::{Ctx, Rows, Shared};
 use super::zoom::bucket_px;
 use crate::component::ComponentName;
@@ -119,10 +120,11 @@ impl Component for ListView {
             gap_x: 0.0,
             gap_y: 0.0,
         }));
-        anchor_zoom(&ctx, f32::from(icon_px), row_height, 1);
+        let settle: Settle = use_hook(|| Rc::new(Cell::new(None)));
+        anchor_zoom(&ctx, f32::from(icon_px), row_height, 1, &settle);
 
         let name_room = plan_name_room(&plan, row_width, icon_px);
-        let bucket = if ctx.thumbnails && icon_px >= LIST_PICTURE_PX {
+        let bucket = if ctx.thumbnails {
             let device_scale = *Platform::get().current_window().scale_factor.read() as f32;
             bucket_px(f32::from(icon_px), device_scale)
         } else {
@@ -159,14 +161,30 @@ impl Component for ListView {
         .item_size(row_height)
         .drag_scrolling(compact)
         .pass_ctrl_wheel(true)
-        .on_sized(move |event: Event<SizedEventData>| viewport.set_if_modified(event.area))
+        .on_sized({
+            let scroll = ctx.scroll;
+            move |event: Event<SizedEventData>| {
+                viewport.set_if_modified(event.area);
+                settle_zoom(scroll, &settle);
+            }
+        })
     }
 }
+
+/// Where an anchored zoom wants the list, and where it left it, until the
+/// scroll view has laid out the new item size.
+pub(super) type Settle = Rc<Cell<Option<(i32, i32)>>>;
 
 /// Keeps the content under the pointer fixed while the zoom changes, and the
 /// first row at the top when only the width does. `zoom_px` is the icon size
 /// of this frame.
-pub(super) fn anchor_zoom(ctx: &Ctx, zoom_px: f32, pitch: f32, columns: usize) {
+///
+/// This runs in render, before the scroll view has laid out the new item size,
+/// so the controller still clamps to the old content height: zooming in near
+/// the end of a long folder could not reach its target and left the view
+/// short of it. The target is kept in `settle` for [`settle_zoom`], which the
+/// view's `on_sized` runs once the new height is known.
+pub(super) fn anchor_zoom(ctx: &Ctx, zoom_px: f32, pitch: f32, columns: usize, settle: &Settle) {
     let seen = ctx.zoom_seen.clone();
     let before = seen.get();
     seen.set(Some((zoom_px, pitch, columns)));
@@ -190,7 +208,21 @@ pub(super) fn anchor_zoom(ctx: &Ctx, zoom_px: f32, pitch: f32, columns: usize) {
     let next = super::interaction::anchored_offset(
         offset, pointer, old_pitch, old_columns, pitch, columns,
     );
-    scroll.scroll_to_y(-(next.max(0.0).round() as i32));
+    let target = -(next.max(0.0).round() as i32);
+    scroll.scroll_to_y(target);
+    settle.set(Some((target, <(i32, i32)>::from(scroll).1)));
+}
+
+/// Moves the view to the target of the last [`anchor_zoom`] now that the scroll
+/// view knows the new content height, unless the person has scrolled since.
+pub(super) fn settle_zoom(scroll: ScrollController, settle: &Settle) {
+    let Some((target, wrote)) = settle.take() else {
+        return;
+    };
+    let mut scroll = scroll;
+    if <(i32, i32)>::from(scroll).1 == wrote {
+        scroll.scroll_to_y(target);
+    }
 }
 
 /// The room the Name cell leaves for text: the row less the icon slot, the
@@ -340,7 +372,12 @@ impl Component for FileRow {
         let enabled = ctx.selectable(entry);
         let dim = !enabled || ctx.cut_dim(&entry.path);
 
-        let icon = face(&tokens, entry, self.icon_px, self.bucket, self.bucket > 0);
+        let preview = match () {
+            _ if self.bucket == 0 => Preview::Off,
+            _ if self.icon_px >= LIST_DECODE_PX => Preview::Full,
+            _ => Preview::Cached,
+        };
+        let icon = face(&tokens, entry, self.icon_px, self.bucket, preview);
         let now = SystemTime::now();
         let dates = if ctx.recent {
             DateStyle::Relative

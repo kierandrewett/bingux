@@ -391,6 +391,18 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
         active_event_loop: &winit::event_loop::ActiveEventLoop,
         event: NativeEvent,
     ) {
+        // Bingux patch: a panic while handling an event is caught and reported
+        // (`freya_core::guard`), never unwound into winit, which would abort. A
+        // failed runner poll marks every scope dirty so the next poll rebuilds
+        // the tree from the components' state.
+        let polled = match &event {
+            NativeEvent::Window(NativeWindowEvent {
+                window_id,
+                action: NativeWindowEventAction::PollRunner,
+            }) => Some(*window_id),
+            _ => None,
+        };
+        let outcome = freya_core::guard::framework("user event", || {
         match event {
             NativeEvent::Generic(NativeGenericEvent::PollFutures) => {
                 GlobalTasks::get().poll();
@@ -737,6 +749,39 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                 }
             }
         }
+        });
+        if outcome.is_none()
+            && let Some(window_id) = polled
+            && let Some(app) = self.windows.get_mut(&window_id)
+        {
+            app.runner.mark_all_dirty();
+            app.process_layout_on_next_render = true;
+            app.window.request_redraw();
+            // Poll again at once, but not faster than four times a second: a
+            // runner that fails on every poll must not spin the event loop.
+            thread_local! {
+                static LAST_REPOLL: std::cell::Cell<Option<std::time::Instant>> =
+                    const { std::cell::Cell::new(None) };
+            }
+            let now = std::time::Instant::now();
+            let due = LAST_REPOLL.with(|last| {
+                let due = last
+                    .get()
+                    .is_none_or(|at| now.duration_since(at) >= std::time::Duration::from_millis(250));
+                if due {
+                    last.set(Some(now));
+                }
+                due
+            });
+            if due {
+                self.proxy
+                    .send_event(NativeEvent::Window(NativeWindowEvent {
+                        window_id,
+                        action: NativeWindowEventAction::PollRunner,
+                    }))
+                    .ok();
+            }
+        }
     }
 
     fn window_event(
@@ -746,6 +791,10 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
         event: winit::event::WindowEvent,
     ) {
         let mut needs_recovery = false;
+        // Bingux patch: see `user_event`. A failed frame or input event is
+        // reported and the window is laid out and drawn again on the next event.
+        let was_frame = matches!(event, WindowEvent::RedrawRequested);
+        let outcome = freya_core::guard::framework("window event", || {
         if let Some(app) = &mut self.windows.get_mut(&window_id) {
             #[cfg(feature = "accessibility")]
             app.accessibility_adapter.process_event(&app.window, &event);
@@ -1311,17 +1360,37 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                 _ => {}
             }
         }
+        });
+        if outcome.is_none()
+            && let Some(app) = self.windows.get_mut(&window_id)
+        {
+            app.process_layout_on_next_render = true;
+            // A frame that panicked is not asked for again at once: a failure that
+            // repeats on every frame would spin. The next event draws it.
+            if !was_frame {
+                app.window.request_redraw();
+            }
+        }
 
         // Rebuild on the same window.
         if needs_recovery && let Some(mut app) = self.windows.remove(&window_id) {
             // Drop the lost driver first to release its GPU surface.
             drop(app.driver);
-            app.driver = GraphicsDriver::recover_reusing_window(
-                event_loop,
-                &app.window,
-                self.gpu_resource_cache_limit,
-                app.window_attributes.transparent,
-            );
+            // Bingux patch: a window that cannot get its graphics driver back is
+            // beyond repair. `guard::unrecoverable` reports it and gives the app
+            // its chance to relaunch; if the process is still here, close.
+            let Some(driver) = freya_core::guard::unrecoverable("rebuilding the graphics driver", || {
+                GraphicsDriver::recover_reusing_window(
+                    event_loop,
+                    &app.window,
+                    self.gpu_resource_cache_limit,
+                    app.window_attributes.transparent,
+                )
+            }) else {
+                event_loop.exit();
+                return;
+            };
+            app.driver = driver;
             tracing::info!("Recovered onto the {} driver", app.driver.name());
             self.plugins.send(
                 PluginEvent::GraphicsDriverChanged {

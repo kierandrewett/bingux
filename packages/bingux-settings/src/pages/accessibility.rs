@@ -143,7 +143,6 @@ fn flag_row(
     overlays: Overlays,
     key: &'static str,
     label: &str,
-    subtitle: &str,
     loaded: Option<bool>,
     write: fn(bool) -> CommandResult,
 ) -> Option<Element> {
@@ -152,7 +151,6 @@ fn flag_row(
         switch_row(label, on, move |next: bool| {
             set_flag(pending, overlays, key, next, move || write(next))
         })
-        .subtitle(subtitle)
         .into(),
     )
 }
@@ -230,7 +228,6 @@ impl Component for AccessibilityPage {
                     overlays,
                     "screen-reader",
                     "Screen reader",
-                    "Reads out what is on screen.",
                     model.screen_reader,
                     |on| {
                         system::gsettings_set(APPLICATIONS, "screen-reader-enabled", flag_text(on))
@@ -241,7 +238,6 @@ impl Component for AccessibilityPage {
                     overlays,
                     "large-text",
                     "Large text",
-                    "Makes the text 25 % larger.",
                     model.large_text,
                     |on| {
                         let scale = if on { LARGE_TEXT } else { 1.0 };
@@ -257,7 +253,6 @@ impl Component for AccessibilityPage {
                     overlays,
                     "high-contrast",
                     "High contrast",
-                    "Stronger outlines and colours, so controls stand out.",
                     model.high_contrast,
                     |on| system::gsettings_set(A11Y_INTERFACE, "high-contrast", flag_text(on)),
                 ),
@@ -266,7 +261,6 @@ impl Component for AccessibilityPage {
                     overlays,
                     "reduce-animations",
                     "Reduce animations",
-                    "Windows and menus appear without movement.",
                     model.reduce_animations,
                     |on| system::gsettings_set(INTERFACE, "enable-animations", flag_text(!on)),
                 ),
@@ -276,7 +270,6 @@ impl Component for AccessibilityPage {
                     overlays,
                     "overlay-scrollbars",
                     "Overlay scrollbars",
-                    "Scrollbars appear only while scrolling.",
                     model.overlay_scrollbars,
                     |on| system::gsettings_set(INTERFACE, "overlay-scrolling", flag_text(on)),
                 ),
@@ -291,7 +284,6 @@ impl Component for AccessibilityPage {
                     overlays,
                     "on-screen-keyboard",
                     "On-screen keyboard",
-                    "Shows a keyboard on screen for typing with a pointer.",
                     model.screen_keyboard,
                     |on| {
                         system::gsettings_set(
@@ -306,7 +298,6 @@ impl Component for AccessibilityPage {
                     overlays,
                     "sticky-keys",
                     "Sticky keys",
-                    "Press Shift, Control or Alt once, then the next key.",
                     model.sticky_keys,
                     |on| system::gsettings_set(KEYBOARD, "stickykeys-enable", flag_text(on)),
                 ),
@@ -315,7 +306,6 @@ impl Component for AccessibilityPage {
                     overlays,
                     "slow-keys",
                     "Slow keys",
-                    "A key counts only when it is held down for a moment.",
                     model.slow_keys,
                     |on| system::gsettings_set(KEYBOARD, "slowkeys-enable", flag_text(on)),
                 ),
@@ -324,7 +314,6 @@ impl Component for AccessibilityPage {
                     overlays,
                     "bounce-keys",
                     "Bounce keys",
-                    "Ignores quick repeated presses of the same key.",
                     model.bounce_keys,
                     |on| system::gsettings_set(KEYBOARD, "bouncekeys-enable", flag_text(on)),
                 ),
@@ -339,7 +328,6 @@ impl Component for AccessibilityPage {
                     overlays,
                     "mouse-keys",
                     "Mouse keys",
-                    "Moves the pointer with the number pad.",
                     model.mouse_keys,
                     |on| system::gsettings_set(KEYBOARD, "mousekeys-enable", flag_text(on)),
                 ),
@@ -348,7 +336,6 @@ impl Component for AccessibilityPage {
                     overlays,
                     "locate-pointer",
                     "Locate pointer",
-                    "Shows a ripple around the pointer when Control is pressed.",
                     model.locate_pointer,
                     |on| system::gsettings_set(INTERFACE, "locate-pointer", flag_text(on)),
                 ),

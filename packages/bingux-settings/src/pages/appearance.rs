@@ -29,7 +29,8 @@ use crate::pages::desktop::{
     self,
     preview::{Frame, Scene, framed, scene},
 };
-use crate::routes::{Route, use_navigator};
+use crate::routes;
+use bingux_ui::prelude::use_router;
 use crate::system::{
     self, CommandError, background, background_then, optimistic, optimistic_then, which,
 };
@@ -212,51 +213,78 @@ fn change(mut model: State<Option<Loaded>>, overlays: Overlays, setting: Setting
 
 /// One accent circle, set in a box of the control size so the row keeps an
 /// even pitch. The selected one is ringed in the text colour and carries a
-/// check. Hovering shows the accent's name.
+/// check. Hovering shows the accent's name. A component of its own: its focus
+/// stop is a hook, and the page returns early while it loads.
 fn swatch(
-    tokens: &Tokens,
     name: &'static str,
     selected: bool,
     on_press: impl Into<EventHandler<()>>,
 ) -> Element {
-    let mark = selected.then(|| {
-        Element::from(icon(
-            Icon::Check,
-            IconSize::Control,
-            Paint::OnAccent.color(tokens),
-        ))
-    });
-    let button = focus_stop(
-        rect()
-            .tw(
-                tokens,
-                &[w(Dim::Box9), h(Dim::Box9), center(), rounded(Radius::Pill)],
-            )
-            .maybe(selected, |ring| {
-                ring.tw(tokens, &[border(Line::Ring(Paint::Text))])
-            })
-            .child(
-                rect()
-                    .tw(
-                        tokens,
-                        &[
-                            w(Dim::Box7),
-                            h(Dim::Box7),
-                            rounded(Radius::Pill),
-                            bg(Paint::Swatch(name)),
-                            center(),
-                        ],
-                    )
-                    .maybe_child(mark),
-            ),
-        format!("Accent colour {name}"),
-        AccessibilityRole::Button,
-        true,
-        Radius::Pill,
-        on_press,
-    );
-    let title = format!("{}{}", name[..1].to_uppercase(), &name[1..]);
-    Element::from(TooltipContainer::new(Tooltip::new_text(title)).child(button))
+    Swatch {
+        name,
+        selected,
+        on_press: on_press.into(),
+    }
+    .into_element()
+}
+
+struct Swatch {
+    name: &'static str,
+    selected: bool,
+    on_press: EventHandler<()>,
+}
+
+impl PartialEq for Swatch {
+    fn eq(&self, _: &Self) -> bool {
+        // The handler never compares equal, so the swatch is drawn again each time.
+        false
+    }
+}
+
+impl Component for Swatch {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let tokens = &tokens;
+        let (name, selected) = (self.name, self.selected);
+        let mark = selected.then(|| {
+            Element::from(icon(
+                Icon::Check,
+                IconSize::Control,
+                Paint::OnAccent.color(tokens),
+            ))
+        });
+        let button = focus_stop(
+            rect()
+                .tw(
+                    tokens,
+                    &[w(Dim::Box9), h(Dim::Box9), center(), rounded(Radius::Pill)],
+                )
+                .maybe(selected, |ring| {
+                    ring.tw(tokens, &[border(Line::Ring(Paint::Text))])
+                })
+                .child(
+                    rect()
+                        .tw(
+                            tokens,
+                            &[
+                                w(Dim::Box7),
+                                h(Dim::Box7),
+                                rounded(Radius::Pill),
+                                bg(Paint::Swatch(name)),
+                                center(),
+                            ],
+                        )
+                        .maybe_child(mark),
+                ),
+            format!("Accent colour {name}"),
+            AccessibilityRole::Button,
+            true,
+            Radius::Pill,
+            self.on_press.clone(),
+        );
+        let title = format!("{}{}", name[..1].to_uppercase(), &name[1..]);
+        TooltipContainer::new(Tooltip::new_text(title)).child(button)
+    }
 }
 
 /// The scene for the hero and the cards: the settings' dock and sidebar, or a
@@ -296,7 +324,7 @@ fn card_picture(
 /// One colour scheme card: the desktop drawn in that scheme, with its name
 /// under it. The chosen card is ringed in the accent colour, as GNOME's Style
 /// switcher. The default scheme shows the light and the dark desktop side by
-/// side.
+/// side. A component of its own, as `swatch` is.
 fn scheme_card(
     title: &'static str,
     scheme: Scheme,
@@ -304,7 +332,6 @@ fn scheme_card(
     desktop: Option<&desktop::Model>,
     on_press: impl Into<EventHandler<()>>,
 ) -> Element {
-    let selected = tokens.scheme == scheme;
     let picture = match scheme {
         Scheme::Default => Element::from(
             rect()
@@ -315,38 +342,65 @@ fn scheme_card(
         Scheme::PreferLight => card_picture(&tokens, false, desktop, w_full()),
         Scheme::PreferDark => card_picture(&tokens, true, desktop, w_full()),
     };
-    let ring = if selected {
-        Paint::Accent
-    } else {
-        Paint::Outline
-    };
-    let frame = rect()
-        .tw(
-            &tokens,
-            &[
-                w_full(),
-                rounded(Radius::Card),
-                border(Line::Ring(ring)),
-                p(S1),
-            ],
+    SchemeCard {
+        title,
+        selected: tokens.scheme == scheme,
+        picture,
+        on_press: on_press.into(),
+    }
+    .into_element()
+}
+
+struct SchemeCard {
+    title: &'static str,
+    selected: bool,
+    picture: Element,
+    on_press: EventHandler<()>,
+}
+
+impl PartialEq for SchemeCard {
+    fn eq(&self, _: &Self) -> bool {
+        false
+    }
+}
+
+impl Component for SchemeCard {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let selected = self.selected;
+        let ring = if selected {
+            Paint::Accent
+        } else {
+            Paint::Outline
+        };
+        let frame = rect()
+            .tw(
+                &tokens,
+                &[
+                    w_full(),
+                    rounded(Radius::Card),
+                    border(Line::Ring(ring)),
+                    p(S1),
+                ],
+            )
+            .child(self.picture.clone());
+        let caption = if selected { EMPHASIS } else { BODY };
+        let card = rect()
+            .tw(
+                &tokens,
+                &[flex_col(), w_flex(), gap(S2), items(Align::Center)],
+            )
+            .child(frame)
+            .child(caption.label(&tokens, self.title));
+        focus_stop(
+            card,
+            format!("{} colour scheme", self.title),
+            AccessibilityRole::Button,
+            true,
+            Radius::Card,
+            self.on_press.clone(),
         )
-        .child(picture);
-    let caption = if selected { EMPHASIS } else { BODY };
-    let card = rect()
-        .tw(
-            &tokens,
-            &[flex_col(), w_flex(), gap(S2), items(Align::Center)],
-        )
-        .child(frame)
-        .child(caption.label(&tokens, title));
-    Element::from(focus_stop(
-        card,
-        format!("{title} colour scheme"),
-        AccessibilityRole::Button,
-        true,
-        Radius::Card,
-        on_press,
-    ))
+    }
 }
 
 /// Whether a pointer press is a right click, which opens the picture menu.
@@ -364,7 +418,7 @@ impl Component for AppearancePage {
         let window = use_window();
         let shared = use_consume::<SharedTokens>().0;
         let tokens = use_tokens();
-        let navigator = use_navigator();
+        let router = use_router();
         let on_setting = move |setting: Setting| change(model, overlays, setting);
 
         let Some(loaded) = model.read().clone() else {
@@ -400,7 +454,7 @@ impl Component for AppearancePage {
 
         let swatches: Vec<Element> = accent_names()
             .map(|name| {
-                swatch(&tokens, name, name == tokens.accent_name, move |_| {
+                swatch(name, name == tokens.accent_name, move |_| {
                     apply_accent(shared, overlays, name)
                 })
             })
@@ -449,9 +503,6 @@ impl Component for AppearancePage {
             })
             .child(
                 Group::titled("Font")
-                    .description(
-                        "The desktop applies it immediately. This window applies it when reopened.",
-                    )
                     .rows(
                         model_value
                             .interface
@@ -462,7 +513,7 @@ impl Component for AppearancePage {
                         row("Font")
                             .value(font_name)
                             .navigates()
-                            .on_press(move |_| navigator.push(Route::Font)),
+                            .on_press(move |_| router.open(routes::font())),
                     ),
             )
             .maybe_child(
@@ -496,7 +547,6 @@ impl Component for AppearancePage {
             .maybe_child(model_value.gsettings.then(|| {
                 Element::from(
                     Group::titled("Colour scheme")
-                        .description("Applications follow this. The desktop shell stays dark.")
                         .row(
                             rect()
                                 .tw(&tokens, BOX_BODY)

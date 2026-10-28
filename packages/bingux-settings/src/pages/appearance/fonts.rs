@@ -13,7 +13,7 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use super::{Loaded, reload, set_font};
-use crate::routes::use_navigator;
+use bingux_ui::prelude::use_router;
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
     Group, Overlays, PageHead, Status, dropdown, menu_item, page_column, row, search_field,
@@ -305,7 +305,7 @@ pub struct FontPage;
 impl Component for FontPage {
     fn render(&self) -> impl IntoElement {
         let model: State<Option<Loaded>> = system::cached("appearance");
-        let navigator = use_navigator();
+        let router = use_router();
         let overlays: Overlays = use_overlays();
         let tokens = use_tokens();
         let fonts = system::use_cached_persistent("fonts", installed_fonts);
@@ -348,7 +348,7 @@ impl Component for FontPage {
                 move || set_font(&family).map(|_| ()),
                 move || {
                     reload(model);
-                    navigator.pop();
+                    router.pop();
                 },
             );
         })
@@ -361,7 +361,6 @@ impl Component for FontPage {
             .as_ref()
             .map(|catalogue| matching(catalogue, &filter_key, &query_text))
             .unwrap_or_default();
-        let total = found.len();
         let mut names: Vec<String> = found.iter().map(|font| font.name.clone()).collect();
         let searching = !query_text.trim().is_empty();
         // Before anything is typed, the current choice comes first, so it is in
@@ -394,12 +393,7 @@ impl Component for FontPage {
                 overlays,
             })
         }));
-        let caption = if loaded {
-            format!("{total} fonts")
-        } else {
-            "\u{a0}".to_string()
-        };
-        let mut list = Group::new(None::<String>).description(caption).rows(rows);
+        let mut list = Group::new(None::<String>).rows(rows);
         if loaded && names.is_empty() {
             list = list.row(status(Status::Empty("Nothing matches.".to_string())));
         }

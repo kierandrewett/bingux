@@ -118,6 +118,9 @@ impl Component for Stepper {
             }
         };
 
+        // The pill is its buttons plus an equal inset on all four sides, so it
+        // is as tall as `StepperHalf` plus twice the inset, and each button
+        // rounds as the pill's corner less that inset.
         rect()
             .component("Stepper")
             .a11y_id(a11y_id)
@@ -133,10 +136,9 @@ impl Component for Stepper {
             .tw(
                 &tokens,
                 &[
-                    h(Dim::Control),
+                    p(S1),
                     flex_row(),
                     items(Align::Center),
-                    px(S0_5),
                     rounded(Radius::Control),
                     bg(Paint::Control),
                 ],
@@ -149,7 +151,7 @@ impl Component for Stepper {
             }))
             .child(
                 rect()
-                    .tw(&tokens, &[min_w(Dim::Box11), h_full(), px(S1), center()])
+                    .tw(&tokens, &[min_w(Dim::Box11), px(S2), center()])
                     .child(BODY.in_ink(Ink::Text).label(&tokens, text).max_lines(1)),
             )
             .child(step_button(Icon::ListAdd, can_increment, move |_| {
@@ -189,7 +191,8 @@ impl Component for StepButton {
                 &[
                     w(Dim::StepperHalf),
                     h(Dim::StepperHalf),
-                    rounded(Radius::Control),
+                    // Inside the track's Control corner, inset by its padding.
+                    rounded(Radius::Inner),
                     center(),
                     surface(
                         Paint::Transparent,
@@ -225,5 +228,95 @@ impl Component for StepButton {
                     Paint::Muted.color(&tokens)
                 },
             ))
+    }
+}
+
+#[cfg(all(test, feature = "testing"))]
+mod geometry {
+    use std::time::Duration;
+
+    use super::*;
+    use crate::snapshot::Snapshot;
+
+    #[derive(PartialEq)]
+    struct Scene(&'static str);
+
+    impl Component for Scene {
+        fn render(&self) -> impl IntoElement {
+            let tokens = crate::theme::provide_tokens();
+            let text = self.0;
+            rect().expanded().tw(&tokens, &[p(S4)]).child(
+                crate::shell::OverlayHost::new(
+                    stepper(1000, |_| {}).range(0, 5000).suffix(text),
+                ),
+            )
+        }
+    }
+
+    fn near(a: f32, b: f32) -> bool {
+        (a - b).abs() < 0.51
+    }
+
+    /// The pill has the same inset above, below, left and right of its
+    /// buttons, the buttons are the same size, and the text is centred
+    /// between them, so both gaps match, whatever the value's length.
+    #[test]
+    fn the_pill_is_symmetric_about_its_buttons_and_its_value() {
+        for (class, size) in [
+            (SizeClass::Regular, (900.0, 300.0)),
+            (SizeClass::Compact, (390.0, 300.0)),
+        ] {
+            for suffix in ["", " items", " items and a very long tail"] {
+                let mut shot = Snapshot::new(move || Scene(suffix).into(), size);
+                shot.settle(Duration::from_millis(300));
+                let half = Dim::StepperHalf.px_in(class);
+                let inset = S1.px_in(class);
+                let boxes: Vec<[f32; 4]> = shot.runner().find_many(|node, _| {
+                    let a = node.layout().area;
+                    Some([a.min_x(), a.max_x(), a.min_y(), a.max_y()])
+                });
+                let buttons: Vec<[f32; 4]> = boxes
+                    .iter()
+                    .copied()
+                    .filter(|b| near(b[1] - b[0], half) && near(b[3] - b[2], half))
+                    .collect();
+                let left = buttons
+                    .iter()
+                    .copied()
+                    .min_by(|a, b| a[0].total_cmp(&b[0]))
+                    .unwrap_or_else(|| panic!("a minus button in {boxes:?}"));
+                let right = buttons
+                    .iter()
+                    .copied()
+                    .max_by(|a, b| a[0].total_cmp(&b[0]))
+                    .expect("a plus button");
+                let pill = boxes
+                    .iter()
+                    .copied()
+                    .find(|b| {
+                        near(b[0], left[0] - inset)
+                            && near(b[1], right[1] + inset)
+                            && near(b[2], left[2] - inset)
+                            && near(b[3], left[3] + inset)
+                    })
+                    .unwrap_or_else(|| panic!("{class:?} {suffix:?}: the insets are not equal"));
+                assert!(near(left[2], right[2]) && near(left[3], right[3]));
+                // The value slot is the space between the buttons; its text is
+                // centred in it.
+                let text = shot.runner().find_many(|node, element| {
+                    freya::prelude::Label::try_downcast(element)?;
+                    let a = node.layout().area;
+                    Some((a.min_x(), a.max_x()))
+                });
+                let (min, max) = text.first().copied().expect("the value label");
+                let gap_left = min - left[1];
+                let gap_right = right[0] - max;
+                assert!(
+                    near(gap_left, gap_right) && gap_left >= S2.px_in(class) - 0.51,
+                    "{class:?} {suffix:?}: gaps {gap_left} and {gap_right}",
+                );
+                assert!(pill[1] > pill[0]);
+            }
+        }
     }
 }

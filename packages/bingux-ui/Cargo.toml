@@ -13,6 +13,8 @@ path = "src/lib.rs"
 default = []
 # Headless rendering for snapshots and tests.
 testing = ["dep:freya-testing", "dep:freya-components"]
+# Every icon of the chat icon fork as `Icon::Chat(..)` (3 MB of outlines): for choosing glyphs.
+chat-icons = []
 
 [dependencies]
 freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar", "engine"] }
@@ -27,10 +29,28 @@ bytes = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 libc = "0.2"
+# Grapheme clusters: a cut in a path or a name never lands inside one.
+unicode-segmentation = "1"
 # The filesystem model behind bingux_ui::files (no UI of its own).
 bingux-files = { path = "../bingux-files" }
+# The search engine behind bingux_ui::search (documents, index, OpenSearch-shaped
+# responses; no UI of its own).
+bingux-search = { path = "../bingux-search" }
 
 # Desktop scroll feel; see ../vendor/README.md.
 [patch.crates-io]
 freya-winit = { path = "../vendor/freya-winit" }
+freya-core = { path = "../vendor/freya-core" }
+freya-animation = { path = "../vendor/freya-animation" }
 freya-components = { path = "../vendor/freya-components" }
+
+# Panics unwind, in dev and in release. The error boundaries and guards in the
+# vendored freya-core catch a panic with `catch_unwind`, which does nothing under
+# `panic = "abort"`: one failed component would end the process again. Both are
+# Cargo's defaults, spelled out so nobody changes one for size.
+# `scripts/ui-lint.py` fails when a Bingux app sets "abort".
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+panic = "unwind"

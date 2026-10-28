@@ -84,6 +84,7 @@ pub mod selection;
 pub mod sort;
 pub mod stat;
 pub mod thumbs;
+pub mod volumes;
 pub mod watch;
 
 pub use entry::{Entry, Kind};

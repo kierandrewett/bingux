@@ -19,6 +19,7 @@ snapshot = ["bingux-ui/testing"]
 freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar"] }
 bingux-ui = { path = "../bingux-ui" }
 bingux-data-usage = { path = "../bingux-data-usage" }
+bingux-audio-effects = { path = "../bingux-audio-effects" }
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 bytes = "1"
@@ -27,6 +28,8 @@ libc = "0.2"
 # Desktop scroll feel; see ../vendor/README.md.
 [patch.crates-io]
 freya-winit = { path = "../vendor/freya-winit" }
+freya-core = { path = "../vendor/freya-core" }
+freya-animation = { path = "../vendor/freya-animation" }
 freya-components = { path = "../vendor/freya-components" }
 
 # A debug build runs Freya's layout, Skia glue and the UI controls unoptimised,
@@ -44,3 +47,14 @@ overflow-checks = false
 opt-level = 2
 debug-assertions = false
 overflow-checks = false
+
+# Panics unwind, in dev and in release. The error boundaries and guards in the
+# vendored freya-core catch a panic with `catch_unwind`, which does nothing under
+# `panic = "abort"`: one failed component would end the process again. Both are
+# Cargo's defaults, spelled out so nobody changes one for size.
+# `scripts/ui-lint.py` fails when a Bingux app sets "abort".
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+panic = "unwind"

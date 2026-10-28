@@ -14,8 +14,10 @@ use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 
 use bingux_files::mounts::{Mount, fill_space, list_mounts, watch_mounts};
+use bingux_files::volumes::{Volume, list_volumes, mount_volume};
 use freya::prelude::*;
 
+use super::directory::Where;
 use super::places_model::{Release, carry_usage};
 use crate::shell::Overlays;
 use crate::task::spawn_blocking;
@@ -31,6 +33,8 @@ const SPACE_DEADLINE: Duration = Duration::from_secs(2);
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct DriveList {
     pub mounts: Vec<Mount>,
+    /// Drives that are plugged in and not mounted.
+    pub volumes: Vec<Volume>,
     /// False until the first read of the sizes finishes, and again while the
     /// table changed and its new drives are being sized.
     pub settled: bool,
@@ -65,11 +69,14 @@ fn initial() -> DriveList {
     if let Some(mounts) = fixture::mounts() {
         return DriveList {
             mounts: mounts.clone(),
+            volumes: Vec::new(),
             settled: true,
         };
     }
+    let mounts = list_mounts();
     DriveList {
-        mounts: list_mounts(),
+        volumes: list_volumes(&mounts),
+        mounts,
         settled: false,
     }
 }
@@ -94,6 +101,31 @@ impl Drives {
     /// Whether the drive with this mount id is being let go of.
     pub fn is_busy(&self, id: u32) -> bool {
         self.busy.read().contains(&id)
+    }
+
+    /// Mount a drive that is plugged in and not mounted, on a worker, and
+    /// open it with `then` when it is. A failure is said in a toast in the
+    /// words of `udisksctl`.
+    pub fn mount(self, volume: Volume, then: EventHandler<Where>) {
+        let mut busy = self.busy;
+        let id = volume.busy_id();
+        if busy.peek().contains(&id) {
+            return;
+        }
+        busy.write().push(id);
+        let overlays = self.overlays;
+        spawn(async move {
+            let label = volume.label.clone();
+            let outcome = spawn_blocking(move || mount_volume(&volume)).await;
+            busy.write().retain(|busy_id| *busy_id != id);
+            match (outcome, overlays) {
+                (Ok(path), _) => then.call(Where::Folder(path)),
+                (Err(sentence), Some(overlays)) => {
+                    overlays.toast(format!("{label}: {sentence}"));
+                }
+                (Err(_), None) => {}
+            }
+        });
     }
 
     /// Unmount or eject `mount` on a worker. Everything the kernel still holds
@@ -153,19 +185,22 @@ fn spawn_refresh(mut list: State<DriveList>) -> Option<TaskHandle> {
         // Held for the life of the task; dropping it stops the thread.
         let _watch = watch_mounts(move || notifier.notify());
         loop {
-            let mounts = spawn_blocking(|| {
+            let (mounts, volumes) = spawn_blocking(|| {
                 let mut mounts = list_mounts();
                 fill_space(&mut mounts, SPACE_DEADLINE);
-                mounts
+                let volumes = list_volumes(&mounts);
+                (mounts, volumes)
             })
             .await;
             list.set(DriveList {
                 mounts,
+                volumes,
                 settled: true,
             });
             wake.wait().await;
             let table = carry_usage(list_mounts(), &list.peek().mounts);
             list.set(DriveList {
+                volumes: list_volumes(&table),
                 mounts: table,
                 settled: false,
             });

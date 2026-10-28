@@ -6,9 +6,9 @@
 //! dialog that closes never leaves a worker crawling a drive.
 
 use std::fs;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use crate::listing::Cancel;
 
@@ -81,6 +81,13 @@ impl Tally {
 /// links and never followed, so a loop cannot trap the walk. Root folders are
 /// not counted as items of themselves.
 pub fn count(roots: &[PathBuf], tally: &Tally, cancel: &Cancel) {
+    walk(roots, tally, cancel);
+    tally.done.store(true, Ordering::Release);
+}
+
+/// [`count`] without saying it is done, so several walks can add into one
+/// tally.
+fn walk(roots: &[PathBuf], tally: &Tally, cancel: &Cancel) {
     let mut pending: Vec<(PathBuf, bool)> = roots.iter().map(|root| (root.clone(), true)).collect();
     'walk: while let Some((path, top)) = pending.pop() {
         if cancel.is_cancelled() {
@@ -120,6 +127,62 @@ pub fn count(roots: &[PathBuf], tally: &Tally, cancel: &Cancel) {
             }
         }
     }
+}
+
+/// One item directly inside a folder that is being counted, with everything
+/// under it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChildSize {
+    pub path: PathBuf,
+    pub name: String,
+    pub is_dir: bool,
+    /// Bytes of the file, or of every file under the folder.
+    pub bytes: u64,
+    /// Files and folders under a folder; zero for a file.
+    pub items: u64,
+}
+
+type Children = Arc<Mutex<Vec<ChildSize>>>;
+
+/// Add up what is in `root`, one child at a time, into `tally` (so its
+/// figures grow as in [`count`]) and record each child's own size in
+/// `children` as it is finished. A folder child is one of `root`'s items,
+/// so the totals match [`count`] of `root`.
+fn breakdown(root: &Path, tally: &Tally, children: &Mutex<Vec<ChildSize>>, cancel: &Cancel) {
+    let Ok(entries) = fs::read_dir(root) else {
+        tally.unreadable.fetch_add(1, Ordering::Relaxed);
+        tally.done.store(true, Ordering::Release);
+        return;
+    };
+    for entry in entries.flatten() {
+        if cancel.is_cancelled() {
+            tally.cancelled.store(true, Ordering::Relaxed);
+            break;
+        }
+        let path = entry.path();
+        let Ok(meta) = fs::symlink_metadata(&path) else {
+            tally.unreadable.fetch_add(1, Ordering::Relaxed);
+            continue;
+        };
+        let is_dir = meta.is_dir();
+        let before = tally.totals();
+        if is_dir {
+            tally.folders.fetch_add(1, Ordering::Relaxed);
+        }
+        walk(std::slice::from_ref(&path), tally, cancel);
+        let after = tally.totals();
+        let inside = (after.items() - before.items()).saturating_sub(u64::from(is_dir));
+        children
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(ChildSize {
+                name: entry.file_name().to_string_lossy().into_owned(),
+                path,
+                is_dir,
+                bytes: after.bytes - before.bytes,
+                items: if is_dir { inside } else { 0 },
+            });
+    }
     tally.done.store(true, Ordering::Release);
 }
 
@@ -128,6 +191,7 @@ pub fn count(roots: &[PathBuf], tally: &Tally, cancel: &Cancel) {
 pub struct Counting {
     tally: Arc<Tally>,
     cancel: Cancel,
+    children: Children,
 }
 
 impl Counting {
@@ -135,15 +199,52 @@ impl Counting {
     pub fn start(roots: Vec<PathBuf>) -> Counting {
         let tally = Arc::new(Tally::default());
         let cancel = Cancel::new();
+        let children = Children::default();
         {
             let (tally, cancel) = (tally.clone(), cancel.clone());
             std::thread::spawn(move || count(&roots, &tally, &cancel));
         }
-        Counting { tally, cancel }
+        Counting {
+            tally,
+            cancel,
+            children,
+        }
+    }
+
+    /// Start adding up the folder `root` on a new thread, and keep the size
+    /// of each of its children for [`largest`](Self::largest). The totals are
+    /// those of [`start`](Self::start) with `root` alone.
+    pub fn start_breakdown(root: PathBuf) -> Counting {
+        let tally = Arc::new(Tally::default());
+        let cancel = Cancel::new();
+        let children = Children::default();
+        {
+            let (tally, cancel, children) = (tally.clone(), cancel.clone(), children.clone());
+            std::thread::spawn(move || breakdown(&root, &tally, &children, &cancel));
+        }
+        Counting {
+            tally,
+            cancel,
+            children,
+        }
     }
 
     pub fn totals(&self) -> Totals {
         self.tally.totals()
+    }
+
+    /// The `limit` biggest children finished so far, biggest first, equal
+    /// sizes by name. Always empty for a count made with
+    /// [`start`](Self::start).
+    pub fn largest(&self, limit: usize) -> Vec<ChildSize> {
+        let mut all = self
+            .children
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        all.sort_by(|a, b| b.bytes.cmp(&a.bytes).then_with(|| a.name.cmp(&b.name)));
+        all.truncate(limit);
+        all
     }
 
     /// Stop the walk. The figures so far stay readable.
@@ -256,5 +357,62 @@ mod tests {
         assert_eq!(totals.unreadable, 1);
         assert!(totals.is_lower_bound());
         assert_eq!(totals.bytes, 2);
+    }
+
+    fn wait_done(counting: &Counting) -> Totals {
+        let started = Instant::now();
+        loop {
+            let totals = counting.totals();
+            if totals.done {
+                return totals;
+            }
+            assert!(started.elapsed() < Duration::from_secs(5), "the count did not finish");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn a_breakdown_sizes_each_child_and_matches_the_whole() {
+        let temp = Temp::new("tally-breakdown");
+        temp.write("d/small.txt", "1");
+        temp.write("d/big.bin", "0123456789");
+        temp.write("d/docs/a", "123");
+        temp.write("d/docs/deep/b", "12");
+        temp.dir("d/empty");
+        let root = temp.path().join("d");
+        let counting = Counting::start_breakdown(root.clone());
+        let totals = wait_done(&counting);
+        let whole = Tally::default();
+        count(std::slice::from_ref(&root), &whole, &Cancel::new());
+        assert_eq!(
+            (totals.bytes, totals.files, totals.folders),
+            (whole.totals().bytes, whole.totals().files, whole.totals().folders)
+        );
+        let names: Vec<(String, u64, u64)> = counting
+            .largest(10)
+            .into_iter()
+            .map(|child| (child.name, child.bytes, child.items))
+            .collect();
+        assert_eq!(
+            names,
+            vec![
+                ("big.bin".to_owned(), 10, 0),
+                ("docs".to_owned(), 5, 3),
+                ("small.txt".to_owned(), 1, 0),
+                ("empty".to_owned(), 0, 0),
+            ]
+        );
+        assert_eq!(counting.largest(2).len(), 2);
+    }
+
+    #[test]
+    fn a_plain_count_has_no_breakdown_and_a_missing_root_is_unreadable() {
+        let temp = Temp::new("tally-plain");
+        temp.write("d/a", "x");
+        let counting = Counting::start(vec![temp.path().join("d")]);
+        wait_done(&counting);
+        assert!(counting.largest(5).is_empty());
+        let missing = Counting::start_breakdown(temp.path().join("nope"));
+        assert_eq!(wait_done(&missing).unreadable, 1);
     }
 }

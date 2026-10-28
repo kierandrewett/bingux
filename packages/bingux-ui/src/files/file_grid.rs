@@ -19,14 +19,16 @@
 //! Radii nest: a tile is [`Radius::Card`] (16 px) and its picture sits
 //! `TILE_INSET` (12 px) inside, so its own corners are `Radius::Mark` (4 px).
 
+use std::cell::Cell;
 use std::hash::{Hash, Hasher};
+use std::rc::Rc;
 
 use freya::prelude::*;
 
-use super::file_list::{anchor_zoom, name_label};
+use super::file_list::{Settle, anchor_zoom, name_label, settle_zoom};
 use super::interaction::Lattice;
 use super::rename_field::RenameField;
-use super::thumbnails::face;
+use super::thumbnails::{Preview, face};
 use super::view::{Ctx, Rows, Shared};
 use super::zoom::{TILE_GAP, TILE_INSET, bucket_px, tile_width};
 use crate::component::ComponentName;
@@ -118,7 +120,8 @@ impl Component for GridView {
         let device_scale = *Platform::get().current_window().scale_factor.read() as f32;
         let bucket = bucket_px(metrics.icon, device_scale);
         ctx.lattice.set(Some(metrics.lattice(self.rows.len())));
-        anchor_zoom(&ctx, f32::from(self.icon_px), metrics.line, metrics.columns);
+        let settle: Settle = use_hook(|| Rc::new(Cell::new(None)));
+        anchor_zoom(&ctx, f32::from(self.icon_px), metrics.line, metrics.columns, &settle);
 
         let lines = self.rows.len().div_ceil(metrics.columns);
         let data = GridData {
@@ -164,7 +167,13 @@ impl Component for GridView {
         .item_size(metrics.line)
         .drag_scrolling(is_compact())
         .pass_ctrl_wheel(true)
-        .on_sized(move |event: Event<SizedEventData>| viewport.set_if_modified(event.area))
+        .on_sized({
+            let scroll = ctx.scroll;
+            move |event: Event<SizedEventData>| {
+                viewport.set_if_modified(event.area);
+                settle_zoom(scroll, &settle);
+            }
+        })
     }
 }
 
@@ -246,7 +255,8 @@ impl Component for Tile {
         let enabled = ctx.selectable(entry);
         let dim = !enabled || ctx.cut_dim(&entry.path);
 
-        let face = face(&tokens, entry, self.icon_px, self.bucket, ctx.thumbnails);
+        let preview = if ctx.thumbnails { Preview::Full } else { Preview::Off };
+        let face = face(&tokens, entry, self.icon_px, self.bucket, preview);
         let name_room = metrics.tile - 2.0 * S1.px();
         let caption: Element = if renaming {
             RenameField::new(&ctx.env, entry)

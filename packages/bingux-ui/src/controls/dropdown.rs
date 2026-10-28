@@ -31,10 +31,9 @@ fn button_chrome() -> f32 {
     S3.px() + S2.px() + IconSize::Row.px() + S2.px()
 }
 
-/// The button on a phone: the value at the row's end, no box.
-const PHONE_VALUE: Recipe = &[pl(S0), pr(S0_5), justify(Align::End)];
-/// The button on a desktop: a filled control, the chevron at its end.
-const DESKTOP_VALUE: Recipe = &[pl(S3), pr(S2), justify(Align::Between)];
+/// The button: a filled control, the icon and label from the start inset, the
+/// chevron against the end inset.
+const VALUE: Recipe = &[pl(S3), pr(S2)];
 
 /// What an option shows before its label.
 #[derive(Clone, PartialEq)]
@@ -141,16 +140,23 @@ impl Dropdown {
 impl Component for Dropdown {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let fitted = crate::rows::use_row_fitted() && !self.dense;
         let button_dim = if self.dense {
             Dim::DenseControl
+        } else if fitted {
+            Dim::RowButton
         } else {
             Dim::Control
         };
+        let button_radius = if fitted { Radius::Inner } else { Radius::Control };
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
         let mut open = use_state(|| false);
         let mut highlighted = use_state(|| None::<usize>);
         let mut button_width = use_state(|| 0.0_f32);
+        // A form line that is too narrow for the button asks it to fill the
+        // room it has.
+        let fills = crate::controls::adaptive::use_line_fill();
         let mut button_area = use_state(Area::default);
         let mut scroll = use_scroll_controller(ScrollConfig::default);
         let mut hovered_item = use_state(|| None::<usize>);
@@ -167,6 +173,7 @@ impl Component for Dropdown {
             .map(|index| options[index].1.clone())
             .unwrap_or_else(|| self.selected.clone());
 
+        // Picking a row ends its query, and closes the list.
         let choose = {
             let on_select = on_select.clone();
             let options = options.clone();
@@ -176,6 +183,7 @@ impl Component for Dropdown {
                 }
                 open.set(false);
                 highlighted.set(None);
+                ahead.clear();
             })
         };
         let count = options.len();
@@ -188,8 +196,10 @@ impl Component for Dropdown {
         // the text; an application icon is one step larger so it stays legible.
         let icon_space = if self.icons.is_empty() {
             0.0
-        } else {
+        } else if self.icons.iter().all(|icon| matches!(icon, OptionIcon::Symbol(_))) {
             IconSize::Row.px() + S2.px()
+        } else {
+            IconSize::AppSmall.px() + S2.px()
         };
         // The measured width is only maths; the bounds come from tokens.
         let width = match self.fixed_width {
@@ -236,8 +246,18 @@ impl Component for Dropdown {
         };
         let on_key_down = {
             let choose = choose.clone();
+            let on_select = on_select.clone();
             let type_options = options.clone();
             move |event: Event<KeyboardEventData>| {
+                // A query typed on the shut button has no pill, so Escape
+                // takes it back here; the open list's Escape is the panel's.
+                if !open()
+                    && event.key == Key::Named(NamedKey::Escape)
+                    && ahead.escape()
+                {
+                    event.stop_propagation();
+                    return;
+                }
                 // Type-ahead first: typed letters, and the keys that walk and
                 // pick the matches while a query is active.
                 let items: Vec<Candidate> = type_options
@@ -247,13 +267,14 @@ impl Component for Dropdown {
                         selectable: true,
                     })
                     .collect();
-                match ahead.key(&event, &items, highlighted().or(selected_index)) {
+                match ahead.key(&event, &items, highlighted().or(selected_index), open()) {
                     Reaction::Ignored => {}
                     Reaction::Handled => {
                         event.stop_propagation();
                         return;
                     }
-                    // Open, a match takes the highlight; closed, it chooses.
+                    // Open, a match takes the highlight; shut, it is chosen as
+                    // it is typed and the query stays for the next letter.
                     Reaction::Focus(index) => {
                         event.stop_propagation();
                         if open() {
@@ -263,8 +284,8 @@ impl Component for Dropdown {
                                 <(i32, i32)>::from(scroll).1,
                                 false,
                             ));
-                        } else {
-                            choose.call(index);
+                        } else if let Some((key, _)) = type_options.get(index) {
+                            on_select.call(key.clone());
                         }
                         return;
                     }
@@ -317,7 +338,19 @@ impl Component for Dropdown {
                         };
                         highlighted.set(Some(next));
                         scroll.scroll_to_y(offset_for(next, <(i32, i32)>::from(scroll).1, !open()));
+                        if !open() {
+                            ahead.clear();
+                        }
                         open.set(true);
+                    }
+                    // Tab leaves the control: the open list closes with it, so
+                    // focus never moves on behind a list that stays up.
+                    Key::Named(NamedKey::Tab) => {
+                        if open() {
+                            open.set(false);
+                            highlighted.set(None);
+                        }
+                        return;
                     }
                     _ => return,
                 }
@@ -325,30 +358,27 @@ impl Component for Dropdown {
             }
         };
 
-        // On a phone the button has no box: the value is muted and sits at
-        // the right, with the chevron.
-        let touch = is_compact();
+        // The button is one row at both densities: the icon, the label and the
+        // chevron each take their own room, so the label's ellipsis ends
+        // before the chevron. On a phone the box is the taller touch size.
         let button = rect()
             .a11y_id(a11y_id)
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::ComboBox)
             .a11y_builder(move |builder| builder.set_expanded(open()))
-            .width(Size::px(width))
+            .width(if fills { Size::fill() } else { Size::px(width) })
             .tw(
                 &tokens,
                 &[
                     h(button_dim),
                     flex_row(),
+                    grow_children(),
                     items(Align::Center),
                     gap(S2),
-                    rounded(Radius::Control),
+                    rounded(button_radius),
                     surface(
-                        if touch {
-                            Paint::Transparent
-                        } else {
-                            Paint::Control
-                        },
+                        Paint::Control,
                         // The button stays lit while its list is open, so it
                         // reads as the owner of the list.
                         enabled && (hovering() || open()),
@@ -357,9 +387,7 @@ impl Component for Dropdown {
                     ),
                 ],
             )
-            // On a phone the value sits at the row's end with no box; on a
-            // desktop it is a filled control with the chevron at its end.
-            .tw(&tokens, if touch { PHONE_VALUE } else { DESKTOP_VALUE })
+            .tw(&tokens, VALUE)
             .on_sized(move |event: Event<SizedEventData>| {
                 button_width.set_if_modified(event.area.width());
                 button_area.set_if_modified(event.area);
@@ -392,34 +420,25 @@ impl Component for Dropdown {
                         if next && let Some(index) = selected_index {
                             scroll.scroll_to_y(offset_for(index, 0, true));
                         }
+                        if next {
+                            // A fresh list starts with a fresh query: what was
+                            // typed on the shut button does not carry over.
+                            ahead.clear();
+                        }
                         open.set(next);
                         highlighted.set(if next { selected_index } else { None });
                     })
                     .on_key_down(on_key_down)
             })
+            .maybe_child(current_icon.map(|icon| option_icon(icon, Paint::Text.color(&tokens), tokens)))
             .child(
-                rect()
-                    .width(Size::fill())
-                    .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
-                    .maybe_child(current_icon.map(|icon| {
-                        option_icon(
-                            icon,
-                            if touch { Paint::Muted } else { Paint::Text }.color(&tokens),
-                            tokens,
-                        )
-                    }))
-                    .child(
-                        BODY.in_ink(if touch { Ink::Muted } else { Ink::Text })
-                            .label(&tokens, current)
-                            .width(Size::fill())
-                            .max_lines(1)
-                            .text_overflow(TextOverflow::Ellipsis)
-                            .text_align(if touch {
-                                TextAlign::Right
-                            } else {
-                                TextAlign::Left
-                            }),
-                    ),
+                rect().tw(&tokens, &[w_flex()]).min_width(Size::px(0.0)).child(
+                    BODY.in_ink(Ink::Text)
+                        .label(&tokens, current)
+                        .width(Size::fill())
+                        .max_lines(1)
+                        .text_overflow(TextOverflow::Ellipsis),
+                ),
             )
             .child(
                 rect()
@@ -433,7 +452,7 @@ impl Component for Dropdown {
             .focusable(
                 // The open list owns the keyboard, and the ring would run under it.
                 if open() { Focus::Not } else { focus() },
-                Radius::Control,
+                button_radius,
             );
 
         let menu_width = button_width().max(Dim::DropdownMenu.px());
@@ -491,6 +510,7 @@ impl Component for Dropdown {
 
         rect()
             .component("Dropdown")
+            .maybe(fills, |wrapper| wrapper.tw(&tokens, &[w_full()]))
             .child(button)
             .child(Element::from(panel))
     }
@@ -545,12 +565,21 @@ impl Component for DropdownItem {
                 on_leave.call(false);
             })
             .on_pointer_down(move |event: Event<PointerEventData>| {
-                event.stop_propagation();
+                // A touch passes up to the sheet's list, so the list can
+                // scroll under the finger and a pull can start: Freya also
+                // drops a stopped touch's global release.
+                if !super::press::is_touch(&event) {
+                    event.stop_propagation();
+                }
                 pressing.set(true);
                 press.begin(&event, None);
             })
             .on_global_pointer_move(move |event: Event<PointerEventData>| {
                 press.moved(&event);
+                // A finger that strays into a drag is no longer pressing.
+                if super::press::is_touch(&event) && *pressing.peek() && !press.pending() {
+                    pressing.set(false);
+                }
             })
             .on_press(move |event: Event<PressEventData>| {
                 event.stop_propagation();
@@ -581,10 +610,164 @@ impl Component for DropdownItem {
 /// The icon before an option's label: an application icon or a symbol.
 fn option_icon(icon: OptionIcon, colour: Color, tokens: Tokens) -> Element {
     match icon {
-        OptionIcon::App(name) => app_icon(name, IconSize::Control).into(),
+        OptionIcon::App(name) => app_icon(name, IconSize::AppSmall).into(),
         OptionIcon::Symbol(symbol) => icons::icon(symbol, IconSize::Row, colour).into(),
         OptionIcon::Colour(chip) => {
-            super::colour_picker::colour_chip(tokens, chip, IconSize::Control.px()).into_element()
+            super::colour_picker::colour_chip(tokens, chip, IconSize::AppSmall.px()).into_element()
+        }
+    }
+}
+
+/// The button is one row: the icon, the label and the chevron lie inside its
+/// box, in that order, each clear of the next, at both densities.
+#[cfg(all(test, feature = "testing"))]
+mod geometry_tests {
+    use std::time::Duration;
+
+    use freya::prelude::*;
+    use freya_core::elements::image::Image;
+    use torin::prelude::Area;
+
+    use super::*;
+    use crate::snapshot::Snapshot;
+    use crate::theme::provide_tokens;
+    use crate::window::WindowHost;
+
+    /// The window root: it provides the tokens the window host reads.
+    #[derive(PartialEq)]
+    struct Root(Host);
+
+    impl Component for Root {
+        fn render(&self) -> impl IntoElement {
+            let _ = provide_tokens();
+            WindowHost::new(Host {
+                icon: self.0.icon,
+                long: self.0.long,
+            })
+        }
+    }
+
+    const LONG: &str = "A name far too long for the room it is given, which must be cut";
+
+    #[derive(PartialEq)]
+    struct Host {
+        icon: bool,
+        long: bool,
+    }
+
+    impl Component for Host {
+        fn render(&self) -> impl IntoElement {
+            let tokens = use_tokens();
+            let text = if self.long { LONG } else { "Bluetooth" };
+            let options = vec![
+                ("a".to_string(), text.to_string()),
+                ("b".to_string(), "Other".to_string()),
+            ];
+            let mut dropdown = dropdown(options, "a", |_: String| {}).width(Dim::DropdownMenu);
+            if self.icon {
+                dropdown = dropdown.icons(vec![Icon::Bluetooth, Icon::Bluetooth]);
+            }
+            rect()
+                .expanded()
+                .tw(&tokens, &[p(S4)])
+                .child(dropdown)
+        }
+    }
+
+    /// The button's area, the label's, and the areas of the icons (the icon
+    /// before the label, when there is one, then the chevron), by x.
+    fn boxes(icon: bool, long: bool, phone: bool) -> (Area, Area, Vec<Area>, (f32, f32, f32)) {
+        let width = if phone { 390.0 } else { 800.0 };
+        let mut shot = Snapshot::new(
+            move || Root(Host { icon, long }).into_element(),
+            (width, 300.0),
+        );
+        shot.settle(Duration::from_millis(300));
+        let (inset_start, inset_end, gap) = shot.runner().run_in(|| (S3.px(), S2.px(), S2.px()));
+        let label = shot
+            .runner()
+            .find_many(|node, element| {
+                let label = Label::try_downcast(element)?;
+                (label.text.starts_with("A name") || label.text == "Bluetooth")
+                    .then(|| node.layout().area)
+            })
+            .into_iter()
+            .next()
+            .expect("the label");
+        // The button is the smallest one-row box around the label that is
+        // narrower than a window (the focus ring's box around it is larger):
+        // on a phone it is capped at the field column, so its width is not
+        // the menu's.
+        let buttons = shot.runner().find_many(|node, _| {
+            let area = node.layout().area;
+            (area.height() > 30.0
+                && area.height() < 70.0
+                && area.width() < width - 40.0
+                && area.min_x() <= label.min_x() + 0.5
+                && area.max_x() >= label.max_x() - 0.5
+                && area.min_y() <= label.min_y() + 0.5
+                && area.max_y() >= label.max_y() - 0.5)
+                .then_some(area)
+        });
+        let button = buttons
+            .into_iter()
+            .min_by(|a, b| (a.width() * a.height()).total_cmp(&(b.width() * b.height())))
+            .expect("the button");
+        let mut glyphs = shot.runner().find_many(|node, element| {
+            // The focus ring's band boxes are the ring's own SVG, not the
+            // control's glyphs.
+            let svg = Image::try_downcast(element).is_some()
+                && !element
+                    .accessibility()
+                    .builder
+                    .class_name()
+                    .is_some_and(|name| name.contains("FocusRing") || name.contains("FocusBand"));
+            let area = node.layout().area;
+            (svg && area.min_x() >= button.min_x() - 40.0 && area.max_x() <= button.max_x() + 40.0
+                && area.min_y() >= button.min_y() && area.max_y() <= button.max_y())
+            .then_some(area)
+        });
+        glyphs.sort_by(|a, b| a.min_x().total_cmp(&b.min_x()));
+        (button, label, glyphs, (inset_start, inset_end, gap))
+    }
+
+    #[test]
+    fn icon_label_and_chevron_lie_inside_the_button_without_overlap() {
+        for phone in [false, true] {
+            for (icon, long) in [(false, false), (true, false), (false, true), (true, true)] {
+                let (button, label, glyphs, (inset_start, inset_end, gap)) = boxes(icon, long, phone);
+                let case = format!("phone {phone}, icon {icon}, long {long}");
+                let chevron = glyphs.last().copied().expect("a chevron");
+                for glyph in &glyphs {
+                    assert!(
+                        glyph.min_x() >= button.min_x() - 0.5 && glyph.max_x() <= button.max_x() + 0.5,
+                        "{case}: a glyph at {glyph:?} is outside the button {button:?}"
+                    );
+                }
+                assert!(label.min_x() >= button.min_x() + inset_start - 0.5, "{case}: the label starts inside the inset");
+                assert!(
+                    chevron.max_x() <= button.max_x() - inset_end + 0.5,
+                    "{case}: the chevron keeps the end inset"
+                );
+                assert!(
+                    label.max_x() + gap <= chevron.min_x() + 0.5,
+                    "{case}: the label (to {}) runs under the chevron (from {})",
+                    label.max_x(),
+                    chevron.min_x()
+                );
+                if icon {
+                    let symbol = glyphs.first().copied().expect("the icon");
+                    assert!(symbol.min_x() < label.min_x(), "{case}: the icon comes first");
+                    assert!(
+                        symbol.max_x() + gap <= label.min_x() + 0.5,
+                        "{case}: the label starts after the icon and its gap"
+                    );
+                    assert!(
+                        (symbol.min_x() - button.min_x() - inset_start).abs() < 0.5,
+                        "{case}: the icon sits on the start inset: icon {symbol:?}, button {button:?}, inset {inset_start}",
+                    );
+                }
+            }
         }
     }
 }

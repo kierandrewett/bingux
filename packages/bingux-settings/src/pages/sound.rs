@@ -8,12 +8,13 @@
 //! background and polled every five seconds.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use freya::prelude::*;
 use serde_json::Value;
 
+use bingux_audio_effects as engine;
 use bingux_ui::prelude::{PageHead, Window, popup, use_window};
 use bingux_ui::style::*;
 use bingux_ui::theme::Tokens;
@@ -21,17 +22,24 @@ use bingux_ui::typography::CAPTION;
 use bingux_ui::window::{PopupFlags, WindowParent};
 
 use crate::apps;
+use crate::routes;
+use bingux_ui::prelude::use_router;
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
-    Group, Icon, LevelRow, Overlays, Status, action_button, app_icon, caption, dropdown, hstack,
-    icon, icon_button, level_row, menu_item, page_column, row, status, switch_row, use_overlays,
-    use_tokens,
+    Group, Icon, IconButton, LevelRow, MenuItem, Overlays, Status, action_button, app_icon,
+    dropdown, hstack, icon_button, level_row, menu_item, page_column, row, status,
+    switch_row, use_overlays, use_tokens,
 };
 
 use self::meter::{LevelMeter, Source};
-use super::loading::veiled;
+use super::loading::revealed;
 
+mod applications;
+mod effects;
 mod meter;
+
+pub use self::applications::ApplicationsPage;
+pub use self::effects::{EffectPage, EffectsPage};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const POLL: Duration = Duration::from_secs(5);
@@ -132,6 +140,9 @@ struct Device {
     /// it is not known.
     detail: String,
     form: Form,
+    /// The node's `node.name`, which the effects engine names its device by.
+    #[serde(default)]
+    node_name: String,
     is_default: bool,
 }
 
@@ -213,45 +224,6 @@ struct Model {
     above_100: bool,
 }
 
-impl Model {
-    /// The shape of a typical machine with blank values: one output with stereo
-    /// channels, so the Balance row is placed, and one input. The page draws it
-    /// under the veil until the first load lands.
-    fn placeholder() -> Self {
-        let device = |form: Form| Device {
-            id: PLACEHOLDER_NODE,
-            name: String::new(),
-            detail: String::new(),
-            form,
-            is_default: true,
-        };
-        let level = Level {
-            id: PLACEHOLDER_NODE,
-            volume: 0.0,
-            muted: false,
-        };
-        Self {
-            outputs: vec![device(Form::Speakers)],
-            inputs: vec![device(Form::Microphone)],
-            output: Some(level.clone()),
-            input: Some(level),
-            mix: Some(Mix {
-                sink: String::new(),
-                channels: vec![
-                    ("front-left".to_string(), 0.0),
-                    ("front-right".to_string(), 0.0),
-                ],
-            }),
-            streams: Vec::new(),
-            above_100: false,
-        }
-    }
-}
-
-/// The node id of the placeholder model. PipeWire gives id 0 to its core
-/// object, never to a sink or a source, so no meter reads from it.
-const PLACEHOLDER_NODE: u32 = 0;
-
 #[derive(Clone, Copy)]
 struct VolumeQueue {
     /// Writes waiting to run, one per key. A newer write with the same key
@@ -307,6 +279,7 @@ fn parse_device(body: &str) -> Option<Device> {
         id,
         name: name.trim().to_string(),
         detail: String::new(),
+        node_name: String::new(),
         form: Form::default(),
         is_default,
     })
@@ -430,7 +403,8 @@ fn read_level(kind: Kind, devices: &[Device]) -> Result<Option<Level>, CommandEr
     let Some(default) = devices.iter().find(|device| device.is_default) else {
         return Ok(None);
     };
-    let text = system::run("wpctl", &["get-volume", kind.target()], TIMEOUT)?;
+    let target = default.id.to_string();
+    let text = system::run("wpctl", &["get-volume", &target], TIMEOUT)?;
     let (volume, muted) = parse_volume(&text)
         .ok_or_else(|| CommandError("Could not read the volume.".to_string()))?;
     Ok(Some(Level {
@@ -568,11 +542,14 @@ impl Shape {
 /// The default output's channels from `pactl`. Its channel map and the
 /// per-channel volumes come from one `pactl list sinks`. Returns `None` when
 /// `pactl` is missing; the slider then uses `wpctl` for the master volume.
-fn read_mix() -> Option<Mix> {
+fn read_mix(sink: Option<&str>) -> Option<Mix> {
     let info: Value =
         serde_json::from_str(&system::run("pactl", &["--format=json", "info"], TIMEOUT).ok()?)
             .ok()?;
-    let sink = info.get("default_sink_name")?.as_str()?.to_string();
+    let sink = match sink {
+        Some(name) => name.to_string(),
+        None => info.get("default_sink_name")?.as_str()?.to_string(),
+    };
     let list: Vec<Value> = serde_json::from_str(
         &system::run("pactl", &["--format=json", "list", "sinks"], TIMEOUT).ok()?,
     )
@@ -619,6 +596,8 @@ struct Hardware {
     /// is when it has no hardware, such as "Network speaker".
     detail: String,
     form: Form,
+    /// The node's `node.name`.
+    node_name: String,
 }
 
 /// One port of a card, from a device's routes.
@@ -807,6 +786,7 @@ fn read_hardware() -> HashMap<u32, Hardware> {
             Hardware {
                 port: port_name,
                 detail,
+                node_name: node.to_string(),
                 form,
             },
         );
@@ -821,36 +801,110 @@ fn describe(device: &mut Device, hardware: &HashMap<u32, Hardware>) {
                 device.name = info.port.clone();
             }
             device.detail = info.detail.clone();
+            device.node_name = info.node_name.clone();
             device.form = info.form;
         }
         None => device.form = form_of(&device.name, "", "", "", ""),
     }
 }
 
+/// While the effects run they are the default device, a filter that wpctl
+/// lists apart from the sinks and sources. Mark the real device behind each
+/// direction's effects as the default, so the page shows and controls it.
+/// Returns the output's real device, by node name.
+fn apply_effects(model: &mut Model) -> Option<String> {
+    let state = engine::store::Store::default().state();
+    let mut output = None;
+    for (direction, devices) in [
+        (engine::Direction::Output, &mut model.outputs),
+        (engine::Direction::Input, &mut model.inputs),
+    ] {
+        let saved = state.of(direction);
+        if !saved.enabled || devices.is_empty() || devices.iter().any(|device| device.is_default) {
+            continue;
+        }
+        let at = devices
+            .iter()
+            .position(|device| Some(device.node_name.as_str()) == saved.device.as_deref())
+            .unwrap_or(0);
+        devices[at].is_default = true;
+        if direction == engine::Direction::Output {
+            output = Some(devices[at].node_name.clone());
+        }
+    }
+    output
+}
+
+/// Point the effects of `direction` at another device, and use the preset
+/// that is set to follow that device, if there is one.
+fn set_effects_device(ctx: Ctx, direction: engine::Direction, device: String) {
+    use engine::store::Store;
+    let model = ctx.model;
+    let overlays = ctx.overlays;
+    begin_write();
+    background_then(
+        move || {
+            let store = Store::default();
+            store
+                .update_state(|state| {
+                    let saved = state.of_mut(direction);
+                    if let Some(preset) = saved.autoload.get(&device).cloned() {
+                        saved.preset = preset;
+                    }
+                    saved.device = Some(device);
+                })
+                .map_err(|e| e.0)?;
+            engine::service::start(direction)
+        },
+        move |result: Result<(), String>| {
+            end_write();
+            if let Err(message) = result {
+                overlays.toast(message);
+            }
+            reload(model);
+        },
+    );
+}
+
 fn load() -> Result<Model, CommandError> {
+    load_model(false)
+}
+
+/// The model with each stream's volume, icon and application, which costs two
+/// commands for every stream.
+fn load_streams() -> Result<Model, CommandError> {
+    load_model(true)
+}
+
+fn load_model(streams: bool) -> Result<Model, CommandError> {
     let text = system::run("wpctl", &["status"], TIMEOUT)?;
     let mut model = parse_status(&text);
     let hardware = read_hardware();
     for device in model.outputs.iter_mut().chain(model.inputs.iter_mut()) {
         describe(device, &hardware);
     }
+    // While the effects run, they own the default device; the sound page
+    // shows and controls the real device behind them.
+    let routed = apply_effects(&mut model);
     model.output = read_level(Kind::Output, &model.outputs)?;
     model.input = read_level(Kind::Input, &model.inputs)?;
-    model.mix = read_mix();
+    model.mix = read_mix(routed.as_deref());
     if let (Some(mix), Some(level)) = (&model.mix, model.output.as_mut()) {
         level.volume = Shape::of(&mix.channels).volume;
     }
     model.above_100 =
         system::gsettings_get("org.gnome.desktop.sound", "allow-volume-above-100-percent")
             .is_ok_and(|value| value.trim() == "true");
-    let apps = apps::installed();
-    for stream in &mut model.streams {
-        // A stream without a volume control (monitor-only nodes) is shown
-        // without a slider rather than failing the page.
-        stream.level = system::run("wpctl", &["get-volume", &stream.id.to_string()], TIMEOUT)
-            .ok()
-            .and_then(|text| parse_volume(&text));
-        identify(stream, &apps);
+    if streams {
+        let apps = apps::installed();
+        for stream in &mut model.streams {
+            // A stream without a volume control (monitor-only nodes) is shown
+            // without a slider rather than failing the page.
+            stream.level = system::run("wpctl", &["get-volume", &stream.id.to_string()], TIMEOUT)
+                .ok()
+                .and_then(|text| parse_volume(&text));
+            identify(stream, &apps);
+        }
     }
     model.streams.sort_by(|a, b| {
         a.name
@@ -923,8 +977,15 @@ fn reload(model: ModelState) {
     // between the two reads is caught by the check below.
     let writes = WRITES.load(Ordering::SeqCst);
     let settled = PENDING.load(Ordering::SeqCst) == 0;
+    let streams = detailed();
     background_then(
-        move || system::load_persistent("sound", load),
+        move || {
+            if streams {
+                system::load_persistent("sound-streams", load_streams)
+            } else {
+                system::load_persistent("sound", load)
+            }
+        },
         move |result| {
             let current = settled
                 && WRITES.load(Ordering::SeqCst) == writes
@@ -1424,7 +1485,7 @@ fn open_test(ctx: Ctx, mix: Mix) {
     let overlays = ctx.overlays;
     ctx.window.open(
         popup("Test speakers", SpeakerTest { mix, overlays })
-            .size(Dim::SpeakerPopupWidth.px(), Dim::SpeakerPopupHeight.px())
+            .width(Dim::SpeakerPopupWidth)
             .flags(PopupFlags::CANCEL | PopupFlags::GRABBER),
     );
 }
@@ -1445,6 +1506,18 @@ fn set_default(ctx: Ctx, kind: Kind, id: u32) {
         .iter()
         .any(|device| device.id == id && device.is_default)
     {
+        return;
+    }
+    // With the effects on they own the default device; the choice moves the
+    // effects to the other device instead.
+    let direction = match kind {
+        Kind::Output => engine::Direction::Output,
+        Kind::Input => engine::Direction::Input,
+    };
+    if engine::store::Store::default().state().of(direction).enabled
+        && let Some(device) = devices.iter().find(|device| device.id == id)
+    {
+        set_effects_device(ctx, direction, device.node_name.clone());
         return;
     }
     let mut next = loaded;
@@ -1597,12 +1670,11 @@ fn level_icon(volume: f64, muted: bool) -> Icon {
 }
 
 /// The button that mutes and unmutes. Its icon shows the current level.
-fn mute_button(volume: f64, muted: bool, on_mute: impl Into<EventHandler<()>>) -> Element {
+fn mute_button(volume: f64, muted: bool, on_mute: impl Into<EventHandler<()>>) -> IconButton {
     let label = if muted { "Unmute" } else { "Mute" };
     icon_button(level_icon(volume, muted), on_mute)
         .tooltip(label)
-        .size(Dim::Box9)
-        .into()
+        .size(Dim::Control)
 }
 
 /// The devices of one kind as a dropdown, each with its icon before its full
@@ -1672,14 +1744,12 @@ fn channel_group(
         .map(|test_mix| {
             action_button("Test...", move |_| open_test(ctx, test_mix.clone())).compact()
         });
-    let meter = level
-        .as_ref()
-        .filter(|level| level.id != PLACEHOLDER_NODE)
-        .map(|level| LevelMeter {
-            node: level.id,
-            source: kind.source(),
-            compact: true,
-        });
+    let meter = level.as_ref().map(|level| LevelMeter {
+        node: level.id,
+        source: kind.source(),
+        compact: true,
+        live: true,
+    });
     let group = if meter.is_some() || test.is_some() {
         group.trailing(
             rect()
@@ -1731,25 +1801,110 @@ fn channel_group(
         group = group.row(
             switch_row("Allow volume above 100%", above, move |on: bool| {
                 set_above_100(ctx, on)
-            })
-            .subtitle("Boosts quiet audio. It can distort."),
+            }),
         );
     }
     group
 }
 
+/// Menu items that move every stream in `ids` to another device. Playing
+/// streams move to an output and recording streams to an input.
+fn route_items(ctx: Ctx, ids: &[u32], recording: bool) -> Vec<MenuItem> {
+    let guard = ctx.model.read();
+    let Some(Ok(data)) = guard.as_ref() else {
+        return Vec::new();
+    };
+    let (kind, devices) = if recording {
+        (Kind::Input, &data.inputs)
+    } else {
+        (Kind::Output, &data.outputs)
+    };
+    if devices.len() < 2 {
+        return Vec::new();
+    }
+    devices
+        .iter()
+        .map(|device| {
+            let ids = ids.to_vec();
+            let device_id = device.id;
+            menu_item(
+                format!(
+                    "{} {}",
+                    if recording { "Record from" } else { "Play to" },
+                    device.full_name()
+                ),
+                move |_| move_streams(ctx, kind, ids.clone(), device_id),
+            )
+        })
+        .collect()
+}
+
+/// Move streams to the device `device`. The device's node name is read from
+/// `wpctl inspect`, which `pactl move-*` takes as the target.
+fn move_streams(ctx: Ctx, kind: Kind, ids: Vec<u32>, device: u32) {
+    begin_write();
+    background_then(
+        move || -> Result<(), CommandError> {
+            let result = (|| {
+                let text = system::run("wpctl", &["inspect", &device.to_string()], TIMEOUT)?;
+                let name = property(&text, "node.name").to_string();
+                if name.is_empty() {
+                    return Err(CommandError("The device has no name.".to_string()));
+                }
+                let verb = match kind {
+                    Kind::Output => "move-sink-input",
+                    Kind::Input => "move-source-output",
+                };
+                for id in ids {
+                    system::run("pactl", &[verb, &id.to_string(), &name], TIMEOUT)?;
+                }
+                Ok(())
+            })();
+            end_write();
+            result
+        },
+        move |result| {
+            if let Err(e) = result {
+                ctx.overlays.toast(e.0);
+            }
+            reload(ctx.model);
+        },
+    );
+}
+
 /// One row per application: its icon, name, what its streams are connected to
 /// and a volume and mute control. The controls change every stream of the
 /// application at once. A thin meter under the slider shows what it plays.
-fn app_row(streams: &[Stream], above: bool, ctx: Ctx) -> Element {
+/// A row that is not `live` belongs to an application that has just stopped:
+/// it keeps its place and size, dimmed, with no meter running.
+fn app_row(streams: &[Stream], above: bool, ctx: Ctx, live: bool) -> Element {
     let first = &streams[0];
     let ids: Vec<u32> = streams.iter().map(|stream| stream.id).collect();
+    let recording = streams
+        .iter()
+        .any(|stream| !stream.recording_from.is_empty());
     match first.level {
         Some((volume, muted)) => {
             let slider_ids = ids.clone();
             let mute_ids = ids.clone();
             let menu_mute_ids = ids.clone();
             let reset_ids = ids.clone();
+            let mut menu = vec![
+                menu_item(if muted { "Unmute" } else { "Mute" }, move |_| {
+                    toggle_stream_mute(ctx, &menu_mute_ids, muted)
+                }),
+                menu_item("Reset to 100%", move |_| {
+                    set_stream_volume(ctx, &reset_ids, 100, above)
+                }),
+            ];
+            if live {
+                menu.extend(route_items(ctx, &ids, recording));
+            }
+            let subtitle = if live {
+                summary_of(streams)
+            } else {
+                "Stopped".to_string()
+            };
             volume_slider(
                 first.name.clone(),
                 volume * 100.0,
@@ -1758,24 +1913,22 @@ fn app_row(streams: &[Stream], above: bool, ctx: Ctx) -> Element {
                     set_stream_volume(ctx, &slider_ids, percent_of(value, above), above);
                 },
             )
-            .subtitle(summary_of(streams))
+            .enabled(live)
+            .subtitle(subtitle)
             .leading(app_icon(first.icon.clone(), IconSize::App))
             .footer(LevelMeter {
                 node: first.id,
                 source: Source::Stream,
                 compact: false,
+                live,
             })
-            .control(mute_button(volume, muted, move |_| {
-                toggle_stream_mute(ctx, &mute_ids, muted)
-            }))
-            .context_menu(vec![
-                menu_item(if muted { "Unmute" } else { "Mute" }, move |_| {
-                    toggle_stream_mute(ctx, &menu_mute_ids, muted)
-                }),
-                menu_item("Reset to 100%", move |_| {
-                    set_stream_volume(ctx, &reset_ids, 100, above)
-                }),
-            ])
+            .control(
+                mute_button(volume, muted, move |_| {
+                    toggle_stream_mute(ctx, &mute_ids, muted)
+                })
+                .enabled(live),
+            )
+            .context_menu(if live { menu } else { Vec::new() })
             .into()
         }
         None => Element::from(
@@ -1790,12 +1943,11 @@ fn app_row(streams: &[Stream], above: bool, ctx: Ctx) -> Element {
 /// Group streams by application, keeping the order of each group's first
 /// stream. Streams of one application share an id, or else a name.
 fn by_application(streams: &[Stream]) -> Vec<Vec<Stream>> {
-    let key = |stream: &Stream| stream.app.clone().unwrap_or_else(|| stream.name.clone());
     let mut groups: Vec<Vec<Stream>> = Vec::new();
     for stream in streams {
         match groups
             .iter_mut()
-            .find(|group| key(&group[0]) == key(stream))
+            .find(|group| application_key(&group[0]) == application_key(stream))
         {
             Some(group) => group.push(stream.clone()),
             None => groups.push(vec![stream.clone()]),
@@ -1804,9 +1956,54 @@ fn by_application(streams: &[Stream]) -> Vec<Vec<Stream>> {
     groups
 }
 
+/// What the streams of one application have in common.
+fn application_key(stream: &Stream) -> String {
+    stream.app.clone().unwrap_or_else(|| stream.name.clone())
+}
+
+/// How many applications play and record, such as "2 playing, 1 recording".
+fn activity_summary(streams: &[Stream]) -> String {
+    let groups = by_application(streams);
+    let playing = groups
+        .iter()
+        .filter(|group| group.iter().any(|stream| !stream.playing_to.is_empty()))
+        .count();
+    let recording = groups
+        .iter()
+        .filter(|group| group.iter().any(|stream| !stream.recording_from.is_empty()))
+        .count();
+    match (playing, recording) {
+        (0, 0) => "Nothing playing".to_string(),
+        (playing, 0) => format!("{playing} playing"),
+        (0, recording) => format!("{recording} recording"),
+        (playing, recording) => format!("{playing} playing, {recording} recording"),
+    }
+}
+
+/// How many mounted pages need the detailed model: each stream's volume,
+/// icon and application. The Sound page itself needs only the summary, which
+/// `wpctl status` alone gives, so it does not run a command for each stream.
+static DETAILED: AtomicUsize = AtomicUsize::new(0);
+
+fn detailed() -> bool {
+    DETAILED.load(Ordering::SeqCst) > 0
+}
+
 /// Poll the sound state while the page is open, and load it once now.
-fn use_sound_model() -> ModelState {
-    let model = use_hook(|| system::cached_persistent::<Model, CommandError>("sound"));
+/// `detail` is true for a page that shows the volume of each stream.
+fn use_sound_model(detail: bool) -> ModelState {
+    use_hook(|| {
+        if detail {
+            DETAILED.fetch_add(1, Ordering::SeqCst);
+        }
+    });
+    use_drop(move || {
+        if detail {
+            DETAILED.fetch_sub(1, Ordering::SeqCst);
+        }
+    });
+    let key = if detail { "sound-streams" } else { "sound" };
+    let model = use_hook(move || system::cached_persistent::<Model, CommandError>(key));
     use_hook(move || {
         reload(model);
         let focus = system::window_focus();
@@ -1822,8 +2019,8 @@ fn use_sound_model() -> ModelState {
     model
 }
 
-fn use_ctx() -> Ctx {
-    let model = use_sound_model();
+fn use_ctx(detail: bool) -> Ctx {
+    let model = use_sound_model(detail);
     let overlays = use_overlays();
     let window = use_window();
     let queue = VolumeQueue {
@@ -1838,20 +2035,61 @@ fn use_ctx() -> Ctx {
     }
 }
 
+/// The quick switch for the output effects: turn them on or off in the
+/// background, then show the preset that is in use, or "Off".
+fn set_output_effects(mut shown: State<Option<String>>, overlays: Overlays, on: bool) {
+    use engine::store::Store;
+    let direction = engine::Direction::Output;
+    let previous = shown.peek().clone();
+    // Shown at once from what the effects page last read; the worker reports
+    // the preset really in use when it has made the change.
+    shown.set(on.then(|| effects::active_preset_cached(direction)));
+    background_then(
+        move || {
+            let store = Store::default();
+            store
+                .update_state(|state| state.of_mut(direction).enabled = on)
+                .map_err(|e| e.0)?;
+            engine::service::apply(&store, direction)?;
+            Ok(effects::summary(direction))
+        },
+        move |result: Result<Option<String>, String>| match result {
+            Ok(summary) => shown.set(summary),
+            Err(message) => {
+                overlays.toast(message);
+                shown.set(previous);
+            }
+        },
+    );
+}
+
 #[derive(PartialEq)]
 pub struct SoundPage;
 
 impl Component for SoundPage {
     fn render(&self) -> impl IntoElement {
-        let ctx = use_ctx();
+        let ctx = use_ctx(false);
         let tokens = use_tokens();
-        // Before the first load lands, the page draws its real groups from a
-        // placeholder model under the veil, so nothing moves when data arrives.
-        let (data, loading) = match ctx.model.read().clone() {
-            None => (Model::placeholder(), true),
-            Some(Ok(data)) => (data, false),
+        // The applications and the effects are subpages, so this page stays
+        // short and runs no meter for them. Hooks come before the early
+        // returns, so every path runs the same ones.
+        let router = use_router();
+        let effects_on = use_state(effects::summary_cached);
+        use_hook(move || {
+            let mut effects_on = effects_on;
+            background_then(
+                || effects::summary(engine::Direction::Output),
+                move |summary| effects_on.set(summary),
+            );
+        });
+        // Which speakers the output has decides which of Balance, Fade and
+        // Subwoofer show, so before the first read lands there is no layout to
+        // draw. The page is hidden, then fades in at its final layout.
+        let data = match ctx.model.read().clone() {
+            None => return revealed(page_column().child(PageHead::new()), true),
+            Some(Ok(data)) => data,
             Some(Err(e)) => {
-                return veiled(
+                return revealed(
                     page_column().child(PageHead::new()).child(
                         status(Status::Error(e.0)).action("Try again", move |_| reload(ctx.model)),
                     ),
@@ -1882,30 +2120,27 @@ impl Component for SoundPage {
                 tokens,
             ));
 
-        let applications = Group::titled("Applications");
-        if data.streams.is_empty() {
-            page = page.child(
-                applications.row(
-                    hstack(S3)
-                        .child(icon(
-                            Icon::Sound,
-                            IconSize::Control,
-                            Paint::Muted.color(&tokens),
-                        ))
-                        .child(caption("Nothing is playing or recording.")),
-                ),
-            );
-        } else {
-            let groups = by_application(&data.streams);
-            page = page.child(
-                applications.rows(
-                    groups
-                        .iter()
-                        .map(|group| app_row(group, data.above_100, ctx)),
-                ),
-            );
-        }
-        veiled(page, loading)
+        let overlays = ctx.overlays;
+        let preset = effects_on.read().clone();
+        page = page.child(
+            Group::new(None::<String>)
+                .row(
+                    row("Application volumes")
+                        .value(activity_summary(&data.streams))
+                        .navigates()
+                        .on_press(move |_| router.open(routes::sound_applications())),
+                )
+                .row(
+                    row("Effects")
+                        .value(preset.clone().unwrap_or_else(|| "Off".to_string()))
+                        .navigates()
+                        .on_press(move |_| router.open(routes::sound_effects())),
+                )
+                .row(switch_row("Output effects", preset.is_some(), move |on: bool| {
+                    set_output_effects(effects_on, overlays, on);
+                })),
+        );
+        revealed(page, false)
     }
 }
 
@@ -1919,7 +2154,7 @@ pub struct AppSound {
 
 impl Component for AppSound {
     fn render(&self) -> impl IntoElement {
-        let ctx = use_ctx();
+        let ctx = use_ctx(true);
 
         let Some(Ok(data)) = ctx.model.read().clone() else {
             return Element::from(rect());
@@ -1935,11 +2170,9 @@ impl Component for AppSound {
         let group = page_column();
         group
             .child(
-                Group::titled("Sound").rows(
-                    streams
-                        .iter()
-                        .map(|stream| app_row(std::slice::from_ref(*stream), data.above_100, ctx)),
-                ),
+                Group::titled("Sound").rows(streams.iter().map(|stream| {
+                    app_row(std::slice::from_ref(*stream), data.above_100, ctx, true)
+                })),
             )
             .into()
     }

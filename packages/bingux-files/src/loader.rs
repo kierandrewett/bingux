@@ -567,7 +567,7 @@ impl Loader {
             if self.cancel.is_cancelled() {
                 break;
             }
-            match rx.recv_timeout(Duration::from_millis(250)) {
+            match rx.recv_timeout(self.wait_time()) {
                 Ok(Msg::Cancel) | Err(RecvTimeoutError::Disconnected) => break,
                 Ok(message) => self.handle(message),
                 Err(RecvTimeoutError::Timeout) => {}
@@ -650,6 +650,28 @@ impl Loader {
     }
 
     /// Timers: unresponsive drives, background stores, polling.
+    /// How long the loop may sleep before `tick` has something to do. Work in
+    /// flight is looked at four times a second, as the timeouts it keeps are
+    /// counted in seconds; a finished folder with an inotify watch has nothing
+    /// to look at, so it sleeps until a message arrives (cancelling is one,
+    /// and the long bound only covers a message lost), and a folder that is
+    /// polled sleeps until its next poll. An idle window therefore wakes this
+    /// thread about once in five seconds instead of four times a second.
+    fn wait_time(&self) -> Duration {
+        const BUSY: Duration = Duration::from_millis(250);
+        const IDLE: Duration = Duration::from_secs(5);
+        let busy = self.reading || self.stats_in_flight > 0 || self.dirty || !self.done_once;
+        if busy {
+            return BUSY;
+        }
+        match self.policy.poll_every {
+            Some(every) if self.options.watch && self.watcher.is_none() && !self.polling => every
+                .saturating_sub(self.last_poll.elapsed())
+                .clamp(Duration::from_millis(10), IDLE),
+            _ => IDLE,
+        }
+    }
+
     fn tick(&mut self) {
         let busy = self.reading || self.stats_in_flight > 0;
         if busy && !self.unresponsive_sent && self.last_activity.elapsed() > self.policy.unresponsive_after {

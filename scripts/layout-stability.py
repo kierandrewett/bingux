@@ -73,19 +73,12 @@ FAKES = {
     "BINGUX_SETTINGS_FAKE_NETWORK": "online",
     "BINGUX_SETTINGS_FAKE_MODEM": "ok",
     "BINGUX_SETTINGS_FAKE_DISPLAYS": "1",
+    "BINGUX_SETTINGS_FAKE_BLUETOOTH": "1",
+    "BINGUX_SETTINGS_FAKE_INPUT": "1",
 }
 # Subpages that need more than the default fakes.
 EXTRA_FAKES = {"network/mobile": {"BINGUX_SETTINGS_FAKE_NETWORK": "modem"}}
 
-# Pages whose shape follows what the machine reports, with no fake to pin it:
-# the number of paired devices or of Gnoblin shortcuts is not known before the
-# read, so a cold start cannot place those rows. Reported, never failed. The
-# saved values (docs/settings.md, "Cached data") hide this on every later run.
-DATA_SHAPED = {
-    "bluetooth": "the device lists follow the paired devices",
-    "keyboard/shortcuts": "needs a running Gnoblin to read the shortcuts",
-    "sound": "the Balance, Fade and Subwoofer rows follow the output's channels",
-}
 
 
 MIN_MOVE = 4  # px; a horizontal rule that moves less is anti-aliasing, not a shift
@@ -142,6 +135,11 @@ def run_one(binary: Path, address: str, size: str, out: Path, delay_ms: int, tim
             )
         except subprocess.TimeoutExpired:
             return f"timed out after {timeout}s"
+    # A render that panics (a hook count that changed when the data landed) is
+    # caught and drawn as an error card: a page that did that is broken, shifts
+    # or not.
+    if "render panicked" in log.read_text(errors="replace"):
+        return "render panicked"
     return "ok" if proc.returncode == 0 else f"exit {proc.returncode}"
 
 
@@ -187,11 +185,7 @@ def main() -> None:
     failed = 0
     for row in rows:
         count = len(row["groups"])
-        note = DATA_SHAPED.get(row["page"])
-        broken = (count > 0 and note is None) or "no frames" in row["run"] or row["run"] not in ("ok", "skipped")
-        if note and count:
-            lines.append(f"| {row['size']} | {row['page']} | {row['frames']} | {count} (exempt: {note}) | {row['run']} |")
-            continue
+        broken = count > 0 or "no frames" in row["run"] or row["run"] not in ("ok", "skipped")
         failed += broken
         lines.append(f"| {row['size']} | {row['page']} | {row['frames']} | {count} | {row['run']} |")
     lines.append("")

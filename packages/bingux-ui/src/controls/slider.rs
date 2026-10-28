@@ -4,6 +4,7 @@
 use freya::animation::*;
 use freya::prelude::*;
 
+use super::capture::{CaptureEvent, Phase, use_capture};
 use crate::component::ComponentName;
 use crate::motion::Focusable;
 use crate::style::*;
@@ -12,6 +13,8 @@ use crate::typography::{CAPTION, Ink};
 
 /// Width of the 100% tick on the track, in px.
 const TICK_WIDTH: f32 = 2.0;
+/// How strongly the danger colour tints the empty part of the track.
+const DANGER_TRACK_OPACITY: f32 = 0.45;
 /// Height of the 100% tick, as a fraction of the thumb: taller than the track.
 const TICK_HEIGHT: f32 = 0.9;
 /// Thumb scale while pressed and while dragging.
@@ -115,8 +118,9 @@ impl Slider {
         self
     }
 
-    /// Paint the travel past `percent` in the danger colour. It does not
-    /// limit the value.
+    /// Tint the track past `percent` in the danger colour, always, and paint
+    /// the filled part of it solid once the value passes. It does not limit
+    /// the value.
     pub fn danger_from(mut self, percent: f64) -> Self {
         self.danger_from = Some(percent);
         self
@@ -196,33 +200,33 @@ impl Component for Slider {
             let half = thumb_size as f64 / 2.0;
             snap(((x - half) / travel as f64 * max).clamp(0.0, max))
         };
-        let on_pointer_down = {
+        // The press, the drag wherever the pointer goes, and the release are
+        // one capture (see `controls::capture`): the value follows the pointer
+        // at most once a frame, and the drag ends with the button.
+        let capture = use_capture({
             let on_moved = on_moved.clone();
-            move |event: Event<PointerEventData>| {
-                if !event.data().is_primary() {
-                    return;
+            move |event: CaptureEvent| match event.phase {
+                Phase::Start => {
+                    a11y_id.request_focus();
+                    pressing.set(true);
+                    on_moved.call(percent_at(event.local.0 as f64));
                 }
-                event.stop_propagation();
-                a11y_id.request_focus();
-                pressing.set(true);
-                on_moved.call(percent_at(event.element_location().x));
-            }
-        };
-        let on_move = {
-            let on_moved = on_moved.clone();
-            move |event: Event<PointerEventData>| {
-                if *pressing.peek() {
-                    event.prevent_default();
+                Phase::Move => {
                     dragging.set_if_modified(true);
-                    let x = event.global_location().x - size.read().min_x() as f64;
-                    on_moved.call(percent_at(x));
+                    on_moved.call(percent_at(event.local.0 as f64));
+                }
+                Phase::End => {
+                    on_moved.call(percent_at(event.local.0 as f64));
+                    pressing.set_if_modified(false);
+                    dragging.set_if_modified(false);
+                }
+                Phase::Cancel => {
+                    pressing.set_if_modified(false);
+                    dragging.set_if_modified(false);
                 }
             }
-        };
-        let on_release = move |_| {
-            pressing.set_if_modified(false);
-            dragging.set_if_modified(false);
-        };
+        });
+        let tracker = capture.clone();
         let on_key_down = {
             let on_moved = on_moved.clone();
             move |event: Event<KeyboardEventData>| {
@@ -270,13 +274,16 @@ impl Component for Slider {
             .maybe(!self.fluid, |element| element.tw(&tokens, &[w(self.width)]))
             .tw(&tokens, &[h(Dim::Control)])
             .maybe(!enabled, |element| element.opacity(DISABLED_OPACITY))
-            .on_sized(move |event: Event<SizedEventData>| size.set(event.area))
+            .on_sized(move |event: Event<SizedEventData>| {
+                // Only a change of size draws the slider again: a slider that
+                // is merely carried (scrolled, slid in) keeps its frame.
+                if size.peek().size != event.area.size {
+                    size.set(event.area);
+                }
+                tracker.sized(&event);
+            })
             .maybe(enabled, |element| {
-                element
-                    .on_pointer_down(on_pointer_down)
-                    .on_capture_global_pointer_move(on_move)
-                    .on_global_pointer_up(on_release)
-                    .on_key_down(on_key_down)
+                capture.handlers(element).on_key_down(on_key_down)
             })
             .child(match &gradient {
                 Some(svg) => rect()
@@ -314,6 +321,28 @@ impl Component for Slider {
                     .height(Size::px(track_height))
                     .tw(&tokens, &[rounded(Radius::Pill), bg(fill_paint)])
             }))
+            // The whole travel past `danger_from`, tinted on the empty track so
+            // the danger zone shows before the value reaches it.
+            .maybe_child(
+                danger_from
+                    .filter(|point| gradient.is_none() && *point < max)
+                    .map(|point| {
+                        let left = thumb_size / 2.0 + (travel * ((point / max) as f32)).round();
+                        rect()
+                            .position(
+                                Position::new_absolute()
+                                    .top(centre - track_height / 2.0)
+                                    .left(left),
+                            )
+                            .width(Size::px((width - left).max(0.0)))
+                            .height(Size::px(track_height))
+                            .opacity(DANGER_TRACK_OPACITY)
+                            .tw(
+                                &tokens,
+                                &[rounded_on(Radius::Pill, Corners::Right, 0.0), bg(Paint::Danger)],
+                            )
+                    }),
+            )
             // The part of the fill past `danger_from`, drawn over the accent fill.
             .maybe_child(
                 danger_from
@@ -329,7 +358,10 @@ impl Component for Slider {
                             )
                             .width(Size::px((centre_x - left).max(0.0)))
                             .height(Size::px(track_height))
-                            .tw(&tokens, &[rounded(Radius::Pill), bg(Paint::Danger)])
+                            .tw(
+                                &tokens,
+                                &[rounded_on(Radius::Pill, Corners::Right, 0.0), bg(Paint::Danger)],
+                            )
                     }),
             )
             .maybe_child(mark.filter(|point| *point < max).map(|point| {
@@ -359,9 +391,12 @@ impl Component for Slider {
                             .left(centre_x - thumb_size / 2.0),
                     )
                     .child(
+                        // The knob that paints is a sibling above this box, which
+                        // stands for it at rest: the same size and radius.
                         rect()
                             .width(Size::px(thumb_size))
                             .height(Size::px(thumb_size))
+                            .tw(&tokens, &[rounded(Radius::Pill)])
                             .focusable(focus(), Radius::Pill),
                     )
             }))

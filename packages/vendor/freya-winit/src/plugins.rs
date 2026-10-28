@@ -76,7 +76,12 @@ impl PluginsManager {
 
     pub fn send(&mut self, mut event: PluginEvent, handle: PluginHandle) {
         for plugin in self.plugins.borrow_mut().values_mut() {
-            plugin.on_event(&mut event, handle.clone())
+            // Bingux patch: a plugin that panics (the inspector, a metrics plugin)
+            // is reported and skipped for this event. It must not count towards
+            // the framework's own failures, which relaunch the app.
+            freya_core::guard::run(freya_core::guard::FailureKind::Framework, || {
+                plugin.on_event(&mut event, handle.clone())
+            });
         }
     }
 

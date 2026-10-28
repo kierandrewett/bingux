@@ -180,7 +180,6 @@ fn choice_now(
     key: &'static str,
     choices: Choices,
     unset: &'static str,
-    caption: &'static str,
 ) -> Element {
     let current = match page.saved.get(key) {
         "" => unset,
@@ -194,7 +193,6 @@ fn choice_now(
         &current,
         move |value: String| page.apply_now(Changes::one(key, value)),
     )
-    .subtitle(caption)
     .into()
 }
 
@@ -205,13 +203,11 @@ fn switch_now(
     key: &'static str,
     on: bool,
     values: (&'static str, &'static str),
-    caption: &'static str,
 ) -> Element {
     let page = page.clone();
     switch_row(title, on, move |on: bool| {
         page.apply_now(Changes::one(key, if on { values.0 } else { values.1 }))
     })
-    .subtitle(caption)
     .into()
 }
 
@@ -263,7 +259,6 @@ impl Component for AdvancedBody {
                 "connection.autoconnect-retries",
                 RETRY_CHOICES,
                 "-1",
-                "How often to try again when connecting automatically fails.",
             ))
             .row(choice_now(
                 &page,
@@ -271,7 +266,6 @@ impl Component for AdvancedBody {
                 "connection.mdns",
                 MULTICAST_DNS_CHOICES,
                 "-1",
-                "Finds devices on this network by name, such as printer.local.",
             ))
             .row(choice_now(
                 &page,
@@ -279,7 +273,6 @@ impl Component for AdvancedBody {
                 "connection.llmnr",
                 MULTICAST_DNS_CHOICES,
                 "-1",
-                "An older way to find computers on this network by name.",
             ));
         if layout.kind == Kind::Wifi {
             connection = connection
@@ -289,7 +282,6 @@ impl Component for AdvancedBody {
                     "802-11-wireless.hidden",
                     saved.yes("802-11-wireless.hidden"),
                     ("yes", "no"),
-                    "Turn on when the network does not show up in the list of networks.",
                 ))
                 .row(choice_now(
                     &page,
@@ -297,7 +289,6 @@ impl Component for AdvancedBody {
                     "802-11-wireless.band",
                     BAND_CHOICES,
                     "",
-                    "Connect on one band only. Automatic uses either.",
                 ));
         }
 
@@ -307,7 +298,6 @@ impl Component for AdvancedBody {
             "ipv4.may-fail",
             saved.get("ipv4.may-fail") == "no",
             ("no", "yes"),
-            "The connection counts as failed when IPv4 does not work.",
         ));
         if layout.dhcp {
             ipv4 = ipv4
@@ -317,7 +307,6 @@ impl Component for AdvancedBody {
                     "ipv4.dhcp-send-hostname",
                     sends_hostname(saved),
                     ("yes", "no"),
-                    "Tells the network this computer's name when asking for an address.",
                 ))
                 .row(
                     form_field("Host name", draft.text("hostname"))
@@ -347,7 +336,6 @@ impl Component for AdvancedBody {
             "ipv6.may-fail",
             saved.get("ipv6.may-fail") == "no",
             ("no", "yes"),
-            "The connection counts as failed when IPv6 does not work.",
         ));
         if layout.addr_gen {
             ipv6 = ipv6.row(choice_now(
@@ -356,7 +344,6 @@ impl Component for AdvancedBody {
                 "ipv6.addr-gen-mode",
                 ADDR_GEN_CHOICES,
                 "default",
-                "How the connection makes its own IPv6 address.",
             ));
         }
         ipv6 = ipv6.row(
@@ -368,7 +355,7 @@ impl Component for AdvancedBody {
         );
 
         page_column()
-            .maybe_child(pending_bar(dirty, ok && !*busy.read(), apply, revert))
+            .child(pending_bar(dirty, ok && !*busy.read(), apply, revert))
             .child(connection)
             .child(ipv4)
             .child(ipv6)

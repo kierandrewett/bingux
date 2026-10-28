@@ -171,8 +171,8 @@ pub fn stop() -> Profile {
     Profile { samples, truncated }
 }
 
-fn is_handler_frame(name: &str) -> bool {
-    name.contains("on_sigprof") || name.contains("__restore_rt")
+pub(super) fn is_handler_frame(name: &str) -> bool {
+    name.contains("on_sigprof") || name.contains("watchdog::on_signal") || name.contains("__restore_rt")
 }
 
 fn free_buffer() {
@@ -237,13 +237,13 @@ extern "C" fn on_sigprof(_sig: c_int, _info: *mut libc::siginfo_t, _ctx: *mut c_
 
 /// Resolves return addresses to names. Results are cached per address.
 #[derive(Default)]
-struct Symbolizer {
+pub(super) struct Symbolizer {
     cache: HashMap<usize, Box<str>>,
     modules: HashMap<String, Option<SymTab>>,
 }
 
 impl Symbolizer {
-    fn name(&mut self, pc: usize) -> Box<str> {
+    pub(super) fn name(&mut self, pc: usize) -> Box<str> {
         if let Some(n) = self.cache.get(&pc) {
             return n.clone();
         }

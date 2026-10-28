@@ -14,6 +14,7 @@ use bingux_ui::prelude::{
 };
 use bingux_ui::runtime::optimistic_then;
 use bingux_ui::shell::MenuItem;
+use bingux_ui::motion::reveal_block_if;
 use bingux_ui::style::*;
 use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 use freya::prelude::*;
@@ -21,7 +22,8 @@ use timezone_map::TimeZoneMap;
 
 use super::loading::veiled;
 use crate::pages::bingux_config;
-use crate::routes::{Route, use_navigator};
+use crate::routes;
+use bingux_ui::prelude::use_router;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
     Group, Overlays, Status, caption, choice_row, dropdown, form_row, menu_item, page_column,
@@ -519,9 +521,12 @@ impl Component for DateBody {
                         stepper(minute(), move |next| minute.set(next)).range(0, 59),
                     )),
             )
-            .maybe_child(setting().then(|| {
-                Element::from(status(Status::Loading("Setting the clock...".to_string())))
-            }))
+            .child(reveal_block_if(
+                S6,
+                setting().then(|| {
+                    Element::from(status(Status::Loading("Setting the clock...".to_string())))
+                }),
+            ))
     }
 }
 
@@ -558,7 +563,7 @@ pub struct DateTimePage;
 
 impl Component for DateTimePage {
     fn render(&self) -> impl IntoElement {
-        let navigator = use_navigator();
+        let router = use_router();
         let overlays = use_overlays();
         let ctx = context(overlays);
         let now = use_state::<Option<Result<Now, String>>>(|| None);
@@ -627,9 +632,9 @@ impl Component for DateTimePage {
             .value(zone_label(&model_data.timezone))
             .navigates()
             .enabled(!auto_zone_on)
-            .on_press(move |_| navigator.push(Route::TimeZone))
+            .on_press(move |_| router.open(routes::time_zone()))
             .context_menu(vec![
-                menu_item("Change time zone", move |_| navigator.push(Route::TimeZone)),
+                menu_item("Change time zone", move |_| router.open(routes::time_zone())),
                 menu_item("Copy time zone name", move |_| {
                     copy_text(overlays, zone.clone(), "Time zone name copied.")
                 }),

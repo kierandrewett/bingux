@@ -7,13 +7,9 @@
 
 use freya::prelude::*;
 
-use super::press::use_press;
-use super::progress::{SpinnerSize, spinner};
-use super::tooltip::hover_tip;
-use crate::component::ComponentName;
-use crate::icons::{self, Icon};
+use super::button::icon_button;
+use crate::icons::Icon;
 use crate::style::*;
-use crate::surface::use_tokens;
 
 /// An icon at the end of a row. While `busy` it shows a spinner and ignores
 /// presses, so a slow action cannot be started twice.
@@ -47,57 +43,14 @@ impl RowAction {
 }
 
 impl Component for RowAction {
+    /// The standard icon button, so a row's action has the hover and pressed
+    /// fill, tooltip, name and busy spinner every icon button has. It is the
+    /// one that skips the Tab order.
     fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let mut hovering = use_state(|| false);
-        let mut pressing = use_state(|| false);
-        let press = use_press();
-        let busy = self.busy;
-        let on_press = self.on_press.clone();
-        let glyph: Element = if busy {
-            spinner(SpinnerSize::Small).into()
-        } else {
-            icons::icon(self.icon, IconSize::Control, Paint::Muted.color(&tokens)).into()
-        };
-        let button = rect()
-            .component("RowAction")
-            .a11y_role(AccessibilityRole::Button)
-            .a11y_alt(self.tooltip.clone())
-            .tw(
-                &tokens,
-                &[
-                    center(),
-                    w(Dim::Box7),
-                    h(Dim::Box7),
-                    rounded(Radius::Control),
-                    surface(Paint::Transparent, hovering() && !busy, pressing(), false),
-                ],
-            )
-            .on_pointer_enter(move |_| hovering.set(true))
-            .on_pointer_leave(move |_| {
-                hovering.set(false);
-                pressing.set_if_modified(false);
-            })
-            .on_pointer_down(move |event: Event<PointerEventData>| {
-                // The press belongs to the button, not to the row under it.
-                event.stop_propagation();
-                if !busy {
-                    pressing.set(true);
-                    press.begin(&event, None);
-                }
-            })
-            .on_global_pointer_move(move |event: Event<PointerEventData>| press.moved(&event))
-            .on_global_pointer_up(move |_| {
-                press.release();
-                pressing.set_if_modified(false);
-            })
-            .on_press(move |event: Event<PressEventData>| {
-                event.stop_propagation();
-                if !busy && press.tap(&event) {
-                    on_press.call(());
-                }
-            })
-            .child(glyph);
-        hover_tip(button, self.tooltip.clone())
+        icon_button(self.icon, self.on_press.clone())
+            .size(Dim::Box7)
+            .tooltip(&self.tooltip)
+            .busy(self.busy)
+            .pointer_only()
     }
 }

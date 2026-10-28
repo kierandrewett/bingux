@@ -1,6 +1,7 @@
 //! The Layout tab: the node's box as nested bands, margin around padding around
 //! content, with each side labelled by the space token it is. Under it the
-//! spacing rows edit the same values as the Properties pane.
+//! spacing rows edit the same values as the Properties pane. The numbers in
+//! the bands are the margin, padding and content size the layout used.
 
 use freya::prelude::*;
 use freya::winit::window::WindowId;
@@ -16,16 +17,24 @@ use crate::typography::{CAPTION, CODE, Ink};
 
 /// The Layout tab for one node.
 pub fn view(tokens: &Tokens, window: WindowId, id: u64, node: &Node, class: SizeClass) -> Element {
-    let Some(props) = node.props.as_ref() else {
+    if node.props.is_none() {
         return rect()
             .tw(tokens, &[w_full(), p(S4)])
             .child(CAPTION.label(tokens, "This element has no box"))
             .into();
+    }
+    // The bands are the box the layout used, not the style the node declares.
+    let (Some(content_box), Some(used_padding)) = (node.used.content, node.used.padding) else {
+        return rect()
+            .tw(tokens, &[w_full(), p(S4)])
+            .child(CAPTION.label(tokens, "This element has not been laid out"))
+            .into();
     };
-    let size = match node.area {
-        Some(area) => format!("{:.0} × {:.0}", area.width(), area.height()),
-        None => "no layout".to_string(),
-    };
+    let size = format!(
+        "{} × {}",
+        editor::number_text(content_box.width()),
+        editor::number_text(content_box.height())
+    );
     let content: Element = rect()
         .tw(
             tokens,
@@ -43,7 +52,7 @@ pub fn view(tokens: &Tokens, window: WindowId, id: u64, node: &Node, class: Size
     let padding = band(
         tokens,
         "padding",
-        &props.padding,
+        &used_padding,
         class,
         Paint::InspectPadding,
         content,
@@ -51,7 +60,7 @@ pub fn view(tokens: &Tokens, window: WindowId, id: u64, node: &Node, class: Size
     let margin = band(
         tokens,
         "margin",
-        &props.margin,
+        &node.used.margin,
         class,
         Paint::InspectMargin,
         padding,

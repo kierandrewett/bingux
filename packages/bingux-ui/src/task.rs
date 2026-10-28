@@ -109,6 +109,13 @@ impl<T> Future for JobFuture<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut slot = lock(&self.slot);
         match std::mem::replace(&mut *slot, Slot::Taken) {
+            // A page is sliding: hold the result back until it has settled, so
+            // data does not re-render the page mid-slide.
+            Slot::Done(outcome) if sliding() => {
+                *slot = Slot::Done(outcome);
+                defer_until_settled(cx.waker().clone());
+                Poll::Pending
+            }
             Slot::Done(outcome) => Poll::Ready(outcome),
             Slot::Pending(_) | Slot::Taken => {
                 *slot = Slot::Pending(Some(cx.waker().clone()));
@@ -121,6 +128,133 @@ impl<T> Future for JobFuture<T> {
 impl<T> Drop for JobFuture<T> {
     fn drop(&mut self) {
         self.cancelled.store(true, Ordering::Release);
+    }
+}
+
+thread_local! {
+    /// When the running slide began, on the UI thread. `None` at rest.
+    static SLIDE_SINCE: std::cell::Cell<Option<std::time::Instant>> = const { std::cell::Cell::new(None) };
+    /// The tasks waiting for the slide to settle.
+    static SLIDE_WAITERS: RefCell<Vec<Waker>> = const { RefCell::new(Vec::new()) };
+    /// Jobs submitted from the UI thread during the slide: they start when it
+    /// settles, so a command's process spawn and its parsing do not compete
+    /// with the slide for the CPU.
+    static SLIDE_JOBS: RefCell<Vec<Job>> = const { RefCell::new(Vec::new()) };
+}
+
+/// The longest a result is held back for a slide. A slide that never reports
+/// its end must not starve the page of its data.
+const SLIDE_HOLD: std::time::Duration = std::time::Duration::from_millis(1500);
+
+fn sliding() -> bool {
+    SLIDE_SINCE.with(|since| since.get().is_some_and(|at| at.elapsed() < SLIDE_HOLD))
+}
+
+fn defer_until_settled(waker: Waker) {
+    SLIDE_WAITERS.with(|waiters| waiters.borrow_mut().push(waker));
+}
+
+/// Start `job` now, or when the running slide has settled if one is running on
+/// this (the UI) thread. Threads of the pool and others never see a slide and
+/// start their jobs at once.
+fn submit_after_slide(job: Job) {
+    if sliding() {
+        SLIDE_JOBS.with(|jobs| jobs.borrow_mut().push(job));
+    } else {
+        submit(job);
+    }
+}
+
+/// Tell the task pool whether a page slide is running. Call from the render
+/// that owns the slide, with `true` while it runs and `false` once it has
+/// settled (every render may call it: only a change does anything). While it
+/// is true, jobs submitted from the UI thread are queued but not started, and
+/// the results of jobs already running wait instead of being delivered. When
+/// it turns false the queued jobs start and the held results are delivered
+/// together. A slide that never reports its end is over after `SLIDE_HOLD`.
+pub fn set_sliding(active: bool) {
+    let was = SLIDE_SINCE.with(|since| since.get().is_some());
+    // A slide that has outlasted SLIDE_HOLD without reporting its end is over.
+    let expired = was && !sliding();
+    if active == was && !expired {
+        return;
+    }
+    let active = active && !expired;
+    SLIDE_SINCE.with(|since| since.set(active.then(std::time::Instant::now)));
+    if !active {
+        let jobs = SLIDE_JOBS.with(|jobs| std::mem::take(&mut *jobs.borrow_mut()));
+        for job in jobs {
+            submit(job);
+        }
+        let waiters = SLIDE_WAITERS.with(|waiters| std::mem::take(&mut *waiters.borrow_mut()));
+        for waker in waiters {
+            waker.wake();
+        }
+    }
+}
+
+/// A cancellation token for a named job. The job's closure gets one and
+/// checks [`CancelToken::is_cancelled`] between steps (a loop over many
+/// files, a series of commands), so work whose page has gone stops early.
+#[derive(Clone, Default)]
+pub struct CancelToken(Arc<AtomicBool>);
+
+impl CancelToken {
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
+
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::Release);
+    }
+}
+
+thread_local! {
+    /// The name of the job this worker is running, for panic reports and
+    /// the watchdog's view of the pool.
+    static CURRENT_JOB: std::cell::Cell<&'static str> = const { std::cell::Cell::new("") };
+}
+
+/// The name of the job running on this thread, empty off the pool.
+pub fn current_job() -> &'static str {
+    CURRENT_JOB.with(std::cell::Cell::get)
+}
+
+/// Like [`spawn_blocking`], for a job with a name and a cancellation token.
+/// The name appears in the panic message and in watchdog reports; dropping the
+/// returned future cancels the token, and a job that has not started is
+/// skipped. A panic in `work` leaves the future pending, as with
+/// [`spawn_blocking`].
+pub fn spawn_named<T: Send + 'static>(
+    name: &'static str,
+    work: impl FnOnce(&CancelToken) -> T + Send + 'static,
+) -> impl Future<Output = T> {
+    let token = CancelToken::default();
+    let guard = token.clone();
+    let job = try_spawn_blocking(move || {
+        CURRENT_JOB.with(|current| current.set(name));
+        let result = catch_unwind(AssertUnwindSafe(|| work(&token)));
+        CURRENT_JOB.with(|current| current.set(""));
+        match result {
+            Ok(value) => value,
+            Err(panic) => {
+                eprintln!("bingux-ui: background job `{name}` panicked");
+                std::panic::resume_unwind(panic)
+            }
+        }
+    });
+    async move {
+        struct Cancel(CancelToken);
+        impl Drop for Cancel {
+            fn drop(&mut self) {
+                self.0.cancel();
+            }
+        }
+        let _cancel = Cancel(guard);
+        match job.await {
+            Ok(value) => value,
+            Err(JobPanicked) => pending().await,
+        }
     }
 }
 
@@ -154,7 +288,7 @@ pub fn try_spawn_blocking<T: Send + 'static>(
     let cancelled = Arc::new(AtomicBool::new(false));
     let job_slot = Arc::clone(&slot);
     let job_cancelled = Arc::clone(&cancelled);
-    submit(Box::new(move || {
+    submit_after_slide(Box::new(move || {
         if job_cancelled.load(Ordering::Acquire) {
             return;
         }
@@ -340,4 +474,115 @@ where
             Err(message) => Resource::Error(message),
         });
     })
+}
+
+/// Run `work` on the pool and do not wait for it: for a job whose effect is
+/// elsewhere (a search service loading its index, a snapshot being written).
+/// Unlike [`spawn_blocking`] there is no future to drop, so the job always
+/// runs. A panic is caught and reported; the worker survives.
+pub fn spawn_detached(name: &'static str, work: impl FnOnce() + Send + 'static) {
+    submit(Box::new(move || {
+        CURRENT_JOB.with(|current| current.set(name));
+        if catch_unwind(AssertUnwindSafe(work)).is_err() {
+            eprintln!("bingux-ui: background job `{name}` panicked");
+        }
+        CURRENT_JOB.with(|current| current.set(""));
+    }));
+}
+
+/// Values sent from a thread to a Freya task, which sleeps until one comes.
+///
+/// A thread that reads a stream (`gsettings monitor`, an inotify descriptor)
+/// [`push`](Feed::push)es what it reads; the task `.await`s
+/// [`next`](Feed::next). The thread wakes the task, so no timer polls the
+/// channel and an idle window stays idle. [`close`](Feed::close) ends the
+/// stream: `next` returns `None` once the queue is empty.
+pub struct Feed<T> {
+    state: Mutex<FeedState<T>>,
+}
+
+struct FeedState<T> {
+    queue: VecDeque<T>,
+    waker: Option<Waker>,
+    closed: bool,
+}
+
+impl<T> Default for Feed<T> {
+    fn default() -> Self {
+        Self {
+            state: Mutex::new(FeedState {
+                queue: VecDeque::new(),
+                waker: None,
+                closed: false,
+            }),
+        }
+    }
+}
+
+impl<T> Feed<T> {
+    pub fn push(&self, value: T) {
+        let mut state = lock(&self.state);
+        state.queue.push_back(value);
+        if let Some(waker) = state.waker.take() {
+            waker.wake();
+        }
+    }
+
+    pub fn close(&self) {
+        let mut state = lock(&self.state);
+        state.closed = true;
+        if let Some(waker) = state.waker.take() {
+            waker.wake();
+        }
+    }
+
+    /// The next value, waiting for one; `None` when the feed is closed and
+    /// drained.
+    pub async fn next(&self) -> Option<T> {
+        std::future::poll_fn(|cx| {
+            let mut state = lock(&self.state);
+            match state.queue.pop_front() {
+                Some(value) => Poll::Ready(Some(value)),
+                None if state.closed => Poll::Ready(None),
+                None => {
+                    state.waker = Some(cx.waker().clone());
+                    Poll::Pending
+                }
+            }
+        })
+        .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::AtomicUsize;
+    use std::time::Duration;
+
+    /// A job submitted during a slide does not start until the slide settles,
+    /// and then starts at once. Jobs submitted off a slide start at once.
+    #[test]
+    fn jobs_wait_for_the_slide() {
+        let started = Arc::new(AtomicUsize::new(0));
+        let count = Arc::clone(&started);
+        set_sliding(true);
+        let held = try_spawn_blocking(move || count.fetch_add(1, Ordering::SeqCst));
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(started.load(Ordering::SeqCst), 0, "the job started mid-slide");
+        set_sliding(false);
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while started.load(Ordering::SeqCst) == 0 {
+            assert!(std::time::Instant::now() < deadline, "the job never started after the slide");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let count = Arc::clone(&started);
+        let free = try_spawn_blocking(move || count.fetch_add(1, Ordering::SeqCst));
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while started.load(Ordering::SeqCst) < 2 {
+            assert!(std::time::Instant::now() < deadline, "the job did not start at rest");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        drop((held, free));
+    }
 }

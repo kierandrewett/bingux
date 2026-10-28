@@ -1,0 +1,48 @@
+[package]
+name = "bingux-taxonomy"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "Every component, icon and token of bingux-ui, live, in a running Bingux app"
+build = "build.rs"
+
+[[bin]]
+name = "bingux-taxonomy"
+path = "src/main.rs"
+
+[dependencies]
+freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar"] }
+# `testing` is always on: `bingux-taxonomy --snapshot DIR` renders every page
+# headlessly (see src/snapshot_mode.rs).
+bingux-ui = { path = "../bingux-ui", features = ["testing"] }
+
+# Desktop scroll feel; see ../vendor/README.md.
+[patch.crates-io]
+freya-winit = { path = "../vendor/freya-winit" }
+freya-core = { path = "../vendor/freya-core" }
+freya-animation = { path = "../vendor/freya-animation" }
+freya-components = { path = "../vendor/freya-components" }
+
+# Same profile as bingux-settings: optimised dependencies, a quick rebuild of
+# the app itself.
+[profile.dev.package."*"]
+opt-level = 2
+debug-assertions = false
+overflow-checks = false
+
+[profile.dev.package.bingux-ui]
+opt-level = 2
+debug-assertions = false
+overflow-checks = false
+
+# Panics unwind, in dev and in release. The error boundaries and guards in the
+# vendored freya-core catch a panic with `catch_unwind`, which does nothing under
+# `panic = "abort"`: one failed component would end the process again. Both are
+# Cargo's defaults, spelled out so nobody changes one for size.
+# `scripts/ui-lint.py` fails when a Bingux app sets "abort".
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+panic = "unwind"

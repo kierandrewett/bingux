@@ -16,7 +16,7 @@ use super::backend::{self, Conflict, ConflictPolicy, OpError, Progress, Resoluti
 use super::undo::{self, Step};
 use super::{Busy, Env, clipboard, describe, notify, set};
 use crate::controls::checkbox;
-use crate::shell::{Overlays, ResponseKind, dialog};
+use crate::shell::{CANCEL_ID, DialogIcon, Overlays, ResponseKind, dialog};
 use crate::task::spawn_blocking;
 
 /// How often the busy line and the conflict question are looked at.
@@ -184,7 +184,8 @@ fn ask_about(overlays: Overlays, ask: Ask) {
         .content(Element::from(ApplyToAll(remember)))
         .response("Skip", ResponseKind::Default, answer(Resolution::Skip))
         .response("Keep both", ResponseKind::Default, answer(Resolution::KeepBoth))
-        .response("Replace", ResponseKind::Destructive, answer(Resolution::Replace)),
+        .response("Replace", ResponseKind::Destructive, answer(Resolution::Replace))
+        .default_action("keep_both"),
     );
 }
 
@@ -494,15 +495,16 @@ fn delete_prompt(paths: &[PathBuf], reason: Option<&str>) -> Prompt {
     }
 }
 
-/// Ask before deleting for good. Cancel has the focus, so a stray Enter
-/// keeps the files.
+/// Ask before deleting for good. Cancel is the default action and has the
+/// focus, so a stray Enter keeps the files.
 fn ask_delete(env: &Env, paths: Vec<PathBuf>, reason: Option<&str>) {
     let prompt = delete_prompt(&paths, reason);
     let env = env.clone();
     env.overlays.show_dialog(
         dialog(prompt.title, prompt.body)
             .cancel("Cancel")
-            .focus_response()
+            .default_action(CANCEL_ID)
+            .icon(DialogIcon::Warning)
             .response("Delete permanently", ResponseKind::Destructive, {
                 let env = env.clone();
                 move |_: ()| delete(&env, paths.clone())
@@ -519,7 +521,8 @@ pub(super) fn confirm_empty_trash(env: &Env) {
             "Everything in the Trash will be deleted for good. This cannot be undone.",
         )
         .cancel("Cancel")
-        .focus_response()
+        .default_action(CANCEL_ID)
+        .icon(DialogIcon::Warning)
         .response("Empty Trash", ResponseKind::Destructive, {
             let env = env.clone();
             move |_: ()| empty_trash(&env)

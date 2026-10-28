@@ -9,7 +9,8 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::passwd;
-use crate::routes::{Navigator, Route, use_navigator};
+use crate::routes;
+use bingux_ui::prelude::{Router, Target, use_router};
 use crate::system::{
     self, CommandError, CommandResult, background, background_then, optimistic_then,
 };
@@ -19,6 +20,7 @@ use crate::ui::{
     caption, form_row, heading, menu_item, page_column, popup, popup_column, row, skeleton_rows, skeleton_shape,
     status, text_field, use_overlays, use_popup_actions, use_tokens, use_window,
 };
+use bingux_ui::motion::reveal_block_if;
 use bingux_ui::style::*;
 use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 
@@ -217,7 +219,7 @@ pub struct UsersPage;
 impl Component for UsersPage {
     fn render(&self) -> impl IntoElement {
         let model = system::use_cached_persistent("users", load);
-        let navigator = use_navigator();
+        let router = use_router();
         let password = use_password();
 
         let Some(loaded) = model.read().clone() else {
@@ -240,11 +242,8 @@ impl Component for UsersPage {
             group.row(status(Status::Empty("No accounts found.".into())))
         } else {
             group.rows(accounts.iter().map(|account| {
-                let route = Route::Account {
-                    path: account.path.clone(),
-                    name: account.display_name().to_string(),
-                };
-                account_row(account, route, navigator, password)
+                let route = routes::account(&account.path.clone(), &account.display_name().to_string());
+                account_row(account, route, router, password)
             }))
         };
         page_column().child(PageHead::new()).child(group)
@@ -524,23 +523,28 @@ impl Component for PasswordBody {
             let confirm_text = sheet.confirm.read();
             !confirm_text.is_empty() && *confirm_text != *new_text
         };
+        let mut group = Group::new(None::<String>)
+            .description("Enter your current password, then the new one twice.")
+            .row(form_row("Current", current))
+            .row(form_row("New", new))
+            .row(form_row("Retype", confirm));
+        if mismatch {
+            group = group.footer("The new passwords do not match.");
+        }
         popup_column()
-            .child(caption(
-                "Enter your current password, then the new one twice.",
+            .child(group)
+            .child(reveal_block_if(
+                S6,
+                error.map(|text| Element::from(status(Status::Error(text)))),
             ))
-            .child(
-                Group::new(None::<String>)
-                    .row(form_row("Current", current))
-                    .row(form_row("New", new))
-                    .row(form_row("Retype", confirm)),
-            )
-            .maybe_child(mismatch.then(|| caption("The new passwords do not match.")))
-            .maybe_child(error.map(|text| Element::from(status(Status::Error(text)))))
-            .maybe_child(busy.then(|| {
-                Element::from(status(Status::Loading(
-                    "Changing your password...".to_string(),
-                )))
-            }))
+            .child(reveal_block_if(
+                S6,
+                busy.then(|| {
+                    Element::from(status(Status::Loading(
+                        "Changing your password...".to_string(),
+                    )))
+                }),
+            ))
     }
 }
 
@@ -646,8 +650,8 @@ impl Component for NameBody {
 /// opens a menu with Open, and Change password for the signed-in user.
 fn account_row(
     account: &Account,
-    route: Route,
-    navigator: Navigator,
+    route: Target,
+    router: Router,
     password: PasswordSheet,
 ) -> Element {
     let role = if account.administrator {
@@ -667,12 +671,12 @@ fn account_row(
     let current = account.current;
     let open_route = route.clone();
     let mut menu = vec![menu_item("Open", move |_| {
-        navigator.push(open_route.clone())
+        router.open(open_route.clone())
     })];
     if current {
         menu.push(menu_item("Change password", move |_| password.open()));
     }
-    item.on_press(move |_| navigator.push(route.clone()))
+    item.on_press(move |_| router.open(route.clone()))
         .context_menu(menu)
         .into()
 }

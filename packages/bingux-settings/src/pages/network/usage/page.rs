@@ -13,7 +13,8 @@ use super::limits::{self, Level, LimitsGroup};
 use super::model::{self, Breakdown, Period, Request, Snapshot};
 use crate::icons::Icon;
 use crate::pages::loading::veiled;
-use crate::routes::{Route, use_navigator};
+use crate::routes;
+use bingux_ui::prelude::use_router;
 use crate::system;
 use crate::ui::{
     Group, Row, Status, Tone, form_field, page_column, property_row, row, segmented, status,
@@ -25,13 +26,8 @@ use bingux_ui::task::use_resource;
 /// How often a visible page reads the totals again.
 const POLL: Duration = Duration::from_secs(30);
 
-/// Said once: nothing in this system counts traffic per process.
-const NO_PER_APP: &str =
-    "Usage per application is not available: this system has no per-process network accounting.";
-
 /// Shown when the recorder is not keeping the history up to date.
 const NOT_RUNNING: &str = "The data usage recorder is not running.";
-const HOW_TO_START: &str = "Start it with: systemctl --user start bingux-statusd";
 
 #[derive(PartialEq)]
 pub struct UsagePage {
@@ -79,11 +75,6 @@ fn notices(snapshot: &Snapshot, scope: &UsageScope) -> Vec<Element> {
             None => "Nothing has been recorded yet.".to_string(),
         };
         warnings.push(Element::from(warning(row(NOT_RUNNING).subtitle(detail))));
-        warnings.push(Element::from(
-            row("The recorder is part of the Bingux status service")
-                .leading_space()
-                .subtitle(HOW_TO_START),
-        ));
     }
     if let Some(what) = &snapshot.unsupported {
         notices.push(Element::from(status(Status::Info(format!(
@@ -148,7 +139,6 @@ fn totals_rows(
     if let Some(since_boot) = snapshot.since_boot {
         rows.push(Element::from(
             row("Since boot")
-                .subtitle("Counted by the kernel since the computer started")
                 .value(format::pair(since_boot)),
         ));
     }
@@ -194,7 +184,7 @@ fn chart_group(snapshot: &Snapshot, period: Period, custom_missing: bool) -> Gro
 
 impl Component for UsagePage {
     fn render(&self) -> impl IntoElement {
-        let navigator = use_navigator();
+        let router = use_router();
         let mut period = use_state(|| Period::Today);
         let today = Zone::Local.today(unix_now());
         let from = use_state(|| format::iso_date(today.add_days(-6)));
@@ -284,7 +274,6 @@ impl Component for UsagePage {
         // Totals.
         page = page.child(
             Group::titled("Totals")
-                .description("Sizes use decimal units: 1 GB is 1000 MB.")
                 .rows(totals_rows(&snapshot, current, custom_span)),
         );
 
@@ -295,9 +284,7 @@ impl Component for UsagePage {
         // Breakdowns, for the whole computer only.
         if scope == UsageScope::All {
             let interfaces = interface_rows(&snapshot.interfaces, move |name: String| {
-                navigator.push(Route::Usage {
-                    scope: UsageScope::Interface(name),
-                })
+                router.open(routes::usage(&UsageScope::Interface(name)))
             });
             page = page.child(
                 Group::titled("By interface")
@@ -305,9 +292,7 @@ impl Component for UsagePage {
                     .rows(or_empty(interfaces, "No interface has been recorded yet.")),
             );
             let connections = connection_rows(&snapshot.connections, move |name: String| {
-                navigator.push(Route::Usage {
-                    scope: UsageScope::Connection(name),
-                })
+                router.open(routes::usage(&UsageScope::Connection(name)))
             });
             page = page.child(
                 Group::titled("By connection")
@@ -339,7 +324,6 @@ impl Component for UsagePage {
         };
         page = page.child(
             Group::titled("About this data")
-                .description(NO_PER_APP)
                 .row(property_row("Source", source)),
         );
 

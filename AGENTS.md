@@ -43,6 +43,18 @@
 - Apps contain pages and backends only; look, layout, controls and behaviour
   come from bingux-ui and its tokens.
 
+## The taxonomy
+
+- `bingux-taxonomy` shows every component, icon, token and state of bingux-ui
+  live. Any change to bingux-ui (a new or changed component, icon, token or
+  behaviour) adds or updates its entry in `packages/bingux-taxonomy/src/registry.rs`
+  in the same change. `scripts/taxonomy-check.py`, run by `make check`, fails
+  on an exported item with no entry.
+- Look at the change in the running app, not in a build. Take its page at
+  desktop size and at 390x800 (`bingux-taxonomy --snapshot DIR`, or a real
+  headless session), and report the screenshot path or what you saw. A
+  bingux-ui change that nobody has seen in the taxonomy is not done.
+
 ## Shared worktrees
 
 - Preserve unrelated local changes. Inspect the worktree before editing,

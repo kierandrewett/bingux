@@ -10,6 +10,7 @@ use std::net::Ipv6Addr;
 use std::str::FromStr;
 
 use bingux_ui::controls::form::validate;
+use freya::prelude::*;
 use serde_json::{Value, json};
 
 use super::{bus, nm};
@@ -414,9 +415,20 @@ pub fn is_all_traffic(items: &[String]) -> bool {
 }
 
 /// Whether the `wg` tool is installed. It generates keys and derives public
-/// keys; nothing else here needs it.
-pub fn has_wg() -> bool {
-    bingux_ui::runtime::which("wg")
+/// keys; nothing else here needs it. Looked up once, off the UI thread, so it
+/// is `false` until the answer arrives and the page never waits on it.
+pub fn use_has_wg() -> bool {
+    static FOUND: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    let mut known = use_state(|| FOUND.get().copied());
+    use_hook(move || {
+        if known.read().is_none() {
+            bingux_ui::runtime::background_then(
+                || *FOUND.get_or_init(|| bingux_ui::runtime::which("wg")),
+                move |found| known.set(Some(found)),
+            );
+        }
+    });
+    known.read().unwrap_or(false)
 }
 
 /// A new private key from `wg genkey`.

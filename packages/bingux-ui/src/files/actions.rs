@@ -48,8 +48,8 @@ const NOTICE_TIME: Duration = Duration::from_secs(4);
 pub struct Capabilities {
     /// Open with another application.
     pub open_with: bool,
-    /// Open a folder in a new window.
-    pub new_window: bool,
+    /// Open a folder in a new tab.
+    pub new_tab: bool,
     /// Rename, create, trash, delete, paste, cut and compress.
     pub modify: bool,
     pub bookmarks: bool,
@@ -59,14 +59,14 @@ pub struct Capabilities {
 impl Capabilities {
     pub const CHOOSER: Self = Self {
         open_with: false,
-        new_window: false,
+        new_tab: false,
         modify: true,
         bookmarks: true,
         properties: true,
     };
     pub const FILES_APP: Self = Self {
         open_with: true,
-        new_window: true,
+        new_tab: true,
         modify: true,
         bookmarks: true,
         properties: true,
@@ -156,7 +156,7 @@ pub(super) struct Env {
     pub open_folder: EventHandler<PathBuf>,
     /// As a double click on `listing.entries[index]`.
     pub activate: EventHandler<usize>,
-    pub open_new_window: EventHandler<PathBuf>,
+    pub open_new_tab: EventHandler<PathBuf>,
     /// The folders that are bookmarks now.
     pub bookmarks: Arc<Vec<PathBuf>>,
     /// Called after a bookmark was added or removed, so the sidebar reads
@@ -178,7 +178,7 @@ pub(super) enum Command {
     Preview,
     /// Open the one selected file with this application.
     OpenWith(App),
-    OpenInNewWindow,
+    OpenInNewTab,
     Cut,
     Copy,
     /// Into the folder on show.
@@ -340,13 +340,13 @@ pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
                 Disabled("Select one file to choose how to open it.")
             }
         }
-        Command::OpenInNewWindow => {
-            if !caps.new_window || facts.folders == 0 {
+        Command::OpenInNewTab => {
+            if !caps.new_tab || facts.folders == 0 {
                 Hidden
             } else if all_folders {
                 Enabled
             } else {
-                Disabled("Only folders open in a new window.")
+                Disabled("Only folders open in a new tab.")
             }
         }
         Command::Cut
@@ -542,9 +542,9 @@ pub(super) fn run(env: &Env, selected: &[Entry], command: Command) {
                 notify(env.ui, format!("Could not start {}: {error}.", app.name), true);
             }
         }
-        Command::OpenInNewWindow => {
+        Command::OpenInNewTab => {
             for entry in selected.iter().filter(|entry| entry.is_dir()) {
-                env.open_new_window.call(entry.path.clone());
+                env.open_new_tab.call(entry.path.clone());
             }
         }
         Command::Cut => clipboard::put(paths_of(selected), true),
@@ -955,14 +955,14 @@ mod tests {
             state(&file, Command::OpenWith(App { name: String::new(), exec: String::new(), mimes: vec![] }))
                 .is_enabled()
         );
-        assert_eq!(state(&file, Command::OpenInNewWindow), Availability::Hidden);
+        assert_eq!(state(&file, Command::OpenInNewTab), Availability::Hidden);
         assert_eq!(state(&file, Command::AddBookmark), Availability::Hidden);
     }
 
     #[test]
     fn one_folder() {
         let mut folder = facts(Capabilities::FILES_APP, 1, 1);
-        assert!(state(&folder, Command::OpenInNewWindow).is_enabled());
+        assert!(state(&folder, Command::OpenInNewTab).is_enabled());
         assert!(state(&folder, Command::AddBookmark).is_enabled());
         assert_eq!(state(&folder, Command::RemoveBookmark), Availability::Hidden);
         folder.bookmarked = true;
@@ -985,7 +985,7 @@ mod tests {
         assert!(state(&many, Command::Trash).is_enabled());
         assert!(state(&many, Command::Copy).is_enabled());
         assert!(matches!(
-            state(&many, Command::OpenInNewWindow),
+            state(&many, Command::OpenInNewTab),
             Availability::Disabled(_)
         ));
         assert_eq!(state(&many, Command::AddBookmark), Availability::Hidden);
@@ -1002,7 +1002,7 @@ mod tests {
         let app = App { name: String::new(), exec: String::new(), mimes: vec![] };
         assert_eq!(state(&file, Command::OpenWith(app)), Availability::Hidden);
         let folder = facts(Capabilities::CHOOSER, 1, 1);
-        assert_eq!(state(&folder, Command::OpenInNewWindow), Availability::Hidden);
+        assert_eq!(state(&folder, Command::OpenInNewTab), Availability::Hidden);
         assert!(state(&folder, Command::Trash).is_enabled());
         assert!(state(&folder, Command::AddBookmark).is_enabled());
     }

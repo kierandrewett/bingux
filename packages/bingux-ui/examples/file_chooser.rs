@@ -166,6 +166,16 @@ const SCENARIOS: &[Scenario] = &[
         script: "wait 500; click-text Aurora.png; wait 300",
     },
     Scenario {
+        name: "pill-rest",
+        request: images,
+        script: "wait 500; click-text Aurora.png; wait 300; hover 600,300; wait 400",
+    },
+    Scenario {
+        name: "pill-dodged",
+        request: images,
+        script: "wait 500; click-text Aurora.png; wait 300; hover 860,722; wait 600",
+    },
+    Scenario {
         name: "select-folder",
         request: folder,
         script: "wait 400; click-text Projects; wait 300",

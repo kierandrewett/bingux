@@ -18,7 +18,7 @@ use std::collections::HashMap;
 
 use freya::prelude::{Color, State, WritableUtils, try_consume_context};
 
-use crate::theme::Tokens;
+use crate::theme::{BannerKind, Tokens};
 
 /// A space on the 4 px grid, named as Tailwind names it: `S4` is 16 px at
 /// regular density, as `p-4` is. `S0_5` is the half step between a title and
@@ -65,6 +65,39 @@ pub const S8: Space = Space::new(32.0, 36.0);
 pub const S10: Space = Space::new(40.0, 44.0);
 pub const S12: Space = Space::new(48.0, 54.0);
 
+/// The space between a row's trailing button and the row's top, bottom and
+/// trailing edge. [`Dim::RowButton`] is the row height less twice this, and
+/// the button's radius is the card's less this ([`Radius::Inner`]).
+pub const ROW_INSET: Space = S2;
+
+/// The padding of an alert dialog's card, equal on all four sides, whatever
+/// the density: 12 px. The buttons sit inside it, so a button's radius is the
+/// card's less this ([`Radius::nested`] of [`Radius::Overlay`], which is
+/// [`Radius::Inner`]), and the title and message sit one more inset in, so the
+/// text starts 24 px from the card's edge. It does not grow on a phone: the
+/// radius relation would break.
+pub const DIALOG_INSET: Space = Space::new(12.0, 12.0);
+
+/// The space between a row's trailing switch and the row's top, bottom and
+/// trailing edge: half the row height less the switch height, 18 px on a
+/// desktop and 16 px on a phone.
+pub const SWITCH_INSET: Space = Space::new(18.0, 16.0);
+
+/// The space between a field's trailing button (a password's reveal, a search
+/// field's clear) and the field's top, bottom and trailing edge.
+/// [`Dim::InlineButton`] is the field height ([`Dim::Control`]) less twice
+/// this, and the button's radius is the field's less this
+/// ([`Radius::nested`]): 4 px on a desktop. At compact density the button is
+/// the whole 44 px touch target, so the inset is 0 and the button takes the
+/// field's corner. A dense or flat field is shorter than a button, so its
+/// button is a [`Dim::Box5`] with the inset that leaves.
+pub const FIELD_INSET: Space = Space::new(4.0, 0.0);
+
+/// The space above and below a one-line field in a form row: half the row
+/// height less the field height, so a field row is as tall as any other row
+/// and the field sits level in it: 10 px on a desktop, 8 px on a phone.
+pub const FIELD_ROW_INSET: Space = Space::new(10.0, 8.0);
+
 /// The side padding inside a sidebar or list navigation row. It matches the
 /// space above and below the row's 24 px icon (40 px rows on a desktop, 56 px
 /// on a phone), so the icon sits in an even margin at both densities.
@@ -79,6 +112,22 @@ pub const LIST_EDGE: Space = S2;
 /// The one horizontal inset inside a card, a header bar and the page edge
 /// on a phone: row text, hairlines and controls start this far in.
 pub const GUTTER: Space = S4;
+
+/// The space a bottom sheet keeps clear below its last row, on top of
+/// [`Dim::SafeBottom`]. It is the end of the sheet's scroll content, so the
+/// last row scrolls clear of the window edge and is never cut by it.
+pub const SHEET_BOTTOM: Space = S4;
+
+/// The smallest a control's hit area may be at compact density: 44 px, the
+/// touch minimum. Every [`Dim`] that is a control's size passes it (see
+/// [`Dim::is_touch_target`]).
+pub const TOUCH_MIN: f32 = 44.0;
+
+/// The size of an icon button in a header bar. It is the control height, so a
+/// header's icon buttons, its segmented control and its split button stand
+/// on one height and rows of header controls line up: 36 px on a desktop,
+/// 44 px (the touch minimum) on a phone. One token, so it cannot drift.
+pub const HEADER_BUTTON: Dim = Dim::Control;
 
 /// How far a disabled control or menu item fades: clearly unavailable, still
 /// readable.
@@ -124,6 +173,19 @@ impl Radius {
             Radius::Pill => 999.0,
         }
     }
+
+    /// The radius of a box that sits `inset` px inside a box of this radius
+    /// and shares its corner: the outer radius less the inset, which keeps
+    /// the two curves concentric. The result is the nearest token at or
+    /// below that, so it is [`Radius::Control`] when the inset is 0, and
+    /// [`Radius::Inner`] for a button 4 px inside a control.
+    pub fn nested(self, inset: f32) -> Radius {
+        let wanted = self.px() - inset;
+        [Radius::Control, Radius::Inner, Radius::Mark]
+            .into_iter()
+            .find(|radius| radius.px() <= wanted + 0.01)
+            .unwrap_or(Radius::Mark)
+    }
 }
 
 /// Text sizes, by role. Only `typography.rs` reads them: text is set with a
@@ -150,13 +212,13 @@ impl TextSize {
     /// The size in logical pixels at the current size class.
     pub fn px(self) -> f32 {
         let (regular, compact) = self.sizes();
-        resolve(regular, compact)
+        resolve(regular, compact) * crate::stress::text_scale()
     }
 
     /// The size in logical pixels at `class`; see [`Space::px_in`].
     pub fn px_in(self, class: SizeClass) -> f32 {
         let (regular, compact) = self.sizes();
-        class.pick(regular, compact)
+        class.pick(regular, compact) * crate::stress::text_scale()
     }
 
     /// The (regular, compact) sizes. Compact text is a step larger, so body
@@ -247,12 +309,15 @@ pub enum Dim {
     /// The header bar: 48 px.
     Header,
     /// A window button (minimise, maximise, close): a 24 px circle in a
-    /// 32 px target. Back in the header uses the same target.
+    /// 32 px target, 44 px at compact density.
     WindowControl,
     WindowControlTarget,
     /// A field, dropdown or slider in a row: 240 px, at most 168 px on a
     /// phone.
     Field,
+    /// The least a field or dropdown in a row shrinks to before the row
+    /// stacks its label above it: 120 px, which still shows a word or two.
+    FieldMin,
     /// A field for a URL, path or name: 440 px, at most 168 px on a phone.
     FieldWide,
     /// A colour value beside its swatch and picker button: 144 px.
@@ -266,9 +331,15 @@ pub enum Dim {
     MenuWide,
     /// A dialog card: 400 px.
     Dialog,
+    /// The narrowest an alert dialog's card gets: 280 px.
+    DialogMin,
     /// A popup's width: 520 px.
     PopupWidth,
-    /// A popup's height until it asks for another: 600 px. Its body scrolls.
+    /// A short form's popup width: 440 px, such as the Wi-Fi password popup.
+    PopupNarrow,
+    /// The height of a popup that lays itself out (a file chooser) until it
+    /// asks for another: 600 px. A form popup has none: it is as tall as its
+    /// content.
     PopupHeight,
     /// A dropdown's option list: 240 px, never narrower than its button.
     DropdownMenu,
@@ -290,10 +361,24 @@ pub enum Dim {
     SliderThumb,
     /// A stepper's square half: 28 px.
     StepperHalf,
+    /// A button inside a field or a chip, such as a password's reveal or a
+    /// tag's remove: 28 px, 44 px at compact density, the touch minimum.
+    InlineButton,
+    /// A button, dropdown or segmented control that is the trailing control
+    /// of a row: the row's height less [`ROW_INSET`] above and below, so it
+    /// fills the row and sits the same distance from its top, bottom and
+    /// trailing edge: 40 px, 44 px (the touch minimum) at compact density.
+    RowButton,
     /// The sidebar: 280 px.
     Sidebar,
-    /// The page column at its widest: 720 px.
+    /// The page column at its widest on a window with a sidebar: 720 px.
     Page,
+    /// The page column at its widest on a narrow window, where the list of
+    /// pages is a screen of its own: 520 px. The column is that wide or the
+    /// window less its margins, whichever is less, centred. Cards grow with
+    /// the window up to the cap and then stop, so a label and its value never
+    /// sit hundreds of pixels apart on a tablet-size window.
+    PagePhone,
     /// Square boxes, named by Tailwind size step: 20, 28, 36, 44 and 96 px
     /// (`size-5`, `size-7`, `size-9`, `size-11`, `size-24`).
     Box5,
@@ -301,6 +386,10 @@ pub enum Dim {
     Box9,
     Box11,
     Box24,
+    /// The narrowest a tab of a tab strip gets before the strip scrolls: 96 px,
+    /// 128 px on a phone, where the close slot is a whole 44 px touch target
+    /// and a title still needs room beside it. The widest is [`Dim::Field`].
+    TabMin,
     /// A colour scheme preview card: 144 x 96.
     PreviewWidth,
     PreviewHeight,
@@ -321,9 +410,8 @@ pub enum Dim {
     SpeakerRoom,
     /// A speaker button in the test: 56 px.
     SpeakerButton,
-    /// The speaker test popup: 440 px wide and tall.
+    /// The speaker test popup's width: 480 px; its height follows the room.
     SpeakerPopupWidth,
-    SpeakerPopupHeight,
     /// The display arrangement preview: 360 x 240.
     ArrangementWidth,
     ArrangementHeight,
@@ -355,6 +443,11 @@ pub enum Dim {
     Label,
     /// A hairline: 1 px.
     Hairline,
+    /// The strip at the bottom edge of a phone-size window that the system's
+    /// gesture bar may use: 16 px at compact density, none on a desktop.
+    /// Pages, sheets, toasts and footers end this far above the edge, so no
+    /// row, button or pill sits on it.
+    SafeBottom,
     /// A selection indicator: 2 px, the underline of the selected tab.
     Indicator,
     /// A check or radio box: 18 px.
@@ -401,6 +494,9 @@ pub enum Dim {
     FileModifiedColumn,
     /// The narrowest a tile of the file grid gets: 132 px.
     GridTile,
+    /// The widest a tooltip bubble gets: 280 px. Longer text wraps onto more
+    /// lines inside it, up to four, then is cut.
+    TooltipMax,
 }
 
 impl Dim {
@@ -414,6 +510,116 @@ impl Dim {
     pub fn px_in(self, class: SizeClass) -> f32 {
         let (regular, compact) = self.sizes();
         class.pick(regular, compact)
+    }
+
+    /// Whether this size is the hit area of something a finger presses: a
+    /// row, a button, a menu item, a window button. Such a size is at least
+    /// [`TOUCH_MIN`] at compact density, and a test walks the table to hold
+    /// it to that. The match has no wildcard: a new `Dim` must say which it
+    /// is. A size that is not a hit area is geometry (a box, a column width, a
+    /// chart) or a mark inside a larger target: the switch and the slider
+    /// thumb are pressed through their row or their track.
+    pub const fn is_touch_target(self) -> bool {
+        match self {
+            Dim::Row
+            | Dim::RowTall
+            | Dim::RowSubtitle
+            | Dim::Control
+            | Dim::Button
+            | Dim::MenuItem
+            | Dim::NavItem
+            | Dim::WindowControlTarget
+            | Dim::StepperHalf
+            | Dim::InlineButton
+            | Dim::RowButton
+            | Dim::SpeakerButton => true,
+            Dim::MenuSeparator
+            | Dim::NavIcon
+            | Dim::Header
+            | Dim::WindowControl
+            | Dim::Field
+            | Dim::FieldWide
+            | Dim::FieldApps
+            | Dim::FieldColour
+            | Dim::FieldMin
+            | Dim::Menu
+            | Dim::MenuWide
+            | Dim::Dialog
+            | Dim::DialogMin
+            | Dim::PopupWidth
+            | Dim::PopupNarrow
+            | Dim::PopupHeight
+            | Dim::DropdownMenu
+            | Dim::DropdownMax
+            | Dim::MenuList
+            | Dim::SwitchWidth
+            | Dim::SwitchHeight
+            | Dim::SwitchThumb
+            | Dim::SwitchThumbPressed
+            | Dim::SliderTrack
+            | Dim::SliderTrackActive
+            | Dim::SliderThumb
+            | Dim::Sidebar
+            | Dim::Page
+            | Dim::PagePhone
+            | Dim::Box5
+            | Dim::Box7
+            | Dim::Box9
+            | Dim::Box11
+            | Dim::Box24
+            | Dim::TabMin
+            | Dim::PreviewWidth
+            | Dim::PreviewHeight
+            | Dim::PreviewRow
+            | Dim::PreviewSidebar
+            | Dim::PreviewLine
+            | Dim::PreviewBar
+            | Dim::PreviewTitleBar
+            | Dim::Chart
+            | Dim::SpeakerRoom
+            | Dim::SpeakerPopupWidth
+            | Dim::ArrangementWidth
+            | Dim::ArrangementHeight
+            | Dim::ArrangementHint
+            | Dim::SkeletonTitle
+            | Dim::SkeletonLabel
+            | Dim::SkeletonValue
+            | Dim::SkeletonLine
+            | Dim::CaptionLine
+            | Dim::StripCell
+            | Dim::IconBox
+            | Dim::SignalBar
+            | Dim::Ring
+            | Dim::Thumb
+            | Dim::Swatch
+            | Dim::Label
+            | Dim::Hairline
+            | Dim::SafeBottom
+            | Dim::Indicator
+            | Dim::Check
+            | Dim::Track
+            | Dim::SpinnerMedium
+            | Dim::Dot
+            | Dim::DashHeight
+            | Dim::IconRow
+            | Dim::IconControl
+            | Dim::Dense
+            | Dim::DenseControl
+            | Dim::PropLabel
+            | Dim::FlameRow
+            | Dim::Timeline
+            | Dim::DenseField
+            | Dim::CodeRow
+            | Dim::TreeIndent
+            | Dim::FlatField
+            | Dim::ChooserWidth
+            | Dim::ChooserHeight
+            | Dim::PlacesColumn
+            | Dim::FileSizeColumn
+            | Dim::FileModifiedColumn
+            | Dim::GridTile
+            | Dim::TooltipMax => false,
+        }
     }
 
     /// Every box size as (regular, compact) in logical pixels. This is the one
@@ -432,14 +638,16 @@ impl Dim {
             Dim::NavIcon => same(24.0),
             Dim::Header => (48.0, 56.0),
             Dim::WindowControl => same(24.0),
-            Dim::WindowControlTarget => same(32.0),
+            Dim::WindowControlTarget => (32.0, TOUCH_MIN),
             Dim::Field => (240.0, 168.0),
             Dim::FieldWide => (440.0, 168.0),
             Dim::FieldApps => (260.0, 168.0),
             Dim::Menu => same(220.0),
             Dim::MenuWide => same(300.0),
             Dim::Dialog => same(400.0),
+            Dim::DialogMin => same(280.0),
             Dim::PopupWidth => same(520.0),
+            Dim::PopupNarrow => same(440.0),
             Dim::PopupHeight => same(600.0),
             Dim::DropdownMenu => same(240.0),
             Dim::DropdownMax => same(360.0),
@@ -451,14 +659,18 @@ impl Dim {
             Dim::SliderTrack => same(6.0),
             Dim::SliderTrackActive => same(8.0),
             Dim::SliderThumb => (16.0, 22.0),
-            Dim::StepperHalf => (28.0, 36.0),
+            Dim::StepperHalf => (28.0, TOUCH_MIN),
+            Dim::InlineButton => (28.0, TOUCH_MIN),
+            Dim::RowButton => (40.0, TOUCH_MIN),
             Dim::Sidebar => same(280.0),
             Dim::Page => same(720.0),
+            Dim::PagePhone => same(520.0),
             Dim::Box5 => same(20.0),
             Dim::Box7 => same(28.0),
             Dim::Box9 => same(36.0),
             Dim::Box11 => same(44.0),
             Dim::Box24 => same(96.0),
+            Dim::TabMin => (96.0, 128.0),
             Dim::PreviewWidth => same(144.0),
             Dim::PreviewHeight => same(96.0),
             Dim::PreviewRow => same(464.0),
@@ -470,7 +682,6 @@ impl Dim {
             Dim::SpeakerRoom => same(360.0),
             Dim::SpeakerButton => same(56.0),
             Dim::SpeakerPopupWidth => same(480.0),
-            Dim::SpeakerPopupHeight => same(480.0),
             Dim::ArrangementWidth => same(360.0),
             Dim::ArrangementHeight => same(240.0),
             Dim::ArrangementHint => same(260.0),
@@ -490,8 +701,10 @@ impl Dim {
             Dim::Swatch => same(16.0),
             Dim::Label => same(96.0),
             Dim::Hairline => same(1.0),
+            Dim::SafeBottom => (0.0, 16.0),
             Dim::Indicator => same(2.0),
             Dim::FieldColour => same(144.0),
+            Dim::FieldMin => same(120.0),
             Dim::Check => same(18.0),
             Dim::Track => same(6.0),
             Dim::SpinnerMedium => same(3.0),
@@ -514,6 +727,7 @@ impl Dim {
             Dim::FileSizeColumn => same(88.0),
             Dim::FileModifiedColumn => same(112.0),
             Dim::GridTile => same(132.0),
+            Dim::TooltipMax => same(280.0),
         }
     }
 }
@@ -564,10 +778,23 @@ pub enum Paint {
     /// not, so the window behind the open menu takes no input.
     Shield,
     Accent,
+    /// The keyboard focus ring and the error ring, at 3:1 on every layer.
+    FocusRing,
+    ErrorRing,
+    /// The fainter band outside the error ring of a focused invalid control:
+    /// the error ring at 34 %. It is an accent to the ring, never the only
+    /// signal, so it carries no contrast requirement of its own.
+    ErrorHalo,
     /// The accent at low strength, behind a badge.
     AccentSoft,
     /// Text and marks drawn on the accent.
     OnAccent,
+    /// Text and marks drawn on the danger, success and warning fills, and on
+    /// the floating surface.
+    OnDanger,
+    OnSuccess,
+    OnWarning,
+    OnFloating,
     /// The selected sidebar item or row.
     Selection,
     Hover,
@@ -623,10 +850,14 @@ pub enum Paint {
     InspectInk,
     /// The soft shadow under the inspector's hover card.
     InspectShadow,
-    /// A tone at 16%: the fill of a banner.
-    Tint(Tone),
-    /// A tone at 28%: the edge of a banner.
-    TintEdge(Tone),
+    /// The opaque tinted fill of a banner or toast of this kind.
+    NoticeFill(BannerKind),
+    /// The 1 px edge of a banner or toast: the hue at 3:1 on its fill.
+    NoticeEdge(BannerKind),
+    /// The filled action button of a banner or toast.
+    NoticeAction(BannerKind),
+    /// Text on that action button.
+    NoticeOnAction(BannerKind),
     /// Syntax colours of markup: a tag name, an attribute name, an
     /// attribute value, text and a comment.
     SyntaxTag,
@@ -659,6 +890,21 @@ impl Tone {
 }
 
 impl Paint {
+    /// The paint for text and marks drawn on this fill: the derived on-colour
+    /// of a coloured fill, else `None`. Callers that take a fill from data
+    /// (a tree badge) use it so the label stays readable.
+    pub fn on(self) -> Option<Paint> {
+        match self {
+            Paint::Accent => Some(Paint::OnAccent),
+            Paint::Danger => Some(Paint::OnDanger),
+            Paint::Success => Some(Paint::OnSuccess),
+            Paint::Warning => Some(Paint::OnWarning),
+            Paint::Floating => Some(Paint::OnFloating),
+            Paint::NoticeAction(kind) => Some(Paint::NoticeOnAction(kind)),
+            _ => None,
+        }
+    }
+
     pub fn color(self, tokens: &Tokens) -> Color {
         match self {
             Paint::Transparent => Color::TRANSPARENT,
@@ -674,8 +920,15 @@ impl Paint {
             Paint::Popover => tokens.popover,
             Paint::Scrim => Color::BLACK.with_af32(0.4),
             Paint::Accent => tokens.accent,
+            Paint::FocusRing => tokens.focus_ring,
+            Paint::ErrorRing => tokens.error_ring,
+            Paint::ErrorHalo => tokens.error_ring.with_af32(0.34),
             Paint::AccentSoft => tokens.accent.with_af32(0.18),
-            Paint::OnAccent => tokens.accent_foreground,
+            Paint::OnAccent => tokens.on_accent,
+            Paint::OnDanger => tokens.on_danger,
+            Paint::OnSuccess => tokens.on_success,
+            Paint::OnWarning => tokens.on_warning,
+            Paint::OnFloating => tokens.on_floating,
             Paint::Selection => tokens.selection,
             Paint::Hover => tokens.hover,
             Paint::Pressed => tokens.pressed,
@@ -691,8 +944,10 @@ impl Paint {
             Paint::Warning => tokens.warning,
             Paint::Floating => tokens.floating,
             Paint::FloatingOutline => tokens.floating_outline,
-            Paint::Tint(tone) => tone.color(tokens).with_af32(0.16),
-            Paint::TintEdge(tone) => tone.color(tokens).with_af32(0.28),
+            Paint::NoticeFill(kind) => tokens.notice(kind).fill,
+            Paint::NoticeEdge(kind) => tokens.notice(kind).edge,
+            Paint::NoticeAction(kind) => tokens.notice(kind).action,
+            Paint::NoticeOnAction(kind) => tokens.notice(kind).on_action,
             Paint::Track => tokens.text.with_af32(0.22),
             Paint::Swatch(name) => crate::theme::accent_for(name, tokens.scheme.is_dark()),
             Paint::MockDarkWindow => Color::from_rgb(38, 38, 42),
@@ -716,8 +971,8 @@ impl Paint {
             Paint::SyntaxValue => tokens.syntax_value,
             Paint::SyntaxText => tokens.syntax_text,
             Paint::SyntaxComment => tokens.syntax_comment,
-            Paint::SearchHit => tokens.warning.with_af32(0.30),
-            Paint::SearchCurrent => tokens.warning.with_af32(0.65),
+            Paint::SearchHit => tokens.search_hit,
+            Paint::SearchCurrent => tokens.search_current,
         }
     }
 }
@@ -784,7 +1039,7 @@ pub enum Line {
     Outline,
     /// A ring of a `Dim` width in a paint: the spinner's ring.
     Stroke(Dim, Paint),
-    /// A 1 px edge in a paint: a banner's tinted edge.
+    /// A 1 px edge in a paint: a notice's tinted edge.
     Edge(Paint),
     /// A 2 px ring in a paint: the selected swatch or preview card.
     Ring(Paint),
@@ -981,4 +1236,77 @@ pub(crate) fn mirror_density(class: SizeClass, pointer: PointerKind) {
         let mut state = *state;
         state.set_if_modified(pointer);
     });
+}
+
+#[cfg(test)]
+mod touch_tests {
+    use super::*;
+    use crate::style::catalogue::dims;
+
+    /// Every control size that a finger presses, at compact density, is at
+    /// least the touch minimum, and at no density does it shrink going
+    /// from regular to compact.
+    #[test]
+    fn every_touch_target_token_reaches_the_touch_minimum_at_compact_density() {
+        let table = dims(SizeClass::Compact);
+        let mut walked = 0;
+        for (name, dim) in table {
+            if !dim.is_touch_target() {
+                continue;
+            }
+            walked += 1;
+            assert!(
+                dim.px_in(SizeClass::Compact) >= TOUCH_MIN,
+                "{name} is {} px at compact density, under the {TOUCH_MIN} px touch minimum",
+                dim.px_in(SizeClass::Compact)
+            );
+            assert!(
+                dim.px_in(SizeClass::Compact) >= dim.px_in(SizeClass::Regular),
+                "{name} shrinks at compact density"
+            );
+        }
+        // The walk saw the controls it is meant to hold: a catalogue that
+        // dropped them would pass with nothing checked.
+        assert!(walked >= 11, "only {walked} touch targets are in the catalogue");
+    }
+
+    #[test]
+    fn the_header_button_and_back_are_touch_targets() {
+        assert!(HEADER_BUTTON.is_touch_target());
+        assert!(Dim::WindowControlTarget.is_touch_target());
+        assert!(HEADER_BUTTON.px_in(SizeClass::Compact) >= TOUCH_MIN);
+        assert!(Dim::WindowControlTarget.px_in(SizeClass::Compact) >= TOUCH_MIN);
+    }
+
+    #[test]
+    fn the_phone_page_column_is_narrower_than_the_desktop_one() {
+        assert!(Dim::PagePhone.px_in(SizeClass::Regular) < Dim::Page.px_in(SizeClass::Regular));
+    }
+
+    /// A field's trailing button is the field less the inset on every side,
+    /// and a one-line field row is as tall as any other row.
+    #[test]
+    fn field_insets_fit_the_field_and_the_row() {
+        for class in [SizeClass::Regular, SizeClass::Compact] {
+            assert_eq!(
+                Dim::Control.px_in(class) - Dim::InlineButton.px_in(class),
+                2.0 * FIELD_INSET.px_in(class),
+                "{class:?}: the inline button is the field less two insets"
+            );
+            assert_eq!(
+                Dim::Row.px_in(class) - Dim::Control.px_in(class),
+                2.0 * FIELD_ROW_INSET.px_in(class),
+                "{class:?}: a field row is a row tall"
+            );
+        }
+    }
+
+    #[test]
+    fn a_nested_radius_is_the_outer_less_the_inset() {
+        assert_eq!(Radius::Control.nested(0.0), Radius::Control);
+        assert_eq!(Radius::Control.nested(4.0), Radius::Inner);
+        assert_eq!(Radius::Card.nested(ROW_INSET.px_in(SizeClass::Regular)), Radius::Inner);
+        assert_eq!(Radius::Control.nested(2.0), Radius::Inner);
+        assert_eq!(Radius::Mark.nested(2.0), Radius::Mark);
+    }
 }

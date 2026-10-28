@@ -21,9 +21,16 @@
 //!
 //! [`WindowHost`]: crate::window::WindowHost
 
+pub mod owner;
+pub mod ring_check;
+#[cfg(all(test, feature = "testing"))]
+mod ring_layout_tests;
+
 use std::{cell::RefCell, rc::Rc};
 
 use freya::prelude::*;
+use freya_core::accessibility::tree::ACCESSIBILITY_ROOT_ID;
+use owner::ScopeStack;
 
 /// The regions of a Bingux window, in F6 order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -48,7 +55,7 @@ enum Dir {
 }
 
 /// What a sentinel is for.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Edge {
     /// The start of a region. Keyboard focus passes through it.
     Region(RegionKind),
@@ -59,11 +66,28 @@ enum Edge {
 }
 
 /// What a keyboard landing on a sentinel does next.
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Step {
     /// Send Tab in this direction, to move on from the sentinel.
     Bounce(Dir),
     /// Focus this sentinel instead, which keeps focus inside a trap.
     Enter(AccessibilityId),
+}
+
+/// What landing on the sentinel `edge` does when focus was moving in `dir`.
+/// This is the wrap order of every modal scope: a Tab off the last control
+/// lands on the end sentinel and re-enters at the start, a Shift+Tab off the
+/// first lands on the start sentinel and re-enters at the end, so focus
+/// cycles inside the scope and never reaches the page behind it. A region's
+/// sentinel just passes focus on.
+fn edge_step(edge: Edge, dir: Dir) -> Step {
+    match (edge, dir) {
+        (Edge::Region(_), dir) => Step::Bounce(dir),
+        (Edge::TrapStart(_), Dir::Forward) => Step::Bounce(Dir::Forward),
+        (Edge::TrapStart(end), Dir::Backward) => Step::Enter(end),
+        (Edge::TrapEnd(start), Dir::Forward) => Step::Enter(start),
+        (Edge::TrapEnd(_), Dir::Backward) => Step::Bounce(Dir::Backward),
+    }
 }
 
 #[derive(Default)]
@@ -72,10 +96,15 @@ struct Core {
     budget: u8,
     current: Option<RegionKind>,
     claimed: bool,
-    open_traps: usize,
+    /// The open modal scopes (dialogs, popups, sheets), the live one on top.
+    scopes: ScopeStack<AccessibilityId>,
+    /// How many scopes are open, as a state the rings read, so they hide and
+    /// show as scopes come and go. Only the window host's core has one.
+    modal_depth: Option<State<usize>>,
     starts: Vec<(RegionKind, AccessibilityId)>,
-    /// The control pressed last, for a popup it opens to return focus to.
-    pressed: Option<AccessibilityId>,
+    /// The control pressed last and when, for a popup it opens to return
+    /// focus to. A press older than [`OPENER_PRESS_MS`] is not an opener.
+    pressed: Option<(AccessibilityId, std::time::Instant)>,
     /// The start a pointer press parked focus on. Freya switches to keyboard
     /// mode on Tab, so the parked start can get a keyboard state while the Tab
     /// that moves focus off it is still in flight; that arrival must not
@@ -90,10 +119,50 @@ struct Core {
 #[derive(Clone, Default)]
 pub struct FocusCore(Rc<RefCell<Core>>);
 
-/// Provides the window's [`FocusCore`] to the tree below. Call once, from the
-/// window host.
+/// Marks the content of a modal scope, so a focus ring knows it is not behind
+/// one. Provided by [`Trap`].
+#[derive(Clone, Copy)]
+pub(crate) struct InsideScope;
+
+/// Provides the window's [`FocusCore`] to the tree below. The window host and
+/// the overlay host both call it once: whichever is outermost creates the core
+/// and the other uses it, so the page and the menus, dialogs and sheets drawn
+/// beside it in the overlay layers share one focus state.
 pub fn provide_focus_core() -> FocusCore {
-    use_provide_context(FocusCore::default)
+    use_hook(|| {
+        try_consume_context::<FocusCore>().unwrap_or_else(|| {
+            let core = FocusCore::default();
+            core.0.borrow_mut().modal_depth = Some(State::create(0));
+            provide_context(core.clone());
+            core
+        })
+    })
+}
+
+impl FocusCore {
+    /// Whether a modal scope is up that the caller is not inside, so what it
+    /// draws belongs to the inert page behind. A focus ring that is inert is
+    /// not drawn. Reading it subscribes the caller to scopes opening and
+    /// closing.
+    pub(crate) fn page_inert(&self, inside_scope: bool) -> bool {
+        let depth = self.0.borrow().modal_depth;
+        if let Some(depth) = depth {
+            let _ = *depth.read();
+        }
+        !inside_scope && self.0.borrow().scopes.is_modal()
+    }
+
+    /// Tells everything that reads [`page_inert`](Self::page_inert) that the
+    /// open scopes changed.
+    fn publish_depth(&self) {
+        let (depth, now) = {
+            let core = self.0.borrow();
+            (core.modal_depth, core.scopes.depth())
+        };
+        if let Some(mut depth) = depth {
+            depth.set_if_modified(now);
+        }
+    }
 }
 
 /// The window's [`FocusCore`], from the window host above. Without a host (the
@@ -169,7 +238,7 @@ impl FocusCore {
     pub fn cycle(&self, back: bool) {
         let target = {
             let core = self.0.borrow();
-            if core.open_traps > 0 {
+            if core.scopes.is_modal() {
                 return;
             }
             let count = ORDER.len();
@@ -277,13 +346,7 @@ impl FocusCore {
             return;
         }
         let dir = self.0.borrow().dir;
-        let step = match (edge, dir) {
-            (Edge::Region(_), dir) => Step::Bounce(dir),
-            (Edge::TrapStart(_), Dir::Forward) => Step::Bounce(Dir::Forward),
-            (Edge::TrapStart(end), Dir::Backward) => Step::Enter(end),
-            (Edge::TrapEnd(start), Dir::Forward) => Step::Enter(start),
-            (Edge::TrapEnd(_), Dir::Backward) => Step::Bounce(Dir::Backward),
-        };
+        let step = edge_step(edge, dir);
         if !self.spend() {
             return;
         }
@@ -342,12 +405,42 @@ pub fn claim_press(core: &FocusCore) {
     core.claim_press();
 }
 
+/// Takes back a claim from [`claim_press`] that no region press will ever
+/// collect. A shield that closes a menu on the pointer going down claims the
+/// press, so the release that follows (which lands on the page once the shield
+/// has gone) does not park focus on the region and blur the control the menu
+/// belongs to; when the shield still hears the release itself, it takes the
+/// claim back here so the next press on empty space is not swallowed.
+pub fn release_press(core: &FocusCore) {
+    core.take_claim();
+}
+
+/// Whether a [`claim_press`] is waiting for its press to finish: a control or a
+/// popup's shield has taken the press now going on. A text field reads it when
+/// the pointer is released, to tell the release that ends a menu's dismissing
+/// press from a click outside the field.
+pub fn press_claimed(core: &FocusCore) -> bool {
+    core.0.borrow().claimed
+}
+
 /// A press that opens something on `id`: records `id` as the pressed control
 /// and requests its focus. A popup opened by the press returns focus to `id`
 /// when it closes. Call from a control's press handler, after its action.
 pub fn press_focus(core: &FocusCore, id: AccessibilityId) {
-    core.0.borrow_mut().pressed = Some(id);
+    note_press(core, id);
     id.request_focus();
+}
+
+/// How long after a press a modal scope it opened still counts it as its
+/// opener, in milliseconds.
+const OPENER_PRESS_MS: u128 = 1000;
+
+/// Records `id` as the control pressed last, so a modal scope opened by the
+/// press returns focus to it. A pointer press does not focus a button, so
+/// without this the opener would be whatever had focus before. Every
+/// focusable control's wrapper does it; callers never need to.
+pub(crate) fn note_press(core: &FocusCore, id: AccessibilityId) {
+    core.0.borrow_mut().pressed = Some((id, std::time::Instant::now()));
 }
 
 /// A zero-size, always-focusable accessibility node at an edge of a region or a
@@ -393,27 +486,62 @@ impl Component for Sentinel {
             .a11y_id(id)
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::GenericContainer)
+            // A key only reaches an element that listens to it, or one whose
+            // descendant has the focus. A sentinel that has the focus listens
+            // (and does nothing with the key), so a scope's own handler, such as
+            // a dialog's Enter, hears it as it bubbles.
+            .on_key_down(|_: Event<KeyboardEventData>| {})
     }
 }
 
-/// A popup's focus trap. Tab and Shift+Tab stay inside the popup. Build one
-/// with [`trap`].
+/// A modal focus scope's trap. Tab and Shift+Tab stay inside it, and the page
+/// behind is inert. Build one with [`trap`] or [`trap_inline`].
 #[derive(Clone, PartialEq)]
 pub struct Trap {
     child: Element,
+    /// Whether the trap's box fills its parent (a popup's content) or is as
+    /// large as `child` (a dialog's card, centred by its panel).
+    fill: bool,
+    /// Whether the trap focuses its start when it opens. A scope whose own
+    /// content picks the first focus (a dialog's default action) turns it off.
+    focus_start: bool,
 }
 
 /// Traps focus inside `child` while it is mounted. On close, focus returns to
-/// the element that had it when the trap opened.
+/// the element that had it when the trap opened. The trap fills its parent.
 pub fn trap(child: impl Into<Element>) -> Trap {
     Trap {
         child: child.into(),
+        fill: true,
+        focus_start: true,
+    }
+}
+
+impl Trap {
+    /// The scope's content takes the first focus itself (a default action,
+    /// an autofocused field), so the trap does not move it to its start.
+    pub fn keep_initial_focus(mut self) -> Self {
+        self.focus_start = false;
+        self
+    }
+}
+
+/// [`trap`] for a card that sizes itself and that its panel places: the trap
+/// adds only two zero-size sentinels around it. Every modal layer (dialog,
+/// alert, framed dialog, sheet) installs it, so the page behind never takes
+/// the keyboard.
+pub fn trap_inline(child: impl Into<Element>) -> Trap {
+    Trap {
+        child: child.into(),
+        fill: false,
+        focus_start: true,
     }
 }
 
 impl Component for Trap {
     fn render(&self) -> impl IntoElement {
         let start = use_a11y();
+        let scope = use_a11y();
         let end = use_a11y();
         let core = use_focus_core();
         let opened = use_state(|| false);
@@ -424,10 +552,10 @@ impl Component for Trap {
             let core = core.clone();
             let window = window.clone();
             move || {
-                core.0
-                    .borrow_mut()
-                    .pressed
-                    .take()
+                let pressed = core.0.borrow_mut().pressed.take();
+                pressed
+                    .filter(|(_, at)| at.elapsed().as_millis() <= OPENER_PRESS_MS)
+                    .map(|(id, _)| id)
                     .unwrap_or_else(|| *window.focused_accessibility_id.peek())
             }
         });
@@ -435,15 +563,20 @@ impl Component for Trap {
         let drop_core = core.clone();
         use_hook({
             let core = core.clone();
-            move || core.0.borrow_mut().open_traps += 1
+            move || core.0.borrow_mut().scopes.push(start, Some(opener))
         });
         use_drop({
             let window = window.clone();
             move || {
-                drop_core.0.borrow_mut().open_traps -= 1;
+                let restore = drop_core.0.borrow_mut().scopes.remove(start);
                 // The window may already be gone at shutdown; then there is
-                // nothing to restore into.
-                if Platform::get().try_window(window.id).is_some() {
+                // nothing to restore into. A scope closed under another one
+                // restores nothing: the live scope keeps its focus.
+                if Platform::get().try_window(window.id).is_none() {
+                    return;
+                }
+                drop_core.publish_depth();
+                if let Some(opener) = restore {
                     let mut mode = window.navigation_mode;
                     mode.set(NavigationMode::Keyboard);
                     window.send(UserEvent::FocusAccessibilityNode(
@@ -452,14 +585,37 @@ impl Component for Trap {
                 }
             }
         });
+        // Rings behind the scope hide while it is open.
+        use_provide_context(|| InsideScope);
+        let publish_core = core.clone();
+        use_side_effect(move || publish_core.publish_depth());
+
+        // The focused node was removed (Freya resets focus to the window's
+        // root): focus falls back to the live scope's start, so Escape and
+        // Tab still work and nothing behind the scope takes the keyboard.
+        let focused = window.focused_accessibility_id;
+        let fallback_core = core.clone();
+        // Focus that never reached anything is not a removed node: the
+        // fallback waits until the focus has been somewhere other than the
+        // window's root, so a scope that opens with its card taking the focus
+        // is not pulled onto its start first.
+        let held = use_hook(|| Rc::new(std::cell::Cell::new(false)));
+        use_side_effect(move || {
+            if *focused.read() != ACCESSIBILITY_ROOT_ID {
+                held.set(true);
+            } else if held.get() && fallback_core.0.borrow().scopes.is_live(start) {
+                send(AccessibilityFocusStrategy::Node(start));
+            }
+        });
 
         // Opening: focus the start, so the first Tab enters the popup. The
         // sentinel is in the tree only after this render, so the focus waits
         // for the first effect.
         let effect_core = core.clone();
+        let focus_start = self.focus_start;
         use_side_effect(move || {
             let mut opened = opened;
-            if !*opened.peek() {
+            if !*opened.peek() && focus_start {
                 opened.set(true);
                 if *Platform::get().current_window().navigation_mode.peek()
                     == NavigationMode::Keyboard
@@ -472,8 +628,13 @@ impl Component for Trap {
         });
 
         rect()
-            .width(Size::fill())
-            .height(Size::fill())
+            .a11y_id(scope)
+            .a11y_focusable(false)
+            .a11y_role(AccessibilityRole::GenericContainer)
+            // The scope is modal: assistive technology treats the page behind
+            // as inert, and the inspector marks it so.
+            .a11y_builder(|builder| builder.set_modal())
+            .maybe(self.fill, |root| root.width(Size::fill()).height(Size::fill()))
             .child(Sentinel {
                 id: start,
                 edge: Edge::TrapStart(end),
@@ -483,5 +644,150 @@ impl Component for Trap {
                 id: end,
                 edge: Edge::TrapEnd(start),
             })
+    }
+}
+
+/// The wrap order of every scope: how a landing on a sentinel moves focus on.
+#[cfg(test)]
+mod edge_tests {
+    use super::*;
+
+    const START: AccessibilityId = AccessibilityId(1);
+    const END: AccessibilityId = AccessibilityId(2);
+
+    #[test]
+    fn a_region_sentinel_always_passes_focus_on() {
+        for kind in ORDER {
+            for dir in [Dir::Forward, Dir::Backward] {
+                assert_eq!(edge_step(Edge::Region(kind), dir), Step::Bounce(dir));
+            }
+        }
+    }
+
+    #[test]
+    fn tab_into_a_traps_start_moves_on_to_its_first_control() {
+        assert_eq!(
+            edge_step(Edge::TrapStart(END), Dir::Forward),
+            Step::Bounce(Dir::Forward)
+        );
+    }
+
+    #[test]
+    fn tab_off_a_traps_last_control_wraps_to_its_start() {
+        assert_eq!(edge_step(Edge::TrapEnd(START), Dir::Forward), Step::Enter(START));
+    }
+
+    #[test]
+    fn shift_tab_off_a_traps_first_control_wraps_to_its_end() {
+        assert_eq!(edge_step(Edge::TrapStart(END), Dir::Backward), Step::Enter(END));
+    }
+
+    #[test]
+    fn shift_tab_into_a_traps_end_moves_on_to_its_last_control() {
+        assert_eq!(
+            edge_step(Edge::TrapEnd(START), Dir::Backward),
+            Step::Bounce(Dir::Backward)
+        );
+    }
+}
+
+/// One Tab press moves focus exactly one control, across a page of every kind
+/// of control, forward and back.
+#[cfg(all(test, feature = "testing"))]
+mod tab_tests {
+    use std::time::Duration;
+
+    use freya::prelude::*;
+
+    use crate::controls::*;
+    use crate::snapshot::Snapshot;
+    use crate::style::*;
+    use crate::surface::use_tokens;
+    use crate::theme::provide_tokens;
+    use crate::window::WindowHost;
+
+    /// How many controls the page holds, each one a single Tab stop.
+    const STOPS: usize = 9;
+
+    /// The window root: it provides the tokens the window host reads.
+    #[derive(PartialEq)]
+    struct Root;
+
+    impl Component for Root {
+        fn render(&self) -> impl IntoElement {
+            let _ = provide_tokens();
+            WindowHost::new(Page)
+        }
+    }
+
+    #[derive(PartialEq)]
+    struct Page;
+
+    impl Component for Page {
+        fn render(&self) -> impl IntoElement {
+            let tokens = use_tokens();
+            let name = use_state(String::new);
+            let options = || {
+                vec![
+                    ("a".to_string(), "One".to_string()),
+                    ("b".to_string(), "Two".to_string()),
+                ]
+            };
+            rect()
+                .expanded()
+                .tw(&tokens, &[flex_col(), p(S4), gap(S2)])
+                .child(action_button("First", |_: ()| {}))
+                .child(switch(false, |_: bool| {}))
+                .child(checkbox(false, |_: bool| {}).text("Check"))
+                .child(dropdown(options(), "a", |_: String| {}))
+                .child(segmented(options(), "a", |_: String| {}))
+                .child(slider(0.5, |_: f64| {}))
+                .child(text_field(name, |_: String| {}))
+                .child(stepper(3, |_: i64| {}))
+                .child(primary_button("Last", |_: ()| {}))
+        }
+    }
+
+    fn focused(shot: &mut Snapshot) -> AccessibilityId {
+        shot.runner()
+            .run_in(|| *Platform::get().current_window().focused_accessibility_id.peek())
+    }
+
+    #[test]
+    fn each_tab_press_moves_focus_one_control_and_shift_tab_walks_back() {
+        let mut shot = Snapshot::new(
+            || Root.into_element(),
+            (520.0, 520.0),
+        );
+        shot.settle(Duration::from_millis(300));
+        let tab = || Key::Named(NamedKey::Tab);
+
+        // A lap forward: every press lands on a control the walk has not
+        // visited, and the press after the last control wraps to the first.
+        let mut walk = Vec::new();
+        for press in 1..=STOPS {
+            shot.key(tab());
+            let now = focused(&mut shot);
+            assert!(
+                !walk.contains(&now),
+                "Tab press {press} stayed on or revisited a control (walk so far: {})",
+                walk.len()
+            );
+            walk.push(now);
+        }
+        shot.key(tab());
+        assert_eq!(focused(&mut shot), walk[0], "Tab {} wraps to the first control", STOPS + 1);
+
+        // Shift+Tab retraces the lap one control per press.
+        for (back, want) in walk.iter().rev().enumerate() {
+            shot.key_with(tab(), Modifiers::SHIFT);
+            assert_eq!(
+                focused(&mut shot),
+                *want,
+                "Shift+Tab press {} lands on control {}",
+                back + 1,
+                STOPS - 1 - back
+            );
+        }
     }
 }

@@ -1,64 +1,72 @@
 //! The application loop: one per process, like GtkApplication.
 //!
-//! [`Application::run`] reads the address named on the command line, makes
+//! [`Application::run`] reads the location named on the command line, makes
 //! sure only one copy of the application runs, and opens the window.
 //!
-//! * The current address lives in a root context. Components read it with
-//!   [`use_address`] and move to another with [`navigate`]. Both are
-//!   reactive, so a page that shows the address redraws when it changes.
-//! * A second launch does not open a second window. It sends its address to
-//!   the running copy over a unix socket in `$XDG_RUNTIME_DIR` and exits 0.
-//!   The running copy opens that address and raises its window. A socket left
-//!   behind by a crash is removed and replaced.
+//! * The app's routes ([`Application::routes`]) are its navigation tree. The
+//!   window's router holds the stack of locations; components reach it with
+//!   [`crate::nav::use_router`] and anywhere else with [`crate::nav::navigate`].
+//! * A second launch does not open a second window. It sends its location (a
+//!   URI such as `bingux-settings://network/proxy`, or a bare path of the
+//!   app's scheme) to the running copy over a unix socket in
+//!   `$XDG_RUNTIME_DIR` and exits 0. The running copy opens it and raises its
+//!   window. A socket left behind by a crash is removed and replaced.
+//!   `xdg-open bingux-settings://network/proxy` reaches the same path through
+//!   the desktop file's `x-scheme-handler`.
 
-use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
-use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Poll, Waker};
 use std::time::Duration;
 
 use freya::prelude::*;
 
-use crate::address::Address;
+use crate::nav::{Location, RouteTable, Router, provide_router};
 use crate::theme;
 
-/// The settings of one application: its identity, its window and the usage
-/// text `--help` prints.
+/// The settings of one application: its identity, its routes, its window and
+/// the usage text `--help` prints.
 pub struct Application {
     app_id: String,
-    scheme: String,
+    routes: Option<RouteTable>,
     title: &'static str,
     size: (f32, f32),
     min_size: (f32, f32),
     borderless: bool,
     usage: String,
+    normalise: Option<fn(&str) -> String>,
 }
 
 impl Application {
-    /// An application with id `app_id`. Its addresses use the same scheme
-    /// unless [`Application::scheme`] says otherwise.
+    /// An application with id `app_id`. Without [`Application::routes`] its
+    /// scheme is the id and it has no pages.
     pub fn new(app_id: impl Into<String>) -> Self {
         let app_id = app_id.into();
         let (width, height) = theme::WINDOW_SIZE;
         let (min_width, min_height) = theme::WINDOW_MIN_SIZE;
         Self {
-            scheme: app_id.clone(),
-            usage: format!("Usage: {app_id} [ADDRESS]"),
+            routes: None,
+            usage: format!("Usage: {app_id} [URI]"),
             app_id,
             title: "",
             size: (width as f32, height as f32),
             min_size: (min_width as f32, min_height as f32),
             borderless: false,
+            normalise: None,
         }
     }
 
-    /// The scheme of this application's addresses, for example `bingux-settings`.
-    /// A bare path on the command line takes this scheme.
-    pub fn scheme(mut self, scheme: impl Into<String>) -> Self {
-        self.scheme = scheme.into();
+    /// The app's routes: its navigation tree as data. Every page, subpage and
+    /// folder is a location of the table's scheme (`bingux-settings://network`),
+    /// and a bare path on the command line takes that scheme. See
+    /// [`crate::nav`].
+    pub fn routes(mut self, routes: RouteTable) -> Self {
+        self.routes = Some(routes);
         self
     }
 
@@ -84,6 +92,16 @@ impl Application {
         self
     }
 
+    /// Turn the command line's argument into the text of an address before
+    /// anything reads it, in this copy and in the copy it is handed to. An
+    /// application whose addresses name files makes a relative path absolute
+    /// here, because the running copy does not share this process's folder.
+    /// An empty argument, which only raises the running window, is not passed.
+    pub fn normalise(mut self, normalise: fn(&str) -> String) -> Self {
+        self.normalise = Some(normalise);
+        self
+    }
+
     /// The text `--help` prints, normally the address forms the application
     /// understands.
     pub fn usage(mut self, usage: impl Into<String>) -> Self {
@@ -95,25 +113,36 @@ impl Application {
     /// the window closes, or straight away when another copy took the
     /// address.
     pub fn run<E: IntoElement + 'static>(self, root: impl Fn() -> E + 'static) {
+        let table = Arc::new(
+            self.routes
+                .clone()
+                .unwrap_or_else(|| RouteTable::new(&self.app_id)),
+        );
+        let scheme = table.scheme().to_string();
         tune_allocator();
-        let argument = std::env::args().nth(1);
+        // Panics are never fatal: the panic hook, the failure log and the
+        // relaunch plan exist before the first window and the first thread.
+        crate::resilience::install_for_app();
+        let normalise = self.normalise;
+        let argument = std::env::args().nth(1).map(|text| match normalise {
+            Some(normalise) if !text.is_empty() && !text.starts_with('-') => normalise(&text),
+            _ => text,
+        });
         if matches!(argument.as_deref(), Some("--help") | Some("-h")) {
             println!("{}", self.usage);
             return;
         }
-        // No argument opens the root address. An argument that names nothing
-        // (an empty string) only raises a running copy.
+        // No argument opens the app root. An argument that names nothing (an
+        // empty string) only raises a running copy. Text that is not a URI is
+        // not an error: the app opens its root and says so.
         let initial = match argument.as_deref() {
-            None => Address::new(self.scheme.clone()),
-            Some("") => Address::new(self.scheme.clone()),
-            Some(text) => match Address::parse_in(&self.scheme, text) {
-                Some(address) => address,
-                None => {
-                    eprintln!("{}: not an address: {text}", self.app_id);
-                    std::process::exit(2);
-                }
-            },
+            None | Some("") => table.home(),
+            Some(text) => Location::parse_in(&scheme, text).unwrap_or_else(|| {
+                eprintln!("{}: not a location: {text}", self.app_id);
+                table.home()
+            }),
         };
+        let initial = table.canonical(&initial);
         let forwarded = match argument.as_deref() {
             None | Some("") => String::new(),
             Some(_) => initial.to_string(),
@@ -149,22 +178,38 @@ impl Application {
             let inbox = Arc::clone(&inbox);
             std::thread::spawn(move || listen(listener, &inbox));
         }
+        let _ = INBOX.set(Arc::clone(&inbox));
         FORWARDED.with(|slot| *slot.borrow_mut() = Some(inbox));
 
-        let scheme = self.scheme.clone();
+        // Anything that needs a process or a font scan to answer is asked now,
+        // before the window exists, never on the first frame that wants it.
+        let _ = crate::typography::mono_family();
+        let _ = theme::font_family();
+
         let (width, height) = self.size;
         let (min_width, min_height) = self.min_size;
         let title = self.title;
         let app_id = self.app_id.clone();
+        // The window's content is built once, so the boundary below it sees the
+        // same closure on every render of this root and does not rebuild the
+        // whole window when the location changes.
+        let root: Rc<dyn Fn() -> Element> = Rc::new(move || root().into_element());
+        let boundary_name = if title.is_empty() { "The app" } else { title };
         let window = WindowConfig::new(move || {
-            let address = provide_address(initial.clone());
-            let scheme = scheme.clone();
+            // From here on the thread is the UI thread: blocking calls are reported.
+            crate::runtime::mark_ui_thread();
+            let router = provide_router(table.clone(), &initial);
             use_hook(move || {
                 if let Some(inbox) = FORWARDED.with(|slot| slot.borrow_mut().take()) {
-                    start_forwarding(inbox, address, scheme);
+                    start_forwarding(inbox, router);
                 }
             });
-            root()
+            // A relaunch after an unrecoverable failure opens this location.
+            crate::resilience::note_location(&crate::nav::use_location().to_string());
+            crate::resilience::use_window_notices();
+            // The last resort: whatever fails below and has no boundary of its
+            // own fails into this one, as a full-window error card.
+            crate::resilience::window_boundary(boundary_name, root.clone()).into_element()
         })
         .with_title(title)
         .with_app_id(app_id)
@@ -175,13 +220,22 @@ impl Application {
         } else {
             window
         };
-        let mut config =
-            theme::with_font(LaunchConfig::new()).with_plugin(crate::inspector::plugin());
-        if self.borderless {
-            config = config.with_plugin(freya::borderless::BorderlessPlugin::new());
-        }
-        launch(config.with_window(window));
+        launch_application(window, self.borderless);
     }
+}
+
+/// The one place a bingux-ui process starts its event loop. It builds the
+/// launch configuration, with the interface font and the inspector plugin, so
+/// every window of every app has the inspector (Ctrl+Alt+Shift+I) without any
+/// code of its own. [`Application::run`] is the only caller, and
+/// `scripts/ui-lint.py` fails on `LaunchConfig::new()` or `freya::launch`
+/// anywhere else.
+fn launch_application(window: WindowConfig, borderless: bool) {
+    let mut config = theme::with_font(LaunchConfig::new()).with_plugin(crate::inspector::plugin());
+    if borderless {
+        config = config.with_plugin(freya::borderless::BorderlessPlugin::new());
+    }
+    launch(config.with_window(window));
 }
 
 /// Keep glibc's heap from holding on to freed memory. The default lets every
@@ -199,12 +253,28 @@ fn tune_allocator() {
     }
 }
 
+/// The inbox of the running application, for [`open_uri`] from any thread.
+static INBOX: std::sync::OnceLock<Arc<Inbox>> = std::sync::OnceLock::new();
+
+/// Open `uri` in this application's window from any thread, as a second launch
+/// would: the window's task wakes, navigates (a deep link: the stack is the
+/// location's ancestors) and raises the window. A search action, a D-Bus
+/// `Activate` or a socket thread calls this. Returns false when the
+/// application has not started yet, so nothing was queued.
+pub fn open_uri(uri: &str) -> bool {
+    match INBOX.get() {
+        Some(inbox) => {
+            inbox.push(uri.to_string());
+            true
+        }
+        None => false,
+    }
+}
+
 thread_local! {
     /// The forwarded addresses, from the listener thread to the window's
     /// root. The root takes it once, when the window opens.
     static FORWARDED: RefCell<Option<Arc<Inbox>>> = const { RefCell::new(None) };
-    /// The window's address state, read by [`navigate`].
-    static WINDOW_ADDRESS: Cell<Option<State<Address>>> = const { Cell::new(None) };
 }
 
 /// `$XDG_RUNTIME_DIR/<app-id>.sock`, or the temporary directory when the
@@ -268,54 +338,15 @@ fn listen(listener: UnixListener, inbox: &Inbox) {
     }
 }
 
-/// Open each forwarded address on the window's thread and raise the window.
-fn start_forwarding(inbox: Arc<Inbox>, address: State<Address>, scheme: String) {
+/// Open each forwarded location on the window's thread and raise the window.
+fn start_forwarding(inbox: Arc<Inbox>, router: Router) {
     spawn(async move {
-        let mut address = address;
         loop {
             let text = inbox.next().await;
-            if !text.is_empty()
-                && let Some(target) = Address::parse_in(&scheme, &text)
-            {
-                address.set(target);
+            if !text.is_empty() {
+                router.navigate(&text);
             }
             Platform::get().focus_window(Platform::window_id());
         }
     });
-}
-
-/// Provide the window's address, starting at `initial`, to everything below
-/// the window root. [`Application::run`] calls this; a snapshot calls it to
-/// render a page at an address without a running application.
-pub fn provide_address(initial: Address) -> State<Address> {
-    let address = use_provide_root_context(move || State::create(initial));
-    // Event handlers have no component scope, so `navigate` finds the window's
-    // address through this slot rather than through context.
-    WINDOW_ADDRESS.with(|slot| slot.set(Some(address)));
-    address
-}
-
-/// The current address. Reactive: a component that reads it redraws when the
-/// address changes.
-pub fn use_address() -> Address {
-    let address = use_consume::<State<Address>>();
-    let current = (*address.read()).clone();
-    current
-}
-
-/// Moves the window to `address`, from any component or event handler. The
-/// page or popup that address names replaces the current one.
-pub fn navigate(address: Address) {
-    let mut current = WINDOW_ADDRESS
-        .with(Cell::get)
-        .expect("navigate called before the window opened");
-    current.set(address);
-}
-
-/// The address the window shows right now, read without subscribing. Event
-/// handlers use it to work out a parent, such as Back.
-pub fn current_address() -> Option<Address> {
-    WINDOW_ADDRESS
-        .with(Cell::get)
-        .map(|current| (*current.peek()).clone())
 }

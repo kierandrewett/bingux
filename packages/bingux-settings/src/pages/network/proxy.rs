@@ -10,10 +10,10 @@
 use freya::prelude::*;
 
 use super::model::NetCtx;
-use crate::routes::Route;
+use crate::routes;
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
-    Group, PageHead, Status, choice_row, form_field, page_column, pending_bar, row, status,
+    Group, PageHead, Status, choice_row, form_field, page_column, pending_bar, row, skeleton_rows, status,
     switch_row, use_overlays,
 };
 use bingux_ui::controls::form::validate;
@@ -467,7 +467,7 @@ impl Component for ProxyRow {
     fn render(&self) -> impl IntoElement {
         let model = model();
         use_hook(move || reload(model));
-        let navigator = self.ctx.navigator;
+        let router = self.ctx.router;
         let value = match &*model.read() {
             Some(Ok(config)) => config.mode.label(),
             _ => "",
@@ -475,7 +475,7 @@ impl Component for ProxyRow {
         row("Proxy")
             .value(value)
             .navigates()
-            .on_press(move |_| navigator.push(Route::Proxy))
+            .on_press(move |_| router.open(routes::proxy()))
     }
 }
 
@@ -609,7 +609,7 @@ impl Component for ProxyForm {
 
         let mut page = page_column()
             .child(PageHead::new())
-            .maybe_child(pending_bar(dirty, valid, apply, revert))
+            .child(pending_bar(dirty, valid, apply, revert))
             .child(Group::new(None::<String>).row(method));
 
         match config.mode {

@@ -2,10 +2,12 @@
 //!
 //! The desktop session does not let other processes capture the screen, so
 //! `BINGUX_INSPECT_SHOT=<dir>` makes the inspector write what each window
-//! rendered: `<dir>/inspector.png` and `<dir>/app.png`, refreshed at most once
+//! rendered: `<dir>/app.png`, `<dir>/inspector.png` and, for an inspector
+//! of an inspector, `<dir>/inspector2.png`..., refreshed at most once
 //! every [`INTERVAL`]. Unset, nothing is read back from the canvas.
 
-use std::cell::Cell;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
@@ -19,30 +21,39 @@ static DIRECTORY: LazyLock<Option<PathBuf>> =
     LazyLock::new(|| std::env::var_os("BINGUX_INSPECT_SHOT").map(PathBuf::from));
 
 thread_local! {
-    static LAST_INSPECTOR: Cell<Option<Instant>> = const { Cell::new(None) };
-    static LAST_APP: Cell<Option<Instant>> = const { Cell::new(None) };
+    /// When each file was last written.
+    static LAST: RefCell<HashMap<usize, Instant>> = RefCell::new(HashMap::new());
 }
 
 /// Writes the canvas of a rendered frame, if the environment asked for it and
-/// the file is due.
-pub fn after_render(inspector: bool, canvas: &Canvas) {
+/// the file is due. `depth` is 0 for an application window, 1 for the
+/// inspector over it (`inspector.png`), 2 for the inspector over that
+/// (`inspector2.png`), and so on.
+pub fn after_render(depth: usize, canvas: &Canvas) {
     let Some(directory) = DIRECTORY.as_ref() else {
         return;
     };
-    let (last, name) = if inspector {
-        (&LAST_INSPECTOR, "inspector.png")
-    } else {
-        (&LAST_APP, "app.png")
-    };
     let now = Instant::now();
-    if last
-        .get()
-        .is_some_and(|at| now.duration_since(at) < INTERVAL)
-    {
+    let due = LAST.with(|last| {
+        let mut last = last.borrow_mut();
+        if last
+            .get(&depth)
+            .is_some_and(|at| now.duration_since(*at) < INTERVAL)
+        {
+            return false;
+        }
+        last.insert(depth, now);
+        true
+    });
+    if !due {
         return;
     }
-    last.set(Some(now));
-    if let Err(error) = write(canvas, &directory.join(name)) {
+    let name = match depth {
+        0 => "app.png".to_string(),
+        1 => "inspector.png".to_string(),
+        n => format!("inspector{n}.png"),
+    };
+    if let Err(error) = write(canvas, &directory.join(&name)) {
         eprintln!("[inspector] screenshot {name} failed: {error}");
     }
 }

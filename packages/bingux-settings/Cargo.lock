@@ -531,6 +531,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bingux-audio-effects"
+version = "0.1.0"
+dependencies = [
+ "bingux-dsp",
+ "libc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "bingux-data-usage"
 version = "0.1.0"
 dependencies = [
@@ -542,6 +552,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "bingux-dsp"
+version = "0.1.0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "bingux-files"
 version = "0.1.0"
 dependencies = [
@@ -549,9 +566,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "bingux-search"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "unicode-normalization",
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "bingux-settings"
 version = "0.1.0"
 dependencies = [
+ "bingux-audio-effects",
  "bingux-data-usage",
  "bingux-ui",
  "bytes",
@@ -567,6 +595,7 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "bingux-files",
+ "bingux-search",
  "bytes",
  "freya",
  "freya-components",
@@ -577,6 +606,7 @@ dependencies = [
  "serde",
  "serde_json",
  "torin",
+ "unicode-segmentation",
 ]
 
 [[package]]
@@ -1309,8 +1339,6 @@ dependencies = [
 [[package]]
 name = "freya-animation"
 version = "0.5.0-rc.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69be3f25414254a601f5c68bfdd9dfac2dec2c264599b404afa4ba3dcfcaf7d1"
 dependencies = [
  "easer",
  "freya-core",
@@ -1363,8 +1391,6 @@ dependencies = [
 [[package]]
 name = "freya-core"
 version = "0.5.0-rc.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "950f0dbe30cb96bf50f84ed3333b9c821866ce5fb5aebdfd1a8ebe99b0a6524a"
 dependencies = [
  "accesskit",
  "async-io",
@@ -3868,6 +3894,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "tinyvec"
+version = "1.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
+
+[[package]]
 name = "tokio"
 version = "1.54.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3993,6 +4025,15 @@ name = "unicode-ident"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
+
+[[package]]
+name = "unicode-normalization"
+version = "0.1.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75cd3fb03d5288b3ba9a1ee103ac7e9cbb59f0b03d64f8ddfcc04dd42758a85d"
+dependencies = [
+ "tinyvec",
+]
 
 [[package]]
 name = "unicode-segmentation"

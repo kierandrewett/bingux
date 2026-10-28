@@ -20,7 +20,7 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use super::{PopupWindow, Window, WindowLike, WindowManager};
-use crate::address::Address;
+use crate::nav::Location;
 use crate::controls::button::{action_button, icon_button, primary_button};
 use crate::icons::Icon;
 use crate::layout::divider;
@@ -56,9 +56,10 @@ const RESIZE_INSIDE: f32 = 2.0;
 const RESIZE_CORNER: f32 = 12.0;
 
 use crate::shell::panel::{
-    MOTION_MS, SHEET_DISMISS_DISTANCE, SHEET_MAX_HEIGHT_PERCENT, grabber, sheet_overhang,
-    use_sheet_pull,
+    MOTION_MS, SHEET_DISMISS_DISTANCE, SHEET_MAX_HEIGHT_PERCENT, grabber,
+    sheet_foot, sheet_offset, sheet_overhang, use_sheet_drag, use_sheet_pull,
 };
+use crate::shell::sheet_gesture::{Metrics, Outcome};
 
 /// The space between a header button and the header's top or bottom edge: the
 /// header is `Dim::Header` tall and its buttons `Dim::Control`, centred.
@@ -143,37 +144,52 @@ pub struct Popup {
     title: String,
     content: Element,
     tabs: Option<Element>,
-    dimensions: (f32, f32),
-    address: Option<Address>,
+    dimensions: (f32, Option<f32>),
+    location: Option<Location>,
     flags: PopupFlags,
 }
 
-/// A popup titled `title` that shows `content`. It is 520 px wide and 600 px
-/// tall until [`Popup::size`] changes that. It is centred in the window, or a
-/// bottom sheet on a phone.
+/// A popup titled `title` that shows `content`. It is 520 px wide until
+/// [`Popup::width`] changes that, and as tall as its content: the panel
+/// measures the body, so there is no empty space under the last row, and the
+/// body scrolls only when it is taller than the window allows. It is centred
+/// in the window, or a bottom sheet on a phone.
 pub fn popup(title: impl Into<String>, content: impl Into<Element>) -> Popup {
+    let title = title.into();
     Popup {
-        title: title.into(),
-        content: content.into(),
+        // A panic in the body shows an error card in the panel, with Retry; the
+        // header, the other popups and the window stay up.
+        content: crate::resilience::error_boundary(title.clone(), content).into(),
+        title,
         tabs: None,
-        dimensions: (Dim::PopupWidth.px(), Dim::PopupHeight.px()),
-        address: None,
+        dimensions: (Dim::PopupWidth.px(), None),
+        location: None,
         flags: PopupFlags::NONE,
     }
 }
 
 impl Popup {
-    /// Set the requested size in pixels. The panel is clamped to the window
-    /// with a margin, and its body scrolls when it is taller than the panel.
-    pub fn size(mut self, width: f32, height: f32) -> Self {
-        self.dimensions = (width, height);
+    /// Set the width, at most the window's less its margin. The height
+    /// follows the content.
+    pub fn width(mut self, width: Dim) -> Self {
+        self.dimensions.0 = width.px();
         self
     }
 
-    /// Tie the popup to the address it shows, so [`WindowLike::address`] can
+    /// Set a width and a height in pixels, for a body that lays itself out
+    /// and has no height of its own (see [`PopupFlags::FILL`]). Both are
+    /// clamped to the window with a margin, and the body scrolls when it is
+    /// taller than the panel. A form does not use this: it sizes to its
+    /// content.
+    pub fn size(mut self, width: f32, height: f32) -> Self {
+        self.dimensions = (width, Some(height));
+        self
+    }
+
+    /// Tie the popup to the location it shows, so [`WindowLike::location`] can
     /// answer.
-    pub fn address(mut self, address: Address) -> Self {
-        self.address = Some(address);
+    pub fn location(mut self, location: Location) -> Self {
+        self.location = Some(location);
         self
     }
 
@@ -214,12 +230,16 @@ pub(crate) struct PopupEntry {
     pub id: u64,
     pub parent: Option<u64>,
     pub title: State<String>,
-    pub size: State<(f32, f32)>,
+    /// The width, and the height when code or a drag has set one. `None`
+    /// follows the content.
+    pub size: State<(f32, Option<f32>)>,
+    /// The size the panel is drawn at, as the layout resolved it.
+    pub drawn: State<(f32, f32)>,
     /// The smallest size a resize can reach.
     pub min: (f32, f32),
     pub closing: State<bool>,
     pub actions: State<PopupActions>,
-    pub address: Option<Address>,
+    pub location: Option<Location>,
     pub content: Element,
     pub tabs: Option<Element>,
     pub flags: PopupFlags,
@@ -229,15 +249,30 @@ pub(crate) struct PopupEntry {
 impl PopupEntry {
     pub(crate) fn new(scope: ScopeId, id: u64, parent: Option<u64>, popup: Popup) -> Self {
         let (width, height) = popup.dimensions;
+        // The overflow checks open every popup at its narrowest.
+        let width = crate::stress::popup_width().map_or(width, |least| least.min(width));
+        // A body that lays itself out has no height of its own to follow.
+        let height = height.or_else(|| {
+            popup
+                .flags
+                .contains(PopupFlags::FILL)
+                .then(|| Dim::PopupHeight.px())
+        });
+        let min_height = match height {
+            Some(height) => height.min(POPUP_MIN_HEIGHT),
+            // A content-sized popup can be dragged down to a header and one row.
+            None => Dim::Header.px() + Dim::Row.px(),
+        };
         Self {
             id,
             parent,
             title: State::create_in_scope(popup.title, scope),
-            size: State::create_in_scope(popup.dimensions, scope),
-            min: (width.min(POPUP_MIN_WIDTH), height.min(POPUP_MIN_HEIGHT)),
+            size: State::create_in_scope((width, height), scope),
+            drawn: State::create_in_scope((width, 0.0), scope),
+            min: (width.min(POPUP_MIN_WIDTH), min_height),
             closing: State::create_in_scope(false, scope),
             actions: State::create_in_scope(PopupActions::default(), scope),
-            address: popup.address,
+            location: popup.location,
             content: popup.content,
             tabs: popup.tabs,
             flags: popup.flags,
@@ -258,6 +293,44 @@ impl PopupEntry {
     }
 }
 
+/// The panel's height, from what the popup asked for and what its body
+/// measured. Pure, so the rule can be tested without a window.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct PanelHeight {
+    /// The height of the panel, a sheet's overhang included.
+    panel: f32,
+    /// The part of it a person sees: the panel less a sheet's overhang.
+    visible: f32,
+}
+
+/// `requested` is the visible height that code or a drag asked for; `None`
+/// follows the content. `content` is the measured height of the scrolling
+/// body (padding and a sheet's foot included), `None` until it is laid out.
+/// `chrome` is everything above the body, `limit` the tallest the panel may
+/// be, and `overhang` how far a sheet hangs below the window.
+///
+/// A popup is as tall as its content and no taller: whatever does not fit
+/// under `limit` scrolls, and nothing is left empty under the last row.
+fn panel_height(
+    requested: Option<f32>,
+    content: Option<f32>,
+    chrome: f32,
+    limit: f32,
+    overhang: f32,
+) -> PanelHeight {
+    let wanted = match requested {
+        Some(height) => height + overhang,
+        // Until the body is measured it may take all there is, so it is laid
+        // out unconstrained and its real height can be read.
+        None => chrome + content.unwrap_or(limit),
+    };
+    let panel = wanted.min(limit).max(chrome);
+    PanelHeight {
+        panel,
+        visible: panel - overhang,
+    }
+}
+
 /// A drag on a resize handle: the edges it moves, where the pointer began and
 /// the size the popup had then.
 #[derive(Clone, Copy, PartialEq)]
@@ -272,7 +345,7 @@ struct ResizeDrag {
 /// One of the eight handles on the panel's edges and corners.
 fn resize_handle(
     mut resize: State<Option<ResizeDrag>>,
-    size: State<(f32, f32)>,
+    size: (f32, f32),
     edges: (f32, f32),
     position: Position,
     width: Size,
@@ -293,7 +366,7 @@ fn resize_handle(
             resize.set(Some(ResizeDrag {
                 edges,
                 start: (at.x as f32, at.y as f32),
-                size: *size.peek(),
+                size,
             }));
         })
 }
@@ -302,11 +375,7 @@ fn resize_handle(
 /// in it, so its clip does not cut them off: each edge band straddles the
 /// edge, mostly outside it, and each corner has a larger square centred on
 /// the corner, so the corners are easy to grab.
-fn resize_handles(
-    resize: State<Option<ResizeDrag>>,
-    size: State<(f32, f32)>,
-    (width, height): (f32, f32),
-) -> Vec<Rect> {
+fn resize_handles(resize: State<Option<ResizeDrag>>, (width, height): (f32, f32)) -> Vec<Rect> {
     let band = RESIZE_OUTSIDE + RESIZE_INSIDE;
     let half = RESIZE_CORNER / 2.0;
     let inner_width = (width - RESIZE_CORNER).max(0.0);
@@ -315,7 +384,7 @@ fn resize_handles(
     let handle = |edges, position, w, h, cursor| {
         resize_handle(
             resize,
-            size,
+            (width, height),
             edges,
             position,
             Size::px(w),
@@ -417,37 +486,47 @@ impl Component for PopupFrame {
         // The frame removes itself from the manager once its exit has played.
         let closing = *entry.closing.read();
         let progress = use_presence(!closing, tokens.motion(MOTION_MS), move || {
-            manager.remove(id)
+            manager.remove(id);
+            // The pull is the window's, so it outlives this popup: the next
+            // sheet must open at rest.
+            let mut pull = manager.sheet_pull;
+            pull.set_if_modified(0.0);
         });
 
         // A drag on an edge follows the pointer, so it does not animate; the
         // code-driven resizes still ease to their new size.
         let mut resize = use_state(|| None::<ResizeDrag>);
-        // A sheet's grabber: where its drag began. How far a sheet is pulled
-        // lives on the manager, so the window can inset with it.
-        let mut grab = use_state(|| None::<f32>);
+        // A sheet's drag. How far a sheet is pulled lives on the manager, so
+        // the window can inset with it.
+        let drag = use_sheet_drag(manager.sheet_pull);
         // An outside press closes the popup only when it also began outside.
         // A drag that starts on a resize handle or in the panel and is let go
         // over the scrim is not a press on the scrim.
         let mut outside_down = use_state(|| false);
-        let mut pull = manager.sheet_pull;
         let mut pulling = manager.sheet_pulling;
+        let mut dragging = manager.sheet_dragging;
         let motion = tokens.motion(MOTION_MS);
-        let eased = use_sheet_pull(pull, motion);
+        let eased = use_sheet_pull(manager.sheet_pull, drag.dragging(), motion);
         let pulled = if *pulling.read() == Some(id) {
             eased
         } else {
             0.0
         };
-        let target = *entry.size.read();
+        let (requested_width, requested_height) = *entry.size.read();
+        // The width and a height that was asked for ease to their new values.
+        // The content's own height does not animate: the panel is simply as
+        // tall as what it holds.
+        let target = (requested_width, requested_height.unwrap_or(0.0));
         let animated = use_animation_transition(target, move |from: (f32, f32), to: (f32, f32)| {
             let time = if resize.peek().is_some() { 0 } else { motion };
+            // The first height asked for has nothing to ease from.
+            let from_height = if from.1 <= 0.0 { to.1 } else { from.1 };
             (
                 AnimNum::new(from.0, to.0)
                     .time(time)
                     .function(Function::Quad)
                     .ease(Ease::Out),
-                AnimNum::new(from.1, to.1)
+                AnimNum::new(from_height, to.1)
                     .time(time)
                     .function(Function::Quad)
                     .ease(Ease::Out),
@@ -455,11 +534,17 @@ impl Component for PopupFrame {
         })
         .get()
         .value();
-        let (width, height) = if resize.read().is_some() {
+        let (width, eased_height) = if resize.read().is_some() {
             target
         } else {
             animated
         };
+        let requested = requested_height.map(|_| eased_height);
+        // What the layout measured: the scrolling body's content, and the
+        // header, tabs and rule above it.
+        let mut content_height = use_state(|| None::<f32>);
+        let mut chrome_height = use_state(|| Dim::Header.px() + Dim::Hairline.px());
+        let mut drawn = entry.drawn;
 
         let title = entry.title.read().clone();
         let actions = entry.actions.read().clone();
@@ -506,15 +591,35 @@ impl Component for PopupFrame {
             header = header.trailing(primary);
         }
 
+        let (max_width, max_height) = if sheet {
+            (100.0, SHEET_MAX_HEIGHT_PERCENT)
+        } else {
+            (POPUP_MAX_WIDTH_PERCENT, POPUP_MAX_HEIGHT_PERCENT)
+        };
+        let root = *Platform::get().current_window().root_size.read();
+        // The panel's height: what a drag or the code asked for, else its
+        // content's, up to the share of the window it may take.
+        let height = panel_height(
+            requested,
+            *content_height.read(),
+            *chrome_height.read(),
+            root.height * max_height / 100.0,
+            if sheet { sheet_overhang() } else { 0.0 },
+        );
+        // The size the panel is actually drawn at, as the panel itself is
+        // capped by the window. The edge hairline and the resize handles use
+        // it, so they stay on the panel's edge when the window is too small
+        // for the popup's own size.
+        let shown_size = (width.min(root.width * max_width / 100.0), height.visible);
+        let metrics = Metrics::new(shown_size.1, sheet_overhang(), SHEET_DISMISS_DISTANCE);
+
         // A drag sets the size from where the pointer began. Each dragged side
         // moves by the drag, so the popup grows by twice it and stays centred.
         // On a sheet, the grabber's drag pulls the sheet down instead.
         let on_move = move |event: Event<PointerEventData>| {
             let at = event.global_location();
             if sheet {
-                if let Some(start) = *grab.peek() {
-                    pull.set_if_modified((at.y as f32 - start).max(0.0));
-                }
+                drag.moved(at.y as f32, true, &metrics);
                 return;
             }
             let Some(drag) = *resize.peek() else {
@@ -527,35 +632,28 @@ impl Component for PopupFrame {
                 drag.size.1 + 2.0 * drag.edges.1 * dy,
             );
         };
-        // Releasing a sheet past the dismiss distance closes it. Otherwise it
-        // springs back, as a sheet that is not pulled far enough should.
-        let on_release = move |_| {
+        // Releasing a sheet past the dismiss distance, or with a fling, closes
+        // it. Otherwise it springs back, as a sheet that is not pulled far
+        // enough should. A cancelled touch springs it back.
+        let on_release = move |event: Event<PointerEventData>| {
             resize.set_if_modified(None);
-            let grabbing = grab.peek().is_some();
-            if grabbing {
-                grab.set(None);
-                if *pull.peek() > SHEET_DISMISS_DISTANCE {
-                    window.close();
-                } else {
-                    pull.set_if_modified(0.0);
-                }
+            if !sheet {
+                return;
+            }
+            let cancelled = matches!(
+                event.data(),
+                PointerEventData::Touch(touch) if touch.phase == TouchPhase::Cancelled
+            );
+            let outcome = if cancelled {
+                drag.cancelled()
+            } else {
+                drag.released(&metrics)
+            };
+            dragging.set_if_modified(false);
+            if outcome == Outcome::Dismiss {
+                window.close();
             }
         };
-
-        let (max_width, max_height) = if sheet {
-            (100.0, SHEET_MAX_HEIGHT_PERCENT)
-        } else {
-            (POPUP_MAX_WIDTH_PERCENT, POPUP_MAX_HEIGHT_PERCENT)
-        };
-        // The size the panel is actually drawn at: its own size, clamped to
-        // the window by the same caps as the panel. The edge hairline and the
-        // resize handles use it, so they stay on the panel's edge when the
-        // window is too small for the popup's own size.
-        let root = *Platform::get().current_window().root_size.read();
-        let shown_size = (
-            width.min(root.width * max_width / 100.0),
-            height.min(root.height * max_height / 100.0),
-        );
         // The panel takes focus when the popup opens. A text field marked
         // `autofocus` is created after it, and freya keeps the last request.
         let panel = rect()
@@ -577,13 +675,12 @@ impl Component for PopupFrame {
                 ],
             )
             .width(if sheet { Size::fill() } else { Size::px(width) })
-            .height(Size::px(if sheet {
-                height + sheet_overhang()
-            } else {
-                height
-            }))
+            .height(Size::px(height.panel))
             .max_width(Size::window_percent(max_width))
             .max_height(Size::window_percent(max_height))
+            .on_sized(move |event: Event<SizedEventData>| {
+                drawn.set_if_modified((event.area.width(), event.area.height()));
+            })
             .on_press(|event: Event<PressEventData>| event.stop_propagation())
             .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
             .on_key_down(move |event: Event<KeyboardEventData>| {
@@ -600,32 +697,49 @@ impl Component for PopupFrame {
             })
             .on_capture_global_pointer_move(on_move)
             .on_global_pointer_up(on_release)
-            .maybe_child(
-                (sheet && flags.contains(PopupFlags::GRABBER))
-                    .then(|| {
-                        grabber(&tokens, move |y| {
-                            grab.set(Some(y));
-                            pulling.set(Some(id));
-                        })
-                    }),
-            )
-            .child(header)
-            .maybe_child(entry.tabs.clone().map(|tabs| {
+            .child(
+                // Everything above the body: the panel measures it, so the
+                // body gets the height that is left.
                 rect()
-                    // The rail's ends line up with the header buttons' outer
-                    // edges, which the header insets by `S2`. The rail is one
-                    // control tall at the top; the rest of the height is the
-                    // gap below it.
-                    .tw(&tokens, &[w_full(), px(S2)])
-                    .height(Size::px(tabs_height()))
-                    .child(tabs)
-            }))
-            .child(divider(&tokens))
+                    .tw(&tokens, &[w_full(), flex_col()])
+                    .on_sized(move |event: Event<SizedEventData>| {
+                        chrome_height.set_if_modified(event.area.height());
+                    })
+                    .maybe_child((sheet && flags.contains(PopupFlags::GRABBER)).then(|| {
+                        grabber(&tokens, move |y| {
+                            drag.grab(y);
+                            pulling.set(Some(id));
+                            dragging.set_if_modified(true);
+                        })
+                    }))
+                    .child(header)
+                    .maybe_child(entry.tabs.clone().map(|tabs| {
+                        rect()
+                            // The rail's ends line up with the header buttons'
+                            // outer edges, which the header insets by `S2`. The
+                            // rail is one control tall at the top; the rest of
+                            // the height is the gap below it.
+                            .tw(&tokens, &[w_full(), px(S2)])
+                            .height(Size::px(tabs_height()))
+                            .child(tabs)
+                    }))
+                    .child(divider(&tokens)),
+            )
             .child(if flags.contains(PopupFlags::FILL) {
+                // A sheet's card hangs `sheet_overhang()` below the window,
+                // so its content ends that far, plus the bottom inset, above
+                // the card's own bottom edge.
                 Element::from(
                     rect()
-                        .tw(&tokens, &[w_full(), h_flex(), clip()])
-                        .child(crate::focus::trap(entry.content.clone())),
+                        .tw(&tokens, &[w_full(), h_flex(), flex_col()])
+                        .child(
+                            rect()
+                                .tw(&tokens, &[w_full(), h_flex(), clip()])
+                                .child(crate::focus::trap(entry.content.clone())),
+                        )
+                        .maybe_child(
+                            sheet.then(|| rect().height(Size::px(sheet_foot()))),
+                        ),
                 )
             } else {
                 Element::from(
@@ -636,15 +750,23 @@ impl Component for PopupFrame {
                         .child(
                             rect()
                                 .tw(&tokens, &[w_full(), p(S4)])
-                                .child(crate::focus::trap(entry.content.clone())),
+                                // The body's natural height, which the panel
+                                // takes up to its limit.
+                                .on_sized(move |event: Event<SizedEventData>| {
+                                    content_height
+                                        .set_if_modified(Some(event.area.height()));
+                                })
+                                .child(crate::focus::trap(entry.content.clone()))
+                                .maybe_child(sheet.then(|| {
+                                    rect().height(Size::px(sheet_foot()))
+                                })),
                         ),
                 )
             });
-
         // A sheet rests with its overhang below the edge and slides up from
         // under it; a pulled sheet follows the pointer down.
         let slide = if sheet {
-            sheet_overhang() + (1.0 - progress) * (height + sheet_overhang()) + pulled
+            sheet_overhang() + sheet_offset(progress, pulled, metrics.travel)
         } else {
             0.0
         };
@@ -676,7 +798,7 @@ impl Component for PopupFrame {
                 )
                 // The handles sit beside the panel, above the scrim, so
                 // they reach outside the panel's clipped edge.
-                .children(resize_handles(resize, entry.size, shown_size))
+                .children(resize_handles(resize, shown_size))
         };
 
         rect()
@@ -708,5 +830,57 @@ impl Component for PopupFrame {
                 stack: OverlayStack::Popup,
                 page: None,
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const CHROME: f32 = 49.0;
+    const LIMIT: f32 = 480.0;
+
+    #[test]
+    fn a_popup_is_as_tall_as_its_content_and_no_taller() {
+        let height = panel_height(None, Some(120.0), CHROME, LIMIT, 0.0);
+        assert_eq!(height.panel, CHROME + 120.0);
+        assert_eq!(height.visible, CHROME + 120.0);
+    }
+
+    #[test]
+    fn content_over_the_limit_is_capped_and_scrolls() {
+        let height = panel_height(None, Some(900.0), CHROME, LIMIT, 0.0);
+        assert_eq!(height.panel, LIMIT);
+    }
+
+    #[test]
+    fn an_unmeasured_body_may_take_the_limit_so_it_can_be_measured() {
+        assert_eq!(panel_height(None, None, CHROME, LIMIT, 0.0).panel, LIMIT);
+    }
+
+    #[test]
+    fn a_height_asked_for_wins_over_the_content() {
+        let height = panel_height(Some(300.0), Some(120.0), CHROME, LIMIT, 0.0);
+        assert_eq!(height.panel, 300.0);
+        assert_eq!(panel_height(Some(700.0), Some(120.0), CHROME, LIMIT, 0.0).panel, LIMIT);
+    }
+
+    #[test]
+    fn a_sheet_hangs_its_overhang_below_the_window() {
+        // The body's measured height holds the sheet's foot, overhang included,
+        // so the panel is chrome and body; the visible part is that less the
+        // overhang.
+        let height = panel_height(None, Some(200.0), CHROME, LIMIT, 20.0);
+        assert_eq!(height.panel, CHROME + 200.0);
+        assert_eq!(height.visible, CHROME + 180.0);
+        // A height asked for is the visible one: the overhang comes on top.
+        let asked = panel_height(Some(300.0), None, CHROME, LIMIT, 20.0);
+        assert_eq!(asked.panel, 320.0);
+        assert_eq!(asked.visible, 300.0);
+    }
+
+    #[test]
+    fn a_tiny_limit_never_squeezes_the_panel_below_its_chrome() {
+        assert_eq!(panel_height(None, Some(50.0), CHROME, 10.0, 0.0).panel, CHROME);
     }
 }

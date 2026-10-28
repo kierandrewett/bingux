@@ -1,3 +1,3 @@
 <svg viewBox="0 0 16 16">
-  <fork name="Trash" weight="fill" mode="exact"/>
+  <fork name="Trash" weight="regular" mode="exact" scale="1.04" dx="0.02" dy="0.18"/>
 </svg>

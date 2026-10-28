@@ -11,6 +11,7 @@ use crate::ui::{
     Group, PopupAction, PopupActions, Status, caption, form_field, popup, popup_column, status,
     use_popup_actions, use_window,
 };
+use bingux_ui::style::S6;
 use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -208,21 +209,22 @@ impl Component for PinBody {
                         .on_submit(move |_| key()),
                 );
         }
+        let note = matches!(task, PinTask::Unlock | PinTask::Puk)
+            .then_some(attempts)
+            .flatten()
+            .map(|left| attempts_text(task, left));
+        if let Some(note) = note {
+            fields = fields.footer(note);
+        }
         popup_column()
-            .child(caption(task.hint()))
-            .child(fields)
-            .maybe_child(
-                matches!(task, PinTask::Unlock | PinTask::Puk)
-                    .then_some(attempts)
-                    .flatten()
-                    .map(|left| caption(attempts_text(task, left))),
-            )
-            .maybe_child(
+            .child(fields.description(task.hint()))
+            .child(bingux_ui::motion::reveal_block_if(
+                S6,
                 error
                     .read()
                     .clone()
                     .map(|text| Element::from(status(Status::Error(text)))),
-            )
+            ))
     }
 }
 

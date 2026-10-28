@@ -10,7 +10,7 @@ use bingux_ui::style::*;
 use bingux_ui::theme::Tokens;
 use freya::prelude::*;
 
-use super::loading::{has_battery_hint, veiled};
+use super::loading::{has_battery_hint, has_power_profiles_hint, veiled};
 use crate::icons::Icon;
 use crate::system::{self, CommandError, CommandResult, background};
 use crate::ui::typography::{CAPTION, EMPHASIS};
@@ -122,13 +122,20 @@ fn placeholder() -> Model {
         enabled: false,
         delay: 900,
     };
+    // Cards when the power profiles service answers on this computer, the
+    // notice when it does not: the same group the loaded page will show.
+    let profiles_on = has_power_profiles_hint();
     Model {
         battery,
-        profiles: Ok(Profiles {
-            choices: vec![mode("power-saver"), mode("balanced"), mode("performance")],
-            active: "balanced".to_string(),
-        }),
-        profiles_tool: true,
+        profiles: if profiles_on {
+            Ok(Profiles {
+                choices: vec![mode("power-saver"), mode("balanced"), mode("performance")],
+                active: "balanced".to_string(),
+            })
+        } else {
+            Err(CommandError(String::new()))
+        },
+        profiles_tool: profiles_on,
         idle_delay: Ok(0),
         lock_enabled: Ok(false),
         lock_delay: Ok(0),
@@ -455,12 +462,49 @@ fn mode_group(
     profiles: &Profiles,
     tokens: &Tokens,
 ) -> Group {
-    let mut cards = rect().tw(&tokens, &[flex_row(), w_full(), gap(S2)]);
+    let mut cards = rect().tw(tokens, &[flex_row(), w_full(), gap(S2)]);
     let chosen = picked(picks, "profile", &profiles.active);
     for name in ["power-saver", "balanced", "performance"] {
         let offered = profiles.choices.iter().any(|(key, _)| key == name);
         let active = chosen == name;
         let key = name.to_string();
+        cards = cards.child(ModeCard {
+            name,
+            offered,
+            active,
+            on_press: EventHandler::new(move |()| {
+                if offered && !active {
+                    let key = key.clone();
+                    choose(picks, loaded, overlays, "profile", key.clone(), move || {
+                        system::run("powerprofilesctl", &["set", &key], Duration::from_secs(5))
+                    });
+                }
+            }),
+        });
+    }
+    Group::titled("Power mode").row(cards)
+}
+
+/// One power mode card. A component of its own: its focus stop is a hook, and
+/// the page shows the cards only when the power profiles service answers.
+struct ModeCard {
+    name: &'static str,
+    offered: bool,
+    active: bool,
+    on_press: EventHandler<()>,
+}
+
+impl PartialEq for ModeCard {
+    fn eq(&self, _: &Self) -> bool {
+        // The handler never compares equal, so the card is drawn again each time.
+        false
+    }
+}
+
+impl Component for ModeCard {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let (name, offered, active) = (self.name, self.offered, self.active);
         let state = if !offered {
             "Not available"
         } else if active {
@@ -496,24 +540,15 @@ fn mode_group(
         if !state.is_empty() {
             card = card.child(CAPTION.label(&tokens, state));
         }
-        let card = focus_stop(
+        focus_stop(
             card,
             profile_label(name),
             AccessibilityRole::Button,
             offered,
             Radius::Card,
-            move |()| {
-                if offered && !active {
-                    let key = key.clone();
-                    choose(picks, loaded, overlays, "profile", key.clone(), move || {
-                        system::run("powerprofilesctl", &["set", &key], Duration::from_secs(5))
-                    });
-                }
-            },
-        );
-        cards = cards.child(card);
+            self.on_press.clone(),
+        )
     }
-    Group::titled("Power mode").row(cards)
 }
 
 /// Switches shown at once: a value here wins over the loaded one until the
@@ -618,7 +653,6 @@ fn battery_group(battery: &Battery) -> Group {
         Some(health) => group.row(
             row("Battery health")
                 .leading(Icon::BatteryLevel50)
-                .subtitle("Full charge capacity compared with a new battery")
                 .value(health.clone()),
         ),
         None => group,
@@ -679,18 +713,15 @@ impl Component for PowerPage {
         let tokens = use_tokens();
         let pending: Pending = use_state(BTreeMap::new);
         let picks: Picks = use_state(BTreeMap::new);
-        let subtitle = loaded
-            .read()
-            .as_ref()
-            .and_then(|model| header_subtitle(&model.battery));
-        let head = PageHead {
-            subtitle,
-            ..PageHead::new()
-        };
-
         let (model, loading) = match loaded.read().clone() {
             Some(model) => (model, false),
             None => (placeholder(), true),
+        };
+        // The head has its subtitle line from the first frame: the placeholder
+        // has one as well, so the page below it does not move when data lands.
+        let head = PageHead {
+            subtitle: header_subtitle(&model.battery),
+            ..PageHead::new()
         };
 
         let mut page = page_column().child(head);

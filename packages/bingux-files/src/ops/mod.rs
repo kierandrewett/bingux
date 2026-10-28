@@ -13,7 +13,7 @@
 //! | Permanent (ask first) | [`delete`], [`empty_trash`] |
 //! | Transfers | [`copy`], [`move_to`], [`ConflictPolicy`] |
 //! | Archives | [`compress`], [`extract`], [`Format`] |
-//! | Properties | [`properties`], [`stat_properties`], [`chmod`], [`Counting`] (a folder's size, in the background), [`user_name`], [`group_name`] |
+//! | Properties | [`properties`], [`stat_properties`], [`permissions`], [`chmod`], [`chmod_tree`] (apply to enclosed items), [`Counting`] (a folder's size and its biggest children, in the background), [`Hashing`] (a file's SHA-256, in the background), [`file_details`] (inode, links, disk use, extended attributes), [`user_name`], [`group_name`] |
 //! | Clipboard | [`uri_of`], [`parse_uri_list`], [`gnome_copied_files`], [`parse_gnome_copied_files`] |
 //!
 //! # What they promise
@@ -66,6 +66,8 @@ use crate::location::NameError;
 mod archive;
 mod clip;
 mod data;
+mod details;
+mod digest;
 mod durable;
 mod names;
 mod props;
@@ -75,9 +77,14 @@ mod trash;
 
 pub use archive::{Format, can_extract, compress, compress_available, extract, extract_available};
 pub use clip::{gnome_copied_files, parse_gnome_copied_files, parse_uri_list, uri_of};
+pub use details::{FileDetails, Xattr, file_details, xattrs};
+pub use digest::{HashOutcome, HashProgress, Hashing, Sha256};
 pub use names::{create_dir, create_file, keep_both_name, rename};
-pub use props::{Properties, Volume, chmod, group_name, properties, stat_properties, user_name};
-pub use tally::{Counting, Tally, Totals, count};
+pub use props::{
+    Permissions, Properties, TreeChange, Volume, chmod, chmod_tree, group_name, permissions, properties,
+    stat_properties, tree_mode, user_name,
+};
+pub use tally::{ChildSize, Counting, Tally, Totals, count};
 pub use transfer::{Conflict, ConflictPolicy, Resolution, copy, delete, move_to};
 pub use trash::{Trashed, can_trash, empty_trash, in_trash, trash, untrash};
 

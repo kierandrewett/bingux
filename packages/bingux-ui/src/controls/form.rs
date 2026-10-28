@@ -29,7 +29,9 @@ use std::rc::Rc;
 use freya::prelude::*;
 
 use crate::component::ComponentName;
+use crate::controls::adaptive::{ControlFacts, LabelFacts, LineMode, choose_line};
 use crate::controls::button::{action_button, primary_button};
+use crate::controls::path_label::text_width;
 use crate::controls::text_field::text_field;
 use crate::group::{Group, caption, use_row_match};
 use crate::search_highlight;
@@ -210,7 +212,7 @@ impl FormField {
 impl Component for FormField {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let compact = is_compact();
+        let mut line_width = use_state(|| 0.0_f32);
         let own_id = use_a11y();
         let focus = use_focus(own_id);
         // The message waits until the person has left the field or pressed
@@ -245,10 +247,39 @@ impl Component for FormField {
             }
             check.run(&text).err()
         });
-        // A field that can fail keeps its message line, so the row does not
-        // jump when the message comes and goes.
-        let reserve = self.check.is_some() || self.error.is_some();
         let wide = self.wide;
+
+        // The title keeps its natural width (or a share of the line, broken
+        // between words); the field shrinks to what is left, and a line that
+        // cannot fit both stacks the title above the field, as on a phone.
+        let optional_width = if self.optional {
+            text_width("Optional", CAPTION) + S2.px()
+        } else {
+            0.0
+        };
+        let mut title_facts = LabelFacts::measure(&self.title, BODY);
+        title_facts.natural += optional_width;
+        let field_natural = if wide { Dim::FieldWide } else { Dim::Field }.px()
+            + self.trailing.as_ref().map_or(0.0, |_| S2.px() + Dim::Control.px());
+        let mode = if is_compact() {
+            LineMode::Stacked
+        } else {
+            choose_line(
+                (line_width() - 2.0 * GUTTER.px()).max(0.0),
+                S3.px(),
+                title_facts,
+                ControlFacts {
+                    natural: field_natural,
+                    least: Some(Dim::FieldMin.px()),
+                },
+            )
+        };
+        let compact = mode == LineMode::Stacked;
+        let shrunk = matches!(mode, LineMode::Shrunk { .. });
+        let title_px = match mode {
+            LineMode::Shrunk { label } => crate::controls::adaptive::label_cell_width(label),
+            _ => 0.0,
+        };
 
         let submit = self.on_submit.clone();
         let mut field = text_field(self.value, move |_: String| {
@@ -260,7 +291,7 @@ impl Component for FormField {
         .a11y_id(own_id)
         .maybe_placeholder(self.placeholder.clone())
         .danger_outline(message.is_some());
-        if compact {
+        if compact || shrunk {
             field = field.fill_width();
         } else {
             field = field.width(if wide { Dim::FieldWide } else { Dim::Field });
@@ -294,8 +325,11 @@ impl Component for FormField {
             .maybe(compact, |line| {
                 line.tw(&tokens, &[grow_children(), w_full()])
             })
+            .maybe(shrunk, |line| {
+                line.tw(&tokens, &[grow_children(), w_flex()])
+            })
             // On a phone the field takes what the trailing element leaves.
-            .child(if compact {
+            .child(if compact || shrunk {
                 Element::from(rect().tw(&tokens, &[w_flex()]).child(field))
             } else {
                 Element::from(field)
@@ -304,11 +338,14 @@ impl Component for FormField {
         // The message sits under the whole row, not under the input: a
         // column that is only as wide as the input would wrap it to three
         // lines and move the rows below it.
-        let error_line = reserve.then(|| error_line(&tokens, message));
-        let outer = rect().component("FormField").tw(
-            &tokens,
-            &[flex_col(), w_full(), px(GUTTER), py(S3), gap(S1)],
-        );
+        let error_line = message.map(|message| error_line(&tokens, message));
+        let outer = rect()
+            .component("FormField")
+            .on_sized(move |event: Event<SizedEventData>| line_width.set_if_modified(event.area.width()))
+            .tw(
+                &tokens,
+                &[flex_col(), w_full(), px(GUTTER), py(FIELD_ROW_INSET), gap(S1)],
+            );
 
         if compact {
             outer
@@ -316,12 +353,14 @@ impl Component for FormField {
                 .child(title_line)
                 .maybe_child(hint)
                 .child(input_line)
-                .maybe_child(error_line)
+                .child(crate::motion::reveal_block_if(S2, error_line))
         } else {
             // The title sits level with the first line of the input, so a
             // multiline field or a hint grows the row downwards, not around.
             let title_side = rect()
-                .tw(&tokens, &[flex_col(), w_flex(), gap(S0_5)])
+                .tw(&tokens, &[flex_col(), gap(S0_5)])
+                .maybe(!shrunk, |side| side.tw(&tokens, &[w_flex()]))
+                .maybe(shrunk, |side| side.width(Size::px(title_px)))
                 .child(
                     rect()
                         .tw(
@@ -347,29 +386,26 @@ impl Component for FormField {
                         .child(title_side)
                         .child(input_line),
                 )
-                .maybe_child(error_line)
+                .child(crate::motion::reveal_block_if(S1, error_line))
         }
     }
 }
 
-/// The message line under a field: one caption line tall when empty, so the
-/// row keeps its height when a one-line message comes, and an alert for
-/// assistive technology when it has text.
-fn error_line(tokens: &crate::theme::Tokens, message: Option<String>) -> Element {
-    match message {
-        Some(message) => rect()
-            .tw(tokens, &[w_full()])
-            .a11y_role(AccessibilityRole::Alert)
-            .a11y_alt(message.clone())
-            .child(
-                CAPTION
-                    .in_ink(Ink::Danger)
-                    .paragraph(tokens, message)
-                    .max_lines(3),
-            )
-            .into(),
-        None => rect().tw(tokens, &[w_full(), h(Dim::CaptionLine)]).into(),
-    }
+/// The message line under a field, an alert for assistive technology. It
+/// exists only while there is a message: an empty line kept free for it
+/// would leave the row with more space below the field than above it.
+fn error_line(tokens: &crate::theme::Tokens, message: String) -> Element {
+    rect()
+        .tw(tokens, &[w_full()])
+        .a11y_role(AccessibilityRole::Alert)
+        .a11y_alt(message.clone())
+        .child(
+            CAPTION
+                .in_ink(Ink::Danger)
+                .paragraph(tokens, message)
+                .max_lines(3),
+        )
+        .into()
 }
 
 /// A read-only "Right now" group of label and value rows, for beside or above
@@ -390,32 +426,32 @@ pub fn live_state(rows: Vec<(String, String)>) -> Element {
 }
 
 /// The bar of a form that applies its changes together: "You have unsaved
-/// changes" with Revert and Apply. It exists only while `dirty`, so it
-/// returns `None` otherwise; put it at the top of the page's form with
-/// `.maybe_child(..)`. Apply is disabled while `valid` is false.
+/// changes" with Revert and Apply. It is present only while `dirty`: it grows
+/// in at the top of the page's form and shrinks away again, taking the page
+/// gap with it, so the groups below move with its edge. Put it first in the
+/// page column with `.child(..)`. Apply is disabled while `valid` is false.
 ///
-/// The bar is a keyed box around its group: Freya pairs unkeyed siblings of
-/// one type by position, so a bare group appearing above other groups would
-/// take over the first one's state and rebuild the fields below it, and the
-/// field being typed in would lose focus.
+/// The bar is always in the column (an empty, gapless box while hidden), so
+/// the groups below keep their place: a bare group appearing above other
+/// groups would take over the first one's state, since Freya pairs unkeyed
+/// siblings of one type by position, and the field being typed in would lose
+/// focus.
 pub fn pending_bar(
     dirty: bool,
     valid: bool,
     on_apply: impl Into<EventHandler<()>>,
     on_revert: impl Into<EventHandler<()>>,
-) -> Option<Element> {
-    dirty.then(|| {
-        let bar = Group::new(None::<String>).row(PendingBar {
-            valid,
-            on_apply: on_apply.into(),
-            on_revert: on_revert.into(),
-        });
-        rect()
-            .key("pending-bar")
-            .tw_layout(&[w_full()])
-            .child(bar)
+) -> Element {
+    let bar = dirty.then(|| {
+        Group::new(None::<String>)
+            .row(PendingBar {
+                valid,
+                on_apply: on_apply.into(),
+                on_revert: on_revert.into(),
+            })
             .into()
-    })
+    });
+    crate::motion::reveal_block_if(S10, bar).into()
 }
 
 #[derive(PartialEq)]

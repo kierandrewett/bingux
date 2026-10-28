@@ -1,3 +1,3 @@
 <svg viewBox="0 0 16 16">
-  <fork name="Star" weight="bold" mode="exact"/>
+  <fork name="Star" weight="bold" mode="exact" scale="0.995" dy="0.01" symmetric="true"/>
 </svg>

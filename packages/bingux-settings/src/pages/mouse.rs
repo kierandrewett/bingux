@@ -447,14 +447,19 @@ impl Setting<'_> {
         let mut grid = rect().tw(&tokens, &[flex_row(), wrap(S4), gap(S4), w_full()]);
         for card in cards {
             let (apply, writes) = (card.apply, card.writes);
-            grid = grid.child(method_card(&tokens, card, move |_| {
-                commit(
-                    loaded,
-                    overlays,
-                    move |model| with_touchpad(model, apply),
-                    move || set_touchpad(writes),
-                )
-            }));
+            grid = grid.child(MethodCardView {
+                label: card.label,
+                picture: card.picture,
+                selected: card.selected,
+                on_press: EventHandler::new(move |()| {
+                    commit(
+                        loaded,
+                        overlays,
+                        move |model| with_touchpad(model, apply),
+                        move || set_touchpad(writes),
+                    )
+                }),
+            });
         }
         let mut column = rect()
             .tw(&tokens, &[flex_col(), w_full(), gap(S3), px(S4), py(S3)])
@@ -469,63 +474,78 @@ impl Setting<'_> {
 
 /// One illustrated card: a small picture in a frame, ringed in the accent
 /// colour when chosen, with its name under it. Mirrors the colour scheme
-/// cards on the Appearance page.
-fn method_card(
-    tokens: &Tokens,
-    card: MethodCard,
-    on_press: impl Into<EventHandler<()>>,
-) -> Element {
-    let ring = if card.selected {
-        Paint::Accent
-    } else {
-        Paint::Outline
-    };
-    let pad = rect()
-        .tw(
-            tokens,
-            &[
-                w_full(),
-                h_full(),
-                rounded(Radius::Control),
-                bg(Paint::Control),
-                clip(),
-            ],
+/// cards on the Appearance page. A component of its own: the focus stop is a
+/// hook, and the number of cards changes when the data lands.
+struct MethodCardView {
+    label: &'static str,
+    picture: fn(&Tokens) -> Element,
+    selected: bool,
+    on_press: EventHandler<()>,
+}
+
+impl PartialEq for MethodCardView {
+    fn eq(&self, _: &Self) -> bool {
+        // The handler never compares equal, so the card is drawn again each time.
+        false
+    }
+}
+
+impl Component for MethodCardView {
+    fn render(&self) -> impl IntoElement {
+        let card = self;
+        let tokens = use_tokens();
+        let tokens = &tokens;
+        let ring = if card.selected {
+            Paint::Accent
+        } else {
+            Paint::Outline
+        };
+        let pad = rect()
+            .tw(
+                tokens,
+                &[
+                    w_full(),
+                    h_full(),
+                    rounded(Radius::Control),
+                    bg(Paint::Control),
+                    clip(),
+                ],
+            )
+            .child((card.picture)(tokens));
+        let frame = rect()
+            .tw(
+                tokens,
+                &[
+                    w_full(),
+                    h(Dim::PreviewHeight),
+                    rounded(Radius::Card),
+                    border(Line::Ring(ring)),
+                    p(S0_5),
+                ],
+            )
+            .child(pad);
+        let label_style = if card.selected { EMPHASIS } else { BODY };
+        let card_box = rect()
+            .tw(
+                tokens,
+                &[
+                    w(Dim::PreviewWidth),
+                    flex_col(),
+                    gap(S2),
+                    items(Align::Center),
+                ],
+            )
+            .child(frame)
+            .child(label_style.label(tokens, card.label));
+        focus_stop(
+            card_box,
+            card.label.to_string(),
+            AccessibilityRole::Button,
+            true,
+            Radius::Card,
+            card.on_press.clone(),
         )
-        .child((card.picture)(tokens));
-    let frame = rect()
-        .tw(
-            tokens,
-            &[
-                w_full(),
-                h(Dim::PreviewHeight),
-                rounded(Radius::Card),
-                border(Line::Ring(ring)),
-                p(S0_5),
-            ],
-        )
-        .child(pad);
-    let label_style = if card.selected { EMPHASIS } else { BODY };
-    let card_box = rect()
-        .tw(
-            tokens,
-            &[
-                w(Dim::PreviewWidth),
-                flex_col(),
-                gap(S2),
-                items(Align::Center),
-            ],
-        )
-        .child(frame)
-        .child(label_style.label(tokens, card.label));
-    focus_stop(
-        card_box,
-        card.label.to_string(),
-        AccessibilityRole::Button,
-        true,
-        Radius::Card,
-        on_press,
-    )
-    .into()
+    }
 }
 
 /// A small dot standing for a finger touch.
@@ -775,16 +795,11 @@ impl Component for MousePage {
             let touchpad = |key, title| setting(TOUCHPAD, "touchpad", key, title);
             let send_events = touchpad("send-events", "Use touchpad");
             let effective = send_events.lua().unwrap_or_else(|| pad.send_events.clone());
-            let group = Group::titled("Touchpad").row(send_events.choice(
+            let head = send_events.choice(
                 &SEND_EVENTS,
                 &pad.send_events,
                 |model, value| with_touchpad(model, |tp| tp.send_events = value),
-            ));
-            // With the touchpad off, its other settings have no effect, so
-            // they are not shown.
-            if effective == "disabled" {
-                return group;
-            }
+            );
             let click_cards = vec![
                 MethodCard {
                     label: "Bottom corners",
@@ -829,58 +844,60 @@ impl Component for MousePage {
                     ],
                 },
             ];
-            group
-                .row(
-                    touchpad("tap-to-click", "Tap to click")
-                        .switch(pad.tap_to_click, |model, on| {
-                            with_touchpad(model, |tp| tp.tap_to_click = on)
-                        }),
-                )
-                .row(
-                    touchpad("natural-scroll", "Natural scrolling")
-                        .switch(pad.natural_scroll, |model, on| {
-                            with_touchpad(model, |tp| tp.natural_scroll = on)
-                        }),
-                )
-                .row(touchpad("click-method", "Secondary click").cards(
-                    "Secondary click",
-                    &["click-method"],
-                    option_label(&CLICK_METHOD, &pad.click_method),
-                    click_cards,
-                ))
-                .row(touchpad("two-finger-scrolling-enabled", "Scrolling").cards(
-                    "Scrolling",
-                    &["two-finger-scrolling-enabled", "edge-scrolling-enabled"],
-                    "Off".to_string(),
-                    scroll_cards,
-                ))
-                .row(
-                    touchpad("speed", "Pointer speed").speed(pad.speed, |model, speed| {
+            // With the touchpad off, its other settings have no effect, so
+            // they slide away.
+            let dependent: Vec<Element> = vec![
+                touchpad("tap-to-click", "Tap to click")
+                    .switch(pad.tap_to_click, |model, on| {
+                        with_touchpad(model, |tp| tp.tap_to_click = on)
+                    })
+                    .into(),
+                touchpad("natural-scroll", "Natural scrolling")
+                    .switch(pad.natural_scroll, |model, on| {
+                        with_touchpad(model, |tp| tp.natural_scroll = on)
+                    })
+                    .into(),
+                touchpad("click-method", "Secondary click")
+                    .cards(
+                        "Secondary click",
+                        &["click-method"],
+                        option_label(&CLICK_METHOD, &pad.click_method),
+                        click_cards,
+                    )
+                    .into(),
+                touchpad("two-finger-scrolling-enabled", "Scrolling")
+                    .cards(
+                        "Scrolling",
+                        &["two-finger-scrolling-enabled", "edge-scrolling-enabled"],
+                        "Off".to_string(),
+                        scroll_cards,
+                    )
+                    .into(),
+                touchpad("speed", "Pointer speed")
+                    .speed(pad.speed, |model, speed| {
                         with_touchpad(model, |tp| tp.speed = speed)
-                    }),
-                )
-                .row(touchpad("accel-profile", "Pointer acceleration").choice(
-                    &ACCEL_PROFILES,
-                    &pad.accel_profile,
-                    |model, value| with_touchpad(model, |tp| tp.accel_profile = value),
-                ))
-                .row(touchpad("left-handed", "Primary button").choice(
-                    &PRIMARY_BUTTON,
-                    &pad.left_handed,
-                    |model, value| with_touchpad(model, |tp| tp.left_handed = value),
-                ))
-                .row(
-                    touchpad("disable-while-typing", "Disable while typing")
-                        .switch(pad.disable_while_typing, |model, on| {
-                            with_touchpad(model, |tp| tp.disable_while_typing = on)
-                        }),
-                )
+                    })
+                    .into(),
+                touchpad("accel-profile", "Pointer acceleration")
+                    .choice(&ACCEL_PROFILES, &pad.accel_profile, |model, value| {
+                        with_touchpad(model, |tp| tp.accel_profile = value)
+                    })
+                    .into(),
+                touchpad("left-handed", "Primary button")
+                    .choice(&PRIMARY_BUTTON, &pad.left_handed, |model, value| {
+                        with_touchpad(model, |tp| tp.left_handed = value)
+                    })
+                    .into(),
+                touchpad("disable-while-typing", "Disable while typing")
+                    .switch(pad.disable_while_typing, |model, on| {
+                        with_touchpad(model, |tp| tp.disable_while_typing = on)
+                    })
+                    .into(),
+            ];
+            Group::titled("Touchpad").row(head.nested(effective != "disabled", dependent))
         });
 
         let test_group = Group::titled("Test your settings")
-            .description(
-                "Double-click the box to test double-click speed. Scroll the list to test scrolling.",
-            )
             .row(ClickTest { within_ms: mouse.double_click }.into_element())
             .row(ScrollTest.into_element());
 

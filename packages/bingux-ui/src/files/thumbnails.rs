@@ -1,5 +1,8 @@
 //! Pictures of files: in a grid tile at every grid level, and in the icon
-//! slot of a list row from 24 px up.
+//! slot of a list row at every size. A list row at the default 16 px shows a
+//! picture only when the desktop's thumbnail cache already has one, so the
+//! default list never decodes an original; from [`LIST_DECODE_PX`] up it
+//! decodes images as the grid does.
 //!
 //! A picture is taken from the desktop's thumbnail cache when it has one
 //! (`bingux_files::thumbs`), and for an image decoded from the file
@@ -39,9 +42,22 @@ use crate::style::*;
 const START_DELAY: Duration = Duration::from_millis(90);
 /// How long a decoded picture is kept once nothing shows it.
 const KEEP: Duration = Duration::from_secs(20);
-/// The smallest icon a list row shows a picture at. Below it a picture is a
-/// smudge, and the icon says more.
-pub const LIST_PICTURE_PX: u16 = 24;
+/// The smallest icon a list row decodes an original image at. Below it a row
+/// shows a picture only from the cache: a 16 px smudge is not worth reading
+/// the file for, and the icon stays as the placeholder until a cached picture
+/// is there.
+pub const LIST_DECODE_PX: u16 = 24;
+
+/// Whether a slot shows a picture, and where it may come from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Preview {
+    /// Always the icon.
+    Off,
+    /// A picture from the thumbnail cache; the icon when it has none.
+    Cached,
+    /// A picture from the cache, or decoded from an image.
+    Full,
+}
 
 /// Where a file's picture can come from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -80,15 +96,20 @@ fn glyph_of(icon: Icon, folder: bool, tokens: &crate::theme::Tokens, px: u16) ->
 }
 
 /// What stands for `entry` in a square slot `px` wide: its picture when
-/// `preview` is set and the file can have one (the icon until it loads, and
-/// when it cannot be loaded), otherwise its icon. The slot is always `px`
+/// `preview` allows one and the file can have one (the icon until it loads,
+/// and when it cannot be loaded), otherwise its icon. The slot is always `px`
 /// square and clips the picture to the small corner radius of the nested
 /// box, [`Radius::Mark`].
-pub fn face(tokens: &crate::theme::Tokens, entry: &Entry, px: u16, bucket: u32, preview: bool) -> Element {
+pub fn face(tokens: &crate::theme::Tokens, entry: &Entry, px: u16, bucket: u32, preview: Preview) -> Element {
     let edge = f32::from(px);
     let icon = glyph(tokens, entry, px);
     let slot = rect().width(Size::px(edge)).height(Size::px(edge));
-    let Some(source) = preview.then(|| source_of(entry)).flatten() else {
+    let source = match preview {
+        Preview::Off => None,
+        Preview::Cached => source_of(entry).map(|_| Source::Cache),
+        Preview::Full => source_of(entry),
+    };
+    let Some(source) = source else {
         return slot.child(icon).into();
     };
     slot.tw(tokens, &[rounded(Radius::Mark), clip()])

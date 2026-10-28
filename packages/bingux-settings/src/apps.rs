@@ -38,7 +38,7 @@ pub struct AppEntry {
 /// The values of one `[Desktop Entry]` group, keyed by the raw key
 /// (`Name`, `Name[en_GB]`, ...).
 fn read_entry(path: &Path) -> Option<HashMap<String, String>> {
-    let text = std::fs::read_to_string(path).ok()?;
+    let text = crate::system::read_to_string(path).ok()?;
     let mut values = HashMap::new();
     let mut in_entry = false;
     for line in text.lines() {
@@ -163,7 +163,7 @@ fn data_dirs() -> Vec<PathBuf> {
 /// Every application desktop file under `directory`, as `(id, path)`. A file
 /// in a subdirectory `a/b.desktop` has the id `a-b`.
 fn desktop_files(directory: &Path, prefix: &str, files: &mut Vec<(String, PathBuf)>) {
-    let Ok(entries) = std::fs::read_dir(directory) else {
+    let Ok(entries) = crate::system::read_dir(directory) else {
         return;
     };
     for entry in entries.flatten() {
@@ -634,7 +634,7 @@ fn classify(
         );
     }
     if exec.to_ascii_lowercase().ends_with(".appimage") {
-        let size = std::fs::metadata(&exec).ok().map(|meta| meta.len());
+        let size = crate::system::metadata(&exec).ok().map(|meta| meta.len());
         let mut files = vec![PathBuf::from(&exec)];
         if in_home(desktop, home) {
             files.push(desktop.to_path_buf());

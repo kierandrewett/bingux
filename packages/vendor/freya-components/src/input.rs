@@ -167,8 +167,10 @@ pub struct Input {
     command: Option<State<Option<InputCommand>>>,
     probe: Option<State<InputProbe>>,
     request: Option<State<Option<InputRequest>>>,
-    keep_selection: bool,
+    focus_within: bool,
+    read_only: bool,
     keep_focus_in: Vec<Area>,
+    keep_focus_when: Option<Callback<(), bool>>,
 }
 
 /// An edit that runs on the text as if its keyboard shortcut was pressed.
@@ -256,6 +258,28 @@ fn apply_key_edit(
     editable.editor().peek().editor_history().version != previous_history_version
 }
 
+/// Whether a read-only input still takes `key`: moving the caret, extending the selection, Select
+/// all and Copy. Everything else would edit the text.
+fn read_only_key(key: &Key, modifiers: Modifiers) -> bool {
+    match key {
+        Key::Named(
+            NamedKey::ArrowLeft
+            | NamedKey::ArrowRight
+            | NamedKey::ArrowUp
+            | NamedKey::ArrowDown
+            | NamedKey::Home
+            | NamedKey::End
+            | NamedKey::PageUp
+            | NamedKey::PageDown,
+        ) => true,
+        Key::Character(text) => {
+            modifiers.contains(Modifiers::ctrl_or_meta())
+                && matches!(text.to_lowercase().as_str(), "a" | "c")
+        }
+        _ => false,
+    }
+}
+
 impl KeyExt for Input {
     fn write_key(&mut self) -> &mut DiffKey {
         &mut self.key
@@ -289,8 +313,10 @@ impl Input {
             command: None,
             probe: None,
             request: None,
-            keep_selection: false,
+            focus_within: false,
+            read_only: false,
             keep_focus_in: Vec::new(),
+            keep_focus_when: None,
         }
     }
 
@@ -327,9 +353,20 @@ impl Input {
         self
     }
 
-    /// Keep the selection highlighted while the input is not focused, as while its own menu is open.
-    pub fn keep_selection(mut self, keep: bool) -> Self {
-        self.keep_selection = keep;
+    /// Draw the input as focused while an overlay it owns (its context menu) holds the keyboard
+    /// focus: the caret stays on and steady, the selection and the background are the focused ones
+    /// and the probe still reports a caret. The overlay's keys go to the overlay; the input is not
+    /// really focused, it only looks and reports as the focus owner. Pass `false` once the overlay
+    /// has closed.
+    pub fn focus_within(mut self, within: bool) -> Self {
+        self.focus_within = within;
+        self
+    }
+
+    /// The text can be selected and copied but not edited: Cut, Paste, typing and deleting do
+    /// nothing, while the caret, selection, Copy and Select all work.
+    pub fn read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
         self
     }
 
@@ -337,6 +374,13 @@ impl Input {
     /// tap on one keeps the focus.
     pub fn keep_focus_in(mut self, areas: Vec<Area>) -> Self {
         self.keep_focus_in = areas;
+        self
+    }
+
+    /// Asked at each release outside a focused input: return `true` when that release ends a
+    /// press the owner took for a popup it owns, and the input keeps its focus.
+    pub fn keep_focus_when(mut self, keep: impl Into<Callback<(), bool>>) -> Self {
+        self.keep_focus_when = Some(keep.into());
         self
     }
 
@@ -521,6 +565,11 @@ impl Component for Input {
 
         let (mut movement_timeout, cursor_color) =
             use_cursor_blink(focus() != Focus::Not, theme_colors.color);
+        // Real keyboard focus, or the owner of the overlay that holds it (see `focus_within`).
+        // The caret blinks only for real focus; for the owner it is steady, so it is always on.
+        let within_owner = self.focus_within && self.enabled;
+        let visual_focus = focus() != Focus::Not || within_owner;
+        let read_only = self.read_only;
 
         let enabled = use_reactive(&self.enabled);
 
@@ -618,7 +667,7 @@ impl Component for Input {
                 return;
             };
             let area_now = *area.peek();
-            let focused = a11y_id.is_focused();
+            let focused = a11y_id.is_focused() || within_owner;
             let shows_caret = focused && !display_placeholder;
             let text = match mode {
                 InputMode::Hidden(character) => {
@@ -693,6 +742,7 @@ impl Component for Input {
                 Key::Named(NamedKey::Escape) => {
                     a11y_id.request_unfocus();
                 }
+                _ if read_only && !read_only_key(&key, modifiers) => {}
                 // On change
                 _ => {
                     movement_timeout.reset();
@@ -723,6 +773,10 @@ impl Component for Input {
             };
             if let Some(mut state) = command_state {
                 state.set(None);
+            }
+            // A read-only input ignores the commands that would change its text.
+            if read_only && matches!(command, InputCommand::Cut | InputCommand::Paste) {
+                return;
             }
             // The edit runs in its own task: reads in it must not subscribe this
             // effect, or the writes it makes would rerun the effect for ever.
@@ -904,6 +958,7 @@ impl Component for Input {
         };
 
         let companions = self.keep_focus_in.clone();
+        let keep_focus_when = self.keep_focus_when.clone();
         let on_global_pointer_up = move |e: Event<PointerEventData>| {
             match *status.read() {
                 InputStatus::Idle if a11y_id.is_focused() => {
@@ -915,18 +970,21 @@ impl Component for Input {
                 _ => {}
             };
 
-            // A touch press reaches the input after its release, so a tap on a field that is
-            // already focused finds it not dragging. The tap is inside it, not outside.
-            let tapped_inside = matches!(e.data(), PointerEventData::Touch(_))
-                && (outer_area.read().to_f64().contains(e.global_location())
-                    || companions
-                        .iter()
-                        .any(|area| area.to_f64().contains(e.global_location())));
+            // A press inside the input, or inside a companion such as its edit bar, is not a press
+            // outside it, whatever the button: a right click on a focused field must not blur it.
+            // A touch reaches the input after its release, so a tap on a field that is already
+            // focused finds it not dragging.
+            let at = e.global_location();
+            let tapped_inside = outer_area.read().to_f64().contains(at)
+                || companions.iter().any(|area| area.to_f64().contains(at));
+            // A release that ends a press the owner took for a popup it owns (the popup's
+            // shield eats the press that dismisses it) is not a press outside the input.
+            let vetoed = keep_focus_when.as_ref().is_some_and(|keep| keep.call(()));
             if a11y_id.is_focused() {
                 if *is_dragging.read() {
                     // The input is focused and dragging, but it just clicked so we assume the dragging can stop
                     is_dragging.set(false);
-                } else if !tapped_inside {
+                } else if !tapped_inside && !vetoed {
                     // The input is focused but not dragging, so the click means it was clicked outside, therefore we can unfocus this input
                     a11y_id.request_unfocus();
                 }
@@ -967,20 +1025,10 @@ impl Component for Input {
             publish_probe();
         };
 
-        let (background, cursor_index, text_selection) = if enabled() && focus() != Focus::Not {
+        let (background, cursor_index, text_selection) = if enabled() && visual_focus {
             (
                 theme_colors.focus_background,
                 Some(editable.editor().read().cursor_pos()),
-                editable
-                    .editor()
-                    .read()
-                    .get_visible_selection(EditorLine::SingleParagraph),
-            )
-        } else if enabled() && self.keep_selection {
-            // Focus sits elsewhere, such as the field's own menu; the selection stays shown.
-            (
-                theme_colors.background,
-                None,
                 editable
                     .editor()
                     .read()
@@ -990,7 +1038,7 @@ impl Component for Input {
             (theme_colors.background, None, None)
         };
 
-        let border = if focus().is_focused() {
+        let border = if visual_focus {
             Border::new()
                 .fill(theme_colors.focus_border_fill)
                 .width(2.)
@@ -1123,11 +1171,8 @@ impl Component for Input {
                             }),
                     ),
             )
-            .maybe_child(
-                self.trailing
-                    .clone()
-                    .map(|trailing| rect().padding(Gaps::new(0., 8., 0., 0.)).child(trailing)),
-            )
+            // The trailing element sets its own inset from the field's edge.
+            .maybe_child(self.trailing.clone())
     }
 
     fn render_key(&self) -> DiffKey {

@@ -20,12 +20,17 @@ use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 
 use crate::apps::{self, AppEntry, Details, Removal, Source};
 use crate::pages::sound::AppSound;
-use crate::routes::{Navigator, Route, use_navigator};
+use crate::routes;
+use bingux_ui::prelude::{Router, use_router};
 use crate::system::{self, CommandError, background_then};
+
+mod file_types;
+
+use file_types::{Category, OtherFileTypes};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Rows shown before the list offers "Show more".
+/// Rows loaded at a time; scrolling to the end of a list loads the next page.
 const PAGE: usize = 40;
 
 /// The row icon size: twice the row size, which is what `AppIcon` asks for.
@@ -69,12 +74,12 @@ pub(crate) const KINDS: [Kind; 9] = [
     },
     Kind {
         title: "Text",
-        icon: Icon::DocumentEdit,
+        icon: Icon::DefaultAppText,
         mimes: &["text/plain"],
     },
     Kind {
         title: "Documents",
-        icon: Icon::DocumentOpen,
+        icon: Icon::DefaultAppDocuments,
         mimes: &["application/pdf"],
     },
     Kind {
@@ -322,6 +327,34 @@ fn size_text(bytes: u64) -> String {
     format!("{bytes} B")
 }
 
+/// How far below the viewport the last row is mounted-and-watched, so the next
+/// page is ready before the list ends.
+const LOAD_MORE_MARGIN: f32 = 360.0;
+
+/// The last row of a list that has more to show. When it comes near the
+/// viewport the next page loads, as the Fonts page does, so there is no
+/// "show more" button.
+#[derive(PartialEq)]
+struct LoadMore {
+    row: Element,
+    on_more: EventHandler<()>,
+}
+
+impl Component for LoadMore {
+    fn render(&self) -> impl IntoElement {
+        let on_more = self.on_more.clone();
+        let probe_height = Dim::Row.px() + LOAD_MORE_MARGIN;
+        // An empty box reaching below the row, out of flow, reports when the
+        // end of the list comes within the margin of the viewport.
+        let probe = rect()
+            .position(Position::new_absolute().top(0.0).left(0.0))
+            .width(Size::fill())
+            .height(Size::px(probe_height))
+            .on_visible(move |_| on_more.call(()));
+        rect().width(Size::fill()).child(self.row.clone()).child(probe)
+    }
+}
+
 fn set_limit(mut limit: State<usize>, value: usize) {
     limit.set(value);
 }
@@ -349,7 +382,7 @@ fn run_uninstall(
     model: ModelState,
     busy: State<bool>,
     overlays: Overlays,
-    leave: Option<Navigator>,
+    leave: Option<Router>,
 ) {
     let mut busy = busy;
     busy.set(true);
@@ -361,8 +394,8 @@ fn run_uninstall(
             match result {
                 Ok(()) => {
                     overlays.toast(format!("{name} was uninstalled."));
-                    if let Some(navigator) = leave {
-                        navigator.pop();
+                    if let Some(router) = leave {
+                        router.pop();
                     }
                 }
                 Err(error) => overlays.toast(format!("Could not uninstall {name}. {error}")),
@@ -378,14 +411,14 @@ fn ask_uninstall(
     model: ModelState,
     busy: State<bool>,
     overlays: Overlays,
-    leave: Option<Navigator>,
+    leave: Option<Router>,
 ) {
     let body = match &app.details {
         Some(details) => format!("{} is installed from {}.", app.name, details.source.label()),
         None => format!("{} is installed on this system.", app.name),
     };
     let title = format!("Uninstall {}?", app.name);
-    overlays.show_dialog(dialog(title, body).cancel("Cancel").response(
+    overlays.show_dialog(dialog(title, body).cancel("Cancel").default_action(CANCEL_ID).response(
         "Uninstall",
         ResponseKind::Destructive,
         move |_| run_uninstall(app.clone(), model, busy, overlays, leave),
@@ -428,12 +461,9 @@ fn browser_default(model: &Model) -> String {
 
 /// The right-click menu for a file type's row. It acts on the application the
 /// row shows, and is greyed out when there is none.
-fn kind_menu(app: Option<AppEntry>, overlays: Overlays, navigator: Navigator) -> Vec<MenuItem> {
+fn kind_menu(app: Option<AppEntry>, overlays: Overlays, router: Router) -> Vec<MenuItem> {
     let available = app.is_some();
-    let route = app.as_ref().map(|app| Route::App {
-        id: app.id.clone(),
-        name: app.name.clone(),
-    });
+    let route = app.as_ref().map(|app| routes::app(&app.id.clone(), &app.name.clone()));
     let open = menu_item("Open", move |_| {
         if let Some(app) = &app {
             apps::launch(app, move |reason| overlays.toast(reason));
@@ -442,7 +472,7 @@ fn kind_menu(app: Option<AppEntry>, overlays: Overlays, navigator: Navigator) ->
     .icon(Icon::DocumentOpen);
     let details = menu_item("Show details", move |_| {
         if let Some(route) = &route {
-            navigator.push(route.clone());
+            router.open(route.clone());
         }
     })
     .icon(Icon::DialogInformation);
@@ -460,14 +490,11 @@ fn default_menu(
     is_default: bool,
     model: ModelState,
     overlays: Overlays,
-    navigator: Navigator,
+    router: Router,
 ) -> Vec<MenuItem> {
     let chosen = app.id.clone();
     let open = app.clone();
-    let details = Route::App {
-        id: app.id.clone(),
-        name: app.name.clone(),
-    };
+    let details = routes::app(&app.id.clone(), &app.name.clone());
     let make = menu_item("Make default", move |_| {
         set_default(model, kind, chosen.clone(), overlays)
     });
@@ -479,7 +506,7 @@ fn default_menu(
             apps::launch(&open, move |reason| overlays.toast(reason))
         })
         .icon(Icon::DocumentOpen),
-        menu_item("Show details", move |_| navigator.push(details.clone()))
+        menu_item("Show details", move |_| router.open(details.clone()))
             .icon(Icon::DialogInformation),
     ]
 }
@@ -514,11 +541,8 @@ enum Sort {
     Size,
 }
 
-fn app_row(app: &AppEntry, navigator: Navigator, icons: bool) -> Row {
-    let route = Route::App {
-        id: app.id.clone(),
-        name: app.name.clone(),
-    };
+fn app_row(app: &AppEntry, router: Router, icons: bool) -> Row {
+    let route = routes::app(&app.id.clone(), &app.name.clone());
     let subtitle = match &app.details {
         Some(details) => match details.size {
             Some(size) => format!("{}, {}", details.source.label(), size_text(size)),
@@ -529,7 +553,7 @@ fn app_row(app: &AppEntry, navigator: Navigator, icons: bool) -> Row {
     let base = row(app.name.clone())
         .subtitle(subtitle)
         .navigates()
-        .on_press(move |_| navigator.push(route.clone()));
+        .on_press(move |_| router.open(route.clone()));
     // The icon column is reserved while the row icons are still loading, so the
     // text does not move when they arrive.
     if icons {
@@ -545,7 +569,7 @@ fn app_menu(
     model: ModelState,
     busy: State<bool>,
     overlays: Overlays,
-    navigator: Navigator,
+    router: Router,
 ) -> Vec<MenuItem> {
     let removable = matches!(
         app.details.as_ref().map(|details| &details.removal),
@@ -553,10 +577,7 @@ fn app_menu(
     );
     let open = app.clone();
     let uninstall = app.clone();
-    let details = Route::App {
-        id: app.id.clone(),
-        name: app.name.clone(),
-    };
+    let details = routes::app(&app.id.clone(), &app.name.clone());
     let uninstall_item = menu_item("Uninstall", move |_| {
         ask_uninstall(uninstall.clone(), model, busy, overlays, None)
     })
@@ -567,7 +588,7 @@ fn app_menu(
             apps::launch(&open, move |reason| overlays.toast(reason))
         })
         .icon(Icon::DocumentOpen),
-        menu_item("Show details", move |_| navigator.push(details.clone()))
+        menu_item("Show details", move |_| router.open(details.clone()))
             .icon(Icon::DialogInformation),
         menu_separator(),
         if removable {
@@ -584,7 +605,7 @@ fn app_entry(
     model: ModelState,
     busy: State<bool>,
     overlays: Overlays,
-    navigator: Navigator,
+    router: Router,
     icons: bool,
 ) -> Element {
     // A row keyed on whether its details have arrived. Row only calls its
@@ -595,8 +616,8 @@ fn app_entry(
             .key((&app.desktop_file, app.details.is_some(), icons))
             .tw_layout(&[w_full()])
             .child(
-                app_row(app, navigator, icons)
-                    .context_menu(app_menu(app, model, busy, overlays, navigator)),
+                app_row(app, router, icons)
+                    .context_menu(app_menu(app, model, busy, overlays, router)),
             ),
     )
 }
@@ -678,7 +699,7 @@ impl Component for ApplicationsPage {
         let limit = use_state(|| PAGE);
         let busy = use_state(|| false);
         let overlays = use_overlays();
-        let navigator = use_navigator();
+        let router = use_router();
         use_page_busy(*busy.read());
 
         let summary = model
@@ -737,15 +758,16 @@ impl Component for ApplicationsPage {
                 let mut rows: Vec<Element> = shown
                     .iter()
                     .take(visible)
-                    .map(|app| app_entry(app, model, busy, overlays, navigator, data.icons))
+                    .map(|app| app_entry(app, model, busy, overlays, router, data.icons))
                     .collect();
+                // Scrolling the last row into view loads the next page.
                 if total > visible {
-                    rows.push(Element::from(
-                        row(format!("{} more", total - visible)).trailing(
-                            action_button("Show more", move |_| set_limit(limit, visible + PAGE))
-                                .compact(),
-                        ),
-                    ));
+                    if let Some(last) = rows.pop() {
+                        rows.push(Element::from(LoadMore {
+                            row: last,
+                            on_more: (move |()| set_limit(limit, visible + PAGE)).into(),
+                        }));
+                    }
                 }
                 let group = Group::titled("Installed")
                     .trailing(installed_tools(
@@ -767,7 +789,7 @@ impl Component for ApplicationsPage {
                     row("Default applications")
                         .value(summary)
                         .navigates()
-                        .on_press(move |_| navigator.push(Route::DefaultApps)),
+                        .on_press(move |_| router.open(routes::default_apps())),
                 ),
             )
             .child(list)
@@ -800,9 +822,28 @@ impl Component for AppPage {
         let model = use_apps();
         let busy = use_state(|| false);
         let overlays = use_overlays();
-        let navigator = use_navigator();
-        let autostart = use_state(|| autostart_enabled(&self.id));
-        let notifications = use_state(|| read_notifications(&self.id));
+        let router = use_router();
+        // Whether the application starts at login and which notification keys
+        // the shell keeps for it come from a file and from gsettings: read on
+        // a worker once the page is open, never in `render`.
+        let autostart = use_state(|| false);
+        let notifications = use_state(|| None::<Notifications>);
+        let startup_read = use_state(|| false);
+        {
+            let id = self.id.clone();
+            use_hook(move || {
+                background_then(
+                    move || (autostart_enabled(&id), read_notifications(&id)),
+                    move |(starts, notes)| {
+                        let (mut autostart, mut notifications, mut startup_read) =
+                            (autostart, notifications, startup_read);
+                        autostart.set(starts);
+                        notifications.set(notes);
+                        startup_read.set(true);
+                    },
+                );
+            });
+        }
         use_page_busy(*busy.read());
         // Snapshot only: BINGUX_SETTINGS_SNAPSHOT_OPEN=uninstall asks to
         // uninstall this application once the page has loaded, so the dialog
@@ -819,7 +860,7 @@ impl Component for AppPage {
                             .as_ref()
                             .and_then(|data| data.apps.iter().find(|app| app.id == id).cloned());
                         if let Some(app) = found {
-                            ask_uninstall(app, model, busy, overlays, Some(navigator));
+                            ask_uninstall(app, model, busy, overlays, Some(router));
                         }
                     });
                 }
@@ -865,17 +906,14 @@ impl Component for AppPage {
                     Group::titled("Open by default").rows(handled.iter().map(
                         |&(kind, is_default)| {
                             let menu =
-                                default_menu(&app, kind, is_default, model, overlays, navigator);
+                                default_menu(&app, kind, is_default, model, overlays, router);
                             Element::from(
                                 row(KINDS[kind].title)
                                     .leading(KINDS[kind].icon)
                                     .value(if is_default { "Default" } else { "Not default" })
                                     .navigates()
                                     .on_press(move |_| {
-                                        navigator.push(Route::DefaultApp {
-                                            kind,
-                                            name: KINDS[kind].title.to_string(),
-                                        })
+                                        router.open(routes::default_app(kind, &KINDS[kind].title.to_string()))
                                     })
                                     .context_menu(menu),
                             )
@@ -926,7 +964,13 @@ impl Component for AppPage {
         let startup = {
             let (id, source) = (app.id.clone(), app.desktop_file.clone());
             let on = *autostart.read();
+            let read = *startup_read.read();
             Group::titled("Startup").row(switch_row("Start at login", on, move |next: bool| {
+                // Before the read has landed the switch shows a guess, and a
+                // press must not write on top of the real value.
+                if !read {
+                    return;
+                }
                 let (id, source) = (id.clone(), source.clone());
                 optimistic(autostart, Some(overlays), !next, next, move || {
                     write_autostart(&id, &source, next).map_err(|error| error.to_string())
@@ -935,25 +979,29 @@ impl Component for AppPage {
         };
 
         // GNOME's per-application notification switches. The group appears only
-        // for applications the shell keeps settings for. The first read is
-        // synchronous so the group is on the first frame.
-        let notifications_group = (*notifications.read()).map(|current| {
-            let switches = [
-                ("Show notifications", NotifyKey::Enable, current.enable),
-                (
-                    "Show on the lock screen",
-                    NotifyKey::LockScreen,
-                    current.lock_screen,
-                ),
-                ("Play notification sounds", NotifyKey::Sound, current.sound),
-            ];
-            Group::titled("Notifications").rows(switches.into_iter().map(|(title, key, on)| {
-                let id = app.id.clone();
-                Element::from(switch_row(title, on, move |next: bool| {
-                    set_notification(notifications, overlays, id.clone(), current, key, next);
+        // for applications the shell keeps settings for; until the read has
+        // answered it is three skeleton rows, the height of the real group.
+        let notifications_group = if *startup_read.read() {
+            (*notifications.read()).map(|current| {
+                let switches = [
+                    ("Show notifications", NotifyKey::Enable, current.enable),
+                    (
+                        "Show on the lock screen",
+                        NotifyKey::LockScreen,
+                        current.lock_screen,
+                    ),
+                    ("Play notification sounds", NotifyKey::Sound, current.sound),
+                ];
+                Group::titled("Notifications").rows(switches.into_iter().map(|(title, key, on)| {
+                    let id = app.id.clone();
+                    Element::from(switch_row(title, on, move |next: bool| {
+                        set_notification(notifications, overlays, id.clone(), current, key, next);
+                    }))
                 }))
-            }))
-        });
+            })
+        } else {
+            Some(Group::titled("Notifications").rows((0..3).map(|_| skeleton_row())))
+        };
 
         let uninstall = match app.details.as_ref() {
             None => Group::titled("Uninstall").row(skeleton_row()),
@@ -973,7 +1021,7 @@ impl Component for AppPage {
                 Group::titled("Uninstall").row(
                     row("Uninstall this application").subtitle(reason).trailing(
                         action_button("Uninstall", move |_| {
-                            ask_uninstall(target.clone(), model, busy, overlays, Some(navigator))
+                            ask_uninstall(target.clone(), model, busy, overlays, Some(router))
                         })
                         .destructive()
                         .compact()
@@ -1018,7 +1066,7 @@ fn autostart_file(id: &str) -> PathBuf {
 /// directory is read, so an entry shipped system-wide is not reported.
 #[cfg(not(feature = "snapshot"))]
 fn autostart_enabled(id: &str) -> bool {
-    std::fs::read_to_string(autostart_file(id)).is_ok_and(|text| {
+    crate::system::read_to_string(autostart_file(id)).is_ok_and(|text| {
         !text.lines().any(|line| {
             let line = line.trim();
             line == "Hidden=true" || line == "X-GNOME-Autostart-enabled=false"
@@ -1045,7 +1093,7 @@ fn write_autostart(id: &str, source: &std::path::Path, on: bool) -> std::io::Res
     } else {
         source.to_path_buf()
     };
-    let text = std::fs::read_to_string(&base)?;
+    let text = crate::system::read_to_string(&base)?;
     let mut kept: Vec<&str> = text
         .lines()
         .filter(|line| {
@@ -1200,22 +1248,18 @@ fn kind_placeholder() -> Group {
 impl Component for DefaultAppsPage {
     fn render(&self) -> impl IntoElement {
         let model = use_apps();
-        let query = use_state(String::new);
         let overlays = use_overlays();
-        let navigator = use_navigator();
+        let router = use_router();
 
         let Some(data) = model.read().clone() else {
             return page_column()
                 .child(PageHead::new())
-                .child(search_field(query, |_| {}).fill_width())
                 .child(kind_placeholder());
         };
-        let limit = use_state(|| PAGE);
         let choices = match &data.choices {
             None => {
                 return page_column()
                     .child(PageHead::new())
-                    .child(search_field(query, |_| {}).fill_width())
                     .child(kind_placeholder());
             }
             Some(Err(failure)) => {
@@ -1227,16 +1271,7 @@ impl Component for DefaultAppsPage {
             Some(Ok(choices)) => choices,
         };
 
-        let needle = query.read().trim().to_lowercase();
-        let shown: Vec<&Choice> = choices
-            .iter()
-            .filter(|choice| {
-                let current = choice.current.as_ref().map(|id| app_name(&data.apps, id));
-                needle.is_empty()
-                    || KINDS[choice.kind].title.to_lowercase().contains(&needle)
-                    || current.is_some_and(|name| name.to_lowercase().contains(&needle))
-            })
-            .collect();
+        let shown: Vec<&Choice> = choices.iter().collect();
         let other = match &data.file_types {
             None => None,
             Some(Err(failure)) => Some(Element::from(
@@ -1245,22 +1280,15 @@ impl Component for DefaultAppsPage {
                         .action("Try again", move |_| start_load(model)),
                 ),
             )),
-            Some(Ok(types)) => {
-                let matching: Vec<&FileType> = types
-                    .iter()
-                    .filter(|file| {
-                        let current = file.current.as_ref().map(|id| app_name(&data.apps, id));
-                        needle.is_empty()
-                            || file.mime.to_lowercase().contains(&needle)
-                            || current.is_some_and(|name| name.to_lowercase().contains(&needle))
-                    })
-                    .collect();
-                (!matching.is_empty()).then(|| {
-                    Element::from(file_type_group(
-                        model, overlays, &data.apps, &matching, limit,
-                    ))
+            Some(Ok(types)) => (!types.is_empty()).then(|| {
+                Element::from(OtherFileTypes {
+                    model,
+                    overlays,
+                    apps: data.apps.clone(),
+                    types: types.clone(),
+                    icons: data.all_icons,
                 })
-            }
+            }),
         };
         let kinds = (!shown.is_empty()).then(|| {
             Element::from(Group::new(None).rows(shown.into_iter().map(|choice| {
@@ -1274,34 +1302,23 @@ impl Component for DefaultAppsPage {
                     .current
                     .as_ref()
                     .map_or_else(|| "Not set".to_string(), |id| app_name(&data.apps, id));
-                let menu = kind_menu(current, overlays, navigator);
+                let menu = kind_menu(current, overlays, router);
                 Element::from(
                     row(KINDS[kind].title)
                         .leading(KINDS[kind].icon)
                         .value(value)
                         .navigates()
                         .on_press(move |_| {
-                            navigator.push(Route::DefaultApp {
-                                kind,
-                                name: KINDS[kind].title.to_string(),
-                            })
+                            router.open(routes::default_app(kind, &KINDS[kind].title.to_string()))
                         })
                         .context_menu(menu),
                 )
             })))
         });
-        let empty = (kinds.is_none() && other.is_none()).then(|| {
-            Element::from(
-                Group::new(None).row(status(Status::Empty("No file type matches.".to_string()))),
-            )
-        });
-
         page_column()
             .child(PageHead::new())
-            .child(search_field(query, |_| {}).fill_width())
             .maybe_child(kinds)
             .maybe_child(other)
-            .maybe_child(empty)
     }
 }
 
@@ -1310,6 +1327,11 @@ impl Component for DefaultAppsPage {
 #[derive(Clone, PartialEq)]
 struct FileType {
     mime: String,
+    /// What a person calls it, such as "Bzip2 archive".
+    title: String,
+    category: Category,
+    /// Its first extensions, such as ".csv  .xls".
+    extensions: String,
     current: Option<String>,
     candidates: Vec<String>,
 }
@@ -1340,8 +1362,12 @@ fn load_file_types(types: &[String]) -> Result<Vec<FileType>, CommandError> {
         .map(|mime| -> Result<FileType, CommandError> {
             let text = system::run("gio", &["mime", mime], TIMEOUT)?;
             let (current, candidates) = parse_mime(&text);
+            let (title, category, extensions) = file_types::describe(mime);
             Ok(FileType {
                 mime: mime.clone(),
+                title,
+                category,
+                extensions,
                 current,
                 candidates,
             })
@@ -1378,57 +1404,6 @@ fn set_file_type(model: ModelState, overlays: Overlays, mime: String, app: Strin
         move || write_file_type(&mime, &app),
         move || start_load(model),
     );
-}
-
-/// One other content type: its default, and a dropdown of the applications
-/// registered for it.
-fn file_type_row(model: ModelState, overlays: Overlays, apps: &[AppEntry], file: &FileType) -> Row {
-    let mut options: Vec<(String, String)> = Vec::new();
-    if file.current.is_none() {
-        options.push((String::new(), "Not set".to_string()));
-    }
-    for id in &file.candidates {
-        options.push((id.clone(), app_name(apps, id)));
-    }
-    if let Some(id) = &file.current {
-        if !file.candidates.contains(id) {
-            options.push((id.clone(), app_name(apps, id)));
-        }
-    }
-    let mime = file.mime.clone();
-    row(file.mime.clone()).trailing(
-        dropdown(
-            options,
-            file.current.clone().unwrap_or_default(),
-            move |app: String| {
-                if !app.is_empty() {
-                    set_file_type(model, overlays, mime.clone(), app);
-                }
-            },
-        )
-        .min_width(Dim::Field),
-    )
-}
-
-/// The other content types, one row each, paged by `limit`.
-fn file_type_group(
-    model: ModelState,
-    overlays: Overlays,
-    apps: &[AppEntry],
-    shown: &[&FileType],
-    limit: State<usize>,
-) -> Group {
-    let visible = shown.len().min(*limit.read());
-    let mut group = Group::titled("Other file types");
-    for file in &shown[..visible] {
-        group = group.row(file_type_row(model, overlays, apps, file));
-    }
-    if shown.len() > visible {
-        group = group.row(row(format!("{} more", shown.len() - visible)).trailing(
-            action_button("Show more", move |_| set_limit(limit, visible + PAGE)).compact(),
-        ));
-    }
-    group
 }
 
 /// The applications that can open one kind of file or link. Choosing one makes

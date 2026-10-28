@@ -39,6 +39,14 @@ pub struct SearchHit {
     pub offset: i32,
 }
 
+impl SectionRegistry {
+    /// The top of the page's scrolled content, once it is laid out. Does not
+    /// subscribe.
+    pub(crate) fn origin(&self) -> Option<f32> {
+        self.0.peek().origin
+    }
+}
+
 /// Provides an empty registry to the sections below. The split view calls it
 /// once per render.
 pub fn provide() -> SectionRegistry {

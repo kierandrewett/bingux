@@ -134,7 +134,7 @@ fn index_value(index: &str, key: &str) -> Option<String> {
 fn themes(kind: ThemeKind) -> Vec<Theme> {
     let mut found: Vec<Theme> = Vec::new();
     for root in theme_roots() {
-        let Ok(entries) = std::fs::read_dir(&root) else {
+        let Ok(entries) = crate::system::read_dir(&root) else {
             continue;
         };
         for entry in entries.flatten() {
@@ -144,7 +144,7 @@ fn themes(kind: ThemeKind) -> Vec<Theme> {
             if id.contains('\'') || id == "hicolor" || id == "default" || !path.is_dir() {
                 continue;
             }
-            let index = std::fs::read_to_string(path.join("index.theme")).unwrap_or_default();
+            let index = crate::system::read_to_string(path.join("index.theme")).unwrap_or_default();
             let wanted = match kind {
                 ThemeKind::Cursor => path.join("cursors").is_dir(),
                 ThemeKind::Icon => {
@@ -204,7 +204,6 @@ pub fn text_size_row(
     let on_change: EventHandler<Setting> = on_change.into();
     let current = percent(interface.text_scale);
     row("Text size")
-        .subtitle("Scales the text in applications that follow the system.")
         .trailing(
             dropdown(
                 text_size_options(current),

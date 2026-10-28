@@ -4,6 +4,7 @@
 
 use std::time::Duration;
 
+use bingux_ui::motion::reveal_block_if;
 use bingux_ui::style::*;
 use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 use freya::prelude::*;
@@ -45,7 +46,7 @@ struct Facts {
 
 /// A value from `/etc/os-release`, without its quotes.
 fn os_release(key: &str) -> Option<String> {
-    std::fs::read_to_string("/etc/os-release")
+    crate::system::read_to_string("/etc/os-release")
         .ok()?
         .lines()
         .find_map(|line| {
@@ -56,7 +57,7 @@ fn os_release(key: &str) -> Option<String> {
 }
 
 fn dmi(name: &str) -> Option<String> {
-    std::fs::read_to_string(format!("/sys/devices/virtual/dmi/id/{name}"))
+    crate::system::read_to_string(format!("/sys/devices/virtual/dmi/id/{name}"))
         .ok()
         .map(|text| text.trim().to_string())
         .filter(|text| {
@@ -65,7 +66,7 @@ fn dmi(name: &str) -> Option<String> {
 }
 
 fn processor() -> String {
-    std::fs::read_to_string("/proc/cpuinfo")
+    crate::system::read_to_string("/proc/cpuinfo")
         .ok()
         .and_then(|text| {
             text.lines()
@@ -77,7 +78,7 @@ fn processor() -> String {
 }
 
 fn memory() -> String {
-    std::fs::read_to_string("/proc/meminfo")
+    crate::system::read_to_string("/proc/meminfo")
         .ok()
         .and_then(|text| {
             text.lines()
@@ -119,16 +120,16 @@ fn graphics() -> String {
 
 /// The first connected display's mode, such as "2560x1440".
 fn display() -> String {
-    let Ok(entries) = std::fs::read_dir("/sys/class/drm") else {
+    let Ok(entries) = crate::system::read_dir("/sys/class/drm") else {
         return "Unknown".to_string();
     };
     let mut modes = entries.flatten().filter_map(|entry| {
         let path = entry.path();
-        let status = std::fs::read_to_string(path.join("status")).ok()?;
+        let status = crate::system::read_to_string(path.join("status")).ok()?;
         if status.trim() != "connected" {
             return None;
         }
-        std::fs::read_to_string(path.join("modes"))
+        crate::system::read_to_string(path.join("modes"))
             .ok()?
             .lines()
             .next()
@@ -145,7 +146,7 @@ fn display() -> String {
 
 /// Time since boot, such as "3 days, 4 hours" or "42 minutes".
 fn uptime() -> String {
-    let Some(seconds) = std::fs::read_to_string("/proc/uptime")
+    let Some(seconds) = crate::system::read_to_string("/proc/uptime")
         .ok()
         .and_then(|text| text.split_whitespace().next()?.parse::<f64>().ok())
     else {
@@ -215,7 +216,7 @@ fn collect() -> Facts {
     };
     let os = os_release("PRETTY_NAME").unwrap_or_else(|| "Unknown".to_string());
     Facts {
-        hostname: std::fs::read_to_string("/etc/hostname")
+        hostname: crate::system::read_to_string("/etc/hostname")
             .map(|text| text.trim().to_string())
             .ok()
             .filter(|text| !text.is_empty())
@@ -402,11 +403,17 @@ impl Component for RenameBody {
         let field = text_field(sheet.draft, move |_: String| sheet.submit(window));
         let error = sheet.error.read().clone();
         popup_column()
-            .child(Group::new(None::<String>).row(form_row("Device name", field)))
-            .child(caption(
-                "Other devices on your network use this name. Letters, numbers and hyphens, up to 63 characters.",
+            .child(
+                Group::new(None::<String>)
+                    .row(form_row("Device name", field))
+                    .footer(
+                        "Other devices on your network use this name. Letters, numbers and hyphens, up to 63 characters.",
+                    ),
+            )
+            .child(reveal_block_if(
+                S6,
+                error.map(|text| Element::from(status(Status::Error(text)))),
             ))
-            .maybe_child(error.map(|text| Element::from(status(Status::Error(text)))))
     }
 }
 

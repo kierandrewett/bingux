@@ -23,10 +23,10 @@ use super::usage::connection_usage_row;
 use super::{Owner, Section};
 use crate::icons::{self, Icon};
 use crate::pages::loading::veiled;
-use crate::routes::Route;
+use crate::routes;
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
-    Group, PageHead, ResponseKind, SpinnerSize, Status, Tokens, action_button, action_strip,
+    CANCEL_ID, Group, PageHead, ResponseKind, SpinnerSize, Status, Tokens, action_button, action_strip,
     caption, dialog, page_column, row, spinner, status, strip_action, use_page_busy, use_tokens,
 };
 use bingux_ui::layout::hstack;
@@ -334,13 +334,14 @@ impl Ui {
     /// level once the network is gone, for the screen that is about it.
     fn confirm_forget(self, saved: &Saved, leave: bool) {
         let (name, uuid) = (saved.name.clone(), saved.uuid.clone());
-        let navigator = self.ctx.navigator;
+        let router = self.ctx.router;
         self.ctx.overlays.show_dialog(
             dialog(
                 format!("Forget \"{name}\"?"),
                 "The saved password is removed. Connecting again asks for it.",
             )
             .cancel("Cancel")
+            .default_action(CANCEL_ID)
             .response("Forget", ResponseKind::Destructive, move |_| {
                 let uuid = uuid.clone();
                 self.act(
@@ -348,7 +349,7 @@ impl Ui {
                     move || nm::forget(&uuid),
                     move || {
                         if leave {
-                            navigator.pop();
+                            router.pop();
                         }
                     },
                 );
@@ -506,10 +507,7 @@ fn network_menu(ui: Ui, model: &Model, network: &Network) -> Vec<MenuItem> {
     let key = profile.map_or_else(|| network.ssid.clone(), |saved| saved.name.clone());
     items.push(
         menu_item("Open", move |_| {
-            ui.ctx.navigator.push(Route::WifiNetwork {
-                ssid: key.clone(),
-                saved_list: false,
-            })
+            ui.ctx.router.open(routes::wifi_network(&key.clone(), false))
         })
         .icon(Icon::PreferencesSystem),
     );
@@ -596,7 +594,7 @@ fn radio_status(ui: Ui, radio: Radio) -> Option<Element> {
                 model::set_wifi_radio(true)
             })
         }),
-        Radio::Airplane => block.action("Back", move |_| ui.ctx.navigator.pop()),
+        Radio::Airplane => block.action("Back", move |_| ui.ctx.router.pop()),
         _ => block,
     };
     Some(Element::from(
@@ -616,10 +614,7 @@ fn connected_block(ui: Ui, model: &Model) -> Option<Element> {
         .subtitle(link_line(network))
         .navigates()
         .on_press(move |_| {
-            ui.ctx.navigator.push(Route::WifiNetwork {
-                ssid: key.clone(),
-                saved_list: false,
-            })
+            ui.ctx.router.open(routes::wifi_network(&key.clone(), false))
         });
     hero = match network {
         Some(network) => {
@@ -679,10 +674,7 @@ fn network_rows(ui: Ui, data: &Data, tokens: Tokens) -> Vec<Element> {
                 .context_menu(network_menu(ui, &data.model, network));
             Element::from(if profile.is_some() {
                 line.navigates().on_press(move |_| {
-                    ui.ctx.navigator.push(Route::WifiNetwork {
-                        ssid: key.clone(),
-                        saved_list: false,
-                    })
+                    ui.ctx.router.open(routes::wifi_network(&key.clone(), false))
                 })
             } else {
                 line.on_press(move |_| ui.join(&target))
@@ -737,7 +729,7 @@ fn available_group(ui: Ui, data: &Data, tokens: Tokens) -> Element {
 fn manage_group(ui: Ui, data: &Data, radio: Radio) -> Element {
     let saved = data.model.joinable().count();
     let window = ui.ctx.window;
-    let navigator = ui.ctx.navigator;
+    let router = ui.ctx.router;
     Element::from(
         Group::new(None::<String>)
             .row(
@@ -748,7 +740,7 @@ fn manage_group(ui: Ui, data: &Data, radio: Radio) -> Element {
                         saved.to_string()
                     })
                     .navigates()
-                    .on_press(move |_| navigator.push(Route::WifiSaved)),
+                    .on_press(move |_| router.open(routes::wifi_saved())),
             )
             .row(
                 row("Connect to hidden network…")
@@ -878,10 +870,7 @@ impl Component for SavedNetworksPage {
                     .subtitle(parts.join(" · "))
                     .navigates()
                     .on_press(move |_| {
-                        ui.ctx.navigator.push(Route::WifiNetwork {
-                            ssid: key.clone(),
-                            saved_list: true,
-                        })
+                        ui.ctx.router.open(routes::wifi_network(&key.clone(), true))
                     })
                     .context_menu(menu),
             )
@@ -925,7 +914,7 @@ impl Component for WifiNetworkPage {
                 if let (true, Some(model)) = (*fresh, lists) {
                     let found = model.resolve(ssid);
                     if found.profile.is_none() && found.network.is_none() {
-                        ui.ctx.navigator.pop();
+                        ui.ctx.router.pop();
                     }
                 }
             },
@@ -1031,9 +1020,6 @@ impl Component for WifiNetworkPage {
             blocks.push(Element::from(
                 Group::new(None::<String>).row(
                     row("Sign-in required")
-                        .subtitle(
-                            "This network needs a sign-in before it gives access to the internet.",
-                        )
                         .trailing(Element::from(action_button(
                             "Open sign-in page",
                             move |_| super::open_portal(ctx),
@@ -1077,10 +1063,7 @@ impl Component for WifiNetworkPage {
             info = info.row(connection_usage_row(
                 ui.ctx,
                 owner.connection_name().to_string(),
-                Route::Section {
-                    owner: owner.clone(),
-                    section: Section::Usage,
-                },
+                routes::section(&owner.clone(), &Section::Usage),
             ));
         }
         blocks.push(Element::from(info));
@@ -1173,7 +1156,7 @@ pub fn wifi_row(ctx: NetCtx, ov: &Overview, airplane: bool) -> Option<Element> {
             .enabled(usable),
         )
         .navigates()
-        .on_press(move |_| ctx.navigator.push(Route::Wifi)),
+        .on_press(move |_| ctx.router.open(routes::wifi())),
     ))
 }
 
@@ -1193,7 +1176,7 @@ pub fn hotspot_row(ctx: NetCtx, ov: &Overview) -> Option<Element> {
             row("Wi-Fi hotspot")
                 .value(running.unwrap_or_default())
                 .navigates()
-                .on_press(move |_| ctx.navigator.push(Route::Hotspot)),
+                .on_press(move |_| ctx.router.open(routes::hotspot())),
         )
     })
 }

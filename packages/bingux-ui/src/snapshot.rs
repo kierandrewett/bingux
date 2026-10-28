@@ -21,7 +21,7 @@ use freya_components::integration::integration;
 use freya_testing::TestingRunner;
 use freya_testing::prelude::{KeyboardEventName, MouseEventName, PlatformEvent, TouchEventName, TouchPhase};
 
-use crate::address::Address;
+use crate::nav::Location;
 use crate::theme::font_family;
 
 /// Width and height in logical pixels.
@@ -43,14 +43,33 @@ impl Snapshot {
     /// Start `app` at `size` with the Bingux font registered when the
     /// system has it (`fc-match "Adwaita Sans"`).
     pub fn new(app: impl Fn() -> Element + 'static, size: SnapshotSize) -> Self {
-        let scale = scale_factor();
+        Self::with_scale(app, size, scale_factor())
+    }
+
+    /// [`Snapshot::new`] at the display scale `scale` instead of the
+    /// environment's, for a test of how a control holds at a fractional one.
+    /// The pointer methods take the runner's own units, which are physical
+    /// pixels at this scale; the layout and the PNG are in physical pixels
+    /// too.
+    pub fn with_scale(
+        app: impl Fn() -> Element + 'static,
+        size: SnapshotSize,
+        scale: f64,
+    ) -> Self {
         // Mount the same root integration the windowed app gets, so Tab and
         // arrow keys move accessibility focus exactly as they do on screen.
-        let app = std::rc::Rc::new(app);
+        let app: std::rc::Rc<dyn Fn() -> Element> = std::rc::Rc::new(app);
+        // The harness is a window like any other: panic hook installed, and the
+        // app inside the same last-resort error boundary `Application::run`
+        // gives it, so a failing specimen shows an error card and the test goes on.
+        crate::resilience::install();
         let (mut runner, ()) = TestingRunner::new(
             move || {
                 let app = app.clone();
-                integration((move || app()).into()).into_element()
+                integration(
+                    (move || crate::resilience::window_boundary("The app", app.clone())).into(),
+                )
+                .into_element()
             },
             Size2D::new(size.0 * scale as f32, size.1 * scale as f32),
             |_| {},
@@ -299,18 +318,19 @@ impl Snapshot {
         self
     }
 
-    /// Move the window to `address`, as the app does when it navigates. The
-    /// page or popup that address names replaces the current one.
-    pub fn navigate(&mut self, address: Address) -> &mut Self {
-        self.mark(&format!("address {}", address.segments().join("/")));
-        self.runner.run_in(move || crate::app::navigate(address));
+    /// Open `location` in the window, as a deep link does: the stack is the
+    /// location's ancestors, so Back works from it.
+    pub fn navigate(&mut self, location: Location) -> &mut Self {
+        self.mark(&format!("address {}", location.path_text()));
+        self.runner
+            .run_in(move || crate::nav::router().navigate_to(&location));
         self.runner.sync_and_update();
         self.capture_frame();
         self
     }
 
     /// Run a script of commands separated by `;` or new lines. `scheme` is the
-    /// address scheme that `address` commands are read in. Commands:
+    /// scheme that `address` commands are read in. Commands:
     ///
     /// - `click x,y`, `right_click x,y`, `hover x,y`
     /// - `touch x,y`, `long_press x,y`: one finger, tapped or rested past the threshold
@@ -318,7 +338,8 @@ impl Snapshot {
     /// - `scroll x,y,dy`, `drag x1,y1,x2,y2`, `down x,y`/`move x,y`/`up x,y`
     /// - `key escape|return|tab|space|left|right|up|down|CHARACTER`, with `shift+`, `ctrl+` or `alt+` in front
     /// - `click-text TEXT`: click the label with that text
-    /// - `address ADDRESS`: navigate, e.g. `address wifi/saved`
+    /// - `address LOCATION`: open a location (a URI or a bare path of `scheme`),
+    ///   e.g. `address network/wifi/saved`
     /// - `wait MS`: let the app run for that long, recording frames
     /// - `mark TEXT`: a note in the frame manifest
     /// - `save PATH`: write a PNG of the current frame
@@ -432,9 +453,9 @@ impl Snapshot {
                     }
                 }
                 "address" => {
-                    let address = Address::parse_in(scheme, rest)
-                        .ok_or_else(|| format!("not an address: {rest}"))?;
-                    self.navigate(address);
+                    let location = Location::parse_in(scheme, rest)
+                        .ok_or_else(|| format!("not a location: {rest}"))?;
+                    self.navigate(location);
                 }
                 "wait" => {
                     let ms: u64 = rest
@@ -460,13 +481,89 @@ impl Snapshot {
         Ok(())
     }
 
+    /// Every focus ring of the current frame with the face it belongs to,
+    /// for [`crate::focus::ring_check`].
+    pub fn focus_rings(&mut self) -> Vec<crate::focus::ring_check::RingProbe> {
+        let snapshot =
+            crate::inspector::snapshot::Snapshot::capture_headless(&self.runner, scale_factor() as f32);
+        crate::focus::ring_check::probes(&snapshot)
+            .into_iter()
+            .map(|(_, probe)| probe)
+            .collect()
+    }
+
+    /// The rings of the current frame that are not around their face's
+    /// painted box. Empty when every ring is where it should be.
+    pub fn ring_mismatches(&mut self) -> Vec<crate::focus::ring_check::Mismatch> {
+        crate::focus::ring_check::check(&self.focus_rings())
+    }
+
+    /// With `BINGUX_UI_RING_CHECK=FILE` set, appends one JSON line to FILE for
+    /// each capture: the PNG's path, how many rings the frame has and the ones
+    /// that are not around their face. `scripts/focus-ring-check.py` reads it.
+    fn lint_rings(&mut self, shot: &Path) {
+        let Some(file) = std::env::var_os("BINGUX_UI_RING_CHECK") else {
+            return;
+        };
+        let probes = self.focus_rings();
+        let mismatches: Vec<_> = crate::focus::ring_check::check(&probes)
+            .iter()
+            .map(|found| {
+                serde_json::json!({
+                    "label": found.label,
+                    "what": found.what,
+                    "expected": found.expected,
+                    "found": found.found,
+                })
+            })
+            .collect();
+        let line = serde_json::json!({
+            "capture": shot.to_string_lossy(),
+            "rings": probes.len(),
+            "mismatches": mismatches,
+        });
+        use std::io::Write;
+        if let Ok(mut out) = fs::OpenOptions::new().create(true).append(true).open(file) {
+            let _ = writeln!(out, "{line}");
+        }
+    }
+
     /// Write a PNG of the current frame.
     pub fn save(&mut self, path: impl AsRef<Path>) -> &mut Self {
         if let Some(parent) = path.as_ref().parent() {
             let _ = fs::create_dir_all(parent);
         }
         self.runner.render_to_file(path.as_ref().to_path_buf());
+        self.lint_layout(path.as_ref());
+        self.lint_rings(path.as_ref());
         self
+    }
+
+    /// The layout findings of the current frame: what the inspector's Layout
+    /// tab would list for this window.
+    pub fn layout_findings(&mut self) -> Vec<crate::inspector::layout_checks::Finding> {
+        let snapshot =
+            crate::inspector::snapshot::Snapshot::capture_headless(&self.runner, scale_factor() as f32);
+        crate::inspector::layout_checks::check(&snapshot)
+    }
+
+    /// With `BINGUX_UI_LAYOUT_LINT=FILE` set, appends one JSON line to FILE
+    /// for each capture: the PNG's path and the layout findings of the frame
+    /// it shows. `scripts/layout-lint.py` reads it.
+    fn lint_layout(&mut self, shot: &Path) {
+        let Some(file) = std::env::var_os("BINGUX_UI_LAYOUT_LINT") else {
+            return;
+        };
+        let findings: Vec<_> = self
+            .layout_findings()
+            .iter()
+            .map(|finding| finding.json())
+            .collect();
+        let line = serde_json::json!({ "capture": shot.to_string_lossy(), "findings": findings });
+        use std::io::Write;
+        if let Ok(mut out) = fs::OpenOptions::new().create(true).append(true).open(file) {
+            let _ = writeln!(out, "{line}");
+        }
     }
 
     pub fn runner(&mut self) -> &mut TestingRunner {

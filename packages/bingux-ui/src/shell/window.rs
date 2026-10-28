@@ -36,6 +36,7 @@ pub struct HeaderBar {
     background: Paint,
     title_slot: Option<Element>,
     busy: bool,
+    draggable: bool,
 }
 
 impl HeaderBar {
@@ -47,6 +48,7 @@ impl HeaderBar {
             background: Paint::Surface,
             title_slot: None,
             busy: false,
+            draggable: true,
         }
     }
 
@@ -77,11 +79,20 @@ impl HeaderBar {
         self.title_slot = Some(element.into());
         self
     }
+
+    /// Whether pressing the bar drags the window (on by default). A bar inside
+    /// a dialog or a sheet is not a window title bar, so it turns this off.
+    pub fn draggable(mut self, draggable: bool) -> Self {
+        self.draggable = draggable;
+        self
+    }
 }
 
 impl Component for HeaderBar {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        // Icon buttons below take the header button size (`HEADER_BUTTON`).
+        use_provide_context(|| crate::controls::button::InHeader);
         // The title is laid out on the whole bar, so its centre is the bar's
         // centre whatever the controls weigh. Its side insets are the wider of
         // the two control clusters, so it never runs under a control.
@@ -131,6 +142,8 @@ impl Component for HeaderBar {
                 trailing_width.set_if_modified(event.area.width());
             })
             .children(self.trailing.clone());
+        let inert = try_consume_context::<InertControls>().is_some();
+        let draggable = self.draggable;
         rect()
             .component("HeaderBar")
             .tw(&tokens, HEADER)
@@ -141,7 +154,11 @@ impl Component for HeaderBar {
                     bg(self.background),
                 ],
             )
-            .on_pointer_down(drag_on_pointer_down)
+            .on_pointer_down(move |event: Event<PointerEventData>| {
+                if !inert && draggable {
+                    drag_on_pointer_down(event);
+                }
+            })
             .child(title)
             .child(leading)
             .child(rect().tw(&tokens, &[w_flex()]))
@@ -153,6 +170,13 @@ impl Component for HeaderBar {
 fn busy_indicator() -> Element {
     hover_tip(spinner(SpinnerSize::Small), "Working")
 }
+
+/// Provide this below a window that is only a picture of a window (the
+/// taxonomy's specimens, a documentation page): its [`WindowControls`] draw,
+/// hover and focus as usual, and do nothing when pressed, so a demonstration
+/// cannot minimise or close the app it is shown in.
+#[derive(Clone, Copy, PartialEq)]
+pub struct InertControls;
 
 /// Minimise, maximise/restore and close, drawn as 24 px circles.
 #[derive(PartialEq)]
@@ -211,6 +235,7 @@ impl Component for WindowControl {
         let focus = use_focus(a11y_id);
         let mut hovering = use_state(|| false);
         let action = self.action;
+        let inert = try_consume_context::<InertControls>().is_some();
         let fill = match (hovering(), self.danger) {
             (false, _) => Paint::Transparent,
             (true, true) => Paint::Danger,
@@ -238,17 +263,25 @@ impl Component for WindowControl {
             .on_key_down(move |event: Event<KeyboardEventData>| {
                 if is_activation_key(&event.key) {
                     event.stop_propagation();
-                    run_window_action(action);
+                    if !inert {
+                        run_window_action(action);
+                    }
                 }
             })
             .on_press(move |event: Event<PressEventData>| {
                 event.stop_propagation();
-                run_window_action(action);
+                if !inert {
+                    run_window_action(action);
+                }
             })
             .child(icons::icon(
                 self.icon,
                 IconSize::Control,
-                Paint::Text.color(&tokens),
+                if self.danger && hovering() {
+                    Paint::OnDanger.color(&tokens)
+                } else {
+                    Paint::Text.color(&tokens)
+                },
             ))
             .focusable(focus(), Radius::Pill)
     }

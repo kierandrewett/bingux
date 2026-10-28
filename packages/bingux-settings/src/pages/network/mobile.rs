@@ -30,7 +30,7 @@ use freya::prelude::*;
 use super::model::{self, CONNECT, NetCtx, Overview, QUICK, nmcli, use_net_ctx};
 use super::usage::{UsagePage, UsageScope, scope_usage_row};
 use crate::pages::loading::veiled;
-use crate::routes::Route;
+use crate::routes;
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
     Group, PageHead, Status, choice_row, page_column, property_row, row, status, switch,
@@ -271,7 +271,7 @@ pub fn mobile_row(ctx: NetCtx, ov: &Overview, airplane: bool) -> Option<Element>
                 switch(on, move |next: bool| set_mobile_data(ctx, &toggle, next)).enabled(usable),
             )
             .navigates()
-            .on_press(move |_| ctx.navigator.push(Route::Mobile)),
+            .on_press(move |_| ctx.router.open(routes::mobile())),
     ))
 }
 
@@ -423,9 +423,8 @@ fn read_mobile(ctx: NetCtx, modem_state: ModemState) -> Result<(Modem, Link, boo
 fn advanced_row(ctx: NetCtx) -> Group {
     Group::new(None::<String>).row(
         row("Advanced")
-            .subtitle("Network, access points, SIM and modem")
             .navigates()
-            .on_press(move |_| ctx.navigator.push(Route::MobileAdvanced)),
+            .on_press(move |_| ctx.router.open(routes::mobile_advanced())),
     )
 }
 
@@ -537,7 +536,6 @@ fn data_group(
     let usable = can_switch(Some(modem), link);
     let toggle = link.clone();
     let data = row("Mobile data")
-        .subtitle("Use the mobile network for internet access.")
         .trailing(
             switch(link.data_on() && usable, move |next: bool| {
                 set_mobile_data(ctx, &toggle, next)
@@ -549,11 +547,6 @@ fn data_group(
         .unwrap_or_else(|| list.iter().all(|profile| !profile.home_only));
     let can_roam = usable && !list.is_empty() && !link.airplane;
     let roaming = row("Data roaming")
-        .subtitle(if list.is_empty() {
-            "Add an access point to change this."
-        } else {
-            "Use mobile data on other carriers' networks. This can cost extra."
-        })
         .trailing({
             let list = list.to_vec();
             switch(allowed, move |next: bool| {
@@ -647,14 +640,14 @@ fn network_group(
             row("Network")
                 .value(carrier_value)
                 .navigates()
-                .on_press(move |_| ctx.navigator.push(Route::MobileNetwork)),
+                .on_press(move |_| ctx.router.open(routes::mobile_network())),
         )
         .row(preferred)
         .row(
             row("Access point names")
                 .value(apn_value)
                 .navigates()
-                .on_press(move |_| ctx.navigator.push(Route::MobileApns)),
+                .on_press(move |_| ctx.router.open(routes::mobile_apns())),
         )
 }
 
@@ -675,7 +668,6 @@ fn sim_group(ctx: NetCtx, modem_state: ModemState, modem: &Modem) -> Group {
     let lock = sim_id.clone();
     group = group.row(
         row("Lock SIM with PIN")
-            .subtitle("Ask for the PIN each time the phone starts.")
             .trailing(switch(modem.pin_lock, move |on: bool| {
                 let task = if on {
                     PinTask::Enable
@@ -752,7 +744,7 @@ fn usage_group(ctx: NetCtx, link: &Link, modem: &Modem) -> Group {
     Group::new(None::<String>).row(scope_usage_row(
         ctx,
         usage_scope(link, modem),
-        Route::MobileUsage,
+        routes::mobile_usage(),
     ))
 }
 

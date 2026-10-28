@@ -1,0 +1,53 @@
+[package]
+name = "bingux-files-app"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "Files, the file manager of the Bingux desktop shell"
+
+# The package is `bingux-files-app` because `bingux-files` is the filesystem
+# model it and the file chooser share. The program and its desktop id are
+# `bingux-files`.
+[[bin]]
+name = "bingux-files"
+path = "src/main.rs"
+
+[dependencies]
+freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar"] }
+bingux-ui = { path = "../bingux-ui" }
+bingux-files = { path = "../bingux-files" }
+libc = "0.2"
+
+# Desktop scroll feel; see ../vendor/README.md.
+[patch.crates-io]
+freya-winit = { path = "../vendor/freya-winit" }
+freya-core = { path = "../vendor/freya-core" }
+freya-animation = { path = "../vendor/freya-animation" }
+freya-components = { path = "../vendor/freya-components" }
+
+# A debug build runs Freya's layout, Skia glue and the UI controls unoptimised,
+# which makes scrolling visibly slow. Optimise every dependency and bingux-ui;
+# the app itself stays at opt-level 0 so a rebuild after an edit stays quick.
+# Debug assertions are off for them too: freya-core's `debug-integrity` walk of
+# the node trees runs after every update when they are on.
+[profile.dev.package."*"]
+opt-level = 2
+debug-assertions = false
+overflow-checks = false
+
+[profile.dev.package.bingux-ui]
+opt-level = 2
+debug-assertions = false
+overflow-checks = false
+
+# Panics unwind, in dev and in release. The error boundaries and guards in the
+# vendored freya-core catch a panic with `catch_unwind`, which does nothing under
+# `panic = "abort"`: one failed component would end the process again. Both are
+# Cargo's defaults, spelled out so nobody changes one for size.
+# `scripts/ui-lint.py` fails when a Bingux app sets "abort".
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+panic = "unwind"

@@ -90,6 +90,49 @@ pub const ROW_TALL: Recipe = &[
     py(S3),
     gap(S3),
 ];
+/// A one-line row split into a body and a chevron zone: the zone reaches the
+/// card edge and the full height, so the row has no padding of its own.
+pub const ROW_SPLIT: Recipe = &[
+    flex_row(),
+    grow_children(),
+    items(Align::Center),
+    w_full(),
+    h(Dim::Row),
+];
+/// [`ROW_SPLIT`] for a row whose text has two or more lines.
+pub const ROW_TALL_SPLIT: Recipe = &[
+    flex_row(),
+    grow_children(),
+    items(Align::Center),
+    w_full(),
+    h_auto(),
+    min_h(Dim::Row),
+];
+/// The body of a split row: what [`ROW`] holds, less the chevron, ending one
+/// gap before the divider.
+pub const ROW_SPLIT_BODY: Recipe = &[
+    flex_row(),
+    grow_children(),
+    items(Align::Center),
+    w_full(),
+    pl(GUTTER),
+    pr(S3),
+    gap(S3),
+];
+/// [`ROW_SPLIT_BODY`] of a tall row, 12 px above and below the text.
+pub const ROW_TALL_SPLIT_BODY: Recipe = &[
+    flex_row(),
+    grow_children(),
+    items(Align::Center),
+    w_full(),
+    pl(GUTTER),
+    pr(S3),
+    py(S3),
+    gap(S3),
+];
+/// The chevron zone of a split row: one gap either side of the chevron, and
+/// at least a control wide so a thumb can land on it.
+pub const ROW_CHEVRON_ZONE: Recipe = &[flex_row(), center(), px(S3), min_w(Dim::Control)];
 /// A row whose content stacks: a title line over a full-width control such
 /// as a slider.
 pub const ROW_STACKED: Recipe = &[flex_col(), w_full(), px(GUTTER), py(S3), gap(S2)];
@@ -128,7 +171,7 @@ pub const BUTTON_COMPACT: Recipe = &[
     rounded(Radius::Control),
 ];
 /// An icon-only button.
-pub const ICON_BUTTON: Recipe = &[center(), w(Dim::Box7), h(Dim::Box7), rounded(Radius::Control)];
+pub const ICON_BUTTON: Recipe = &[center(), w(Dim::Control), h(Dim::Control), rounded(Radius::Control)];
 /// A small rounded count or tag after a title.
 pub const BADGE_BOX: Recipe = &[
     flex_row(),

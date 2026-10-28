@@ -17,6 +17,7 @@ pub fn place_icon(kind: PlaceKind) -> Icon {
         PlaceKind::Music => Icon::FolderMusic,
         PlaceKind::Pictures => Icon::FolderPictures,
         PlaceKind::Videos => Icon::FolderVideos,
+        PlaceKind::Trash => Icon::UserTrash,
         PlaceKind::Computer => Icon::DriveHarddisk,
         PlaceKind::Volume => Icon::MediaRemovable,
         PlaceKind::Bookmark => Icon::Bookmarks,

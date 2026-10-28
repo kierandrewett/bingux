@@ -111,6 +111,7 @@ impl Component for Segmented {
 impl Component for SegmentRail {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let fitted = crate::rows::use_row_fitted();
         let enabled = use_enabled(true);
         let options = self.options.clone();
         let selected = self.selected.clone();
@@ -134,12 +135,12 @@ impl Component for SegmentRail {
                 .tw(
                     &tokens,
                     &[
-                        h(Dim::Control),
+                        h(if fitted { Dim::RowButton } else { Dim::Control }),
                         flex_row(),
                         items(Align::Center),
                         p(S1),
                         gap(S1),
-                        rounded(Radius::Control),
+                        rounded(if fitted { Radius::Inner } else { Radius::Control }),
                         bg(Paint::Control),
                     ],
                 )
@@ -207,6 +208,10 @@ struct Segment {
 impl Component for Segment {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        // Inside a rail that fills a row, the rail's radius less its padding.
+        let fitted = crate::rows::use_row_fitted();
+        // The face and its ring share one radius, so the ring follows the fill.
+        let radius = if fitted { Radius::Mark } else { Radius::Inner };
         let mut hovering = use_state(|| false);
         let a11y_id = self.a11y_id;
         let focus = use_focus(a11y_id);
@@ -227,7 +232,7 @@ impl Component for Segment {
                     h_full(),
                     px(S2),
                     center(),
-                    rounded(Radius::Inner),
+                    rounded(radius),
                     bg(if self.selected {
                         Paint::Raised
                     } else {
@@ -270,7 +275,7 @@ impl Component for Segment {
                 .label(&tokens, self.text.clone())
                 .max_lines(1),
             )
-            .focusable(focus(), Radius::Inner)
+            .focusable(focus(), radius)
             .maybe(self.fill, |wrapper| wrapper.tw(&tokens, &[w_flex()]))
             .tw(&tokens, &[h_full()])
     }

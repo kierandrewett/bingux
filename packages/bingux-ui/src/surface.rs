@@ -35,6 +35,17 @@ pub fn use_tokens() -> Tokens {
     *use_consume::<SharedTokens>().0.read()
 }
 
+/// The live palette, as [`use_tokens`] gives it, but not a hook: it may be
+/// called conditionally, from a helper that only some renders reach, without
+/// changing the number of hooks the component runs. Use it only where a hook
+/// is not allowed; everywhere else `use_tokens` is the call.
+pub fn tokens_now() -> Tokens {
+    *try_consume_context::<SharedTokens>()
+        .expect("the window root provides the tokens")
+        .0
+        .read()
+}
+
 /// Source-over composition: `top` drawn over `bottom`, both possibly
 /// translucent. The result keeps the combined alpha, so layers stack the
 /// way they do on screen.

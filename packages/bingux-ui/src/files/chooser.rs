@@ -27,8 +27,9 @@ use freya::prelude::*;
 
 use super::actions::{Capabilities, open_default};
 use super::address_bar::AddressBar;
-use super::browser::{Browse, Trail};
+use super::browser::Browse;
 use super::directory::{Load, Reload, Where, home_folder, use_directory};
+use super::folder_table::{folder_table, location_of, place_of};
 use super::places_view::{PlacesMenu, PlacesSidebar};
 use super::search::{Deep, DeepResults, DeepStatus, Find, SearchLink, SearchView, step_selection, use_subfolder_search};
 use super::skeleton::skeleton;
@@ -41,8 +42,10 @@ use crate::controls::{SplitButton, checkbox, dropdown, icon_button, text_field};
 use crate::group::{Status, status};
 use crate::icons::Icon;
 use crate::layout::divider;
+use crate::nav::{NavModel, Outcome};
 use crate::shell::{
-    MenuItem, Overlays, ResponseKind, dialog, menu_item, menu_separator, use_overlays,
+    CANCEL_ID, MenuItem, Overlays, ResponseKind, dialog, history_menu, menu_item, menu_separator,
+    use_overlays,
 };
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -142,9 +145,10 @@ fn load_places(_: u32) -> Result<bingux_files::Places, String> {
 /// Moving between folders. All `State`s, so it is `Copy`.
 #[derive(Clone, Copy)]
 struct Nav {
-    location: State<Where>,
-    history: State<Vec<Where>>,
-    forward: State<Vec<Where>>,
+    /// The folder shown and the history around it: one place in a linear
+    /// stack on [`folder_table`], so Back, Forward and their menus are the
+    /// navigation system's.
+    model: State<NavModel>,
     selection: State<Selection>,
     editing: State<bool>,
     /// The search in the address bar; going anywhere ends it.
@@ -158,6 +162,17 @@ struct Nav {
 }
 
 impl Nav {
+    /// The place shown, without subscribing to it.
+    fn here(&self) -> Where {
+        place_of(self.model.peek().location())
+    }
+
+    /// The place shown; the caller re-renders when it changes.
+    fn current(&self) -> Where {
+        place_of(self.model.read().location())
+    }
+
+    /// Everything about a place that follows the person there.
     fn arrive(mut self, at: Where) {
         // The recent files read newest first; a folder reads by name.
         let recent = matches!(at, Where::Recent);
@@ -184,46 +199,51 @@ impl Nav {
                 });
             }
         }
-        self.location.set(at);
         self.selection.write().clear();
         self.editing.set(false);
         self.find.set(Find::default());
         self.problem.set(None);
     }
 
-    fn go(mut self, to: Where) {
-        let from = self.location.peek().clone();
-        if from == to {
-            return;
-        }
-        self.history.write().push(from);
-        self.forward.write().clear();
-        self.arrive(to);
-    }
-
-    fn back(mut self) {
-        let previous = self.history.write().pop();
-        if let Some(previous) = previous {
-            let from = self.location.peek().clone();
-            self.forward.write().push(from);
-            self.arrive(previous);
+    /// Run `op` on a copy of the history; when it moved, keep the copy and
+    /// arrive at the new place. A move to where the view already is changes
+    /// nothing, not even a re-render.
+    fn apply(mut self, op: impl FnOnce(&mut NavModel) -> Outcome) {
+        let mut model = self.model.peek().clone();
+        if let Outcome::Changed(change) = op(&mut model) {
+            self.model.set(model);
+            self.arrive(place_of(&change.to.location));
         }
     }
 
-    fn forward(mut self) {
-        let next = self.forward.write().pop();
-        if let Some(next) = next {
-            let from = self.location.peek().clone();
-            self.history.write().push(from);
-            self.arrive(next);
-        }
+    fn go(self, to: Where) {
+        let to = location_of(&to);
+        self.apply(move |model| model.navigate(&to));
+    }
+
+    fn back(self) {
+        self.apply(NavModel::back);
+    }
+
+    fn forward(self) {
+        self.apply(NavModel::forward);
+    }
+
+    /// A choice of the Back menu: that entry, however many levels back.
+    fn back_to(self, entry: u64) {
+        self.apply(move |model| model.pop_to(entry));
+    }
+
+    /// A choice of the Forward menu.
+    fn forward_to(self, entry: u64) {
+        self.apply(move |model| model.forward_to(entry));
     }
 
     /// Keep how this folder is sorted, so it opens that way next time. The
     /// recent files have no folder to remember it in. The icon size is the
     /// folder's own, kept by the view when the person zooms.
     fn remember_sort(self, sort: Sort) {
-        let Where::Folder(path) = self.location.peek().clone() else {
+        let Where::Folder(path) = self.here() else {
             return;
         };
         let icon_px = view_state::folder(&path).map_or(self.fallback, |view| view.icon_px);
@@ -239,7 +259,7 @@ impl Nav {
     /// Keep the icon size the toolbar chose for this folder. (The view keeps
     /// the ones the person zooms to.)
     fn remember_level(self, icon_px: u16) {
-        let Where::Folder(path) = self.location.peek().clone() else {
+        let Where::Folder(path) = self.here() else {
             return;
         };
         let sort = view_state::folder(&path).map_or(*self.sort.peek(), |view| view.sort.into());
@@ -253,7 +273,7 @@ impl Nav {
     }
 
     fn up(self) {
-        let here = self.location.peek().clone();
+        let here = self.here();
         if let Where::Folder(path) = here
             && let Some(parent) = path.parent()
         {
@@ -295,8 +315,8 @@ struct Session {
 impl Session {
     /// The folder shown, or home when the recent files are.
     fn folder(&self) -> PathBuf {
-        match &*self.nav.location.peek() {
-            Where::Folder(path) => path.clone(),
+        match self.nav.here() {
+            Where::Folder(path) => path,
             Where::Recent => self.home.clone(),
         }
     }
@@ -320,7 +340,7 @@ impl Session {
     /// A letter typed on the list, or Ctrl+F (`typed` empty): the address bar
     /// becomes a search of this folder.
     fn start_search(&self, typed: &str) {
-        if !matches!(&*self.nav.location.peek(), Where::Folder(_)) {
+        if !matches!(self.nav.here(), Where::Folder(_)) {
             return;
         }
         let mut find = self.find;
@@ -489,11 +509,14 @@ impl Session {
             _ => existing,
         };
         self.overlays
-            .show_dialog(dialog(title, body).cancel("Cancel").response(
-                "Replace",
-                ResponseKind::Destructive,
-                move |_: ()| session.finish(paths.clone()),
-            ));
+            .show_dialog(
+                dialog(title, body)
+                    .cancel("Cancel")
+                    .default_action(CANCEL_ID)
+                    .response("Replace", ResponseKind::Destructive, move |_: ()| {
+                        session.finish(paths.clone())
+                    }),
+            );
     }
 
     /// A row was opened by double click, tap or Enter.
@@ -546,7 +569,7 @@ impl Session {
         match self.request.action {
             Action::Open => !self.nav.selection.read().is_empty(),
             Action::SelectFolder | Action::SaveFiles => {
-                matches!(*self.nav.location.read(), Where::Folder(_))
+                matches!(self.nav.current(), Where::Folder(_))
             }
             Action::Save => !self.name.read().trim().is_empty(),
         }
@@ -599,32 +622,23 @@ impl Component for ChooserBody {
             move || Rc::new(request)
         });
 
-        let trail = use_hook({
+        let history = use_hook({
             let host = self.host.clone();
             let start = request.initial_folder(&home);
             move || match host {
-                Host::Browser(browse) => browse.memory.trail(),
-                Host::Dialog(_) => Trail::new(Where::Folder(start)),
+                Host::Browser(browse) => browse.memory.model(),
+                Host::Dialog(_) => {
+                    NavModel::new(Arc::new(folder_table()), &location_of(&Where::Folder(start)))
+                }
             }
         });
         // A folder the person has shown a way before opens that way again,
         // the first one too.
-        let remembered = match &trail.at {
-            Where::Folder(path) => view_state::folder(path),
+        let remembered = match place_of(history.location()) {
+            Where::Folder(path) => view_state::folder(&path),
             Where::Recent => None,
         };
-        let location = use_state({
-            let at = trail.at.clone();
-            move || at
-        });
-        let history = use_state({
-            let back = trail.back.clone();
-            move || back
-        });
-        let forward = use_state({
-            let ahead = trail.forward.clone();
-            move || ahead
-        });
+        let model = use_state(move || history);
         let selection = use_state(Selection::new);
         let sort = use_state(move || remembered.map_or_else(Sort::default, |view| view.sort.into()));
         let mut show_hidden = use_state(|| false);
@@ -654,7 +668,7 @@ impl Component for ChooserBody {
         let problem = use_state(|| None::<String>);
         let places_rev = use_state(|| 0_u32);
         let places = use_resource(*places_rev.read(), load_places).with(Clone::clone);
-        let current = location.read().clone();
+        let current = place_of(model.read().location());
         let (load, reload) = use_directory(&current);
         // The subfolder search: running exactly while a search of the
         // subfolders is on show for the folder on show.
@@ -680,9 +694,7 @@ impl Component for ChooserBody {
         );
 
         let nav = Nav {
-            location,
-            history,
-            forward,
+            model,
             selection,
             editing,
             find,
@@ -729,13 +741,9 @@ impl Component for ChooserBody {
         if let Host::Browser(browse) = &self.host {
             let browse = browse.clone();
             use_side_effect(move || {
-                let at = location.read().clone();
-                let trail = Trail {
-                    at: at.clone(),
-                    back: history.read().clone(),
-                    forward: forward.read().clone(),
-                };
-                browse.memory.set(trail);
+                let model = model.read().clone();
+                let at = place_of(model.location());
+                browse.memory.set(model);
                 browse.on_location.call(at);
             });
         }
@@ -802,7 +810,6 @@ impl Component for ChooserBody {
         let order = shown
             .as_ref()
             .map_or_else(|| Arc::new(Vec::new()), |shown| shown.order.clone());
-        let filtered_out = shown.as_ref().map_or(0, |shown| shown.hidden_by_filter);
         let current_load = match (&*load.read(), &shown) {
             (Load::Ready(_), Some(shown)) => Load::Ready(shown.listing.clone()),
             (Load::Ready(_), None) => Load::Loading,
@@ -955,7 +962,7 @@ impl Component for ChooserBody {
                     }
                     Key::Character(text) if ctrl && text.eq_ignore_ascii_case("l") => {
                         event.stop_propagation();
-                        draft.set(AddressBar::text_of(&session.nav.location.peek()));
+                        draft.set(AddressBar::text_of(&session.nav.here()));
                         editing.set(true);
                     }
                     Key::Character(text) if ctrl && text.eq_ignore_ascii_case("h") => {
@@ -998,7 +1005,6 @@ impl Component for ChooserBody {
             ),
             use_grid,
             folder_mode,
-            filtered_out,
             active_filter.is_some(),
             search_view.clone(),
         );
@@ -1052,7 +1058,7 @@ impl Component for ChooserBody {
                                         match &self.host {
                                             Host::Browser(browse) => {
                                                 let on_new_tab = browse.on_new_tab.clone();
-                                                sidebar.on_open_new_window(move |to: Where| {
+                                                sidebar.on_open_new_tab(move |to: Where| {
                                                     if let Where::Folder(path) = to {
                                                         on_new_tab.call(path);
                                                     }
@@ -1109,7 +1115,6 @@ fn main_area(
     bookmarks: Arc<Vec<PathBuf>>,
     use_grid: bool,
     folder_mode: bool,
-    filtered_out: usize,
     filtered: bool,
     search: Option<SearchView>,
 ) -> Element {
@@ -1156,7 +1161,6 @@ fn main_area(
                     move |typed: String| session.start_search(&typed)
                 })
                 .show_hidden(shown_hidden)
-                .filtered_out(filtered_out)
                 .thumbnails(listing.mount.thumbnails())
                 .new_folder(new_folder)
                 .focus(focus)
@@ -1185,7 +1189,8 @@ fn main_area(
             if let Host::Browser(browse) = &session.host {
                 view = view
                     .caps(Capabilities::FILES_APP)
-                    .on_open_new_window(browse.on_new_tab.clone());
+                    .on_open_new_tab(browse.on_new_tab.clone())
+                    .remember_for(browse.memory.id());
             }
             if let Some(placeholder) = placeholder {
                 view = view.placeholder(placeholder);
@@ -1218,9 +1223,16 @@ fn toolbar(
 ) -> Element {
     let nav = session.nav;
     let mut places_rev = session.places_rev;
-    let current = nav.location.read().clone();
-    let can_go_back = !nav.history.read().is_empty();
-    let can_go_forward = !nav.forward.read().is_empty();
+    let current = nav.current();
+    let (can_go_back, can_go_forward, back_items, forward_items) = {
+        let model = nav.model.read();
+        (
+            model.can_go_back(),
+            model.can_forward(),
+            history_menu(model.back_menu(), move |entry| nav.back_to(entry)),
+            history_menu(model.forward_menu(), move |entry| nav.forward_to(entry)),
+        )
+    };
     let path_bar = AddressBar::new(
         current.clone(),
         session.home.clone(),
@@ -1245,14 +1257,17 @@ fn toolbar(
         focus.set(next);
     });
 
+    // A right click or a hold lists the places the button would take.
     let back = icon_button(Icon::GoPrevious, move |_: ()| nav.back())
         .size(Dim::Control)
         .tooltip("Back")
-        .enabled(can_go_back);
+        .enabled(can_go_back)
+        .context_menu(back_items);
     let forward = icon_button(Icon::GoNext, move |_: ()| nav.forward())
         .size(Dim::Control)
         .tooltip("Forward")
-        .enabled(can_go_forward);
+        .enabled(can_go_forward)
+        .context_menu(forward_items);
     let has_parent = matches!(&current, Where::Folder(path) if path.parent().is_some());
     let parent = icon_button(Icon::GoUp, move |_: ()| nav.up())
         .size(Dim::Control)

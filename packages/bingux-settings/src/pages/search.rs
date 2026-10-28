@@ -15,7 +15,7 @@ use crate::system::{
     self, CommandError, CommandResult, background, background_then, optimistic_then,
 };
 use crate::ui::{
-    Group, Overlays, PageHead, PopupAction, PopupActions, ResponseKind, Row, Status, Window,
+    CANCEL_ID, Group, Overlays, PageHead, PopupAction, PopupActions, ResponseKind, Row, Status, Window,
     caption, choice_row, dialog, form_row, icon_button, page_column, popup, popup_column,
     primary_button, row, slider_row, status, switch, switch_row, text_field,
     use_overlays, use_popup_actions, use_tokens, use_window,
@@ -809,6 +809,7 @@ fn confirm_remove(ctx: Ctx, name: &str, default: &str, without: &[Engine]) {
             "Its shortcut stops working. You can add the engine again later.",
         )
         .cancel("Cancel")
+        .default_action(CANCEL_ID)
         .response("Remove", ResponseKind::Destructive, move |_| {
             write_engines(ctx, &default, without.clone())
         }),
@@ -1001,14 +1002,12 @@ impl Component for EngineBody {
         let hint = problems.shortcut.or(problems.url).unwrap_or(
             "Type the shortcut in search to use this engine. Put {query} in the address where the search words go.",
         );
-        popup_column().child(fields).child(caption(hint))
+        popup_column().child(fields.footer(hint))
     }
 }
 
 fn files_group(data: &Model, ctx: Ctx) -> Group {
-    let mut group = Group::titled("File search").description(
-        "Files in these folders appear in search results. With none listed, the home folders are searched.",
-    );
+    let mut group = Group::titled("File search");
     if let Some(recursive) = &data.recursive_search {
         let options = RECURSIVE_SEARCH_OPTIONS
             .iter()
@@ -1066,6 +1065,7 @@ fn confirm_remove_folder(ctx: Ctx, folder: String, remaining: Vec<String>) {
             "Files in this folder no longer appear in search results.",
         )
         .cancel("Cancel")
+        .default_action(CANCEL_ID)
         .response("Remove", ResponseKind::Destructive, move |_| {
             let args = if remaining.is_empty() {
                 vec!["unset".into(), "search.file_roots".into()]
@@ -1237,9 +1237,6 @@ fn assistant_group(data: &Model, ctx: Ctx) -> Group {
         ("claude".to_string(), "Claude".to_string()),
     ];
     let mut group = Group::titled("Assistant")
-        .description(
-            "Choose the program Bingux asks. Leave Model empty to use the program's own choice.",
-        )
         .row(choice_row(
             "Assistant program",
             options,

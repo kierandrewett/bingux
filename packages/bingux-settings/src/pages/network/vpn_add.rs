@@ -11,6 +11,7 @@
 use std::path::Path;
 
 use freya::prelude::*;
+use bingux_ui::style::S10;
 
 use super::model::{self, NetCtx};
 use super::vpn::data::PluginProfile;
@@ -22,7 +23,7 @@ use super::vpn_tunnel::{
 };
 use crate::icons::Icon;
 use crate::pages::loading::veiled;
-use crate::routes::Route;
+use crate::routes;
 use crate::system;
 use crate::ui::files::{ChooserRequest, Filter, choose};
 use crate::ui::{
@@ -99,7 +100,7 @@ fn create_then_open(
                 Ok((name, overview)) => {
                     let mut shown = ctx.overview;
                     shown.set(Some(overview));
-                    ctx.navigator.push(Route::Vpn { name });
+                    ctx.router.open(routes::vpn(&name));
                 }
                 Err(message) => error.set(Some(message)),
             }
@@ -144,22 +145,6 @@ impl Component for AddVpnPage {
     }
 }
 
-/// What a plugin does, in a line.
-fn blurb(plugin: &Plugin) -> String {
-    let what = match plugin.short.as_str() {
-        "openvpn" => "Connect with a password, certificates or both.".to_string(),
-        "openconnect" => "Cisco AnyConnect, GlobalProtect and similar servers.".to_string(),
-        "vpnc" => "Cisco IPsec servers.".to_string(),
-        "ssh" => "Tunnel through an SSH server.".to_string(),
-        _ => format!("Provided by the {} plugin.", plugin.name),
-    };
-    if plugin.supports_multiple {
-        what
-    } else {
-        format!("{what} Only one can be connected at a time.")
-    }
-}
-
 /// The types of VPN to choose from, and importing a file.
 #[derive(PartialEq)]
 struct Chooser;
@@ -174,16 +159,13 @@ impl Component for Chooser {
         let open = move |kind: &str| {
             let kind = kind.to_string();
             move |_: ()| {
-                ctx.navigator.push(Route::AddVpn {
-                    kind: Some(kind.clone()),
-                })
+                ctx.router.open(routes::add_vpn(Some(&kind.clone())))
             }
         };
 
         let mut types = Group::titled("Type").row(
             row("WireGuard")
                 .leading(Icon::NetworkVpn)
-                .subtitle("Built in. A fast, modern VPN that needs only keys and addresses.")
                 .navigates()
                 .on_press(open("wireguard")),
         );
@@ -191,20 +173,13 @@ impl Component for Chooser {
             types = types.row(
                 row(plugin.name.clone())
                     .leading(Icon::NetworkVpn)
-                    .subtitle(blurb(plugin))
                     .navigates()
                     .on_press(open(&plugin.short)),
-            );
-        }
-        if !loading && installed.is_empty() {
-            types = types.description(
-                "No VPN plugin is installed, so only WireGuard is offered. Install a plugin such as NetworkManager-openvpn for more.",
             );
         }
         let import = Group::titled("From a file").row(
             row("Import from file...")
                 .leading(Icon::DocumentOpen)
-                .subtitle("A WireGuard .conf, an OpenVPN .ovpn, or another VPN's own file.")
                 .navigates()
                 .on_press(open("import")),
         );
@@ -231,7 +206,7 @@ impl Component for WireguardForm {
         let keepalive = use_state(|| "25".to_string());
         let busy = use_state(|| false);
         let error = use_state(|| None::<String>);
-        let has_wg = wireguard::has_wg();
+        let has_wg = wireguard::use_has_wg();
 
         let read = move || {
             let keepalive_text = keepalive.read().trim().to_string();
@@ -327,9 +302,6 @@ impl Component for WireguardForm {
                     .validate(check::dns_list),
             );
         let peer = Group::titled("Peer")
-            .description(
-                "The server or computer this tunnel connects to. You can add more peers later.",
-            )
             .row(
                 form_field("Public key", public_key)
                     .monospace()
@@ -359,10 +331,6 @@ impl Component for WireguardForm {
                     .validate(check::keepalive),
             );
         let mut traffic = Group::titled("Traffic")
-            .description(
-                "Route all traffic sends everything you do online through this peer. \
-                 Otherwise only the addresses you list go through it.",
-            )
             .row(switch_row("Route all traffic", all, move |on: bool| {
                 let mut allowed = allowed;
                 allowed.set(if on {
@@ -394,12 +362,13 @@ impl Component for WireguardForm {
             .child(interface)
             .child(peer)
             .child(traffic)
-            .maybe_child(
+            .child(bingux_ui::motion::reveal_block_if(
+                S10,
                 error
                     .read()
                     .clone()
-                    .map(|message| status(Status::Error(message))),
-            )
+                    .map(|message| Element::from(status(Status::Error(message)))),
+            ))
             .child(submit_row(
                 "Add VPN",
                 Some("It does not connect until you turn it on."),
@@ -543,7 +512,6 @@ impl Component for PluginAddForm {
             group = field_rows(group, fields, &states, &texts);
         } else {
             group = field_rows(group, fields, &states, &texts)
-                .description("This app has no form for this kind of VPN, so enter its settings as the plugin keeps them.")
                 .row(
                     form_field("Settings", raw)
                         .multiline(4)
@@ -564,12 +532,13 @@ impl Component for PluginAddForm {
                 ),
             )
             .child(group)
-            .maybe_child(
+            .child(bingux_ui::motion::reveal_block_if(
+                S10,
                 error
                     .read()
                     .clone()
-                    .map(|message| status(Status::Error(message))),
-            )
+                    .map(|message| Element::from(status(Status::Error(message)))),
+            ))
             .child(submit_row(
                 "Add VPN",
                 Some("It does not connect until you turn it on."),
@@ -652,7 +621,7 @@ fn stem_of(path: &str) -> String {
 /// Import the file at `path`, as VPN type `kind` or the one it looks like.
 /// Returns the new profile's name.
 fn import_file(path: &str, kind: &str, installed: &[Plugin]) -> Result<String, String> {
-    let text = std::fs::read_to_string(path)
+    let text = crate::system::read_to_string(path)
         .map_err(|error| format!("The file could not be read: {error}."))?;
     let head: String = text.lines().take(60).collect::<Vec<_>>().join("\n");
     let kind = if kind == "auto" {
@@ -812,12 +781,13 @@ impl Component for ImportForm {
 
         page_column()
             .child(file_group)
-            .maybe_child(
+            .child(bingux_ui::motion::reveal_block_if(
+                S10,
                 error
                     .read()
                     .clone()
-                    .map(|message| status(Status::Error(message))),
-            )
+                    .map(|message| Element::from(status(Status::Error(message)))),
+            ))
             .child(submit_row(
                 "Import",
                 Some(
@@ -901,19 +871,5 @@ mod tests {
     fn paths_must_be_absolute() {
         assert!(check_path("/home/k/a.ovpn").is_ok());
         assert!(check_path("a.ovpn").is_err());
-    }
-
-    #[test]
-    fn the_plugin_blurb_mentions_single_connection_plugins() {
-        let plugin = |short: &str, multiple: bool| Plugin {
-            short: short.into(),
-            service: String::new(),
-            name: plugins::display_name(short),
-            program: None,
-            supports_multiple: multiple,
-        };
-        assert_eq!(blurb(&plugin("ssh", true)), "Tunnel through an SSH server.");
-        assert!(blurb(&plugin("wibble", false)).ends_with("Only one can be connected at a time."));
-        assert!(blurb(&plugin("wibble", false)).starts_with("Provided by the Wibble plugin."));
     }
 }

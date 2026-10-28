@@ -2,7 +2,7 @@
 //! family of traits, the way `GtkWindow` and its dialogs share `GtkWindow`.
 //!
 //! - [`WindowLike`] is the base every window has: close, resize, title, size,
-//!   parent and address.
+//!   parent and location.
 //! - [`WindowParent`] adds [`open`](WindowParent::open): a popup can open
 //!   popups, and closing it closes them too.
 //! - [`Minimizable`] and [`Maximizable`] belong to the top-level window only,
@@ -35,7 +35,7 @@ mod popup;
 use freya::animation::*;
 use freya::prelude::*;
 
-use crate::address::Address;
+use crate::nav::Location;
 use crate::component::ComponentName;
 use crate::focus::provide_focus_core;
 use crate::shell::with_window;
@@ -63,6 +63,9 @@ pub(crate) struct WindowManager {
     /// being pulled. Both outlive the drag, so the inset can ease back out.
     sheet_pull: State<f32>,
     sheet_pulling: State<Option<u64>>,
+    /// Whether a pointer holds the sheet right now: the pull then follows
+    /// the pointer exactly instead of easing.
+    sheet_dragging: State<bool>,
 }
 
 impl WindowManager {
@@ -136,8 +139,8 @@ pub trait WindowLike: Copy {
     /// The window this one opened from. `None` for the main window.
     fn parent(self) -> Option<Window>;
 
-    /// The address the popup was opened with, if it has one.
-    fn address(self) -> Option<Address>;
+    /// The location the popup was opened with, if it has one.
+    fn location(self) -> Option<Location>;
 }
 
 /// A window that can open popups.
@@ -225,7 +228,7 @@ impl WindowLike for MainWindow {
         None
     }
 
-    fn address(self) -> Option<Address> {
+    fn location(self) -> Option<Location> {
         None
     }
 }
@@ -269,7 +272,8 @@ impl WindowLike for PopupWindow {
     fn resize_to(self, width: f32, height: f32) {
         if let Some(entry) = self.entry() {
             let mut size = entry.size;
-            size.set_if_modified(entry.clamp((width, height)));
+            let (width, height) = entry.clamp((width, height));
+            size.set_if_modified((width, Some(height)));
         }
     }
 
@@ -286,7 +290,7 @@ impl WindowLike for PopupWindow {
             .read()
             .iter()
             .find(|entry| entry.id == self.id)
-            .map_or((0.0, 0.0), |entry| *entry.size.read())
+            .map_or((0.0, 0.0), |entry| *entry.drawn.read())
     }
 
     fn is_popup(self) -> bool {
@@ -306,8 +310,8 @@ impl WindowLike for PopupWindow {
         })
     }
 
-    fn address(self) -> Option<Address> {
-        self.entry()?.address
+    fn location(self) -> Option<Location> {
+        self.entry()?.location
     }
 }
 
@@ -382,10 +386,10 @@ impl WindowLike for Window {
         }
     }
 
-    fn address(self) -> Option<Address> {
+    fn location(self) -> Option<Location> {
         match self {
-            Window::Main(window) => window.address(),
-            Window::Popup(window) => window.address(),
+            Window::Main(window) => window.location(),
+            Window::Popup(window) => window.location(),
         }
     }
 }
@@ -422,10 +426,13 @@ impl Component for WindowHost {
             next: State::create(0),
             sheet_pull: State::create(0.0),
             sheet_pulling: State::create(None),
+            sheet_dragging: State::create(false),
             scope,
         });
         use_provide_context(move || manager);
         use_provide_context(move || Window::Main(MainWindow { manager }));
+        // The window's tooltips share one clock: see `controls::tooltip`.
+        crate::controls::tooltip::provide_tooltips();
         // Tab, Shift+Tab and F6 move focus for every window and popup, so the
         // handler sits on the root. See `focus` for the region model.
         let focus = provide_focus_core();
@@ -478,7 +485,7 @@ impl Component for WindowHost {
         )
         .get()
         .value();
-        let eased_pull = use_sheet_pull(manager.sheet_pull, motion);
+        let eased_pull = use_sheet_pull(manager.sheet_pull, *manager.sheet_dragging.read(), motion);
         // The pulled popup keeps its pull while it closes, so the inset stays
         // at zero as it leaves and does not flash back.
         let pulling = *manager.sheet_pulling.read();
