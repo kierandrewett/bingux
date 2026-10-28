@@ -7,7 +7,7 @@
 //! that was started, not the folder of the one that is running.
 
 use std::ffi::OsString;
-use std::os::unix::ffi::OsStringExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -53,7 +53,7 @@ pub fn normalise(argument: &str) -> String {
     let mut location = Location::rooted(SCHEME);
     for part in absolute.components() {
         if let Component::Normal(name) = part {
-            location = location.join(name.to_string_lossy().into_owned());
+            location = location.join_bytes(name.as_bytes());
         }
     }
     location.with_query(LAUNCH, launch).to_string()
