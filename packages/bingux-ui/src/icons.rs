@@ -481,21 +481,59 @@ impl Icon {
     }
 }
 
+/// The image source of `icon`. Its id is the address of the embedded file, so
+/// building one hashes a pointer and not the SVG: a page draws hundreds.
+fn source(icon: Icon) -> ImageSource {
+    let bytes = icon.bytes();
+    ImageSource::from((bytes.as_ptr() as usize, bytes))
+}
+
+/// The viewer behind every icon.
+///
+/// Rendering an icon only looks its raster up in the asset cache (keyed by
+/// the icon, the size in device pixels and the colour): the first draw of a
+/// combination rasterises it on a worker, and until it lands the viewer is an
+/// empty box of the same size, so nothing moves. `render` never rasterises on
+/// the UI thread. The colour is set as both `fill` and `color` so the key does
+/// not change when the viewer learns its inherited text colour after the first
+/// draw, which would rasterise every icon twice.
+pub(crate) fn glyph(icon: Icon, edge: f32, color: Color) -> SvgViewer {
+    off_thread(
+        SvgViewer::new(source(icon))
+            .width(Size::px(edge))
+            .height(Size::px(edge))
+            .fill(color),
+        color,
+    )
+}
+
+/// Makes `viewer` rasterise on a worker, as an empty box of its size until it
+/// lands, keyed on `color` from the first draw (as `fill` and `currentColor`)
+/// so it does not rasterise a second time when it learns its inherited colour.
+pub(crate) fn off_thread(viewer: SvgViewer, color: Color) -> SvgViewer {
+    viewer
+        .color(color)
+        .async_rasterization(true)
+        .show_loader(false)
+}
+
 /// Draws `icon` as a square of `size` filled with `color`. Pass a token
 /// colour: `Paint::Muted.color(&tokens)`.
 pub fn icon(icon: Icon, size: crate::style::IconSize, color: Color) -> SvgViewer {
-    SvgViewer::new(icon.bytes())
-        .width(Size::px(size.px()))
-        .height(Size::px(size.px()))
-        .fill(color)
+    glyph(icon, size.px(), color)
 }
 
 /// [`icon`] with its size scaled by `scale` and rounded to whole pixels, so a
 /// zooming view keeps its glyph edges sharp. The size is never below 1 px.
 pub fn icon_scaled(icon: Icon, size: crate::style::IconSize, scale: f32, color: Color) -> SvgViewer {
-    let edge = (size.px() * scale).round().max(1.0);
-    SvgViewer::new(icon.bytes())
-        .width(Size::px(edge))
-        .height(Size::px(edge))
-        .fill(color)
+    glyph(icon, (size.px() * scale).round().max(1.0), color)
+}
+
+/// Rasterises `icon` at `size` in `color` on a worker, into the cache that
+/// [`icon`] reads, so the first frame that draws it finds it there. Call from
+/// a hook at start-up for the icons the first frame shows (the sidebar and
+/// the header); anything else rasterises when it first appears. A combination
+/// that is already cached or on its way costs nothing.
+pub fn warm(icon: Icon, size: crate::style::IconSize, color: Color) {
+    warm_svg(source(icon), size.px(), color);
 }

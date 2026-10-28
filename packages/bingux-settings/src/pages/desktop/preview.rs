@@ -425,6 +425,11 @@ fn window_card(tokens: &Tokens, window: Paint, stub: Paint) -> Element {
     )
 }
 
+/// The longest side a wallpaper is decoded to in the picture: enough for a
+/// full-width hero on a HiDPI screen, and the same for every use of one
+/// wallpaper so the hero and the scheme cards share one decode.
+const WALLPAPER_DECODE: f32 = 2048.0;
+
 /// The desktop picture: the wallpaper (or a stand-in) behind the top bar, the
 /// window, the sidebar and the dock.
 ///
@@ -436,24 +441,38 @@ fn window_card(tokens: &Tokens, window: Paint, stub: Paint) -> Element {
 pub(crate) fn scene(tokens: &Tokens, picture: &Scene, frame: Frame, menus: Option<Ctx>) -> Element {
     let (window, bar, stub) = paints(picture.dark);
 
-    let backdrop = match picture.wallpaper {
-        Some(path) => Element::from(
+    // The backdrop is the picture's final box, filled with the stand-in colour,
+    // from the first frame. A wallpaper decodes on a worker (to a bounded size,
+    // so a 4K picture does not become a 33 MB upload on the UI thread) and
+    // fades in over the stand-in when it lands; nothing in the picture moves
+    // or changes edge.
+    let mut backdrop_layer = rect()
+        .position(Position::new_absolute().left(0.).top(0.))
+        .tw(tokens, &[w_full(), h_full(), clip(), bg(Paint::AccentSoft)]);
+    if let Some(path) = picture.wallpaper {
+        backdrop_layer = backdrop_layer.child(
             ImageViewer::new(PathBuf::from(path))
+                .decode_mode(DecodeMode::Custom(Size2D::new(
+                    WALLPAPER_DECODE,
+                    WALLPAPER_DECODE,
+                )))
+                .loading_placeholder(rect().tw(tokens, &[w_full(), h_full()]))
+                .fade_in(tokens.motion(bingux_ui::motion::MOVE_MS))
                 .width(Size::fill())
                 .height(Size::fill())
                 .aspect_ratio(AspectRatio::Max),
-        ),
-        None => Element::from(rect().tw(tokens, &[w_full(), h_full(), bg(Paint::AccentSoft)])),
-    };
-    let backdrop_layer = rect()
-        .position(Position::new_absolute().left(0.).top(0.))
-        .tw(tokens, &[w_full(), h_full(), clip()])
-        .child(backdrop);
+        );
+    }
 
     let edge = picture.sidebar;
+    // The picture's own parts sit one layer above the backdrop. Siblings in
+    // one layer are painted in no fixed order (Freya keeps a layer's nodes in a
+    // hash set), so without this a wallpaper that lands after the first frame,
+    // a new node, is painted over the top bar.
     let mut desktop_layer = rect()
         .position(Position::new_absolute().left(0.).top(0.))
         .tw(tokens, &[w_full(), h_full(), flex_col(), grow_children()])
+        .layer(Layer::Relative(1))
         .child(top_bar(tokens, bar, stub));
     if edge == Some(Edge::Top) {
         desktop_layer = desktop_layer.child(sidebar_panel(tokens, Edge::Top, bar, stub, menus));

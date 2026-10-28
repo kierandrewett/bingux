@@ -125,6 +125,19 @@ The changes are panic resilience (`freya-core`, `freya-winit`) and scroll feel f
   file in memory: about 500 MB for 31 pictures. At most two images decode at once
   (upstream: four), which halves the peak while a large folder opens.
 
+- `freya-components/src/image_viewer.rs`: `ImageViewer::fade_in(ms)`: an image
+  that arrives after the viewer was first drawn fades in from transparent, over
+  whatever the caller drew behind it (the Appearance hero's stand-in), instead
+  of popping in. An image already in the cache shows at once. Also,
+  `ImageSource::bytes` returns in-memory bytes without a thread round trip.
+
+- `freya-components/src/svg_viewer.rs`, `cache.rs`: `warm_svg(source, px,
+  colour)` rasterises an SVG on a worker into the asset cache under the key an
+  `SvgViewer` of that size and colour looks up, and `AssetCacher::reserve`
+  claims the entry first so a viewer that mounts meanwhile waits for it instead
+  of rasterising the same icon again. Bingux's `icons::warm` uses it to have
+  the sidebar and header icons ready for the first frame.
+
 - `freya-animation/src/hook.rs`: an animation tick adds at most 34 ms to the
   animation's clock, and the first tick adds nothing. Upstream adds the whole
   wall time since the animation started, which includes the frame that

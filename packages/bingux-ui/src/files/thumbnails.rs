@@ -84,15 +84,15 @@ pub fn glyph(tokens: &crate::theme::Tokens, entry: &Entry, px: u16) -> SvgViewer
 }
 
 fn glyph_of(icon: Icon, folder: bool, tokens: &crate::theme::Tokens, px: u16) -> SvgViewer {
-    let edge = f32::from(px);
-    SvgViewer::new(icon.bytes())
-        .width(Size::px(edge))
-        .height(Size::px(edge))
-        .fill(if folder {
+    crate::icons::glyph(
+        icon,
+        f32::from(px),
+        if folder {
             Paint::Accent.color(tokens)
         } else {
             Paint::Muted.color(tokens)
-        })
+        },
+    )
 }
 
 /// What stands for `entry` in a square slot `px` wide: its picture when

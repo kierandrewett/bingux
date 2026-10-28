@@ -249,6 +249,20 @@ pub fn background<T: Send + 'static>(
     });
 }
 
+/// As [`background`], for a read that repeats (a poll on a timer, a reload
+/// after a change elsewhere): the state is written only when `work` returns
+/// something other than what it holds. A poll that finds nothing new redraws
+/// nothing, so an idle window stays idle. Use [`background`] for the first
+/// load and for one-shot work.
+pub fn refresh<T: PartialEq + Send + 'static>(
+    mut state: State<Option<T>>,
+    work: impl FnOnce() -> T + Send + 'static,
+) {
+    spawn(async move {
+        state.set_if_modified(Some(spawn_blocking(work).await));
+    });
+}
+
 thread_local! {
     /// One state per page key, alive for the whole window. Pages read their
     /// data from here, so switching pages never starts from nothing.

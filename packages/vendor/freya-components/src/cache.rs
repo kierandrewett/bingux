@@ -133,6 +133,27 @@ impl AssetCacher {
             .map(|a| a.asset.clone())
     }
 
+    /// Claim an entry for an asset that is about to be produced elsewhere (a
+    /// worker thread that rasterises ahead of the first user), so that a
+    /// viewer mounting meanwhile finds it loading and waits for it instead of
+    /// starting the same work. Returns `false`, and does nothing, when the
+    /// entry is already present. The entry has no users, so it stays for the
+    /// app's life.
+    pub fn reserve(&mut self, asset_config: &AssetConfiguration) -> bool {
+        let mut registry = self.registry.write_unchecked();
+        if registry.contains_key(asset_config) {
+            return false;
+        }
+        registry.insert(
+            asset_config.clone(),
+            AssetState {
+                asset: Asset::Loading,
+                users: AssetUsers::Listeners(Rc::default()),
+            },
+        );
+        true
+    }
+
     /// Update an [Asset] given a [AssetConfiguration].
     ///
     /// Does nothing if the entry is not present.

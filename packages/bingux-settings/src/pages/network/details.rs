@@ -494,7 +494,7 @@ fn reload(loaded: Loaded, name: String) {
             if result.is_err() && matches!(&*loaded.peek(), Some(Ok(_))) {
                 return;
             }
-            loaded.set(Some(result));
+            loaded.set_if_modified(Some(result));
         },
     );
 }

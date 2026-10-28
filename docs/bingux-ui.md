@@ -198,6 +198,24 @@ you can see. The rule for an application: **nothing on the UI thread waits.**
 - Animations are paced by frames: a tick adds at most 34 ms to an animation's
   clock (the vendored `freya-animation`), so a slow frame delays a slide by a
   frame instead of skipping it.
+- Icons are looked up, never rasterised, in `render`. `icons::icon` (and
+  `icon_scaled`, `app_icon` and the file views' glyphs) draw an `SvgViewer`
+  that finds its raster in the asset cache, keyed by the icon, its size in
+  device pixels and its colour. The first draw of a combination rasterises it
+  on a worker, and until it lands the viewer is an empty box of the same size,
+  so nothing moves. The colour is set as both `fill` and `color`, so the key
+  does not change when the viewer learns its inherited text colour after the
+  first draw (which used to rasterise every icon twice). The icons the first
+  frame shows are rasterised at start-up: `NavigationSplitView` calls
+  `icons::warm(icon, size, colour)` for the sidebar rows, the search field,
+  the window controls and Back and Forward, and an app can warm its own the
+  same way from a hook.
+- A poll writes only what changed. A timer that reads a source again uses
+  `runtime::refresh(state, work)`, or `State::set_if_modified` in a
+  `background_then` callback, so a tick that finds nothing new redraws
+  nothing and an idle window stays idle. The Date & Time clock writes only
+  when the minute (the second, when the face shows seconds) changed.
+  `runtime::background` is for first loads and one-shot work.
 - `scripts/ui-lint.py` forbids `Command::new`, `std::fs` reads and writes and
   `thread::sleep` outside `BLOCKING_ALLOWED` (each entry has its reason), and
   any of them, or a blocking `system::` call, directly in a `render` body or

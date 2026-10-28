@@ -618,7 +618,7 @@ pub fn reload_overview(state: State<Option<Result<Overview, CommandError>>>) {
         move |loaded| {
             LAST_READ.store(now_ms(), Ordering::SeqCst);
             let mut state = state;
-            state.set(Some(loaded));
+            state.set_if_modified(Some(loaded));
         },
     );
 }

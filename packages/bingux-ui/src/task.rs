@@ -428,6 +428,53 @@ where
     K: Clone + PartialEq + Send + 'static,
     T: Send + 'static,
 {
+    resource_with(key, load, None)
+}
+
+/// [`use_resource`] that also reads again every `every` while the window has
+/// focus, and writes only when the new value is not `same` as the one on
+/// screen. A read that finds nothing new makes no state change, so it redraws
+/// nothing; the state never passes through [`Resource::Refreshing`] for it.
+/// `same` is a comparison of what the page draws, so a field that changes on
+/// every read without showing (a timestamp) can be left out of it.
+/// [`UseResource::refresh`] still reloads at once, with the mark.
+pub fn use_polled_resource<K, T>(
+    key: K,
+    load: fn(K) -> Result<T, String>,
+    every: std::time::Duration,
+    same: fn(&T, &T) -> bool,
+) -> UseResource<T>
+where
+    K: Clone + PartialEq + Send + 'static,
+    T: Send + 'static,
+{
+    resource_with(key, load, Some(Repeat { every, same }))
+}
+
+/// How a polled resource reads again.
+struct Repeat<T> {
+    every: std::time::Duration,
+    /// Whether two values are the same, so the state is not rewritten.
+    same: fn(&T, &T) -> bool,
+}
+
+impl<T> Clone for Repeat<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> Copy for Repeat<T> {}
+
+fn resource_with<K, T>(
+    key: K,
+    load: fn(K) -> Result<T, String>,
+    repeat: Option<Repeat<T>>,
+) -> UseResource<T>
+where
+    K: Clone + PartialEq + Send + 'static,
+    T: Send + 'static,
+{
     let state = use_state(|| Resource::<T>::Loading);
     let generation = use_state(|| 0_u64);
     let running = use_hook(|| Rc::new(RefCell::new(None::<Running<K>>)));
@@ -440,7 +487,7 @@ where
         if let Some(previous) = running.take() {
             previous.task.try_cancel();
         }
-        let task = spawn_load(state, key.clone(), load);
+        let task = spawn_load(state, key.clone(), load, repeat);
         *running = Some(Running {
             key,
             generation: current,
@@ -452,14 +499,17 @@ where
 
 /// Start one load as a component task. The task marks the state as refreshing
 /// before it waits, so the mark is written from an event-loop task and never
-/// from `render`.
+/// from `render`. With `repeat` it then reads again on a timer while the
+/// window has focus, in the same task, so a new key or an unmount ends the
+/// polling with the load.
 fn spawn_load<K, T>(
     mut state: State<Resource<T>>,
     key: K,
     load: fn(K) -> Result<T, String>,
+    repeat: Option<Repeat<T>>,
 ) -> TaskHandle
 where
-    K: Send + 'static,
+    K: Clone + Send + 'static,
     T: Send + 'static,
 {
     spawn(async move {
@@ -468,11 +518,33 @@ where
             Resource::Ready(value) | Resource::Refreshing(value) => Resource::Refreshing(value),
             Resource::Loading | Resource::Error(_) => Resource::Loading,
         });
-        let outcome = spawn_blocking(move || load(key)).await;
+        let first = key.clone();
+        let outcome = spawn_blocking(move || load(first)).await;
         state.set(match outcome {
             Ok(value) => Resource::Ready(value),
             Err(message) => Resource::Error(message),
         });
+        let Some(repeat) = repeat else { return };
+        let focus = Platform::get().current_window().is_app_focused;
+        loop {
+            timer(repeat.every).await;
+            if !*focus.peek() {
+                continue;
+            }
+            let again = key.clone();
+            let outcome = spawn_blocking(move || load(again)).await;
+            let unchanged = match (&outcome, &*state.peek()) {
+                (Ok(new), Resource::Ready(old) | Resource::Refreshing(old)) => (repeat.same)(old, new),
+                (Err(new), Resource::Error(old)) => new == old,
+                _ => false,
+            };
+            if !unchanged {
+                state.set(match outcome {
+                    Ok(value) => Resource::Ready(value),
+                    Err(message) => Resource::Error(message),
+                });
+            }
+        }
     })
 }
 

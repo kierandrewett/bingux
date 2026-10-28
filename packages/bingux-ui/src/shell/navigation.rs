@@ -655,6 +655,30 @@ fn root_items(table: &RouteTable) -> Vec<RootItem> {
         .collect()
 }
 
+/// Rasterises the icons the window shows before any page does, in the colours
+/// they are drawn in: the sidebar rows, the search field, the window controls
+/// and the Back and Forward buttons.
+fn warm_chrome(tokens: &Tokens, sidebar: &[Icon]) {
+    let text = Paint::Text.color(tokens);
+    let muted = Paint::Muted.color(tokens);
+    for &icon in sidebar {
+        icons::warm(icon, IconSize::Row, text);
+        icons::warm(icon, IconSize::Row, muted);
+    }
+    icons::warm(Icon::Search, IconSize::Row, muted);
+    for icon in [
+        Icon::WindowMinimize,
+        Icon::WindowMaximize,
+        Icon::WindowRestore,
+        Icon::WindowClose,
+        Icon::GoPrevious,
+        Icon::GoNext,
+    ] {
+        icons::warm(icon, IconSize::Control, text);
+    }
+    icons::warm(Icon::WindowClose, IconSize::Control, Paint::OnDanger.color(tokens));
+}
+
 /// A compact screen: its header over its content.
 fn compact_screen(tokens: &Tokens, header: Element, content: Element) -> Element {
     rect()
@@ -903,6 +927,14 @@ impl Component for NavigationSplitView {
         let at_index = table.kind(&current.location) == RouteKind::Index;
         let list_key = narrow && at_index;
         let roots = root_items(&table);
+        // The sidebar and header icons are drawn on the first frame: rasterise
+        // them on a worker now, so that frame finds them in the icon cache
+        // and a mounting row rasterises nothing.
+        use_hook({
+            let tokens = tokens.clone();
+            let sidebar: Vec<Icon> = roots.iter().map(|root| root.icon).collect();
+            move || warm_chrome(&tokens, &sidebar)
+        });
         let selected_root = model.selected_root();
         let shown_location = match table.default_root().and_then(|root| table.pattern_location(root)) {
             Some(first) if at_index && !narrow => first,

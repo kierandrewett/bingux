@@ -15,13 +15,12 @@ use crate::icons::Icon;
 use crate::pages::loading::veiled;
 use crate::routes;
 use bingux_ui::prelude::use_router;
-use crate::system;
 use crate::ui::{
     Group, Row, Status, Tone, form_field, page_column, property_row, row, segmented, status,
 };
 use bingux_data_usage::Source;
 use bingux_ui::style::is_compact;
-use bingux_ui::task::use_resource;
+use bingux_ui::task::use_polled_resource;
 
 /// How often a visible page reads the totals again.
 const POLL: Duration = Duration::from_secs(30);
@@ -199,18 +198,12 @@ impl Component for UsagePage {
                 .as_ref()
                 .and_then(|dates| dates.as_ref().ok().copied()),
         };
-        let resource = use_resource(request.clone(), model::load);
-        use_hook(move || {
-            let focus = system::window_focus();
-            spawn(async move {
-                loop {
-                    timer(POLL).await;
-                    if *focus.peek() {
-                        resource.refresh();
-                    }
-                }
-            })
-        });
+        let resource = use_polled_resource(
+            request.clone(),
+            model::load,
+            POLL,
+            Snapshot::draws_same,
+        );
 
         if let Some(failure) = resource.with(|state| state.error().map(str::to_string)) {
             return Element::from(page_column().child(

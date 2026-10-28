@@ -1,4 +1,5 @@
 use std::{
+    cell::Cell,
     collections::hash_map::DefaultHasher,
     fs,
     hash::{
@@ -16,6 +17,13 @@ use bytes::Bytes;
 use freya_core::{
     elements::image::*,
     prelude::*,
+};
+use freya_animation::prelude::{
+    AnimNum,
+    Ease,
+    Function,
+    OnCreation,
+    use_animation,
 };
 use freya_engine::prelude::{
     Paint,
@@ -203,6 +211,8 @@ impl ImageSource {
         match self {
             #[cfg(feature = "remote-asset")]
             Self::Uri(uri) => crate::http::fetch(uri).await,
+            // Bytes already in memory need no thread to be "fetched".
+            Self::Bytes(_, bytes) => Ok(bytes),
             source => thread(move || source.fetch()).await,
         }
     }
@@ -329,6 +339,7 @@ pub struct ImageViewer {
     effect: EffectData,
     style: StyleState,
     decode_mode: DecodeMode,
+    fade_ms: u64,
 
     children: Vec<Element>,
     loading_placeholder: Option<Element>,
@@ -348,6 +359,7 @@ impl ImageViewer {
             effect: EffectData::default(),
             style: StyleState::default(),
             decode_mode: DecodeMode::default(),
+            fade_ms: 0,
             children: Vec::new(),
             loading_placeholder: None,
             error_renderer: None,
@@ -417,6 +429,15 @@ impl ImageViewer {
         self
     }
 
+    /// Fade the image in over `ms` milliseconds when it arrives after the
+    /// viewer was first drawn, so the caller's own placeholder behind it is
+    /// replaced without a pop. An image already in the cache when the viewer
+    /// mounts shows at once, and `0` turns the fade off.
+    pub fn fade_in(mut self, ms: u64) -> Self {
+        self.fade_ms = ms;
+        self
+    }
+
     /// Customize how long the image will remain cached after no longer being used.
     ///
     /// Defaults to [`AssetAge::default`] (1h).
@@ -483,16 +504,53 @@ impl Component for ImageViewer {
         let asset = asset_cacher
             .read_asset(&asset_config)
             .expect("Asset should exist by now");
+        let fade_ms = self.fade_ms;
+        let mut fade = use_animation(move |conf| {
+            conf.on_creation(OnCreation::Finish);
+            AnimNum::new(0., 1.)
+                .time(fade_ms.max(1))
+                .function(Function::Quad)
+                .ease(Ease::Out)
+        });
+        let waited = use_hook(|| Rc::new(Cell::new(false)));
+        let faded = use_hook(|| Rc::new(Cell::new(false)));
+        use_side_effect_with_deps(&matches!(asset, Asset::Cached(_)), {
+            let waited = waited.clone();
+            let faded = faded.clone();
+            move |ready: &bool| {
+                if *ready && waited.get() && !faded.get() && fade_ms > 0 {
+                    faded.set(true);
+                    fade.reset();
+                    fade.start();
+                }
+            }
+        });
+
+        let ready = matches!(asset, Asset::Cached(_));
+        if !ready {
+            // The image is not here yet: when it arrives it fades in.
+            waited.set(true);
+            faded.set(false);
+        }
+        let fading = self.fade_ms > 0 && waited.get();
+        // Read the animation on every render while a fade is wanted, so the
+        // component is subscribed to it before the effect starts it.
+        let progress = if fading { fade.get().value() } else { 1.0 };
+        let opacity = if faded.get() { progress } else { 0.0 };
 
         match asset {
             Asset::Cached(asset) => {
                 let asset = asset.downcast_ref::<ImageHandle>().unwrap().clone();
+                let mut effect = self.effect.clone();
+                if fading {
+                    effect.opacity = Some(opacity);
+                }
                 image(asset)
                     .accessibility(self.accessibility.clone())
                     .a11y_role(AccessibilityRole::Image)
                     .layout(self.layout.clone())
                     .image_data(self.image_data.clone())
-                    .effect(self.effect.clone())
+                    .effect(effect)
                     .children(self.children.clone())
                     .style(self.style.clone())
                     .into_element()

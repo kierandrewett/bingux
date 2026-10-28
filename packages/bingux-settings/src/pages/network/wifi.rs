@@ -64,7 +64,7 @@ fn reload_model_then(done: impl FnOnce() + 'static) {
         || system::load_persistent(cache_key(), nm::load),
         move |loaded| {
             let mut state = model_state();
-            state.set(Some(loaded));
+            state.set_if_modified(Some(loaded));
             done();
         },
     );
@@ -242,7 +242,7 @@ impl Ui {
     /// over: a scan on its radio would drop the devices on it.
     fn refresh(self, scan: bool) {
         let mut fresh = self.fresh;
-        reload_model_then(move || fresh.set(true));
+        reload_model_then(move || fresh.set_if_modified(true));
         let hotspot = matches!(&*self.model.peek(), Some(Ok(model)) if model.hotspot().is_some());
         if !scan
             || hotspot

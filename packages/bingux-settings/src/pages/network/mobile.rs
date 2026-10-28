@@ -73,7 +73,7 @@ fn reload_modem_then(state: ModemState, after: impl FnOnce() + 'static) {
     background_then(modem::load_modem, move |loaded| {
         LAST_READ.store(now_ms(), Ordering::SeqCst);
         let mut state = state;
-        state.set(Some(loaded));
+        state.set_if_modified(Some(loaded));
         after();
     });
 }

@@ -402,7 +402,7 @@ impl Component for RunningGroup {
                             move || read_clients(&device),
                             move |count| {
                                 let mut clients = clients;
-                                clients.set(count);
+                                clients.set_if_modified(count);
                             },
                         );
                     }

@@ -191,6 +191,23 @@ impl Snapshot {
             unsupported: None,
         }
     }
+
+    /// Whether the page draws `other` the same as `self`: every field equal,
+    /// except `now`, which only feeds the "Last recorded 5 min ago" text and
+    /// differs on every read. A poll that finds the same numbers and the same
+    /// age text writes nothing, so the page does not redraw.
+    pub fn draws_same(&self, other: &Snapshot) -> bool {
+        let age = |snapshot: &Snapshot| {
+            snapshot
+                .last_sample
+                .map(|last| super::format::ago(snapshot.now, last))
+        };
+        let mut mine = self.clone();
+        let mut theirs = other.clone();
+        mine.now = 0;
+        theirs.now = 0;
+        mine == theirs && age(self) == age(other)
+    }
 }
 
 impl UsageScope {
@@ -399,6 +416,31 @@ mod tests {
 
     fn date(year: i32, month: u8, day: u8) -> Date {
         Date::new(year, month, day).expect("valid date")
+    }
+
+    #[test]
+    fn a_later_read_of_the_same_numbers_draws_the_same() {
+        let first = Snapshot::bare(1_793_016_000);
+        let later = Snapshot::bare(1_793_016_030);
+        assert_ne!(first, later, "now differs on every read");
+        assert!(first.draws_same(&later));
+    }
+
+    #[test]
+    fn new_numbers_or_a_new_age_draw_differently() {
+        let mut first = Snapshot::bare(1_793_016_000);
+        first.last_sample = Some(1_793_016_000 - 30);
+        // The age text still reads "just now" half a minute later.
+        let mut later = first.clone();
+        later.now += 20;
+        assert!(first.draws_same(&later));
+        // A minute on, it reads "1 min ago".
+        later.now += 60;
+        assert!(!first.draws_same(&later));
+        // And a changed total is a change.
+        let mut moved = first.clone();
+        moved.today.rx += 1;
+        assert!(!first.draws_same(&moved));
     }
 
     /// Monday 2026-10-26 12:00 UTC, billing day 15.

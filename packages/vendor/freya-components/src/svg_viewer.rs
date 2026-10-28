@@ -104,6 +104,40 @@ fn store_raster(
     }
 }
 
+/// Rasterise `source` at `logical` px square, filled and coloured `fill`, on a
+/// worker thread, into the asset cache under the key an [`SvgViewer`] of that
+/// size and colour looks up. A viewer that mounts afterwards finds the image
+/// in the cache and rasterises nothing; one that mounts while it is still
+/// being made waits for it. Call from a hook, once per (icon, size, colour):
+/// a call whose entry exists does nothing.
+pub fn warm_svg(source: impl Into<ImageSource>, logical: f32, fill: Color) {
+    let source = source.into();
+    let scale_factor = *Platform::get().current_window().scale_factor.peek();
+    let edge = (logical * scale_factor as f32).round().max(1.) as u32;
+    let target = DecodeSize::new(edge, edge);
+    let style = SvgStyle {
+        color: Some(fill),
+        fill: Some(fill),
+        ..SvgStyle::default()
+    };
+    let asset_config =
+        AssetConfiguration::new((&source, Some(target), style.as_key()), AssetAge::default());
+    let mut asset_cacher = AssetCacher::get();
+    if !asset_cacher.reserve(&asset_config) {
+        return;
+    }
+    spawn_in_window(async move {
+        let result = match source.bytes().await {
+            Ok(bytes) => {
+                let _permit = RASTER_LIMIT.acquire().await;
+                thread(move || rasterize_bytes(&bytes, target, style)).await
+            }
+            Err(err) => Err(err),
+        };
+        store_raster(asset_cacher, asset_config, result);
+    });
+}
+
 /// SVG viewer component.
 ///
 /// Rasterizes the SVG at its layout size and caches the result.

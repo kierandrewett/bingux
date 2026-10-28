@@ -763,9 +763,9 @@ pub static ENTRIES: &[Entry] = &[
         name: "Icon set",
         category: Category::Icons,
         page: "Icon set",
-        api: "icon(Icon::Name, IconSize::Control, Paint::Text.color(&tokens)) -> SvgViewer; icon_scaled(icon, size, scale, colour); Icon::ALL; Icon::bytes()",
+        api: "icon(Icon::Name, IconSize::Control, Paint::Text.color(&tokens)) -> SvgViewer; icon_scaled(icon, size, scale, colour); warm(icon, size, colour) rasterises on a worker ahead of the first draw; Icon::ALL; Icon::bytes()",
         doc: "icons",
-        covers: &["Icon", "icon", "icon_scaled"],
+        covers: &["Icon", "icon", "icon_scaled", "warm"],
         body: Body::Custom(icon_set::icon_set),
     },
     Entry {

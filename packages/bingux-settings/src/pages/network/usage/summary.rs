@@ -125,7 +125,7 @@ impl Component for UsageRow {
                 loop {
                     timer(POLL).await;
                     if *focus.peek() {
-                        system::background(summary, || system::load_saved(CACHE, load));
+                        system::refresh(summary, || system::load_saved(CACHE, load));
                     }
                 }
             })
@@ -161,7 +161,7 @@ impl Component for ScopedUsageRow {
                     timer(POLL).await;
                     if *focus.peek() {
                         let scope = scope.clone();
-                        system::background(summary, move || load_for(&scope));
+                        system::refresh(summary, move || load_for(&scope));
                     }
                 }
             })

@@ -195,6 +195,24 @@ fn read_now() -> Result<Now, String> {
     }
 }
 
+/// Whether two readings draw the same clock face and date: the same minute,
+/// and the same second when the face shows seconds.
+fn same_face(shown: &Result<Now, String>, fresh: &Result<Now, String>, seconds: bool) -> bool {
+    match (shown, fresh) {
+        (Ok(a), Ok(b)) => {
+            a.year == b.year
+                && a.month == b.month
+                && a.day == b.day
+                && a.hour == b.hour
+                && a.minute == b.minute
+                && (!seconds || a.second == b.second)
+                && a.weekday == b.weekday
+        }
+        (Err(a), Err(b)) => a == b,
+        _ => false,
+    }
+}
+
 /// The clock face: `09:05` in 24-hour form, `9:05 AM` in 12-hour form.
 fn clock_text(now: &Now, twelve_hour: bool, seconds: bool) -> String {
     let mut text = if twelve_hour {
@@ -586,7 +604,24 @@ impl Component for DateTimePage {
                 loop {
                     timer(Duration::from_secs(1)).await;
                     if *focus.peek() {
-                        background(now, read_now);
+                        background_then(read_now, move |reading| {
+                            // The face shows the minute, and the second only
+                            // when the setting says so: a tick that would draw
+                            // the same text writes nothing, so the page is
+                            // idle between minutes.
+                            let seconds = matches!(
+                                &*ctx.model.peek(),
+                                Some(Ok(model)) if model.clock_seconds == Some(true)
+                            );
+                            let mut now = now;
+                            let unchanged = matches!(
+                                &*now.peek(),
+                                Some(shown) if same_face(shown, &reading, seconds)
+                            );
+                            if !unchanged {
+                                now.set(Some(reading));
+                            }
+                        });
                     }
                 }
             });
@@ -834,4 +869,41 @@ fn displayed(ctx: Ctx) -> Option<Model> {
 /// Start loading this page's data before it is opened.
 pub fn prefetch() {
     system::prefetch_persistent("datetime", load);
+}
+
+#[cfg(test)]
+mod clock_tests {
+    use super::*;
+
+    fn at(minute: i64, second: i64) -> Result<Now, String> {
+        Ok(Now {
+            year: 2026,
+            month: 10,
+            day: 28,
+            hour: 9,
+            minute,
+            second,
+            weekday: "Wednesday".to_string(),
+        })
+    }
+
+    #[test]
+    fn a_tick_inside_the_minute_draws_nothing_new_without_seconds() {
+        assert!(same_face(&at(5, 1), &at(5, 2), false));
+        assert!(!same_face(&at(5, 59), &at(6, 0), false));
+    }
+
+    #[test]
+    fn every_tick_changes_the_face_when_it_shows_seconds() {
+        assert!(!same_face(&at(5, 1), &at(5, 2), true));
+        assert!(same_face(&at(5, 2), &at(5, 2), true));
+    }
+
+    #[test]
+    fn a_new_error_or_a_recovery_is_a_change() {
+        let failed = Err("The time could not be read.".to_string());
+        assert!(same_face(&failed, &failed.clone(), false));
+        assert!(!same_face(&failed, &at(5, 1), false));
+        assert!(!same_face(&at(5, 1), &failed, false));
+    }
 }

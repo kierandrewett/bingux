@@ -379,9 +379,15 @@ impl Component for AppIcon {
             Some(Some(IconFile {
                 path,
                 svg: Some(bytes),
-            })) => SvgViewer::new((path, bytes))
-                .width(Size::px(size))
-                .height(Size::px(size))
+            })) => crate::icons::off_thread(
+                SvgViewer::new((path, bytes))
+                    .width(Size::px(size))
+                    .height(Size::px(size)),
+                Paint::Text.color(&tokens),
+            )
+                // Rasterised on a worker, and keyed on the text colour from
+                // the first draw, so the viewer does not rasterise a second
+                // time when it learns the inherited colour.
                 .into_element(),
             Some(Some(IconFile { path, svg: None })) => ImageViewer::new(path)
                 .width(Size::px(size))
