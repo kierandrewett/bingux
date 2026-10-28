@@ -1,0 +1,22 @@
+[package]
+name = "bingux-search"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "Bingux search engine: documents, schema, inverted index and OpenSearch-shaped responses; no UI"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+unicode-segmentation = "1"
+unicode-normalization = "0.1"
+
+[dev-dependencies]
+proptest = "1"
+
+[profile.bench]
+debug = false
