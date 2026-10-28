@@ -5,8 +5,14 @@ work belongs in Git history and does not stay here as a second changelog.
 
 ## Release blockers
 
-- [ ] Build the native RPM in Fedora 43 x86_64.
-- [ ] Install the RPM into a clean user account and start the user target.
+- [ ] Build the RPMs in a clean Fedora 43 chroot (mock or COPR). `make rpm-package`
+      builds all six on a Fedora 43 host, with the host's toolchain and `--nodeps`.
+- [ ] Install the RPMs with `dnf` into a clean user account, start the user target
+      and open Settings and Files from a Gnoblin session.
+- [ ] Decide how COPR gets the Rust crates and the prebuilt Skia archive
+      (`design/userspace.md`, question 8).
+- [ ] Merge the app packages into the Bingux OS image and sign the pacman
+      repository (`design/userspace.md`, section 5 and question 9).
 - [ ] Verify Gnoblin login, logout, lock and unlock with the packaged shell.
 - [ ] Verify a compositor without Gnoblin still starts the general shell.
 - [ ] Package or document a matching Qt 6 QMLTermWidget build for the terminal.

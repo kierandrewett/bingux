@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.drewett.bingux.Settings</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Settings</name>
+  <summary>Change Bingux and system settings</summary>
+  <developer id="dev.drewett">
+    <name>Kieran Drewett</name>
+  </developer>
+  <description>
+    <p>
+      Settings is the Bingux desktop's settings application. It changes how the
+      shell looks and behaves, and the system settings you reach for most.
+    </p>
+    <ul>
+      <li>Network: Wi-Fi, Ethernet, mobile, VPN, proxy and data usage</li>
+      <li>Bluetooth devices, sound devices and per-application volume</li>
+      <li>Sound effects: equaliser, compressor and other plugins on any output or microphone</li>
+      <li>Displays, wallpaper, accent colour and the dock, top bar and sidebar</li>
+      <li>Power, date and time, keyboard, mouse, accounts and default applications</li>
+    </ul>
+    <p>
+      Settings keeps the shell's configuration in one TOML file, so changes made
+      here and edits made by hand are checked by the same rules.
+    </p>
+  </description>
+  <launchable type="desktop-id">bingux-settings.desktop</launchable>
+  <url type="homepage">https://github.com/kierandrewett/bingux</url>
+  <url type="bugtracker">https://github.com/kierandrewett/bingux/issues</url>
+  <url type="vcs-browser">https://github.com/kierandrewett/bingux</url>
+  <url type="help">https://github.com/kierandrewett/bingux/tree/main/docs</url>
+  <provides>
+    <binary>bingux-settings</binary>
+  </provides>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <content_rating type="oars-1.1"/>
+  <categories>
+    <category>Settings</category>
+    <category>DesktopSettings</category>
+  </categories>
+  <releases>
+    <release version="0.1.0" date="2026-10-28"/>
+  </releases>
+</component>

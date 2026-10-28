@@ -49,7 +49,10 @@ settings remain under `$XDG_CONFIG_HOME/bingux`.
 
 A Fedora package is being prepared in the [Bingux COPR](https://copr.fedorainfracloud.org/coprs/kierandrewett/bingux/).
 The repository does not publish a ready package until a clean Fedora build and
-a fresh install test pass.
+a fresh install test pass. The shell, Settings, Files, the sound effects engine
+and the configuration command are separate packages for Fedora
+(`make rpm-package`) and Arch Linux (`make arch-package`); see
+[package management](docs/package-management.md).
 
 For an isolated source run, see [portable testing](docs/portable-testing.md).
 
@@ -63,12 +66,16 @@ If something does not start or shows no data, see [troubleshooting](docs/trouble
 
 [Bingux Settings](docs/settings.md) is the graphical front for shell and
 system settings; [configuration](docs/configuration.md) covers the file and CLI.
+[Bingux Files](docs/files.md) is the file manager: tabs, drag and drop, drives,
+and the same file view as the file chooser.
 
 ## Source layout
 
 - `shell/bingux/`: desktop UI and Python helpers.
 - `packages/bingux-config/`: configuration schema, `bingux.toml` store and CLI.
 - `packages/bingux-settings/`: the Settings application.
+- `packages/bingux-files-app/`: the Files application (program `bingux-files`).
+- `packages/bingux-files/`: the filesystem model the file chooser and Files share.
 - `packages/bingux-ui/`: the design system crate for Bingux's Freya applications.
 - `packages/`: search and metrics daemons, native plugins and helper programs.
 - `tests/`: component, input and integration checks.

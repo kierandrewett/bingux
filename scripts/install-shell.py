@@ -17,6 +17,11 @@ import time
 def install(source, destination, executable=False):
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source, destination)
+    # A script that names its interpreter is executable; packaging tools reject
+    # a `#!` file without the bit.
+    if not executable:
+        with open(source, "rb") as handle:
+            executable = handle.read(2) == b"#!"
     destination.chmod(0o755 if executable else 0o644)
 
 
@@ -157,8 +162,15 @@ def migrate_legacy_search_launcher(prefix):
     )
 
 
-def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=False):
-    """Install payload files and return their paths relative to prefix."""
+def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=False, cargo=None, ladspa=None):
+    """Install payload files and return their paths relative to prefix.
+
+    `cargo` is the Cargo target directory that holds `release/` (default
+    BUILD/cargo) and `ladspa` is where the LADSPA plugin library goes (default
+    PREFIX/lib/ladspa; Fedora packages use lib64).
+    """
+    cargo = cargo or build / "cargo"
+    ladspa = ladspa or prefix / "lib/ladspa"
     payload = {
         build / "effects/libbinguxeffects.so": qml / "Bingux/Effects/libbinguxeffects.so",
         source / "packages/bingux-effects/qmldir": qml / "Bingux/Effects/qmldir",
@@ -169,17 +181,41 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         build / "bingux-audio-meter": prefix / "bin/bingux-audio-meter",
         build / "bingux-image-clipboard": prefix / "libexec/bingux/bingux-image-clipboard",
         build / "bingux-frame": prefix / "libexec/bingux/bingux-frame",
-        build / "cargo/release/bingux-config": prefix / "bin/bingux-config",
-        build / "cargo/release/bingux-searchd": prefix / "bin/bingux-searchd",
-        build / "cargo/release/bingux-statusd": prefix / "bin/bingux-statusd",
-        build / "cargo/release/bingux-settings": prefix / "bin/bingux-settings",
+        cargo / "release/bingux-config": prefix / "bin/bingux-config",
+        cargo / "release/bingux-searchd": prefix / "bin/bingux-searchd",
+        cargo / "release/bingux-statusd": prefix / "bin/bingux-statusd",
+        cargo / "release/bingux-settings": prefix / "bin/bingux-settings",
+        # Sound effects: the engine Settings starts, and the LADSPA library
+        # (bingux_dsp) with the compressor, limiter, reverb and the rest.
+        cargo / "release/bingux-effects": prefix / "bin/bingux-effects",
+        cargo / "release/libbingux_dsp.so": ladspa / "libbingux_dsp.so",
         source / "packages/bingux-settings/bingux-settings.desktop": prefix
         / "share/applications/bingux-settings.desktop",
         source / "packages/bingux-settings/bingux-settings.svg": prefix
         / "share/icons/hicolor/scalable/apps/bingux-settings.svg",
+        cargo / "release/bingux-files": prefix / "bin/bingux-files",
+        source / "packages/bingux-files-app/bingux-files.desktop": prefix
+        / "share/applications/bingux-files.desktop",
+        source / "packages/bingux-files-app/bingux-files.svg": prefix
+        / "share/icons/hicolor/scalable/apps/bingux-files.svg",
+        cargo / "release/bingux-taxonomy": prefix / "bin/bingux-taxonomy",
+        source / "packages/bingux-taxonomy/bingux-taxonomy.desktop": prefix
+        / "share/applications/bingux-taxonomy.desktop",
+        source / "packages/bingux-taxonomy/bingux-taxonomy.svg": prefix
+        / "share/icons/hicolor/scalable/apps/bingux-taxonomy.svg",
         source / "scripts/bingux-clipboard-paste": prefix / "bin/bingux-clipboard-paste",
+        # Tells bingux-searchd that Settings exposes search: its program (opens a
+        # hit's address) and its id. See design/search.md section 8.
+        source / "packaging/search-apps/bingux-settings.json": prefix
+        / "share/bingux/search-apps/bingux-settings.json",
         source / "packaging/gnoblin/bingux.lua": prefix / "share/gnoblin/conf.d/bingux.lua",
+        # Enables bingux.target for every user; see packaging/systemd/90-bingux.preset.
+        source / "packaging/systemd/90-bingux.preset": prefix / "lib/systemd/user-preset/90-bingux.preset",
     }
+    for path in sorted((source / "packaging/metainfo").glob("*.metainfo.xml")):
+        payload[path] = prefix / "share/metainfo" / path.name
+    for path in sorted((source / "packaging/man").glob("*.1")):
+        payload[path] = prefix / "share/man/man1" / path.name
     missing = [str(path) for path in payload if not path.is_file()]
     if missing:
         raise ValueError("run make first; missing: " + ", ".join(missing))
@@ -201,7 +237,9 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         raise ValueError(
             "Adwaita icon theme submodule is missing; run git submodule update --init subprojects/adwaita-icon-theme"
         )
-    adwaita_install = prefix / "share/icons/Adwaita"
+    # Private to Bingux (AdwaitaIcons.qml reads BINGUX_ADWAITA_ICON_DIR), so it
+    # never collides with the distribution's adwaita-icon-theme under icons/.
+    adwaita_install = prefix / "share/bingux/icons/Adwaita"
     copy(adwaita_index, adwaita_install / "index.theme")
     for path in adwaita_assets.rglob("*"):
         if path.is_file():
@@ -209,7 +247,7 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     for license_name in ("COPYING", "COPYING_CCBYSA3", "COPYING_LGPL"):
         copy(
             adwaita_source / license_name,
-            prefix / "share/licenses/adwaita-icon-theme" / license_name,
+            prefix / "share/licenses/bingux/adwaita-icon-theme" / license_name,
         )
     folder_open = adwaita_install / "scalable/status/folder-open.svg"
     if not folder_open.is_file():
@@ -229,11 +267,21 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
             continue
         copy(path, gnoblin_integration / path.relative_to(source / "shell/gnoblin"))
     for path, destination in payload.items():
-        executable = destination.parent == prefix / "bin" or destination in (
-            prefix / "libexec/bingux/bingux-image-clipboard",
-            prefix / "libexec/bingux/bingux-frame",
+        executable = (
+            destination.parent == prefix / "bin"
+            or destination.suffix == ".so"
+            or destination
+            in (
+                prefix / "libexec/bingux/bingux-image-clipboard",
+                prefix / "libexec/bingux/bingux-frame",
+            )
         )
-        if path == source / "packaging/gnoblin/bingux.lua":
+        if path == source / "packaging/search-apps/bingux-settings.json":
+            destination_path = target(destination)
+            destination_path.parent.mkdir(parents=True, exist_ok=True)
+            destination_path.write_text(path.read_text().replace("@BINDIR@", str(prefix / "bin")))
+            installed.append(destination.relative_to(prefix))
+        elif path == source / "packaging/gnoblin/bingux.lua":
             # GDM does not necessarily include the user's command-link folder
             # in PATH. Use this install's wrappers and frame command directly.
             generated = path.read_text()
@@ -293,7 +341,7 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         + shlex.quote(str(prefix / "share"))
         + ":${XDG_DATA_DIRS:-/usr/local/share:/usr/share}\n"
     )
-    common += "export BINGUX_ADWAITA_ICON_DIR=" + shlex.quote(str(prefix / "share/icons/Adwaita")) + "\n"
+    common += "export BINGUX_ADWAITA_ICON_DIR=" + shlex.quote(str(prefix / "share/bingux/icons/Adwaita")) + "\n"
     common += "export BINGUX_CONFIG_PATH=" + shlex.quote(str(shell)) + "\n"
     common += "export BINGUX_AUDIO_METER=" + shlex.quote(str(prefix / "bin/bingux-audio-meter")) + "\n"
     # Helpers run with the interpreter that installed Bingux, and the shell
@@ -357,12 +405,12 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     )
     installed.append(Path("share/bingux/search.json"))
 
-    search_service = target(prefix / "libexec/bingux/search-service")
+    search_service = prefix / "libexec/bingux/search-service"
     search_migrator = prefix / "share/bingux/shell/migrate-search-config.py"
     application_launcher = prefix / "share/bingux/shell/launch-application.py"
     steam_game_catalog = prefix / "share/bingux/shell/steam-games.py"
     write_launcher(
-        search_service,
+        target(search_service),
         "#!/bin/sh\nset -eu\n"
         + 'config="${XDG_CONFIG_HOME:-${HOME:?}/.config}/bingux/search.json"\n'
         + '[ -f "$config" ] || config='
@@ -542,7 +590,7 @@ def ensure_gnoblin_dropin_loader():
     )
 
 
-def install_user(source, build, prefix, qml, no_systemd):
+def install_user(source, build, prefix, qml, no_systemd, cargo=None, ladspa=None):
     manifest_path = prefix / ".bingux-install.json"
     if prefix.is_symlink():
         raise ValueError(f"refusing to install through symlink: {prefix}")
@@ -569,6 +617,8 @@ def install_user(source, build, prefix, qml, no_systemd):
             lambda path: staging / path.relative_to(prefix),
             quickshell,
             managed=True,
+            cargo=cargo,
+            ladspa=ladspa,
         )
         manifest = {
             "format": 1,
@@ -658,6 +708,8 @@ def main():
     parser.add_argument("--destdir", default="")
     parser.add_argument("--build-dir", default="build")
     parser.add_argument("--qml-dir")
+    parser.add_argument("--cargo-dir", help="Cargo target directory that holds release/ (default: BUILD_DIR/cargo)")
+    parser.add_argument("--ladspa-dir", help="where the LADSPA plugin library goes (default: PREFIX/lib/ladspa)")
     parser.add_argument("--no-systemd", action="store_true", help="do not reload or start user services")
     args = parser.parse_args()
     if args.uninstall and not args.user:
@@ -678,6 +730,14 @@ def main():
             qml.relative_to(prefix)
         except ValueError:
             parser.error("--qml-dir must be inside --prefix for a managed user install")
+    ladspa = Path(args.ladspa_dir or prefix / "lib/ladspa")
+    if not ladspa.is_absolute():
+        parser.error("prefix and LADSPA directory must be absolute")
+    if args.user:
+        try:
+            ladspa.relative_to(prefix)
+        except ValueError:
+            parser.error("--ladspa-dir must be inside --prefix for a managed user install")
     if args.uninstall:
         try:
             uninstall_user(prefix, args.no_systemd)
@@ -686,9 +746,10 @@ def main():
         return
     source = Path(__file__).resolve().parents[1]
     build = Path(args.build_dir).resolve()
+    cargo = Path(args.cargo_dir).resolve() if args.cargo_dir else None
     try:
         if args.user:
-            install_user(source, build, prefix, qml, args.no_systemd)
+            install_user(source, build, prefix, qml, args.no_systemd, cargo, ladspa)
             return
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         parser.error(str(error))
@@ -698,7 +759,7 @@ def main():
         return stage / path.relative_to("/")
 
     try:
-        build_payload(source, build, prefix, qml, target)
+        build_payload(source, build, prefix, qml, target, cargo=cargo, ladspa=ladspa)
     except (OSError, ValueError) as error:
         parser.error(str(error))
     print("Installed Bingux under " + str(target(prefix)))

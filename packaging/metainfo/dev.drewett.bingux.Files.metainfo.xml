@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.drewett.bingux.Files</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Files</name>
+  <summary>Browse and organise files and folders</summary>
+  <developer id="dev.drewett">
+    <name>Kieran Drewett</name>
+  </developer>
+  <description>
+    <p>
+      Files is the Bingux desktop's file manager. It lists folders, drives and
+      the Trash, and opens files in the application the system chooses for them.
+    </p>
+    <ul>
+      <li>Tabs that each keep their own folder, history and scroll position</li>
+      <li>List and grid views, thumbnails, previews and search inside a folder</li>
+      <li>Copy, move, rename, trash and undo, with drag and drop between folders and tabs</li>
+      <li>Drives and removable media with free space</li>
+    </ul>
+    <p>
+      The window is the same code as the file chooser dialog that other Bingux
+      applications use.
+    </p>
+  </description>
+  <launchable type="desktop-id">bingux-files.desktop</launchable>
+  <url type="homepage">https://github.com/kierandrewett/bingux</url>
+  <url type="bugtracker">https://github.com/kierandrewett/bingux/issues</url>
+  <url type="vcs-browser">https://github.com/kierandrewett/bingux</url>
+  <url type="help">https://github.com/kierandrewett/bingux/tree/main/docs</url>
+  <provides>
+    <binary>bingux-files</binary>
+    <mediatype>inode/directory</mediatype>
+  </provides>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <content_rating type="oars-1.1"/>
+  <categories>
+    <category>System</category>
+    <category>FileTools</category>
+    <category>FileManager</category>
+  </categories>
+  <releases>
+    <release version="0.1.0" date="2026-10-28"/>
+  </releases>
+</component>

@@ -1,0 +1,9 @@
+# Bingux user-service presets. `systemctl --global preset` applies them when a
+# package is installed.
+#
+# The helper services (search and status) follow every Gnoblin session through
+# this target.
+enable bingux.target
+# The sound effects engine starts only after the user turns effects on in
+# Settings, which enables one instance for each direction.
+disable bingux-effects@.service

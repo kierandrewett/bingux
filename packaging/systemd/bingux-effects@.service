@@ -1,0 +1,14 @@
+[Unit]
+Description=Bingux sound effects (%i)
+Documentation=man:bingux-effects(1)
+After=pipewire.service wireplumber.service
+PartOf=pipewire.service
+
+[Service]
+ExecStart=/usr/bin/bingux-effects run %i
+Restart=on-failure
+RestartSec=2
+LimitCORE=0
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,10 @@
+# Applies the user preset, which enables bingux.target for every user. Fedora's
+# RPM does the same through its systemd scriptlets. Skip it with
+# `systemctl --global disable bingux.target` afterwards.
+post_install() {
+    systemctl --global preset bingux.target >/dev/null 2>&1 || true
+}
+
+pre_remove() {
+    systemctl --global disable bingux.target >/dev/null 2>&1 || true
+}

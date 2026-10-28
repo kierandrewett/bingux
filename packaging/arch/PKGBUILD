@@ -1,0 +1,172 @@
+# Maintainer: Kieran Drewett <kieran@drewett.dev>
+#
+# Bingux desktop packages for Arch Linux (and Bingux OS, which is Arch-based).
+#
+# One source archive, six packages: the shell, the configuration command,
+# Settings, Files, the sound effects engine and the Taxonomy reference window.
+# `make install` stages everything once in build(); each package_*() function
+# takes its files out of that stage, and the last one (bingux, the shell) takes
+# whatever is left, so no installed file is dropped.
+#
+# The source archive comes from scripts/make-source-archive.sh. `make arch-package`
+# builds it, writes its checksum into a copy of this file and runs makepkg
+# (in an Arch container when makepkg is not installed). The `SKIP` checksum is
+# only the development template: do not publish a package built with it.
+# shellcheck shell=bash disable=SC2034,SC2154
+pkgbase=bingux
+pkgname=(bingux-config bingux-settings bingux-files bingux-audio-effects bingux-taxonomy bingux)
+pkgver=0.1.0
+pkgrel=1
+arch=('x86_64')
+url='https://github.com/kierandrewett/bingux'
+license=('GPL-3.0-or-later')
+makedepends=('cargo' 'gcc' 'make' 'python' 'pkgconf' 'qt6-base' 'qt6-declarative' 'qt6-wayland'
+    'qt6-tools' 'wayland' 'wayland-protocols' 'libpulse' 'gtk4' 'libadwaita' 'fontconfig'
+    'freetype2' 'libxkbcommon' 'libglvnd' 'desktop-file-utils' 'appstream')
+# !lto: bingux-searchd bundles SQLite through the cc crate; with makepkg's
+# -flto=auto the C objects become GCC bitcode that rustc's linker rejects.
+options=('!lto')
+source=("$pkgbase-$pkgver.tar.xz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/$pkgbase-$pkgver" || return
+    make BUILD_DIR=build JOBS="$(nproc)"
+    make licenses BUILD_DIR=build
+    make install PREFIX=/usr DESTDIR="$srcdir/stage" BUILD_DIR=build QMLDIR=/usr/lib/bingux/qml LADSPADIR=/usr/lib/ladspa
+    # Arch has no %check-style hook for these; check them where the files are made.
+    desktop-file-validate "$srcdir"/stage/usr/share/applications/bingux-*.desktop
+    appstreamcli validate --no-net "$srcdir"/stage/usr/share/metainfo/*.metainfo.xml
+}
+
+# Move paths (relative to the stage) into the package being built.
+_take() {
+    local path
+    for path in "$@"; do
+        install -d "$pkgdir/$(dirname "$path")"
+        mv "$srcdir/stage/$path" "$pkgdir/$path"
+    done
+}
+
+# licence texts for the crates linked into a program, plus the project licence.
+_licenses() {
+    local program
+    install -Dm644 "$srcdir/$pkgbase-$pkgver/COPYING" "$pkgdir/usr/share/licenses/$pkgname/COPYING"
+    for program in "$@"; do
+        install -Dm644 "$srcdir/$pkgbase-$pkgver/build/licenses/$program.LICENSE.dependencies" \
+            "$pkgdir/usr/share/licenses/$pkgname/$program.LICENSE.dependencies"
+    done
+}
+
+package_bingux-config() {
+    pkgdesc='Configuration command for the Bingux desktop'
+    license=('GPL-3.0-or-later' 'MIT' 'Unicode-3.0' 'Zlib')
+    depends=('glibc' 'gcc-libs')
+    _take usr/bin/bingux-config usr/share/man/man1/bingux-config.1
+    _licenses bingux-config
+}
+
+package_bingux-settings() {
+    pkgdesc='Settings application for the Bingux desktop'
+    license=('GPL-3.0-or-later' 'Apache-2.0' 'BSD-2-Clause' 'BSD-3-Clause' 'ISC' 'MIT' 'Unicode-3.0' 'Zlib')
+    # Freya draws with Skia on OpenGL and loads the Wayland and keyboard
+    # libraries at run time, so makepkg does not find them on its own.
+    depends=('bingux-config' 'fontconfig' 'freetype2' 'libglvnd' 'mesa' 'libxkbcommon' 'wayland'
+        'hicolor-icon-theme' 'shared-mime-info' 'xdg-utils' 'glib2' 'dconf' 'gsettings-desktop-schemas'
+        'systemd')
+    optdepends=('networkmanager: Network page'
+        'modemmanager: mobile network'
+        'bluez: Bluetooth page'
+        'bluez-utils: Bluetooth page'
+        'wireplumber: sound devices and volumes'
+        'pipewire: sound effects and application volume'
+        'libpulse: sound devices (pactl)'
+        'power-profiles-daemon: power profiles'
+        'upower: battery and power'
+        'accountsservice: Users page'
+        'udisks2: disk usage'
+        'wireguard-tools: WireGuard VPN'
+        'imagemagick: wallpaper previews'
+        'adwaita-fonts: the Adwaita Sans interface font'
+        'gnome-settings-daemon: night light and input settings'
+        'bingux-audio-effects: sound effects'
+        'bingux-files: file manager')
+    _take usr/bin/bingux-settings \
+        usr/share/applications/bingux-settings.desktop \
+        usr/share/icons/hicolor/scalable/apps/bingux-settings.svg \
+        usr/share/metainfo/dev.drewett.bingux.Settings.metainfo.xml \
+        usr/share/man/man1/bingux-settings.1 \
+        usr/share/bingux/search-apps/bingux-settings.json
+    _licenses bingux-settings
+}
+
+package_bingux-files() {
+    pkgdesc='File manager for the Bingux desktop'
+    license=('GPL-3.0-or-later' 'Apache-2.0' 'BSD-2-Clause' 'BSD-3-Clause' 'ISC' 'MIT' 'Unicode-3.0' 'Zlib')
+    depends=('fontconfig' 'freetype2' 'libglvnd' 'mesa' 'libxkbcommon' 'wayland' 'hicolor-icon-theme'
+        'shared-mime-info' 'xdg-utils' 'glib2')
+    optdepends=('adwaita-fonts: the Adwaita Sans interface font'
+        'udisks2: mount and unmount drives'
+        'gvfs: more places and trash integration'
+        'unzip: open zip archives'
+        'bingux-settings: Settings')
+    _take usr/bin/bingux-files \
+        usr/share/applications/bingux-files.desktop \
+        usr/share/icons/hicolor/scalable/apps/bingux-files.svg \
+        usr/share/metainfo/dev.drewett.bingux.Files.metainfo.xml \
+        usr/share/man/man1/bingux-files.1
+    _licenses bingux-files
+}
+
+package_bingux-audio-effects() {
+    pkgdesc='Sound effects for the Bingux desktop: engine and LADSPA plugins'
+    license=('GPL-3.0-or-later' 'MIT' 'Unicode-3.0')
+    depends=('pipewire' 'systemd')
+    optdepends=('wireplumber: choose the real device'
+        'lsp-plugins-ladspa: more effect plugins')
+    _take usr/bin/bingux-effects \
+        usr/lib/ladspa/libbingux_dsp.so \
+        usr/lib/systemd/user/bingux-effects@.service \
+        usr/share/man/man1/bingux-effects.1
+    _licenses bingux-effects
+}
+
+package_bingux-taxonomy() {
+    pkgdesc='Reference window for the Bingux UI components (development tool)'
+    license=('GPL-3.0-or-later' 'Apache-2.0' 'BSD-2-Clause' 'BSD-3-Clause' 'ISC' 'MIT' 'Unicode-3.0' 'Zlib')
+    depends=('fontconfig' 'freetype2' 'libglvnd' 'mesa' 'libxkbcommon' 'wayland' 'hicolor-icon-theme')
+    optdepends=('adwaita-fonts: the Adwaita Sans interface font')
+    _take usr/bin/bingux-taxonomy \
+        usr/share/applications/bingux-taxonomy.desktop \
+        usr/share/icons/hicolor/scalable/apps/bingux-taxonomy.svg \
+        usr/share/metainfo/dev.drewett.bingux.Taxonomy.metainfo.xml \
+        usr/share/man/man1/bingux-taxonomy.1
+    _licenses bingux-taxonomy
+}
+
+# The shell takes everything the other packages left in the stage.
+package_bingux() {
+    pkgdesc='Wayland desktop shell for Gnoblin and other layer-shell compositors'
+    license=('GPL-3.0-or-later' 'LGPL-3.0-or-later' 'CC-BY-SA-3.0' 'Apache-2.0' 'BSD-3-Clause'
+        'CDLA-Permissive-2.0' 'ISC' 'MIT' 'Unicode-3.0' 'Zlib')
+    # quickshell provides /usr/bin/qs, which the shell wrappers start.
+    depends=('bingux-config' 'quickshell' 'qt6-declarative' 'qt6-wayland' 'qt6-svg' 'systemd'
+        'python' 'python-cairo' 'python-gobject' 'python-pillow' 'ffmpeg' 'wl-clipboard' 'xdg-utils'
+        'dconf' 'glib2' 'gtk3' 'gtk4' 'libadwaita' 'fontconfig' 'libglvnd' 'libpulse' 'pam')
+    optdepends=('gnoblin: the compositor and session'
+        'bingux-settings: Settings, opened from the Control Centre and the dock'
+        'bingux-files: file manager'
+        'gnome-settings-daemon: night light'
+        'networkmanager: network status and Wi-Fi'
+        'upower: battery'
+        'python-yaml: YAML frontmatter in document previews'
+        'zenity: file dialogs for helper scripts')
+    backup=('etc/pam.d/bingux-lock')
+    install=bingux.install
+    install -Dm644 "$srcdir/$pkgbase-$pkgver/packaging/pam/bingux-lock" "$pkgdir/etc/pam.d/bingux-lock"
+    # Directories the other packages emptied (applications, metainfo, man1, ...) stay with them.
+    find "$srcdir/stage" -depth -type d -empty -delete
+    mv "$srcdir"/stage/usr "$pkgdir/usr"
+    _licenses bingux-searchd bingux-statusd
+    # The bundled Adwaita icon licences are already under usr/share/licenses/bingux/.
+}

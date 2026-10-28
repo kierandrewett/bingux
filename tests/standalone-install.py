@@ -11,6 +11,24 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# What `make` leaves in build/ for the installer to copy (fixtures, not real programs).
+FIXTURE_FILES = (
+    "text/libbinguxtext.so",
+    "effects/libbinguxeffects.so",
+    "wayland-sync/libbinguxwaylandsync.so",
+    "bingux-audio-meter",
+    "bingux-image-clipboard",
+    "bingux-frame",
+    "cargo/release/bingux-searchd",
+    "cargo/release/bingux-statusd",
+    "cargo/release/bingux-config",
+    "cargo/release/bingux-settings",
+    "cargo/release/bingux-files",
+    "cargo/release/bingux-taxonomy",
+    "cargo/release/bingux-effects",
+    "cargo/release/libbingux_dsp.so",
+)
+
 
 class InstallTest(unittest.TestCase):
     def test_user_upgrade_migrates_legacy_launcher_without_losing_search_settings(self):
@@ -18,18 +36,7 @@ class InstallTest(unittest.TestCase):
             base = Path(name)
             build, prefix = base / "build", base / "install"
             home, config = base / "home", base / "config"
-            for filename in (
-                "text/libbinguxtext.so",
-                "effects/libbinguxeffects.so",
-                "wayland-sync/libbinguxwaylandsync.so",
-                "bingux-audio-meter",
-                "bingux-image-clipboard",
-                "bingux-frame",
-                "cargo/release/bingux-searchd",
-                "cargo/release/bingux-statusd",
-                "cargo/release/bingux-config",
-                "cargo/release/bingux-settings",
-            ):
+            for filename in FIXTURE_FILES:
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("test fixture\n")
@@ -96,18 +103,7 @@ class InstallTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as name:
             base = Path(name)
             build, stage = base / "build", base / "stage"
-            for filename in (
-                "text/libbinguxtext.so",
-                "effects/libbinguxeffects.so",
-                "wayland-sync/libbinguxwaylandsync.so",
-                "bingux-audio-meter",
-                "bingux-image-clipboard",
-                "bingux-frame",
-                "cargo/release/bingux-searchd",
-                "cargo/release/bingux-statusd",
-                "cargo/release/bingux-config",
-                "cargo/release/bingux-settings",
-            ):
+            for filename in FIXTURE_FILES:
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("test fixture\n")
@@ -177,6 +173,46 @@ class InstallTest(unittest.TestCase):
             # Gnoblin's Lua autostart, so wanting them here would start a second copy.
             wants = next(line for line in target_unit.splitlines() if line.startswith("Wants="))
             self.assertEqual(set(wants[len("Wants=") :].split()), {"bingux-searchd.service", "bingux-statusd.service"})
+            # The files each package takes: applications, sound effects, metadata.
+            for path in (
+                "usr/bin/bingux-settings",
+                "usr/bin/bingux-files",
+                "usr/bin/bingux-taxonomy",
+                "usr/bin/bingux-effects",
+                "usr/bin/bingux-config",
+                "usr/lib/ladspa/libbingux_dsp.so",
+                "usr/lib/systemd/user/bingux-effects@.service",
+                "usr/lib/systemd/user-preset/90-bingux.preset",
+                "usr/share/man/man1/bingux-settings.1",
+                "usr/share/man/man1/bingux-files.1",
+                "usr/share/man/man1/bingux-config.1",
+                "usr/share/man/man1/bingux-effects.1",
+                "usr/share/man/man1/bingux-taxonomy.1",
+                "usr/share/metainfo/dev.drewett.bingux.Settings.metainfo.xml",
+                "usr/share/metainfo/dev.drewett.bingux.Files.metainfo.xml",
+                "usr/share/metainfo/dev.drewett.bingux.Taxonomy.metainfo.xml",
+                "usr/share/applications/bingux-files.desktop",
+                "usr/share/icons/hicolor/scalable/apps/bingux-files.svg",
+            ):
+                self.assertTrue((stage / path).is_file(), path)
+            self.assertTrue((stage / "usr/lib/ladspa/libbingux_dsp.so").stat().st_mode & 0o111)
+            effects_unit = (stage / "usr/lib/systemd/user/bingux-effects@.service").read_text()
+            self.assertIn("ExecStart=/usr/bin/bingux-effects run %i", effects_unit)
+            self.assertIn("enable bingux.target", (stage / "usr/lib/systemd/user-preset/90-bingux.preset").read_text())
+            # The bundled Adwaita icons stay private to Bingux and never overlap
+            # the distribution's adwaita-icon-theme.
+            self.assertTrue((stage / "usr/share/bingux/icons/Adwaita/index.theme").is_file())
+            self.assertFalse((stage / "usr/share/icons/Adwaita").exists())
+            self.assertTrue((stage / "usr/share/licenses/bingux/adwaita-icon-theme/COPYING").is_file())
+            self.assertFalse((stage / "usr/share/licenses/adwaita-icon-theme").exists())
+            self.assertIn("/usr/share/bingux/icons/Adwaita", (stage / "usr/bin/bingux").read_text())
+            manifest = json.loads((stage / "usr/share/bingux/search-apps/bingux-settings.json").read_text())
+            self.assertEqual(manifest["command"], ["/usr/bin/bingux-settings"])
+            # A package builder stages below a build root; no installed file may name it
+            # (rpm's check-buildroot rejects the build when one does).
+            for path in stage.rglob("*"):
+                if path.is_file() and not path.is_symlink():
+                    self.assertNotIn(str(stage).encode(), path.read_bytes(), str(path))
 
     def test_missing_build_fails_before_install(self):
         with tempfile.TemporaryDirectory() as name:
@@ -193,18 +229,7 @@ class InstallTest(unittest.TestCase):
             base = Path(name)
             build, prefix = base / "build", base / "install"
             home, config = base / "home", base / "config"
-            for filename in (
-                "text/libbinguxtext.so",
-                "effects/libbinguxeffects.so",
-                "wayland-sync/libbinguxwaylandsync.so",
-                "bingux-audio-meter",
-                "bingux-image-clipboard",
-                "bingux-frame",
-                "cargo/release/bingux-searchd",
-                "cargo/release/bingux-statusd",
-                "cargo/release/bingux-config",
-                "cargo/release/bingux-settings",
-            ):
+            for filename in FIXTURE_FILES:
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("test fixture\n")
@@ -326,18 +351,7 @@ class InstallTest(unittest.TestCase):
             base = Path(name)
             build, prefix = base / "build", base / "install"
             home, config, bin_dir = base / "home", base / "config", base / "bin"
-            for filename in (
-                "text/libbinguxtext.so",
-                "effects/libbinguxeffects.so",
-                "wayland-sync/libbinguxwaylandsync.so",
-                "bingux-audio-meter",
-                "bingux-image-clipboard",
-                "bingux-frame",
-                "cargo/release/bingux-searchd",
-                "cargo/release/bingux-statusd",
-                "cargo/release/bingux-config",
-                "cargo/release/bingux-settings",
-            ):
+            for filename in FIXTURE_FILES:
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("test fixture\n")
@@ -385,18 +399,7 @@ class InstallTest(unittest.TestCase):
             base = Path(name)
             build, prefix = base / "build", base / "install"
             home, bin_dir = base / "home", base / "bin"
-            for filename in (
-                "text/libbinguxtext.so",
-                "effects/libbinguxeffects.so",
-                "wayland-sync/libbinguxwaylandsync.so",
-                "bingux-audio-meter",
-                "bingux-image-clipboard",
-                "bingux-frame",
-                "cargo/release/bingux-searchd",
-                "cargo/release/bingux-statusd",
-                "cargo/release/bingux-config",
-                "cargo/release/bingux-settings",
-            ):
+            for filename in FIXTURE_FILES:
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("test fixture\n")

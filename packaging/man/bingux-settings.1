@@ -1,0 +1,100 @@
+.TH BINGUX-SETTINGS 1 "2026-10-28" "Bingux 0.1.0" "Bingux"
+.SH NAME
+bingux-settings \- settings application for the Bingux desktop
+.SH SYNOPSIS
+.B bingux-settings
+.RI [ LOCATION ]
+.br
+.B bingux-settings \-\-search\-provider
+.SH DESCRIPTION
+.B bingux-settings
+opens the Settings window: network, Bluetooth, sound, displays, appearance, the
+shell's dock and top bar, power, date and time, keyboard, mouse, accounts and
+default applications.
+With no argument it opens at the root.
+With a
+.I LOCATION
+it opens that page or subpage, and Back leads to the pages above it.
+.PP
+Only one Settings window runs.
+Starting
+.B bingux-settings
+with a location while the window is open shows that location in the open window
+and exits at once.
+.SH LOCATIONS
+A location is a URI,
+.BI bingux\-settings:// PATH \fR[\fB?\fIQUERY\fR][\fB#\fIROW\fR],
+or the bare
+.IR PATH .
+The path names a page or subpage, the query holds one-off state, and the
+fragment names a row to scroll to.
+.PP
+Pages:
+.BR network ,
+.BR bluetooth ,
+.BR background ,
+.BR desktop ,
+.BR search ,
+.BR display ,
+.BR sound ,
+.BR power ,
+.BR keyboard ,
+.BR mouse ,
+.BR datetime ,
+.BR users ,
+.BR applications ,
+.BR accessibility ,
+.BR about .
+Run
+.B bingux-settings \-\-help
+for the subpages.
+.SH OPTIONS
+.TP
+.B \-\-help
+Print the locations the window understands.
+.TP
+.B \-\-search\-provider
+Do not open a window. Serve Settings' search index on the application search
+socket until killed, so the desktop search can find settings without Settings
+being open.
+.SH ENVIRONMENT
+.TP
+.B BINGUX_CONFIG_BIN
+The
+.BR bingux\-config (1)
+program to use instead of the one next to
+.B bingux-settings
+or on
+.BR PATH .
+.TP
+.B BINGUX_REDUCED_MOTION
+Set to
+.B 1
+to turn off animations.
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/bingux/bingux.toml
+The shell's configuration, edited by Settings and by
+.BR bingux\-config (1).
+.TP
+.I $XDG_CONFIG_HOME/bingux/effects/
+Sound effects state and presets (see
+.BR bingux\-effects (1)).
+.TP
+.I $XDG_DATA_HOME/bingux/data-usage.sqlite3
+Network data usage recorded by
+.BR bingux\-statusd .
+.TP
+.I $XDG_RUNTIME_DIR/bingux-settings.sock
+Hands a location to the running window.
+.SH EXIT STATUS
+.B 0
+when the window closes normally or a location was handed to the running window.
+.SH SEE ALSO
+.BR bingux\-config (1),
+.BR bingux\-effects (1),
+.BR xdg\-open (1)
+.PP
+Documentation: docs/settings.md in the Bingux source.
+.SH AUTHORS
+Kieran Drewett and the Bingux contributors.

@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
-"""Verify the RPM spec keeps the managed user-service lifecycle intact."""
+"""Check the package definitions without building anything.
 
-from pathlib import Path
+Covers the RPM spec, the Arch PKGBUILD, the systemd units and preset, the
+desktop entries, the AppStream files and the man pages. `make rpm-package` and
+`make arch-package` build the packages themselves.
+"""
+
+import re
 import shutil
 import subprocess
 import unittest
-
+import xml.etree.ElementTree as ET
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# The release being packaged: every package, metainfo file and man page must say so.
+VERSION = re.search(r"^VERSION \?= (\S+)", (ROOT / "Makefile").read_text(), re.M).group(1)
 UNITS = (
     "bingux.target",
     "bingux.service",
@@ -18,6 +26,21 @@ UNITS = (
     "bingux-capture-ui.service",
     "bingux-emoji-ui.service",
 )
+PACKAGES = (
+    "bingux",
+    "bingux-config",
+    "bingux-settings",
+    "bingux-files",
+    "bingux-audio-effects",
+    "bingux-taxonomy",
+)
+# Application packages: binary, desktop entry, metainfo id and man page.
+APPLICATIONS = {
+    "bingux-settings": ("packages/bingux-settings", "dev.drewett.bingux.Settings"),
+    "bingux-files": ("packages/bingux-files-app", "dev.drewett.bingux.Files"),
+    "bingux-taxonomy": ("packages/bingux-taxonomy", "dev.drewett.bingux.Taxonomy"),
+}
+MAN_PAGES = ("bingux-settings", "bingux-files", "bingux-taxonomy", "bingux-config", "bingux-effects")
 
 
 class UnitFilesTest(unittest.TestCase):
@@ -35,6 +58,73 @@ class UnitFilesTest(unittest.TestCase):
             else:
                 self.assertIn("Restart=on-failure", lines, path.name)
 
+    def test_preset_enables_the_helper_target_only(self):
+        lines = [
+            line
+            for line in (ROOT / "packaging/systemd/90-bingux.preset").read_text().splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+        self.assertIn("enable bingux.target", lines)
+        self.assertIn("disable bingux-effects@.service", lines)
+        self.assertEqual([line for line in lines if line.startswith("enable ")], ["enable bingux.target"])
+
+
+class DesktopFilesTest(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("desktop-file-validate"), "desktop-file-validate is not installed")
+    def test_desktop_entries_validate(self):
+        for package, (directory, _) in APPLICATIONS.items():
+            result = subprocess.run(
+                ["desktop-file-validate", str(ROOT / directory / f"{package}.desktop")],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_entries_match_window_id_icon_and_scheme(self):
+        for package, (directory, _) in APPLICATIONS.items():
+            entry = (ROOT / directory / f"{package}.desktop").read_text()
+            self.assertIn(f"Icon={package}\n", entry)
+            # The window's app id is the program name, so the dock groups by it.
+            self.assertIn(f"StartupWMClass={package}\n", entry)
+            self.assertIn(f"x-scheme-handler/{package}", entry)
+            self.assertTrue((ROOT / directory / f"{package}.svg").is_file())
+        files = (ROOT / "packages/bingux-files-app/bingux-files.desktop").read_text()
+        self.assertIn("inode/directory", files)
+
+
+class AppStreamTest(unittest.TestCase):
+    def test_every_application_has_matching_metainfo(self):
+        for package, (_, component) in APPLICATIONS.items():
+            path = ROOT / "packaging/metainfo" / f"{component}.metainfo.xml"
+            tree = ET.parse(path).getroot()
+            self.assertEqual(tree.findtext("id"), component)
+            self.assertEqual(tree.findtext("launchable"), f"{package}.desktop")
+            self.assertEqual(tree.findtext("provides/binary"), package)
+            self.assertEqual(tree.findtext("project_license"), "GPL-3.0-or-later")
+            self.assertEqual(tree.find("releases/release").get("version"), VERSION)
+
+    @unittest.skipUnless(shutil.which("appstreamcli"), "appstreamcli is not installed")
+    def test_metainfo_validates(self):
+        for _, component in APPLICATIONS.values():
+            result = subprocess.run(
+                ["appstreamcli", "validate", "--no-net", str(ROOT / "packaging/metainfo" / f"{component}.metainfo.xml")],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+class ManPageTest(unittest.TestCase):
+    def test_every_command_has_a_page_with_the_standard_sections(self):
+        for name in MAN_PAGES:
+            text = (ROOT / "packaging/man" / f"{name}.1").read_text()
+            self.assertTrue(text.startswith(f".TH {name.upper()} 1 "), name)
+            self.assertIn(f'"Bingux {VERSION}"', text.splitlines()[0], name)
+            for section in ("NAME", "SYNOPSIS", "DESCRIPTION"):
+                self.assertIn(f".SH {section}", text, name)
+
 
 @unittest.skipUnless(shutil.which("rpmspec"), "rpmspec is not installed")
 class RpmPackageTest(unittest.TestCase):
@@ -50,12 +140,27 @@ class RpmPackageTest(unittest.TestCase):
         if result.returncode != 0:
             raise AssertionError(result.stderr or result.stdout)
         cls.spec = result.stdout
+        names = subprocess.run(
+            ["rpmspec", "-q", "--qf", "%{name}\\n", "packaging/rpm/bingux.spec"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        cls.names = names.stdout.split()
+
+    def test_the_spec_builds_every_package(self):
+        self.assertEqual(sorted(self.names), sorted(PACKAGES))
 
     def test_user_unit_lifecycle_is_expanded(self):
         for action in ("install-user-units", "remove-user-units", "mark-restart-user-units"):
             self.assertIn(action, self.spec)
             for unit in UNITS:
                 self.assertIn(unit, self.spec)
+
+    def test_effects_instances_are_stopped_on_removal(self):
+        for unit in ("bingux-effects@output.service", "bingux-effects@input.service"):
+            self.assertIn(unit, self.spec)
 
     def test_shell_wrappers_and_license_are_packaged(self):
         for wrapper in (
@@ -77,6 +182,66 @@ class RpmPackageTest(unittest.TestCase):
     def test_gnoblin_fragment_is_in_the_payload(self):
         self.assertTrue((ROOT / "packaging/gnoblin/bingux.lua").is_file())
         self.assertIn("/usr/share/gnoblin/conf.d/bingux.lua", self.spec)
+
+    def test_each_application_package_ships_its_entry_icon_metainfo_and_man_page(self):
+        for package, (_, component) in APPLICATIONS.items():
+            for path in (
+                f"/usr/bin/{package}",
+                f"/usr/share/applications/{package}.desktop",
+                f"/usr/share/icons/hicolor/scalable/apps/{package}.svg",
+                f"/usr/share/metainfo/{component}.metainfo.xml",
+                f"/usr/share/man/man1/{package}.1*",
+            ):
+                self.assertIn(path, self.spec)
+
+    def test_the_bundled_adwaita_icons_do_not_overlap_the_distribution(self):
+        self.assertNotIn("%{_datadir}/icons/Adwaita", self.spec)
+        self.assertNotIn("/usr/share/icons/Adwaita", self.spec)
+        self.assertNotIn("/usr/share/licenses/adwaita-icon-theme", self.spec)
+
+    def test_no_scriptlet_hand_updates_desktop_caches(self):
+        code = "\n".join(line for line in self.spec.splitlines() if not line.lstrip().startswith("#"))
+        for command in ("update-desktop-database", "gtk-update-icon-cache", "update-mime-database", "glib-compile-schemas"):
+            self.assertNotIn(command, code)
+
+    @unittest.skipUnless(shutil.which("cargo"), "cargo is not installed")
+    def test_license_tags_match_the_linked_crates(self):
+        result = subprocess.run(
+            ["python3", "scripts/cargo-licenses.py", "--out", "build/licenses", "--check"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+
+class ArchPackageTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.text = (ROOT / "packaging/arch/PKGBUILD").read_text()
+
+    def test_syntax(self):
+        subprocess.run(["bash", "-n", str(ROOT / "packaging/arch/PKGBUILD")], check=True)
+        subprocess.run(["bash", "-n", str(ROOT / "packaging/arch/bingux.install")], check=True)
+
+    def test_builds_the_same_packages_as_the_spec(self):
+        match = re.search(r"^pkgname=\(([^)]*)\)", self.text, re.M)
+        self.assertIsNotNone(match)
+        self.assertEqual(sorted(match.group(1).split()), sorted(PACKAGES))
+        for name in PACKAGES:
+            self.assertIn(f"package_{name}()", self.text)
+
+    def test_the_shell_is_last_so_it_takes_what_is_left(self):
+        match = re.search(r"^pkgname=\(([^)]*)\)", self.text, re.M)
+        self.assertEqual(match.group(1).split()[-1], "bingux")
+
+    def test_version_matches_the_makefile_and_the_spec(self):
+        makefile = (ROOT / "Makefile").read_text()
+        spec = (ROOT / "packaging/rpm/bingux.spec").read_text()
+        version = re.search(r"^VERSION \?= (\S+)", makefile, re.M).group(1)
+        self.assertIn(f"pkgver={version}\n", self.text)
+        self.assertIn(f"Version:        {version}\n", spec)
 
 
 if __name__ == "__main__":

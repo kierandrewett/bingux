@@ -1,0 +1,100 @@
+.TH BINGUX-EFFECTS 1 "2026-10-28" "Bingux 0.1.0" "Bingux"
+.SH NAME
+bingux-effects \- sound effects engine for the Bingux desktop
+.SH SYNOPSIS
+.B bingux-effects run
+.RB { output | input }
+.br
+.B bingux-effects restore
+.br
+.B bingux-effects render
+.RB { output | input }
+.br
+.B bingux-effects presets
+.RB { output | input }
+.br
+.B bingux-effects scan
+.br
+.B bingux-effects import
+.I FILE
+.RB { output | input }
+.RI [ NAME ]
+.SH DESCRIPTION
+.B bingux-effects
+puts a chain of audio plugins between applications and the speakers
+.RB ( output )
+or between a microphone and applications
+.RB ( input ).
+It turns the active preset into a PipeWire
+.B filter-chain
+configuration and runs it as its own PipeWire client, one process for each
+direction.
+It creates a virtual device (\(lqEffects (Output)\(rq or \(lqEffects (Input)\(rq),
+makes it the default device and sends the result to the real device.
+When it stops, the real device is the default again.
+.PP
+Bingux Settings, under Sound, Effects, edits the presets and turns the effects
+on and off.
+.SH COMMANDS
+.TP
+.BI "run " DIRECTION
+Run one direction until stopped. The user unit
+.B bingux-effects@output.service
+does this.
+.TP
+.B restore
+Start each direction that Settings has turned on. Run it at login.
+.TP
+.BI "render " DIRECTION
+Print the filter-chain configuration for the active preset.
+.TP
+.BI "presets " DIRECTION
+List the presets.
+.TP
+.B scan
+List the plugins found, as JSON.
+.TP
+.BI "import " "FILE DIRECTION " [ NAME ]
+Read an EasyEffects, Equalizer APO or AutoEq preset and save it as a Bingux preset.
+.SH PLUGINS
+Plugins come from PipeWire's built-in filters (equaliser, gain, delay, convolver),
+from
+.B libbingux_dsp.so
+(compressor, limiter, gate, reverb and others), and from any LADSPA library found
+in
+.BR LADSPA_PATH ,
+.IR ~/.ladspa ,
+.I /usr/lib/ladspa
+and the other usual directories.
+.SH ENVIRONMENT
+.TP
+.B LADSPA_PATH
+Where to look for LADSPA libraries, instead of the usual directories.
+.TP
+.B BINGUX_LADSPA_PATH
+More directories to look in.
+.TP
+.B BINGUX_EFFECTS_BIN
+The
+.B bingux-effects
+program that Settings starts.
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/bingux/effects/state.json
+What is on, the preset and the device.
+.TP
+.I $XDG_CONFIG_HOME/bingux/effects/{output,input}/presets/NAME.json
+One preset per file.
+.TP
+.I $XDG_CACHE_HOME/bingux/effects/plugins.json
+The plugin scan, cached by file date.
+.TP
+.I $XDG_RUNTIME_DIR/bingux/effects/
+The generated configuration, process id and level meters.
+.SH SEE ALSO
+.BR bingux\-settings (1),
+.BR pipewire (1)
+.PP
+Documentation: docs/audio-effects.md in the Bingux source.
+.SH AUTHORS
+Kieran Drewett and the Bingux contributors.

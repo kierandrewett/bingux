@@ -163,8 +163,19 @@ The package-oriented installer writes only below `DESTDIR`. It installs:
 - Shell files in `share/bingux/shell`.
 - Native QML plugins in `lib/bingux/qml`.
 - Helper programs in `bin` and `libexec/bingux`.
+- The Settings, Files and Taxonomy applications and the sound effects engine in
+  `bin`, with their desktop entries, `hicolor` icons, AppStream metainfo
+  (`share/metainfo`) and man pages (`share/man/man1`).
+- The Bingux DSP LADSPA library in `lib/ladspa` (`LADSPADIR` changes it).
+- The bundled Adwaita symbolic icons in `share/bingux/icons/Adwaita`. They are
+  private to Bingux and never overlap the distribution's icon theme.
 - The Gnoblin module in `share/gnoblin/conf.d/bingux.lua`.
-- User systemd units in `lib/systemd/user`.
+- User systemd units in `lib/systemd/user` and the preset in
+  `lib/systemd/user-preset`.
+
+`CARGO_TARGET` names the Cargo target directory the programs are read from
+(default `BUILD_DIR/cargo`). To split the staged files into packages, see the
+[package list](package-management.md#the-packages).
 
 It does not enable services or change user configuration. Use the managed
 `make install-user` flow for a source installation.

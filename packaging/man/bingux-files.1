@@ -1,0 +1,64 @@
+.TH BINGUX-FILES 1 "2026-10-28" "Bingux 0.1.0" "Bingux"
+.SH NAME
+bingux-files \- file manager for the Bingux desktop
+.SH SYNOPSIS
+.B bingux-files
+.RI [ FOLDER | FILE | URI ]
+.SH DESCRIPTION
+.B bingux-files
+opens the Files window with tabs, a places sidebar, list and grid views,
+previews and file operations.
+With no argument it opens the home folder, or raises the window when it is
+already open.
+.PP
+Only one Files window runs.
+A second launch hands its folder to the running window, which opens it in a new
+tab and comes to the front.
+Only the first argument is used.
+.SH ARGUMENTS
+.TP
+.I FOLDER
+A folder path.
+.B ~
+and relative paths are accepted; a relative path is relative to the current
+directory.
+.TP
+.I FILE
+A file path. Files opens the folder that holds it.
+.TP
+.I URI
+.BR file:///path ,
+.B recent:///
+for the recent files, or
+.BR bingux\-files://path .
+.SH DEFAULT FILE MANAGER
+The desktop entry lists
+.BR inode/directory .
+To open folders in Files, run:
+.PP
+.RS
+.B xdg\-mime default bingux\-files.desktop inode/directory
+.RE
+.PP
+or choose it under Settings, Applications, Default applications.
+.SH FILES
+.TP
+.I $XDG_STATE_HOME/bingux/files/view.json
+Each folder's icon size and sort order, and the window size.
+.TP
+.I $XDG_CACHE_HOME/bingux/files/v1/
+Cached folder listings.
+.TP
+.I $XDG_DATA_HOME/Trash/
+Where deleted files go (the freedesktop.org Trash).
+.TP
+.I $XDG_DATA_HOME/recently-used.xbel
+The recent files list.
+.SH SEE ALSO
+.BR bingux\-settings (1),
+.BR xdg\-open (1),
+.BR xdg\-mime (1)
+.PP
+Documentation: docs/files.md in the Bingux source.
+.SH AUTHORS
+Kieran Drewett and the Bingux contributors.
