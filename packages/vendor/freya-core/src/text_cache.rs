@@ -29,4 +29,11 @@ impl Hash for CachedParagraph<'_> {
     }
 }
 
-pub type TextCache = LRUCache<SkParagraph, NodeId>;
+/// The laid-out paragraphs of the window's text nodes. It retains the paragraphs of
+/// the nodes that went away (Bingux patch; see [`LRUCache`]), so a page that is opened
+/// again does not shape its labels again on the frame that mounts it.
+pub type TextCache = LRUCache<SkParagraph, NodeId, 2, RETAINED_PARAGRAPHS>;
+
+/// How many paragraphs with no node are kept for the next page that asks for
+/// them: about forty pages' worth of labels, a few megabytes.
+pub const RETAINED_PARAGRAPHS: usize = 2048;

@@ -22,7 +22,7 @@ use crate::{
         WinitRenderer,
     },
 };
-mod bingux_scroll;
+pub mod bingux_scroll;
 mod accessibility;
 mod clipboard;
 pub mod config;

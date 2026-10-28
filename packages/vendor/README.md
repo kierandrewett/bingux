@@ -55,6 +55,24 @@ The changes are panic resilience (`freya-core`, `freya-winit`) and scroll feel f
   interrupted. Turning the wheel the other way drops the pending travel and
   starts from the content's current position. `BINGUX_SCROLL_DEBUG=1` prints
   every wheel event and animation frame to stderr.
+- `freya-winit/src/bingux_scroll.rs` (now `pub`) and `renderer.rs`: a raw wheel
+  tap. The `MouseWheel` arm hands winit's event (`LineDelta` or `PixelDelta`,
+  the phase and the window scale, before Freya drops every phase but `Moved`)
+  to `bingux_scroll::tap`. `BINGUX_SCROLL_LOG=path` appends one JSON object per
+  event to `path`; `bingux_scroll::enable_tap()` queues them for
+  `bingux_scroll::drain_tap()` (the `scroll_probe` example reads them). Off
+  (one atomic load per event) unless one of the two is set.
+- `freya-components/src/scrollviews/wheel_accel.rs` (new), `scrollview.rs`,
+  `virtual_scrollview.rs`, `use_scroll_controller.rs`: the wheel feel.
+  `BINGUX_WHEEL_FEEL` (`current`, `raw`, `accelerated`) or
+  `wheel_accel::set_feel` picks how both scroll views turn a wheel event into
+  movement. `current` (default) is the behaviour above, unchanged. `raw` is
+  the event's distance at once, no spring. `accelerated` scales each detent by
+  a gain of 1x to 4x from the detent rate over the last 150 ms (pure
+  `wheel_accel::step`, unit-tested), on top of the same spring, and makes
+  `VirtualScrollView` drop pending travel on reversal as `ScrollView` does.
+  Not the default yet: the `scroll_probe` example compares the three.
+  `ScrollController::motion()` reports the spring's velocity.
 - `freya-components/src/scrollviews/shared.rs`, `scrollbar.rs`,
   `scrollview.rs` and `virtual_scrollview.rs`: an auto-hidden scrollbar stays
   for 3 s after the last scroll or pointer movement, then fades out over
@@ -69,6 +87,16 @@ The changes are panic resilience (`freya-core`, `freya-winit`) and scroll feel f
   `ScrollView::scrollbar_inset_top(px)` does the same at the top
   (`start_inset`), so the bar starts below a header that floats over the
   content.
+- `freya-components/src/scrollviews/activity.rs` (new), `scrollview.rs` and
+  `virtual_scrollview.rs`: a window-level scroll signal. `ScrollActivity` is
+  provided once per window (`provide_scroll_activity`, called by `WindowHost`);
+  every `ScrollView` and `VirtualScrollView` reads it with `scroll_activity()`
+  and pulses it from a wheel notch that moved the content and from every frame
+  in which the content has a new position (a glide, a scrollbar drag, keys, a
+  drag of the content). `scrolling()` (subscribing) and `is_scrolling()` read
+  it; it clears after `SCROLL_STILL` (200 ms) without a pulse. Bingux tooltips
+  and the file view's detail card stay down while it is set. A view with no
+  provider above it does nothing (upstream has no such signal).
 - `freya-components/src/input.rs`: the text field reports its caret and
   selection to the app. `Input::probe(State<InputProbe>)` writes the focus,
   the field's window area, the caret rectangle and the selection ends on each

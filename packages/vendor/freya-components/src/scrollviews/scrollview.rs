@@ -14,6 +14,7 @@ use torin::{
 
 use crate::scrollviews::{
     ScrollBar,
+    scroll_activity,
     ScrollBarContext,
     ScrollBarThumbEvents,
     ScrollConfig,
@@ -42,7 +43,7 @@ fn debug_ms() -> f64 {
 }
 
 /// Bingux patch: the most a wheel scroll may trail its target, in pixels.
-const MAX_WHEEL_LAG: f32 = 1200.0;
+pub(super) const MAX_WHEEL_LAG: f32 = 1200.0;
 
 /// Scrollable area with bidirectional support and scrollbars.
 ///
@@ -230,6 +231,12 @@ impl Component for ScrollView {
         let a11y_id = use_a11y();
         let mut timeout = super::shared::use_idle_timer();
         let mut pressing_shift = use_state(|| false);
+        // Bingux patch: the wheel feel's own state (acceleration), see `wheel_accel`.
+        let wheel_state = use_hook(|| {
+            std::rc::Rc::new(std::cell::RefCell::new(super::wheel_accel::State::new(
+                super::wheel_accel::px_per_detent(),
+            )))
+        });
         let mut clicking_scrollbar = use_state::<Option<(Axis, f64)>>(|| None);
         let mut size = use_state(SizedEventData::default);
         let mut scroll_controller = self
@@ -302,6 +309,18 @@ impl Component for ScrollView {
         // Bingux patch: captured for the pointer handler, which runs later.
         let scrollbar_inset_bottom = self.scrollbar_inset_bottom;
         let scrollbar_inset_top = self.scrollbar_inset_top;
+        // Bingux patch: the window learns that the content moves, from a wheel
+        // notch and from every frame it has a new position, whatever moved it.
+        let activity = scroll_activity();
+        let moved = (rendered_position.x as i32, rendered_position.y as i32);
+        let seen = use_hook(|| std::rc::Rc::new(std::cell::Cell::new(moved)));
+        use_side_effect_with_deps(&moved, move |&now| {
+            if seen.replace(now) != now
+                && let Some(activity) = activity
+            {
+                activity.pulse();
+            }
+        });
 
         let on_capture_global_pointer_up = move |e: Event<PointerEventData>| {
             if clicking_scrollbar.read().is_some() {
@@ -332,7 +351,13 @@ impl Component for ScrollView {
                 (e.delta_x as f32, e.delta_y as f32)
             };
 
-            let animate = e.source == WheelSource::Line;
+            // Bingux patch: the wheel feel (current, raw or accelerated) decides the
+            // distance and whether the content glides to it.
+            let super::wheel_accel::Applied {
+                x: x_movement,
+                y: y_movement,
+                animate,
+            } = super::wheel_accel::apply(&wheel_state, e.source, x_movement, y_movement);
             if std::env::var_os("BINGUX_SCROLL_DEBUG").is_some() {
                 eprintln!(
                     "[scroll] t={:.0}ms wheel src={:?} dy={:.1} rendered_y={:.1} target_y={:.1}",
@@ -358,11 +383,7 @@ impl Component for ScrollView {
                 if !animate {
                     return rendered;
                 }
-                let pending = target - rendered;
-                if (movement > 0.0 && pending < 0.0) || (movement < 0.0 && pending > 0.0) {
-                    return rendered;
-                }
-                rendered + pending.clamp(-MAX_WHEEL_LAG, MAX_WHEEL_LAG)
+                super::wheel_accel::trail_base(target, rendered, movement, MAX_WHEEL_LAG)
             };
             let (base_x, base_y) = (
                 base(corrected_scrolled_x, rendered_position.x, x_movement),
@@ -376,9 +397,12 @@ impl Component for ScrollView {
                 size.read().area.height(),
                 base_y,
             );
-            scroll_controller.scroll_to_y(scroll_position_y).then(|| {
-                e.stop_propagation();
-            });
+            let moved_y = scroll_controller
+                .scroll_to_y(scroll_position_y)
+                .then(|| {
+                    e.stop_propagation();
+                })
+                .is_some();
 
             // Horizontal scroll
             let scroll_position_x = get_scroll_position_from_wheel(
@@ -387,9 +411,18 @@ impl Component for ScrollView {
                 size.read().area.width(),
                 base_x,
             );
-            scroll_controller.scroll_to_x(scroll_position_x).then(|| {
-                e.stop_propagation();
-            });
+            let moved_x = scroll_controller
+                .scroll_to_x(scroll_position_x)
+                .then(|| {
+                    e.stop_propagation();
+                })
+                .is_some();
+            if moved_y || moved_x {
+                // Bingux patch: tooltips go as soon as the content moves.
+                if let Some(activity) = activity {
+                    activity.pulse();
+                }
+            }
             timeout.reset();
         };
 

@@ -14,6 +14,7 @@ use torin::{
 
 use crate::scrollviews::{
     ScrollBar,
+    scroll_activity,
     ScrollBarContext,
     ScrollBarThumbEvents,
     ScrollConfig,
@@ -482,6 +483,12 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
         let mut timeout = super::shared::use_idle_timer();
         let mut pressing_shift = use_state(|| false);
         let mut pressing_ctrl = use_state(|| false);
+        // Bingux patch: the wheel feel's own state (acceleration), see `wheel_accel`.
+        let wheel_state = use_hook(|| {
+            std::rc::Rc::new(std::cell::RefCell::new(super::wheel_accel::State::new(
+                super::wheel_accel::px_per_detent(),
+            )))
+        });
         let mut clicking_scrollbar = use_state::<Option<(Axis, f64)>>(|| None);
         let mut size = use_state(SizedEventData::default);
         let mut scroll_controller = self
@@ -554,6 +561,18 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
         let scroll_with_arrows = self.scroll_with_arrows;
         let invert_scroll_wheel = self.invert_scroll_wheel;
         let pass_ctrl_wheel = self.pass_ctrl_wheel;
+        // Bingux patch: the window learns that the content moves, from a wheel
+        // notch and from every frame it has a new position, whatever moved it.
+        let activity = scroll_activity();
+        let moved = (rendered_position.x as i32, rendered_position.y as i32);
+        let seen = use_hook(|| std::rc::Rc::new(std::cell::Cell::new(moved)));
+        use_side_effect_with_deps(&moved, move |&now| {
+            if seen.replace(now) != now
+                && let Some(activity) = activity
+            {
+                activity.pulse();
+            }
+        });
 
         let on_capture_global_pointer_up = move |e: Event<PointerEventData>| {
             if clicking_scrollbar.read().is_some() {
@@ -592,17 +611,34 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
                 (e.delta_x as f32, e.delta_y as f32)
             };
 
-            let animate = e.source == WheelSource::Line;
+            // Bingux patch: the wheel feel (current, raw or accelerated) decides the
+            // distance and whether the content glides to it. Only the accelerated
+            // feel also drops the pending travel when the wheel turns back (as
+            // ScrollView does), so the current feel stays as shipped here.
+            let super::wheel_accel::Applied {
+                x: x_movement,
+                y: y_movement,
+                animate,
+            } = super::wheel_accel::apply(&wheel_state, e.source, x_movement, y_movement);
             if animate {
                 scroll_controller.animate_from(rendered_position);
             } else {
                 scroll_controller.stop();
             }
-            let (base_x, base_y) = if animate {
-                (corrected_scrolled_x, corrected_scrolled_y)
-            } else {
-                (rendered_position.x, rendered_position.y)
+            let accelerated = super::wheel_accel::feel() == super::wheel_accel::WheelFeel::Accelerated;
+            let base = |target: f32, rendered: f32, movement: f32| -> f32 {
+                if !animate {
+                    rendered
+                } else if accelerated {
+                    super::wheel_accel::trail_base(target, rendered, movement, super::scrollview::MAX_WHEEL_LAG)
+                } else {
+                    target
+                }
             };
+            let (base_x, base_y) = (
+                base(corrected_scrolled_x, rendered_position.x, x_movement),
+                base(corrected_scrolled_y, rendered_position.y, y_movement),
+            );
 
             // Vertical scroll
             let scroll_position_y = get_scroll_position_from_wheel(
@@ -611,9 +647,12 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
                 size.read().area.height(),
                 base_y,
             );
-            scroll_controller.scroll_to_y(scroll_position_y).then(|| {
-                e.stop_propagation();
-            });
+            let moved_y = scroll_controller
+                .scroll_to_y(scroll_position_y)
+                .then(|| {
+                    e.stop_propagation();
+                })
+                .is_some();
 
             // Horizontal scroll
             let scroll_position_x = get_scroll_position_from_wheel(
@@ -622,9 +661,18 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
                 size.read().area.width(),
                 base_x,
             );
-            scroll_controller.scroll_to_x(scroll_position_x).then(|| {
-                e.stop_propagation();
-            });
+            let moved_x = scroll_controller
+                .scroll_to_x(scroll_position_x)
+                .then(|| {
+                    e.stop_propagation();
+                })
+                .is_some();
+            if moved_y || moved_x {
+                // Bingux patch: tooltips go as soon as the content moves.
+                if let Some(activity) = activity {
+                    activity.pulse();
+                }
+            }
             timeout.reset();
         };
 

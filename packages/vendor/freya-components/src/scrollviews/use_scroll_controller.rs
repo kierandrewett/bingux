@@ -381,6 +381,12 @@ impl ScrollController {
         }
     }
 
+    /// Bingux patch: the spring's current velocity and whether a scroll
+    /// animation is running, for the scroll probe.
+    pub fn motion(&self) -> (Vector2D, bool) {
+        (self.damp.peek().velocity, self.task.peek().is_some())
+    }
+
     /// Chases the controller position from `current`, keeping the current velocity.
     pub fn animate_from(&mut self, current: Point2D) {
         self.start(current, None, TargetPlatform::get().scroll_smoothing_time());

@@ -1199,6 +1199,9 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                 }
 
                 WindowEvent::MouseWheel { delta, phase, .. } => {
+                    // Bingux patch: the raw event for the scroll probe and
+                    // BINGUX_SCROLL_LOG, before Freya drops any phase but Moved.
+                    crate::bingux_scroll::tap(delta, phase, app.window.scale_factor());
                     // Bingux patch: desktop defaults, tunable without a rebuild.
                     // BINGUX_WHEEL_STEP is pixels per wheel notch and
                     // BINGUX_TOUCHPAD_FACTOR scales touchpad movement.
