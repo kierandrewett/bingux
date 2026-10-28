@@ -4,6 +4,8 @@
 pub mod back_button;
 pub mod banner;
 pub mod dialog;
+#[cfg(all(test, feature = "testing"))]
+mod header_bar_tests;
 pub mod menu;
 #[cfg(all(test, feature = "testing"))]
 mod menu_first_frame_tests;

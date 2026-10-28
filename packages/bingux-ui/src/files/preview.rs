@@ -34,6 +34,7 @@ use crate::controls::{icon_button, path_label};
 use crate::icons::Icon;
 use crate::shell::{Overlays, framed_dialog};
 use crate::style::*;
+use crate::theme::Tokens;
 use crate::surface::use_tokens;
 use crate::typography::{CAPTION, Ink, SECTION};
 
@@ -225,6 +226,31 @@ struct QuickLook {
     overlays: Overlays,
 }
 
+/// The card's header bar: the file's `name`, which takes the room it is
+/// given, then `position` ("3 of 4"), then Close. It is the standard header
+/// bar, so its icon button takes the header size and insets and Close sits
+/// where it does in every other header. The title row is laid out in the
+/// room the bar leaves between its controls.
+fn header(
+    tokens: &Tokens,
+    name: impl Into<Element>,
+    position: Option<String>,
+    on_close: impl Into<EventHandler<()>>,
+) -> crate::shell::HeaderBar {
+    // `grow_children` is what lets the name's `w_flex` share the row with the
+    // counter. Without it the name takes the whole row and pushes the counter
+    // out from under its room, over the Close button.
+    let title: Element = rect()
+        .tw(tokens, &[flex_row(), grow_children(), items(Align::Center), gap(S3), w_full()])
+        .child(rect().tw(tokens, &[w_flex()]).child(name))
+        .maybe_child(position.map(|text| CAPTION.in_ink(Ink::Muted).label(tokens, text).max_lines(1)))
+        .into();
+    crate::shell::HeaderBar::new("")
+        .draggable(false)
+        .title_slot(title)
+        .trailing(icon_button(Icon::WindowClose, on_close).tooltip("Close (Space)"))
+}
+
 impl Component for QuickLook {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
@@ -268,30 +294,18 @@ impl Component for QuickLook {
             text
         });
 
-        // The standard header bar: its icon buttons take the header size and
-        // its insets, so Close sits where it does in every other header.
-        let title: Element = rect()
-            .tw(&tokens, &[flex_row(), items(Align::Center), gap(S3), w_full()])
-            .child(
-                rect().tw(&tokens, &[w_flex()]).child(
-                    path_label(
-                        entry
-                            .as_ref()
-                            .map_or("Nothing to preview", |entry| entry.name.as_str()),
-                    )
-                    .name()
-                    .style(SECTION),
-                ),
+        let header = header(
+            &tokens,
+            path_label(
+                entry
+                    .as_ref()
+                    .map_or("Nothing to preview", |entry| entry.name.as_str()),
             )
-            .maybe_child(position.map(|text| CAPTION.in_ink(Ink::Muted).label(&tokens, text).max_lines(1)))
-            .into();
-        let header = crate::shell::HeaderBar::new("")
-            .draggable(false)
-            .title_slot(title)
-            .trailing(
-                icon_button(Icon::WindowClose, move |_| overlays.dismiss_dialog())
-                    .tooltip("Close (Space)"),
-            );
+            .name()
+            .style(SECTION),
+            position,
+            move |_| overlays.dismiss_dialog(),
+        );
 
         rect()
             .component("QuickLook")
@@ -388,5 +402,76 @@ mod tests {
         assert_eq!(arrow(NamedKey::ArrowUp, false), Route::Step(Step::Previous));
         assert_eq!(arrow(NamedKey::ArrowDown, true), Route::Step(Step::Down));
         assert_eq!(arrow(NamedKey::ArrowUp, true), Route::Step(Step::Up));
+    }
+}
+
+/// The header's title row sits between the card's edge and Close: the "3 of 4"
+/// counter ended under the Close button when the row had no `grow_children`.
+#[cfg(all(test, feature = "testing"))]
+mod header_tests {
+    use std::time::Duration;
+
+    use super::*;
+    use crate::snapshot::Snapshot;
+    use crate::theme::provide_tokens;
+    use crate::window::WindowHost;
+
+    #[derive(PartialEq)]
+    struct Root;
+
+    impl Component for Root {
+        fn render(&self) -> impl IntoElement {
+            let _ = provide_tokens();
+            WindowHost::new(Host)
+        }
+    }
+
+    #[derive(PartialEq)]
+    struct Host;
+
+    impl Component for Host {
+        fn render(&self) -> impl IntoElement {
+            let tokens = use_tokens();
+            rect().expanded().child(header(
+                &tokens,
+                path_label("notes.txt").name().style(SECTION),
+                Some("3 of 4".to_owned()),
+                |_| {},
+            ))
+        }
+    }
+
+    #[test]
+    fn the_counter_ends_before_the_close_button() {
+        // The largest card, the smallest card and a phone's.
+        for width in [CARD.0, CARD_MIN.0, 390.0] {
+            let mut shot = Snapshot::new(|| Root.into_element(), (width, 160.0));
+            shot.settle(Duration::from_millis(400));
+            let gap = shot.runner().run_in(|| S1.px());
+            let counter = shot
+                .runner()
+                .find_many(|node, element| {
+                    let label = Label::try_downcast(element)?;
+                    (label.text == "3 of 4").then(|| node.layout().area)
+                })
+                .into_iter()
+                .next()
+                .expect("the counter");
+            let close = shot
+                .runner()
+                .find_many(|node, element| {
+                    (element.accessibility().builder.class_name() == Some("IconButton"))
+                        .then(|| node.layout().area)
+                })
+                .into_iter()
+                .next()
+                .expect("the close button");
+            assert!(
+                counter.max_x() <= close.min_x() - gap + 0.5,
+                "width {width}: the counter ends at {} under the close button from {}",
+                counter.max_x(),
+                close.min_x()
+            );
+        }
     }
 }

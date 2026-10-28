@@ -1050,10 +1050,15 @@ impl Panel {
         };
         let cap = (window.1 * percent / 100.0 - chrome).max(0.0);
         let viewport = (self.content_height + tail).min(cap);
+        // A device preview holds the page to a phone-wide column in the middle
+        // of the window: the sheet rises from the bottom of that column, as the
+        // page's own sheets do, not across the whole window.
+        let column = page_column(window.0);
         SheetLayout {
             header,
             tail,
             viewport,
+            column: (column < window.0).then(|| ((window.0 - column) / 2.0, column)),
             metrics: Metrics::new(chrome + viewport, overhang, SHEET_DISMISS_DISTANCE),
         }
     }
@@ -1141,11 +1146,14 @@ impl Panel {
             }))
             .child(self.body(tokens, layout.viewport, true, layout.tail, Some(drag)))
             .child(rect().height(Size::px(overhang)));
+        let (left, width) = layout.column.map_or((0.0, Size::fill()), |(left, width)| {
+            (left, Size::px(width))
+        });
         rect()
             .component("SheetSlot")
-            .position(Position::new_absolute().bottom(-overhang).left(0.0))
+            .position(Position::new_absolute().bottom(-overhang).left(left))
             .layer(Layer::Overlay)
-            .width(Size::fill())
+            .width(width)
             .offset_y(offset)
             .child(card)
     }
@@ -1159,6 +1167,9 @@ struct SheetLayout {
     tail: f32,
     /// The visible height of the rows.
     viewport: f32,
+    /// The page column's left edge and width when the page is narrower than
+    /// the window (a device preview); `None` when the page is the window.
+    column: Option<(f32, f32)>,
     metrics: Metrics,
 }
 

@@ -87,13 +87,24 @@ def read_rings(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
+ATTEMPTS = 3
+
+
 def run(job: dict, workdir: Path, timeout: int) -> dict:
+    """One capture run, repeated up to ATTEMPTS times while it produces no
+    capture or does not exit cleanly. A run that fails every time is reported
+    (see `broken` in main); one that failed once under load is not."""
     rings = workdir / "rings" / f"{job['name']}.jsonl"
     rings.parent.mkdir(parents=True, exist_ok=True)
-    rings.unlink(missing_ok=True)
     job = dict(job, env=dict(job.get("env", {}), BINGUX_UI_RING_CHECK=str(rings)))
-    result = lint.run_job(job, workdir, timeout)
-    result["shots"] = read_rings(rings)
+    for attempt in range(1, ATTEMPTS + 1):
+        rings.unlink(missing_ok=True)
+        result = lint.run_job(job, workdir, timeout)
+        result["shots"] = read_rings(rings)
+        result["attempts"] = attempt
+        if result["status"] == "ok" and result["shots"]:
+            break
+        print(f"retry {attempt}/{ATTEMPTS}  {job['name']}  ({result['status']}, {len(result['shots'])} captures)", flush=True)
     return result
 
 

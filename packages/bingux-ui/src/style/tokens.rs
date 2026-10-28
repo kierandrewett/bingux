@@ -1212,6 +1212,19 @@ pub fn device_preview() -> bool {
         .is_some_and(|density| matches!(density.forced(), Some((SizeClass::Compact, _))))
 }
 
+/// The width the page of a window `window_width` px wide is drawn at: the
+/// phone preview's column in a device preview, which holds the page to a
+/// phone-wide column in the middle of the window, and the whole window
+/// otherwise. What a window lays out against the page's edges (a bottom
+/// sheet) uses it, so a sheet is as wide as the page and not the window.
+pub fn page_column(window_width: f32) -> f32 {
+    if device_preview() {
+        window_width.min(crate::theme::PHONE_PREVIEW_SIZE.0)
+    } else {
+        window_width
+    }
+}
+
 /// `regular` at regular density, `compact` at compact density, read now.
 pub fn pick<T>(regular: T, compact: T) -> T {
     size_class().pick(regular, compact)

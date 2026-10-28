@@ -74,7 +74,11 @@ impl HeaderBar {
         self
     }
 
-    /// Draw `element` where the title goes, in place of the title text.
+    /// Draw `element` where the title goes, in place of the title text. The
+    /// slot is as wide as the room between the controls, centred on the bar,
+    /// and `w_full()` fills it. A row in it that gives one child `w_flex()`
+    /// needs `grow_children()`, or that child takes the whole row and pushes
+    /// the rest out under the controls.
     pub fn title_slot(mut self, element: impl Into<Element>) -> Self {
         self.title_slot = Some(element.into());
         self
@@ -100,6 +104,13 @@ impl Component for HeaderBar {
         let mut trailing_width = use_state(|| 0.0_f32);
         let mut title_width = use_state(|| 0.0_f32);
         let inset = leading_width().max(trailing_width()) + S2.px() + S1.px();
+        // The title layer sits in the bar's content box, inside the padding. The
+        // padding is wider on the left of a bar with no leading control, so both
+        // sides are cleared by the wider one and the title is centred on the bar,
+        // not on a content box that is off centre by half the difference.
+        let pad_left = if self.leading.is_empty() { S3 } else { S2 };
+        let pad_right = S2;
+        let pad = pad_left.px().max(pad_right.px());
         let text: Element = match &self.title_slot {
             Some(slot) => slot.clone(),
             None => EMPHASIS
@@ -112,8 +123,10 @@ impl Component for HeaderBar {
         };
         // Drawn first, so the controls above it take the pointer where they overlap.
         // The title is inset on both sides by the wider cluster so it never runs under a control.
-        // The measured title width less both insets is the title's run-time width.
-        let centre_width = (title_width() - inset * 2.0).max(0.0);
+        // The measured width is the content box's: the paddings are added back for the bar's,
+        // and both clearances come off for the title's run-time width.
+        let centre_width =
+            (title_width() + pad_left.px() + pad_right.px() - 2.0 * (pad + inset)).max(0.0);
         let title = rect()
             .position(Position::new_absolute().top(0.0).left(0.0))
             .tw(&tokens, &[w_full(), h_full()])
@@ -122,7 +135,7 @@ impl Component for HeaderBar {
             })
             .child(
                 rect()
-                    .position(Position::new_absolute().top(0.0).left(inset))
+                    .position(Position::new_absolute().top(0.0).left(inset + pad - pad_left.px()))
                     .width(Size::px(centre_width))
                     // Freya does not size an absolute box from top and bottom,
                     // so the row takes the bar's full height to centre the title.
@@ -150,7 +163,7 @@ impl Component for HeaderBar {
             .tw(
                 &tokens,
                 &[
-                    pl(if self.leading.is_empty() { S3 } else { S2 }),
+                    pl(pad_left),
                     bg(self.background),
                 ],
             )

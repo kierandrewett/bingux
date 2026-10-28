@@ -614,3 +614,50 @@ fn the_dropdown_row_check_flags_a_label_that_cannot_be_seen() {
         "the ink check found {problems:?}"
     );
 }
+
+/// The window root of a device preview: the window is wide, and the density is
+/// held at compact, so the page is a phone-wide column in its middle.
+#[derive(PartialEq)]
+struct PreviewRoot(Case);
+
+impl Component for PreviewRoot {
+    fn render(&self) -> impl IntoElement {
+        use_hook(|| force_density(Platform::get().current_window().id, Some((SizeClass::Compact, PointerKind::Touch))));
+        Root(self.0)
+    }
+}
+
+/// In a device preview the dropdown's sheet rises from the bottom of the phone
+/// column, not across the whole window.
+#[test]
+fn a_dropdown_sheet_in_a_device_preview_is_as_wide_as_the_phone_column() {
+    let case = Case { count: 4, icons: false, last: false, dark: true };
+    let size = (800.0, 700.0);
+    let mut shot = Snapshot::with_scale(move || PreviewRoot(case).into_element(), size, 1.0);
+    shot.settle(Duration::from_millis(300));
+    let tree = Frame2::of(&mut shot);
+    let button = tree
+        .tree
+        .nodes
+        .iter()
+        .find(|node| node.a11y.role == "ComboBox")
+        .and_then(|node| node.area)
+        .expect("the dropdown's button");
+    shot.click(button.min_x() + button.width() / 2.0, button.min_y() + button.height() / 2.0);
+    shot.settle(Duration::from_millis(500));
+    let tree = Frame2::of(&mut shot);
+    let slot = tree
+        .tree
+        .nodes
+        .iter()
+        .find(|node| node.a11y.component.as_deref() == Some("SheetSlot"))
+        .and_then(|node| node.area)
+        .expect("the sheet opened");
+    let column = crate::theme::PHONE_PREVIEW_SIZE.0;
+    assert!((slot.width() - column).abs() < 0.5, "the sheet is {} px wide, not the {column} px column", slot.width());
+    assert!(
+        (slot.min_x() - (size.0 - column) / 2.0).abs() < 0.5,
+        "the sheet starts at {}, not at the column's edge",
+        slot.min_x()
+    );
+}

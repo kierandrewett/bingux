@@ -6,6 +6,7 @@
 
 use freya::prelude::*;
 
+use super::path_label::text_width;
 use super::press::use_press;
 use crate::app_icon::app_icon;
 use crate::component::ComponentName;
@@ -24,6 +25,28 @@ use crate::typography::{BODY, Ink};
 /// to an ellipsised label, so the button is sized from its longest option
 /// and does not change width when the choice changes.
 const GLYPH_WIDTH: f32 = 8.2;
+
+/// How many of the longest labels are measured as drawn. The average glyph
+/// is too narrow for a run of digits (a cursor size of `24` at a phone's
+/// 15 px text is wider than two average glyphs, so the button left it no room
+/// and the ellipsis took the whole value); measuring the few longest labels
+/// by their characters finds the widest without measuring a long list.
+const MEASURED_LABELS: usize = 8;
+
+/// Room added to a measured label so rounding never ellipsises its last glyph.
+const LABEL_SLACK: f32 = 2.0;
+
+/// The width in px, as drawn now (density and text scale included), of the
+/// widest of the `MEASURED_LABELS` longest labels of `options`.
+fn widest_label(options: &[(String, String)]) -> f32 {
+    let mut longest: Vec<&str> = options.iter().map(|(_, text)| text.as_str()).collect();
+    longest.sort_unstable_by_key(|text| std::cmp::Reverse(text.chars().count()));
+    longest
+        .into_iter()
+        .take(MEASURED_LABELS)
+        .map(|text| text_width(text, BODY))
+        .fold(0.0, f32::max)
+}
 
 /// Left padding, gap and chevron with its right padding. Used for the
 /// measured width only.
@@ -206,7 +229,8 @@ impl Component for Dropdown {
             Some(fixed) => fixed.px(),
             None => {
                 let min = self.min_width.map_or(0.0, Dim::px);
-                (longest * GLYPH_WIDTH + button_chrome() + icon_space)
+                let label_room = (longest * GLYPH_WIDTH).max(widest_label(&options) + LABEL_SLACK);
+                (label_room + button_chrome() + icon_space)
                     .min(Dim::DropdownMax.px())
                     .max(min)
             }
@@ -768,6 +792,64 @@ mod geometry_tests {
                     );
                 }
             }
+        }
+    }
+}
+
+/// A short value (a cursor size, `24`) is drawn, not cut to nothing by the
+/// ellipsis: the button's label box is as wide as the value is drawn.
+#[cfg(all(test, feature = "testing"))]
+mod value_tests {
+    use std::time::Duration;
+
+    use super::*;
+    use crate::snapshot::Snapshot;
+    use crate::theme::provide_tokens;
+    use crate::window::WindowHost;
+
+    #[derive(PartialEq)]
+    struct Root;
+
+    impl Component for Root {
+        fn render(&self) -> impl IntoElement {
+            let _ = provide_tokens();
+            WindowHost::new(Host)
+        }
+    }
+
+    #[derive(PartialEq)]
+    struct Host;
+
+    impl Component for Host {
+        fn render(&self) -> impl IntoElement {
+            let options = ["24", "32", "48", "64", "96"]
+                .iter()
+                .map(|size| (size.to_string(), size.to_string()))
+                .collect();
+            rect().expanded().child(dropdown(options, "24", |_: String| {}))
+        }
+    }
+
+    #[test]
+    fn a_short_value_keeps_the_room_it_is_drawn_in() {
+        for width in [390.0, 800.0] {
+            let mut shot = Snapshot::new(|| Root.into_element(), (width, 200.0));
+            shot.settle(Duration::from_millis(300));
+            let drawn = shot.runner().run_in(|| text_width("24", BODY));
+            let label = shot
+                .runner()
+                .find_many(|node, element| {
+                    let label = Label::try_downcast(element)?;
+                    (label.text == "24").then(|| node.layout().area)
+                })
+                .into_iter()
+                .next()
+                .expect("the value's label");
+            assert!(
+                label.width() >= drawn - 0.5,
+                "width {width}: the value is {drawn} px wide and its box {} px, so it is cut",
+                label.width()
+            );
         }
     }
 }

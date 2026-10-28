@@ -8,7 +8,7 @@
 //! never looks like a second selection.
 
 use super::press::use_press;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -74,7 +74,6 @@ impl Segmented {
 
 impl Component for Segmented {
     fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
         // On a phone a row has no room for a track of segments beside its
         // title, so the same choice is a value picker, as the dropdown is.
         // The density is read here, so a change swaps the child below.
@@ -86,26 +85,107 @@ impl Component for Segmented {
             )
             .into_element();
         }
-        let rail: Element = SegmentRail {
+        if self.scroll {
+            return ScrollingRail {
+                options: self.options.clone(),
+                selected: self.selected.clone(),
+                on_select: self.on_select.clone(),
+            }
+            .into_element();
+        }
+        SegmentRail {
             options: self.options.clone(),
             selected: self.selected.clone(),
             on_select: self.on_select.clone(),
             fill: self.fill,
+            measure: None,
         }
-        .into_element();
-        if !self.scroll {
-            return rail;
-        }
+        .into_element()
+    }
+}
+
+/// A rail that scrolls sideways when its container is too narrow for it, and
+/// brings the selected segment into view whenever the selection moves (a
+/// keyboard shortcut, an arrow key) or the rail is first measured, so the
+/// selected tab is never the one scrolled out of sight. A scrolling rail is its
+/// own component so its hooks are not skipped by the compact branch above.
+#[derive(PartialEq)]
+struct ScrollingRail {
+    options: Vec<(String, String)>,
+    selected: String,
+    on_select: EventHandler<String>,
+}
+
+impl Component for ScrollingRail {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let scroll = use_scroll_controller(ScrollConfig::default);
+        let mut viewport = use_state(|| 0.0_f32);
+        let widths = use_state(Vec::<f32>::new);
+        let selected_index = self.options.iter().position(|(key, _)| *key == self.selected);
+        // The rail pads its segments and sets them apart by `S1`.
+        let step = S1.px();
+        // Where the rail is scrolled to, read here so the effect below does not
+        // subscribe to every scroll and pull a rail the person scrolled back.
+        let offset = use_hook(|| Rc::new(Cell::new(0.0_f32)));
+        offset.set(-(<(i32, i32)>::from(scroll).0 as f32));
+        let deps = (
+            selected_index,
+            widths.read().iter().map(|width| width.round() as i32).collect::<Vec<_>>(),
+            viewport().round() as i32,
+            step.round() as i32,
+        );
+        use_side_effect_with_deps(&deps, move |(index, widths, region, step)| {
+            let Some(index) = *index else { return };
+            if widths.len() <= index || widths.iter().any(|width| *width <= 0) {
+                return;
+            }
+            let widths: Vec<f32> = widths.iter().map(|width| *width as f32).collect();
+            let mut scroll = scroll;
+            let current = offset.get();
+            let to = reveal(&widths, index, *step as f32, *region as f32, current);
+            if (to - current).abs() >= 1.0 {
+                scroll.scroll_to_x(-(to.round() as i32));
+            }
+        });
+        let rail = SegmentRail {
+            options: self.options.clone(),
+            selected: self.selected.clone(),
+            on_select: self.on_select.clone(),
+            fill: false,
+            measure: Some(widths),
+        };
         rect()
             .tw(&tokens, &[w_full(), h(Dim::Control)])
+            .on_sized(move |event: Event<SizedEventData>| {
+                viewport.set_if_modified(event.area.width());
+            })
             .child(
-                scroll_x()
+                scroll_x_controlled(scroll)
                     .width(Size::fill())
                     .height(Size::fill())
                     .child(rail),
             )
-            .into_element()
     }
+}
+
+/// The scroll offset, from the rail's start, that shows segment `index` of a
+/// rail whose segments are `widths` wide, with `step` of padding at its ends
+/// and between segments, in a region `region` wide, moving no further than it
+/// must. `current` is where the region starts now. One `step` of the rail
+/// beside the segment is shown too, so its neighbour is in sight.
+fn reveal(widths: &[f32], index: usize, step: f32, region: f32, current: f32) -> f32 {
+    let content = 2.0 * step + widths.iter().sum::<f32>() + step * widths.len().saturating_sub(1) as f32;
+    let left = step + widths[..index].iter().sum::<f32>() + step * index as f32;
+    let (near, far) = (left - step, left + widths[index] + step);
+    let to = if near < current {
+        near
+    } else if far > current + region {
+        far - region
+    } else {
+        current
+    };
+    to.clamp(0.0, (content - region).max(0.0))
 }
 
 impl Component for SegmentRail {
@@ -177,6 +257,7 @@ impl Component for SegmentRail {
                         fill: self.fill,
                         on_select: self.on_select.clone(),
                         a11y_id: ids[index],
+                        measure: self.measure.map(|widths| (index, widths)),
                     })
                 })),
         )
@@ -192,6 +273,8 @@ struct SegmentRail {
     selected: String,
     on_select: EventHandler<String>,
     fill: bool,
+    /// Collects each segment's width; `Some` for a rail that scrolls.
+    measure: Option<State<Vec<f32>>>,
 }
 
 #[derive(PartialEq)]
@@ -203,6 +286,9 @@ struct Segment {
     fill: bool,
     on_select: EventHandler<String>,
     a11y_id: AccessibilityId,
+    /// Where to report this segment's width, by its place in the rail, for a
+    /// rail that scrolls and must know where each segment lies.
+    measure: Option<(usize, State<Vec<f32>>)>,
 }
 
 impl Component for Segment {
@@ -241,6 +327,23 @@ impl Component for Segment {
                 ],
             )
             .maybe(self.fill, |element| element.tw(&tokens, &[w_flex()]))
+            .maybe(self.measure.is_some(), |element| {
+                let Some((index, widths)) = self.measure else {
+                    return element;
+                };
+                element.on_sized(move |event: Event<SizedEventData>| {
+                    let width = event.area.width();
+                    let known = widths.peek().get(index).copied();
+                    if known.is_none_or(|known| (known - width).abs() > 0.5) {
+                        let mut widths = widths;
+                        let mut widths = widths.write();
+                        if widths.len() <= index {
+                            widths.resize(index + 1, 0.0);
+                        }
+                        widths[index] = width;
+                    }
+                })
+            })
             .maybe(self.selected, |element| {
                 element.tw(&tokens, &[shadow(Elevation::Knob)])
             })
@@ -278,5 +381,103 @@ impl Component for Segment {
             .focusable(focus(), radius)
             .maybe(self.fill, |wrapper| wrapper.tw(&tokens, &[w_flex()]))
             .tw(&tokens, &[h_full()])
+    }
+}
+
+#[cfg(test)]
+mod reveal_tests {
+    use super::reveal;
+
+    const WIDTHS: [f32; 4] = [60.0, 100.0, 70.0, 80.0];
+    // Padding 4: the segments start at 4, 68, 172 and 246, and end at 64, 168, 242 and 326.
+
+    #[test]
+    fn a_segment_in_view_leaves_the_rail_where_it_is() {
+        assert_eq!(reveal(&WIDTHS, 1, 4.0, 200.0, 0.0), 0.0);
+    }
+
+    #[test]
+    fn a_segment_past_the_end_scrolls_in_with_a_step_of_rail_beside_it() {
+        // The last segment ends at 326; a step of rail beyond it is 330, the rail's end.
+        assert_eq!(reveal(&WIDTHS, 3, 4.0, 200.0, 0.0), 130.0);
+        // The third ends at 242, and 246 shows the step beside it.
+        assert_eq!(reveal(&WIDTHS, 2, 4.0, 200.0, 0.0), 46.0);
+    }
+
+    #[test]
+    fn a_segment_before_the_start_scrolls_back_to_it() {
+        assert_eq!(reveal(&WIDTHS, 0, 4.0, 200.0, 130.0), 0.0);
+        assert_eq!(reveal(&WIDTHS, 1, 4.0, 200.0, 130.0), 64.0);
+    }
+
+    #[test]
+    fn the_offset_never_leaves_the_rail() {
+        // A region wider than the rail has nothing to scroll.
+        assert_eq!(reveal(&WIDTHS, 3, 4.0, 400.0, 0.0), 0.0);
+        assert_eq!(reveal(&WIDTHS, 3, 4.0, 200.0, 500.0), 130.0);
+    }
+}
+
+#[cfg(all(test, feature = "testing"))]
+mod scroll_tests {
+    use std::time::Duration;
+
+    use super::*;
+    use crate::snapshot::Snapshot;
+    use crate::theme::provide_tokens;
+    use crate::window::WindowHost;
+
+    const TABS: [&str; 4] = ["Basic", "Permissions", "Details", "Contents"];
+
+    #[derive(PartialEq)]
+    struct Root(usize);
+
+    impl Component for Root {
+        fn render(&self) -> impl IntoElement {
+            let _ = provide_tokens();
+            WindowHost::new(Host(self.0))
+        }
+    }
+
+    #[derive(PartialEq)]
+    struct Host(usize);
+
+    impl Component for Host {
+        fn render(&self) -> impl IntoElement {
+            let options = TABS.iter().map(|tab| (tab.to_string(), tab.to_string())).collect();
+            segmented(options, TABS[self.0], |_: String| {})
+                .tabs()
+                .scroll()
+        }
+    }
+
+    /// The horizontal extent of the label `text`, once the rail has settled in
+    /// a window `width` wide with `selected` chosen.
+    fn label_x(text: &str, selected: usize, width: f32) -> (f32, f32) {
+        let mut shot = Snapshot::new(move || Root(selected).into_element(), (width, 120.0));
+        shot.settle(Duration::from_millis(600));
+        let text = text.to_owned();
+        let area = shot
+            .runner()
+            .find_many(move |node, element| {
+                let label = Label::try_downcast(element)?;
+                (label.text == text).then(|| node.layout().area)
+            })
+            .into_iter()
+            .next()
+            .expect("the segment's label");
+        (area.min_x(), area.max_x())
+    }
+
+    #[test]
+    fn a_scrolling_rail_shows_the_selected_segment_however_far_along_it_is() {
+        // 200 px holds neither the four labels nor their padding.
+        for (index, tab) in TABS.iter().enumerate() {
+            let (min_x, max_x) = label_x(tab, index, 200.0);
+            assert!(
+                min_x >= 0.0 && max_x <= 200.0,
+                "the selected segment {tab} is scrolled out of sight: it spans {min_x} to {max_x} in a 200 px window"
+            );
+        }
     }
 }
