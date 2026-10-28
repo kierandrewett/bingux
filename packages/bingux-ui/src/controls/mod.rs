@@ -10,6 +10,8 @@ pub mod checkbox;
 pub mod colour_picker;
 pub(crate) mod default_mark;
 pub mod dropdown;
+#[cfg(all(test, feature = "testing"))]
+mod dropdown_rows_tests;
 pub mod focus_stop;
 pub mod form;
 pub(crate) mod hsva;
