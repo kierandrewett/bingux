@@ -33,7 +33,9 @@ exclusive end time; events covering the entire selected local day display as
 The packaged helper has Python/Gio dependencies bundled; local development uses
 `python3` with PyGObject. `BINGUX_CALENDAR_HELPER` overrides its executable.
 A missing service produces an unavailable state without blocking the popout.
-Use the calendar icon to open GNOME Calendar for account/event management.
+Use the calendar icon to open your default calendar app (the `text/calendar`
+choice in Settings > Applications) for account and event management. GNOME
+Calendar is used when no default is set.
 Events load automatically on opening/month changes and update through service
 signals; there is no manual refresh button. No-calendar and empty-day states
 are distinct; an empty response does not prove a remote account is synced.
@@ -55,10 +57,13 @@ Arrow keys move between picker cells, Enter selects, Page Up/Down changes the
 range, and Escape returns one level. Today returns directly to today's day view.
 The popup keeps the same height throughout.
 
-Agenda rows open the matching event in GNOME Calendar on click or Enter/Space.
-They use the shared instant hover, pressed and focus surface. Event activation
-converts the calendar server's source/event/recurrence identifier to Calendar's
-UUID format; events without that identifier fall back to opening their date.
+Agenda rows open the matching event on click or Enter/Space. With GNOME Calendar
+as the default, Calendar opens the event; any other default calendar app is
+started without a date, because only GNOME Calendar accepts date and event
+options. They use the shared instant hover, pressed and focus surface. Event
+activation converts the calendar server's source/event/recurrence identifier to
+Calendar's UUID format; events without that identifier fall back to opening
+their date.
 
 In the sidebar, the agenda grows to fit all events for the selected day. Only
 the outer sidebar scrolls when the whole calendar exceeds its available height.

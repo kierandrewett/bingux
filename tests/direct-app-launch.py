@@ -113,6 +113,7 @@ class Bus:
     def call_sync(self,*args): return Reply()
 module.Gio.bus_get_sync=lambda *args: Bus()
 module.calendar_locale=lambda bus: "C"
+module.default_calendar=lambda: None
 sys.argv=["calendar-launch.py", "--date", "2026-10-13", "--uuid", "source:event;$(touch forbidden)"]
 module.main()
 """

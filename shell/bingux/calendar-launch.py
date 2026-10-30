@@ -38,11 +38,34 @@ def calendar_locale(bus):
     return env.get("LC_ALL") or env.get("LC_TIME") or env.get("LANG") or "C"
 
 
+GNOME_CALENDAR_ID = "org.gnome.Calendar.desktop"
+
+
+def default_calendar():
+    """The user's default text/calendar handler, or None when none is set."""
+    return Gio.AppInfo.get_default_for_type("text/calendar", False)
+
+
+def open_other_calendar(app):
+    """Start the chosen calendar app. Only GNOME Calendar has date and event options."""
+    spawn_detached(["gio", "launch", app.get_filename()])
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--date", required=True)
+    parser.add_argument("--date")
     parser.add_argument("--uuid")
+    parser.add_argument("--open", action="store_true", help="Start the default calendar without a date")
     args = parser.parse_args()
+    if not args.open and not args.date:
+        parser.error("--date is required unless --open is given")
+    app = default_calendar()
+    if app is not None and app.get_id() != GNOME_CALENDAR_ID and app.get_filename():
+        open_other_calendar(app)
+        return
+    if args.open:
+        spawn_detached(["gnome-calendar"])
+        return
     date = datetime.date.fromisoformat(args.date)
     bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
     try:
