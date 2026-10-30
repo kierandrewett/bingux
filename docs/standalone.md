@@ -115,7 +115,6 @@ The installer records the following managed links in `.bingux-install.json`:
 - `$XDG_BIN_HOME`, normally `~/.local/bin`, for convenience commands.
 - `$XDG_CONFIG_HOME/systemd/user` for optional helper units.
 - `$XDG_CONFIG_HOME/gnoblin/conf.d` for the Bingux Gnoblin module.
-- `$XDG_DATA_HOME/gnoblin/scripts` for the text-input integration.
 
 The matching uninstall command removes those links safely. Existing personal
 settings stay in place. The installer puts the `gnoblin.load(...)` loader at

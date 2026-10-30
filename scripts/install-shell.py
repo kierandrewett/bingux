@@ -198,7 +198,6 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
         / "share/applications/bingux-taxonomy.desktop",
         source / "apps/taxonomy/bingux-taxonomy.svg": prefix
         / "share/icons/hicolor/scalable/apps/bingux-taxonomy.svg",
-        source / "scripts/bingux-clipboard-paste": prefix / "bin/bingux-clipboard-paste",
         # Tells bingux-searchd that Settings exposes search: its program (opens a
         # hit's address) and its id. See design/search.md section 8.
         source / "packaging/search-apps/bingux-settings.json": prefix
@@ -276,11 +275,6 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
     helpers = prefix / "libexec/bingux/shell"
     for path in sorted((source / "shell/bingux").glob("*.py")):
         copy(path, helpers / path.name)
-    gnoblin_integration = prefix / "share/bingux/gnoblin"
-    for path in (source / "gnoblin/scripts").rglob("*"):
-        if not path.is_file() or "__pycache__" in path.parts or path.suffix == ".pyc":
-            continue
-        copy(path, gnoblin_integration / path.relative_to(source / "gnoblin/scripts"))
     for path, destination in payload.items():
         executable = (
             destination.parent == prefix / "bin"
@@ -365,21 +359,6 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
             )
         else:
             copy(path, destination, executable)
-    entry_path = prefix / "share/gnoblin/scripts/bingux-text-input.js"
-    entry = target(entry_path)
-    entry.parent.mkdir(parents=True, exist_ok=True)
-    entry.write_text(
-        "const integration = "
-        + json.dumps((gnoblin_integration / "bingux-text-input.js").as_uri())
-        + ";\n"
-        + "export default async function (api) {\n"
-        + '    const offset = import.meta.url.indexOf("?");\n'
-        + '    const suffix = offset < 0 ? "" : import.meta.url.slice(offset);\n'
-        + "    const script = await import(integration + suffix);\n"
-        + "    return script.default(api);\n"
-        + "}\n"
-    )
-    installed.append(entry_path.relative_to(prefix))
     copy(source / "tools/binguxctl/binguxctl.py", prefix / "libexec/bingux/binguxctl.py")
     if managed:
         copy(source / "scripts/install-shell.py", prefix / "libexec/bingux/install-shell.py", True)
@@ -495,7 +474,6 @@ def integration_paths(prefix, managed=False):
         "bingux-search-service",
         "binguxctl",
         "bingux-frame",
-        "bingux-clipboard-paste",
     )
     if managed:
         names += ("bingux-uninstall",)
@@ -518,13 +496,11 @@ def integration_paths(prefix, managed=False):
     )
     bin_dir = Path(os.environ.get("XDG_BIN_HOME") or Path.home() / ".local/bin")
     config_dir = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
-    data_dir = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
     unit_dir = config_dir / "systemd/user"
     links = (
         [(bin_dir / name, prefix / "bin" / name) for name in names]
         + [(unit_dir / name, prefix / "lib/systemd/user" / name) for name in units]
         + [(config_dir / "gnoblin/conf.d/bingux.lua", prefix / "share/gnoblin/conf.d/bingux.lua")]
-        + [(data_dir / "gnoblin/scripts/bingux-text-input.js", prefix / "share/gnoblin/scripts/bingux-text-input.js")]
     )
     return links
 

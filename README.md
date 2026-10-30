@@ -85,7 +85,7 @@ and the same file view as the file chooser.
 | `services/` | Background programs and helpers: search and status daemons, the portal backend, the session and shell helpers, the preview host and the sound effects engine. |
 | `bsm/` | The Bingux Session Manager: one directory per crate (`core`, `manager`, `compositor`, `host`, `helper`, `appearance`, `proto`). |
 | `shell/` | The desktop shell: the QML (`shell/bingux`), the Quickshell-based runtime (`shell/runtime`), its patches and the terminal widget. |
-| `gnoblin/` | What Bingux installs into the Gnoblin compositor: the Lua modules and the input scripts. |
+| `gnoblin/` | What Bingux installs into the Gnoblin compositor: the Lua modules. |
 | `native/` | C and C++ components: QML plugins, Wayland helpers and the GTK frame helper. |
 | `tools/` | Command-line tools: `binguxctl` and the inventory script. |
 | `vendor/` | Forked third-party Rust crates (Freya and winit). |

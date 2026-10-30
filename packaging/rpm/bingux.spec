@@ -344,7 +344,6 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/dev.drewett.bingux.Ta
 %{_bindir}/binguxctl
 %{_bindir}/bingux-audio-meter
 %{_bindir}/bingux-frame
-%{_bindir}/bingux-clipboard-paste
 %{_bindir}/bingux-searchd
 %{_bindir}/bingux-search-service
 %{_bindir}/bingux-statusd
@@ -353,7 +352,6 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/dev.drewett.bingux.Ta
 %{_libexecdir}/bingux/
 %dir %{_datadir}/bingux
 %dir %{_datadir}/bingux/search-apps
-%{_datadir}/bingux/gnoblin/
 %{_datadir}/bingux/greeter/
 %{_datadir}/bingux/icons/
 %{_datadir}/bingux/search.json
@@ -362,9 +360,7 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/dev.drewett.bingux.Ta
 %{_datadir}/dbus-1/services/org.gnoblin.Shell.GlobalShortcutsProvider.service
 %dir %{_datadir}/gnoblin
 %dir %{_datadir}/gnoblin/conf.d
-%dir %{_datadir}/gnoblin/scripts
 %{_datadir}/gnoblin/conf.d/bingux.lua
-%{_datadir}/gnoblin/scripts/bingux-text-input.js
 %{_userunitdir}/bingux.target
 %{_userunitdir}/bingux.service
 %{_userunitdir}/bingux-capture-ui.service

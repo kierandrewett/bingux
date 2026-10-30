@@ -122,7 +122,7 @@ names them explicitly (section 5).
 | Shell launchers and daemons | `/usr/bin/bingux*`, `/usr/bin/binguxctl` | `bingux` |
 | Private programs | `/usr/libexec/bingux/` (`bingux-frame`, `bingux-image-clipboard`, `search-service`, `binguxctl.py`) | `bingux` |
 | QML plugins | `/usr/lib64/bingux/qml` (Fedora), `/usr/lib/bingux/qml` (Arch) | `bingux` |
-| Shell files | `/usr/share/bingux/shell`, `/usr/share/bingux/gnoblin`, `/usr/share/bingux/search.json` | `bingux` |
+| Shell files | `/usr/share/bingux/shell`, `/usr/share/bingux/search.json` | `bingux` |
 | Bundled Adwaita symbolic icons | `/usr/share/bingux/icons/Adwaita` (private; never `/usr/share/icons/Adwaita`, which `adwaita-icon-theme` owns) | `bingux` |
 | Desktop entries | `/usr/share/applications/bingux-{settings,files,taxonomy}.desktop` | each app |
 | Icons | `/usr/share/icons/hicolor/scalable/apps/bingux-{settings,files,taxonomy}.svg` | each app |
@@ -131,7 +131,7 @@ names them explicitly (section 5).
 | Search-app manifest | `/usr/share/bingux/search-apps/bingux-settings.json` | `bingux-settings` |
 | User units | `/usr/lib/systemd/user/bingux*.service`, `bingux.target` | `bingux`; `bingux-effects@.service` in `bingux-audio-effects` |
 | User preset | `/usr/lib/systemd/user-preset/90-bingux.preset` | `bingux` |
-| Gnoblin drop-in | `/usr/share/gnoblin/conf.d/bingux.lua`, `/usr/share/gnoblin/scripts/bingux-text-input.js` | `bingux` |
+| Gnoblin drop-in | `/usr/share/gnoblin/conf.d/bingux.lua` | `bingux` |
 | LADSPA plugins | `/usr/lib64/ladspa/libbingux_dsp.so` (Fedora), `/usr/lib/ladspa/` (Arch) | `bingux-audio-effects` |
 | PAM service | `/etc/pam.d/bingux-lock` (`%config(noreplace)`) | `bingux` |
 | Licences | `/usr/share/licenses/<package>/`, plus `COPYING` and a `*.LICENSE.dependencies` file per program | each package |
@@ -277,7 +277,7 @@ what it installs and whether it runs without being opened.
 | `bingux-quickshell`, `bingux-qmltermwidget` | patched Quickshell and terminal widget sources | not packaged here | none | the packages require `/usr/bin/qs` instead | Qt 6 | No |
 | `bingux-ui`, `bingux-files`, `bingux-preview-core`, `bingux-search`, `bingux-data-usage` | libraries | linked in, not installed | none | none | none | No |
 | `vendor/` | patched `freya-*` crates (scroll feel) | linked in, not installed | none | none | none | No |
-| `shell/bingux`, `gnoblin/scripts` | QML shell, Python helpers, Gnoblin scripts | `bingux` | none | `/usr/share/bingux/shell`, `/usr/share/bingux/gnoblin` | Quickshell, Python 3, PyGObject, Pillow, ffmpeg | The shell runs from Gnoblin's autostart |
+| `shell/bingux` | QML shell, Python helpers | `bingux` | none | `/usr/share/bingux/shell` | Quickshell, Python 3, PyGObject, Pillow, ffmpeg | The shell runs from Gnoblin's autostart |
 
 ## 4. Open questions
 
