@@ -39,6 +39,9 @@ ShellPopup {
     popupWidth: mediaPlayers.length > 0 || button.notificationCount > 0 || notificationPreview.renderedNotificationCount > 0 ? 320 : 280
     preferredX: dock.margins.left + dockCentreX - popupWidth / 2
     preferredY: height - dock.dockTopFromBottom - popupHeight - Theme.gap
+    // The menu sits on the dock as drawn. The default clamp assumes the 88 px dock,
+    // so a smaller dock left the menu floating that much above its icon.
+    popupDockSafeBottom: height - dock.dockTopFromBottom - Theme.gap
     revealOriginY: popupHeight
     screen: dock.screen
 
