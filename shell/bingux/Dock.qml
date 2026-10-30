@@ -1345,7 +1345,10 @@ PanelWindow {
                 continue;
             const newest = root.newestWindowSerial(group);
             if (root.startupReady && newest > (root.groupNewestSerial[group.id] || 0))
-                bumped.push({newest, group});
+                bumped.push({
+                    newest,
+                    group
+                });
             root.groupNewestSerial[group.id] = newest;
         }
         if (bumped.length > 0) {
