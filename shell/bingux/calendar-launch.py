@@ -47,7 +47,7 @@ def default_calendar():
 
 
 def open_other_calendar(app):
-    """Start the chosen calendar app. Only GNOME Calendar has date and event options."""
+    """Start the chosen calendar app. The shell only knows GNOME Calendar's date and event options."""
     spawn_detached(["gio", "launch", app.get_filename()])
 
 

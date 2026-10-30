@@ -58,9 +58,10 @@ range, and Escape returns one level. Today returns directly to today's day view.
 The popup keeps the same height throughout.
 
 Agenda rows open the matching event on click or Enter/Space. With GNOME Calendar
-as the default, Calendar opens the event; any other default calendar app is
-started without a date, because only GNOME Calendar accepts date and event
-options. They use the shared instant hover, pressed and focus surface. Event
+as the default, Calendar opens the event. For any other default calendar app,
+the shell starts the app without a date or event, because it only knows
+GNOME Calendar's date and event options. They use the shared instant hover,
+pressed and focus surface. Event
 activation converts the calendar server's source/event/recurrence identifier to
 Calendar's UUID format; events without that identifier fall back to opening
 their date.

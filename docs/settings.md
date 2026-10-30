@@ -156,16 +156,21 @@ Default applications also has an Other file types section for the content types 
 
 Choosing a default writes it with `gio mime`. This list says which parts of the
 shell read the choice. It comes from a search of the shell's QML for hardcoded
-launches on 2026-10-30, so a kind marked "none found" is not proof that no part
-of the shell starts it. Other applications reach every kind through `xdg-open`
-or `gio open`, which read the same store.
+launches on 2026-10-30, so "none found" is not proof that no part of the shell
+starts that kind. Applications that open files or links with `xdg-open` or
+`gio open` read the same store.
 
-| Kind | Content types | Shell behaviour |
-| ---- | ------------- | --------------- |
-| Web | `x-scheme-handler/http`, `x-scheme-handler/https`, `text/html` | `BrowserFocus.qml` reads the default with `xdg-mime` to find the browser window to raise. It does not start a browser. |
-| Calendar | `text/calendar` | The calendar popup's Open Calendar button and agenda rows start the default. Only GNOME Calendar opens a date or event; other apps start without one. GNOME Calendar is used when no default is set. |
-| Files | `inode/directory` | The Super+E shortcut runs `gio open $HOME`, so it follows this default. |
-| Mail, Text, Documents, Photos, Music, Video | `x-scheme-handler/mailto`, `text/plain`, `application/pdf`, image, audio and video types | No launcher found in the shell's QML. Not audited beyond that search. |
+- **Web** (`x-scheme-handler/http`, `x-scheme-handler/https`, `text/html`):
+  `BrowserFocus.qml` reads the default with `xdg-mime` to find the browser
+  window to raise. It does not start a browser.
+- **Calendar** (`text/calendar`): the calendar popup's Open Calendar button and
+  agenda rows start the default. The shell passes a date or event only to GNOME
+  Calendar; any other default starts without those arguments. GNOME Calendar is
+  used when no default is set.
+- **Files** (`inode/directory`): the Super+E shortcut runs `gio open $HOME`, so
+  it follows this default.
+- **Mail, Text, Documents, Photos, Music and Video**: no launcher found in the
+  shell's QML. Not audited beyond that search.
 
 Settings is not a kind. The shell starts `bingux-settings` directly
 (`BINGUX_SETTINGS_BIN` overrides the program).
