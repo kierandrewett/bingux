@@ -103,6 +103,11 @@ from `media list` when `--player` is supplied. Available actions are `play`,
 `pause`, `toggle`, `next`, `previous` and `seek`. Seek takes an absolute position
 in seconds. Unsupported actions and missing player IDs return errors.
 
+The Bingux Gnoblin module binds the play/pause, next and previous media keys
+(including keys sent by devices such as Solaar) to `binguxctl media toggle`,
+`next` and `previous`. They act on the same player as the control centre, which
+is the one that is playing, instead of the first player on the bus.
+
 ## Notifications, dock and windows
 
 ```sh
