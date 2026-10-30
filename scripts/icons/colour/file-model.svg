@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" data-chrome="page">
+  <rect x="4" y="8" width="5" height="5" fill="ink"/>
+  <polygon points="4,8 7,6 12,6 9,8" fill="ink" fill-opacity=".8"/>
+  <polygon points="9,8 12,6 12,11 9,13" fill="ink" fill-opacity=".6"/>
+  <g data-grid="128">
+    <path d="M64 52L90 67L64 82L38 67Z" fill="ink" stroke="ink" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M38 67L64 82V110L38 95Z" fill="ink" stroke="ink" stroke-width="3" stroke-linejoin="round" opacity=".72"/>
+    <path d="M64 82L90 67V95L64 110Z" fill="ink" stroke="ink" stroke-width="3" stroke-linejoin="round" opacity=".5"/>
+  </g>
+</svg>

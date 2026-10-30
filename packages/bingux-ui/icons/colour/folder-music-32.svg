@@ -1,0 +1,16 @@
+<svg height="32px" viewBox="0 0 32 32" width="32px" xmlns="http://www.w3.org/2000/svg">
+    <defs><linearGradient id="lit" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.32"/><stop offset="0.55" stop-color="#fff" stop-opacity="0"/></linearGradient><linearGradient id="paper" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#ebeae8"/></linearGradient></defs>
+    <path d="M3 8C3 5.791 4.791 4 7 4L11.879 4C13.05 4 14.672 4.672 15.5 5.5L15.5 5.5C16.328 6.328 17.95 7 19.121 7L25 7C27.209 7 29 8.791 29 11L29 24L3 24Z"/>
+    <path d="M3 8C3 5.791 4.791 4 7 4L11.879 4C13.05 4 14.672 4.672 15.5 5.5L15.5 5.5C16.328 6.328 17.95 7 19.121 7L25 7C27.209 7 29 8.791 29 11L29 24L3 24Z" fill="#000" fill-opacity=".22"/>
+    <path d="M6.5 9.5C6.5 8.672 7.172 8 8 8L24 8C24.828 8 25.5 8.672 25.5 9.5L25.5 13.5C25.5 14.328 24.828 15 24 15L8 15C7.172 15 6.5 14.328 6.5 13.5Z" fill="url(#paper)"/>
+    <path d="M8.5 9.5C8.5 9.224 8.724 9 9 9L16 9C16.276 9 16.5 9.224 16.5 9.5L16.5 9.5C16.5 9.776 16.276 10 16 10L9 10C8.724 10 8.5 9.776 8.5 9.5Z" fill="#000" fill-opacity=".22"/>
+    <path d="M3 16C3 13.791 4.791 12 7 12L25 12C27.209 12 29 13.791 29 16L29 25C29 27.209 27.209 29 25 29L7 29C4.791 29 3 27.209 3 25Z"/>
+    <path d="M3 16C3 13.791 4.791 12 7 12L25 12C27.209 12 29 13.791 29 16L29 25C29 27.209 27.209 29 25 29L7 29C4.791 29 3 27.209 3 25Z" fill="#000" fill-opacity=".36"/>
+    <path d="M3 15C3 12.791 4.791 11 7 11L25 11C27.209 11 29 12.791 29 15L29 24C29 26.209 27.209 28 25 28L7 28C4.791 28 3 26.209 3 24Z"/>
+    <path d="M3 15C3 12.791 4.791 11 7 11L25 11C27.209 11 29 12.791 29 15L29 24C29 26.209 27.209 28 25 28L7 28C4.791 28 3 26.209 3 24Z" fill="#fff" fill-opacity=".28"/>
+    <path d="M3 15C3 12.791 4.791 11 7 11L25 11C27.209 11 29 12.791 29 15L29 24C29 26.209 27.209 28 25 28L7 28C4.791 28 3 26.209 3 24Z" fill="url(#lit)"/>
+    <path d="M4.8 11L24.2 11L24.2 12L4.8 12Z" fill="#fff" fill-opacity=".6"/>
+    <circle cx="14" cy="23" r="3" fill="currentColor"/>
+    <rect x="16" y="14" width="2" height="10" fill="currentColor"/>
+    <polygon points="18,14 22,16 22,20 18,18" fill="currentColor"/>
+</svg>

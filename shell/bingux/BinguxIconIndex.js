@@ -97,6 +97,7 @@ var names = {
     "media-optical-symbolic": true,
     "media-playback-pause-symbolic": true,
     "media-playback-start-symbolic": true,
+    "media-playback-stop-symbolic": true,
     "media-removable-symbolic": true,
     "media-view-subtitles-symbolic": true,
     "network-error-symbolic": true,

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" data-chrome="page">
+  <polygon points="4,13 7,9 9,12 10,10 12,13" fill="ink"/>
+  <circle cx="10" cy="8" r="1" fill="ink"/>
+  <g data-grid="128">
+    <path d="M34 104L58 68L74 90L84 76L98 104Z" fill="ink" stroke="ink" stroke-width="6" stroke-linejoin="round"/>
+    <circle cx="84" cy="60" r="10" fill="ink"/>
+  </g>
+</svg>

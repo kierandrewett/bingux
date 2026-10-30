@@ -1,0 +1,14 @@
+<svg height="32px" viewBox="0 0 32 32" width="32px" xmlns="http://www.w3.org/2000/svg">
+    <defs><linearGradient id="lit" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.32"/><stop offset="0.55" stop-color="#fff" stop-opacity="0"/></linearGradient><linearGradient id="paper" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#ebeae8"/></linearGradient></defs>
+    <path d="M8 6C8 4.895 8.895 4 10 4L14 4C15.105 4 16 4.895 16 6L16 10C16 11.105 15.105 12 14 12L10 12C8.895 12 8 11.105 8 10Z" fill="#000" fill-opacity=".22"/>
+    <path d="M16 8C16 6.895 16.895 6 18 6L22 6C23.105 6 24 6.895 24 8L24 10C24 11.105 23.105 12 22 12L18 12C16.895 12 16 11.105 16 10Z" fill="#000" fill-opacity=".22"/>
+    <path d="M8 4C8 2.895 8.895 2 10 2L14 2C15.105 2 16 2.895 16 4L16 10C16 11.105 15.105 12 14 12L10 12C8.895 12 8 11.105 8 10Z" fill="url(#paper)"/>
+    <path d="M16 6C16 4.895 16.895 4 18 4L22 4C23.105 4 24 4.895 24 6L24 10C24 11.105 23.105 12 22 12L18 12C16.895 12 16 11.105 16 10Z" fill="url(#paper)"/>
+    <path d="M6 12H26V24Q26 28 22 28H10Q6 28 6 24Z"/>
+    <path d="M6 12H26V24Q26 28 22 28H10Q6 28 6 24Z" fill="#fff" fill-opacity=".28"/>
+    <path d="M6 12H26V24Q26 28 22 28H10Q6 28 6 24Z" fill="url(#lit)"/>
+    <path d="M4 10C4 8.895 4.895 8 6 8L26 8C27.105 8 28 8.895 28 10L28 10C28 11.105 27.105 12 26 12L6 12C4.895 12 4 11.105 4 10Z"/>
+    <path d="M4 10C4 8.895 4.895 8 6 8L26 8C27.105 8 28 8.895 28 10L28 10C28 11.105 27.105 12 26 12L6 12C4.895 12 4 11.105 4 10Z" fill="#000" fill-opacity=".22"/>
+    <rect x="12" y="16" width="2" height="8" fill="currentColor"/>
+    <rect x="18" y="16" width="2" height="8" fill="currentColor"/>
+</svg>

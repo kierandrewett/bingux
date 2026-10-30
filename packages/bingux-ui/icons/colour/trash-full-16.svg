@@ -1,0 +1,14 @@
+<svg height="16px" viewBox="0 0 16 16" width="16px" xmlns="http://www.w3.org/2000/svg">
+    <defs><linearGradient id="lit" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.32"/><stop offset="0.55" stop-color="#fff" stop-opacity="0"/></linearGradient><linearGradient id="paper" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#ebeae8"/></linearGradient></defs>
+    <path d="M4 3C4 2.448 4.448 2 5 2L7 2C7.552 2 8 2.448 8 3L8 5C8 5.552 7.552 6 7 6L5 6C4.448 6 4 5.552 4 5Z" fill="#000" fill-opacity=".22"/>
+    <path d="M8 4C8 3.448 8.448 3 9 3L11 3C11.552 3 12 3.448 12 4L12 5C12 5.552 11.552 6 11 6L9 6C8.448 6 8 5.552 8 5Z" fill="#000" fill-opacity=".22"/>
+    <path d="M4 2C4 1.448 4.448 1 5 1L7 1C7.552 1 8 1.448 8 2L8 5C8 5.552 7.552 6 7 6L5 6C4.448 6 4 5.552 4 5Z" fill="url(#paper)"/>
+    <path d="M8 3C8 2.448 8.448 2 9 2L11 2C11.552 2 12 2.448 12 3L12 5C12 5.552 11.552 6 11 6L9 6C8.448 6 8 5.552 8 5Z" fill="url(#paper)"/>
+    <path d="M3 6H13V12Q13 14 11 14H5Q3 14 3 12Z"/>
+    <path d="M3 6H13V12Q13 14 11 14H5Q3 14 3 12Z" fill="#fff" fill-opacity=".28"/>
+    <path d="M3 6H13V12Q13 14 11 14H5Q3 14 3 12Z" fill="url(#lit)"/>
+    <path d="M2 5C2 4.448 2.448 4 3 4L13 4C13.552 4 14 4.448 14 5L14 5C14 5.552 13.552 6 13 6L3 6C2.448 6 2 5.552 2 5Z"/>
+    <path d="M2 5C2 4.448 2.448 4 3 4L13 4C13.552 4 14 4.448 14 5L14 5C14 5.552 13.552 6 13 6L3 6C2.448 6 2 5.552 2 5Z" fill="#000" fill-opacity=".22"/>
+    <rect x="6" y="8" width="1" height="4" fill="currentColor"/>
+    <rect x="9" y="8" width="1" height="4" fill="currentColor"/>
+</svg>

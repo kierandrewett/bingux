@@ -11,11 +11,11 @@ that takes the chat icon fork's own drawing (see labels.tsv and map-fork.py):
   <fork name="Power" weight="bold" mode="exact"/>
 
 `mode="exact"` emits the fork's outline untouched (scaled by 1/16 through a transform,
-and moved as a whole by at most half a pixel so that straight edges meet pixel
-boundaries; `dx`/`dy` add to that, `align="none"` turns it off). Custom icons are
-written in a small dialect of plain SVG shapes, which may also include `<fork/>`
-pieces (`mode="exact"` keeps a piece untouched, scaled by `scale`, moved by `dx`/`dy`; without
-`mode` a piece is dilated and snapped, see "the chat fork's geometry" below):
+and moved as a whole by at most half a pixel, the shift that leaves the fewest soft
+edges; `dx`/`dy` add to that, `align="none"` turns it off). The outline is only ever
+translated and scaled by one factor on both axes: never warped, thickened or snapped.
+Custom icons are written in a small dialect of plain SVG shapes, which may also include
+`<fork/>` pieces (placed the same way, see "the chat fork's geometry" below):
 
 - Root `<svg viewBox="0 0 16 16">` sets the defaults that children inherit:
   fill="none" stroke="none" stroke-width="2" stroke-linecap="round"
@@ -39,9 +39,9 @@ Source rules, checked on every source:
 - ink stays inside the 16 x 16 box.
 
 Pixel rules, checked on the rasterised output by --check and --lint (see "pixel rules" below
-and docs/bingux-ui.md): ink size by optical class, ink centred, partly covered pixels on
-straight edges, left-right symmetry of the icons labels.tsv lists, no hole closed by fitting,
-and the fill/outline weight of each icon's category.
+and docs/bingux-ui.md): ink size, ink near the centre, partly covered pixels on straight
+edges (against the icon's own best placement), left-right symmetry of the icons labels.tsv
+lists, no hole closed by mirroring, and the fill/outline weight of each icon's category.
 
 Usage:
   build.py                    compile sources into packages/bingux-ui/icons
@@ -50,7 +50,7 @@ Usage:
                               output directory matches the sources, and every pixel rule
   build.py --lint [--src DIR] only the pixel rules (DIR: a draft or probe directory)
   build.py --measure          the pixel rules plus a table of every icon's measurements
-  build.py --suggest [ICON]   scale, dx, dy for fork rows of labels.tsv that satisfy the rules
+  build.py --suggest [ICON]   the scale for fork rows of labels.tsv that satisfy the size rule
 """
 
 from __future__ import annotations
@@ -66,7 +66,6 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import numpy as np
 import pathops
 import raster
 from labels import Labels, load as load_labels
@@ -97,6 +96,8 @@ DEFAULTS = {
     "stroke-linejoin": "round",
 }
 ALLOWED_STROKE_WIDTHS = (1.0, 1.5, 2.0, 3.0)
+# The rules of design/rules.json this check holds (read by scripts/rules-check.py).
+RULE_IDS = {"*": ["IC-01", "IC-04", "IC-06", "AL-15"]}
 CAPS = {
     "butt": pathops.LineCap.BUTT_CAP,
     "round": pathops.LineCap.ROUND_CAP,
@@ -137,6 +138,11 @@ def fmt(v: float) -> str:
     """Format a coordinate for output: 3 decimals, no trailing zeros, no -0."""
     s = f"{v:.3f}".rstrip("0").rstrip(".")
     return "0" if s in ("-0", "") else s
+
+
+def fmt_scale(v: float) -> str:
+    """A scale factor: the fork's 1/16 needs 4 decimals (0.0625), `fmt` would round it to 0.062."""
+    return f"{v:.6f}".rstrip("0").rstrip(".")
 
 
 def fmt_src(v: float) -> str:
@@ -425,29 +431,26 @@ def path_d(path: pathops.Path) -> str:
 #
 # `<fork name="Power" weight="bold"/>` pulls the rounded Phosphor geometry that
 # ~/dev/chat/packages/icons generated (vendored in packages/bingux-ui/icons/chat/geometry.json by
-# import-chat.py) onto the 16 grid. The outline is the fork's own; only these things
-# ever happen to it, each one a per-icon attribute written by map-fork.py from labels.tsv:
+# import-chat.py) onto the 16 grid. The outline is the fork's own, and it is only ever
+# moved or uniformly scaled, never warped, thickened or redrawn. Three per-icon attributes
+# (written by map-fork.py from labels.tsv) say how:
 #
 # 1. `mirror="left"|"right"`: keep that half and replace the other with its mirror image
 #    (for glyphs the fork draws a little lopsided, such as User);
-# 2. `scale` grows or shrinks the whole drawing about the middle of the box, so each icon
-#    fills its box by its optical size (see RULES);
-# 3. stroke widths are made whole pixels: a bold stroke (1.5 px, times `scale`) is grown
-#    or shrunk to the nearest whole pixel by offsetting the outline with round joins
-#    (at most 0.25 px a side), a regular one (1 px) likewise. Fill glyphs have no stroke.
-#    `stroke="none"` leaves the width alone;
-# 4. `dx`/`dy` move the whole drawing, so its straight edges meet pixel boundaries
-#    and its ink is centred;
-# 5. snap: every long horizontal or vertical edge and every curve extreme is moved to the
-#    nearest pixel line by a monotone piecewise linear warp (at most half a pixel; half
-#    way cases move away from the middle). `snap="none"` turns it off. A symmetric icon
-#    (labels.tsv `#symmetric`) is warped on its left half and mirrored.
+# 2. `scale` grows or shrinks the whole drawing about the middle of the box, by one factor
+#    on both axes (the fork leaves 1 to 2 px of margin around some glyphs);
+# 3. `dx`/`dy` move the whole drawing; on top of them `align="auto"` (the default for an
+#    icon that is a single `<fork/>`) adds the shift of at most half a pixel that puts the
+#    most straight edges on whole pixels (a `mirror` icon is never moved sideways, so it stays
+#    centred on x = 8). `align="none"` turns the automatic shift off.
 #
-# Curves and corners are never redrawn. When none of this changes the outline it is written
-# as the fork's own path data under a `transform`, byte for byte.
+# Strokes keep the fork's own width (1 px `regular`, 1.5 px `bold`), curves and corners are
+# never touched: an edge the shift cannot put on a pixel line renders softly, which is
+# accepted (see "pixel rules"). When there is no `mirror`, the outline is written as the
+# fork's own path data under a `transform`, byte for byte.
 
 _FORK: dict | None = None
-FORK_STROKE = {"regular": 1.0, "bold": 1.5, "fill": 0.0}
+FORK_WEIGHTS = ("regular", "bold", "fill")
 
 
 def fork_geometry(name: str, weight: str, where: str) -> list[str]:
@@ -474,17 +477,6 @@ def scaled_path(ds: list[str], scale: float) -> pathops.Path:
     return pathops.simplify(out)
 
 
-def dilated(path: pathops.Path, amount: float) -> pathops.Path:
-    """Offset the outline by `amount` px with round joins: out when positive, in when negative."""
-    if abs(amount) <= EPS:
-        return path
-    band = pathops.Path(path)
-    band.stroke(2 * abs(amount), pathops.LineCap.ROUND_CAP, pathops.LineJoin.ROUND_JOIN, 4.0)
-    band.convertConicsToQuads(0.02)
-    band = pathops.simplify(band)
-    if amount > 0:
-        return pathops.simplify(pathops.op(path, band, pathops.PathOp.UNION))
-    return pathops.simplify(pathops.op(path, band, pathops.PathOp.DIFFERENCE))
 
 
 def contours_of(path: pathops.Path) -> list[list[tuple[str, list[tuple[float, float]]]]]:
@@ -541,11 +533,15 @@ def snap_anchors(path: pathops.Path, min_len: float = 0.9, tol: float = 0.02) ->
     return xs, ys
 
 
-def warped(path: pathops.Path, wx, wy) -> pathops.Path:
+def affine(path: pathops.Path, sx: float, sy: float, tx: float, ty: float) -> pathops.Path:
+    """`path` scaled by (sx, sy) and moved by (tx, ty). The two scales may differ only in sign
+    (a reflection): stretching one axis would distort the glyph."""
+    if abs(abs(sx) - abs(sy)) > EPS:
+        raise BuildError(f"affine: non-uniform scale {sx} x {sy}")
     out = pathops.Path()
     for contour in contours_of(path):
         for kind, pts in contour:
-            m = [(wx(x), wy(y)) for x, y in pts]
+            m = [(x * sx + tx, y * sy + ty) for x, y in pts]
             if kind == "M":
                 out.moveTo(*m[0])
             elif kind == "L":
@@ -558,83 +554,31 @@ def warped(path: pathops.Path, wx, wy) -> pathops.Path:
     return pathops.simplify(out)
 
 
-def snap_target(value: float) -> float:
-    """The pixel line for `value`; half pixels move away from the middle of the box."""
-    frac = value - math.floor(value)
-    if abs(frac - 0.5) < 0.15:
-        return math.floor(value) + 1.0 if value >= GRID / 2 else math.floor(value)
-    return float(math.floor(value + 0.5))
+def soft_placements(
+    polys: list[list[tuple[float, float]]], ink: tuple[float, float, float, float], sideways: bool = True
+) -> list[tuple[int, float, float]]:
+    """(soft pixels at 16 px, dx, dy) for each translation in SOFT_SHIFTS that keeps the ink in the box.
 
-
-def snap_target_inward(value: float) -> float:
-    """The pixel line for `value`; half pixels move towards the middle of the box."""
-    frac = value - math.floor(value)
-    if abs(frac - 0.5) < 0.15:
-        return math.ceil(value) if value < GRID / 2 else math.floor(value)
-    return float(math.floor(value + 0.5))
-
-
-def snap_pairs(coords: list[float], eps: float = 0.3) -> list[tuple[float, float]]:
-    """(from, to) for each cluster of anchors: `to` is the pixel line the cluster moves to.
-
-    The outermost edges on each side never move outwards (snapping may not grow the ink past
-    the size rule); every other half pixel moves away from the middle (two edges never close a gap).
+    Only a translation: no shape changes. `sideways=False` keeps dx at 0.
     """
-    clusters: list[list[float]] = []
-    for v in sorted(coords):
-        if clusters and v - clusters[-1][-1] <= eps:
-            clusters[-1].append(v)
-        else:
-            clusters.append([v])
-    pairs: list[tuple[float, float]] = []
-    for index, cluster in enumerate(clusters):
-        c = sum(cluster) / len(cluster)
-        t = snap_target_inward(c) if index in (0, len(clusters) - 1) else snap_target(c)
-        # Never fold two edges together or reverse their order.
-        if pairs and (t <= pairs[-1][1] or (t - pairs[-1][1]) < 0.5 * (c - pairs[-1][0])):
-            continue
-        pairs.append((c, t))
-    return pairs
+    found = []
+    for sx in SOFT_SHIFTS if sideways else (0.0,):
+        for sy in SOFT_SHIFTS:
+            if ink[0] + sx < -EPS or ink[1] + sy < -EPS or ink[2] + sx > GRID + EPS or ink[3] + sy > GRID + EPS:
+                continue
+            moved = [[(x + sx, y + sy) for x, y in poly] for poly in polys]
+            found.append((raster.soft_edge_pixels(raster.coverage(moved, DESIGN_SIZE)), sx, sy))
+    return found
 
 
-def warp_of(pairs: list[tuple[float, float]]):
-    """The monotone piecewise linear map that sends each `from` to its `to` and is a shift beyond the ends."""
-    if not pairs:
-        return lambda v: v
-
-    def warp(v: float) -> float:
-        if v <= pairs[0][0]:
-            return v + (pairs[0][1] - pairs[0][0])
-        if v >= pairs[-1][0]:
-            return v + (pairs[-1][1] - pairs[-1][0])
-        for (a, ta), (b, tb) in zip(pairs, pairs[1:]):
-            if a <= v <= b:
-                return ta + (v - a) * (tb - ta) / (b - a)
-        return v
-
-    return warp
-
-
-def snap_warps(path: pathops.Path, symmetric: bool):
-    """(wx, wy, moved): warps that put the long straight edges and curve extremes on whole pixels.
-
-    Strokes keep their width (their two edges are anchors on the same side of a pixel after
-    `stroke_growth`), curves keep their shape (the warp is piecewise linear and moves a point
-    by at most half a pixel). For a symmetric icon x is warped on the left half and mirrored,
-    so both halves move alike.
-    """
-    xs, ys = snap_anchors(path)
-    if symmetric:
-        folded = [min(v, GRID - v) for v in xs] + [GRID / 2]
-        left = warp_of(snap_pairs(folded))
-        wx = lambda v: left(v) if v <= GRID / 2 else GRID - left(GRID - v)  # noqa: E731
-        x_moved = any(abs(left(v) - v) > 1e-3 for v in folded)
-    else:
-        pairs = snap_pairs(xs)
-        wx = warp_of(pairs)
-        x_moved = any(abs(t - f) > 1e-3 for f, t in pairs)
-    y_pairs = snap_pairs(ys)
-    return wx, warp_of(y_pairs), x_moved or any(abs(t - f) > 1e-3 for f, t in y_pairs)
+def best_offset(path: pathops.Path, sideways: bool = True) -> tuple[float, float]:
+    """The whole-icon shift of at most half a pixel that leaves the fewest soft edge pixels at
+    16 px (ties go to the smallest move)."""
+    found = soft_placements(polygons(path), path.bounds, sideways)
+    if not found:
+        return 0.0, 0.0
+    _, sx, sy = min(found, key=lambda f: (f[0], abs(f[1]) + abs(f[2]), f[1], f[2]))
+    return sx, sy
 
 
 def box_path(left: float, top: float, right: float, bottom: float) -> pathops.Path:
@@ -651,7 +595,7 @@ def mirrored(path: pathops.Path, keep: str) -> pathops.Path:
     """The `keep` half of `path` (about x = 8) and its mirror image."""
     half = box_path(-GRID, -GRID, GRID / 2, 2 * GRID) if keep == "left" else box_path(GRID / 2, -GRID, 2 * GRID, 2 * GRID)
     kept = pathops.simplify(pathops.op(path, half, pathops.PathOp.INTERSECTION))
-    flipped = warped(kept, lambda v: GRID - v, lambda v: v)
+    flipped = affine(kept, -1.0, 1.0, GRID, 0.0)
     return pathops.simplify(pathops.op(kept, flipped, pathops.PathOp.UNION))
 
 
@@ -662,52 +606,37 @@ class ForkOutline:
     verbatim: tuple[list[str], str] | None
 
 
-def stroke_growth(weight: str, zoom: float, mode: str) -> float:
-    """How far to offset the outline (px a side) so the stroke is a whole number of pixels."""
-    width = FORK_STROKE[weight] * zoom
-    if width <= 0 or mode == "none":
-        return 0.0
-    # Rounds up from 0.35 over (a 1.4 px bold stroke becomes 2 px, not 1): a stroke that thins
-    # out reads weaker than its neighbours, one that thickens a little does not.
-    grow = (max(1.0, math.ceil(width - 0.35)) - width) / 2
-    return 0.0 if abs(grow) < 1e-3 else grow
-
-
 def fork_outline(attrs: dict[str, str], where: str) -> ForkOutline:
     name = attrs.get("name", "")
     weight = attrs.get("weight", "regular")
-    if weight not in FORK_STROKE:
+    if weight not in FORK_WEIGHTS:
         raise BuildError(f"{where}: fork weight must be regular, bold or fill")
     mirror = attrs.get("mirror", "")
     if mirror not in ("", "left", "right"):
         raise BuildError(f"{where}: mirror must be left or right")
-    stroke = attrs.get("stroke", "auto")
-    if stroke not in ("auto", "none"):
-        raise BuildError(f"{where}: stroke must be auto or none")
-    snap = attrs.get("snap", "auto")
-    if snap not in ("auto", "none"):
-        raise BuildError(f"{where}: snap must be auto or none")
-    symmetric = attrs.get("symmetric", "") == "true"
+    align = attrs.get("align", "auto")
+    if align not in ("auto", "none"):
+        raise BuildError(f"{where}: align must be auto or none")
     ds = fork_geometry(name, weight, where)
     zoom = parse_float(attrs, "scale", 1.0)
     if zoom <= 0:
         raise BuildError(f"{where}: scale must be positive")
+    natural = scaled_path(ds, 1 / 16)
+    if mirror:
+        natural = mirrored(natural, mirror)
     # The drawing is scaled about the middle of the box, then moved by dx, dy.
     dx = parse_float(attrs, "dx") + (GRID / 2) * (1 - zoom)
     dy = parse_float(attrs, "dy") + (GRID / 2) * (1 - zoom)
-    grow = stroke_growth(weight, zoom, stroke)
-    path = scaled_path(ds, 1 / 16)
-    if mirror:
-        path = mirrored(path, mirror)
-    path = dilated(warped(path, lambda v: v * zoom + dx, lambda v: v * zoom + dy), grow)
-    moved = False
-    if snap == "auto":
-        wx, wy, moved = snap_warps(path, symmetric)
-        if moved:
-            path = warped(path, wx, wy)
-    if not mirror and grow == 0.0 and not moved:
+    if align == "auto":
+        left, top, right, bottom = affine(natural, zoom, zoom, dx, dy).bounds
+        shift_x, shift_y = best_offset(affine(natural, zoom, zoom, dx, dy), sideways=not mirror)
+        # The shift never pushes ink out of the box.
+        dx += min(max(shift_x, -left), GRID - right)
+        dy += min(max(shift_y, -top), GRID - bottom)
+    path = affine(natural, zoom, zoom, dx, dy)
+    if not mirror:
         transform = f"translate({fmt(dx)} {fmt(dy)}) " if abs(dx) > EPS or abs(dy) > EPS else ""
-        return ForkOutline(path, (ds, f"{transform}scale({fmt(zoom / 16)})"))
+        return ForkOutline(path, (ds, f"{transform}scale({fmt_scale(zoom / 16)})"))
     return ForkOutline(path, None)
 
 
@@ -932,29 +861,39 @@ DESIGN_SIZE = 16
 
 RULES = {
     # class: (smallest, largest) length of the longer side of the ink, px on the 16 grid.
-    "compact": (13.0, 15.0),  # round and square glyphs: about 14 px of ink
-    "elongated": (14.0, 15.5),  # aspect 1.3 or more: the long side fills the box
+    # A fork glyph keeps the size its designer drew (10 px for a nine-dot grid, 16 for a
+    # battery); the rule catches a glyph that is lost or leaves the box, not a 1 px difference.
+    "icon": (10.0, 16.0),
     "mark": (8.0, 13.0),  # chevrons, ticks, plus and minus: smaller on purpose (labels.tsv #mark)
 }
-ELONGATED_ASPECT = 1.3
-MARGIN = 0.25  # ink may not come closer to the box edge than this
-CENTRE_TOLERANCE = 0.5  # centre of the ink from the centre of the box, each axis
+# The fork centres glyphs by their visual mass, not their box (the shackle of a lock, the
+# point of a play triangle, the strap of headphones), so the ink box of a glyph may sit up to
+# this far from the middle of the box; a symmetric one must be centred sideways.
+CENTRE_TOLERANCE = 1.5
 SYMMETRIC_TOLERANCE = 0.05  # the same for a symmetric icon: it is mirrored about x = 8
 SYMMETRY_LIMIT = (0.15, 0.03)  # largest and mean coverage difference from the mirror image
-# Partly covered pixels on straight edge runs (raster.soft_edge_pixels). 16 px is the size
-# icons are designed for; the others are scaled copies and can only be as crisp as 18/16
-# of a pixel grid allows, so they are held to a looser bound that still catches a regression.
-SOFT_LIMIT = {14: 100, 16: 10, 18: 120, 20: 140}
-# What each category of icon is drawn with (labels.tsv #policy lines; docs/bingux-ui.md).
-OUTLINE = ("regular", "bold")
+# Crispness. `soft_edge_pixels` counts partly covered pixels on straight edge runs. A bold stroke
+# (1.5 px) always leaves one such row per edge whatever its position, so there is no absolute
+# limit; an icon is judged against its own best placement: the fewest soft pixels any
+# translation of at most half a pixel gives (the only fitting freedom there is). It may have
+# SOFT_SLACK more than that, in a factor and in pixels (curves and the 0.05 px search step).
+SOFT_SLACK = (1.35, 6)
+SOFT_SHIFTS = (-0.5, -0.25, 0.0, 0.25, 0.5)
+# At 14, 18 and 20 px the icons are scaled copies and can only be as crisp as that grid
+# allows, so they are held to a bound that still catches a regression.
+SOFT_LIMIT = {14: 100, 18: 120, 20: 140}
+# What each category of icon is drawn with (labels.tsv #policy lines; docs/bingux-ui.md). The
+# 1 px `regular` weight is not used for a named icon: it draws a thin wire that reads rounder
+# and weaker than its neighbours at 16 px.
+OUTLINE = ("bold",)
 POLICY = {
     "object": ("fill",),  # things: devices, places, tools
     "status": ("fill",),  # badges whose meaning is the mass: info, warning, error, secure, media marks
-    "detail": OUTLINE,  # things recognised by their inner structure (keys, buttons, frames, globe, envelope)
-    "action": OUTLINE,  # verbs: search, copy, share, refresh, delete
-    "control": OUTLINE,  # arrows, chevrons, ticks, plus, close, menus: simple strokes, bold (2 px)
-    "indicator": OUTLINE,  # levels and states: battery, volume, Bluetooth, network
-    "section": OUTLINE,  # the icons of the settings sidebar: one weight, whatever they show
+    "detail": ("bold", "fill"),  # things recognised by their inner structure (keys, frames, globe, envelope)
+    "action": ("bold", "fill"),  # verbs: search, copy, share, refresh, delete
+    "control": OUTLINE,  # arrows, chevrons, ticks, plus, close, menus: simple strokes
+    "indicator": ("bold", "fill"),  # levels and states: battery, volume, Bluetooth, network
+    "section": ("bold", "fill"),  # the icons of the settings sidebar
     "drawn": (),  # drawn by hand from strokes, not a fork glyph
 }
 
@@ -965,6 +904,7 @@ class Measure:
     cls: str
     ink: tuple[float, float, float, float]
     soft: dict[int, int]
+    soft_best: int  # fewest soft pixels at 16 px over the translations of SOFT_SHIFTS
     asym: tuple[float, float]
     density: float
 
@@ -1015,11 +955,8 @@ def short_name(name: str) -> str:
     return name.removesuffix("-symbolic")
 
 
-def classify(name: str, width: float, height: float, labels: Labels) -> str:
-    if short_name(name) in labels.marks:
-        return "mark"
-    short = max(min(width, height), 0.01)
-    return "elongated" if max(width, height) / short >= ELONGATED_ASPECT else "compact"
+def classify(name: str, labels: Labels) -> str:
+    return "mark" if short_name(name) in labels.marks else "icon"
 
 
 def measure_icon(item: Compiled, labels: Labels) -> Measure:
@@ -1028,12 +965,13 @@ def measure_icon(item: Compiled, labels: Labels) -> Measure:
     # The ink box is read from a 64 px raster (a quarter of a pixel of 16 px) so that a curve's
     # apex, which only part covers its pixel, still counts as ink.
     ink = raster.ink_extents(raster.coverage(polys, 4 * DESIGN_SIZE))
-    width, height = ink[2] - ink[0], ink[3] - ink[1]
+    soft = {size: raster.soft_edge_pixels(cov) for size, cov in covs.items()}
     return Measure(
         name=item.name,
-        cls=classify(item.name, width, height, labels),
+        cls=classify(item.name, labels),
         ink=ink,
-        soft={size: raster.soft_edge_pixels(cov) for size, cov in covs.items()},
+        soft=soft,
+        soft_best=min([soft[DESIGN_SIZE]] + [count for count, _, _ in soft_placements(polys, item.ink)]),
         asym=raster.asymmetry(covs[DESIGN_SIZE]),
         density=float(covs[DESIGN_SIZE].sum()) / (DESIGN_SIZE * DESIGN_SIZE),
     )
@@ -1054,16 +992,19 @@ def judge(m: Measure, labels: Labels) -> list[str]:
             f"{short}: ink is {m.width:.2f} x {m.height:.2f} px ({m.cls}): the long side must be {lo:g} to {hi:g} px; "
             f"change scale (about {((lo + hi) / 2) / long_side:.2f} times the current one)"
         )
-    left, top, right, bottom = m.ink
-    if not exempt("size") and min(left, top, GRID - right, GRID - bottom) < MARGIN - 0.05:
-        problems.append(f"{short}: ink {left:.2f},{top:.2f} to {right:.2f},{bottom:.2f} is within {MARGIN} px of the box edge")
     cx, cy = m.centre
     tolerance = SYMMETRIC_TOLERANCE if short in labels.symmetric else CENTRE_TOLERANCE
     if not exempt("centre") and (abs(cx) > tolerance + 0.01 or abs(cy) > CENTRE_TOLERANCE + 0.01):
         problems.append(f"{short}: ink centre is off the box centre by {cx:+.2f}, {cy:+.2f} px; move it with dx/dy")
-    for size in SIZES:
-        if not exempt("soft") and m.soft[size] > SOFT_LIMIT[size]:
-            problems.append(f"{short}: {m.soft[size]} soft edge pixels at {size} px (limit {SOFT_LIMIT[size]}); fix scale, dx, dy or the stroke")
+    for size, limit in SOFT_LIMIT.items():
+        if not exempt("soft") and m.soft[size] > limit:
+            problems.append(f"{short}: {m.soft[size]} soft edge pixels at {size} px (limit {limit}); the glyph is placed badly")
+    allowed = SOFT_SLACK[0] * m.soft_best + SOFT_SLACK[1]
+    if not exempt("soft") and m.soft[DESIGN_SIZE] > allowed:
+        problems.append(
+            f"{short}: {m.soft[DESIGN_SIZE]} soft edge pixels at 16 px, {m.soft_best} at its best placement "
+            f"(allowed {allowed:.0f}); the glyph is placed badly: fix dx, dy or align"
+        )
     if short in labels.symmetric and (m.asym[0] > SYMMETRY_LIMIT[0] or m.asym[1] > SYMMETRY_LIMIT[1]):
         problems.append(
             f"{short}: not left-right symmetric (worst pixel differs by {m.asym[0]:.2f}, mean {m.asym[1]:.3f}); "
@@ -1094,9 +1035,17 @@ def label_problems(compiled: dict[str, Compiled], labels: Labels) -> list[str]:
             problems.append(f"{short}: {category} icons use the {' or '.join(expected)} weight, not {row.weight}")
         if row is not None and not expected and row.fork is not None:
             problems.append(f"{short}: category {category} is for drawn icons, but the glyph is {row.fork}")
-    named = labels.symmetric | labels.marks | {n for names in labels.exempt.values() for n in names} | set(labels.policy)
+    named = (
+        labels.symmetric
+        | labels.marks
+        | labels.mirror_rtl
+        | {n for names in labels.exempt.values() for n in names}
+        | set(labels.policy)
+    )
     for short in sorted(named - shorts):
         problems.append(f"{short}: named in a labels.tsv directive but has no source")
+    for short in sorted(labels.mirror_rtl & labels.symmetric):
+        problems.append(f"{short}: is left-right symmetric, so mirroring it in a right to left interface changes nothing; drop it from `#mirror_rtl`")
     return problems
 
 
@@ -1108,18 +1057,43 @@ def counter_problems(compiled: dict[str, Compiled], labels: Labels) -> list[str]
         row = labels.rows.get(short)
         if row is None or row.fork is None or short in labels.exempt.get("counters", set()):
             continue
-        natural = fork_outline({"name": row.fork, "weight": row.weight, "snap": "none", "stroke": "none"}, name).path
+        natural = fork_outline({"name": row.fork, "weight": row.weight, "align": "none"}, name).path
         before, after = len(contours_of(natural)), len(contours_of(item.path))
         if after < before:
-            problems.append(f"{short}: fitting closed {before - after} of the {row.fork} glyph's {before} holes or parts (scale, dx, dy or snap)")
+            problems.append(f"{short}: fitting closed {before - after} of the {row.fork} glyph's {before} holes or parts (mirror or scale)")
     return problems
 
 
-SIDEBAR_DENSITY = (0.10, 0.30)  # ink as a share of the 16 x 16 box: one visual weight across the sidebar
+def contour_aspects(path: pathops.Path) -> list[float]:
+    """Width over height of each contour's ink box, sorted: scale and shift leave it unchanged."""
+    aspects = []
+    for poly in polygons(path):
+        xs, ys = [x for x, _ in poly], [y for _, y in poly]
+        aspects.append((max(xs) - min(xs)) / max(max(ys) - min(ys), EPS))
+    return sorted(aspects)
+
+
+def distortion_problems(compiled: dict[str, Compiled], labels: Labels) -> list[str]:
+    """A fork glyph is only moved and scaled by one factor: every contour keeps its proportions,
+    so a dot stays a circle and a cell keeps its shape. (A `mirror` icon is rebuilt from one half.)"""
+    problems: list[str] = []
+    for name, item in compiled.items():
+        short = short_name(name)
+        row = labels.rows.get(short)
+        if row is None or row.fork is None or "mirror" in row.attrs:
+            continue
+        natural = contour_aspects(fork_outline({"name": row.fork, "weight": row.weight, "align": "none"}, name).path)
+        placed = contour_aspects(item.path)
+        if len(natural) != len(placed) or any(abs(a - b) > 0.02 * max(a, b) for a, b in zip(natural, placed)):
+            problems.append(f"{short}: a contour of the {row.fork} glyph changed proportions: the glyph is warped")
+    return problems
+
+
+SIDEBAR_DENSITY = (0.10, 0.55)  # ink as a share of the 16 x 16 box: the set mixes fills (40 to 50 %) and outlines (20 to 40 %) but has no solid slab
 
 
 def sidebar_problems(measures: list[Measure], labels: Labels) -> list[str]:
-    """The sidebar icons (groups.txt [sidebar]) are one set: outline weight, similar ink."""
+    """The sidebar icons (groups.txt [sidebar]) are one set: none is a heavier slab than the rest."""
     names: list[str] = []
     in_group = False
     for line in (HERE / "groups.txt").read_text().splitlines():
@@ -1134,12 +1108,10 @@ def sidebar_problems(measures: list[Measure], labels: Labels) -> list[str]:
         m, row = by_name.get(short), labels.rows.get(short)
         if m is None:
             continue
-        if row is not None and row.fork is not None and row.weight == "fill":
-            problems.append(f"{short}: a sidebar icon must be an outline, this one is a fill")
         if not SIDEBAR_DENSITY[0] <= m.density <= SIDEBAR_DENSITY[1]:
             problems.append(
                 f"{short}: ink covers {100 * m.density:.0f} % of the box; the sidebar set keeps to "
-                f"{100 * SIDEBAR_DENSITY[0]:.0f} to {100 * SIDEBAR_DENSITY[1]:.0f} % so no icon looks heavier than the rest"
+                f"{100 * SIDEBAR_DENSITY[0]:.0f} to {100 * SIDEBAR_DENSITY[1]:.0f} % so no icon is a slab beside the rest"
             )
     return problems
 
@@ -1147,7 +1119,9 @@ def sidebar_problems(measures: list[Measure], labels: Labels) -> list[str]:
 def lint_pixels(compiled: dict[str, Compiled], labels: Labels, whole_set: bool) -> tuple[list[str], list[Measure]]:
     """Judge every icon by its pixels. `whole_set` also checks labels.tsv covers the sources."""
     measures = [measure_icon(item, labels) for item in compiled.values()]
-    problems = (label_problems(compiled, labels) + counter_problems(compiled, labels)) if whole_set else []
+    problems = (
+        label_problems(compiled, labels) + counter_problems(compiled, labels) + distortion_problems(compiled, labels)
+    ) if whole_set else []
     for m in measures:
         problems += judge(m, labels)
     if whole_set:
@@ -1168,107 +1142,33 @@ def soft_table(measures: list[Measure], count: int = 10) -> str:
 
 # ------------------------------------------------------------------- fitting
 #
-# `build.py --suggest` proposes the scale, dx and dy that satisfy RULES for a fork icon:
-# the smallest change of scale that brings the long side into range, then the shift (at most
-# what keeps the ink centred) that puts the most straight edges on whole pixels.
-
-
-def anchor_cost(values: np.ndarray, shifts: np.ndarray) -> np.ndarray:
-    moved = values[None, :] + shifts[:, None]
-    return np.abs(moved - np.round(moved)).sum(axis=1)
-
-
-def best_shift(values: list[float], low: float, high: float, step: float = 0.05) -> float:
-    """The shift in [low, high] that puts the anchors closest to whole pixels; ties go to the smaller move."""
-    count = int(math.floor((high - low) / step + 1e-9))
-    shifts = np.array([low + i * step for i in range(count + 1)]) if count >= 0 else np.array([(low + high) / 2])
-    if not values:
-        return float(shifts[np.argmin(np.abs(shifts))])
-    cost = anchor_cost(np.array(values), shifts)
-    order = np.lexsort((np.abs(shifts), np.round(cost, 4)))
-    return float(shifts[order[0]])
+# `build.py --suggest` proposes the `scale` of a fork icon: the factor closest to 1 that brings
+# the long side of the ink into the range of its class in RULES. Nothing else is fitted: the
+# shift that puts edges on pixel lines is automatic (see "the chat fork's geometry").
 
 
 def suggest_fit(short: str, row, labels: Labels) -> dict[str, str]:
-    """Scale, dx and dy for a fork row, as strings ready for labels.tsv."""
+    """The scale for a fork row, as a string ready for labels.tsv (empty when 1 already fits)."""
     base = {"name": row.fork, "weight": row.weight}
-    for key in ("mirror", "stroke"):
-        if key in row.attrs:
-            base[key] = row.attrs[key]
+    if "mirror" in row.attrs:
+        base["mirror"] = row.attrs["mirror"]
     where = f"{short}-symbolic.svg"
 
-    def outline(zoom: float, dx: float = 0.0, dy: float = 0.0) -> pathops.Path:
-        attrs = dict(base, scale=repr(zoom), dx=repr(dx), dy=repr(dy), snap="none")
-        return fork_outline(attrs, where).path
+    def long_side(zoom: float) -> float:
+        l, t, r, b = fork_outline(dict(base, scale=repr(zoom), align="none"), where).path.bounds
+        return max(r - l, b - t)
 
-    natural_path = outline(1.0)
-    natural = natural_path.bounds
-    nat_w, nat_h = natural[2] - natural[0], natural[3] - natural[1]
-    nat_contours = len(contours_of(natural_path))
-    cls = classify(short, nat_w, nat_h, labels)
+    cls = classify(short, labels)
     lo, hi = RULES[cls]
-    inner = 0.1
-    valid = []
-    for step in range(int(0.60 / 0.02), int(1.70 / 0.02) + 1):
-        zoom = round(step * 0.02, 3)
-        l, t, r, b = outline(zoom).bounds
-        if lo + inner <= max(r - l, b - t) <= hi - inner:
-            valid.append(zoom)
+    valid = [
+        zoom
+        for zoom in (round(step * 0.01, 2) for step in range(60, 171))
+        if lo - 0.05 <= long_side(zoom) <= hi + 0.05
+    ]
     if not valid:
         raise BuildError(f"{short}: no scale puts the long side in {lo:g} to {hi:g} px")
-    start = min(valid, key=lambda z: (abs(z - 1.0), z))
-    symmetric = short in labels.symmetric
-    best: tuple[float, int, float, float, float, float] | None = None
-    for k in range(0, 41):
-        zoom = round(start - 0.08 + k * 0.005, 3)
-        if zoom <= 0:
-            continue
-        path = outline(zoom)
-        l, t, r, b = path.bounds
-        xs, ys = snap_anchors(path)
-        cx, cy = (l + r) / 2 - GRID / 2, (t + b) / 2 - GRID / 2
-        tol_x = SYMMETRIC_TOLERANCE / 2 if symmetric else CENTRE_TOLERANCE - 0.02
-        low_x = max(-cx - tol_x, MARGIN + 0.05 - l)
-        high_x = min(-cx + tol_x, GRID - MARGIN - 0.05 - r)
-        low_y = max(-cy - (CENTRE_TOLERANCE - 0.02), MARGIN + 0.05 - t)
-        high_y = min(-cy + (CENTRE_TOLERANCE - 0.02), GRID - MARGIN - 0.05 - b)
-        if low_x > high_x:
-            low_x = high_x = (low_x + high_x) / 2
-        if low_y > high_y:
-            low_y = high_y = (low_y + high_y) / 2
-        sx = round(-cx if symmetric else best_shift(xs, low_x, high_x), 2)
-        sy = round(best_shift(ys, low_y, high_y), 2)
-        # Judge the real outline, snapping included.
-        final = fork_outline(
-            dict(base, scale=repr(zoom), dx=repr(sx), dy=repr(sy), symmetric="true" if symmetric else ""), where
-        ).path
-        l, t, r, b = final.bounds
-        long_side = max(r - l, b - t)
-        # How far the outline is from satisfying size, margin and centre (0 when it does).
-        violation = (
-            max(0.0, lo + 0.02 - long_side, long_side - (hi - 0.02))
-            + max(0.0, MARGIN + 0.02 - min(l, t, GRID - r, GRID - b))
-            + max(0.0, abs((l + r) / 2 - GRID / 2) - ((SYMMETRIC_TOLERANCE if symmetric else CENTRE_TOLERANCE) - 0.01))
-            + max(0.0, abs((t + b) / 2 - GRID / 2) - (CENTRE_TOLERANCE - 0.01))
-            + 1.0 * max(0, nat_contours - len(contours_of(final)))  # a counter or a cut-out closed up
-        )
-        soft = raster.soft_edge_pixels(raster.coverage(polygons(final), DESIGN_SIZE))
-        candidate = (round(violation, 3), soft, abs(zoom - 1.0), zoom, sx, sy)
-        if best is None or candidate < best:
-            best = candidate
-    if best is None:
-        raise BuildError(f"{short}: no scale puts the long side in {lo:g} to {hi:g} px with the ink inside the box")
-    violation, _, _, zoom, sx, sy = best
-    if violation > 0.05:
-        print(f"icons: warning: {short}: best fit still breaks a rule by {violation} px", file=sys.stderr)
-    result: dict[str, str] = {}
-    if abs(zoom - 1.0) > 1e-9:
-        result["scale"] = f"{zoom:g}"
-    if abs(sx) > 1e-9:
-        result["dx"] = f"{sx:.2f}".rstrip("0").rstrip(".")
-    if abs(sy) > 1e-9:
-        result["dy"] = f"{sy:.2f}".rstrip("0").rstrip(".")
-    return result
+    zoom = min(valid, key=lambda z: (abs(z - 1.0), z))
+    return {} if abs(zoom - 1.0) < 1e-9 else {"scale": f"{zoom:g}"}
 
 
 def referenced_icons() -> set[str]:
@@ -1449,7 +1349,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lint", action="store_true", help="only judge the sources' pixels (size, centre, crispness, symmetry)")
     parser.add_argument("--measure", action="store_true", help="print the measurements of every icon")
     parser.add_argument(
-        "--suggest", nargs="*", metavar="ICON", help="propose scale, dx and dy for fork icons (all, or the ones named)"
+        "--suggest", nargs="*", metavar="ICON", help="propose the scale for fork icons (all, or the ones named)"
     )
     parser.add_argument("--report", action="store_true", help="list edges that are not on a whole pixel")
     parser.add_argument("--src", type=Path, help="compile sources from this directory (drafts)")

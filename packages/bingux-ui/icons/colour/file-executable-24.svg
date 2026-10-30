@@ -1,0 +1,11 @@
+<svg height="24px" viewBox="0 0 24 24" width="24px" xmlns="http://www.w3.org/2000/svg">
+    <defs><linearGradient id="lit" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.32"/><stop offset="0.55" stop-color="#fff" stop-opacity="0"/></linearGradient><linearGradient id="deep" x1="0" x2="0" y1="0" y2="1"><stop offset="0.45" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.1"/></linearGradient></defs>
+    <path d="M3 4C3 2.343 4.343 1 6 1L14 1C14.552 1 15.317 1.317 15.707 1.707L20.293 6.293C20.683 6.683 21 7.448 21 8L21 20C21 21.657 19.657 23 18 23L6 23C4.343 23 3 21.657 3 20Z"/>
+    <path d="M3 4C3 2.343 4.343 1 6 1L14 1C14.552 1 15.317 1.317 15.707 1.707L20.293 6.293C20.683 6.683 21 7.448 21 8L21 20C21 21.657 19.657 23 18 23L6 23C4.343 23 3 21.657 3 20Z" fill="url(#lit)"/>
+    <path d="M3 4C3 2.343 4.343 1 6 1L14 1C14.552 1 15.317 1.317 15.707 1.707L20.293 6.293C20.683 6.683 21 7.448 21 8L21 20C21 21.657 19.657 23 18 23L6 23C4.343 23 3 21.657 3 20Z" fill="url(#deep)"/>
+    <path d="M15.707 1.707C15.317 1.317 15 1.448 15 2L15 6.2C15 6.642 15.358 7 15.8 7L20 7C20.552 7 20.683 6.683 20.293 6.293Z" fill="#000" fill-opacity=".22"/>
+    <clipPath id="page"><path d="M3 4C3 2.343 4.343 1 6 1L14 1C14.552 1 15.317 1.317 15.707 1.707L20.293 6.293C20.683 6.683 21 7.448 21 8L21 20C21 21.657 19.657 23 18 23L6 23C4.343 23 3 21.657 3 20Z"/></clipPath>
+    <path d="M3 4C3 2.343 4.343 1 6 1L14 1C14.552 1 15.317 1.317 15.707 1.707L20.293 6.293C20.683 6.683 21 7.448 21 8L21 20C21 21.657 19.657 23 18 23L6 23C4.343 23 3 21.657 3 20Z" fill="none" stroke="#000" stroke-opacity="0.26" stroke-width="2" clip-path="url(#page)"/>
+    <polyline points="7.5,12.5 12.5,15.5 7.5,18.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="miter" stroke-linecap="butt"/>
+    <rect x="14" y="18" width="4" height="2" fill="currentColor"/>
+</svg>

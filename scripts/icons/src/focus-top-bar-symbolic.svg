@@ -1,3 +1,3 @@
 <svg viewBox="0 0 16 16">
-  <fork name="AppWindow" weight="regular" mode="exact" scale="1.055" dx="0.17" dy="-0.23"/>
+  <fork name="AppWindow" weight="fill" mode="exact"/>
 </svg>

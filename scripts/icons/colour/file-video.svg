@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" data-chrome="page">
+  <rect x="6" y="7" width="2" height="6" fill="ink" data-at="16 20"/>
+  <rect x="8" y="8" width="2" height="4" fill="ink" data-at="16 20"/>
+  <rect x="10" y="9" width="1" height="2" fill="ink" data-at="16 20"/>
+  <polygon points="6,7 11,10 6,13" fill="ink" data-at="24 32"/>
+  <g data-grid="128">
+    <path d="M50 58L96 80L50 102Z" fill="ink" stroke="ink" stroke-width="8" stroke-linejoin="round"/>
+  </g>
+</svg>

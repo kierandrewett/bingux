@@ -1,0 +1,12 @@
+<svg height="32px" viewBox="0 0 32 32" width="32px" xmlns="http://www.w3.org/2000/svg">
+    <defs><linearGradient id="lit" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.32"/><stop offset="0.55" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
+    <path d="M12 6C12 4.895 12.895 4 14 4L18 4C19.105 4 20 4.895 20 6L20 8C20 9.105 19.105 10 18 10L14 10C12.895 10 12 9.105 12 8Z"/>
+    <path d="M12 6C12 4.895 12.895 4 14 4L18 4C19.105 4 20 4.895 20 6L20 8C20 9.105 19.105 10 18 10L14 10C12.895 10 12 9.105 12 8Z" fill="#000" fill-opacity=".22"/>
+    <path d="M6 12H26V24Q26 28 22 28H10Q6 28 6 24Z"/>
+    <path d="M6 12H26V24Q26 28 22 28H10Q6 28 6 24Z" fill="#fff" fill-opacity=".28"/>
+    <path d="M6 12H26V24Q26 28 22 28H10Q6 28 6 24Z" fill="url(#lit)"/>
+    <path d="M4 10C4 8.895 4.895 8 6 8L26 8C27.105 8 28 8.895 28 10L28 10C28 11.105 27.105 12 26 12L6 12C4.895 12 4 11.105 4 10Z"/>
+    <path d="M4 10C4 8.895 4.895 8 6 8L26 8C27.105 8 28 8.895 28 10L28 10C28 11.105 27.105 12 26 12L6 12C4.895 12 4 11.105 4 10Z" fill="#000" fill-opacity=".22"/>
+    <rect x="12" y="16" width="2" height="8" fill="currentColor"/>
+    <rect x="18" y="16" width="2" height="8" fill="currentColor"/>
+</svg>

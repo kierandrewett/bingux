@@ -253,28 +253,14 @@ def compare(before: Path, after: Path, group: str, out: Path) -> None:
     print(f"review: wrote {out}")
 
 
-def fitted_polys(name: str, weight: str, careful: bool = False):
-    """The glyph fitted to the size rules: build.py's own search (`careful`) or one scale and a half pixel shift."""
+def fitted_polys(name: str, weight: str):
+    """The glyph as build.py places it: the scale that satisfies the size rule (one factor on both axes) and the half pixel shift."""
     base = {"name": name, "weight": weight}
-    if careful:
-        try:
-            fit = build.suggest_fit(f"zz-{name}", SimpleNamespace(fork=name, weight=weight, attrs={}), labelsmod.Labels())
-        except build.BuildError:
-            fit = {}
-        return build.polygons(build.fork_outline({**base, **fit}, name).path)
-    left, top, right, bottom = build.fork_outline(base, name).path.bounds
-    long_side, short = max(right - left, bottom - top), max(min(right - left, bottom - top), 0.01)
-    target = 14.0 if long_side / short < build.ELONGATED_ASPECT else 14.75
-    zoom = round(min(max(target / max(long_side, 0.01), 0.5), 3.0), 2)
-    left, top, right, bottom = build.fork_outline({**base, "scale": repr(zoom)}, name).path.bounds
-    dx = -round(((left + right) / 2 - 8) * 2) / 2
-    dy = -round(((top + bottom) / 2 - 8) * 2) / 2
-    fitted = {**base, "scale": repr(zoom), "dx": repr(dx), "dy": repr(dy)}
-    path = build.fork_outline(fitted, name).path
-    left, top, right, bottom = path.bounds
-    if left < 0 or top < 0 or right > 16 or bottom > 16:
-        return build.polygons(build.fork_outline(base, name).path)
-    return build.polygons(path)
+    try:
+        fit = build.suggest_fit(f"zz-{name}", SimpleNamespace(fork=name, weight=weight, attrs={}), labelsmod.Labels())
+    except build.BuildError:
+        fit = {}
+    return build.polygons(build.fork_outline({**base, **fit}, name).path)
 
 
 def candidates(specs: list[str], out: Path) -> None:
@@ -288,7 +274,7 @@ def candidates(specs: list[str], out: Path) -> None:
     for index, spec in enumerate(specs):
         name, _, weight = spec.partition(":")
         weight = weight or "fill"
-        polys = fitted_polys(name, weight, careful=True)
+        polys = fitted_polys(name, weight)
         x, y = 12 + (index % cols) * cell_w, 8 + (index // cols) * cell_h
         image.paste(cell(polys, 16, zoom, DARK), (x, y))
         image.paste(cell(polys, 16, zoom, LIGHT), (x, y + 16 * zoom + 4))

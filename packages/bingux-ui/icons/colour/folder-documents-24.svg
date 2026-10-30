@@ -1,0 +1,10 @@
+<svg height="24px" viewBox="0 0 24 24" width="24px" xmlns="http://www.w3.org/2000/svg">
+    <defs><linearGradient id="lit" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.32"/><stop offset="0.55" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
+    <path d="M2 6C2 4.343 3.343 3 5 3L8.586 3C9.367 3 10.448 3.448 11 4L11 4C11.552 4.552 12.633 5 13.414 5L19 5C20.657 5 22 6.343 22 8L22 18L2 18Z"/>
+    <path d="M2 6C2 4.343 3.343 3 5 3L8.586 3C9.367 3 10.448 3.448 11 4L11 4C11.552 4.552 12.633 5 13.414 5L19 5C20.657 5 22 6.343 22 8L22 18L2 18Z" fill="#000" fill-opacity=".22"/>
+    <path d="M2 11C2 9.343 3.343 8 5 8L19 8C20.657 8 22 9.343 22 11L22 18C22 19.657 20.657 21 19 21L5 21C3.343 21 2 19.657 2 18Z"/>
+    <path d="M2 11C2 9.343 3.343 8 5 8L19 8C20.657 8 22 9.343 22 11L22 18C22 19.657 20.657 21 19 21L5 21C3.343 21 2 19.657 2 18Z" fill="#fff" fill-opacity=".28"/>
+    <path d="M2 11C2 9.343 3.343 8 5 8L19 8C20.657 8 22 9.343 22 11L22 18C22 19.657 20.657 21 19 21L5 21C3.343 21 2 19.657 2 18Z" fill="url(#lit)"/>
+    <path d="M3.35 8L18.65 8L18.65 9L3.35 9Z" fill="#fff" fill-opacity=".6"/>
+    <path d="M9 11H15V20H9ZM11 14H14V15H11ZM11 17H14V18H11Z" fill="currentColor" fill-rule="evenodd"/>
+</svg>

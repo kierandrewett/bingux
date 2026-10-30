@@ -29,7 +29,7 @@ view-reveal view-conceal starred non-starred window-close window-minimize window
 [buttons-and-menus]
 open-menu view-more view-refresh object-rotate-right sidebar-show focus-top-bar edit-copy edit-delete
 user-trash view-filter find-location document-edit document-open send-to view-list view-grid
-media-playback-pause preferences-system emblem-system folder folder-download bookmarks
+media-playback-pause media-playback-stop preferences-system emblem-system folder folder-download bookmarks
 
 [status]
 dialog-error dialog-information dialog-warning help-browser security-high security-low

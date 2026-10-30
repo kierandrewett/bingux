@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" data-chrome="folder">
+  <path d="M6 7H10V13H6Z M7 9H9V10H7Z M7 11H9V12H7Z" fill="ink" fill-rule="evenodd"/>
+  <g data-grid="128">
+    <path d="M53 56H75Q82 56 82 63V97Q82 104 75 104H53Q46 104 46 97V63Q46 56 53 56Z M54 66H72A3 3 0 0 1 72 72H54A3 3 0 0 1 54 66Z M54 78H72A3 3 0 0 1 72 84H54A3 3 0 0 1 54 78Z M54 90H64A3 3 0 0 1 64 96H54A3 3 0 0 1 54 90Z" fill="ink" fill-rule="evenodd"/>
+  </g>
+</svg>

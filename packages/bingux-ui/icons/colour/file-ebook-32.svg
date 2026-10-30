@@ -1,0 +1,11 @@
+<svg height="32px" viewBox="0 0 32 32" width="32px" xmlns="http://www.w3.org/2000/svg">
+    <defs><linearGradient id="lit" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.32"/><stop offset="0.55" stop-color="#fff" stop-opacity="0"/></linearGradient><linearGradient id="deep" x1="0" x2="0" y1="0" y2="1"><stop offset="0.45" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.1"/></linearGradient></defs>
+    <path d="M4 6C4 3.791 5.791 2 8 2L18.6 2C19.373 2 20.443 2.443 20.99 2.99L27.01 9.01C27.557 9.557 28 10.627 28 11.4L28 26C28 28.209 26.209 30 24 30L8 30C5.791 30 4 28.209 4 26Z"/>
+    <path d="M4 6C4 3.791 5.791 2 8 2L18.6 2C19.373 2 20.443 2.443 20.99 2.99L27.01 9.01C27.557 9.557 28 10.627 28 11.4L28 26C28 28.209 26.209 30 24 30L8 30C5.791 30 4 28.209 4 26Z" fill="url(#lit)"/>
+    <path d="M4 6C4 3.791 5.791 2 8 2L18.6 2C19.373 2 20.443 2.443 20.99 2.99L27.01 9.01C27.557 9.557 28 10.627 28 11.4L28 26C28 28.209 26.209 30 24 30L8 30C5.791 30 4 28.209 4 26Z" fill="url(#deep)"/>
+    <path d="M20.99 2.99C20.443 2.443 20 2.627 20 3.4L20 8.8C20 9.463 20.537 10 21.2 10L26.6 10C27.373 10 27.557 9.557 27.01 9.01Z" fill="#000" fill-opacity=".22"/>
+    <clipPath id="page"><path d="M4 6C4 3.791 5.791 2 8 2L18.6 2C19.373 2 20.443 2.443 20.99 2.99L27.01 9.01C27.557 9.557 28 10.627 28 11.4L28 26C28 28.209 26.209 30 24 30L8 30C5.791 30 4 28.209 4 26Z"/></clipPath>
+    <path d="M4 6C4 3.791 5.791 2 8 2L18.6 2C19.373 2 20.443 2.443 20.99 2.99L27.01 9.01C27.557 9.557 28 10.627 28 11.4L28 26C28 28.209 26.209 30 24 30L8 30C5.791 30 4 28.209 4 26Z" fill="none" stroke="#000" stroke-opacity="0.26" stroke-width="2" clip-path="url(#page)"/>
+    <polygon points="8,14 14,16 14,26 8,24" fill="currentColor"/>
+    <polygon points="18,16 24,14 24,24 18,26" fill="currentColor"/>
+</svg>

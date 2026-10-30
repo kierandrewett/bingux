@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" data-chrome="page">
+  <circle cx="6" cy="12" r="1.5" fill="ink"/>
+  <circle cx="10" cy="11" r="1.5" fill="ink"/>
+  <rect x="7" y="7" width="1" height="5" fill="ink"/>
+  <rect x="11" y="6" width="1" height="5" fill="ink"/>
+  <polygon points="7,7 12,6 12,8 7,9" fill="ink"/>
+  <g data-grid="128">
+    <circle cx="50" cy="96" r="10" fill="ink"/>
+    <circle cx="80" cy="90" r="10" fill="ink"/>
+    <path d="M60 96V60L90 52V88" fill="none" stroke="ink" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M60 60L90 52V68L60 76Z" fill="ink" stroke="ink" stroke-width="4" stroke-linejoin="round"/>
+  </g>
+</svg>

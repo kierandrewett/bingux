@@ -1,0 +1,12 @@
+<svg height="20px" viewBox="0 0 20 20" width="20px" xmlns="http://www.w3.org/2000/svg">
+    <defs><linearGradient id="lit" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.32"/><stop offset="0.55" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
+    <path d="M8 4.25C8 3.56 8.56 3 9.25 3L11.75 3C12.44 3 13 3.56 13 4.25L13 4.75C13 5.44 12.44 6 11.75 6L9.25 6C8.56 6 8 5.44 8 4.75Z"/>
+    <path d="M8 4.25C8 3.56 8.56 3 9.25 3L11.75 3C12.44 3 13 3.56 13 4.25L13 4.75C13 5.44 12.44 6 11.75 6L9.25 6C8.56 6 8 5.44 8 4.75Z" fill="#000" fill-opacity=".22"/>
+    <path d="M4 8H16V15Q16 18 14 18H6Q4 18 4 15Z"/>
+    <path d="M4 8H16V15Q16 18 14 18H6Q4 18 4 15Z" fill="#fff" fill-opacity=".28"/>
+    <path d="M4 8H16V15Q16 18 14 18H6Q4 18 4 15Z" fill="url(#lit)"/>
+    <path d="M3 6.25C3 5.56 3.56 5 4.25 5L16.75 5C17.44 5 18 5.56 18 6.25L18 6.75C18 7.44 17.44 8 16.75 8L4.25 8C3.56 8 3 7.44 3 6.75Z"/>
+    <path d="M3 6.25C3 5.56 3.56 5 4.25 5L16.75 5C17.44 5 18 5.56 18 6.25L18 6.75C18 7.44 17.44 8 16.75 8L4.25 8C3.56 8 3 7.44 3 6.75Z" fill="#000" fill-opacity=".22"/>
+    <rect x="8" y="10" width="1" height="5" fill="currentColor"/>
+    <rect x="11" y="10" width="1" height="5" fill="currentColor"/>
+</svg>

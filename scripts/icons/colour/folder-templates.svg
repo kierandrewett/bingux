@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" data-chrome="folder">
+  <rect x="6" y="7" width="4" height="6" fill="none" stroke="ink" stroke-width="1"/>
+  <g data-grid="128">
+    <path d="M52 56H70L84 70V98Q84 104 78 104H52Q46 104 46 98V62Q46 56 52 56Z" fill="none" stroke="ink" stroke-width="7" stroke-linejoin="round"/>
+    <path d="M56 84H74M56 94H66" fill="none" stroke="ink" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

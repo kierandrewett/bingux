@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" data-chrome="folder">
+  <path d="M4 7H12V12H4Z M5 8H11V11H5Z" fill="ink" fill-rule="evenodd"/>
+  <rect x="6" y="12" width="4" height="1" fill="ink"/>
+  <g data-grid="128">
+    <rect x="42" y="58" width="44" height="32" rx="7" fill="none" stroke="ink" stroke-width="8"/>
+    <path d="M64 92V102M50 104H78" fill="none" stroke="ink" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

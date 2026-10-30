@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" data-chrome="folder">
+  <circle cx="8" cy="8.5" r="1.5" fill="ink"/>
+  <path d="M5 13A3 3 0 0 1 11 13Z" fill="ink"/>
+  <g data-grid="128">
+    <circle cx="64" cy="68" r="12" fill="ink"/>
+    <path d="M40 106Q40 86 64 86Q88 86 88 106Z" fill="ink" stroke="ink" stroke-width="4" stroke-linejoin="round"/>
+  </g>
+</svg>

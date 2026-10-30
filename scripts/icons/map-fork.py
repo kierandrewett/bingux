@@ -17,6 +17,8 @@ from pathlib import Path
 import labels
 
 HERE = Path(__file__).resolve().parent
+# The rules of design/rules.json this check holds (read by scripts/rules-check.py).
+RULE_IDS = {"*": ["IC-01"]}
 
 
 def source(row: labels.Row) -> str:

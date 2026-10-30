@@ -2,9 +2,9 @@
 
 Rows: `file | where it is used | metaphor | glyph`, where glyph is either
 `custom: <how it is drawn>` or `<ForkName> <weight> [key=value ...]` with the
-keys `scale`, `dx`, `dy` (pixels on the 16 grid), `mirror` (`left` or `right`: draw the
-other half as its mirror image), `stroke` (`none` keeps the fork's stroke width) and `snap` (`none` keeps
-the fork's edge positions).
+keys `scale` (one factor on both axes), `dx`, `dy` (pixels on the 16 grid), `mirror` (`left` or
+`right`: draw the other half as its mirror image) and `align` (`none` turns off the automatic
+half pixel shift). A glyph is only ever scaled uniformly and moved.
 
 Directives, one per comment line, add the per-icon metadata the checks and the
 review sheets need:
@@ -13,6 +13,9 @@ review sheets need:
   #symmetric: file file ...              must be left-right symmetric about x = 8
   #mark: file file ...                   a small control mark (chevron, tick, plus)
   #exempt <rule>: file file ...          rule is one of size, centre, soft
+  #mirror_rtl: file file ...             drawn with a direction (an arrow, a chevron, a panel
+                                         at one side): flipped left to right when the interface
+                                         reads right to left (`Icon::mirrors_in_rtl`, design/rtl.md)
 """
 
 from __future__ import annotations
@@ -24,8 +27,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 LABELS = HERE / "labels.tsv"
 FORK_SPEC = re.compile(r"^([A-Za-z0-9]+) (regular|bold|fill)((?: [a-z]+=[-0-9.a-z]+)*)$")
-ATTR_KEYS = ("scale", "dx", "dy", "mirror", "stroke", "snap", "symmetric")
-DIRECTIVE = re.compile(r"^#(policy|symmetric|mark|exempt)(?: ([a-z-]+))?:\s*(.*)$")
+ATTR_KEYS = ("scale", "dx", "dy", "mirror", "align")
+DIRECTIVE = re.compile(r"^#(policy|symmetric|mark|exempt|mirror_rtl)(?: ([a-z-]+))?:\s*(.*)$")
 
 
 @dataclass
@@ -50,6 +53,7 @@ class Labels:
     symmetric: set[str] = field(default_factory=set)
     marks: set[str] = field(default_factory=set)
     exempt: dict[str, set[str]] = field(default_factory=dict)
+    mirror_rtl: set[str] = field(default_factory=set)
 
 
 def load(path: Path = LABELS) -> Labels:
@@ -70,6 +74,8 @@ def load(path: Path = LABELS) -> Labels:
                 labels.symmetric.update(files)
             elif kind == "mark":
                 labels.marks.update(files)
+            elif kind == "mirror_rtl":
+                labels.mirror_rtl.update(files)
             else:
                 labels.exempt.setdefault(arg or "", set()).update(files)
             continue
@@ -90,7 +96,4 @@ def load(path: Path = LABELS) -> Labels:
         if parts[0] in labels.rows:
             raise SystemExit(f"labels.tsv:{number}: {parts[0]} appears twice")
         labels.rows[parts[0]] = row
-    for file in labels.symmetric:
-        if file in labels.rows and not labels.rows[file].custom:
-            labels.rows[file].attrs["symmetric"] = "true"
     return labels

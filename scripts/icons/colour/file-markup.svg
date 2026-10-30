@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" data-chrome="page">
+  <rect x="6" y="7" width="1" height="6" fill="ink"/>
+  <rect x="9" y="7" width="1" height="6" fill="ink"/>
+  <rect x="4" y="8" width="8" height="1" fill="ink"/>
+  <rect x="4" y="11" width="8" height="1" fill="ink"/>
+  <g data-grid="128">
+    <path d="M54 54V104M74 54V104M36 70H94M36 88H94" fill="none" stroke="ink" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" data-chrome="page">
+  <polyline points="6,7 4,10 6,13" fill="none" stroke="ink" stroke-width="2"/>
+  <polyline points="10,7 12,10 10,13" fill="none" stroke="ink" stroke-width="2"/>
+  <g data-grid="128">
+    <path d="M52 60L34 80L52 100M76 60L94 80L76 100" fill="none" stroke="ink" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

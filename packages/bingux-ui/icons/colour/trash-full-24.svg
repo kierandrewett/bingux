@@ -1,0 +1,14 @@
+<svg height="24px" viewBox="0 0 24 24" width="24px" xmlns="http://www.w3.org/2000/svg">
+    <defs><linearGradient id="lit" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.32"/><stop offset="0.55" stop-color="#fff" stop-opacity="0"/></linearGradient><linearGradient id="paper" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#ebeae8"/></linearGradient></defs>
+    <path d="M6 4.5C6 3.672 6.672 3 7.5 3L10.5 3C11.328 3 12 3.672 12 4.5L12 7.5C12 8.328 11.328 9 10.5 9L7.5 9C6.672 9 6 8.328 6 7.5Z" fill="#000" fill-opacity=".22"/>
+    <path d="M12 6.5C12 5.672 12.672 5 13.5 5L16.5 5C17.328 5 18 5.672 18 6.5L18 7.5C18 8.328 17.328 9 16.5 9L13.5 9C12.672 9 12 8.328 12 7.5Z" fill="#000" fill-opacity=".22"/>
+    <path d="M6 3.5C6 2.672 6.672 2 7.5 2L10.5 2C11.328 2 12 2.672 12 3.5L12 7.5C12 8.328 11.328 9 10.5 9L7.5 9C6.672 9 6 8.328 6 7.5Z" fill="url(#paper)"/>
+    <path d="M12 4.5C12 3.672 12.672 3 13.5 3L16.5 3C17.328 3 18 3.672 18 4.5L18 7.5C18 8.328 17.328 9 16.5 9L13.5 9C12.672 9 12 8.328 12 7.5Z" fill="url(#paper)"/>
+    <path d="M5 9H20V18Q20 21 17 21H8Q5 21 5 18Z"/>
+    <path d="M5 9H20V18Q20 21 17 21H8Q5 21 5 18Z" fill="#fff" fill-opacity=".28"/>
+    <path d="M5 9H20V18Q20 21 17 21H8Q5 21 5 18Z" fill="url(#lit)"/>
+    <path d="M3 7.5C3 6.672 3.672 6 4.5 6L19.5 6C20.328 6 21 6.672 21 7.5L21 7.5C21 8.328 20.328 9 19.5 9L4.5 9C3.672 9 3 8.328 3 7.5Z"/>
+    <path d="M3 7.5C3 6.672 3.672 6 4.5 6L19.5 6C20.328 6 21 6.672 21 7.5L21 7.5C21 8.328 20.328 9 19.5 9L4.5 9C3.672 9 3 8.328 3 7.5Z" fill="#000" fill-opacity=".22"/>
+    <rect x="9" y="12" width="2" height="6" fill="currentColor"/>
+    <rect x="14" y="12" width="2" height="6" fill="currentColor"/>
+</svg>

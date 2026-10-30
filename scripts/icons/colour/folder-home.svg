@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" data-chrome="folder">
+  <polygon points="4,10 8,7 12,10" fill="ink"/>
+  <path d="M5 10H11V13H5Z M7 11H9V13H7Z" fill="ink" fill-rule="evenodd"/>
+  <g data-grid="128">
+    <path d="M34 80L64 54L94 80V100Q94 104 90 104H38Q34 104 34 100Z M57 104V88Q57 85 60 85H68Q71 85 71 88V104Z" fill="ink" fill-rule="evenodd" stroke="ink" stroke-width="6" stroke-linejoin="round"/>
+  </g>
+</svg>
