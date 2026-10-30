@@ -1,16 +1,34 @@
 //! Progress indicators (SwiftUI `ProgressView`, libadwaita
 //! `GtkProgressBar` and `AdwSpinner`).
 
+use std::f32::consts::{PI, TAU};
+
 use freya::animation::*;
 use freya::prelude::*;
 
 use crate::component::ComponentName;
+use crate::motion::use_cycle;
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::typography::CAPTION;
 
-/// A 6 px progress bar. Determinate bars fill with the accent colour;
-/// an indeterminate bar sweeps a 30% segment across the track.
+/// One sweep of an indeterminate bar, in milliseconds.
+const SWEEP_MS: u64 = 1400;
+/// One breath of an indeterminate bar under reduced motion, in milliseconds.
+const BREATH_MS: u64 = 2400;
+/// The moving segment's share of the track, in percent.
+const SEGMENT: f32 = 30.0;
+/// How faint the breathing fill gets, as an opacity.
+const BREATH_LOW: f32 = 0.3;
+/// One turn of a spinner, in milliseconds, and under reduced motion.
+const SPIN_MS: u64 = 800;
+const SPIN_SLOW_MS: u64 = 2400;
+
+/// A 6 px progress bar. Determinate bars fill with the accent colour. An
+/// indeterminate bar sweeps a 30% segment across the track and starts over,
+/// for as long as it is on screen. Under reduced motion the segment does not
+/// travel: the whole fill breathes between faint and solid instead, because a
+/// bar that stood still would look frozen.
 #[derive(PartialEq)]
 pub struct ProgressBar {
     /// `Some(fraction)` in `0.0..=1.0`, or `None` for indeterminate.
@@ -53,30 +71,19 @@ impl Component for ProgressBar {
                     .function(Function::Cubic)
                     .ease(Ease::Out)
             });
-        let sweep = use_animation(move |conf| {
-            conf.on_creation(OnCreation::Run);
-            conf.on_finish(OnFinish::restart());
-            AnimNum::new(-30.0, 100.0)
-                .time(1400)
-                .function(Function::Sine)
-                .ease(Ease::InOut)
-        });
         let percent = fill.get().value();
-        let sweep_x = sweep.get().value();
 
         // The filled share is a run-time percentage, so a raw `Size::percent`.
+        // The indeterminate bar is its own component: its loop runs only
+        // while the bar is indeterminate, and a label or a width changing on
+        // this bar never restarts it.
         let bar: Element = match fraction {
             Some(_) => rect()
                 .width(Size::percent(percent))
                 .height(Size::fill())
                 .tw(&tokens, &[rounded(Radius::Mark), bg(Paint::Accent)])
                 .into(),
-            None if tokens.reduced_motion => rect()
-                .width(Size::percent(30.0))
-                .height(Size::fill())
-                .tw(&tokens, &[rounded(Radius::Mark), bg(Paint::Accent)])
-                .into(),
-            None => SweepTrack { sweep_x }.into(),
+            None => Indeterminate.into(),
         };
 
         rect()
@@ -102,6 +109,7 @@ impl Component for ProgressBar {
             }))
             .child(
                 rect()
+                    .component("ProgressTrack")
                     .width(Size::fill())
                     .tw(
                         &tokens,
@@ -117,29 +125,73 @@ impl Component for ProgressBar {
     }
 }
 
-/// The moving segment of an indeterminate bar. Measures the track so the
-/// percentage sweep maps to pixels.
-#[derive(PartialEq)]
-struct SweepTrack {
-    sweep_x: f32,
+/// Where the sweeping segment's left edge is at `phase` of the cycle (0 to 1),
+/// in percent of the track: from just off the left edge (the segment is
+/// entirely outside) to just off the right edge. It eases in and out, so it
+/// leaves one edge and arrives at the other gently, and the end of a cycle
+/// is where the next one begins.
+fn sweep_left(phase: f32) -> f32 {
+    let eased = 0.5 - 0.5 * (PI * phase).cos();
+    -SEGMENT + (100.0 + SEGMENT) * eased
 }
 
-impl Component for SweepTrack {
+/// The opacity of the breathing fill at `phase` of its cycle: faint at both
+/// ends, solid half way.
+fn breath(phase: f32) -> f32 {
+    BREATH_LOW + (1.0 - BREATH_LOW) * (0.5 - 0.5 * (TAU * phase).cos())
+}
+
+/// The inside of an indeterminate bar: a segment that sweeps across the track,
+/// or a fill that breathes under reduced motion. Its clock ([`use_cycle`])
+/// lives in this scope, so it runs for as long as the bar is indeterminate
+/// and only restarts when the bar is mounted again.
+#[derive(PartialEq)]
+struct Indeterminate;
+
+impl Component for Indeterminate {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let mut size = use_state(Area::default);
-        let width = size.read().width();
-        rect()
-            .width(Size::fill())
-            .height(Size::fill())
-            .on_sized(move |event: Event<SizedEventData>| size.set(event.area))
-            .child(
+        let reduced = tokens.reduced_motion;
+        let phase = use_cycle(if reduced { BREATH_MS } else { SWEEP_MS });
+        // The track's width: the sweep is a distance in pixels, and the width
+        // is known only after the first layout.
+        let mut track = use_state(|| 0.0_f32);
+        let width = *track.read();
+
+        if reduced {
+            return Element::from(
                 rect()
-                    .width(Size::percent(30.0))
+                    .component("ProgressSegment")
+                    .width(Size::fill())
                     .height(Size::fill())
                     .tw(&tokens, &[rounded(Radius::Mark), bg(Paint::Accent)])
-                    .offset_x(width * self.sweep_x / 100.0),
-            )
+                    .opacity(breath(phase)),
+            );
+        }
+        // `offset_x` shifts a box's children, not the box itself: it moves the
+        // segment inside this strip, and the strip keeps the track's size.
+        // (Set on the segment it would move nothing: the segment has no
+        // children.) Until the width is known the strip is empty, so the
+        // segment's first frame is already at its start.
+        Element::from(
+            rect()
+                .width(Size::fill())
+                .height(Size::fill())
+                .on_sized(move |event: Event<SizedEventData>| {
+                    // Only a change of width draws the strip again.
+                    if *track.peek() != event.area.width() {
+                        track.set(event.area.width());
+                    }
+                })
+                .offset_x(width * sweep_left(phase) / 100.0)
+                .maybe_child((width > 0.0).then(|| {
+                    rect()
+                        .component("ProgressSegment")
+                        .width(Size::percent(SEGMENT))
+                        .height(Size::fill())
+                        .tw(&tokens, &[rounded(Radius::Mark), bg(Paint::Accent)])
+                })),
+        )
     }
 }
 
@@ -208,18 +260,16 @@ impl Component for Spinner {
         let px = self.size.px();
         let stroke = self.size.stroke();
         let ink = self.ink;
-        let animation = use_animation(move |conf| {
-            conf.on_creation(OnCreation::Run);
-            conf.on_finish(OnFinish::restart());
-            AnimNum::new(0.0, 360.0).time(if tokens.reduced_motion { 2400 } else { 800 })
-        });
-        // The angle is a prop, so each animation tick re-renders the arc and
-        // repaints it with the new rotation.
+        // The same loop clock as an indeterminate bar's. Under reduced motion
+        // the ring turns slowly instead of standing still.
+        let phase = use_cycle(if tokens.reduced_motion { SPIN_SLOW_MS } else { SPIN_MS });
+        // The angle is a prop, so each tick re-renders the arc and repaints it
+        // with the new rotation.
         let arc = SpinnerArc {
             px,
             stroke: stroke.px(),
             ink,
-            angle: animation.get().value(),
+            angle: phase * 360.0,
         };
         let ring = rect()
             .width(Size::px(px))
@@ -233,6 +283,7 @@ impl Component for Spinner {
             ))
             .child(arc);
         rect()
+            .component("Spinner")
             .a11y_role(AccessibilityRole::ProgressIndicator)
             .tw(&tokens, &[flex_col(), center(), gap(S2)])
             .child(ring)

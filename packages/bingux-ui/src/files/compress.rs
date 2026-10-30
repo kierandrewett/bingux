@@ -53,7 +53,7 @@ use crate::shell::{ResponseKind, dialog, form_dialog, open_form};
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::task::{spawn_detached, use_resource};
-use crate::window::use_window;
+use crate::window::Window;
 
 /// What the dialog is opened with: a selection and the view it came from.
 pub(super) struct Launch {
@@ -68,6 +68,10 @@ pub(super) struct Launch {
     /// What Create asked for, waiting for the dialog to be gone (and, for a
     /// job that removes originals, for the person to confirm).
     pending: RefCell<Option<Request>>,
+    /// The window the dialog was opened from. The dialog renders in the
+    /// overlay layer, which sits outside the window's context, so it cannot
+    /// look the window up itself.
+    window: Option<Window>,
 }
 
 #[derive(Clone)]
@@ -173,6 +177,7 @@ pub fn compress_preview(preview: CompressPreview) -> Element {
         view_names: HashSet::new(),
         prefs: Prefs::default(),
         pending: RefCell::new(None),
+        window: None,
         preview: Some(Prepared {
             tools: preview.tools,
             taken: preview.taken.into_iter().collect(),
@@ -246,6 +251,7 @@ pub(super) fn show_compress(env: &Env, selected: &[Entry]) {
         view_names,
         prefs: remembered(),
         pending: RefCell::new(None),
+        window: env.window,
     });
     let title = subject.title();
     let after = launch.clone();
@@ -374,7 +380,8 @@ pub(super) struct Fields {
 impl Component for CompressDialog {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let window = use_window();
+        let in_context = use_try_consume::<Window>();
+        let window = self.launch.0.window.or(in_context);
         let launch = self.launch.0.clone();
         let subject = &launch.subject;
         let fields = Fields {
@@ -522,6 +529,7 @@ impl Component for CompressDialog {
             let mut draft_state = fields.draft;
             let start = destination.clone();
             EventHandler::new(move |()| {
+                let Some(window) = window else { return };
                 choose(
                     window,
                     ChooserRequest::select_folder()
@@ -703,7 +711,7 @@ fn archive_groups(
             S0,
             rect().child(Element::from(
                 switch_row("Encrypt file names", draft.pack.hide_names, move |on: bool| state.write().pack.hide_names = on)
-                    .subtitle("Nobody can even list what is inside without the password."),
+                    .subtitle("Nobody can even list what is inside without the password"),
             )),
         ));
 
@@ -731,7 +739,7 @@ fn archive_groups(
         .row(switch_row("Include hidden files", draft.pack.include_hidden, move |on: bool| state.write().pack.include_hidden = on))
         .row(
             switch_row("Keep links as links", !draft.pack.follow_links, move |on: bool| state.write().pack.follow_links = !on)
-                .subtitle("Off stores what each link points to instead."),
+                .subtitle("Off stores what each link points to instead"),
         )
         .row(
             switch_row("Keep permissions and owners", draft.pack.keep_owner && is_tar, move |on: bool| state.write().pack.keep_owner = on)

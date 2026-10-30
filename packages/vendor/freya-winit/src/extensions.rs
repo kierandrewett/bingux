@@ -62,6 +62,14 @@ pub trait WinitPlatformExt {
     /// ```
     fn launch_window(&self, window_config: WindowConfig) -> impl Future<Output = WindowId>;
 
+    /// Like [`launch_window`](WinitPlatformExt::launch_window), but `None` when the window could
+    /// not be created. For a popup the compositor may refuse (a grab it does not accept, a parent
+    /// that is no longer mapped); the asker then draws the content another way.
+    fn try_launch_window(
+        &self,
+        window_config: WindowConfig,
+    ) -> impl Future<Output = Option<WindowId>>;
+
     /// Close an existing window by its [`WindowId`].
     ///
     /// # Example
@@ -201,6 +209,17 @@ impl WinitPlatformExt for Platform {
             },
         ))));
         receiver.await.expect("Failed to create window")
+    }
+
+    async fn try_launch_window(&self, window_config: WindowConfig) -> Option<WindowId> {
+        let (sender, receiver) = futures_channel::oneshot::channel();
+        self.send(GlobalUserEvent::Erased(SingleThreadErasedEvent(Box::new(
+            NativePlatformErasedEventAction::LaunchWindow {
+                window_config: Box::new(window_config),
+                ack: sender,
+            },
+        ))));
+        receiver.await.ok()
     }
 
     fn close_window(&self, window_id: WindowId) {

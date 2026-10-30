@@ -13,6 +13,9 @@
 //!   on a phone) and sit [`NOTICE_PAD`] from the edge above, below and at the
 //!   trailing end. The text keeps clear of the curve with a wider leading
 //!   inset.
+//! - The buttons are flush: actions and the dismiss cross share one
+//!   `NoticeButtons` row with no gap, so their hit areas and hover fills
+//!   abut. The gap is only between the message and the group.
 //! - A button's radius is its container's radius less the padding between
 //!   them. The container is a pill and a pill less 4 px is a pill, so the
 //!   buttons are pills. When a long message makes the banner tall the
@@ -41,6 +44,12 @@ pub(crate) const NOTICE_BUTTON: Dim = Dim::Control;
 /// The padding between a notice's edge and its trailing button: equal above,
 /// below and at the trailing edge.
 pub(crate) const NOTICE_PAD: Space = S1;
+
+/// The alpha of the notice's ink laid over a button of the notice under the pointer, and while
+/// it is pressed. The ink is dark on a light tint and light on a dark toast, so the layer shows
+/// on either (the window's own layers are black or white a few percent thick).
+const STATE_HOVER: f32 = 0.14;
+const STATE_PRESSED: f32 = 0.24;
 
 /// The widest a floating notice's text gets, as a share of the window width,
 /// so the actions and the close button stay on a phone.
@@ -224,6 +233,13 @@ impl Component for Banner {
         let mut tall = use_state(|| false);
         let kind = self.kind;
         let ink = Ink::Notice(kind);
+        // The state layers of its buttons are the notice's ink at a low alpha: the window's
+        // own layers are a few percent of black or white, and over a dark toast in a light
+        // window (or the reverse) they do not show.
+        let (hover, pressed) = {
+            let ink = tokens.notice(kind).ink;
+            (ink.with_af32(STATE_HOVER), ink.with_af32(STATE_PRESSED))
+        };
         let floating = self.floating;
         // Several buttons would crush the message on a phone: they go on a row
         // of their own under it, and the banner is as tall as that makes it.
@@ -264,13 +280,15 @@ impl Component for Banner {
         let glyph = self.glyph().map(|glyph| {
             rect()
                 .tw(&tokens, &[mr(S1)])
-                .child(icons::icon(glyph, IconSize::Row, ink.color(&tokens)))
+                .child(icons::icon(glyph, IconSize::Row, Paint::NoticeGlyph(kind).color(&tokens)))
         });
         let actions = self.actions.iter().enumerate().map(|(index, (label, on_press))| {
             NoticeAction {
                 label: label.clone(),
                 kind,
                 radius: button_radius,
+                hover,
+                pressed,
                 on_press: on_press.clone(),
                 id: self.button_ids.get(index).copied(),
             }
@@ -281,6 +299,7 @@ impl Component for Banner {
                 .size(NOTICE_BUTTON)
                 .radius(button_radius)
                 .ink(ink)
+                .layers(hover, pressed)
                 .tooltip("Dismiss");
             match self.button_ids.get(self.actions.len()) {
                 Some(id) => button.a11y_id(*id),
@@ -320,15 +339,22 @@ impl Component for Banner {
                 )
                 .child(
                     rect()
-                        .tw(&tokens, &[flex_row(), justify(Align::End), gap(S2), w_full()])
+                        .tw(&tokens, &[flex_row(), justify(Align::End), w_full()])
                         .children(actions),
                 )
         } else {
+            // The buttons are one flush group: the bar's gap separates the
+            // message from it, never one button from the next.
             bar.tw(&tokens, &[flex_row(), items(Align::Center)])
                 .maybe_child(glyph)
                 .child(text)
-                .children(actions)
-                .maybe_child(dismiss)
+                .maybe_child(trailing.then(|| {
+                    rect()
+                        .component("NoticeButtons")
+                        .tw(&tokens, &[flex_row(), items(Align::Center)])
+                        .children(actions)
+                        .maybe_child(dismiss)
+                }))
         };
 
         if floating {
@@ -343,14 +369,17 @@ impl Component for Banner {
 
 /// An action button of a notice, drawn quiet: no fill at rest, so the notice
 /// reads as one calm surface, its label in the notice's own ink (the colour
-/// of its text and its dismiss glyph, AAA on the fill), the hover and pressed
-/// layers of every control over the fill, and the focus ring. It is as tall
-/// as the dismiss button beside it, with the same radius.
+/// of its text and its dismiss glyph, AAA on the fill), a hover and a pressed
+/// layer of that ink over the fill, and the focus ring. It is as tall as the
+/// dismiss button beside it, with the same radius.
 #[derive(PartialEq)]
 struct NoticeAction {
     label: String,
     kind: BannerKind,
     radius: Radius,
+    /// The state layers: the notice's ink at a low alpha ([`STATE_HOVER`], [`STATE_PRESSED`]).
+    hover: Color,
+    pressed: Color,
     on_press: EventHandler<()>,
     id: Option<AccessibilityId>,
 }
@@ -378,7 +407,13 @@ impl Component for NoticeAction {
                     px(S3),
                     rounded(self.radius),
                     center(),
-                    surface(Paint::Transparent, hovering(), pressing(), false),
+                    fill(if pressing() {
+                        self.pressed
+                    } else if hovering() {
+                        self.hover
+                    } else {
+                        Paint::Transparent.color(&tokens)
+                    }),
                 ],
             )
             .on_pointer_enter(move |_| hovering.set(true))

@@ -1,166 +1,160 @@
 # Tabs
 
-Contributor notes for `bingux_ui::controls::tab_strip` and `tab_frame`: what
-model the tabs follow, which parts of it we took, and the numbers. The
-component's own behaviour (keys, menus, overflow) is in the module comment of
+Contributor notes for `bingux_ui::controls::tab_strip`: what the tabs look
+like and why, the numbers, and the behaviour that does not depend on the look.
+The component's own behaviour (keys, menus, overflow) is in the module comment of
 `packages/bingux-ui/src/controls/tabs.rs` and in `docs/bingux-ui.md`.
 
-## The model: Chromium's tab strip
+## Design thesis
 
-Chromium draws a tab as part of the content it opens. The selected tab is the
-same surface as the toolbar and page under it; its outline rises from the
-strip's bottom edge, rounds two top corners and comes back down, and nothing is
-drawn along its bottom, so the tab and the content are one shape. Every other
-tab is recessed into a darker strip. Reading the sources:
+1. **Tabs are the shell's own controls, spread along the title bar.** A tab is a
+   rounded rectangle of `Radius::Control`, the corner of a button, a sidebar row
+   and a segmented control; the selected one has the fill of a selected sidebar
+   row (`Paint::Selection`), the pointer's fill is `Paint::Hover`, a press is
+   `Paint::Pressed`, and accent colour is used for nothing but a drop target.
+2. **The tabs are separate from the content, and say so.** The bar is the
+   window's title bar on `Paint::Surface`, the page under it is `Paint::Bg` (the
+   same colour), and nothing joins the two: no flare, no shared shape, no
+   darker strip, no card. The page runs square to the window's edges as the
+   Settings page does, so it has no corner of its own to match. The window's
+   rounding is the compositor's.
+3. **Quiet and dense.** An unselected tab is muted ink on the bare bar, a tab
+   is 32 px tall, 4 px from the bar's edges, 4 px from its neighbour; no
+   separators, no outline, no hairline, no shadow.
 
-* **The strip is behind the tabs and the page is in front of the strip.** The
-  design document for the strip describes tabs that *overlap by a small amount
-  (about 20 px)* and a z-order that must be kept consistent so the overlap
-  looks the same however the selection changes, a layout loop that walks the
-  tabs left to right, and a *New Tab Button* placed after the last one
-  ([Tab Strip Design (Mac)](https://www.chromium.org/developers/design-documents/tab-strip-mac/)).
-* **The tab is a path, not a rounded box.** `HorizontalTabStyleViews::GetPath`
-  builds the selected tab's outline going clockwise from the lower left: it
-  starts in the overlap region *"preventing a gap between toolbar and
-  tabstrip"*, draws the bottom-left **extension** corner as an arc of the
-  *bottom* corner radius (counter-clockwise: a concave flare), runs up the
-  ascender, rounds the top left with the *top* radius, crosses, and mirrors
-  down the right side. The outline stroke is inset by half its width and the
-  stroked path (`kBorder`) is open at the bottom, so the line follows the tab
-  and stops at the feet
-  ([`horizontal_tab_style_views.cc`](https://github.com/chromium/chromium/blob/main/chrome/browser/ui/views/tabs/common/horizontal_tab_style_views.cc)).
-  The tab also extends a little *into* the toolbar below it
-  (`kTabstripToolbarOverlap`) so no gap appears at fractional display scales.
-* **Selected, hovered and inactive tabs are different shapes.** The highlight
-  path for a hovered or inactive tab is a detached rounded rectangle inset
-  from the strip's bottom, not the flared outline; only the selected tab joins
-  the content.
-* **Radii and widths** are in `tab_style.cc`: the 2023 style has a *top*
-  corner radius of 10 and a *bottom* (flare) radius of 12; the tab *overlap* is
-  twice the bottom radius less the separator, so neighbours' feet share the
-  space between them; the separator is 2 px wide and 16 px tall with a 2 px
-  margin each side, and the older GM2 style used 1 px; the standard tab width
-  is 240; the *minimum active width* is a close button plus the content
-  insets, and the *minimum inactive width* lets a tab shrink until its
-  interior is 16 px; a pinned tab is 24 px of content plus insets
-  ([`tab_style.cc`](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/chrome/browser/ui/tabs/tab_style.cc)).
-* **The width algorithm** (`tab_strip_layout.cc`) gives every tab a minimum,
-  a *crossover* (the active tab's minimum) and a preferred width. With little
-  room the inactive tabs shrink between their minimum and the crossover; with
-  more, all tabs grow from the crossover towards the preferred width. The
-  fractional pixels the rounding leaves are handed back, left to right, to the
-  tabs that can take one
-  ([`tab_strip_layout.cc`](https://github.com/chromium/chromium/blob/main/chrome/browser/ui/views/tabs/tab_strip_layout.cc)).
-* **Behaviour the Mac design document records.** Closing with the close
-  button keeps the tab widths fixed until the pointer leaves the strip, so the
-  next close button lands under the pointer ("rapid closure mode"). A tab being
-  dragged follows the pointer and the others get out of its way; a placeholder
-  gap marks where it would land. Leaving the strip by a margin tears the tab
-  out into its own window. A new tab "submarines" into place from below.
-  A window with one tab and nowhere to drop it drags the window instead.
+## What it replaced, and why
 
-## What we take, and why
+The first version was Chromium's tab strip: the selected tab and the content
+were one shape, a concave flare at each foot ran into the content's top edge, the
+bar behind the tabs was one step darker (`Paint::TabStrip`), and the window's
+frame was that darker colour round an inset, rounded *card*. Kieran's verdict on
+it was that it looked out of place next to the rest of Bingux and that the card's
+corners (square where the first tab joined them, round elsewhere, a different
+radius from the window's and from every other surface) were not consistent.
+Rounded corners that depend on which tab is selected cannot be made consistent:
+the join under the selected tab, the card's two top corners, the window-edge
+corners and the sidebar's edge are four treatments of one corner. Of the two
+honest options, truly connected (with a concave join, no seam, and corners that
+follow the selection) or clearly separate, we took the second, because every
+other surface in the shell (the Settings page, a dialog, a popover, the segmented
+control above a page) is separate from what it controls.
 
 | Chromium | Here | Why |
 | --- | --- | --- |
-| Selected tab is the content's surface, outlined from the strip's bottom edge, no line under it | Yes: one path, filled with the content's paint, stroked open at the bottom | It is the point of the design: the tab says which content it opens |
-| Concave flares at the feet | Yes, radius = top radius less `FIELD_INSET` | Reuses the nested-radius rule; the flare and a close button inset by the same amount agree |
-| Strip one step darker than the content | Yes: `Paint::TabStrip` | The recess that makes the selected tab read as raised |
-| Hovered or inactive tab is a detached pill, not the flared shape | Yes: `Hover`, `Pressed` and `AccentSoft` fills, inset from the strip's bottom | Only the selected tab joins the content |
-| Separator between inactive tabs, hidden next to the selected and hovered tab | Yes | Tells neighbours apart without borders; hides where a fill or the outline already does |
-| Neighbouring tabs overlap by two feet | The feet of two tabs are the *same* space: bodies are one foot apart | The flare of a selected tab then never reaches a neighbour's body, so a hover fill next to it is never bitten by it |
-| Width: preferred 240, shrink to a minimum, active tab wider | One shared width, `Dim::Field` at most, `Dim::TabMin` at least; scroll beyond | Our tabs always reserve a close slot, so the active tab needs no extra room; a readable minimum beats Chromium's 16 px sliver |
-| Scrollable strip with a tab list | Yes: fades at the edge, tab list button, selected tab scrolled into view | Same as Chrome's scrollable strip |
-| New tab button after the last tab | Yes, pinned after the tabs, never scrolls away | |
-| Drag follows the pointer, others slide | Yes, on `crate::reorder` and `crate::drag` | The shared drag primitive the sortable list uses |
-| Width animation on add/close | Yes | |
-| Rapid closure mode | No | Tabs here are 96 to 240 px wide and the close button is not at the tab's centre; revisit if closing many tabs is slow |
-| Pinned tabs, tab groups, split tabs | No | No caller needs them; the API has no place for them yet |
-| Tear-out into another window | No | A Bingux app window is one window; there is no window to drop into |
-| Favicon, loading spinner, audio and attention indicators | An icon only | `TabItem` carries an icon; state indicators wait for a caller that has state to show |
+| Selected tab is the content's surface with flares into it | A rounded rectangle with the selection fill, an inset above the page | The rest of the shell does not join a selection to its content |
+| Strip one step darker than the page | The bar is `Paint::Surface`, the page's colour | One window surface; the selected fill carries the state |
+| Inset rounded card | Full-bleed page, square to the window | One corner treatment: the window's |
+| Separator between inactive tabs | None | The gap and the muted ink separate them; a hover fill appears on the one under the pointer |
+| Close button on the active tab and under the pointer | Same | |
+| Width: shrink to a minimum, then scroll | Same: `Dim::Field` at most, `Dim::TabMin` at least | |
+| Scrollable strip with a tab list, new tab button after the last tab | Same | |
+| Drag follows the pointer, others slide; tear-out | Same, on `crate::reorder` and `crate::drag` | `design/tab-tearoff.md` |
+| Rapid closure, close-tab menu, reopen closed tab | Same | |
+| Pinned tabs, groups, split tabs | No | No caller needs them |
 
 ## Geometry
 
-Every length is a token. The frame is `Dim::Header` tall and the tab is
-`Dim::Control` tall, so a tab is as tall as a header button, and at compact
-density it is the 44 px touch target. The numbers are logical pixels at mouse
-density, then compact.
+Every length is a token. The strip is `Dim::TabBar` tall and *is* the window's
+title bar: the `HeaderBar` that holds it is that tall too, so the window carries
+no second row above its tabs. A tab is `Dim::TabButton`: the strip less
+`FIELD_INSET` above and below, so it is as tall as an end button, and at compact
+density, where there is no inset, the whole 44 px touch target. Numbers are
+logical pixels at mouse density, then compact.
 
 | Name | Token | Mouse | Compact |
 | --- | --- | --- | --- |
-| Strip height | `Dim::Header` | 48 | 56 |
-| Tab height | `Dim::Control` | 36 | 44 |
-| Band above the tabs (drags the window) | strip less tab | 12 | 12 |
-| Top corner radius | `Radius::Control` | 12 | 12 |
-| Flare radius, foot width and gap between bodies | `Radius::Control.nested(FIELD_INSET)` | 8 | 12 (no inset) |
-| Body width | `Dim::TabMin` .. `Dim::Field` | 96 .. 240 | 128 .. 168 |
-| Close button | `Dim::Box5` / `Dim::InlineButton`, radius `Radius::Control.nested(FIELD_INSET)` | 20 | 44 |
-| New tab and tab list buttons | `Dim::InlineButton`, same radius | 28 | 44 |
-| Outline and seam line | `Dim::Hairline` | 1 | 1 |
-| Separator | `Dim::Indicator` x `Dim::Box5`, `Paint::MutedFaint` | 2 x 20 | 2 x 20 |
-| Overflow fade | `Dim::Box5` | 20 | 20 |
+| Strip (title bar) height | `Dim::TabBar` | 40 | 44 |
+| Tab height | `Dim::TabButton`, the strip less two `FIELD_INSET` | 32 | 44 |
+| Band above and below a tab (drags the window) | `FIELD_INSET` | 4 | 0 |
+| Tab corner | `Radius::Control` | 12 | 12 |
+| Gap between tabs | `S1` | 4 | 4 |
+| Width | `Dim::TabMin` .. `Dim::Field` | 96 .. 240 | 128 .. 168 |
+| Icon | `IconSize::Control` | 16 | 18 |
+| Title | `CAPTION`, the small type step | 13 | 13 |
+| Close button | `Dim::DenseControl` / `Dim::InlineButton`, corner `Radius::Control.nested(FIELD_INSET)` | 24 | 44 |
+| New tab and tab list buttons | `Dim::TabButton`, the corner of a tab, in a cluster with an inset each end | 32 | 44 |
+| Icon buttons elsewhere in the bar | `Dim::TabButton` (`InTabBar`) | 32 | 44 |
+| Start edge | the header bar's padding, `S2` | 8 | 8 |
+| Overflow fade | `Dim::Box5`, into `Paint::Surface` | 20 | 20 |
 
-A strip of `n` bodies of width `w` has content `foot + n * (w + foot)` wide:
-a foot before the first tab, a body and a foot after each. The first tab's
-left flare and the last tab's right flare are those outer feet, so a tab never
-changes its layout when it becomes selected; only what is painted changes.
+A strip of `n` tabs of width `w` has content `n (w + gap) - gap` wide. A tab is
+laid out and painted in the same box: what takes the pointer and the focus is
+what is drawn, so the gap between two tabs drags the window.
 
-A tab is drawn in a slot a foot wider than its body on each side, so the
-flares fit inside the painted box (a painted background is clipped to its box).
-The *body* inside the slot is the control that takes the pointer and the
-focus; the feet take nothing, so the gap between two tabs drags the window.
+The close button is centred in the tab and `FIELD_INSET` from its edges, and its
+corner is the tab's less that inset (`Radius::Inner`, 8 px inside 12 px):
+concentric, the nesting rule of every other control in the shell. The focus ring
+is the tab's own rounded rectangle.
 
-### The path
+## Colours
 
-Local to the slot, with `f` the foot (flare radius), `r` the top radius, `T`
-the tab height, `w` the body width and `l` the line width, all on the middle of
-the line (half a line inside the edge):
+| State | Fill | Ink |
+| --- | --- | --- |
+| Unselected | none (the bar) | `Ink::Muted` |
+| Hovered (mouse only) | `Paint::Hover`, fading in over `MOVE_MS` | `Ink::Text` once past half |
+| Pressed | `Paint::Pressed`, at once | `Ink::Text` |
+| Selected | `Paint::Selection` over the bar | `Ink::Text` |
+| Drop target | `Paint::AccentSoft` | `Ink::Text` |
+| Held by a drag | its own fill, lifted over the others (faint once going on would tear it off) | |
 
-```
-move  (0, T - l/2)                         left foot, on the strip's hairline
-arc   centre (0, T - l/2 - (f + l/2))      flare, counter-clockwise, to the wall
-line  (f + l/2, ...)                       up the wall
-arc   top left corner, radius r - l/2
-line  across the top
-arc   top right corner
-line  down the right wall
-arc   centre (f + w + f, ...)              flare, counter-clockwise, to the foot
-[fill only] line (f + w + f, T), (0, T), close
-```
+The selected tab's fill is the selection layer composed over the bar *as one
+opaque colour*: the tab in the hand of a drag slides over its neighbours' titles
+and must hide them, which a translucent layer would not. Contrast: unselected
+titles are `Ink::Muted` on the bar and under the hover and pressed fills; the
+selected title is `Ink::Text` on the selection fill; `tabs.rs` tests every
+ground in both schemes.
 
-The fill is the closed path, in the content's paint. The stroke is the open
-path, `Paint::Separator`, one `Dim::Hairline` wide. The strip's own hairline
-runs along the bottom edge of the frame's bar; the tab's line starts and ends
-on the middle of it, so the two are one line that dips up and over the tab.
+## The page under the tabs
 
-## The colour rule
+The page begins at the bar's bottom edge and runs to the window's edges on the
+left, right and bottom: no card, no margin, no rounding, no hairline between it
+and the bar (they are the same colour). At the top corners of the page there is
+nothing to round, at the bottom corners the compositor's window rounding clips it,
+exactly as in Settings. Whatever is selected, at any width, with one tab or many,
+with tabs dragged, in either reading direction, and in light and dark, the
+page's pixels at its four corners and along its top edge are the page's colour
+(`tab_tests.rs`, `the_page_runs_square_to_the_window_under_a_bar_of_its_own_colour`).
+The sidebar below the bar is the shell's `Paint::Sidebar` as everywhere; its top
+edge is the bar's bottom edge.
 
-> The selected tab and the content area directly under it share **one surface
-> paint**, taken from the same value; the strip behind them is **one step
-> darker**.
+## Closing
 
-* `tab_frame` owns the value. It paints its content in `surface` (default
-  `Paint::Bg`) and provides the same value to the `TabStrip` inside it, which
-  fills the selected tab with it. A strip with no frame uses the default.
-* `Paint::TabStrip` is the darker step. Light: `0xebebed`, the same step the
-  sidebar takes below the `0xfafafb` page. Dark: `0x18181b`, below the `0x222226`
-  page (the dark sidebar is a step *lighter*, so it cannot be reused).
-* Contrast: unselected titles are `Ink::Muted` on the strip, and under the
-  hover and pressed fills; they must be 4.5:1 (`contrast_matrix` lists
-  `TabStrip` among the layers, and `tabs.rs` tests the hover and pressed
-  grounds). The selected title is `Ink::Text` on the surface.
-* Never fill a tab with a colour of its own, and never put a border on the
-  bottom of the selected tab or the top of the content. Both break the rule.
+Every tab closes, a lone one too, by: its close button, a middle click,
+Delete, Ctrl+W (the strip's, or the host's when the focus is in the page), and
+the menu. The strip reports the id; the host decides.
 
-## Seam
+**Why Kieran could not close tabs.** Reproduced in the Files app with real
+input: (1) a lone tab, which is what Files opens with, had no close slot at all
+(`closable = tabs > 1`), its middle click did nothing, and Ctrl+W with the focus
+on the tab was swallowed by the strip, which stops propagation before the window
+shortcut can close the window; (2) an unselected tab showed its button only
+under a *mouse* pointer; (3) the button was 20 px. With two or more tabs and a
+mouse the X worked (checked). All three are fixed at the source: the strip no
+longer special-cases a lone tab (Files closes the window for it), the button
+shows on every tab at touch and compact density, and it is a 24 px icon button
+(44 px at compact), inside the tab body, where a press is stopped before it can
+reach the header bar's window drag.
 
-The bar's bottom edge is the content's top edge: the bar is `Dim::Header`
-tall, the content starts right after it, and the selected tab's body ends on
-that edge (a layout test asserts the two areas touch). The painted tab ends on
-the same edge. The line below the other tabs is the frame's hairline, laid in
-the bar's last row; the tab paints over it with the surface, which is why the
-bar's children must be transparent. Both rows are whole logical pixels, so
-there is no gap at fractional scales that keep the header on a whole pixel.
+* **Selection** (`tab_close::selection_after_close`): the tab to the right,
+  else the left, else none. The host applies it (Files in `TabSet::close`).
+* **Last tab.** Files closes the window, and asks first, in a dialog, only if
+  a copy, move or compression is running (`files::operations_running`).
+* **Rapid closure** (`tab_close::RapidClose`): a close with the pointer (button,
+  middle click) holds the tab width. While the pointer stays anywhere in the
+  strip's row the next tab slides under it with its close button visible (the
+  tab under a pointer that did not move is shown as hovered), so the person
+  can click again. When the pointer leaves the row the widths grow to the room
+  over `MOVE_MS` (at once with reduced motion). Closing with the keyboard or
+  the menu, or adding a tab, does not hold. The machine is pure over a clock
+  passed in, tested with a fake one.
+* **Reopen closed tab** (Ctrl+Shift+T and the menu): `files::ClosedTabs` keeps
+  the last 10 closed tabs with their place and their `TabMemory`, so Back and
+  Forward come back with the folder. Closing several (others, to the right)
+  remembers them rightmost first so Reopen brings them back left to right.
+* **The menu** (`tab_close::menu_rows`, pure): Close tab, Close other tabs,
+  Close tabs to the left, Close tabs to the right, a separator, Duplicate
+  tab, Reopen closed tab, a separator, Move left, Move right. An action that
+  cannot do anything is greyed out (the moves are left out at the ends).
 
 ## Motion
 
@@ -171,22 +165,59 @@ there is no gap at fractional scales that keep the header on a whole pixel.
   when let go and `on_reorder(id, to)` is called once, after it has settled.
   With reduced motion everything is at its place at once.
 * Dragging past the strip's end scrolls it, at the speed `reorder::edge_speed`
-  gives; Escape, or letting go more than a header's height above or below the
-  strip, puts the tab back.
+  gives; Escape puts the tab back. Without an `on_detach` handler, letting go more
+  than a header's height above or below the strip puts it back too; with one,
+  the tab is torn off first (`design/tab-tearoff.md`).
 
 ## Where tabs appear
 
 * **A window of views of one kind** (Files): `tab_frame(HeaderBar, content)`
-  with the strip in the header bar's start slot. The window controls share the
-  row.
+  with the strip in the header bar's tab slot. The window controls share the
+  row; the bar is the title bar.
 * **A few fixed pages that cannot be closed** (the inspector's Elements,
   Performance, Accessibility and Layout; the Properties dialog): the segmented
   control's `tabs()` variant. It is a rail of choices, not a set of documents:
   nothing to close, reorder or scroll, and no content it is attached to.
 
+
 ## Not done
 
-Rapid closure mode, pinned tabs, groups, tear-out and state indicators are
-listed above with the reason. Chromium's tab colours also have separate values
-for an inactive window (the `frame_active` argument in `tab_style.cc`); the
-strip here has one set.
+Pinned tabs, groups and state indicators are listed above with the reason. An
+inactive tab's close button is not a keyboard stop (the selected tab is the stop;
+Delete and Ctrl+W close it), so "visible on keyboard focus" is the selected
+tab's.
+
+## Behaviour notes that outlived the first design
+
+* **The pointer.** Which tab is hovered is worked out from where the pointer and
+  the tabs are (`tab_at`), on every pointer move and every draw, not from
+  per-tab enter and leave events (which Freya does not send when the tabs move
+  under a still pointer, nor reliably when a node's siblings change). The fill
+  fades with `use_tween` on `MOVE_MS`; pressed is a stronger fill at once; a
+  drag ends the pressed look explicitly (it takes the release). A tab's pieces
+  are keyed so Freya never pairs one piece with another's body.
+* **Scrolling.** The strip keeps its own logical offset (`controls/tab_scroll.rs`):
+  wheel (the vertical one too), touchpad pan and a finger scroll it; scroll into
+  view only runs when the selection or the widths change. (An effect that called
+  `ScrollController::scroll_to_x` subscribed to every layout and pulled the strip
+  back after each wheel notch.)
+* **Titles.** `fade_text` replaces the ellipsis: the glyphs' alpha ramps to
+  nothing over the last `Dim::TextFade` (24 px) at the end of the reading
+  direction, so it is right on the hover fill, the selected fill and the bar, and
+  the close button is never touched.
+* **Layers.** Paint order in Freya is the layer, which is the depth in the
+  tree, so a dragged tab is lifted by `HELD_LAYER` or it would be drawn under a
+  neighbour's title.
+* **Menu.** Close tab, Close other tabs, Close tabs to the left (greyed out on
+  the first tab), Close tabs to the right, Duplicate tab, Reopen closed tab, Move
+  left, Move right. A closed group is remembered rightmost first, so Reopen
+  brings it back left to right at its places. The tab list shows each tab's icon,
+  its name (cut in the middle, the whole name as the tooltip) and ticks the
+  selected one.
+* **Right to left.** `controls::direction`: the strip, a tab's pieces, the tab
+  list rows, scroll offsets, arrow keys and the place a torn tab lands
+  (`StripLayout { rtl }`) are mirrored; `tab_tests.rs` runs the geometry checks
+  in both directions.
+* **The insertion marker** of a tab brought from another window is the strip's
+  edge at either end of the strip (there is no room outside the clipped region)
+  and the gap between two tabs otherwise.

@@ -23,12 +23,15 @@ pub mod pattern;
 pub mod router;
 pub mod table;
 
+#[cfg(test)]
+mod slide_users_tests;
+
 pub use anchor::{Anchor, slug, use_anchor};
 pub use gesture::{BackGesture, GestureConfig, Pose};
 pub use location::{InvalidLocation, Location};
 pub use model::{
-    Change, Confirmation, Entry, EntryInfo, HistoryItem, Modal, ModalKind, NavModel, Op, Outcome,
-    PopGuard, Snapshot,
+    Change, Confirmation, Entry, EntryInfo, HISTORY_LIMIT, HistoryItem, Modal, ModalKind, NavModel,
+    Op, Outcome, PopGuard, Snapshot,
 };
 pub use router::{
     Router, Target, navigate, provide_router, router, try_router, use_entry_id, use_location,

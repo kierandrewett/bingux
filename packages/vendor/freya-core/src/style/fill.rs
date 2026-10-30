@@ -96,6 +96,17 @@ impl Fill {
         }
     }
 
+    /// [`apply_to_paint`](Self::apply_to_paint) for a box that reads right to
+    /// left: a linear gradient, written as for left to right, is reflected.
+    pub fn apply_to_paint_directed(&self, paint: &mut Paint, area: Area, rtl: bool) {
+        match (&self, rtl) {
+            (Fill::LinearGradient(gradient), true) => {
+                paint.set_shader(gradient.prepare_shader_mirrored(area));
+            }
+            _ => self.apply_to_paint(paint, area),
+        }
+    }
+
     pub fn apply_to_paint(&self, paint: &mut Paint, area: Area) {
         match &self {
             Fill::Color(color) => {

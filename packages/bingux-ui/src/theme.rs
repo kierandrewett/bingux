@@ -119,9 +119,9 @@ pub struct Tokens {
     pub surface: Color,
     /// Sidebar background.
     pub sidebar: Color,
-    /// The strip behind a row of tabs: one step darker than `bg`. The selected
-    /// tab and the content under it are `bg`.
-    pub tab_strip: Color,
+    /// The recess behind a viewer's content (an image, a PDF page): one step
+    /// darker than `bg`, so the page or picture stands out of it.
+    pub recess: Color,
     /// Fill of the group cards, dialogs and popovers.
     pub elevated: Color,
     /// Fill of buttons, fields, dropdowns and segmented controls. One step
@@ -239,7 +239,7 @@ impl Tokens {
             bg: p.content,
             surface: p.content,
             sidebar: p.sidebar,
-            tab_strip: p.strip,
+            recess: p.recess,
             elevated: p.card,
             control: p.control,
             raised: p.raised,
@@ -336,26 +336,34 @@ impl BannerKind {
 }
 
 /// The colours of one [`BannerKind`] in one scheme and accent. The fill is an
-/// opaque low-chroma tint of the kind's hue, so the notice reads over any
-/// content it floats on. The ink (text, icon, dismiss glyph and the label of
-/// an action button) is the same hue moved in lightness: darker than the fill
-/// on a light scheme, lighter on a dark one, until it reaches AAA (7:1) on the
-/// fill. The edge is the hue itself at 3:1 on the fill. An action button has
-/// no colour of its own: it is quiet, the ink on the fill with the hover and
-/// press layers over it.
+/// opaque, soft, low-chroma tint of the kind's hue (a hint of the hue over the
+/// surface), so the notice reads over any content it floats on without
+/// shouting. The ink (text and the dismiss glyph, and the label of an action
+/// button) is the same hue moved in lightness: darker than the fill on a light
+/// scheme, lighter on a dark one, until it reaches AAA (7:1) on the fill. The
+/// `glyph` is the hue itself at 3:1 on the fill: only the leading kind icon
+/// uses it, so the saturated colour is the icon and nothing else. The edge is
+/// a very faint line, the ink at low alpha over the fill, the same for every
+/// kind, never a coloured outline. An action button has no colour of its own:
+/// it is quiet, the ink on the fill with the hover and press layers over it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NoticePalette {
     pub fill: Color,
     pub ink: Color,
+    pub glyph: Color,
     pub edge: Color,
 }
 
 /// The lightness of the tinted fill, how much of the hue's chroma it keeps
 /// and its chroma ceiling (OKLab), on a light and on a dark scheme.
-const NOTICE_FILL_LIGHT: (f32, f32, f32) = (0.95, 0.30, 0.05);
-const NOTICE_FILL_DARK: (f32, f32, f32) = (0.30, 0.35, 0.07);
+const NOTICE_FILL_LIGHT: (f32, f32, f32) = (0.965, 0.20, 0.035);
+const NOTICE_FILL_DARK: (f32, f32, f32) = (0.27, 0.20, 0.045);
 /// The most chroma the ink seed keeps, so a saturated hue stays readable.
 const NOTICE_INK_CHROMA_MAX: f32 = 0.13;
+/// The opacity of the ink in a notice's faint edge. At 0.12 the dark scheme's edge was
+/// 1.35 to 1.43 times the fill's luminance; BR-07 asks for a soft one, at most 1.3, and
+/// `scripts/pixel-check.py` measures it on the rendered notice.
+const NOTICE_EDGE_ALPHA: f32 = 0.07;
 
 /// The palettes of every kind, indexed by [`BannerKind::index`]: `hues` are the
 /// accent, success, warning and danger fills.
@@ -377,14 +385,16 @@ fn notice_palettes(
         }
         .to_colour();
         let ink = ensure_contrast(seed, &[fill], AAA_TEXT);
-        let edge = ensure_contrast(hue, &[fill], AA_LARGE);
-        NoticePalette { fill, ink, edge }
+        let glyph = ensure_contrast(hue, &[fill], AA_LARGE);
+        let edge = composite(ink.with_af32(NOTICE_EDGE_ALPHA), fill);
+        NoticePalette { fill, ink, glyph, edge }
     };
     let [info, success, warning, error] = hues.map(tinted);
     let neutral = NoticePalette {
         fill: floating,
         ink: on_floating,
-        edge: composite(rgba(1.0, 1.0, 1.0, 0.16), floating),
+        glyph: on_floating,
+        edge: composite(on_floating.with_af32(NOTICE_EDGE_ALPHA), floating),
     };
     [neutral, info, success, warning, error]
 }
@@ -476,9 +486,8 @@ pub(crate) struct Palette {
     pub(crate) content: Color,
     /// Sidebar, one step off the content.
     pub(crate) sidebar: Color,
-    /// The tab strip behind a window's tabs: one step darker than the content,
-    /// so the selected tab, painted in the content's colour, stands out of it.
-    pub(crate) strip: Color,
+    /// The recess behind a viewer's content: one step darker than the content.
+    pub(crate) recess: Color,
     /// Group cards on a page.
     pub(crate) card: Color,
     /// Buttons, fields and dropdowns sitting on a card.
@@ -541,7 +550,7 @@ impl Palette {
     pub(crate) fn dark() -> Self {
         Self {
             content: hex(0x222226),
-            strip: hex(0x18181b),
+            recess: hex(0x18181b),
             sidebar: hex(0x2e2e32),
             card: hex(0x343438),
             control: hex(0x424246),
@@ -570,7 +579,7 @@ impl Palette {
         Self {
             content: hex(0xfafafb),
             sidebar: hex(0xebebed),
-            strip: hex(0xebebed),
+            recess: hex(0xebebed),
             card: hex(0xffffff),
             control: hex(0xf1f1f3),
             raised: hex(0xffffff),

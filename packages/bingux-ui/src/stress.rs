@@ -7,6 +7,10 @@
 //!   becoming `[Ńéţẃöŕķ ńáḿé ~~~~~]`. German and Finnish run about that much
 //!   longer than English, so a layout that survives it survives the
 //!   translations, and an untranslated string stands out.
+//!   `BINGUX_PSEUDO_LOCALE=ar` or `he` rewrites each letter in Arabic or
+//!   Hebrew instead ([`in_script`]), so the text is right to left, with the
+//!   digits and punctuation of the original among it; run with
+//!   `BINGUX_DIRECTION=rtl` to see a window read right to left.
 //! * **Text scale** (`BINGUX_TEXT_SCALE=2`): every text size of the type ramp
 //!   is multiplied by the factor (the largest the accessibility page offers
 //!   is 2), rounded by the label to a quarter pixel.
@@ -48,11 +52,19 @@ pub fn popup_width() -> Option<f32> {
 
 #[cfg(any(debug_assertions, feature = "testing"))]
 mod switches {
-    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+    use super::Script;
+    use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
     use std::sync::LazyLock;
 
     static PSEUDO: LazyLock<AtomicBool> = LazyLock::new(|| {
         AtomicBool::new(std::env::var("BINGUX_PSEUDO_LOCALE").is_ok_and(|value| value == "expand"))
+    });
+    static SCRIPT: LazyLock<AtomicU8> = LazyLock::new(|| {
+        AtomicU8::new(match std::env::var("BINGUX_PSEUDO_LOCALE").as_deref() {
+            Ok("ar") => 1,
+            Ok("he") => 2,
+            _ => 0,
+        })
     });
     static SCALE: LazyLock<AtomicU32> = LazyLock::new(|| {
         let scale = std::env::var("BINGUX_TEXT_SCALE")
@@ -71,6 +83,23 @@ mod switches {
         PSEUDO.store(on, Ordering::Relaxed);
     }
 
+    pub fn script() -> Option<Script> {
+        match SCRIPT.load(Ordering::Relaxed) {
+            1 => Some(Script::Arabic),
+            2 => Some(Script::Hebrew),
+            _ => None,
+        }
+    }
+
+    pub fn set_script(script: Option<Script>) {
+        let code = match script {
+            None => 0,
+            Some(Script::Arabic) => 1,
+            Some(Script::Hebrew) => 2,
+        };
+        SCRIPT.store(code, Ordering::Relaxed);
+    }
+
     pub fn scale() -> f32 {
         f32::from_bits(SCALE.load(Ordering::Relaxed))
     }
@@ -82,10 +111,16 @@ mod switches {
 
 #[cfg(not(any(debug_assertions, feature = "testing")))]
 mod switches {
+    use super::Script;
+
     pub fn pseudo() -> bool {
         false
     }
     pub fn set_pseudo(_: bool) {}
+    pub fn script() -> Option<Script> {
+        None
+    }
+    pub fn set_script(_: Option<Script>) {}
     pub fn scale() -> f32 {
         1.0
     }
@@ -118,14 +153,69 @@ pub fn set_text_scale(scale: f32) {
 /// that is on. Text with no letter in it (a number, a time, an ellipsis) is
 /// left as it is.
 pub fn localise(text: &str) -> Cow<'_, str> {
-    if cfg!(any(debug_assertions, feature = "testing")) && pseudo_locale() {
-        match expand(text) {
-            Some(expanded) => Cow::Owned(expanded),
-            None => Cow::Borrowed(text),
-        }
-    } else {
-        Cow::Borrowed(text)
+    if !cfg!(any(debug_assertions, feature = "testing")) {
+        return Cow::Borrowed(text);
     }
+    let rewritten = match pseudo_script() {
+        Some(script) => in_script(text, script),
+        None if pseudo_locale() => expand(text),
+        None => None,
+    };
+    match rewritten {
+        Some(rewritten) => Cow::Owned(rewritten),
+        None => Cow::Borrowed(text),
+    }
+}
+
+/// A right to left script the pseudo-locale can write every letter in
+/// (`BINGUX_PSEUDO_LOCALE=ar` or `he`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Script {
+    Arabic,
+    Hebrew,
+}
+
+/// The script every string is rewritten in, when one is on.
+pub fn pseudo_script() -> Option<Script> {
+    switches::script()
+}
+
+/// Writes the pseudo-locale in `script`, or turns it off with `None`. Debug and
+/// `testing` builds only; a release build ignores it.
+pub fn set_pseudo_script(script: Option<Script>) {
+    switches::set_script(script);
+}
+
+/// `text` with each ASCII letter, in alphabet order, replaced by a letter of
+/// `script`: the same length, right to left, shaped (Arabic joins), with the
+/// digits, spaces and punctuation a real string has among its words. Not a
+/// translation: it stands where one would, to see how the layout reads right to
+/// left. `None` when `text` has no ASCII letter.
+pub fn in_script(text: &str, script: Script) -> Option<String> {
+    const ARABIC: [char; 26] = [
+        'ا', 'ب', 'ت', 'ث', 'ج', 'ح', 'خ', 'د', 'ذ', 'ر', 'ز', 'س', 'ش', 'ص', 'ض', 'ط', 'ظ', 'ع',
+        'غ', 'ف', 'ق', 'ك', 'ل', 'م', 'ن', 'ه',
+    ];
+    const HEBREW: [char; 26] = [
+        'א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ז', 'ח', 'ט', 'י', 'כ', 'ל', 'מ', 'נ', 'ס', 'ע', 'פ', 'צ',
+        'ק', 'ר', 'ש', 'ת', 'ך', 'ם', 'ן', 'ף',
+    ];
+    if !text.chars().any(|c| c.is_ascii_alphabetic()) {
+        return None;
+    }
+    let letters = match script {
+        Script::Arabic => &ARABIC,
+        Script::Hebrew => &HEBREW,
+    };
+    Some(
+        text.chars()
+            .map(|c| match c {
+                'a'..='z' => letters[usize::from(c as u8 - b'a')],
+                'A'..='Z' => letters[usize::from(c as u8 - b'A')],
+                other => other,
+            })
+            .collect(),
+    )
 }
 
 /// [`localise`] for an owned string: the same allocation when nothing changes.
@@ -285,5 +375,16 @@ mod tests {
         if std::env::var_os("BINGUX_TEXT_SCALE").is_none() {
             assert_eq!(text_scale(), 1.0);
         }
+    }
+
+    #[test]
+    fn a_script_keeps_the_length_and_the_digits_and_punctuation() {
+        let arabic = in_script("Wi-Fi 5 GHz: on", Script::Arabic).unwrap();
+        assert_eq!(arabic.chars().count(), "Wi-Fi 5 GHz: on".chars().count());
+        assert!(arabic.contains('5') && arabic.contains(':') && arabic.contains('-'));
+        assert!(!arabic.chars().any(|c| c.is_ascii_alphabetic()), "{arabic}");
+        let hebrew = in_script("Network", Script::Hebrew).unwrap();
+        assert!(hebrew.chars().all(|c| ('\u{05D0}'..='\u{05EA}').contains(&c)), "{hebrew}");
+        assert_eq!(in_script("12:30", Script::Arabic), None);
     }
 }

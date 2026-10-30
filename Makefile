@@ -18,12 +18,14 @@ DSP_TARGET ?= $(CARGO_TARGET)-dsp
 PACKAGE_DIR ?= /var/tmp/BinguxPkg
 USER_PREFIX ?= $(if $(XDG_DATA_HOME),$(XDG_DATA_HOME),$(HOME)/.local/share)/bingux
 JOBS ?= 2
+# Captures `layout-check` and `overflow-check` render at once.
+LINT_JOBS ?= 4
 VERSION ?= 0.1.0
 OUTPUT ?= dist/bingux-$(VERSION).tar.xz
 SHELL := /bin/bash
 ROOT := $(abspath .)
 
-.PHONY: all native daemons apps icons icons-check doctor doctor-build check install install-user uninstall-user install-apps uninstall-apps rpm-package rpm-check arch-package licenses source-archive
+.PHONY: all native daemons apps icons icons-check doctor doctor-build check layout-check overflow-check copy-check pixel-check stability-check motion-check state-check rules-check install install-user uninstall-user install-apps uninstall-apps rpm-package rpm-check arch-package licenses source-archive
 all: native daemons
 
 native: $(BUILD_DIR)/bingux-image-clipboard $(BUILD_DIR)/bingux-frame
@@ -44,6 +46,8 @@ $(BUILD_DIR)/bingux-frame: packages/bingux-frame/paint-gtk.c packages/bingux-fra
 
 # The Rust programs. Each crate has its own Cargo.lock, so each is built on its own.
 # bingux-settings, bingux-files and bingux-taxonomy are the Freya applications;
+# bingux-preview-host is the helper process Files runs to play films and songs and
+# render PDFs (GStreamer and poppler stay out of the application);
 # bingux-effects and libbingux_dsp.so are the sound-effects engine and its LADSPA plugins.
 # `apps` builds the applications and what Settings runs (bingux-config, the effects
 # engine); `daemons` adds the search and status daemons.
@@ -54,6 +58,7 @@ apps:
 	install -Dm755 $(DSP_TARGET)/release/libbingux_dsp.so $(CARGO_TARGET)/release/libbingux_dsp.so
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-settings/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-files-app/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-preview-host/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-taxonomy/Cargo.toml --target-dir $(CARGO_TARGET)
 
 daemons: apps
@@ -62,16 +67,20 @@ daemons: apps
 
 # Compile the icon sources (scripts/icons/src) into the bingux-ui icons and the
 # shell's copy. Needs uv: the script declares its own packages. map-fork.py first
-# writes the one-line sources from scripts/icons/labels.tsv.
+# writes the one-line sources from scripts/icons/labels.tsv. colour.py compiles the
+# colour file and folder icons (scripts/icons/colour) into packages/bingux-ui/icons/colour.
 icons:
 	scripts/icons/map-fork.py
 	scripts/icons/build.py
+	scripts/icons/colour.py
 
 # Sources match labels.tsv, sources are valid, output is current, and every icon
 # meets the size, centre, crispness and symmetry rules (docs/bingux-ui.md, Icons).
 icons-check:
 	scripts/icons/map-fork.py --check
 	scripts/icons/build.py --check
+	scripts/icons/colour.py --check
+	scripts/icons/golden.py
 
 doctor-build:
 	python3 scripts/check-dependencies.py --qmake '$(QMAKE)' --cargo '$(CARGO)' --cc '$(CC)' --pkg-config '$(PKG_CONFIG)'
@@ -98,6 +107,69 @@ arch-package:
 licenses:
 	python3 scripts/cargo-licenses.py --out '$(BUILD_DIR)/licenses'
 
+# Renders every Settings page, popup and taxonomy page headlessly (no compositor,
+# fixed fakes for the machine's data) and fails on a layout defect or on text that
+# overflows under pseudo-localised strings, 200 % text scale and very long data.
+# Each builds the snapshot binaries first (a no-op when they are current). The
+# findings and the ALLOWED lists are described in docs/bingux-ui.md, "Layout checks".
+# --rtl captures everything a second time right to left and fails on a box that is not
+# the reflection of where it is left to right (design/rtl.md).
+layout-check:
+	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/layout-lint.py --build --parity --rtl --jobs $(LINT_JOBS)
+
+overflow-check:
+	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/overflow-check.py --build --jobs $(LINT_JOBS)
+
+# Drives every Settings page, popup, taxonomy page and the Files window headlessly:
+# points at, presses and focuses each interactive node and renders every state,
+# tabs through the page and back, walks every menu by key, and reads the cursor
+# over each control. Fails on a control with no hover, pressed or focus look, a
+# clipped ring, a touch target under 44 px at 390x800, a control under a resize
+# handle, a Tab trap or the wrong cursor. The rules and the ALLOW lists are in
+# docs/bingux-ui.md, "State checks".
+state-check:
+	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/state-check.py --build --jobs $(LINT_JOBS)
+
+# Copy: the written rules about words (percent signs, "show more", filler, subtitles that
+# restate their title, three dots for an ellipsis) over the source strings and the text of
+# every capture. docs/bingux-ui.md, "Copy checks".
+copy-check:
+	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/copy-lint.py --build --jobs $(LINT_JOBS)
+
+# Pixels: text contrast measured on the PNG of every page, popup and taxonomy state, and a
+# visible border or shadow on all four sides of every popup, dialog and menu card, in both
+# schemes and at 1x and 2x. docs/bingux-ui.md, "Pixel checks".
+pixel-check:
+	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/pixel-check.py --build --jobs $(LINT_JOBS)
+
+# Stability: the first frame of every page, popup, taxonomy page and Files state against the
+# settled one, and the scroll offset kept through a push and pop, a tab switch and a data
+# refresh. docs/bingux-ui.md, "Stability checks".
+stability-check:
+	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/structure-stability.py --build --jobs $(LINT_JOBS)
+	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/scroll-continuity.py --jobs $(LINT_JOBS)
+
+# Motion: loops run and nothing else moves, animated numbers roll, a close is its open
+# mirrored, and every page mounts inside its frame budget (report and warn on a noisy
+# runner: BINGUX_FRAME_GATE=report). docs/bingux-ui.md, "Motion checks".
+motion-check:
+	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/loop-check.py --all
+	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/number-roll-check.py
+	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/nav-slide.py
+	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/frame-gate.py
+
+# The report on top of the checks above: it calls the same scripts (one at a time, through
+# scripts/app_env.py), reads from the checks which rule IDs each one holds, and writes the state of
+# every rule of design/rules.json (passing, failing, not run, unenforced) to design/rules-report.md
+# and .json. ARGS passes options through:
+#   make rules-check ARGS=--offline          the checks that need no app, report kept out of design/
+#   make rules-check ARGS="--only ui-lint,copy-lint"
+#   make rules-check ARGS="--reuse /var/tmp/rules-check/latest --strict"
+# Exit status is 1 while a rule is failing. `check` does not call it: `check` already runs the
+# checks and fails on their findings; this adds the per-rule report (design/rules-checks.md).
+rules-check:
+	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/rules-check.py --jobs $(JOBS) $(ARGS)
+
 check: doctor-build native daemons
 	python3 scripts/generate-adwaita-icon-index.py --check
 	python3 scripts/ui-lint.py
@@ -106,11 +178,18 @@ check: doctor-build native daemons
 	QT_QPA_PLATFORM=offscreen $(BUILD_DIR)/text/spacing-test
 	$(CARGO) test --locked --manifest-path packages/bingux-config/Cargo.toml --target-dir $(CARGO_TARGET)
 	BINGUX_CONFIG_BIN=$(CARGO_TARGET)/release/bingux-config python3 tests/bingux-config.test.py
+	python3 tests/app-env.test.py
+	python3 tests/rules-check.test.py
 	$(CARGO) test --locked --manifest-path packages/bingux-searchd/Cargo.toml --lib
 	$(CARGO) test --locked --manifest-path packages/bingux-files/Cargo.toml
+	$(CARGO) test --locked --manifest-path packages/bingux-preview-core/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) test --locked --manifest-path packages/bingux-preview-host/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) test --locked --manifest-path packages/bingux-search/Cargo.toml
 	$(CARGO) test --locked --manifest-path packages/bingux-data-usage/Cargo.toml
 	$(CARGO) test --locked --manifest-path packages/bingux-taxonomy/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(MAKE) layout-check overflow-check state-check
+	$(MAKE) copy-check pixel-check stability-check motion-check
+	$(CARGO) test --locked --manifest-path packages/bingux-ui/Cargo.toml --features testing --target-dir $(CARGO_TARGET) --lib slide_users_tests
 	$(CARGO) test --locked --manifest-path packages/bingux-statusd/Cargo.toml
 	python3 tests/shortcut-reload.py
 	python3 tests/gnoblin-menu-focus.py

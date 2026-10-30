@@ -35,7 +35,7 @@ const OPEN_SCALE: f32 = 0.94;
 /// The layer of the popup's edge hairline, relative to the popup. Higher
 /// than any depth the panel's content reaches (the header bar's buttons sit
 /// a few dozen levels down), so the outline is drawn over all of it.
-const POPUP_OUTLINE_LAYER: i16 = 1000;
+const POPUP_OUTLINE_LAYER: i16 = crate::layers::POPUP_OUTLINE;
 /// The widest a popup gets, as a share of the window width, so it keeps a
 /// margin on a phone.
 const POPUP_MAX_WIDTH_PERCENT: f32 = 94.0;
@@ -48,18 +48,21 @@ const POPUP_MIN_HEIGHT: f32 = 240.0;
 /// How far an edge's resize band reaches outside the panel, and how far
 /// inside it. Most of the band is outside, so the scrollbar and controls at
 /// the panel's edge stay usable.
-const RESIZE_OUTSIDE: f32 = 4.0;
-const RESIZE_INSIDE: f32 = 2.0;
+pub(crate) const RESIZE_OUTSIDE: f32 = 4.0;
+pub(crate) const RESIZE_INSIDE: f32 = 2.0;
 /// The side of the square resize handle centred on each corner: a little
 /// larger than an edge band, so a corner is easy to find without reaching
 /// into the header buttons.
-const RESIZE_CORNER: f32 = 12.0;
+pub(crate) const RESIZE_CORNER: f32 = 12.0;
 
 use crate::shell::panel::{
-    MOTION_MS, SHEET_DISMISS_DISTANCE, SHEET_MAX_HEIGHT_PERCENT, grabber,
-    sheet_foot, sheet_offset, sheet_overhang, use_sheet_drag, use_sheet_pull,
+    MOTION_MS, SHEET_DISMISS_DISTANCE, SHEET_MAX_HEIGHT_PERCENT, grabber, scrim_amount, sheet_foot,
+    sheet_overhang, sheet_position, use_sheet_drag,
 };
-use crate::shell::sheet_gesture::{Metrics, Outcome};
+use crate::shell::sheet_gesture::{Metrics, Outcome, lift_limit};
+use crate::shell::sheet_motion::{
+    SHEET_MS, SHEET_SPRING_MS, openness, use_sheet_clock, use_sheet_spring,
+};
 
 /// The space between a header button and the header's top or bottom edge: the
 /// header is `Dim::Header` tall and its buttons `Dim::Control`, centred.
@@ -141,7 +144,7 @@ pub struct PopupActions {
 /// A popup: a title, the content, its optional tab rail and its flags.
 #[derive(Clone, PartialEq)]
 pub struct Popup {
-    title: String,
+    pub(crate) title: String,
     content: Element,
     tabs: Option<Element>,
     dimensions: (f32, Option<f32>),
@@ -483,22 +486,14 @@ impl Component for PopupFrame {
         use_provide_context(move || overlays);
         let a11y_id = use_a11y();
 
-        // The frame removes itself from the manager once its exit has played.
         let closing = *entry.closing.read();
-        let progress = use_presence(!closing, tokens.motion(MOTION_MS), move || {
-            manager.remove(id);
-            // The pull is the window's, so it outlives this popup: the next
-            // sheet must open at rest.
-            let mut pull = manager.sheet_pull;
-            pull.set_if_modified(0.0);
-        });
 
         // A drag on an edge follows the pointer, so it does not animate; the
         // code-driven resizes still ease to their new size.
         let mut resize = use_state(|| None::<ResizeDrag>);
-        // A sheet's drag. How far a sheet is pulled lives on the manager, so
-        // the window can inset with it.
-        let drag = use_sheet_drag(manager.sheet_pull);
+        // A sheet's drag. How far a sheet is pulled, and the release that let
+        // it go, live on the manager, so the window can inset with it.
+        let drag = use_sheet_drag(manager.sheet_pull, manager.sheet_release);
         // An outside press closes the popup only when it also began outside.
         // A drag that starts on a resize handle or in the panel and is let go
         // over the scrim is not a press on the scrim.
@@ -506,12 +501,19 @@ impl Component for PopupFrame {
         let mut pulling = manager.sheet_pulling;
         let mut dragging = manager.sheet_dragging;
         let motion = tokens.motion(MOTION_MS);
-        let eased = use_sheet_pull(manager.sheet_pull, drag.dragging(), motion);
+        let eased = use_sheet_spring(
+            manager.sheet_pull,
+            manager.sheet_release,
+            drag.dragging(),
+            tokens.motion(SHEET_SPRING_MS),
+            lift_limit(sheet_overhang()),
+        );
         let pulled = if *pulling.read() == Some(id) {
             eased
         } else {
             0.0
         };
+        let drag = drag.showing(pulled);
         let (requested_width, requested_height) = *entry.size.read();
         // The width and a height that was asked for ease to their new values.
         // The content's own height does not animate: the panel is simply as
@@ -751,22 +753,63 @@ impl Component for PopupFrame {
                             rect()
                                 .tw(&tokens, &[w_full(), p(S4)])
                                 // The body's natural height, which the panel
-                                // takes up to its limit.
+                                // takes up to its limit. The trap is inline: one that
+                                // fills its parent makes an auto-height body as tall as
+                                // the room it is measured in, and the popup never shrinks
+                                // to its content (SP-07).
                                 .on_sized(move |event: Event<SizedEventData>| {
                                     content_height
                                         .set_if_modified(Some(event.area.height()));
                                 })
-                                .child(crate::focus::trap(entry.content.clone()))
+                                .child(crate::focus::trap_inline(entry.content.clone()))
                                 .maybe_child(sheet.then(|| {
                                     rect().height(Size::px(sheet_foot()))
                                 })),
                         ),
                 )
             });
+        // The frame removes itself from the manager once its exit has played.
+        let remove = move || {
+            manager.remove(id);
+            // The pull is the window's, so it outlives this popup: the next
+            // sheet must open at rest.
+            let mut pull = manager.sheet_pull;
+            pull.set_if_modified(0.0);
+        };
+        let presence = use_presence(!closing, motion, move || {
+            if !sheet {
+                remove();
+            }
+        });
+        // A sheet is moved by its own clock, and does not start until its body
+        // is measured: it is laid out at its final size and only translated, so
+        // until then there is nothing to translate.
+        let measured = flags.contains(PopupFlags::FILL)
+            || requested_height.is_some()
+            || content_height.read().is_some();
+        let clock = use_sheet_clock(
+            sheet && !closing && measured,
+            !closing,
+            tokens.motion(SHEET_MS),
+            move || {
+                if sheet {
+                    remove();
+                }
+            },
+        );
+        let progress = if sheet { openness(clock) } else { presence };
         // A sheet rests with its overhang below the edge and slides up from
-        // under it; a pulled sheet follows the pointer down.
+        // under it; a pulled sheet follows the pointer down, and one let go
+        // past the dismiss distance leaves at the speed it was let go at.
+        let dismissed = closing && *pulling.peek() == Some(id) && *manager.sheet_pull.peek() > 0.0;
         let slide = if sheet {
-            sheet_overhang() + sheet_offset(progress, pulled, metrics.travel)
+            sheet_overhang()
+                + sheet_position(
+                    clock,
+                    pulled,
+                    dismissed.then(|| manager.sheet_release.peek().velocity),
+                    metrics.travel,
+                )
         } else {
             0.0
         };
@@ -777,6 +820,17 @@ impl Component for PopupFrame {
                 .tw(&tokens, &[w_screen()])
                 .offset_y(slide)
                 .child(panel)
+                // The sheet's edge, the same hairline the desktop popup has all round: without it a
+                // sheet's top edge was the panel fill against the dimmed page, 1.07:1
+                // (scripts/pixel-check.py, BR-03). The bottom hangs below the window.
+                .child(
+                    rect()
+                        .position(Position::new_absolute().top(0.0).left(0.0))
+                        .layer(Layer::Relative(POPUP_OUTLINE_LAYER))
+                        .width(Size::fill())
+                        .height(Size::px(height.panel))
+                        .tw(&tokens, &[rounded(Radius::Overlay), border(Line::Hairline)]),
+                )
         } else {
             rect()
                 // The panel scales up from a little smaller, about its centre.
@@ -801,9 +855,9 @@ impl Component for PopupFrame {
                 .children(resize_handles(resize, shown_size))
         };
 
-        rect()
+        let root = rect()
             .position(Position::new_absolute().top(0.0).left(0.0))
-            .layer(Layer::OverlayLevel(10))
+            .layer(crate::layers::level(crate::layers::LEVEL_POPUP))
             .tw(
                 &tokens,
                 &[
@@ -811,11 +865,22 @@ impl Component for PopupFrame {
                     h_screen(),
                     justify(if sheet { Align::End } else { Align::Center }),
                     items(Align::Center),
-                    bg(Paint::Scrim),
                 ],
+            );
+        // The scrim fades in with the popup. A sheet's scrim is its own box
+        // under the sheet, so the sheet itself never fades: it follows the
+        // sheet's position, and fades with exactly its timing.
+        let root = if sheet {
+            root.child(
+                rect()
+                    .position(Position::new_absolute().top(0.0).left(0.0))
+                    .tw(&tokens, &[w_screen(), h_screen(), bg(Paint::Scrim)])
+                    .opacity(scrim_amount(slide - sheet_overhang(), metrics.travel)),
             )
-            // The scrim fades in with the popup.
-            .opacity(progress)
+        } else {
+            root.tw(&tokens, &[bg(Paint::Scrim)]).opacity(progress)
+        };
+        root
             .on_pointer_down(move |_: Event<PointerEventData>| outside_down.set(true))
             .on_press(move |_: Event<PressEventData>| {
                 let began_outside = *outside_down.peek();

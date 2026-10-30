@@ -175,7 +175,13 @@ impl Component for Checkbox {
                             .expanded()
                             .tw(
                                 &tokens,
-                                &[rounded(Radius::Mark), center(), bg(Paint::Accent)],
+                                // The accent fill of a checked box takes the hover and press layers
+                                // too, or the box under it would hide them.
+                                &[
+                                    rounded(Radius::Mark),
+                                    center(),
+                                    surface(Paint::Accent, hovering(), pressing(), false),
+                                ],
                             )
                             .opacity(fill)
                             .maybe_child(glyph),

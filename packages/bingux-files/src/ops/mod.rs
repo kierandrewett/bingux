@@ -121,7 +121,9 @@ pub(crate) use trash_info::BinFolder;
 pub use trash_empty::{
     TrashSummary, delete_trashed, empty_trash, trash_is_empty, trash_summary,
 };
-pub use trash_info::{InBin, TrashItem, cached_dir_size, trash_item, trash_items, trash_place};
+pub use trash_info::{
+    InBin, TrashItem, cached_dir_size, trash_folder, trash_item, trash_items, trash_place,
+};
 
 /// Why an operation did not happen. Each one reads as a plain sentence.
 #[derive(Clone, Debug, PartialEq, Eq)]

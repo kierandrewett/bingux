@@ -134,7 +134,8 @@ pub struct RendererContext<'a> {
 }
 
 impl RendererContext<'_> {
-    pub fn launch_window(&mut self, window_config: WindowConfig) -> WindowId {
+    pub fn launch_window(&mut self, mut window_config: WindowConfig) -> WindowId {
+        resolve_parent(self.windows, &mut window_config);
         let app_window = AppWindow::new(
             window_config,
             self.active_event_loop,
@@ -292,8 +293,76 @@ impl From<accesskit_winit::Event> for NativeEvent {
     }
 }
 
+/// Finds the window handle of the parent a new window asked for, so winit can parent the
+/// toplevel (`xdg_toplevel.set_parent`).
+fn resolve_parent(windows: &FxHashMap<WindowId, AppWindow>, config: &mut WindowConfig) {
+    use winit::raw_window_handle::HasWindowHandle;
+    if config.parent_handle.is_none()
+        && let Some(parent) = config.parent
+    {
+        config.parent_handle = windows
+            .get(&parent)
+            .and_then(|app| app.window.window_handle().ok())
+            .map(|handle| handle.as_raw());
+    }
+}
+
+impl WinitRenderer {
+    /// The window that hears the keys of `id`: a popup's belong to the window it grew from.
+    fn input_target(&self, mut id: WindowId, event: &WindowEvent) -> WindowId {
+        if !matches!(
+            event,
+            WindowEvent::KeyboardInput { .. } | WindowEvent::ModifiersChanged(_) | WindowEvent::Ime(_)
+        ) {
+            return id;
+        }
+        for _ in 0..64 {
+            match self.windows.get(&id).and_then(|app| app.popup_parent) {
+                Some(parent) if self.windows.contains_key(&parent) => id = parent,
+                _ => break,
+            }
+        }
+        id
+    }
+
+    /// The window a popup grew from, all the way up to the toplevel.
+    fn family_root(&self, mut id: WindowId) -> WindowId {
+        for _ in 0..64 {
+            match self.windows.get(&id).and_then(|app| app.popup_parent) {
+                Some(parent) if self.windows.contains_key(&parent) => id = parent,
+                _ => break,
+            }
+        }
+        id
+    }
+
+    /// Whether a focus change is only the compositor handing the keyboard between a window and
+    /// its popups: a popup is never focused or unfocused, and a window with a popup open keeps
+    /// looking focused.
+    fn swallow_focus(&self, id: WindowId, event: &WindowEvent) -> bool {
+        let WindowEvent::Focused(focused) = event else {
+            return false;
+        };
+        let Some(app) = self.windows.get(&id) else {
+            return false;
+        };
+        if app.popup_parent.is_some() {
+            return true;
+        }
+        !*focused
+            && self
+                .windows
+                .iter()
+                .any(|(other, app)| app.popup_parent.is_some() && self.family_root(*other) == id)
+    }
+}
+
 impl ApplicationHandler<NativeEvent> for WinitRenderer {
     fn resumed(&mut self, active_event_loop: &winit::event_loop::ActiveEventLoop) {
+        #[cfg(target_os = "linux")]
+        crate::popup::set_supported(
+            winit::platform::wayland::ActiveEventLoopExtWayland::is_wayland(active_event_loop),
+        );
         if !self.resumed {
             #[cfg(feature = "tray")]
             {
@@ -505,18 +574,40 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                         .downcast::<NativePlatformErasedEventAction>()
                         .expect("Expected NativePlatformErasedEventAction");
                     match *action {
-                        NativePlatformErasedEventAction::LaunchWindow { window_config, ack } => {
-                            let app_window = AppWindow::new(
-                                *window_config,
-                                active_event_loop,
-                                &self.proxy,
-                                &mut self.plugins,
-                                &mut self.font_collection,
-                                &self.font_manager,
-                                &self.fallback_fonts,
-                                self.gpu_resource_cache_limit,
-                                &mut self.graphics_context,
-                            );
+                        NativePlatformErasedEventAction::LaunchWindow { mut window_config, ack } => {
+                            resolve_parent(&self.windows, &mut window_config);
+                            let is_popup = window_config.is_popup();
+                            let created = if is_popup {
+                                // A popup the compositor refuses must not take the app with it:
+                                // the asker is told nothing came of it.
+                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                    AppWindow::new(
+                                        *window_config,
+                                        active_event_loop,
+                                        &self.proxy,
+                                        &mut self.plugins,
+                                        &mut self.font_collection,
+                                        &self.font_manager,
+                                        &self.fallback_fonts,
+                                        self.gpu_resource_cache_limit,
+                                        &mut self.graphics_context,
+                                    )
+                                }))
+                                .ok()
+                            } else {
+                                Some(AppWindow::new(
+                                    *window_config,
+                                    active_event_loop,
+                                    &self.proxy,
+                                    &mut self.plugins,
+                                    &mut self.font_collection,
+                                    &self.font_manager,
+                                    &self.fallback_fonts,
+                                    self.gpu_resource_cache_limit,
+                                    &mut self.graphics_context,
+                                ))
+                            };
+                            if let Some(app_window) = created {
                             let window_id = app_window.window.id();
                             let _ = self
                                 .proxy
@@ -526,9 +617,11 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                                 }));
                             self.windows.insert(window_id, app_window);
                             let _ = ack.send(window_id);
+                            }
                         }
                         NativePlatformErasedEventAction::CloseWindow(window_id) => {
                             Platform::get().unregister_window(window_id);
+                            crate::popup::forget(u64::from(window_id));
                             if let Some(app) = self.windows.remove(&window_id) {
                                 self.plugins.send(
                                     PluginEvent::WindowClosed {
@@ -794,6 +887,12 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
         // Bingux patch: see `user_event`. A failed frame or input event is
         // reported and the window is laid out and drawn again on the next event.
         let was_frame = matches!(event, WindowEvent::RedrawRequested);
+        if self.swallow_focus(window_id, &event) {
+            return;
+        }
+        // A popup never owns the keyboard: the keys the compositor gives it belong to the window
+        // it grew from, as they do when the compositor keeps the keyboard on the parent.
+        let window_id = self.input_target(window_id, &event);
         let outcome = freya_core::guard::framework("window event", || {
         if let Some(app) = &mut self.windows.get_mut(&window_id) {
             #[cfg(feature = "accessibility")]
@@ -871,6 +970,16 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                 WindowEvent::ModifiersChanged(modifiers) => {
                     app.modifiers_state = modifiers.state();
                     crate::modifiers::set_live(winit_mappings::map_winit_modifiers(app.modifiers_state));
+                }
+                WindowEvent::Moved(position) => {
+                    // A popup's `Moved` is where the compositor put it (see winit's `with_popup`).
+                    if app.popup_parent.is_some() {
+                        let scale = app.window.scale_factor().max(0.01);
+                        crate::popup::place(
+                            u64::from(window_id),
+                            ((position.x as f64 / scale) as f32, (position.y as f64 / scale) as f32),
+                        );
+                    }
                 }
                 WindowEvent::Focused(is_focused) => {
                     app.platform.is_app_focused.set_if_modified(is_focused);

@@ -59,6 +59,7 @@ impl ragnarok::EventsMeasurer for EventsMeasurerAdapter<'_> {
             cursor,
             layout_node,
             scale_factor: self.scale_factor,
+            direction: self.tree.text_style_state.get(key).map(|state| state.direction).unwrap_or_default(),
         }) {
             return false;
         }
@@ -74,6 +75,7 @@ impl ragnarok::EventsMeasurer for EventsMeasurerAdapter<'_> {
                     cursor,
                     layout_node,
                     scale_factor: self.scale_factor,
+                    direction: self.tree.text_style_state.get(node_id).map(|state| state.direction).unwrap_or_default(),
                 }) {
                     return false;
                 }

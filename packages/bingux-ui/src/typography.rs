@@ -120,6 +120,12 @@ impl TextStyle {
         self.label_in_color(paint.color(tokens), text.into())
     }
 
+    /// [`Self::label`] painted with `fill`, a gradient, instead of the ink: a
+    /// line whose end fades out ([`fade_text`](crate::controls::fade_text)).
+    pub fn label_filled(self, tokens: &Tokens, text: impl Into<String>, fill: impl Into<Fill>) -> Label {
+        self.label(tokens, text).color(fill)
+    }
+
     fn label_in_color(self, color: Color, text: String) -> Label {
         let label = label()
             .text(crate::stress::localised(text))
@@ -198,9 +204,12 @@ impl TextStyle {
     /// such as a value, a caption or a status. It takes no search marks, as a
     /// selection takes the only highlight slot.
     pub fn selectable(self, tokens: &Tokens, text: impl Into<String>) -> SelectableText {
+        // Text is never a Tab stop unless a caller asks (`select_text(..).tab_stop`):
+        // a stop with no ring is a place focus disappears into.
         SelectableText::new()
             .span(self.span(tokens, text))
             .line_height(self.leading)
+            .a11y_focusable(false)
     }
 }
 

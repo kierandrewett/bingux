@@ -85,6 +85,10 @@ pub struct A11y {
     /// Whether a modal scope elsewhere makes this element inert: it takes no
     /// focus and no keys until the scope closes.
     pub inert: bool,
+    /// Whether the control says it is disabled (`a11y_enabled(false)`): it is
+    /// not usable now, which is not the same as being left out of the Tab
+    /// order (`focusable`).
+    pub disabled: bool,
     /// The call that built the component, if it published one.
     pub published: Option<Published>,
 }
@@ -390,6 +394,71 @@ impl Snapshot {
 
     pub fn node(&self, id: u64) -> Option<&Node> {
         self.index.get(&id).map(|&index| &self.nodes[index])
+    }
+
+    /// The tree as indented text, one node a line: id, the component or kind,
+    /// the border box, the padding and layout the engine used, and a text's
+    /// string and measurements. `BINGUX_UI_LAYOUT_TREE` writes it beside each
+    /// capture of the layout lint, so a finding can be read against the tree.
+    pub fn outline(&self) -> String {
+        let mut depths: HashMap<u64, usize> = HashMap::new();
+        let mut out = String::new();
+        for node in &self.nodes {
+            let depth = node
+                .parent
+                .and_then(|parent| depths.get(&parent))
+                .map_or(0, |parent| parent + 1);
+            depths.insert(node.id, depth);
+            let area = node.used.border.or(node.area).map_or_else(
+                || "unplaced".to_owned(),
+                |area| {
+                    format!(
+                        "[{:.1} {:.1} {:.1}x{:.1}]",
+                        area.min_x(),
+                        area.min_y(),
+                        area.width(),
+                        area.height()
+                    )
+                },
+            );
+            out.push_str(&"  ".repeat(depth));
+            out.push_str(&format!("#{} {} {area}", node.id, node.title()));
+            if let Some(padding) = node.used.padding.filter(|padding| *padding != [0.0; 4]) {
+                out.push_str(&format!(" pad{padding:?}"));
+            }
+            if let Some(props) = &node.props {
+                out.push_str(&format!(
+                    " {} cross={} w={} h={} gap={}",
+                    props.direction, props.cross_align, props.width, props.height, props.gap
+                ));
+                if props.clip {
+                    out.push_str(" clip");
+                }
+                if props.background.is_some_and(|colour| colour.a() != 0) {
+                    out.push_str(" fill");
+                }
+            }
+            if node.used.out_of_flow {
+                out.push_str(" out-of-flow");
+            }
+            if node.used.hidden {
+                out.push_str(" hidden");
+            }
+            if let Some((width, height)) = node.used.inner_sizes {
+                out.push_str(&format!(" inner={width:.1}x{height:.1}"));
+            }
+            if let Some(text) = &node.text {
+                out.push_str(&format!(" {text:?}"));
+                if let Some(used) = &node.used.text {
+                    out.push_str(&format!(
+                        " lines={:?} needs={:?} measured={:?}",
+                        used.lines, used.intrinsic, used.measured
+                    ));
+                }
+            }
+            out.push('\n');
+        }
+        out
     }
 
     /// The smallest laid-out node under the point `(x, y)` in logical pixels.
@@ -722,6 +791,7 @@ fn a11y_of(data: &freya_core::data::AccessibilityData) -> A11y {
         focused: false,
         modal: data.builder.is_modal(),
         inert: false,
+        disabled: data.builder.is_disabled(),
         published: data.builder.author_id().and_then(Published::decode),
     }
 }

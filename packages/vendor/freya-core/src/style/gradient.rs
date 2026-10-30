@@ -113,6 +113,17 @@ impl LinearGradient {
     }
 
     pub fn prepare_shader(&self, bounds: Area) -> Option<Shader> {
+        self.shader_at(bounds, self.angle)
+    }
+
+    /// The shader of a box that reads right to left: the gradient written as for
+    /// left to right, reflected, so what runs from the start edge to the end
+    /// edge still does (the angle `a` becomes `360 - a`).
+    pub fn prepare_shader_mirrored(&self, bounds: Area) -> Option<Shader> {
+        self.shader_at(bounds, 360.0 - self.angle)
+    }
+
+    fn shader_at(&self, bounds: Area, angle: f32) -> Option<Shader> {
         let colors: Vec<SkColor4f> = self
             .stops
             .iter()
@@ -123,7 +134,7 @@ impl LinearGradient {
         let grad_colors = Colors::new(&colors[..], Some(&offsets[..]), TileMode::Clamp, None);
         let grad = Gradient::new(grad_colors, Interpolation::default());
 
-        let (dy, dx) = (self.angle.to_radians() + FRAC_PI_2).sin_cos();
+        let (dy, dx) = (angle.to_radians() + FRAC_PI_2).sin_cos();
         let farthest_corner = SkPoint::new(
             if dx > 0.0 { bounds.width() } else { 0.0 },
             if dy > 0.0 { bounds.height() } else { 0.0 },

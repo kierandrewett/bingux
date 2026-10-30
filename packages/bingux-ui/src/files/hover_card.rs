@@ -319,12 +319,16 @@ pub(super) fn card_lines(
     modified: Option<&str>,
     place: Option<String>,
     reserve_place: bool,
+    link: Option<&std::path::Path>,
 ) -> Vec<String> {
-    let kind = if entry.is_dir() || !entry.sized {
+    let mut kind = if entry.is_dir() || !entry.sized {
         entry.mime.description.to_string()
     } else {
         format!("{} · {}", entry.mime.description, display::size(entry.size))
     };
+    if let Some(target) = link {
+        kind.push_str(&format!(" · Link to {}", target.display()));
+    }
     let date = match (modified, entry.sized) {
         (Some(modified), _) => format!("Modified {modified}"),
         (None, false) => "Modified …".to_string(),
@@ -399,7 +403,9 @@ impl Component for HoverCard {
             || ctx.gestures.band.read().is_some()
             || ctx.env.ui.rename.read().is_some()
             // A preview or a dialog is over the view; the pointer rests under it.
-            || ctx.env.overlays.dialog_open();
+            || ctx.env.overlays.dialog_open()
+            // A menu holds the pointer; the card behind it is stale.
+            || ctx.env.overlays.menu_open();
         let Some(hover) = feed.shown().filter(|_| !busy && !scrolling) else {
             return rect().interactive(false).into_element();
         };
@@ -429,7 +435,13 @@ impl Component for HoverCard {
                 .search
                 .as_ref()
                 .is_some_and(|search| search.deep.is_some());
-        let lines = card_lines(entry, modified.as_deref(), place, reserve_place);
+        // Where a link leads is what the link itself says: `readlink` does
+        // not touch the target, so a stalled mount cannot hold the card.
+        let link = entry
+            .symlink
+            .then(|| std::fs::read_link(&entry.path).ok())
+            .flatten();
+        let lines = card_lines(entry, modified.as_deref(), place, reserve_place, link.as_deref());
 
         let origin = *self.origin.read();
         let (width, height) = (*size.read()).unwrap_or((0.0, 0.0));
@@ -445,7 +457,7 @@ impl Component for HoverCard {
         }
         let mut card = rect()
             .interactive(false)
-            .layer(Layer::Overlay)
+            .layer(crate::layers::HOVER_CARD)
             .position(Position::new_absolute().left(left).top(top))
             .opacity(if measured { 1.0 } else { 0.0 })
             .on_sized(move |event: Event<SizedEventData>| {
@@ -645,8 +657,8 @@ mod tests {
 
     #[test]
     fn the_card_has_the_same_lines_before_and_after_the_listing_has_the_size() {
-        let before = card_lines(&entry("a.txt", None), None, None, false);
-        let after = card_lines(&entry("a.txt", Some(2)), Some("15 Nov 2023"), None, false);
+        let before = card_lines(&entry("a.txt", None), None, None, false, None);
+        let after = card_lines(&entry("a.txt", Some(2)), Some("15 Nov 2023"), None, false, None);
         assert_eq!(before.len(), after.len(), "{before:?} against {after:?}");
         assert_eq!(before[2], "Modified …");
         assert_eq!(after[1], "Text document · 2 bytes");
@@ -654,11 +666,24 @@ mod tests {
     }
 
     #[test]
+    fn a_link_says_where_it_leads_in_its_type_line() {
+        let lines = card_lines(
+            &entry("a.txt", Some(2)),
+            Some("1 Jan"),
+            None,
+            false,
+            Some(std::path::Path::new("/mnt/x/a.txt")),
+        );
+        assert_eq!(lines.len(), 3);
+        assert_eq!(lines[1], "Text document · 2 bytes · Link to /mnt/x/a.txt");
+    }
+
+    #[test]
     fn a_view_with_places_keeps_a_line_for_each_card() {
-        let with = card_lines(&entry("a.txt", Some(2)), Some("1 Jan"), Some("In sub".into()), true);
-        let without = card_lines(&entry("b.txt", Some(2)), Some("1 Jan"), None, true);
+        let with = card_lines(&entry("a.txt", Some(2)), Some("1 Jan"), Some("In sub".into()), true, None);
+        let without = card_lines(&entry("b.txt", Some(2)), Some("1 Jan"), None, true, None);
         assert_eq!(with.len(), 4);
         assert_eq!(without.len(), 4, "the line is kept, blank, so the cards are alike");
-        assert_eq!(card_lines(&entry("c.txt", Some(2)), Some("1 Jan"), None, false).len(), 3);
+        assert_eq!(card_lines(&entry("c.txt", Some(2)), Some("1 Jan"), None, false, None).len(), 3);
     }
 }

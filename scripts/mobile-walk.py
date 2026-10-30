@@ -66,6 +66,9 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from app_env import isolated  # noqa: E402
+
 REPO = Path(__file__).resolve().parent.parent
 DEFAULT_BINARY = (
     Path(os.environ.get("CARGO_TARGET_DIR", "/var/tmp/bingux-settings-target"))
@@ -140,15 +143,14 @@ def run_script(binary: Path, out: Path, name: str, size: str, page: str, script:
     """Run one walk. Frames go to OUT/frames/NAME/PAGE, shots to OUT/shots."""
     frames = out / "frames" / name
     shutil.rmtree(frames, ignore_errors=True)
-    env = dict(os.environ)
+    # Settings writes through gsettings: scripts/app_env.py keeps the walk's clicks off the
+    # person's dconf and off the live desktop.
+    env = isolated()
     env.update(
         BINGUX_SETTINGS_SNAPSHOT_SIZE=size,
         BINGUX_SETTINGS_SNAPSHOT_FRAMES=str(frames),
         BINGUX_SETTINGS_SNAPSHOT_SCRIPT=script,
         BINGUX_SETTINGS_SNAPSHOT_SCHEME="prefer-dark",
-        # Settings writes through gsettings: a memory backend keeps the walk's
-        # clicks off the desktop.
-        GSETTINGS_BACKEND="memory",
     )
     log = out / "logs" / f"{name}.log"
     log.parent.mkdir(parents=True, exist_ok=True)

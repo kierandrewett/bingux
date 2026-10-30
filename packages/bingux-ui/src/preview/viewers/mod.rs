@@ -10,6 +10,11 @@ mod archive;
 mod card;
 mod folder;
 mod image;
+mod media;
+mod media_controls;
+mod media_logic;
+mod pdf;
+mod pdf_layout;
 mod text;
 
 use std::sync::Arc;
@@ -18,6 +23,8 @@ use bingux_preview_core::ViewerId;
 use freya::prelude::*;
 
 pub(super) use card::{Card, Placeholder};
+pub use media_controls::{ControlAction, ControlState, MediaControls};
+pub use pdf::{DocumentAction, DocumentControls, DocumentState, ZoomChoice};
 
 use super::chrome::{PreviewNav, icon_of};
 use super::mode::Mode;
@@ -25,14 +32,15 @@ use super::subject::Resolved;
 
 /// The viewer for `resolved`.
 pub(super) fn viewer(resolved: Arc<Resolved>, nav: &PreviewNav, mode: Mode) -> Element {
-    let _ = mode;
     match resolved.viewer {
         ViewerId::Image => image::ImageView { resolved }.into(),
         ViewerId::Text => text::TextView { resolved }.into(),
         ViewerId::Folder => folder::FolderView { resolved }.into(),
         ViewerId::Archive => archive::ArchiveView { resolved }.into(),
-        // Audio, video and documents: the desktop's thumbnail and the facts.
-        ViewerId::Media | ViewerId::Document | ViewerId::Font | ViewerId::Card => Card::of(&resolved, nav).into(),
+        ViewerId::Media => media::MediaView { resolved, nav: nav.clone(), mode }.into(),
+        ViewerId::Document => pdf::DocumentView { resolved, nav: nav.clone(), mode }.into(),
+        // Fonts and the rest: the desktop's thumbnail and the facts.
+        ViewerId::Font | ViewerId::Card => Card::of(&resolved, nav).into(),
     }
 }
 

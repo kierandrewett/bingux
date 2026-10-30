@@ -14,10 +14,9 @@ use freya::prelude::*;
 use super::{Loaded, choose_wallpaper, file_name, set_wallpaper};
 use crate::system::{self, background};
 use crate::theme::Tokens;
-use crate::ui::typography::BODY;
 use crate::ui::{
-    Group, Icon, Overlays, Status, Window, dropdown, icon, search_field, status, tile_rows,
-    use_overlays, use_tokens, use_window,
+    Group, Icon, Overlays, Status, Window, dropdown, icon, path_label, search_field, status,
+    tile_rows, use_overlays, use_tokens, use_window,
 };
 use bingux_ui::style::*;
 
@@ -323,7 +322,7 @@ fn add_tile(
     tile(
         tokens,
         thumb(tokens, false, face.into()),
-        "Add picture...",
+        "Add picture…",
         move |_| choose_wallpaper(model, overlays, window),
     )
 }
@@ -430,14 +429,12 @@ fn tile(
         .on_press(on_press)
         .child(thumb)
         .child(
+            // A file name that does not fit loses its middle and keeps its
+            // extension, and the whole name is the tooltip.
             rect()
                 .tw(tokens, &[w_full()])
                 .height(Size::px(CAPTION_HEIGHT))
-                .child(
-                    BODY.label(tokens, name.to_string())
-                        .max_lines(1)
-                        .text_overflow(TextOverflow::Ellipsis),
-                ),
+                .child(path_label(name.to_string()).name()),
         )
         .into()
 }

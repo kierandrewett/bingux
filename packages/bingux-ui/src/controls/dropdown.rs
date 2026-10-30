@@ -51,7 +51,7 @@ fn widest_label(options: &[(String, String)]) -> f32 {
 /// Left padding, gap and chevron with its right padding. Used for the
 /// measured width only.
 fn button_chrome() -> f32 {
-    S3.px() + S2.px() + IconSize::Row.px() + S2.px()
+    S3.px() + S2.px() + IconSize::Mark.px() + S2.px()
 }
 
 /// The button: a filled control, the icon and label from the start inset, the
@@ -269,6 +269,7 @@ impl Component for Dropdown {
             width
         };
         let current_icon = selected_index.and_then(|index| self.icons.get(index).cloned());
+        let current_icon_shown = current_icon.is_some();
         // The rows' height, and the part of it the menu shows.
         let item_height = Dim::MenuItem.px();
         let list_height = count as f32 * item_height;
@@ -294,12 +295,21 @@ impl Component for Dropdown {
             };
             -(want.clamp(0.0, furthest) as i32)
         };
+        // Whether the list was open when this render was made. The open list's
+        // Escape is the panel's, which hears it on its shield and closes it,
+        // possibly before this handler runs: a list that has just closed must
+        // not let the same Escape through to the page as a second one.
+        let was_open = open();
         let on_key_down = {
             let choose = choose.clone();
             let on_select = on_select.clone();
             let type_options = options.clone();
             let type_off = unavailable.clone();
             move |event: Event<KeyboardEventData>| {
+                if was_open && event.key == Key::Named(NamedKey::Escape) {
+                    event.stop_propagation();
+                    return;
+                }
                 // A query typed on the shut button has no pill, so Escape
                 // takes it back here; the open list's Escape is the panel's.
                 if !open()
@@ -485,20 +495,36 @@ impl Component for Dropdown {
             })
             .maybe_child(current_icon.map(|icon| option_icon(icon, Paint::Text.color(&tokens), tokens)))
             .child(
-                rect().tw(&tokens, &[w_flex()]).min_width(Size::px(0.0)).child(
-                    BODY.in_ink(Ink::Text)
-                        .label(&tokens, current)
+                rect().tw(&tokens, &[w_flex()]).min_width(Size::px(0.0)).child({
+                    let label = BODY
+                        .in_ink(Ink::Text)
+                        .label(&tokens, current.clone())
                         .width(Size::fill())
                         .max_lines(1)
-                        .text_overflow(TextOverflow::Ellipsis),
-                ),
+                        .text_overflow(TextOverflow::Ellipsis);
+                    // A label that does not fit the button ends in an ellipsis
+                    // and is the tooltip in full, which the Layout checks read
+                    // as "cut on purpose" (the whole list is one press away).
+                    let room = button_width()
+                        - button_chrome()
+                        - if current_icon_shown { IconSize::Text.px() + S2.px() } else { 0.0 };
+                    if button_width() > 0.0 && text_width(&current, BODY) > room + 0.5 {
+                        rect()
+                            .component("Elided")
+                            .width(Size::fill())
+                            .child(crate::controls::hover_tip(label, current.clone()))
+                            .into_element()
+                    } else {
+                        label.into_element()
+                    }
+                }),
             )
             .child(
                 rect()
                     .tw(&tokens, &[flex_row(), center()])
                     .child(icons::icon(
                         Icon::PanDown,
-                        IconSize::Row,
+                        IconSize::Mark,
                         Paint::Muted.color(&tokens),
                     )),
             )

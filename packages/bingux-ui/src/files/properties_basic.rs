@@ -121,23 +121,17 @@ fn head(page: &Page) -> Element {
                 .copyable(true),
         )
         .child(
-            CAPTION
-                .in_ink(Ink::Muted)
-                .label(&tokens, subtitle)
-                .width(Size::fill())
-                .max_lines(1)
-                .text_overflow(TextOverflow::Ellipsis)
-                .text_align(TextAlign::Center),
+            // The kind wraps (and can be copied), centred under the name.
+            crate::controls::select_text(subtitle)
+                .style(CAPTION.in_ink(Ink::Muted))
+                .align(TextAlign::Center),
         )
-        // The line is always there, so an error appearing moves nothing.
+        // The line is always there, so an error appearing moves nothing; a
+        // long message wraps.
         .child(
-            CAPTION
-                .in_ink(Ink::Danger)
-                .label(&tokens, if status.is_empty() { " ".to_owned() } else { status })
-                .width(Size::fill())
-                .max_lines(1)
-                .text_overflow(TextOverflow::Ellipsis)
-                .text_align(TextAlign::Center),
+            crate::controls::select_text(if status.is_empty() { " ".to_owned() } else { status })
+                .style(CAPTION.in_ink(Ink::Danger))
+                .align(TextAlign::Center),
         )
         .into()
 }
@@ -179,9 +173,15 @@ fn general(page: &Page) -> Group {
         general = general.row(property_row("Contents", contents(page.totals)));
     }
     let location = common_parent(page.entries);
+    // Where an item of the Trash is, is the Trash: `trash:///`, never the
+    // bin's own folder.
+    let roots = super::named::Roots::at_home(page.home);
     let location_text = location.as_ref().map_or_else(
         || "Several folders".to_owned(),
-        |folder| home_relative(folder, page.home),
+        |folder| match roots.below_trash(folder) {
+            Some(_) => roots.uri(&super::directory::Where::Folder(folder.clone())),
+            None => home_relative(folder, page.home),
+        },
     );
     let overlays = page.overlays;
     let open_location = location.clone().map(|folder| {
@@ -198,29 +198,31 @@ fn general(page: &Page) -> Group {
     // An item of the Trash says where it was and when it was deleted, from its
     // info file.
     if single && let Some(trash) = first.trash.as_ref() {
-        general = general.row(property_row(
-            "Original location",
-            trash
-                .original
-                .as_deref()
-                .map_or_else(|| "Unknown".to_owned(), |original| home_relative(original, page.home)),
-        ));
+        general = general.row(
+            row("Original location").path_value(
+                trash
+                    .original
+                    .as_deref()
+                    .map_or_else(|| "Unknown".to_owned(), |original| home_relative(original, page.home)),
+            ),
+        );
         general = general.row(property_row(
             "Deleted",
             super::properties_words::time(trash.deleted).unwrap_or_else(|| "Unknown".to_owned()),
         ));
     }
     if single && first.symlink {
-        general = general.row(property_row(
-            "Link target",
-            page.fact(|facts| {
-                facts
-                    .props
-                    .link_target
-                    .as_ref()
-                    .map(|target| target.to_string_lossy().into_owned())
-            }),
-        ));
+        general = general.row(
+            row("Link target").path_value(
+                page.fact(|facts| {
+                    facts
+                        .props
+                        .link_target
+                        .as_ref()
+                        .map(|target| target.to_string_lossy().into_owned())
+                }),
+            ),
+        );
     }
     general
 }

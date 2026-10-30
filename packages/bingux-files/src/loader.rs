@@ -11,6 +11,7 @@
 //!                    Stats (visible rows, then the rest where cheap)
 //!                    Diff  (the folder changed later)
 //!                    Unresponsive (the drive stopped answering)
+//!                    Stopped (a read ended on request, [`Load::stop_read`]: no Done follows)
 //! ```
 //!
 //! # How it stays fast
@@ -170,6 +171,11 @@ pub enum Event {
     /// The drive has not answered for [`Policy::unresponsive_after`]. What is
     /// shown stays. The next event from the loader means it answered.
     Unresponsive,
+    /// The read was stopped on request ([`Load::stop_read`]), before it was
+    /// done. The listing keeps what it had: the entries of a first read that
+    /// had come in, or everything of a listing that was only being checked.
+    /// `Done` is not coming; a later [`Load::refresh`] reads again.
+    Stopped,
     Failed(ListError),
 }
 
@@ -205,6 +211,7 @@ enum Msg {
     Want(u64, Vec<u32>),
     StatAll,
     Refresh,
+    StopRead,
     Cancel,
     Kind(u64, MountKind),
     Entries(u64, Vec<Entry>),
@@ -280,6 +287,15 @@ impl Load {
     /// Read the folder again now, whatever the cache says.
     pub fn refresh(&self) {
         let _ = self.tx.send(Msg::Refresh);
+    }
+
+    /// Stop the read that is in flight, if there is one, and keep the
+    /// listing as it is (no `Done` follows; [`Event::Stopped`] says so).
+    /// The folder is still followed: a change in it, or [`Load::refresh`],
+    /// reads it again. Never blocks; a read stuck in the kernel is
+    /// abandoned and its answer ignored.
+    pub fn stop_read(&self) {
+        let _ = self.tx.send(Msg::StopRead);
     }
 
     /// Stop. Never blocks. Also happens on drop.
@@ -595,6 +611,7 @@ impl Loader {
             Msg::Want(revision, indices) => self.want(revision, indices),
             Msg::StatAll => self.stat_everything(),
             Msg::Refresh => self.restart_read(),
+            Msg::StopRead => self.stop_read(),
             Msg::Kind(generation, kind) => {
                 if generation == self.generation && (!self.kind_sent || kind != self.master.mount) {
                     self.kind_sent = true;
@@ -743,6 +760,20 @@ impl Loader {
             return;
         }
         self.start_read(None);
+    }
+
+    /// Give up the read in flight. Its late answers belong to an older
+    /// generation and are ignored; what the listing holds stays.
+    fn stop_read(&mut self) {
+        if !self.reading {
+            return;
+        }
+        self.generation += 1;
+        self.read_cancel.cancel();
+        self.reading = false;
+        self.reread = false;
+        self.fresh.clear();
+        self.emit(Event::Stopped);
     }
 
     fn read_done(&mut self, stamp: Option<DirStamp>, unchanged: bool, result: Result<(), ListError>) {
@@ -1350,5 +1381,107 @@ mod tests {
         let diff = diff_entries(&[known.clone()], vec![unsized_again, added]);
         assert!(diff.changed.is_empty() && diff.removed.is_empty());
         assert_eq!(diff.added.len(), 1);
+    }
+
+    fn fifo(path: &Path) {
+        use std::os::unix::ffi::OsStrExt;
+        let c_path = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
+        // SAFETY: `c_path` is a valid NUL-terminated path.
+        assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) }, 0);
+    }
+
+    /// The read is started and stopped with no message handled in between, so
+    /// whatever the read thread says afterwards is late: none of it may reach
+    /// the listing, and a later refresh must still read the folder.
+    #[test]
+    fn a_stopped_read_says_so_and_its_late_answers_are_ignored() {
+        let root = scratch("stop-late");
+        let dir = root.join("data");
+        fs::create_dir_all(&dir).unwrap();
+        for i in 0..40 {
+            fs::write(dir.join(format!("file{i:02}.txt")), b"x").unwrap();
+        }
+        let seen = Arc::new(Mutex::new(Vec::<Event>::new()));
+        let (tx, rx) = mpsc::channel();
+        let log = seen.clone();
+        let mut loader = Loader::new(
+            dir.clone(),
+            options(&root.join("cache")),
+            Arc::new(Mutex::new(Policy::for_kind(MountKind::Local))),
+            tx,
+            Cancel::new(),
+            Box::new(move |event| log.lock().unwrap().push(event)),
+        );
+        loader.start_read(None);
+        loader.stop_read();
+        assert_eq!(*seen.lock().unwrap(), [Event::Stopped]);
+        assert!(!loader.reading && !loader.reread);
+        // Stopping when nothing is reading says nothing more.
+        loader.stop_read();
+        assert_eq!(seen.lock().unwrap().len(), 1);
+        while let Ok(message) = rx.recv_timeout(Duration::from_millis(300)) {
+            loader.handle(message);
+        }
+        assert_eq!(*seen.lock().unwrap(), [Event::Stopped], "no batch and no Done after the stop");
+        assert!(loader.master.entries.is_empty());
+
+        // Reading again, as F5 does, works: the whole folder arrives.
+        loader.restart_read();
+        let mut listing = Listing::new(&dir);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !seen.lock().unwrap().iter().any(|event| matches!(event, Event::Done { .. })) {
+            assert!(Instant::now() < deadline, "no Done after the second read");
+            if let Ok(message) = rx.recv_timeout(Duration::from_millis(50)) {
+                loader.handle(message);
+            }
+        }
+        for event in seen.lock().unwrap().iter() {
+            listing.apply(event);
+        }
+        assert_eq!(listing.entries.len(), 40);
+        assert!(listing.complete && !listing.stopped);
+        loader.finish();
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// A folder whose `.hidden` is a pipe blocks its read for as long as we
+    /// like. Stopping it must answer at once with `Stopped`, keep the thread
+    /// out of the way, and leave the loader able to read the folder again.
+    #[test]
+    fn stopping_a_blocked_first_read_leaves_an_empty_stopped_listing() {
+        let root = scratch("stop-fifo");
+        let dir = root.join("data");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("file"), b"1").unwrap();
+        let pipe = dir.join(".hidden");
+        fifo(&pipe);
+        let (load, events) = collect(&dir, options(&root.join("cache")));
+        // Let the read get stuck on the pipe.
+        std::thread::sleep(Duration::from_millis(150));
+        let asked = Instant::now();
+        load.stop_read();
+        let mut listing = Listing::new(&dir);
+        loop {
+            let event = events.recv_timeout(Duration::from_secs(3)).expect("a Stopped event");
+            let stopped = event == Event::Stopped;
+            listing.apply_event(event);
+            if stopped {
+                break;
+            }
+        }
+        assert!(asked.elapsed() < Duration::from_secs(1), "it does not wait for the stuck read");
+        assert!(listing.stopped && !listing.complete && listing.entries.is_empty());
+        // Let the stuck read go: its answers must not come through.
+        drop(fs::OpenOptions::new().write(true).open(&pipe).unwrap());
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(events.try_recv().is_err(), "a late read says nothing");
+        // A new read of the folder, once the pipe is gone, completes.
+        fs::remove_file(&pipe).unwrap();
+        load.refresh();
+        until_done(&events, &mut listing);
+        assert!(listing.complete && !listing.stopped);
+        assert_eq!(names(&listing), ["file"]);
+        drop(load);
+        let _ = fs::remove_dir_all(&root);
     }
 }

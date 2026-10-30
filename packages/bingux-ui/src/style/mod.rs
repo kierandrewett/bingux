@@ -34,7 +34,7 @@ use crate::theme::Tokens;
 
 pub use recipes::*;
 pub use tokens::*;
-pub(crate) use painted::painted;
+pub(crate) use painted::{checker, painted};
 
 /// Cross-axis or main-axis alignment.
 #[derive(Clone, Copy, Debug, PartialEq)]

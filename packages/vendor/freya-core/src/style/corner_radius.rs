@@ -284,3 +284,18 @@ impl Scaled for CornerRadius {
         self.bottom_right *= scale;
     }
 }
+
+impl CornerRadius {
+    /// The radii reflected left to right: what a box that reads right to left
+    /// is painted with when it is written as for left to right (see
+    /// [`TextDirection`](super::text_direction::TextDirection)).
+    pub const fn mirrored(self) -> Self {
+        Self {
+            top_left: self.top_right,
+            top_right: self.top_left,
+            bottom_right: self.bottom_left,
+            bottom_left: self.bottom_right,
+            smoothing: self.smoothing,
+        }
+    }
+}

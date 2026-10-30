@@ -45,7 +45,7 @@ use serde::{Deserialize, Serialize};
 
 use super::view_state;
 use crate::component::ComponentName;
-use crate::controls::focus_stop;
+use crate::controls::focus_stop_press;
 use crate::controls::press::point_of;
 use crate::icons::{self, Icon};
 use crate::shell::{MenuItem, menu_item, menu_separator};
@@ -73,11 +73,11 @@ const HANDLE_LAYER: i16 = 8;
 const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 
 /// The horizontal space between the edge of the list and a row's content: the
-/// list's edge and the inset inside the row's fill. Header and rows must use
-/// the same, or their cells drift apart. Read the size class: call it while
-/// rendering.
+/// list's edge and the inset inside the row's fill ([`FILE_ROW_INSET`], which
+/// does not grow on a phone). Header and rows must use the same, or their cells
+/// drift apart; and it is the same at every width, so an icon's left edge is.
 pub fn row_padding() -> f32 {
-    LIST_EDGE.px() + NAV_INSET.px()
+    LIST_EDGE.px() + FILE_ROW_INSET.px()
 }
 /// The space a cell keeps at each side of its content.
 pub const CELL_PADDING: Space = S2;
@@ -1207,7 +1207,7 @@ impl Component for ColumnHeaders {
                             items(Align::Center),
                             w_full(),
                             h_full(),
-                            px(NAV_INSET),
+                            px(FILE_ROW_INSET),
                         ],
                     )
                     .child(rect().width(Size::px(gutter(self.icon_px))))
@@ -1236,8 +1236,10 @@ impl Component for HeaderCell {
     }
 
     fn render(&self) -> impl IntoElement {
+        let direction = crate::controls::direction::use_direction();
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
+        let mut pressing = use_state(|| false);
         let mut edge_hot = use_state(|| false);
         let mut area = use_state(Area::default);
         let column = self.column;
@@ -1323,16 +1325,19 @@ impl Component for HeaderCell {
                     w_full(),
                     h_full(),
                     rounded(Radius::Mark),
-                    surface(Paint::Transparent, hovering(), self.moving, false),
+                    surface(Paint::Transparent, hovering(), self.moving || pressing(), false),
                 ],
             )
             .on_pointer_enter(move |_| hovering.set(true))
-            .on_pointer_leave(move |_| hovering.set(false))
+            .on_pointer_leave(move |_| {
+                hovering.set(false);
+                pressing.set_if_modified(false);
+            })
             .child(body);
 
         let button = {
             let shared = shared.clone();
-            focus_stop(
+            focus_stop_press(
                 content,
                 match column.sort_key() {
                     Some(_) => format!("Sort by {}", column.title()),
@@ -1354,6 +1359,7 @@ impl Component for HeaderCell {
                         shared.on_sort.call(key);
                     }
                 },
+                pressing,
             )
             .tw(&tokens, &[w_full(), h_full()])
         };
@@ -1423,7 +1429,8 @@ impl Component for HeaderCell {
             move |event: Event<KeyboardEventData>| {
                 let shift = event.modifiers.contains(Modifiers::SHIFT);
                 let ctrl = event.modifiers.contains(Modifiers::CONTROL);
-                let step = match &event.key {
+                let key = direction.reading_key(&event.key);
+                let step = match &key {
                     Key::Named(NamedKey::ArrowLeft) => -1,
                     Key::Named(NamedKey::ArrowRight) => 1,
                     Key::Named(NamedKey::ContextMenu) => {

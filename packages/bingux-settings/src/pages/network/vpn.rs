@@ -110,7 +110,7 @@ impl Link {
         match self {
             Self::Connected(address) if address.is_empty() => "Connected".to_string(),
             Self::Connected(address) => format!("Connected · {address}"),
-            Self::Connecting => "Connecting...".to_string(),
+            Self::Connecting => "Connecting…".to_string(),
             Self::Failed(reason) => format!("Failed: {reason}"),
             Self::Off => "Not connected".to_string(),
         }
@@ -266,7 +266,7 @@ pub fn vpn_group(ctx: NetCtx, ov: &Overview) -> Element {
         .map(|vpn| vpn_row(ctx, ov, vpn))
         .collect();
     rows.push(Element::from(
-        row("Add VPN...")
+        row("Add VPN…")
             .leading(Icon::ListAdd)
             .navigates()
             .on_press(move |_| ctx.router.open(routes::add_vpn(None))),
@@ -593,7 +593,7 @@ mod tests {
         let idle = link_from(&ov, &ov.vpns[0], None, None);
         let busy = link_from(&ov, &ov.vpns[1], None, None);
         assert_eq!(idle.line(), "Not connected");
-        assert_eq!(busy.line(), "Connecting...");
+        assert_eq!(busy.line(), "Connecting…");
         assert!(busy.on());
         assert!(!idle.on());
     }

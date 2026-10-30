@@ -197,6 +197,12 @@ impl Router {
         self.model.read().clone()
     }
 
+    /// Whether a menu, choice, dialog or sheet is open in this window. Subscribes the
+    /// calling component, so it redraws when one opens or closes.
+    pub fn modal_open(&self) -> bool {
+        !self.model.read().modals().is_empty()
+    }
+
     pub fn journal(&self) -> Journal {
         self.journal.read().clone()
     }

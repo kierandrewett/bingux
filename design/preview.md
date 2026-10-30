@@ -83,23 +83,31 @@ What the table settles, as rules for Bingux:
 - **Selection is the source of truth in the pane.** The pane follows the file
   view's selection live (Finder, Dolphin, Explorer, Nautilus). The popup also
   follows it (Quick Look, Sushi), so one mechanism serves both.
-- **Space.** In the file list Space opens the preview in the last used mode, and
-  closes it when it is open. Inside the viewer Space closes the popup (Quick Look,
-  Sushi), except in the media viewer where Space toggles play and pause and Esc
-  closes, because a player that Space closes cannot be paused from the
-  keyboard. In the pane the list keeps the keyboard, so Space closes the pane;
-  after the person clicks or tabs into a video, Space plays and pauses, and Esc
-  returns the keyboard to the list; a second Esc hides the pane. Click on a
-  video toggles play (Quick Look).
+- **Space.** In the file list Space is Quick Look: the popup, whether or not a
+  pane is docked (it used to open "the last mode used" and, with the pane open,
+  hid the pane, so after one Alt+P Space never showed a popup again). Inside the
+  popup Space and Esc close it, for every viewer including the player, as in
+  Quick Look and Sushi; the player is paused with K, a click or its button. In a
+  pane the list keeps the keyboard; after the person clicks into the pane it
+  holds the pane's own keys, and then Space plays and pauses a film and pages a
+  document (Shift+Space back). Esc, or a click in the list, gives the keyboard
+  back (it does not close the pane; Alt+P or the header does).
 - **Esc.** Leaves fullscreen, else moves the keyboard from the pane to the
-  list, else closes the preview. With the pane closed Esc is the file view's.
-- **Arrows.** Left and Right (Up and Down in a grid, as now) step the file
-  view's selection over *previewable* rows (folders and files that cannot be
-  chosen are still shown by the pane, but the popup's "n of m" counts only
-  the files it can reach). Inside a viewer that owns the arrows, they are its
-  own: Left and Right seek 5 s in a player, Up and Down scroll a document; a
-  modifier hands them back: **Alt+Left, Alt+Right** step the file from any
-  viewer. Image zoom uses the `+`, `-`, `0` (fit) and `1` (actual size) keys.
+  list, else closes the popup. With the pane closed Esc is the file view's.
+- **Arrows choose the file. Always.** Left, Right, Up and Down (Up and Down a
+  line in a grid), with or without Alt, step the file view's selection in the
+  popup, in the pane and in every viewer; the preview follows. No viewer owns an
+  arrow: they never scroll a document, seek a film or pan a picture, and
+  `keys::route` has no viewer parameter, so one cannot be given. (The first
+  design let a document keep Up and Down and a player Left and Right, with Alt
+  as the escape; in use it meant a PDF or film swallowed the arrows the moment
+  it had focus, and there was no way to reach the next file. Quick Look, Sushi
+  and every file manager's preview agree: the arrows are the file's.) A document
+  scrolls with the wheel or touchpad, Page Up, Page Down, Home, End; a film seeks
+  with Shift+Left and Shift+Right (5 s), J and L (10 s), the volume is
+  Shift+Up and Shift+Down. A pane steps the selection itself while it holds the
+  keyboard (the list's own key handler is not focused then), through the same
+  `on_step` the popup uses.
 - **Other keys.** `F` fullscreen, `I` info panel, `R` and `Shift+R` rotate,
   `W` text wrap, `M` mute, `[` and `]` playback speed, `Alt+Enter` the
   Properties dialog (kept), `Enter` Open, `Alt+P` or `F3` the docked pane from
@@ -429,6 +437,38 @@ tried and the result is not relied on.
 2. **Media and documents:** `bingux-preview-host`, the protocol, the player and
    the PDF viewer.
 3. **Packaging, docs, taxonomy, tests and real-input proof.**
+
+## 7a. Revision after use: less, whole, and the arrows
+
+Kieran's review of the first build: "too much stuff going on", the PDF zoom
+"broken", the menu "behind the preview", and the arrow keys scrolling the PDF
+instead of choosing the next file. Each was reproduced with the installed Files
+app in a headless session, and each had a cause:
+
+| Seen | Cause | Fix |
+| ---- | ----- | --- |
+| The zoom menu (and any menu opened from the popup) opened behind the card; its right edge showed beside the card and the rest was invisible, so a zoom could not be chosen | The window's menu layer (`OverlayLevel(8)`) was below the dialog layer (`OverlayLevel(12)`), and the preview card is a dialog | `OverlayStack::menu_layer(over_dialog)`: above an open dialog the menu is on level 14. Pixel test: a menu over a loud-red dialog has no red in its panel |
+| Down and Up scrolled the PDF in Quick Look; after a click in the docked PDF every arrow scrolled it | `keys::route` gave Up and Down to a document and Left and Right to a player; the PDF's own handler scrolled on the arrows, and a clicked pane took the keyboard from the list | No viewer takes an arrow; a pane that holds the keyboard steps the selection itself (`Keyboard`, `PreviewNav::pane_keys`) |
+| Space never showed the popup after one use of Alt+P | Space opened "the last mode used" and, with the pane open, hid it | Space is always Quick Look |
+| The PDF opened as fit width: a tall page showed only its top | `Zoom::FitWidth` was the default | The default is fit page: the whole first page, centred (a stack shorter than the viewport is centred vertically too) |
+| The zoom buttons moved when the label changed from "Fit width" to "150%" | The label sat in a menu button that sized to its text | A fixed slot as wide as "Fit width" |
+| A pane had no zoom label at all | The compact toolbar dropped the menu | One toolbar everywhere: page field, zoom out, menu, zoom in, find |
+| The big play button sat at the top of a paused popup or pane | An absolute box with `Size::fill()` sized to its content's top, not to its parent | Overlays are sized from the measured box |
+| The phone's seek bar shrank to nothing | The bar picked its form from a width the caller had to pass | The bar measures its own room once laid out |
+
+The chrome that was removed: the footer line (it repeated the type and size
+that Info shows), the Info-less fullscreen button in the header (F), the text
+viewer's language bar and "Wrap lines" checkbox (a line appears only when the
+preview stops early), the picture's two rotate buttons and its always-on zoom
+pill (the pill shows under the pointer or when zoomed), the PDF toolbar's
+thumbnails and its separate compact form, and the player's full screen
+button. Syntax colour in the text preview went too: a preview is for reading
+what a file is. A title line has at most four buttons (Open, Info, dock or pop
+out, Close); a viewer adds its bar only if it is a player or a document.
+
+Chrome budget (controls on screen at rest, popup, `preview::behaviour_tests`):
+picture 4 (the header's), text 4, folder 4, card 5, document 9 (4 + page field,
+zoom out, menu, zoom in, find), song 10.
 
 ## 8. What is not done, and open questions
 

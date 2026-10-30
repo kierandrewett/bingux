@@ -1860,7 +1860,7 @@ fn monitor_menu(ctx: Ctx, router: Router, index: usize, monitor: &Monitor) -> Ve
             });
         }),
         menu_separator(),
-        menu_item("Settings...", move |_| {
+        menu_item("Settings…", move |_| {
             router.open(routes::display(index, &label))
         }),
     ]

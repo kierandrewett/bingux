@@ -11,6 +11,7 @@ use freya::prelude::*;
 
 use crate::controls::icon_button;
 use crate::icons::Icon;
+use crate::nav::{Location, ModalKind, RouteTable};
 use crate::shell::overlays::{OverlayHost, Overlays};
 use crate::snapshot::Snapshot;
 use crate::style::*;
@@ -80,9 +81,17 @@ impl Component for Page {
         // The "s" key stands for a notch of the wheel: the window's scroll
         // signal, which every scroll view sets when its content moves.
         let activity = scroll_activity();
+        // The "c" key opens and closes a choice list or popover, which is a modal of the
+        // window's navigation as a `Panel` makes it.
+        let mut choice = use_state(|| false);
         let mut page = rect()
             .expanded()
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
+                if let Key::Character(key) = &event.key
+                    && key == "c"
+                {
+                    choice.toggle();
+                }
                 if let (Some(overlays), Key::Character(key)) = (overlays, &event.key)
                     && key == "m"
                 {
@@ -100,7 +109,20 @@ impl Component for Page {
         for toggle in &self.toggles {
             page = page.child(Element::from(toggle.clone()));
         }
-        page
+        page.child(Element::from(ChoiceStandIn { open: choice() }))
+    }
+}
+
+/// What a choice list or popover is to the window's stack while it is open.
+#[derive(PartialEq)]
+struct ChoiceStandIn {
+    open: bool,
+}
+
+impl Component for ChoiceStandIn {
+    fn render(&self) -> impl IntoElement {
+        crate::nav::router::use_modal(self.open, ModalKind::Choice, "", |()| {});
+        rect()
     }
 }
 
@@ -113,6 +135,8 @@ struct Root {
 impl Component for Root {
     fn render(&self) -> impl IntoElement {
         let _tokens = provide_tokens();
+        let table = std::sync::Arc::new(RouteTable::new("tips").index("Tips", |_| rect().into()));
+        crate::nav::provide_router(table, &Location::new("tips"));
         WindowHost::new(OverlayHost::new(self.page.clone()))
     }
 }
@@ -124,11 +148,14 @@ fn app(toggles: Vec<Toggle>) -> Snapshot {
     Snapshot::new(move || root.clone().into_element(), WINDOW)
 }
 
-/// One bubble in one frame.
+/// One bubble in one frame: the box of the bubble itself, which is what has to stay
+/// centred on its control and inside the window, and the box of its text, which lies
+/// inside it and is as wide as the longest line of the text.
 #[derive(Clone, Debug)]
 struct Seen {
     text: String,
     area: Area,
+    label: Area,
     opacity: f32,
 }
 
@@ -152,15 +179,17 @@ fn bubbles(shot: &mut Snapshot, texts: &[&str]) -> Vec<Seen> {
     });
     found
         .into_iter()
-        .filter_map(|(text, area)| {
-            let centre = Area::center(&area);
+        .filter_map(|(text, label)| {
+            let centre = Area::center(&label);
             let around = shot.runner().find_many(|node, element| {
                 let own = element.effect()?.opacity?;
                 let boxed = node.layout().area;
-                boxed.contains(centre).then(|| (boxed.width() * boxed.height(), own))
+                boxed.contains(centre).then(|| (boxed, own))
             });
-            let (_, opacity) = around.into_iter().min_by(|a, b| a.0.total_cmp(&b.0))?;
-            (opacity > 0.0).then_some(Seen { text, area, opacity })
+            let (area, opacity) = around
+                .into_iter()
+                .min_by(|a, b| (a.0.width() * a.0.height()).total_cmp(&(b.0.width() * b.0.height())))?;
+            (opacity > 0.0).then_some(Seen { text, area, label, opacity })
         })
         .collect()
 }
@@ -377,7 +406,7 @@ fn a_long_label_wraps_inside_the_widest_bubble_and_flips_once_at_the_edge() {
     let short = until_shown(&mut shot, &["Mute", LONG]);
     assert_eq!(short.text, "Mute");
     assert!(short.area.min_y() > toggle.bottom(), "a short tip opens below");
-    let one_line = short.area.height();
+    let one_line = short.label.height();
 
     press_at(&mut shot, x, y);
     let frames = watch_from_now(&mut shot, &["Mute", LONG], 24);
@@ -405,12 +434,26 @@ fn a_long_label_wraps_inside_the_widest_bubble_and_flips_once_at_the_edge() {
     let long = frames.last().and_then(|seen| seen.first()).expect("the long tip is up");
     assert_eq!(long.text, LONG);
     assert!(long.area.max_y() <= toggle.top(), "the wrapped tip sits above the control");
-    assert!(long.area.height() >= 2.0 * one_line - 1.0, "the long text wraps onto more lines");
+    assert!(long.label.height() >= 2.0 * one_line - 1.0, "the long text wraps onto more lines");
     assert!(
         long.area.width() <= Dim::TooltipMax.px_in(SizeClass::Regular),
         "the wrapped tip is {} wide, past the {} limit",
         long.area.width(),
         Dim::TooltipMax.px_in(SizeClass::Regular)
+    );
+    // The bubble of a text that wrapped fills the room it wrapped in: the text inside it
+    // is as wide as its longest line, so the box is wider than the text.
+    let room = Dim::TooltipMax.px_in(SizeClass::Regular).min(WINDOW.0 - 16.0);
+    assert!(
+        (long.area.width() - room).abs() <= 1.0,
+        "a tip whose text wrapped is as wide as its room ({room}), not as its longest line: {}",
+        long.area.width()
+    );
+    assert!(
+        long.label.min_x() >= long.area.min_x() && long.label.max_x() <= long.area.max_x(),
+        "the text is inside its bubble: {:?} in {:?}",
+        long.label,
+        long.area
     );
 
     // Back to the short label: still above, still centred, still one tip.
@@ -445,6 +488,36 @@ fn a_tip_goes_when_a_menu_opens_and_none_opens_over_it() {
     shot.hover(x + 2.0, y + 2.0);
     shot.settle(Duration::from_millis(700));
     assert!(bubbles(&mut shot, &["Copy"]).is_empty(), "a tip opened over the menu");
+}
+
+#[test]
+fn a_tip_goes_when_a_choice_or_popover_opens_and_none_opens_over_it() {
+    let toggle = Toggle::new((300.0, 200.0), "Copy", "Copy");
+    let mut shot = app(vec![toggle.clone()]);
+    shot.settle(Duration::from_millis(300));
+    let (x, y) = toggle.middle();
+    shot.hover(x, y);
+    until_shown(&mut shot, &["Copy"]);
+
+    // A popover opens from the control: where the system allows it, it is a window of its
+    // own, and a bubble drawn in this window would show from under it.
+    shot.key(Key::Character("c".into()));
+    let open = shot.runner().run_in(|| crate::nav::try_router().map(|router| router.model().modals().len()));
+    assert_eq!(open, Some(1), "the choice is on the window's stack");
+    let frames = watch(&mut shot, &["Copy"], 30);
+    assert!(frames[10..].iter().all(Vec::is_empty), "a tip is still drawn beside the open choice");
+    shot.hover(x + 2.0, y + 2.0);
+    shot.settle(Duration::from_millis(700));
+    assert!(bubbles(&mut shot, &["Copy"]).is_empty(), "a tip opened beside the open choice");
+
+    // Closed, the control's tip is back after the usual rest.
+    shot.key(Key::Character("c".into()));
+    shot.settle(Duration::from_millis(200));
+    let open = shot.runner().run_in(|| crate::nav::try_router().map(|router| router.model().modals().len()));
+    assert_eq!(open, Some(0), "the choice left the window's stack");
+    shot.hover(x + 40.0, y + 40.0);
+    shot.hover(x, y);
+    until_shown(&mut shot, &["Copy"]);
 }
 
 /// A notch of scrolling that leaves the pointer where it is, as the "s" key.

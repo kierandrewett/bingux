@@ -1,0 +1,156 @@
+use alloc::rc::Rc;
+use core::any::Any;
+
+pub use euclid::Rect;
+
+use crate::{
+    geometry::Area,
+    node::Node,
+    prelude::{
+        AreaModel,
+        AreaOf,
+        Gaps,
+        Inner,
+        Length,
+        Size2D,
+    },
+};
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+/// Cached layout results of a Node
+#[derive(Debug, Default, Clone)]
+pub struct LayoutNode {
+    /// Area that ocuppies this node
+    pub area: Area,
+
+    /// Area inside this Node
+    pub inner_area: AreaOf<Inner>,
+
+    /// Accumulated sizes inside this Node
+    pub inner_sizes: Size2D,
+
+    /// Outer margin
+    pub margin: Gaps,
+
+    /// Offsets
+    pub offset_x: Length,
+    pub offset_y: Length,
+
+    /// Hidden Nodes are not painted and do not receive events.
+    pub hidden: bool,
+
+    /// Associated data
+    #[cfg_attr(feature = "serde", serde(skip_deserializing, skip_serializing))]
+    pub data: Option<Rc<dyn Any>>,
+}
+
+impl PartialEq for LayoutNode {
+    fn eq(&self, other: &Self) -> bool {
+        self.area == other.area
+            && self.inner_area == other.inner_area
+            && self.margin == other.margin
+            && self.offset_x == other.offset_x
+            && self.offset_y == other.offset_y
+            && self.hidden == other.hidden
+    }
+}
+
+impl LayoutNode {
+    // The area without any margin
+    pub fn visible_area(&self) -> Area {
+        self.area.without_gaps(&self.margin)
+    }
+}
+
+pub trait NodeKey: Clone + PartialEq + Eq + core::hash::Hash + Copy + core::fmt::Debug {}
+
+impl NodeKey for usize {}
+
+pub trait TreeAdapter<Key: NodeKey> {
+    fn root_id(&self) -> Key;
+
+    /// Read the Node and its children.
+    fn read_node<R>(&self, node_id: &Key, reader: impl FnOnce(&Node, &[Key]) -> R) -> Option<R>;
+
+    /// Get the height in the Tree of the given Node
+    fn height(&self, node_id: &Key) -> Option<u16>;
+
+    /// Get the parent of a Node
+    fn parent_of(&self, node_id: &Key) -> Option<Key>;
+
+    /// Get the closest common parent Node of two Nodes
+    fn closest_common_parent(
+        &self,
+        node_a: &Key,
+        node_b: &Key,
+        walker: impl FnMut(Key),
+    ) -> Option<Key> {
+        let height_a = self.height(node_a)?;
+        let height_b = self.height(node_b)?;
+
+        let (node_a, node_b) = match height_a.cmp(&height_b) {
+            core::cmp::Ordering::Less => (
+                *node_a,
+                // Does not make sense to call the walker for when the node a is higher than the node b
+                balance_heights(self, *node_b, *node_a, None::<fn(_)>).unwrap_or(*node_b),
+            ),
+            core::cmp::Ordering::Equal => (*node_a, *node_b),
+            core::cmp::Ordering::Greater => (
+                balance_heights(self, *node_a, *node_b, Some(walker)).unwrap_or(*node_a),
+                *node_b,
+            ),
+        };
+
+        let mut currents = (node_a, node_b);
+
+        loop {
+            // Common parent of node_a and node_b
+            if currents.0 == currents.1 {
+                return Some(currents.0);
+            }
+
+            let parent_a = self.parent_of(&currents.0);
+            if let Some(parent_a) = parent_a {
+                currents.0 = parent_a;
+            } else if self.root_id() != currents.0 {
+                // Skip unconected nodes
+                break;
+            }
+
+            let parent_b = self.parent_of(&currents.1);
+            if let Some(parent_b) = parent_b {
+                currents.1 = parent_b;
+            } else if self.root_id() != currents.1 {
+                // Skip unconected nodes
+                break;
+            }
+        }
+
+        None
+    }
+}
+
+/// Walk to the ancestor of `base` with the same height of `target`
+fn balance_heights<Key: NodeKey>(
+    tree_adapter: &(impl TreeAdapter<Key> + ?Sized),
+    base: Key,
+    target: Key,
+    mut walker: Option<impl FnMut(Key)>,
+) -> Option<Key> {
+    let target_height = tree_adapter.height(&target)?;
+    let mut current = base;
+    loop {
+        if let Some(walker) = &mut walker {
+            (walker)(current);
+        }
+        if tree_adapter.height(&current)? == target_height {
+            break;
+        }
+
+        let parent_current = tree_adapter.parent_of(&current);
+        if let Some(parent_current) = parent_current {
+            current = parent_current;
+        }
+    }
+    Some(current)
+}

@@ -76,14 +76,23 @@ fn category_of(mime: &str) -> Category {
         FileKind::Audio => Category::Audio,
         FileKind::Video => Category::Video,
         FileKind::Text
+        | FileKind::Markup
         | FileKind::Pdf
         | FileKind::Spreadsheet
         | FileKind::Presentation
-        | FileKind::Document => Category::Documents,
-        FileKind::Archive => Category::Archives,
+        | FileKind::Document
+        | FileKind::Page
+        | FileKind::Ebook => Category::Documents,
+        FileKind::Archive | FileKind::DiskImage => Category::Archives,
         FileKind::Font => Category::Fonts,
-        FileKind::Code => Category::Code,
-        FileKind::Folder | FileKind::Executable | FileKind::Unknown => Category::Other,
+        FileKind::Code | FileKind::Config => Category::Code,
+        FileKind::Folder
+        | FileKind::Executable
+        | FileKind::Model3d
+        | FileKind::Database
+        | FileKind::Certificate
+        | FileKind::Torrent
+        | FileKind::Unknown => Category::Other,
     }
 }
 

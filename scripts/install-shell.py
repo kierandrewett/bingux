@@ -200,6 +200,8 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         source / "packages/bingux-files-app/bingux-files.svg": prefix
         / "share/icons/hicolor/scalable/apps/bingux-files.svg",
         cargo / "release/bingux-taxonomy": prefix / "bin/bingux-taxonomy",
+        # The helper Files runs for films, songs and PDFs; found beside bingux-files.
+        cargo / "release/bingux-preview-host": prefix / "bin/bingux-preview-host",
         source / "packages/bingux-taxonomy/bingux-taxonomy.desktop": prefix
         / "share/applications/bingux-taxonomy.desktop",
         source / "packages/bingux-taxonomy/bingux-taxonomy.svg": prefix
@@ -707,7 +709,7 @@ def uninstall_user(prefix, no_systemd):
 # Gnoblin module, no session or user-service changes. A manifest records every
 # file, its checksum, the file it displaced and the folders it created, so
 # --uninstall removes exactly that and puts the displaced files back.
-APPS_PROGRAMS = ("bingux-config", "bingux-settings", "bingux-files", "bingux-taxonomy", "bingux-effects")
+APPS_PROGRAMS = ("bingux-config", "bingux-settings", "bingux-files", "bingux-preview-host", "bingux-taxonomy", "bingux-effects")
 APPS_MANIFEST = Path("share/bingux-apps/manifest.json")
 APPS_HELPER = Path("share/bingux-apps/install-shell.py")
 APPS_BACKUP_SUFFIX = ".pre-bingux-apps.bak"

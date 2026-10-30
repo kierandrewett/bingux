@@ -61,7 +61,10 @@ use crate::{
         ImePreeditEventData,
         MaybeExt,
     },
-    style::fill::Fill,
+    style::{
+        fill::Fill,
+        text_direction::TextDirection,
+    },
     text_cache::TextCache,
     tree::{
         DiffModifies,
@@ -184,10 +187,14 @@ pub trait ElementExt: Any {
     /// Renders this element using the supplied canvas and layout context.
     fn render(&self, _context: RenderContext) {}
 
-    /// Creates a rounded rectangle from an area using this element's corner radius.
-    fn render_rect(&self, area: &Area, scale_factor: f32) -> SkRRect {
+    /// Creates a rounded rectangle from an area using this element's corner
+    /// radius, reflected when the element reads right to left.
+    fn render_rect(&self, area: &Area, scale_factor: f32, direction: TextDirection) -> SkRRect {
         let style = self.style();
-        let corner_radius = style.corner_radius.with_scale(scale_factor);
+        let mut corner_radius = *style.corner_radius.with_scale(scale_factor);
+        if direction.is_rtl() {
+            corner_radius = corner_radius.mirrored();
+        }
         SkRRect::new_rect_radii(
             SkRect::new(area.min_x(), area.min_y(), area.max_x(), area.max_y()),
             &[
@@ -230,6 +237,8 @@ pub struct EventMeasurementContext<'a> {
     pub cursor: ragnarok::CursorPoint,
     pub layout_node: &'a LayoutNode,
     pub scale_factor: f64,
+    /// The direction the element reads in: its corners are reflected right to left.
+    pub direction: TextDirection,
 }
 
 pub struct PostMeasureContext<'a> {
@@ -246,6 +255,8 @@ pub struct ClipContext<'a> {
     pub canvas: &'a Canvas,
     pub visible_area: &'a Area,
     pub scale_factor: f64,
+    /// The direction the clipping element reads in: its corners are reflected right to left.
+    pub direction: TextDirection,
 }
 
 impl<T: Any + PartialEq> ComponentProps for T {

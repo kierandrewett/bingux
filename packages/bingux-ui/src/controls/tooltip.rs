@@ -13,14 +13,20 @@
 //!   copy first, and when its size is known the bubble swaps to the new text and
 //!   the new place in one frame. No frame draws text at the size of other text.
 //!   It stays centred on the control, on the edge that touches it.
-//! - **Long text wraps** inside `Dim::TooltipMax` onto at most four lines.
+//! - **A bubble is as wide as its text**, on one line, up to `Dim::TooltipMax`
+//!   or the window less its margins; longer text wraps inside that onto at most
+//!   four lines, and a bubble whose text wrapped is that wide (not as wide as
+//!   its longest line). It is laid out in a box of that width of its own
+//!   (`slot`), so the control it hangs from, or a clipped cell around it,
+//!   cannot narrow it.
 //! - **Tips share one clock per window.** While one tip is up, or for 300 ms
 //!   after it went, the next control's tip opens at once, in full: no 500 ms
 //!   wait. The tip it replaces stays as it was until the new bubble has a size
 //!   and is drawn, and goes in that same frame, so moving along a row of
 //!   controls is one bubble that changes place, never a gap and never two.
-//! - **A menu or dialog takes tips down.** None opens while one is up, so a
-//!   bubble never covers the menu a control opened.
+//! - **A menu, a choice list, a popover or a dialog takes tips down.** None opens while one
+//!   is up, so a bubble never covers the menu a control opened, and never shows from under
+//!   a popover that is a window of its own.
 //! - **Scrolling takes tips down.** Content that scrolls moves under a resting
 //!   pointer, so no tip is up while the window scrolls (`ScrollActivity`, which
 //!   every scroll view pulses). A tip that is up goes in the frame the scroll
@@ -41,7 +47,7 @@ use super::press::{is_touch, use_press};
 use crate::icons::{self, Icon};
 use crate::motion::{PRESENCE_SCALE, use_presence};
 use crate::shell::overlays::Overlays;
-use crate::shell::panel::{PanelRect, Side};
+use crate::shell::panel::{PANEL_EDGE, PanelRect, Side};
 use crate::shell::tooltip_place::decide;
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -228,10 +234,13 @@ struct Tip {
 }
 
 impl Tip {
-    /// Whether a menu or dialog is up, which no tooltip opens over.
+    /// Whether a menu, a choice list or popover, or a dialog is up, which no tooltip opens
+    /// over. A choice or a popover is a window of its own where the system allows it, and a
+    /// bubble drawn in the control's window would show from under it.
     fn blocked(self) -> bool {
         self.overlays
             .is_some_and(|overlays| overlays.menu_open() || overlays.dialog_open())
+            || crate::nav::try_router().is_some_and(|router| router.modal_open())
     }
 
     fn cancel_pending(mut self) {
@@ -315,19 +324,17 @@ struct HoverTip {
     text: String,
 }
 
-/// One bubble: the tooltip surface around `text`, at most `Dim::TooltipMax`
-/// wide. Its size is the size of the text and nothing else, so the same call
-/// lays out the same in the hidden copy that measures it and in the visible one.
-fn bubble(tokens: &Tokens, text: &str) -> Rect {
+/// One bubble: the tooltip surface around `text`. Its size is the size of the
+/// text and nothing else, so the same call lays out the same in the hidden copy
+/// that measures it and in the visible one. `full` fills its slot: a bubble
+/// whose text wrapped is as wide as the room it wrapped in, and not as wide as
+/// its longest line, which leaves a gap of up to a word beside a shorter bubble.
+fn bubble(tokens: &Tokens, text: &str, full: bool) -> Rect {
     rect()
         .tw(tokens, TOOLTIP)
-        .tw(
-            tokens,
-            &[
-                border(Line::Stroke(Dim::Hairline, Paint::FloatingOutline)),
-                max_w(Dim::TooltipMax),
-            ],
-        )
+        .tw(tokens, &[border(Line::Stroke(Dim::Hairline, Paint::FloatingOutline))])
+        .maybe(full, |bubble| bubble.width(Size::fill()))
+        .interactive(false)
         .child(
             CAPTION
                 .in_ink(Ink::OnFloating)
@@ -335,6 +342,23 @@ fn bubble(tokens: &Tokens, text: &str) -> Rect {
                 .max_lines(TOOLTIP_MAX_LINES)
                 .text_overflow(TextOverflow::Ellipsis),
         )
+}
+
+/// The width a bubble is laid out in: `Dim::TooltipMax`, or the window's width
+/// less the edge margins when that is less.
+fn room(window_width: f32) -> f32 {
+    Dim::TooltipMax.px().min((window_width - 2.0 * PANEL_EDGE).max(0.0))
+}
+
+/// The box a bubble is laid out in. A text element wraps at the room its
+/// ancestors give it, and an absolutely placed element is given the room of
+/// the nearest ancestor with a size of its own: the 36 px button it describes,
+/// or the clipped cell of a tab strip. This box has a size of its own, `room`
+/// wide, so the bubble is as wide as its text on one line up to `room` and
+/// never as wide as what it hangs from. It is placed (and raised) as the
+/// bubble is; the bubble inside it is what is drawn.
+fn slot(room: f32, bubble: Rect) -> Rect {
+    rect().width(Size::px(room)).interactive(false).child(bubble)
 }
 
 impl Component for HoverTip {
@@ -449,30 +473,37 @@ impl Component for HoverTip {
 
         // The hidden copy lays out the text the tooltip is to show. The
         // bubble keeps the last text it measured until this one has a size.
+        let window = *Platform::get().current_window().root_size.read();
+        let room = room(window.width);
         let text = self.text.clone();
-        let probe = bubble(&tokens, &self.text)
-            .interactive(false)
-            .opacity(0.0)
-            // The copy is only for measuring: the bubble is what is announced.
-            .a11y_builder(|node| node.set_hidden())
-            .position(Position::new_absolute().left(0.0).top(0.0))
-            .on_sized(move |e: Event<SizedEventData>| {
-                measured.set_if_modified(Some(Measured {
-                    text: text.clone(),
-                    size: (e.area.width(), e.area.height()),
-                }));
-                // The bubble is drawn from the next frame, so a tip it replaced
-                // can go in that same frame.
-                if *visible.peek() {
-                    hub.drawn_by(*opened.peek());
-                }
-            });
+        // A one line bubble is the box of one line of caption.
+        let one_line = CAPTION.size.px() * CAPTION.leading + 2.0 * S1.px();
+        let probe = slot(
+            room,
+            bubble(&tokens, &self.text, false)
+                .opacity(0.0)
+                // The copy is only for measuring: the bubble is what is announced.
+                .a11y_builder(|node| node.set_hidden())
+                .on_sized(move |e: Event<SizedEventData>| {
+                    // A wrapped text fills the room it wrapped in.
+                    let wrapped = e.area.height() > one_line * 1.5;
+                    measured.set_if_modified(Some(Measured {
+                        text: text.clone(),
+                        size: (if wrapped { room } else { e.area.width() }, e.area.height()),
+                    }));
+                    // The bubble is drawn from the next frame, so a tip it replaced
+                    // can go in that same frame.
+                    if *visible.peek() {
+                        hub.drawn_by(*opened.peek());
+                    }
+                }),
+        )
+        .position(Position::new_absolute().left(0.0).top(0.0));
 
         let shown = anchor().zip(measured.read().clone());
         let Some((area, shown)) = shown else {
             return rect().child(wrapper).child(probe).into_element();
         };
-        let window = *Platform::get().current_window().root_size.read();
         let placed = decide(
             PanelRect::from_area(&area),
             shown.size,
@@ -481,16 +512,18 @@ impl Component for HoverTip {
         );
         side.set(Some(placed.side));
 
-        let label = bubble(&tokens, &shown.text)
-            .interactive(false)
-            .layer(Layer::Overlay)
-            .position(
-                Position::new_absolute()
-                    .left(placed.x - area.min_x())
-                    .top(placed.y - area.min_y()),
-            )
-            .opacity(progress)
-            .scale(PRESENCE_SCALE + (1.0 - PRESENCE_SCALE) * progress);
+        let label = slot(
+            room,
+            bubble(&tokens, &shown.text, shown.size.0 >= room)
+                .opacity(progress)
+                .scale(PRESENCE_SCALE + (1.0 - PRESENCE_SCALE) * progress),
+        )
+        .layer(crate::layers::TOOLTIP)
+        .position(
+            Position::new_absolute()
+                .left(placed.x - area.min_x())
+                .top(placed.y - area.min_y()),
+        );
 
         rect().child(wrapper).child(probe).child(label).into_element()
     }
@@ -499,3 +532,11 @@ impl Component for HoverTip {
 #[cfg(all(test, feature = "testing"))]
 #[path = "tooltip_tests.rs"]
 mod tests;
+
+#[cfg(all(test, feature = "testing"))]
+#[path = "tooltip_layout_tests.rs"]
+mod layout_tests;
+
+#[cfg(feature = "testing")]
+#[path = "tooltip_check.rs"]
+pub mod check;

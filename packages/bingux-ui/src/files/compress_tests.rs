@@ -16,7 +16,6 @@ use crate::shell::overlays::{OverlayHost, use_overlays};
 use crate::shell::{FORM_HEIGHT, FORM_WIDTH, open_form};
 use crate::snapshot::Snapshot;
 use crate::theme::provide_tokens;
-use crate::window::WindowHost;
 
 const DESKTOP: (f32, f32) = (1100.0, 820.0);
 const PHONE: (f32, f32) = (390.0, 800.0);
@@ -95,7 +94,9 @@ struct Root {
 impl Component for Root {
     fn render(&self) -> impl IntoElement {
         let _tokens = provide_tokens();
-        WindowHost::new(OverlayHost::new(self.child.clone()))
+        // No WindowHost here: OverlayHost adds its own around the page only,
+        // so the dialog layer has no window context, as in the Files app.
+        OverlayHost::new(self.child.clone())
     }
 }
 

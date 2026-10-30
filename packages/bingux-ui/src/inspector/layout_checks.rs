@@ -21,6 +21,12 @@ use std::collections::HashMap;
 use super::a11y_checks::describe;
 use super::snapshot::{Kind, Node, Snapshot};
 
+/// The spacing and alignment rules (`SP-`, `AL-`, `BR-` IDs of
+/// `design/rules.json`), one registration point: see `checks/mod.rs`.
+#[path = "checks/mod.rs"]
+mod checks;
+pub use checks::parity_checks::Metric;
+
 /// The accuracy of the measurements, in logical pixels. Insets that differ
 /// by no more than this are the same.
 pub const TOLERANCE: f32 = 1.0;
@@ -59,11 +65,24 @@ pub enum Rule {
     HiddenLabel,
     TextCollision,
     FocusRing,
+    ValueEllipsised,
+    IconNotCentred,
+    /// Found by comparing a left to right render with a right to left one
+    /// ([`direction_asymmetric`]), never by [`check`] on one tree.
+    DirectionAsymmetric,
+    InsetAsymmetry,
+    TrailingInset,
+    ColumnAligned,
+    ListRowInset,
+    FieldTextStart,
+    HeaderMeasure,
+    RadiusConcentric,
+    OffScale,
 }
 
 impl Rule {
     /// In the order the tab lists the groups.
-    pub const ALL: [Rule; 15] = [
+    pub const ALL: [Rule; 26] = [
         Rule::UnevenPadding,
         Rule::OffCentre,
         Rule::UnequalSiblings,
@@ -79,6 +98,17 @@ impl Rule {
         Rule::HiddenLabel,
         Rule::TextCollision,
         Rule::FocusRing,
+        Rule::ValueEllipsised,
+        Rule::IconNotCentred,
+        Rule::DirectionAsymmetric,
+        Rule::InsetAsymmetry,
+        Rule::TrailingInset,
+        Rule::ColumnAligned,
+        Rule::ListRowInset,
+        Rule::FieldTextStart,
+        Rule::HeaderMeasure,
+        Rule::RadiusConcentric,
+        Rule::OffScale,
     ];
 
     pub fn label(self) -> &'static str {
@@ -98,6 +128,10 @@ impl Rule {
             Rule::HiddenLabel => "Hidden label",
             Rule::TextCollision => "Text collision",
             Rule::FocusRing => "Focus ring off its face",
+            Rule::ValueEllipsised => "Value cut off",
+            Rule::IconNotCentred => "Icon off centre",
+            Rule::DirectionAsymmetric => "Not mirrored",
+            rule => checks::meta(rule).label,
         }
     }
 
@@ -119,6 +153,10 @@ impl Rule {
             Rule::HiddenLabel => "hidden-label",
             Rule::TextCollision => "text-collision",
             Rule::FocusRing => "focus-ring",
+            Rule::ValueEllipsised => "value-ellipsised",
+            Rule::IconNotCentred => "icon-not-centred",
+            Rule::DirectionAsymmetric => "direction-asymmetric",
+            rule => checks::meta(rule).key,
         }
     }
 
@@ -158,6 +196,10 @@ impl Rule {
             Rule::HiddenLabel => "A control shows its label, so a person can tell what it does.",
             Rule::TextCollision => "Texts do not lie on each other, or neither can be read.",
             Rule::FocusRing => "A focus ring is drawn around the box the control paints, with the face's corner radius nested, so it always shows what has focus.",
+            Rule::ValueEllipsised => "A value is shown in full: text is never cut off with an ellipsis or a clip, except a path or name shortened by design that has its full text as a tooltip and a Copy.",
+            Rule::IconNotCentred => "An icon in a field's leading slot or in an icon button is centred in that slot, on both axes: its centre is within half a pixel of the slot's.",
+            Rule::DirectionAsymmetric => "Rendered right to left, a box is the reflection of where it is left to right: the same size, at the same distance from the other edge.",
+            rule => checks::meta(rule).why,
         }
     }
 
@@ -189,6 +231,10 @@ impl Rule {
             Rule::HiddenLabel => "Give the control room for its label, or shorten the label or use an icon with a tooltip.",
             Rule::TextCollision => "Lay the two out in a row or a column, or give the first one a width limit.",
             Rule::FocusRing => "End the control's render with .focusable(..) on the node that paints its fill and its corner radii.",
+            Rule::ValueEllipsised => "Give the text its whole width: let a value wrap or stack under its label (a row does this by itself), put a long list in a selectable block, or for a path or name use path_label, which shortens it by design, shows the full text as a tooltip and offers Copy.",
+            Rule::IconNotCentred => "Put the icon alone in a box the size of the slot with `center()` (a field's leading slot is `IconSlot`, as wide as the field is tall), and take any margin or padding that is not the same on both sides off it.",
+            Rule::DirectionAsymmetric => "Place it with start and end (the layout mirrors by itself): padding, margin, alignment and a row's order, not a left offset in pixels; draw a canvas through `Direction::left_edge`; flip an icon that points somewhere with `#mirror_rtl` in labels.tsv; if the box is not meant to mirror (a clock, a media control, a number line) allow it in the lint with the reason.",
+            rule => checks::meta(rule).fix,
         }
     }
 }
@@ -248,7 +294,192 @@ pub fn check(snapshot: &Snapshot) -> Vec<Finding> {
     hidden_label(&cx, &mut out);
     text_collision(&cx, &mut out);
     focus_ring(&cx, &mut out);
+    value_ellipsised(&cx, &mut out);
+    icon_not_centred(&cx, &mut out);
+    checks::run(&cx, &mut out);
     out.sort_by_key(|finding| (finding.rule, finding.node));
+    out
+}
+
+/// The named insets of each component class of the frame, for the parity
+/// pass of `scripts/layout-lint.py` (`--parity`), which compares the desktop
+/// and the phone capture of a page.
+pub fn metrics(snapshot: &Snapshot) -> Vec<Metric> {
+    checks::parity_checks::metrics(&Context::new(snapshot))
+}
+
+/// How far a mirrored box may be from the reflection of where it was, in
+/// logical pixels: the rounding of two layouts.
+pub const MIRROR_TOLERANCE: f32 = 1.0;
+
+/// The same for the left edge and the width of a text: a string is shaped again in a paragraph
+/// that reads from the right, and its trailing `.` or a `/` in a path, which have no direction of
+/// their own, take the paragraph's and start a run of their own, so the same words can come out a
+/// pixel or two wider or narrower. A text that is really misplaced is further off than this.
+pub const MIRROR_TEXT_TOLERANCE: f32 = 2.5;
+
+/// One node of a [`Structure`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct MirrorNode {
+    /// The name the tree shows for the node.
+    pub title: String,
+    /// The border box, `[x, y, width, height]`.
+    pub area: [f32; 4],
+    /// Whether it takes part: laid out, not hidden, not transparent.
+    pub visible: bool,
+    /// The index of its parent in the same list.
+    pub parent: Option<usize>,
+}
+
+/// The shape of a rendered tree, kept from one render to compare with another:
+/// every node's title and box in preorder, and the window's width.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Structure {
+    pub window: f32,
+    pub nodes: Vec<MirrorNode>,
+}
+
+impl Structure {
+    pub fn of(snapshot: &Snapshot) -> Self {
+        let index: HashMap<u64, usize> = snapshot
+            .nodes
+            .iter()
+            .enumerate()
+            .map(|(at, node)| (node.id, at))
+            .collect();
+        let nodes = snapshot
+            .nodes
+            .iter()
+            .map(|node| MirrorNode {
+                title: node.title().to_owned(),
+                area: border_box(node).unwrap_or([0.0; 4]),
+                visible: is_visible(node),
+                parent: node.parent.and_then(|id| index.get(&id).copied()),
+            })
+            .collect();
+        let window = snapshot
+            .roots
+            .first()
+            .and_then(|id| snapshot.node(*id))
+            .and_then(border_box)
+            .map_or(0.0, |area| area[2]);
+        Structure { window, nodes }
+    }
+
+    #[cfg(feature = "testing")]
+    pub fn json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "window": self.window,
+            "nodes": self.nodes.iter().map(|node| serde_json::json!({
+                "title": node.title,
+                "area": node.area,
+                "visible": node.visible,
+                "parent": node.parent,
+            })).collect::<Vec<_>>(),
+        })
+    }
+
+    #[cfg(feature = "testing")]
+    pub fn from_json(value: &serde_json::Value) -> Option<Self> {
+        let nodes = value
+            .get("nodes")?
+            .as_array()?
+            .iter()
+            .map(|node| {
+                let area = node.get("area")?.as_array()?;
+                let at = |i: usize| area.get(i).and_then(serde_json::Value::as_f64).map(|v| v as f32);
+                Some(MirrorNode {
+                    title: node.get("title")?.as_str()?.to_owned(),
+                    area: [at(0)?, at(1)?, at(2)?, at(3)?],
+                    visible: node.get("visible")?.as_bool()?,
+                    parent: node
+                        .get("parent")
+                        .and_then(serde_json::Value::as_u64)
+                        .map(|parent| parent as usize),
+                })
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(Structure {
+            window: value.get("window")?.as_f64()? as f32,
+            nodes,
+        })
+    }
+}
+
+/// Compares the tree `ltr` was rendered left to right with `rtl`, the same
+/// screen rendered right to left: every visible box must be the reflection of
+/// itself in the window's vertical centre line, with the same size and the same
+/// height. A box that is not is reported once, at the outermost node; what is
+/// inside it moved with it. A tree of another shape (a node more, or one with
+/// another name) is reported as one finding on the first node that differs.
+/// Things that are meant to keep their place (a clock, a media control, a
+/// number line) are allowed by the lint's list, as for every other rule.
+pub fn direction_asymmetric(ltr: &Structure, rtl: &Snapshot) -> Vec<Finding> {
+    let cx = Context::new(rtl);
+    let here = Structure::of(rtl);
+    let Some(first) = rtl.nodes.first() else {
+        return Vec::new();
+    };
+    let differs = ltr.nodes.len() != here.nodes.len()
+        || ltr.nodes.iter().zip(&here.nodes).any(|(a, b)| a.title != b.title);
+    if differs {
+        let at = ltr
+            .nodes
+            .iter()
+            .zip(&here.nodes)
+            .position(|(a, b)| a.title != b.title)
+            .unwrap_or(ltr.nodes.len().min(here.nodes.len()).saturating_sub(1));
+        let node = rtl.nodes.get(at).unwrap_or(first);
+        return vec![cx.finding(
+            Rule::DirectionAsymmetric,
+            node,
+            format!(
+                "Right to left the tree has {} nodes and left to right {}; they differ at node {at} ({:?} against {:?})",
+                here.nodes.len(),
+                ltr.nodes.len(),
+                here.nodes.get(at).map(|n| n.title.as_str()).unwrap_or("none"),
+                ltr.nodes.get(at).map(|n| n.title.as_str()).unwrap_or("none"),
+            ),
+            vec![("nodes-ltr", ltr.nodes.len() as f32), ("nodes-rtl", here.nodes.len() as f32)],
+        )];
+    }
+    let mut covered = vec![false; here.nodes.len()];
+    let mut out = Vec::new();
+    for (at, (before, after)) in ltr.nodes.iter().zip(&here.nodes).enumerate() {
+        let parent_covered = after.parent.is_some_and(|parent| covered[parent]);
+        if parent_covered || !before.visible || !after.visible {
+            covered[at] = parent_covered;
+            continue;
+        }
+        let expected = ltr.window - before.area[0] - before.area[2];
+        let off_x = after.area[0] - expected;
+        let off_y = after.area[1] - before.area[1];
+        let off_w = after.area[2] - before.area[2];
+        let off_h = after.area[3] - before.area[3];
+        let slack = if is_text(&rtl.nodes[at]) { MIRROR_TEXT_TOLERANCE } else { MIRROR_TOLERANCE };
+        if off_x.abs() > slack || off_w.abs() > slack || off_y.abs() > MIRROR_TOLERANCE || off_h.abs() > MIRROR_TOLERANCE {
+            covered[at] = true;
+            out.push(cx.finding(
+                Rule::DirectionAsymmetric,
+                &rtl.nodes[at],
+                format!(
+                    "Right to left its left edge is at {:.1}, {:.1} px from where the reflection of the left to right box ({:.1} wide at {:.1} in a {:.0} wide window) is{}",
+                    after.area[0],
+                    off_x.abs(),
+                    before.area[2],
+                    before.area[0],
+                    ltr.window,
+                    if off_y.abs() > MIRROR_TOLERANCE || off_w.abs() > MIRROR_TOLERANCE || off_h.abs() > MIRROR_TOLERANCE {
+                        format!("; it also moved {:.1} px down and changed {:.1} x {:.1} px in size", off_y, off_w, off_h)
+                    } else {
+                        String::new()
+                    },
+                ),
+                vec![("off-x", off_x), ("off-y", off_y), ("off-width", off_w), ("off-height", off_h)],
+            ));
+        }
+    }
+    out.sort_by_key(|finding| finding.node);
     out
 }
 
@@ -474,26 +705,59 @@ fn fixed_height(node: &Node) -> Option<f32> {
         .and_then(|props| props.height.parse::<f32>().ok())
 }
 
+/// Whether the layout takes a size from the parent (`fill`, `fill-min`, a flex
+/// share or a percentage) instead of from the content.
+fn sized_by_parent(size: &str) -> bool {
+    size == "fill" || size == "fill-min" || size.starts_with("flex") || size.ends_with('%')
+}
+
+/// The box that the in-flow children of `node` that show something hold: the
+/// union of their border boxes. A child's own padding is part of its box, so
+/// the room a wrapper keeps around its text is the wrapper's business and not
+/// counted again against the container. Children that take no space in the
+/// flow (an overlay, a ring) and children with nothing to show (an empty line
+/// kept free for a message) leave no mark.
+fn content_extent(cx: &Context, node: &Node) -> Option<Box4> {
+    cx.children_of(node)
+        .filter(|child| {
+            is_visible(child)
+                && !child.used.out_of_flow
+                && cx.within[cx.index[&child.id]].is_some()
+        })
+        .filter_map(border_box)
+        .fold(None, |extent, area| union(extent, Some(area)))
+}
+
 /// A box that has the same padding on both sides of an axis says the content
 /// is meant to sit in the middle of it. When the box is as big as its
 /// content and its padding, nothing else decides where the content sits, so
-/// the ink should have the same room on both sides.
+/// the content should have the same room on both sides. A box whose size on
+/// an axis comes from its parent (a card as wide as the page, a row as wide
+/// as its list) is not sized by its content there, and content that starts at
+/// the leading edge is the normal case, so that axis is left alone.
 fn uneven_padding(cx: &Context, out: &mut Vec<Finding>) {
     for (at, node) in cx.snapshot.nodes.iter().enumerate() {
         if node.kind != Kind::Rect || node.children.is_empty() || cx.scrolled[at] {
             continue;
         }
-        let (Some(area), Some(ink), Some((inner_width, inner_height))) =
-            (border_box(node), cx.below[at], node.used.inner_sizes)
+        let (Some(area), Some((inner_width, inner_height))) =
+            (border_box(node), node.used.inner_sizes)
         else {
             continue;
         };
         if !is_visible(node) {
             continue;
         }
+        let Some(ink) = content_extent(cx, node) else {
+            continue;
+        };
+        let (wide_by_parent, tall_by_parent) = node.props.as_ref().map_or((false, false), |props| {
+            (sized_by_parent(&props.width), sized_by_parent(&props.height))
+        });
         let [top, right_pad, bottom_pad, left] = padding_of(node);
         // Vertical.
         if top > 0.0
+            && !tall_by_parent
             && (top - bottom_pad).abs() <= TOLERANCE
             && (area[3] - (inner_height + top + bottom_pad)).abs() <= TOLERANCE
         {
@@ -518,6 +782,7 @@ fn uneven_padding(cx: &Context, out: &mut Vec<Finding>) {
         }
         // Horizontal.
         if left > 0.0
+            && !wide_by_parent
             && (left - right_pad).abs() <= TOLERANCE
             && (area[2] - (inner_width + left + right_pad)).abs() <= TOLERANCE
         {
@@ -772,7 +1037,9 @@ fn contains(outer: Box4, inner: Box4) -> bool {
 }
 
 /// One-line text that is narrower than it needs to be while its container has
-/// room to spare.
+/// room to spare, and whose container would have room for all of it if the
+/// text took that room. Text that is too long for the row even then is a
+/// text that is meant to end in an ellipsis; the Overflow rule asks it to have one.
 fn truncated(cx: &Context, out: &mut Vec<Finding>) {
     for node in &cx.snapshot.nodes {
         if !is_text(node) || !is_visible(node) {
@@ -804,7 +1071,7 @@ fn truncated(cx: &Context, out: &mut Vec<Finding>) {
         } else {
             content.width() - area[2]
         };
-        if room > TRUNCATED_ROOM {
+        if room > TRUNCATED_ROOM && needed <= area[2] + room + TOLERANCE {
             out.push(cx.finding(
                 Rule::Truncated,
                 node,
@@ -896,6 +1163,9 @@ const SHORT_LINE: usize = 2;
 const NARROW_GLYPHS: f32 = 2.0;
 /// A control keeps its label when at least this much of it shows.
 const LABEL_SHOWN: f32 = 0.5;
+/// How many glyphs of a text that ends in an ellipsis must show for its label
+/// to count as shown.
+const ELLIPSIS_GLYPHS: f32 = 3.0;
 
 /// The width of a text node's content box: its border box less its padding.
 fn content_width(node: &Node) -> f32 {
@@ -906,6 +1176,20 @@ fn content_width(node: &Node) -> f32 {
 /// Whether the text ends in an ellipsis when it does not fit.
 fn ellipsised(node: &Node) -> bool {
     node.used.text.as_ref().is_some_and(|text| text.wrap.ellipsis)
+}
+
+/// Whether the node is inside a text input, whose value runs past the box it
+/// is typed in, scrolls, and breaks wherever the width is: none of that is a
+/// layout fault.
+fn in_text_input(cx: &Context, node: &Node) -> bool {
+    let mut current = cx.parent_of(node);
+    while let Some(parent) = current {
+        if parent.a11y.role.ends_with("Input") {
+            return true;
+        }
+        current = cx.parent_of(parent);
+    }
+    false
 }
 
 /// The box the text's glyphs cover: its own box narrowed to the width of its
@@ -940,7 +1224,7 @@ fn ink_box(node: &Node) -> Option<Box4> {
 /// control with a fixed width is the usual cause.
 fn wrapped(cx: &Context, out: &mut Vec<Finding>) {
     for node in &cx.snapshot.nodes {
-        if !is_text(node) || !is_visible(node) {
+        if !is_text(node) || !is_visible(node) || in_text_input(cx, node) {
             continue;
         }
         let (Some(text), Some(string)) = (node.used.text.as_ref(), node.text.as_deref()) else {
@@ -972,6 +1256,8 @@ fn wrapped(cx: &Context, out: &mut Vec<Finding>) {
             )
         } else if lines > 1
             && !ellipsised(node)
+            // A path, hash or address has no space to break at, and says so.
+            && component_above(cx, node, "BreaksAnywhere").is_none()
             && let Some(word) = text.wrap.longest_word.filter(|word| *word > width + TOLERANCE)
         {
             numbers.push(("longest-word", word));
@@ -990,7 +1276,7 @@ fn wrapped(cx: &Context, out: &mut Vec<Finding>) {
 /// is the Clipped rule's.
 fn overflow(cx: &Context, out: &mut Vec<Finding>) {
     for node in &cx.snapshot.nodes {
-        if !is_text(node) || !is_visible(node) || ellipsised(node) {
+        if !is_text(node) || !is_visible(node) || ellipsised(node) || in_text_input(cx, node) {
             continue;
         }
         let Some(text) = node.used.text.as_ref() else {
@@ -1018,7 +1304,7 @@ fn overflow(cx: &Context, out: &mut Vec<Finding>) {
 /// along the scroll axis.
 fn outside_parent(cx: &Context, out: &mut Vec<Finding>) {
     for node in &cx.snapshot.nodes {
-        if !is_ink(node) || node.used.out_of_flow {
+        if !is_ink(node) || node.used.out_of_flow || in_text_input(cx, node) {
             continue;
         }
         let (Some(area), Some(parent)) = (border_box(node), cx.parent_of(node)) else {
@@ -1028,6 +1314,11 @@ fn outside_parent(cx: &Context, out: &mut Vec<Finding>) {
             continue;
         };
         if parent.kind != Kind::Rect || !is_visible(parent) {
+            continue;
+        }
+        // A line that `fade_text` shows is wider than its box on purpose: the box clips it and
+        // the end of the line fades out.
+        if parent.a11y.component.as_deref() == Some("FadeText") {
             continue;
         }
         let scrolls = parent.a11y.role == "ScrollView";
@@ -1107,7 +1398,11 @@ fn horizontal_scroll(cx: &Context, out: &mut Vec<Finding>) {
 /// box that clips it.
 fn hidden_label(cx: &Context, out: &mut Vec<Finding>) {
     for node in &cx.snapshot.nodes {
-        if node.a11y.focusable != Some(true) || !is_visible(node) {
+        // A text input shows the start of its value and scrolls to the rest.
+        if node.a11y.focusable != Some(true)
+            || !is_visible(node)
+            || node.a11y.role.ends_with("Input")
+        {
             continue;
         }
         let Some(frame) = border_box(node) else {
@@ -1150,7 +1445,7 @@ fn shown_of(cx: &Context, text: &Node, frame: Box4) -> f32 {
     let Some(area) = border_box(text) else {
         return 0.0;
     };
-    let needed = text
+    let mut needed = text
         .used
         .text
         .as_ref()
@@ -1158,6 +1453,14 @@ fn shown_of(cx: &Context, text: &Node, frame: Box4) -> f32 {
         .and_then(|used| used.intrinsic)
         .unwrap_or(area[2])
         .max(1.0);
+    // Text that ends in an ellipsis when it does not fit is meant to show its
+    // beginning: a few letters and the mark say what the control is, so that
+    // is all that has to show.
+    // Text that fades out where it ends (`fade_text`) is meant to show its beginning as well.
+    if ellipsised(text) || component_above(cx, text, "FadeText").is_some() {
+        let glyphs = text.text.as_deref().map_or(1, |string| string.chars().count().max(1));
+        needed = needed.min(ELLIPSIS_GLYPHS * needed / glyphs as f32);
+    }
     let (mut left, mut edge) = (area[0], right(area));
     let mut narrow = |frame: Box4| {
         left = left.max(frame[0]);
@@ -1176,8 +1479,35 @@ fn shown_of(cx: &Context, text: &Node, frame: Box4) -> f32 {
     ((edge - left).max(0.0) / needed).min(1.0)
 }
 
+/// The part of `ink` that can be seen: what is left after every box above the
+/// node that clips (a clipping box, a scroll view's viewport) has cut it. A
+/// text that lies wholly outside such a box is not on the screen, so it
+/// cannot collide with anything.
+fn visible_part(cx: &Context, node: &Node, ink: Box4) -> Option<Box4> {
+    let mut seen = ink;
+    let mut current = cx.parent_of(node);
+    while let Some(clip) = current {
+        let clips = clip.props.as_ref().is_some_and(|props| props.clip)
+            || clip.a11y.role == "ScrollView";
+        if clips && let Some(frame) = border_box(clip) {
+            seen = intersection(seen, frame)?;
+        }
+        current = cx.parent_of(clip);
+    }
+    Some(seen)
+}
+
+/// The box two boxes share, `None` when they only touch or are apart.
+fn intersection(a: Box4, b: Box4) -> Option<Box4> {
+    let (x, y) = (a[0].max(b[0]), a[1].max(b[1]));
+    let (r, d) = (right(a).min(right(b)), bottom(a).min(bottom(b)));
+    (r > x && d > y).then_some([x, y, r - x, d - y])
+}
+
 /// Two texts in unrelated boxes whose glyphs lie on each other: a label that
 /// overflowed into the next row. Texts of one parent are the Overlap rule's.
+/// Only the glyphs that show count: text cut off by a clipping box or pushed
+/// out of a scroll view's view is not on the screen.
 fn text_collision(cx: &Context, out: &mut Vec<Finding>) {
     let texts: Vec<(usize, &Node, Box4)> = cx
         .snapshot
@@ -1185,7 +1515,10 @@ fn text_collision(cx: &Context, out: &mut Vec<Finding>) {
         .iter()
         .enumerate()
         .filter(|(_, node)| is_text(node) && is_visible(node))
-        .filter_map(|(at, node)| ink_box(node).map(|ink| (at, node, ink)))
+        .filter_map(|(at, node)| {
+            let ink = ink_box(node)?;
+            visible_part(cx, node, ink).map(|seen| (at, node, seen))
+        })
         .collect();
     for (first, (at_a, a, ink_a)) in texts.iter().enumerate() {
         for (at_b, b, ink_b) in &texts[first + 1..] {
@@ -1237,6 +1570,194 @@ fn focus_ring(cx: &Context, out: &mut Vec<Finding>) {
                     ("found y", fy),
                     ("found width", fw),
                     ("found height", fh),
+                ],
+            ));
+        }
+    }
+}
+
+/// How far past a clipping box the end of a text may lie, in logical pixels,
+/// before the text counts as cut by it.
+const CLIP_SLACK: f32 = 2.0;
+
+/// The text without the marks that isolate a left-to-right run, which
+/// `PathLabel` adds around the text it draws.
+fn plain(text: &str) -> String {
+    text.chars()
+        .filter(|c| !('\u{2066}'..='\u{2069}').contains(c))
+        .collect()
+}
+
+/// The nearest component named `name` above the node, itself included.
+fn component_above<'a>(cx: &Context<'a>, node: &'a Node, name: &str) -> Option<&'a Node> {
+    let mut current = Some(node);
+    while let Some(here) = current {
+        if here.a11y.component.as_deref() == Some(name) {
+            return Some(here);
+        }
+        current = cx.parent_of(here);
+    }
+    None
+}
+
+/// What the text says about how it was cut.
+enum Cut {
+    /// All of it shows.
+    Whole,
+    /// Part of it is cut away: what was measured, in words and in numbers.
+    Part(String, Vec<(&'static str, f32)>),
+}
+
+/// Whether the text's layout leaves part of the text out: it ends in an
+/// ellipsis, or a path label shortened it, or a clipping box cuts it off.
+fn cut_of(cx: &Context, node: &Node) -> Cut {
+    let (Some(text), Some(string)) = (node.used.text.as_ref(), node.text.as_deref()) else {
+        return Cut::Whole;
+    };
+    let width = content_width(node);
+    // A path label shortens its text itself, and keeps the whole of it as its
+    // name.
+    if let Some(label) = component_above(cx, node, "PathLabel")
+        && let Some(full) = label.a11y.name.as_deref()
+        && plain(full) != plain(string)
+    {
+        return Cut::Part(
+            format!("The text is shortened to \"{}\" of \"{}\"", plain(string), plain(full)),
+            vec![("width", width)],
+        );
+    }
+    if ellipsised(node)
+        && let (Some(needed), Some(lines)) = (text.intrinsic, text.lines)
+    {
+        let shown: usize = text.wrap.line_chars.iter().sum();
+        let all = string.encode_utf16().count();
+        let one_line_cut = lines == 1 && needed > width + TOLERANCE;
+        let more_cut = lines > 1
+            && text.wrap.max_lines == Some(lines)
+            && (needed > lines as f32 * width + TOLERANCE || (shown > 0 && shown + 1 < all));
+        if one_line_cut || more_cut {
+            return Cut::Part(
+                format!(
+                    "The text needs {needed:.0} px, has {lines} line{} of {width:.0} px, and ends in an ellipsis",
+                    if lines == 1 { "" } else { "s" }
+                ),
+                vec![("needed", needed), ("width", width), ("lines", lines as f32)],
+            );
+        }
+    }
+    // A clipping box that is not a scroll view cuts the text's ink off. A
+    // scroll view moves its content, so a line below its fold is not cut.
+    if let Some(ink) = ink_box(node) {
+        let mut current = cx.parent_of(node);
+        while let Some(clip) = current {
+            // A scroll view moves its content: what lies past its edge is scrolled out and not
+            // cut, and no box outside the view cuts the text again.
+            if clip.a11y.role == "ScrollView" {
+                break;
+            }
+            let clips = clip.props.as_ref().is_some_and(|props| props.clip);
+            if clips && let Some(frame) = border_box(clip) {
+                // A box whose content is larger than it is (a page's viewport,
+                // a list) moves that content: what lies past its edge on that
+                // axis is scrolled out, not cut.
+                let (scrolls_x, scrolls_y) = clip.used.inner_sizes.map_or((false, false), |(w, h)| {
+                    (w > frame[2] + TOLERANCE, h > frame[3] + TOLERANCE)
+                });
+                let past_x = if scrolls_x {
+                    0.0
+                } else {
+                    (frame[0] - ink[0]).max(right(ink) - right(frame))
+                };
+                let past_y = if scrolls_y {
+                    0.0
+                } else {
+                    (frame[1] - ink[1]).max(bottom(ink) - bottom(frame))
+                };
+                let past = past_x.max(past_y);
+                let seen = intersection(ink, frame);
+                // Ink wholly outside the box is hidden, not cut: the Hidden
+                // label rule has it.
+                if past > CLIP_SLACK && seen.is_some() {
+                    return Cut::Part(
+                        format!("{past:.0} px of the text lies outside {} that clips it", describe(cx.snapshot, Some(clip.id))),
+                        vec![("outside", past), ("width", width)],
+                    );
+                }
+            }
+            current = cx.parent_of(clip);
+        }
+    }
+    Cut::Whole
+}
+
+/// Text that is cut off, by an ellipsis or a clip, wherever a person reads a
+/// value: an info row, a property, a table cell, a dialog. A value is read
+/// in full or it is useless (a licence, a path, an address, a version), so
+/// plain text is never allowed to end in an ellipsis. The one exception is a
+/// path or name that a `PathLabel` shortens by design: it lies under an
+/// `Elided` box, which holds the full text as its hover tooltip and offers
+/// Copy. Text inputs scroll their value, and a scroll view moves its content,
+/// so neither is cut.
+fn value_ellipsised(cx: &Context, out: &mut Vec<Finding>) {
+    for node in &cx.snapshot.nodes {
+        if !is_text(node) || !is_visible(node) || in_text_input(cx, node) {
+            continue;
+        }
+        if let Cut::Part(what, numbers) = cut_of(cx, node) {
+            if component_above(cx, node, "Elided").is_some() || component_above(cx, node, "FadeText").is_some() {
+                continue;
+            }
+            out.push(cx.finding(Rule::ValueEllipsised, node, what, numbers));
+        }
+    }
+}
+
+/// How far the centre of the icon in a slot may lie from the slot's centre,
+/// on each axis, in logical pixels.
+pub const ICON_CENTRE: f32 = 0.5;
+
+/// The components whose box is a slot an icon is centred in: the leading
+/// slot of a text field and the face of an icon button.
+const ICON_SLOTS: [&str; 5] = ["IconSlot", "IconButton", "IconMenuButton", "WindowControl", "TabClose"];
+
+/// An icon in a slot sits at the slot's centre. The slot is the box of the
+/// component, and the icon is what paints inside it, so a margin on one side
+/// of the glyph or a slot that is not as big as its field shows as an offset.
+/// The measure is the centre of the icon's box; where the ink lies inside the
+/// box is measured on pixels by the `search_field` tests.
+fn icon_not_centred(cx: &Context, out: &mut Vec<Finding>) {
+    for (at, node) in cx.snapshot.nodes.iter().enumerate() {
+        let in_slot = node
+            .a11y
+            .component
+            .as_deref()
+            .is_some_and(|name| ICON_SLOTS.contains(&name));
+        if !in_slot || !is_visible(node) {
+            continue;
+        }
+        let (Some(slot), Some(ink)) = (border_box(node), cx.below[at]) else {
+            continue;
+        };
+        let off_x = (ink[0] + ink[2] / 2.0) - (slot[0] + slot[2] / 2.0);
+        let off_y = (ink[1] + ink[3] / 2.0) - (slot[1] + slot[3] / 2.0);
+        if off_x.abs() > ICON_CENTRE || off_y.abs() > ICON_CENTRE {
+            out.push(cx.finding(
+                Rule::IconNotCentred,
+                node,
+                format!(
+                    "The icon's centre is {:.1} px {} and {:.1} px {} of the centre of its {:.0} by {:.0} slot",
+                    off_x.abs(),
+                    if off_x < 0.0 { "left" } else { "right" },
+                    off_y.abs(),
+                    if off_y < 0.0 { "above" } else { "below" },
+                    slot[2],
+                    slot[3],
+                ),
+                vec![
+                    ("off-x", off_x),
+                    ("off-y", off_y),
+                    ("slot-width", slot[2]),
+                    ("slot-height", slot[3]),
                 ],
             ));
         }
@@ -1828,6 +2349,367 @@ mod tests {
         tree.out_of_flow(overlay);
         tree.text(overlay, "Add a network", (10.0, 10.0, 100.0, 18.0), 100.0);
         assert!(of(&check(&tree.snapshot()), Rule::TextCollision).is_empty());
+    }
+
+    /// A card with the same padding on both sides, in a column, holding one
+    /// line of text at its leading edge: `width` is how the card was sized.
+    fn leading_text_in_a_card(width: &str) -> Snapshot {
+        let mut tree = Tree::default();
+        let card = tree.rect(None, (0.0, 0.0, 300.0, 52.0));
+        tree.pad(card, [0.0, 8.0, 0.0, 8.0]);
+        tree.inner(card, 284.0, 52.0);
+        tree.at(card).props.as_mut().unwrap().width = width.to_string();
+        tree.text(card, "Kieran", (16.0, 16.0, 60.0, 18.0), 60.0);
+        tree.snapshot()
+    }
+
+    #[test]
+    fn content_at_the_leading_edge_of_a_box_as_wide_as_its_parent_is_not_uneven() {
+        for width in ["fill", "flex 1", "50%"] {
+            assert!(
+                of(&check(&leading_text_in_a_card(width)), Rule::UnevenPadding).is_empty(),
+                "width {width}"
+            );
+        }
+    }
+
+    #[test]
+    fn content_at_the_leading_edge_of_a_box_sized_by_its_content_is_uneven() {
+        // The same box, as wide as the 300 px its content and padding say.
+        let findings = check(&leading_text_in_a_card("auto"));
+        let uneven = of(&findings, Rule::UnevenPadding);
+        assert_eq!(uneven.len(), 1, "{findings:?}");
+        assert!(uneven[0].numbers.contains(&("inset-left", 16.0)));
+        assert!(uneven[0].numbers.contains(&("inset-right", 224.0)));
+    }
+
+    #[test]
+    fn the_padding_of_a_child_is_the_childs_own_and_not_counted_against_the_container() {
+        // An alert: 12 px around its parts, a message part with 12 px of its
+        // own, then the buttons. The text is 24 px from the top and the
+        // buttons 12 px from the bottom, and the dialog is even.
+        let mut tree = Tree::default();
+        let dialog = tree.rect(None, (0.0, 0.0, 300.0, 147.0));
+        tree.pad(dialog, [12.0, 12.0, 12.0, 12.0]);
+        tree.inner(dialog, 276.0, 123.0);
+        let message = tree.rect(Some(dialog), (12.0, 12.0, 276.0, 71.0));
+        tree.pad(message, [12.0, 12.0, 12.0, 12.0]);
+        tree.text(message, "Update installed", (24.0, 24.0, 252.0, 21.0), 126.0);
+        let buttons = tree.rect(Some(dialog), (12.0, 95.0, 276.0, 40.0));
+        tree.fill(buttons);
+        assert!(of(&check(&tree.snapshot()), Rule::UnevenPadding).is_empty());
+    }
+
+    /// Two texts at the same place, one inside a box that clips (or a scroll
+    /// view) whose frame ends above it.
+    fn text_under_a_text(clipped: bool) -> Snapshot {
+        let mut tree = Tree::default();
+        let root = tree.rect(None, (0.0, 0.0, 300.0, 400.0));
+        let frame = tree.rect(Some(root), (0.0, 0.0, 300.0, 100.0));
+        if clipped {
+            tree.clip(frame);
+        }
+        tree.text(frame, "Line 6", (10.0, 150.0, 100.0, 18.0), 100.0);
+        let after = tree.rect(Some(root), (0.0, 140.0, 300.0, 60.0));
+        tree.text(after, "Related", (10.0, 150.0, 100.0, 18.0), 100.0);
+        tree.snapshot()
+    }
+
+    #[test]
+    fn text_that_a_clipping_box_cuts_away_does_not_collide_with_anything() {
+        assert!(of(&check(&text_under_a_text(true)), Rule::TextCollision).is_empty());
+    }
+
+    #[test]
+    fn the_same_texts_with_nothing_clipping_them_collide() {
+        let findings = check(&text_under_a_text(false));
+        assert_eq!(of(&findings, Rule::TextCollision).len(), 1, "{findings:?}");
+    }
+
+    #[test]
+    fn text_inside_the_view_of_a_scroll_view_still_collides_with_text_over_it() {
+        let mut tree = Tree::default();
+        let root = tree.rect(None, (0.0, 0.0, 300.0, 400.0));
+        let scroller = tree.rect(Some(root), (0.0, 0.0, 300.0, 400.0));
+        tree.at(scroller).a11y.role = "ScrollView".into();
+        let first = tree.rect(Some(scroller), (0.0, 0.0, 300.0, 60.0));
+        tree.text(first, "Network", (10.0, 10.0, 100.0, 18.0), 100.0);
+        let second = tree.rect(Some(scroller), (0.0, 20.0, 300.0, 60.0));
+        tree.text(second, "Bluetooth", (10.0, 20.0, 100.0, 18.0), 100.0);
+        assert_eq!(of(&check(&tree.snapshot()), Rule::TextCollision).len(), 1);
+    }
+
+    #[test]
+    fn text_too_long_for_its_row_even_with_the_spare_room_is_meant_to_end_in_an_ellipsis() {
+        let mut tree = Tree::default();
+        let row = tree.rect(None, (0.0, 0.0, 400.0, 36.0));
+        tree.row(row);
+        // Needs 560 px, has 100, and 300 are spare: still cut.
+        tree.text(row, "A very long network name", (0.0, 10.0, 100.0, 16.0), 560.0);
+        assert!(!rules(&tree.snapshot()).contains(&Rule::Truncated));
+    }
+
+    /// A button whose one text is cut to `shown` px of the 150 it needs.
+    fn labelled_button(shown: f32, ellipsis: bool) -> Snapshot {
+        let mut tree = Tree::default();
+        let root = tree.rect(None, (0.0, 0.0, 400.0, 100.0));
+        let button = tree.rect(Some(root), (0.0, 0.0, 100.0, 36.0));
+        tree.fill(button);
+        tree.focusable(button);
+        tree.clip(button);
+        let label = tree.text(button, "Headphones connected", (0.0, 8.0, shown, 18.0), 150.0);
+        tree.at(label).used.text.as_mut().unwrap().wrap.ellipsis = ellipsis;
+        tree.snapshot()
+    }
+
+    #[test]
+    fn a_label_that_ends_in_an_ellipsis_with_some_letters_showing_is_not_hidden() {
+        assert!(of(&check(&labelled_button(50.0, true)), Rule::HiddenLabel).is_empty());
+    }
+
+    #[test]
+    fn a_label_cut_to_a_third_with_no_ellipsis_is_hidden_and_one_with_no_room_is_hidden_either_way() {
+        assert_eq!(of(&check(&labelled_button(50.0, false)), Rule::HiddenLabel).len(), 1);
+        assert_eq!(of(&check(&labelled_button(4.0, true)), Rule::HiddenLabel).len(), 1);
+    }
+
+    /// A one-line text input holding a value of 1 100 px in a 400 px field,
+    /// as every text field does with a long value: it scrolls.
+    fn long_value_in_a_field(role: &str) -> Snapshot {
+        let mut tree = Tree::default();
+        let root = tree.rect(None, (0.0, 0.0, 400.0, 100.0));
+        let field = tree.rect(Some(root), (0.0, 0.0, 400.0, 36.0));
+        tree.fill(field);
+        tree.focusable(field);
+        tree.at(field).a11y.role = role.into();
+        let view = tree.rect(Some(field), (0.0, 0.0, 400.0, 36.0));
+        tree.clip(view);
+        let value = tree.text(view, "A name far too long for the room it is given", (0.0, 8.0, 1100.0, 18.0), 1100.0);
+        tree.at(value).used.text.as_mut().unwrap().measured = Some((1100.0, 18.0));
+        tree.snapshot()
+    }
+
+    #[test]
+    fn the_value_of_a_text_input_may_run_past_its_field() {
+        let findings = check(&long_value_in_a_field("TextInput"));
+        for rule in [Rule::OutsideParent, Rule::HiddenLabel, Rule::Overflow, Rule::Wrapped] {
+            assert!(of(&findings, rule).is_empty(), "{rule:?}: {findings:?}");
+        }
+    }
+
+    #[test]
+    fn the_same_text_in_a_control_that_is_not_an_input_is_still_found() {
+        let findings = check(&long_value_in_a_field("Button"));
+        assert!(!of(&findings, Rule::OutsideParent).is_empty(), "{findings:?}");
+        assert!(!of(&findings, Rule::HiddenLabel).is_empty(), "{findings:?}");
+    }
+
+    /// A "Licences" info row as it was drawn: a title and a value that is half
+    /// the row, cut with an ellipsis.
+    fn info_row(value: &str, lines: usize, shown: f32, needed: f32, ellipsis: bool) -> Snapshot {
+        let mut tree = Tree::default();
+        let card = tree.rect(None, (0.0, 0.0, 400.0, 56.0));
+        let row = tree.rect(Some(card), (0.0, 0.0, 400.0, 56.0));
+        tree.row(row);
+        tree.at(row).a11y.component = Some("Row".into());
+        tree.text(row, "Licences", (16.0, 18.0, 70.0, 20.0), 60.0);
+        let cell = tree.rect(Some(row), (200.0, 0.0, 184.0, 56.0));
+        tree.at(cell).a11y.component = Some("ValueText".into());
+        let text = tree.text(cell, value, (200.0, 18.0, shown, 20.0), needed);
+        let used = tree.at(text).used.text.as_mut().unwrap();
+        used.wrap.ellipsis = ellipsis;
+        used.lines = Some(lines);
+        used.wrap.max_lines = Some(lines);
+        tree.snapshot()
+    }
+
+    #[test]
+    fn a_value_cut_with_an_ellipsis_is_found_whatever_room_the_row_has() {
+        // The known-bad fixture: 330 px of licence text in 184 px, ellipsised.
+        let findings = check(&info_row("Apache-2.0 AND MIT AND Zlib AND BSD-3-Clause", 1, 184.0, 330.0, true));
+        let found = of(&findings, Rule::ValueEllipsised);
+        assert_eq!(found.len(), 1, "{findings:?}");
+        assert!(found[0].what.contains("330"), "{}", found[0].what);
+    }
+
+    #[test]
+    fn a_value_that_fits_or_that_wraps_in_full_is_clean() {
+        // The clean fixture: it fits, and so does the same text wrapped to
+        // three lines (each fully shown, nothing cut).
+        assert!(of(&check(&info_row("GPL-3.0-or-later", 1, 120.0, 120.0, false)), Rule::ValueEllipsised).is_empty());
+        let mut wrapped = info_row("Apache-2.0 AND MIT AND Zlib AND BSD-3-Clause", 1, 184.0, 330.0, false);
+        {
+            let text = wrapped.nodes.iter_mut().find(|node| node.kind == Kind::Label && node.text.as_deref().is_some_and(|t| t.starts_with("Apache"))).unwrap();
+            let used = text.used.text.as_mut().unwrap();
+            used.lines = Some(2);
+            used.wrap.max_lines = None;
+            used.wrap.line_chars = vec![24, 20];
+        }
+        assert!(of(&check(&wrapped), Rule::ValueEllipsised).is_empty());
+    }
+
+    #[test]
+    fn a_value_wrapped_to_its_line_limit_with_text_left_over_is_cut() {
+        let mut cut = info_row("a b c d e f g h i j k l m n o p q r s t u v w x y z", 2, 184.0, 600.0, true);
+        {
+            let text = cut.nodes.iter_mut().find(|node| node.kind == Kind::Label && node.text.as_deref().is_some_and(|t| t.starts_with("a b"))).unwrap();
+            // 51 characters, 2 lines of 16 and 15 shown.
+            text.used.text.as_mut().unwrap().wrap.line_chars = vec![16, 15];
+        }
+        assert_eq!(of(&check(&cut), Rule::ValueEllipsised).len(), 1);
+    }
+
+    /// A path label as `PathLabel` draws it: the shortened text under a body
+    /// that carries the full text as its name.
+    fn path_label(full: &str, shown: &str, elided: bool) -> Snapshot {
+        let mut tree = Tree::default();
+        let root = tree.rect(None, (0.0, 0.0, 400.0, 56.0));
+        let body = tree.rect(Some(root), (0.0, 0.0, 200.0, 20.0));
+        tree.at(body).a11y.component = Some("PathLabel".into());
+        tree.at(body).a11y.name = Some(full.to_string());
+        let anchor = if elided {
+            let marked = tree.rect(Some(body), (0.0, 0.0, 200.0, 20.0));
+            tree.at(marked).a11y.component = Some("Elided".into());
+            marked
+        } else {
+            body
+        };
+        tree.text(anchor, shown, (0.0, 0.0, 200.0, 20.0), 190.0);
+        tree.snapshot()
+    }
+
+    #[test]
+    fn a_path_shortened_by_design_with_its_tooltip_is_allowed_and_one_without_is_found() {
+        let full = "/home/kieran/Documents/reports/final-report-2026.pdf";
+        let shown = "/home/kieran/…/final-report-2026.pdf";
+        assert!(of(&check(&path_label(full, shown, true)), Rule::ValueEllipsised).is_empty());
+        assert_eq!(of(&check(&path_label(full, shown, false)), Rule::ValueEllipsised).len(), 1);
+        // A path that was not shortened has nothing to declare.
+        assert!(of(&check(&path_label(full, full, false)), Rule::ValueEllipsised).is_empty());
+    }
+
+    #[test]
+    fn a_value_in_a_text_input_may_be_cut() {
+        let mut input = long_value_in_a_field("TextInput");
+        for node in &mut input.nodes {
+            if let Some(text) = node.used.text.as_mut() {
+                text.wrap.ellipsis = true;
+            }
+        }
+        assert!(of(&check(&input), Rule::ValueEllipsised).is_empty());
+    }
+
+    #[test]
+    fn text_that_a_scroll_view_holds_is_not_cut_by_it() {
+        let mut tree = Tree::default();
+        let root = tree.rect(None, (0.0, 0.0, 400.0, 100.0));
+        let scroller = tree.rect(Some(root), (0.0, 0.0, 400.0, 100.0));
+        tree.at(scroller).a11y.role = "ScrollView".into();
+        tree.clip(scroller);
+        tree.text(scroller, "A line below the fold", (0.0, 120.0, 200.0, 20.0), 190.0);
+        assert!(of(&check(&tree.snapshot()), Rule::ValueEllipsised).is_empty());
+    }
+
+    #[test]
+    fn text_on_the_fold_of_a_scroll_view_inside_a_clipping_window_is_scrolled_and_not_cut() {
+        let mut tree = Tree::default();
+        let root = tree.rect(None, (0.0, 0.0, 400.0, 100.0));
+        tree.clip(root);
+        let scroller = tree.rect(Some(root), (0.0, 0.0, 400.0, 100.0));
+        tree.at(scroller).a11y.role = "ScrollView".into();
+        tree.clip(scroller);
+        // A line that straddles the bottom edge of the window: its lower part is scrolled out.
+        tree.text(scroller, "A line on the fold", (0.0, 90.0, 200.0, 20.0), 190.0);
+        let found = check(&tree.snapshot());
+        assert!(of(&found, Rule::ValueEllipsised).is_empty(), "{found:?}");
+    }
+
+    /// A tab whose title is longer than its room, in a box named `FadeText` or not.
+    fn long_title(named: bool) -> Snapshot {
+        let mut tree = Tree::default();
+        let root = tree.rect(None, (0.0, 0.0, 400.0, 40.0));
+        let tab = tree.rect(Some(root), (0.0, 0.0, 100.0, 30.0));
+        tree.focusable(tab);
+        let fade = tree.rect(Some(tab), (0.0, 5.0, 100.0, 20.0));
+        tree.clip(fade);
+        if named {
+            tree.at(fade).a11y.component = Some("FadeText".into());
+        }
+        tree.text(fade, "A name far too long for the room it is given", (0.0, 5.0, 300.0, 20.0), 300.0);
+        tree.snapshot()
+    }
+
+    #[test]
+    fn a_line_that_fade_text_cuts_on_purpose_is_no_finding_and_the_same_box_unnamed_is() {
+        let named = check(&long_title(true));
+        assert!(of(&named, Rule::OutsideParent).is_empty(), "{named:?}");
+        assert!(of(&named, Rule::ValueEllipsised).is_empty(), "{named:?}");
+        assert!(of(&named, Rule::HiddenLabel).is_empty(), "{named:?}");
+        let plain = check(&long_title(false));
+        assert_eq!(of(&plain, Rule::OutsideParent).len(), 1, "{plain:?}");
+        assert_eq!(of(&plain, Rule::ValueEllipsised).len(), 1, "{plain:?}");
+        assert_eq!(of(&plain, Rule::HiddenLabel).len(), 1, "{plain:?}");
+    }
+
+    /// A window 400 wide with a box and a text in it, at the given places.
+    fn mirrored(text: (f32, f32), shape: (f32, f32)) -> Snapshot {
+        let mut tree = Tree::default();
+        let root = tree.rect(None, (0.0, 0.0, 400.0, 100.0));
+        tree.rect(Some(root), (shape.0, 10.0, shape.1, 20.0));
+        tree.text(root, "The battery is low.", (text.0, 50.0, text.1, 20.0), text.1);
+        tree.snapshot()
+    }
+
+    #[test]
+    fn a_text_a_pixel_or_two_off_its_reflection_is_shaping_and_a_box_that_far_off_is_a_finding() {
+        let ltr = Structure::of(&mirrored((100.0, 100.0), (100.0, 100.0)));
+        // Right to left the text is 1.5 px wider and keeps the reflection of its right edge.
+        let shaped = mirrored((198.5, 101.5), (200.0, 100.0));
+        assert!(direction_asymmetric(&ltr, &shaped).is_empty());
+        // The same slip in a plain box is a finding, and so is a text 4 px off.
+        let slipped_box = mirrored((200.0, 100.0), (198.5, 101.5));
+        assert_eq!(direction_asymmetric(&ltr, &slipped_box).len(), 1);
+        let misplaced = mirrored((196.0, 104.0), (200.0, 100.0));
+        assert_eq!(direction_asymmetric(&ltr, &misplaced).len(), 1);
+    }
+
+    /// A field's leading slot with an icon in it: `(x, y)` is where the icon's
+    /// 16 px box sits in the 36 px slot at the origin.
+    fn slot_with_icon(component: &str, (x, y): (f32, f32)) -> Snapshot {
+        let mut tree = Tree::default();
+        let field = tree.rect(None, (0.0, 0.0, 240.0, 36.0));
+        tree.row(field);
+        let slot = tree.rect(Some(field), (0.0, 0.0, 36.0, 36.0));
+        tree.at(slot).a11y.component = Some(component.to_string());
+        let icon = tree.rect(Some(slot), (x, y, 16.0, 16.0));
+        tree.at(icon).kind = Kind::Other;
+        tree.snapshot()
+    }
+
+    #[test]
+    fn an_icon_off_the_centre_of_its_slot_is_found() {
+        // The slot of a field that kept its glyph 8 px from the edge: the
+        // icon's centre is 16 px in, not 18.
+        for component in ["IconSlot", "IconButton"] {
+            let findings = check(&slot_with_icon(component, (8.0, 10.0)));
+            let found = of(&findings, Rule::IconNotCentred);
+            assert_eq!(found.len(), 1, "{component}: {findings:?}");
+            assert!(found[0].numbers.contains(&("off-x", -2.0)), "{:?}", found[0].numbers);
+            assert!(found[0].numbers.contains(&("off-y", 0.0)), "{:?}", found[0].numbers);
+        }
+        let high = check(&slot_with_icon("IconSlot", (10.0, 6.0)));
+        assert_eq!(of(&high, Rule::IconNotCentred).len(), 1, "{high:?}");
+    }
+
+    #[test]
+    fn an_icon_centred_in_its_slot_is_clean_within_half_a_pixel() {
+        for at in [(10.0, 10.0), (10.4, 9.6), (9.6, 10.4)] {
+            let findings = check(&slot_with_icon("IconSlot", at));
+            assert!(of(&findings, Rule::IconNotCentred).is_empty(), "{at:?}: {findings:?}");
+        }
+        // A box that is not a slot is not measured.
+        let other = check(&slot_with_icon("Row", (8.0, 10.0)));
+        assert!(of(&other, Rule::IconNotCentred).is_empty(), "{other:?}");
     }
 
     #[test]

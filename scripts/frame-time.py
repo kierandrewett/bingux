@@ -69,6 +69,9 @@ import tempfile
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from app_env import isolated  # noqa: E402
+
 SESSION = Path(os.environ.get("INSPECTOR_HARNESS", "/var/tmp/InspectorHarness")) / "session.sh"
 FILES_SESSION = SESSION.with_name("files-session.sh")
 TARGET = Path(os.environ.get("CARGO_TARGET_DIR", "/var/tmp/bingux-settings-target")) / "debug"
@@ -104,11 +107,11 @@ class Session:
         self.dir = Path(os.environ.get("INSPECTOR_HARNESS", "/var/tmp/InspectorHarness")) / "sessions" / name
         self.perf = workdir / "perf.log"
         self.watch = workdir / "watchdog.log"
-        env = dict(os.environ, INSPECT="0", BIN=str(binary),
+        env = isolated(dict(os.environ, INSPECT="0", BIN=str(binary),
                    BINGUX_PERF_LOG=str(self.perf), BINGUX_UI_WATCHDOG=str(watchdog_ms),
                    BINGUX_UI_WATCHDOG_LOG=str(self.watch),
                    BINGUX_SETTINGS_FAKE_NETWORK="online", BINGUX_SETTINGS_FAKE_MODEM="ok",
-                   BINGUX_SETTINGS_FAKE_DISPLAYS="1")
+                   BINGUX_SETTINGS_FAKE_DISPLAYS="1"))  # no write reaches the person's dconf
         if files:
             # The Files app in a 1200x800 window, with its own HOME.
             env.update(FILES_BIN=str(binary), FILES_HOME=str(FILES_HOME), W="1200", H="800")

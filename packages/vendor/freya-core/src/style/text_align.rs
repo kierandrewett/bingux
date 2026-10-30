@@ -4,8 +4,7 @@ use freya_engine::prelude::SkTextAlign;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Default, Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum TextAlign {
-    /// Align text to the left edge. This is the default.
-    #[default]
+    /// Align text to the left edge.
     Left = 0,
     /// Align text to the right edge.
     Right = 1,
@@ -13,7 +12,9 @@ pub enum TextAlign {
     Center = 2,
     /// Stretch each line to fill the width, except the last line.
     Justify = 3,
-    /// Align text to the start edge, following the text direction.
+    /// Align text to the start edge, following the text direction: the left
+    /// for left to right text, the right for right to left. This is the default.
+    #[default]
     Start = 4,
     /// Align text to the end edge, following the text direction.
     End = 5,

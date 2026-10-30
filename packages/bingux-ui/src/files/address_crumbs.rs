@@ -9,27 +9,29 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use bingux_files::listing::Cancel;
-use bingux_files::location::{self, subfolders};
+use bingux_files::location::subfolders;
 use bingux_files::places::Places;
-use bingux_files::{Kind, PlaceKind};
+use bingux_files::Kind;
 use freya::prelude::*;
 
 use super::address_list::{Lead, ListRow, NoticeRow, Part, rows_height, scroll_offset};
 use super::address_target::StopOnDrop;
 use super::address_trail::{Item, Metrics, layout};
 use super::directory::Where;
+use super::named::Roots;
 use super::file_icon::{FileIcon, FileKind, file_icon_view};
 use crate::component::ComponentName;
 use crate::controls::path_label::measure_text;
 use crate::controls::tooltip::hover_tip;
-use crate::controls::{StopRing, focus_stop_menu, focus_stop_with};
+use crate::controls::text_field::field_action;
+use crate::controls::{StopRing, focus_stop_press, focus_stop_pressed, focus_stop_with};
 use crate::icons::{self, Icon};
 use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
 use crate::shell::menu_query::{Candidate, Mark, Reaction};
 use crate::shell::type_ahead::use_list_query;
 use crate::shell::{MenuItem, Overlays, menu_item, menu_separator};
 use crate::style::*;
-use crate::surface::use_tokens;
+use crate::surface::{Interaction, use_tokens};
 use crate::task::{spawn_blocking, use_resource};
 use crate::typography::{BODY, Ink};
 
@@ -58,24 +60,24 @@ pub(super) struct Stop {
 }
 
 /// The stops of `location`, outermost first. A path in the home folder starts
-/// at Home, any other at Computer. The trail spells the path the text field
-/// holds, so the two never disagree about where you are.
+/// at Home, any other at Computer; Recent is one stop, `Recent`, and the
+/// Trash is one stop, `Trash`, with what is inside it named as it was before
+/// it was deleted ([`Roots::crumbs`]). The trail spells the place the text
+/// field holds, so the two never disagree about where you are.
 pub(super) fn stops(location: &Where, home: &Path) -> Vec<Stop> {
-    match location {
-        Where::Recent => vec![Stop {
-            label: "Recent".into(),
-            path: None,
-            icon: FileIcon::for_place_kind(PlaceKind::Recent),
-        }],
-        Where::Folder(path) => location::crumbs(path, home)
-            .into_iter()
-            .map(|crumb| Stop {
-                icon: FileIcon::folder_at(&crumb.path),
-                label: crumb.label,
-                path: Some(crumb.path),
-            })
-            .collect(),
-    }
+    let roots = Roots::at_home(home);
+    roots
+        .crumbs(location)
+        .into_iter()
+        .map(|stop| Stop {
+            icon: roots.icon(&stop.at),
+            path: match stop.at {
+                Where::Folder(path) => Some(path),
+                Where::Recent => None,
+            },
+            label: stop.label,
+        })
+        .collect()
 }
 
 /// The icon of the folder `name` inside `dir`, in a crumb's list.
@@ -117,7 +119,8 @@ impl Component for Crumbs {
         let stops = stops(&self.location, &self.home);
         let metrics = Metrics {
             crumb: 2.0 * S2.px(),
-            first_extra: IconSize::Control.px() + S1.px(),
+            // The icon's slot, less the crumb's own left padding, which it replaces.
+            first_extra: Dim::Dense.px(),
             chevron: Dim::Box5.px(),
             widest: Dim::Field.px(),
         };
@@ -310,20 +313,32 @@ fn crumb_menu(
             });
         })
     };
-    vec![
+    let roots = Roots::current();
+    let in_trash = roots.below_trash(path).is_some();
+    let copy_label = if in_trash { "Copy location" } else { "Copy path" };
+    let mut items = vec![
         menu_item("Open", move |_| {
             on_open.call(Where::Folder(open_path.clone()));
         }),
         menu_separator(),
-        menu_item("Copy path", move |_| {
-            let text = copy_path.display().to_string();
+        menu_item(copy_label, move |_| {
+            // The Trash has no path anyone could use: its address is `trash:///`.
+            let roots = Roots::current();
+            let text = match roots.below_trash(&copy_path) {
+                Some(_) => roots.uri(&Where::Folder(copy_path.clone())),
+                None => copy_path.display().to_string(),
+            };
             match freya::clipboard::Clipboard::set(text) {
                 Ok(()) => toast("Copied."),
                 Err(_) => toast("The path could not be copied."),
             }
         }),
-        bookmark,
-    ]
+    ];
+    // Nothing in the Trash is a place to keep.
+    if !in_trash {
+        items.push(bookmark);
+    }
+    items
 }
 
 /// One crumb: a folder's name. Pressing it opens the folder; a right click
@@ -344,35 +359,42 @@ struct CrumbButton {
 impl Component for CrumbButton {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let mut hovering = use_state(|| false);
+        let face = Interaction::use_interaction();
         let ink = if self.current { Ink::Text } else { Ink::Muted };
         let cut = self.shown != self.label;
-        let content = rect()
-            .component("AddressCrumb")
-            .tw(
-                &tokens,
-                &[
-                    flex_row(),
-                    items(Align::Center),
-                    h(Dim::Dense),
-                    px(S2),
-                    gap(S1),
-                    rounded(Radius::Inner),
-                    surface(Paint::Transparent, hovering(), false, false),
-                ],
+        // The stop is the box and carries the ring; the face inside it is lit
+        // by the pointer. The face hears the press first and lets it through.
+        // The first crumb's icon sits in a square slot, as the text field's
+        // does, so the icon and the text start where the field's do.
+        let lead = self.icon.map(|icon| {
+            rect()
+                .tw(&tokens, &[w(Dim::Dense), h_full(), center()])
+                .child(file_icon_view(&tokens, &icon, IconSize::Control, false))
+        });
+        let content = rect().component("AddressCrumb").tw(&tokens, &[h(Dim::Dense)]).child(
+            face.attach(
+                rect().tw(
+                    &tokens,
+                    &[
+                        flex_row(),
+                        items(Align::Center),
+                        h_full(),
+                        if lead.is_some() { pr(S2) } else { px(S2) },
+                        gap(if lead.is_some() { S2 } else { S1 }),
+                        rounded(Radius::Inner),
+                        surface(Paint::Transparent, face.hovering(), face.pressing(), false),
+                    ],
+                ),
             )
-            .on_pointer_enter(move |_| hovering.set(true))
-            .on_pointer_leave(move |_| hovering.set(false))
-            .maybe_child(
-                self.icon
-                    .map(|icon| file_icon_view(&tokens, &icon, IconSize::Control, false)),
-            )
+            .maybe_child(lead)
             .child(
                 BODY.in_ink(ink)
                     .label(&tokens, self.shown.clone())
                     .max_lines(1),
-            );
-        let stop = focus_stop_menu(
+            ),
+        );
+        let stop = focus_stop_pressed(
+            use_a11y(),
             content,
             self.label.clone(),
             AccessibilityRole::Button,
@@ -380,6 +402,8 @@ impl Component for CrumbButton {
             Radius::Inner,
             self.on_press.clone(),
             self.menu.clone(),
+            StopRing::Outside,
+            Some(face.pressing),
         );
         if cut {
             hover_tip(stop, self.label.clone())
@@ -399,7 +423,7 @@ struct OverflowButton {
 impl Component for OverflowButton {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let mut hovering = use_state(|| false);
+        let face = Interaction::use_interaction();
         let mut area = use_state(Area::default);
         let id = use_a11y();
         let focus = use_focus(id);
@@ -424,26 +448,26 @@ impl Component for OverflowButton {
                 focus() == Focus::Keyboard,
             );
         });
-        let content = rect()
-            .component("AddressOverflow")
-            .tw(
-                &tokens,
-                &[
-                    flex_row(),
-                    items(Align::Center),
-                    h(Dim::Dense),
-                    px(S2),
-                    rounded(Radius::Inner),
-                    surface(Paint::Transparent, hovering(), false, false),
-                ],
+        let content = rect().component("AddressOverflow").tw(&tokens, &[h(Dim::Dense)]).child(
+            face.attach(
+                rect().tw(
+                    &tokens,
+                    &[
+                        flex_row(),
+                        items(Align::Center),
+                        h_full(),
+                        px(S2),
+                        rounded(Radius::Inner),
+                        surface(Paint::Transparent, face.hovering(), face.pressing(), false),
+                    ],
+                ),
             )
-            .on_pointer_enter(move |_| hovering.set(true))
-            .on_pointer_leave(move |_| hovering.set(false))
             .child(
                 BODY.in_ink(Ink::Muted)
                     .label(&tokens, "…".to_string())
                     .max_lines(1),
-            );
+            ),
+        );
         let stop = focus_stop_with(
             id,
             content,
@@ -525,9 +549,10 @@ struct Chevron {
 
 impl Component for Chevron {
     fn render(&self) -> impl IntoElement {
+        let direction = crate::controls::direction::use_direction();
         let tokens = use_tokens();
         let mut open = use_state(|| false);
-        let mut hovering = use_state(|| false);
+        let face = Interaction::use_interaction();
         let mut folders = use_state(|| None::<Arc<Folders>>);
         let mut highlighted = use_state(|| None::<usize>);
         let mut hovered = use_state(|| None::<usize>);
@@ -644,7 +669,8 @@ impl Component for Chevron {
                         }
                     }
                 }
-                let Key::Named(key) = &event.key else {
+                let reading = direction.reading_key(&event.key);
+                let Key::Named(key) = &reading else {
                     return;
                 };
                 if !open() {
@@ -680,38 +706,36 @@ impl Component for Chevron {
             }
         };
 
+        let lit = face.hovering() || open();
         let content = rect()
             .component("AddressChevron")
-            .tw(
-                &tokens,
-                &[
-                    w(Dim::Box5),
-                    h(Dim::Dense),
-                    center(),
-                    rounded(Radius::Inner),
-                    surface(Paint::Transparent, hovering() || open(), false, false),
-                ],
-            )
+            .tw(&tokens, &[w(Dim::Box5), h(Dim::Dense)])
             .a11y_builder(move |builder| builder.set_expanded(open()))
-            .on_pointer_enter(move |_| hovering.set(true))
-            .on_pointer_leave(move |_| hovering.set(false))
-            .child(icons::icon(
-                if open() { Icon::PanDown } else { Icon::PanEnd },
-                IconSize::Mark,
-                if hovering() || open() {
-                    Ink::Text
-                } else {
-                    Ink::Muted
-                }
-                .color(&tokens),
-            ));
-        let stop = crate::controls::focus_stop(
+            .child(
+                face.attach(rect().tw(
+                    &tokens,
+                    &[
+                        w_full(),
+                        h_full(),
+                        center(),
+                        rounded(Radius::Inner),
+                        surface(Paint::Transparent, lit, face.pressing(), false),
+                    ],
+                ))
+                .child(icons::icon(
+                    if open() { Icon::PanDown } else { Icon::PanEnd },
+                    IconSize::Mark,
+                    if lit { Ink::Text } else { Ink::Muted }.color(&tokens),
+                )),
+            );
+        let stop = focus_stop_press(
             content,
             format!("Folders in {}", self.title),
             AccessibilityRole::Button,
             true,
             Radius::Inner,
             activate,
+            face.pressing,
         );
 
         let rows: Vec<Element> = match &list {
@@ -868,34 +892,47 @@ impl Component for CompactTrail {
         .title("Location")
         .on_dismiss(close);
 
+        // The stop is the box and carries the ring. The face inside it is the
+        // dropdown's: the control fill, lit under the pointer and while the
+        // sheet is open, deeper while pressed. Its inset, icon, gap and name
+        // are the typed-path field's, so the field replaces it in place.
+        let face = Interaction::use_interaction();
         let content = rect()
             .component("AddressCompact")
-            .tw(
-                &tokens,
-                &[
-                    flex_row(),
-                    grow_children(),
-                    items(Align::Center),
-                    gap(S2),
-                    w_full(),
-                    h_full(),
-                    px(S3),
-                    rounded(Radius::Control),
-                ],
-            )
-            .child(file_icon_view(&tokens, &current_icon, IconSize::Control, false))
+            .tw(&tokens, &[w_full(), h_full()])
             .child(
-                BODY.in_ink(Ink::Text)
-                    .label(&tokens, name.clone())
-                    .max_lines(1)
-                    .text_overflow(TextOverflow::Ellipsis)
-                    .width(Size::flex(1.0)),
-            )
-            .child(icons::icon(
-                Icon::PanDown,
-                IconSize::Row,
-                Ink::Muted.color(&tokens),
-            ));
+                face.attach(rect().tw(
+                    &tokens,
+                    &[
+                        flex_row(),
+                        grow_children(),
+                        items(Align::Center),
+                        gap(S1),
+                        w_full(),
+                        h_full(),
+                        pr(S3),
+                        rounded(Radius::Control),
+                        surface(Paint::Control, face.hovering() || open(), face.pressing(), false),
+                    ],
+                ))
+                .child(
+                    rect()
+                        .tw(&tokens, &[w(Dim::Control), h_full(), center()])
+                        .child(file_icon_view(&tokens, &current_icon, IconSize::Control, false)),
+                )
+                .child(
+                    BODY.in_ink(Ink::Text)
+                        .label(&tokens, name.clone())
+                        .max_lines(1)
+                        .text_overflow(TextOverflow::Ellipsis)
+                        .width(Size::flex(1.0)),
+                )
+                .child(icons::icon(
+                    Icon::PanDown,
+                    IconSize::Row,
+                    Ink::Muted.color(&tokens),
+                )),
+            );
         let trail = crate::controls::focus_stop(
             content,
             format!("{name}. Show the path"),
@@ -913,6 +950,8 @@ impl Component for CompactTrail {
             }),
         );
         let on_edit = self.on_edit.clone();
+        // No clip: the trail's ring is drawn outside its box. The pencil sits
+        // where the field's trailing button does.
         rect()
             .component("AddressCompactBar")
             .tw(
@@ -925,17 +964,14 @@ impl Component for CompactTrail {
                     h(Dim::Control),
                     rounded(Radius::Control),
                     bg(Paint::Control),
-                    clip(),
                 ],
             )
             .on_sized(move |event: Event<SizedEventData>| area.set_if_modified(event.area))
             .child(rect().tw(&tokens, &[w_flex(), h_full()]).child(trail))
             .child(
-                crate::controls::button::icon_button(Icon::DocumentEdit, move |_: ()| {
-                    on_edit.call(())
-                })
-                .size(Dim::Control)
-                .tooltip("Type a path"),
+                rect()
+                    .tw(&tokens, &[flex_row(), items(Align::Center), h_full(), pr(FIELD_INSET)])
+                    .child(field_action(Icon::DocumentEdit, move |_: ()| on_edit.call(())).tooltip("Type a path")),
             )
             .child(Element::from(panel))
     }

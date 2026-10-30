@@ -19,6 +19,8 @@ freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar"] }
 # `testing` is always on: `bingux-taxonomy --snapshot DIR` renders every page
 # headlessly (see src/snapshot_mode.rs).
 bingux-ui = { path = "../bingux-ui", features = ["testing"] }
+# A PDF and a WAV written byte by byte, for the preview specimens.
+bingux-preview-core = { path = "../bingux-preview-core" }
 
 # Desktop scroll feel; see ../vendor/README.md.
 [patch.crates-io]
@@ -26,6 +28,8 @@ freya-winit = { path = "../vendor/freya-winit" }
 freya-core = { path = "../vendor/freya-core" }
 freya-animation = { path = "../vendor/freya-animation" }
 freya-components = { path = "../vendor/freya-components" }
+torin = { path = "../vendor/torin" }
+winit = { path = "../vendor/winit" }
 
 # Same profile as bingux-settings: optimised dependencies, a quick rebuild of
 # the app itself.

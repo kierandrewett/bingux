@@ -11,6 +11,7 @@
 
 use freya::prelude::*;
 
+use super::direction::use_direction;
 use crate::component::ComponentName;
 use crate::motion::Focusable;
 use crate::style::*;
@@ -71,8 +72,10 @@ impl SplitPane {
 impl Component for SplitPane {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let direction = use_direction();
         let mut area = use_state(Area::default);
         let mut dragging = use_state(|| false);
+        let mut hovering = use_state(|| false);
         let mut ratio = self.ratio.clone();
         let vertical = self.vertical;
         let bounds = *area.read();
@@ -99,7 +102,14 @@ impl Component for SplitPane {
                 return;
             }
             let (low, high) = share_bounds(length);
-            let share = ((pointer as f32 - origin) / length).clamp(low, high);
+            // The first pane starts at the start edge: the right one when the panes read
+            // from the right, so the pointer is measured from there.
+            let along = if direction.is_rtl() && !vertical {
+                origin + length - pointer as f32
+            } else {
+                pointer as f32 - origin
+            };
+            let share = (along / length).clamp(low, high);
             ratio.set_if_modified(share);
         };
 
@@ -107,27 +117,34 @@ impl Component for SplitPane {
         let focus = use_focus(a11y_id);
         let mut keyed = self.ratio.clone();
         let on_key_down = move |event: Event<KeyboardEventData>| {
+            // Along the reading direction: the first pane grows towards the end, which is
+            // Left when the panes read from the right.
             let delta = match (&event.key, vertical) {
-                (Key::Named(NamedKey::ArrowLeft), false)
-                | (Key::Named(NamedKey::ArrowUp), true) => -KEY_STEP,
-                (Key::Named(NamedKey::ArrowRight), false)
-                | (Key::Named(NamedKey::ArrowDown), true) => KEY_STEP,
+                (Key::Named(NamedKey::ArrowUp), true) => -KEY_STEP,
+                (Key::Named(NamedKey::ArrowDown), true) => KEY_STEP,
+                (Key::Named(NamedKey::ArrowLeft | NamedKey::ArrowRight), false) => {
+                    direction.along(&event.key).unwrap_or(0) as f32 * KEY_STEP
+                }
                 _ => return,
             };
             event.stop_propagation();
             keyed.set_if_modified((value + delta).clamp(low, high));
         };
+        // The divider is the pane's whole length, so its ring is drawn inside it: outside, a
+        // clipped container (the card the panes sit in) cuts the ring off at both ends. It
+        // lights under the pointer and while it is held.
+        let lit = surface(Paint::Transparent, hovering(), dragging(), false);
         let hit = if vertical {
             rect()
                 .width(Size::fill())
                 .height(Size::px(HIT_PX))
-                .tw(&tokens, &[items(Align::Center), justify(Align::Center)])
+                .tw(&tokens, &[items(Align::Center), justify(Align::Center), lit])
                 .child(rect().tw(&tokens, &[w_full(), h(Dim::Hairline), bg(Paint::Separator)]))
         } else {
             rect()
                 .width(Size::px(HIT_PX))
                 .height(Size::fill())
-                .tw(&tokens, &[items(Align::Center), justify(Align::Center)])
+                .tw(&tokens, &[items(Align::Center), justify(Align::Center), lit])
                 .child(rect().tw(&tokens, &[h_full(), w(Dim::Hairline), bg(Paint::Separator)]))
         };
         let divider = hit
@@ -136,13 +153,16 @@ impl Component for SplitPane {
             .a11y_role(AccessibilityRole::Splitter)
             .a11y_alt("Pane divider")
             .on_key_down(on_key_down)
+            .on_pointer_enter(move |_| hovering.set(true))
+            .on_pointer_leave(move |_| hovering.set(false))
             .on_pointer_down(move |event: Event<PointerEventData>| {
                 if !event.data().is_primary() {
                     return;
                 }
                 event.stop_propagation();
                 dragging.set(true);
-            }).focusable(focus());
+            })
+            .focusable_inside(focus());
 
         // The first pane is a run-time share of the length, so a raw percent;
         // the second takes what the divider leaves.

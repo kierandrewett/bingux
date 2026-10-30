@@ -1,5 +1,6 @@
 //! The context menus of the file views: a file or folder, several items,
-//! empty space, the column header and a place of the sidebar.
+//! empty space and the column header. The sidebar's rows have theirs in
+//! `place_menu.rs`.
 //!
 //! Each menu is built in two steps. A pure step decides which rows there are,
 //! in the GNOME Files grouping, from [`Facts`] about the selection and the
@@ -15,17 +16,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use bingux_files::places::{SpecialFolder, system_user_dirs};
-use bingux_files::{Entry, Place, PlaceKind, Sort, SortKey};
-use freya::prelude::*;
+use bingux_files::{Entry, Sort, SortKey};
 
-use super::actions::{
-    self, App, Availability, Capabilities, Command, Env, Facts, availability, shortcut,
-};
+use super::actions::{self, App, Availability, Command, Env, Facts, TrashView, availability, shortcut};
 use super::columns::columns_menu_items;
-use super::directory::Where;
 use super::zoom::{LADDER, ViewKind, kind_of};
 use crate::app_icon::AppChoice;
-use crate::shell::{MenuItem, Overlays, app_menu_item, menu_item, menu_separator, submenu};
+use crate::shell::{MenuItem, app_menu_item, menu_item, menu_separator, submenu};
 
 
 /// A change the menu makes to the view rather than to files.
@@ -370,9 +367,11 @@ fn new_file_row(facts: &Facts, templates: &[Template]) -> Option<Row> {
 /// Undo with nothing done) is left out rather than greyed; Paste stays in a
 /// folder, greyed until something is copied.
 fn empty_plan(facts: &Facts, looks: Looks, templates: &[Template], compress: Option<Row>) -> Vec<Row> {
+    // In the Trash a paste moves what was copied to the Trash.
+    let paste_label = if facts.trash == TrashView::Root { "Paste into Trash" } else { "Paste" };
     let paste = facts
         .in_folder
-        .then(|| Row::command_greyed("Paste", facts, Command::Paste))
+        .then(|| Row::command_greyed(paste_label, facts, Command::Paste))
         .flatten();
     let undo = facts
         .undo
@@ -556,95 +555,10 @@ pub(super) fn menu_for_header(env: &Env) -> Vec<MenuItem> {
     items
 }
 
-// ---------------------------------------------------------------------------
-// Places
-// ---------------------------------------------------------------------------
-
-/// What a place's menu needs from the sidebar.
-#[derive(Clone)]
-pub struct PlaceEnv {
-    pub overlays: Overlays,
-    pub caps: Capabilities,
-    pub on_open: EventHandler<Where>,
-    pub on_open_new_tab: EventHandler<Where>,
-    pub on_remove_bookmark: EventHandler<PathBuf>,
-    pub on_properties: EventHandler<PathBuf>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-enum PlaceAct {
-    Open,
-    OpenNewTab,
-    RemoveBookmark,
-    Properties,
-}
-
-/// The rows of a place's menu, as `(label, action)` with separators as
-/// `None`.
-fn place_plan(caps: Capabilities, kind: PlaceKind, has_folder: bool) -> Vec<Option<(&'static str, PlaceAct)>> {
-    let mut groups: Vec<Vec<(&'static str, PlaceAct)>> = vec![vec![("Open", PlaceAct::Open)]];
-    if caps.new_tab && has_folder {
-        groups[0].push(("Open in new tab", PlaceAct::OpenNewTab));
-    }
-    if caps.bookmarks && kind == PlaceKind::Bookmark && has_folder {
-        groups.push(vec![("Remove from bookmarks", PlaceAct::RemoveBookmark)]);
-    }
-    if caps.properties && has_folder {
-        groups.push(vec![("Properties", PlaceAct::Properties)]);
-    }
-    let mut rows = Vec::new();
-    for group in groups {
-        if !rows.is_empty() {
-            rows.push(None);
-        }
-        rows.extend(group.into_iter().map(Some));
-    }
-    rows
-}
-
-/// The menu of a row of the places sidebar. A volume's Unmount and Eject are
-/// added by the caller with [`place_menu_with`].
-pub fn place_menu(env: PlaceEnv, place: &Place) -> Vec<MenuItem> {
-    place_menu_with(env, place, Vec::new())
-}
-
-/// [`place_menu`] with `extra` items after the standard ones, behind a
-/// separator: the extension point for what only some places have, such as
-/// Unmount for a mounted volume.
-pub fn place_menu_with(env: PlaceEnv, place: &Place, extra: Vec<MenuItem>) -> Vec<MenuItem> {
-    let target = match &place.path {
-        Some(path) => Where::Folder(path.clone()),
-        None => Where::Recent,
-    };
-    let mut items: Vec<MenuItem> = place_plan(env.caps, place.kind, place.path.is_some())
-        .into_iter()
-        .map(|row| {
-            let Some((label, act)) = row else {
-                return menu_separator();
-            };
-            let env = env.clone();
-            let target = target.clone();
-            let path = place.path.clone();
-            menu_item(label, move |_| match (&act, &path) {
-                (PlaceAct::Open, _) => env.on_open.call(target.clone()),
-                (PlaceAct::OpenNewTab, _) => env.on_open_new_tab.call(target.clone()),
-                (PlaceAct::RemoveBookmark, Some(path)) => env.on_remove_bookmark.call(path.clone()),
-                (PlaceAct::Properties, Some(path)) => env.on_properties.call(path.clone()),
-                _ => {}
-            })
-        })
-        .collect();
-    if !extra.is_empty() {
-        items.push(menu_separator());
-        items.extend(extra);
-    }
-    items
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::actions::TrashView;
+    use super::actions::{Capabilities, TrashView};
 
     fn facts(caps: Capabilities, selected: usize, folders: usize) -> Facts {
         Facts {
@@ -866,10 +780,16 @@ mod tests {
         assert!(enabled(&rows), "something to empty");
         in_trash.shown = 0;
         assert!(offers(&plan(&in_trash), "Empty Trash") && !enabled(&plan(&in_trash)), "greyed when empty");
-        // No new folder, paste or new file in the Trash.
+        // Nothing is made in the Trash; a paste there moves to the Trash.
         for gone in ["New folder", "Paste", "New file", "Empty file"] {
             assert!(!offers(&plan(&in_trash), gone), "{gone}");
         }
+        let greyed = |rows: &[Row], wanted: &str| {
+            rows.iter().any(|row| matches!(row, Row::Item(item) if item.label == wanted && !item.enabled))
+        };
+        assert!(offers(&plan(&in_trash), "Paste into Trash") && !greyed(&plan(&in_trash), "Paste into Trash"));
+        in_trash.can_paste = false;
+        assert!(greyed(&plan(&in_trash), "Paste into Trash"), "nothing to paste");
     }
 
     #[test]
@@ -981,14 +901,14 @@ mod tests {
         let none = labels(&plan(&facts(Capabilities::FILES_APP, 0, 0)));
         assert!(!none.iter().any(|label| label.starts_with("Undo")));
         let mut with_undo = facts(Capabilities::FILES_APP, 0, 0);
-        with_undo.undo = Some("Undo Rename");
+        with_undo.undo = Some("Undo rename");
         let rows = plan(&with_undo);
         assert_eq!(
             labels(&rows)[3..5],
-            ["Paste".to_owned(), "Undo Rename".to_owned()]
+            ["Paste".to_owned(), "Undo rename".to_owned()]
         );
         let hint = rows.iter().find_map(|row| match row {
-            Row::Item(item) if item.label == "Undo Rename" => Some((item.shortcut, item.enabled)),
+            Row::Item(item) if item.label == "Undo rename" => Some((item.shortcut, item.enabled)),
             _ => None,
         });
         assert_eq!(hint, Some((Some("Ctrl+Z"), true)));
@@ -1190,34 +1110,5 @@ mod tests {
         assert!(!sorted(descending, &Act::SortKey(SortKey::Modified)).descending);
         assert!(sorted(descending, &Act::SortKey(SortKey::Name)).descending);
         assert!(!sorted(descending, &Act::Descending(false)).descending);
-    }
-
-    fn place(kind: PlaceKind, folder: bool) -> Vec<String> {
-        place_plan(Capabilities::FILES_APP, kind, folder)
-            .into_iter()
-            .map(|row| row.map_or_else(|| "---".to_owned(), |(label, _)| label.to_owned()))
-            .collect()
-    }
-
-    #[test]
-    fn place_menus() {
-        assert_eq!(place(PlaceKind::Recent, false), ["Open"]);
-        assert_eq!(
-            place(PlaceKind::Home, true),
-            ["Open", "Open in new tab", "---", "Properties"]
-        );
-        assert_eq!(
-            place(PlaceKind::Bookmark, true),
-            [
-                "Open",
-                "Open in new tab",
-                "---",
-                "Remove from bookmarks",
-                "---",
-                "Properties"
-            ]
-        );
-        let chooser = place_plan(Capabilities::CHOOSER, PlaceKind::Bookmark, true);
-        assert!(chooser.iter().flatten().all(|(label, _)| *label != "Open in new tab"));
     }
 }

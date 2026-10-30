@@ -104,6 +104,7 @@ impl RenderPipeline<'_> {
                                 canvas: self.canvas,
                                 visible_area: clip_area,
                                 scale_factor: self.scale_factor,
+                                direction: self.tree.text_style_state.get(clip_node_id).map(|state| state.direction).unwrap_or_default(),
                             };
 
                             clip_element.clip(clip_context);
@@ -127,7 +128,7 @@ impl RenderPipeline<'_> {
                         self.canvas.concat(&matrix);
                     }
 
-                    let render_rect = element.render_rect(&visible_area, self.scale_factor as f32);
+                    let render_rect = element.render_rect(&visible_area, self.scale_factor as f32, text_style_state.direction);
 
                     // Apply inherited opacity effects with bounds expanded
                     // to accommodate outset shadows

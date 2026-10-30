@@ -29,6 +29,10 @@ pub const MAX_MESSAGE: usize = 4096;
 pub const MAX_WORDS: usize = 24;
 /// The most tracks one `Tracks` message lists.
 pub const MAX_TRACKS: usize = 16;
+/// The most pages one `PageSizes` message lists.
+pub const MAX_PAGE_SIZES: usize = 256;
+/// The most pages the host opens; a longer document is shown up to here.
+pub const MAX_PAGES: u32 = 5000;
 
 /// What the host can do, from `Ready`.
 pub mod feature {
@@ -88,7 +92,11 @@ pub enum Message {
     OpenDocument,
     Play,
     Pause,
-    Seek { ns: u64 },
+    /// Move to `ns`. `accurate` lands on that exact frame (slower); otherwise
+    /// the host snaps to the nearest keyframe (fast, for dragging a bar). The
+    /// host answers with a `Position` carrying this request's id once the
+    /// move is done.
+    Seek { ns: u64, accurate: bool },
     /// Volume in thousandths: 1000 is full.
     SetVolume { permille: u32 },
     SetMute { muted: bool },
@@ -131,6 +139,11 @@ pub enum Message {
     /// Words of a page; `more` says another message follows.
     PageTextIs { page: u32, words: Vec<Word>, more: bool },
     SearchHit { page: u32, rects: Vec<Rect> },
+    /// The size of pages `first..` in thousandths of a point, sent after
+    /// `Opened` until every page is listed.
+    PageSizes { first: u32, sizes: Vec<(u32, u32)> },
+    /// A search finished: `hits` words matched over all pages.
+    SearchDone { hits: u32 },
     Error { code: ErrorCode, message: String },
 }
 
@@ -189,6 +202,8 @@ mod tag {
     pub const PAGE_TEXT_IS: u8 = 72;
     pub const SEARCH_HIT: u8 = 73;
     pub const ERROR: u8 = 74;
+    pub const PAGE_SIZES: u8 = 75;
+    pub const SEARCH_DONE: u8 = 76;
 }
 
 /// A message and the request it belongs to.
@@ -359,6 +374,8 @@ pub fn encode(packet: &Packet) -> Vec<u8> {
         Cue { .. } => tag::CUE,
         PageTextIs { .. } => tag::PAGE_TEXT_IS,
         SearchHit { .. } => tag::SEARCH_HIT,
+        PageSizes { .. } => tag::PAGE_SIZES,
+        SearchDone { .. } => tag::SEARCH_DONE,
         Error { .. } => tag::ERROR,
     };
     out.u8(tag);
@@ -375,7 +392,10 @@ pub fn encode(packet: &Packet) -> Vec<u8> {
             out.bool(*subtitle_file);
         }
         OpenDocument | Play | Pause | Close => {}
-        Seek { ns } => out.u64(*ns),
+        Seek { ns, accurate } => {
+            out.u64(*ns);
+            out.bool(*accurate);
+        }
         SetVolume { permille } | SetRate { permille } => out.u32(*permille),
         SetMute { muted } => out.bool(*muted),
         SetSize { max_w, max_h } => {
@@ -447,9 +467,20 @@ pub fn encode(packet: &Packet) -> Vec<u8> {
         PageTextIs { page, words, more } => {
             out.u32(*page);
             out.bool(*more);
-            let words = &words[..words.len().min(MAX_WORDS)];
-            out.u16(words.len() as u16);
-            for word in words {
+            // As many words as fit: a message is at most `MAX_MESSAGE`.
+            let mut budget = MAX_MESSAGE - 64;
+            let fit = words
+                .iter()
+                .take(MAX_WORDS)
+                .take_while(|word| {
+                    let size = 16 + 2 + word.text.len().min(512);
+                    let fits = size <= budget;
+                    budget = budget.saturating_sub(size);
+                    fits
+                })
+                .count();
+            out.u16(fit as u16);
+            for word in &words[..fit] {
                 out.rect(word.rect);
                 out.str(&word.text);
             }
@@ -462,6 +493,16 @@ pub fn encode(packet: &Packet) -> Vec<u8> {
                 out.rect(*rect);
             }
         }
+        PageSizes { first, sizes } => {
+            out.u32(*first);
+            let sizes = &sizes[..sizes.len().min(MAX_PAGE_SIZES)];
+            out.u16(sizes.len() as u16);
+            for (width, height) in sizes {
+                out.u32(*width);
+                out.u32(*height);
+            }
+        }
+        SearchDone { hits } => out.u32(*hits),
         Error { code, message } => {
             out.u8(code.to_u8());
             out.str(message);
@@ -498,7 +539,7 @@ pub fn decode(bytes: &[u8]) -> Result<Packet, ProtocolError> {
         tag::OPEN_DOCUMENT => OpenDocument,
         tag::PLAY => Play,
         tag::PAUSE => Pause,
-        tag::SEEK => Seek { ns: r.u64()? },
+        tag::SEEK => Seek { ns: r.u64()?, accurate: r.bool()? },
         tag::SET_VOLUME => SetVolume { permille: r.u32()? },
         tag::SET_MUTE => SetMute { muted: r.bool()? },
         tag::SET_RATE => SetRate { permille: r.u32()? },
@@ -584,6 +625,15 @@ pub fn decode(bytes: &[u8]) -> Result<Packet, ProtocolError> {
             }
             SearchHit { page, rects }
         }
+        tag::PAGE_SIZES => {
+            let first = r.u32()?;
+            let mut sizes = Vec::new();
+            for _ in 0..r.count(MAX_PAGE_SIZES)? {
+                sizes.push((r.u32()?, r.u32()?));
+            }
+            PageSizes { first, sizes }
+        }
+        tag::SEARCH_DONE => SearchDone { hits: r.u32()? },
         tag::ERROR => Error {
             code: ErrorCode::from_u8(r.u8()?)?,
             message: r.str()?,
@@ -608,7 +658,7 @@ mod tests {
             Message::OpenDocument,
             Message::Play,
             Message::Pause,
-            Message::Seek { ns: 5_000_000_000 },
+            Message::Seek { ns: 5_000_000_000, accurate: true },
             Message::SetVolume { permille: 800 },
             Message::SetMute { muted: true },
             Message::SetRate { permille: 1500 },
@@ -643,6 +693,8 @@ mod tests {
                 more: true,
             },
             Message::SearchHit { page: 2, rects: vec![rect, rect] },
+            Message::PageSizes { first: 3, sizes: vec![(612_000, 792_000), (595_000, 842_000)] },
+            Message::SearchDone { hits: 4 },
             Message::Error { code: ErrorCode::NoDecoder, message: "No decoder for H.265.".into() },
         ]
     }

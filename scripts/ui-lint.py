@@ -33,6 +33,37 @@ import re
 import sys
 from pathlib import Path
 
+# The rules of design/rules.json each kind of finding holds, and the words that tell the kinds
+# apart in this script's output (read by scripts/rules-check.py; a kind with no ID holds no rule yet).
+RULE_IDS = {
+    "direct-styling": ["DR-03"],
+    "raw-colour": ["DR-03"],
+    "ink-near-fill": ["CL-04"],
+    "fixed-size": ["DR-03"],
+    "header-size": ["SZ-02"],
+    "icon-size": ["SZ-03"],
+    "window-launch": ["IN-01"],
+    "blocking-call": ["MO-03", "BH-03"],
+    "panic-manifest": ["DG-04"],
+    "raw-press": ["PR-01", "FC-04"],
+    "app-about": [],
+    "own-loop": ["MO-04", "MO-10"],
+}
+RULE_MESSAGES = {
+    "direct-styling": r"styles a box directly",
+    "raw-colour": r"is a raw colour|Color::TRANSPARENT|is a raw value",
+    "ink-near-fill": r"sits near bg\(Paint::",
+    "fixed-size": r"uses a fixed size",
+    "header-size": r"sizes a header element|height must come from",
+    "icon-size": r"icon size .* is not an IconSize",
+    "window-launch": r"starts a window without the inspector",
+    "blocking-call": r" blocks; use the wrappers| blocks the UI thread|in the initial value of a state or memo",
+    "panic-manifest": r"panic = \"abort\"|must say panic = \"unwind\"|must patch freya-core",
+    "raw-press": r"a press handler on a bare box",
+    "app-about": r"starts an Application without",
+    "own-loop": r"a looping animation",
+}
+
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = [
     ROOT / "packages/bingux-ui/src",
@@ -50,18 +81,33 @@ SKIP_FILES = {
     ROOT / "packages/bingux-ui/src/typography.rs",
     ROOT / "packages/bingux-ui/src/icons.rs",
     ROOT / "packages/bingux-ui/src/snapshot.rs",
+    # The tooltip size tests hang a bubble from boxes of exact, arbitrary
+    # pixel widths narrower than its text: that is what they test.
+    ROOT / "packages/bingux-ui/src/controls/tooltip_layout_tests.rs",
     ROOT / "packages/bingux-ui/examples/icon_sheet.rs",
     ROOT / "packages/bingux-ui/src/surface.rs",
     # Contrast measurement: colour maths and the matrix that reads raw tokens.
     ROOT / "packages/bingux-ui/src/contrast.rs",
     ROOT / "packages/bingux-ui/src/contrast_matrix.rs",
     ROOT / "packages/bingux-ui/src/charts/palette.rs",
+    # The tones of the colour file icons are derived from, and checked against,
+    # the raw token colours of every ground a row is drawn on.
+    ROOT / "packages/bingux-ui/src/files/colour.rs",
+    ROOT / "packages/bingux-ui/src/files/colour_tests.rs",
+    # Test fixtures that measure exact geometry or paint raw probe colours:
+    # RTL mirror probes, a bright-red dialog under a menu, a blue test PNG.
+    ROOT / "packages/bingux-ui/src/controls/hit_area_tests.rs",
+    ROOT / "packages/bingux-ui/src/files/preview_step_tests.rs",
+    ROOT / "packages/bingux-ui/src/controls/direction_tests.rs",
+    ROOT / "packages/bingux-ui/src/shell/menu_over_dialog_tests.rs",
+    ROOT / "packages/bingux-ui/src/preview/behaviour_tests.rs",
+    ROOT / "packages/bingux-ui/src/inspector/state_checks/tests.rs",
     ROOT / "packages/bingux-ui/src/charts/svg.rs",
 }
 
 STYLING = re.compile(
     r"\.(padding|spacing|margin|corner_radius|rounded(?:_[a-z0-9]+)?|background|border|shadow|"
-    r"font_size|font_weight|color|direction|content|cross_align|main_align|overflow)\(|\.center\(\)"
+    r"font_size|font_weight|color|direction|content|cross_align|main_align|overflow)\(|(?<![\w\]])\.center\(\)"
 )
 COLOUR_FIELD = re.compile(
     r"\btokens\.(bg|surface|sidebar|elevated|control|separator|card|hover|pressed|selection|border|"
@@ -153,7 +199,16 @@ def check(path: Path) -> list[str]:
         if len(parts) > 1 and not parts[1].startswith(("IconSize::", "size", "self.size")):
             if LITERAL.search(parts[1]):
                 report(match.start(), f"icon size {parts[1]} is not an IconSize")
-    return problems
+    # `// ui-lint: allow(reason)` on a line, or the line above it, exempts that
+    # line: for a size or inset that is measured at run time, not a design value.
+    raw = path.read_text().split("\n")
+    exempt = {
+        number + offset
+        for number, line in enumerate(raw, 1)
+        if re.search(r"ui-lint: allow\([^)]+\)", line)
+        for offset in (0, 1)
+    }
+    return [problem for problem in problems if int(problem.split(":")[1]) not in exempt]
 
 
 # The only files that may touch Freya's launch API: the app loop that builds the
@@ -216,6 +271,12 @@ BLOCKING_ALLOWED: dict[str, str] = {
     "packages/bingux-ui/src/typography.rs": "the monospace family is asked once, at start-up, before the window exists",
     "packages/bingux-ui/src/app.rs": "the single-instance socket and its listener thread",
     "packages/bingux-ui/src/snapshot.rs": "the headless test runner, no window",
+    "packages/bingux-ui/src/files/tab_tests.rs": "test fixtures: a few temporary folders written before the headless window mounts, no window thread",
+    "packages/bingux-ui/src/files/place_tests.rs": "test fixtures: two temporary folders written before the headless window mounts, no window thread",
+    "packages/bingux-ui/src/files/search_tests.rs": "test fixtures: a folder tree written before the headless window mounts, no window thread",
+    "packages/bingux-ui/src/files/preview_step_tests.rs": "test fixtures: a folder of small files written before the headless window mounts, no window thread",
+    "packages/bingux-ui/src/files/colour_tests.rs": "test: writes the tones JSON to a path the test run names (BINGUX_COLOUR_TONES), no window thread",
+    "packages/bingux-ui/src/files/file_icon_surfaces.rs": "test (cfg(all(test, feature = \"testing\"))): deletes the probe PNG it wrote to a path of its own, headless runner, no window thread",
     "packages/bingux-ui/src/about/details.rs": "reads os-release, the kernel release and sysfs once, in Application::run before the window exists; never in render",
     "packages/bingux-ui/src/about/link.rs": "the xdg-open child, started from a press handler and reaped on a thread of its own, and the licence-file read, run by use_resource on a worker",
     "packages/bingux-settings/src/apps.rs": "the application scanner and its loader thread; nothing in it is called from render",
@@ -243,6 +304,12 @@ BLOCKING_ALLOWED: dict[str, str] = {
     "packages/bingux-ui/src/files/drives.rs": "fake unmount pause in a worker",
     "packages/bingux-ui/src/files/view_state.rs": "per-folder view state: first read and delayed write; the read is on first use, to move to a worker (FilesSearch)",
     "packages/bingux-ui/src/files/places_fixture.rs": "test fixture file, read once when a fake is requested",
+    "packages/bingux-ui/src/files/reload_stop_tests.rs": "test fixtures: a folder and the pipe that stalls its read, made before the headless window mounts and removed after it",
+    "packages/bingux-ui/src/files/history_ui_tests.rs": "test fixtures: a few files written before the headless window mounts, no window thread",
+    "packages/bingux-ui/src/preview/behaviour_tests.rs": "test fixtures: a folder of files written before the headless window mounts, no window thread",
+    "packages/bingux-ui/src/preview/render_tests.rs": "test fixtures: generated media files and the ffmpeg that makes them, written before the headless window mounts",
+    "packages/bingux-ui/src/nav/slide_users_tests.rs": "test: reads the source tree to list the slide users, no window",
+    "packages/bingux-ui/src/preview/host_link.rs": "the supervisor thread spawns and reaps the helper process and polls it there; the UI reads a Feed, never these calls",
 }
 
 
@@ -297,7 +364,7 @@ def check_blocking(path: Path) -> list[str]:
     rel = str(path.relative_to(ROOT))
     text = strip_comments(path.read_text())
     # Unit tests may touch the disk.
-    cut = text.find("#[cfg(test)]")
+    cut = min((i for i in (text.find("#[cfg(test)]"), text.find("#[cfg(all(test")) if i != -1), default=-1)
     if cut != -1:
         text = text[:cut]
     problems = []
@@ -388,7 +455,9 @@ RAW_PRESS = re.compile(
     r"\.on_press\(\s*(?:move\s*)?\|\s*\w+\s*:\s*Event<PressEventData>\s*\||\.on_pointer_press\(|\.on_click\("
 )
 RAW_PRESS_ALLOWED = {
+    "packages/bingux-ui/src/popup_windows/route_tests.rs": "test fixture: a bare box whose press opens a sub-window",
     "packages/bingux-ui/src/controls/button.rs": "the button components",
+    "packages/bingux-ui/src/controls/colour_picker/button.rs": "the colour button: a swatch with hover, pressed and open fills, which no library button draws",
     "packages/bingux-ui/src/controls/split_button.rs": "the split button's two parts",
     "packages/bingux-ui/src/controls/dropdown.rs": "the dropdown's trigger",
     "packages/bingux-ui/src/controls/segmented.rs": "the segmented control's segments",
@@ -396,6 +465,7 @@ RAW_PRESS_ALLOWED = {
     "packages/bingux-ui/src/controls/stepper.rs": "the stepper's halves",
     "packages/bingux-ui/src/controls/action_strip.rs": "the action strip's cells",
     "packages/bingux-ui/src/controls/focus_stop.rs": "makes a keyboard stop out of any content",
+    "packages/bingux-ui/src/controls/press.rs": "hit_area: a transparent touch target whose listeners do nothing and let the press bubble to the control that holds it",
     "packages/bingux-ui/src/controls/tabs.rs": "the tab itself, a selectable item, not an icon",
     "packages/bingux-ui/src/controls/tree_view.rs": "tree rows, and the expand chevron: part of the row's own keyboard model (Left and Right), not a stop of its own",
     "packages/bingux-ui/src/rows.rs": "the row",
@@ -412,6 +482,7 @@ RAW_PRESS_ALLOWED = {
     "packages/bingux-ui/src/files/address_list.rs": "the address bar's completion list rows",
     "packages/bingux-ui/src/files/address_crumbs.rs": "path crumbs, which are navigation, not icon buttons",
     "packages/bingux-ui/src/charts/flame.rs": "chart hit areas",
+    "packages/bingux-ui/src/charts/view.rs": "chart hit areas: a tap on a donut's ring or legend row selects its segment (a hover does for a mouse); the segments are not controls and have no keyboard action",
 }
 
 
@@ -457,6 +528,32 @@ def about_problems() -> list[str]:
     return found
 
 
+# --- Every loop runs on motion::use_cycle ---------------------------------------
+#
+# An indeterminate bar and a spinner once looped on their own `use_animation`
+# with `OnFinish::restart()`, each set up its own way. Every loop now reads
+# `motion::use_cycle(ms)`, one clock kept in the scope of the component that
+# draws it, so a new indicator cannot be built a different way by accident.
+
+LOOP = re.compile(r"\bOnFinish::(?:[Rr]estart|[Rr]everse)")
+LOOP_HOME = ROOT / "packages/bingux-ui/src/motion.rs"
+
+
+def loop_problems() -> list[str]:
+    found = []
+    for source in SOURCES:
+        for path in sorted(source.rglob("*.rs")):
+            if "target" in path.parts or path == LOOP_HOME:
+                continue
+            text = strip_comments(path.read_text())
+            for match in LOOP.finditer(text):
+                found.append(
+                    f"{path.relative_to(ROOT)}:{text.count(chr(10), 0, match.start()) + 1}: a looping animation "
+                    "of its own; loop on motion::use_cycle(ms) (docs/bingux-ui.md, \"Progress bars and spinners\")"
+                )
+    return found
+
+
 def main() -> int:
     problems = []
     for source in SOURCES:
@@ -479,7 +576,8 @@ def main() -> int:
     blocking = blocking_problems()
     panics = panic_problems()
     abouts = about_problems()
-    everything = problems + launches + blocking + panics + abouts
+    loops = loop_problems()
+    everything = problems + launches + blocking + panics + abouts + loops
     for problem in everything:
         print(problem)
     if everything:

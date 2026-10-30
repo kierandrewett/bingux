@@ -269,12 +269,16 @@ impl ComponentOwned for ScrollBar {
             }
         };
 
+        // Bingux patch: the track is placed by its absolute position, which a
+        // right to left window mirrors with the box that holds it. It used to
+        // sit at the holder's origin and push its children back by `offset_x`
+        // (`offset_y`): an offset on a mirrored box is re-applied when the
+        // track's subtree is measured again (a page that changes height under
+        // the bar), and the bar came out 40 px outside the window.
         rect()
-            .position(Position::new_absolute())
+            .position(Position::new_absolute().left(offset_x).top(offset_y))
             .width(if is_hidden { Size::px(0.) } else { width })
             .height(if is_hidden { Size::px(0.) } else { height })
-            .offset_x(offset_x)
-            .offset_y(offset_y)
             .layer(999)
             .opacity(fade)
             .cursor(CursorIcon::Default)

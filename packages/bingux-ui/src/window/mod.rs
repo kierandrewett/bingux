@@ -30,9 +30,8 @@
 //! On a narrow window (a phone) every popup is a sheet from the bottom edge,
 //! see [`PopupFlags`]. [`WindowHost`] makes that choice from the window width.
 
-mod popup;
+pub(crate) mod popup;
 
-use freya::animation::*;
 use freya::prelude::*;
 
 use crate::nav::Location;
@@ -46,7 +45,11 @@ use crate::style::{
 use crate::surface::use_tokens;
 use crate::theme::{NARROW_BELOW, PHONE_PREVIEW_SIZE};
 
-use crate::shell::panel::{MOTION_MS, SHEET_DISMISS_DISTANCE, use_sheet_pull};
+use crate::shell::panel::{SHEET_DISMISS_DISTANCE, sheet_overhang};
+use crate::shell::sheet_gesture::lift_limit;
+use crate::shell::sheet_motion::{
+    Release, SHEET_MS, SHEET_SPRING_MS, openness, use_sheet_clock, use_sheet_spring,
+};
 use popup::{PopupEntry, PopupFrame};
 pub use popup::{Popup, PopupAction, PopupActions, PopupFlags, popup, use_popup_actions};
 
@@ -66,6 +69,8 @@ pub(crate) struct WindowManager {
     /// Whether a pointer holds the sheet right now: the pull then follows
     /// the pointer exactly instead of easing.
     sheet_dragging: State<bool>,
+    /// The release that last let a sheet go, with the speed it had.
+    sheet_release: State<Release>,
 }
 
 impl WindowManager {
@@ -103,6 +108,7 @@ impl WindowManager {
     pub(crate) fn remove(self, id: u64) {
         let mut popups = self.popups;
         popups.write().retain(|entry| entry.id != id);
+        crate::layers::with_stack(|stack| stack.close(stack_id(id)));
     }
 
     /// Add a popup under `parent` (`None` for the main window).
@@ -110,10 +116,26 @@ impl WindowManager {
         let mut manager = self;
         let id = *manager.next.peek();
         manager.next.set(id + 1);
+        // The window stack (see `layers`): an in-window popup is a modal child of the popup it
+        // was opened from, or of the window that holds it.
+        let title = popup.title.clone();
+        crate::layers::with_stack(|stack| {
+            let window = u64::from(Platform::get().current_window().id);
+            if !stack.contains(window) {
+                stack.open(window, crate::layers::WindowKind::Toplevel, None, false, "window");
+            }
+            let parent = parent.map_or(window, stack_id);
+            stack.open(stack_id(id), crate::layers::WindowKind::Dialog, Some(parent), true, &title);
+        });
         let entry = PopupEntry::new(manager.scope, id, parent, popup);
         manager.popups.write().push(entry);
         PopupWindow { manager, id }
     }
+}
+
+/// An in-window popup's id in the window stack: numbered apart from the app's windows.
+fn stack_id(id: u64) -> u64 {
+    (1 << 61) | id
 }
 
 /// What every window can do. Components reach it through [`use_window`], and
@@ -427,6 +449,7 @@ impl Component for WindowHost {
             sheet_pull: State::create(0.0),
             sheet_pulling: State::create(None),
             sheet_dragging: State::create(false),
+            sheet_release: State::create(Release::default()),
             scope,
         });
         use_provide_context(move || manager);
@@ -473,23 +496,20 @@ impl Component for WindowHost {
         // sheet's pull eases the inset out with it: full when the sheet rests,
         // gone at the dismiss distance. Only a sheet insets: on a wide window
         // the popup is a centred panel and the content stays full size.
-        let motion = tokens.motion(MOTION_MS);
         let inset = narrow
             && popups.iter().any(|entry| {
                 entry.flags.contains(PopupFlags::INSET_VIEWPORT) && !*entry.closing.read()
             });
-        let open = use_animation_transition(
-            if inset { 1.0_f32 } else { 0.0 },
-            move |from: f32, to: f32| {
-                AnimNum::new(from, to)
-                    .time(motion)
-                    .function(Function::Quad)
-                    .ease(Ease::Out)
-            },
-        )
-        .get()
-        .value();
-        let eased_pull = use_sheet_pull(manager.sheet_pull, *manager.sheet_dragging.read(), motion);
+        // The inset moves on the sheet's own clock and curve, so the card
+        // shrinks as the sheet rises and springs back as it leaves.
+        let open = openness(use_sheet_clock(inset, true, tokens.motion(SHEET_MS), || {}));
+        let eased_pull = use_sheet_spring(
+            manager.sheet_pull,
+            manager.sheet_release,
+            *manager.sheet_dragging.read(),
+            tokens.motion(SHEET_SPRING_MS),
+            lift_limit(sheet_overhang()),
+        );
         // The pulled popup keeps its pull while it closes, so the inset stays
         // at zero as it leaves and does not flash back.
         let pulling = *manager.sheet_pulling.read();

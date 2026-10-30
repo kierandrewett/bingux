@@ -32,12 +32,12 @@ impl Step {
     /// The menu text that offers to reverse this step.
     pub(super) fn label(&self) -> &'static str {
         match self {
-            Step::Rename { .. } => "Undo Rename",
-            Step::Trash(_) => "Undo Move to Trash",
-            Step::Restore(_) => "Undo Restore",
-            Step::Create { folder: true, .. } => "Undo New Folder",
-            Step::Create { folder: false, .. } => "Undo New File",
-            Step::Move(_) => "Undo Move",
+            Step::Rename { .. } => "Undo rename",
+            Step::Trash(_) => "Undo move to Trash",
+            Step::Restore(_) => "Undo restore",
+            Step::Create { folder: true, .. } => "Undo new folder",
+            Step::Create { folder: false, .. } => "Undo new file",
+            Step::Move(_) => "Undo move",
         }
     }
 }
@@ -114,7 +114,7 @@ mod tests {
             folder: true,
         };
         stack.push(created.clone());
-        assert_eq!(stack.peek().map(Step::label), Some("Undo New Folder"));
+        assert_eq!(stack.peek().map(Step::label), Some("Undo new folder"));
         assert_eq!(stack.pop(), Some(created));
         assert_eq!(stack.pop(), Some(rename(1)));
         assert!(stack.pop().is_none());
@@ -137,9 +137,9 @@ mod tests {
 
     #[test]
     fn labels_name_the_change() {
-        assert_eq!(rename(1).label(), "Undo Rename");
-        assert_eq!(Step::Trash(Vec::new()).label(), "Undo Move to Trash");
-        assert_eq!(Step::Restore(Vec::new()).label(), "Undo Restore");
-        assert_eq!(Step::Move(Vec::new()).label(), "Undo Move");
+        assert_eq!(rename(1).label(), "Undo rename");
+        assert_eq!(Step::Trash(Vec::new()).label(), "Undo move to Trash");
+        assert_eq!(Step::Restore(Vec::new()).label(), "Undo restore");
+        assert_eq!(Step::Move(Vec::new()).label(), "Undo move");
     }
 }

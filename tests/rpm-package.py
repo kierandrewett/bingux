@@ -31,6 +31,7 @@ PACKAGES = (
     "bingux-config",
     "bingux-settings",
     "bingux-files",
+    "bingux-preview-host",
     "bingux-audio-effects",
     "bingux-taxonomy",
 )
@@ -193,6 +194,20 @@ class RpmPackageTest(unittest.TestCase):
                 f"/usr/share/man/man1/{package}.1*",
             ):
                 self.assertIn(path, self.spec)
+
+    def test_the_preview_host_is_its_own_package_with_the_decoders_it_links(self):
+        package = re.search(r"^%package preview-host\n(.*?)^%description", self.spec, re.M | re.S).group(1)
+        for requirement in ("gstreamer1-plugins-base", "gstreamer1-plugins-good", "poppler-glib"):
+            self.assertIn(f"Requires:       {requirement}\n", package)
+        for recommendation in ("gstreamer1-plugin-libav", "gstreamer1-plugins-bad-free"):
+            self.assertIn(f"Recommends:     {recommendation}\n", package)
+        self.assertIn("/usr/bin/bingux-preview-host", self.spec)
+        # Files works without it (it falls back to the card), so it is only recommended.
+        files = re.search(r"^%package files\n(.*?)^%description", self.spec, re.M | re.S).group(1)
+        self.assertIn("Recommends:     bingux-preview-host", files)
+        self.assertNotIn("Requires:       bingux-preview-host", files)
+        for build_requirement in ("gstreamer-1.0", "gstreamer-app-1.0", "gstreamer-video-1.0", "poppler-glib"):
+            self.assertIn(f"BuildRequires:  pkgconfig({build_requirement})", self.spec)
 
     def test_the_bundled_adwaita_icons_do_not_overlap_the_distribution(self):
         self.assertNotIn("%{_datadir}/icons/Adwaita", self.spec)

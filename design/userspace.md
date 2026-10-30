@@ -102,6 +102,7 @@ binary and desktop id are `bingux-files`).
 | `bingux-config` | `bingux-config` command and its man page | Needed by the shell, Settings and by hand; has no GUI dependencies |
 | `bingux-settings` | Settings, desktop entry, icon, metainfo, man page, search-app manifest | An app a user may remove, replace or install on another desktop |
 | `bingux-files` | Files, desktop entry, icon, metainfo, man page | Same |
+| `bingux-preview-host` | The helper process Files runs to preview films, songs and PDFs: GStreamer decoding and poppler rendering behind a socket, so a damaged file crashes it and not the file manager | Files links neither library. `bingux-files` recommends it; without it those previews show the file's card and Open. It needs GStreamer base and good plugins and poppler-glib, and recommends libav, bad-free and openh264 for more codecs |
 | `bingux-audio-effects` | `bingux-effects` engine, `libbingux_dsp.so` LADSPA plugins, the `bingux-effects@.service` template, man page | Needs PipeWire, not the shell. The plugin library is usable from any LADSPA host |
 | `bingux-taxonomy` | The Bingux UI reference window | A developer tool: nobody needs it on an ordinary desktop |
 
@@ -117,7 +118,7 @@ names them explicitly (section 5).
 
 | Kind | Path | Owner package |
 | --- | --- | --- |
-| Programs | `/usr/bin/bingux-settings`, `bingux-files`, `bingux-taxonomy`, `bingux-effects`, `bingux-config` | the package of that name |
+| Programs | `/usr/bin/bingux-settings`, `bingux-files`, `bingux-preview-host`, `bingux-taxonomy`, `bingux-effects`, `bingux-config` | the package of that name |
 | Shell launchers and daemons | `/usr/bin/bingux*`, `/usr/bin/binguxctl` | `bingux` |
 | Private programs | `/usr/libexec/bingux/` (`bingux-frame`, `bingux-image-clipboard`, `search-service`, `binguxctl.py`) | `bingux` |
 | QML plugins | `/usr/lib64/bingux/qml` (Fedora), `/usr/lib/bingux/qml` (Arch) | `bingux` |
@@ -258,7 +259,8 @@ what it installs and whether it runs without being opened.
 | Crate or file | Program | Package | Desktop id | Installs | Runtime dependencies | Runs by itself |
 | --- | --- | --- | --- | --- | --- | --- |
 | `bingux-settings` | `bingux-settings` | `bingux-settings` | `bingux-settings.desktop` (`x-scheme-handler/bingux-settings`) | `/usr/bin`, desktop entry, hicolor SVG, metainfo, man page, `search-apps/bingux-settings.json` | `bingux-config`; `nmcli` (NetworkManager), `bluetoothctl` (bluez), `wpctl` (wireplumber), `pactl` (pulseaudio-utils), `pw-dump`/`pw-record`/`pw-cli` (pipewire-utils), `upower`, `powerprofilesctl` (power-profiles-daemon), `timedatectl`/`hostnamectl` (systemd), AccountsService, `udisksctl` (udisks2), `mmcli` (ModemManager), `wg` (wireguard-tools), `gsettings`/`gio` (glib2, dconf, gsettings-desktop-schemas), `magick` (ImageMagick), `fc-match`/`fc-list` (fontconfig), `xdg-open` (xdg-utils), `gnoblinctl` (Gnoblin), Adwaita Sans (adwaita-sans-fonts / adwaita-fonts); every backend is optional and its page shows an error without it | No. One window; `--search-provider` runs it without a window and nothing starts that mode |
-| `bingux-files-app` | `bingux-files` | `bingux-files` | `bingux-files.desktop` (`inode/directory`, `x-scheme-handler/bingux-files`) | `/usr/bin`, desktop entry, hicolor SVG, metainfo, man page | `tar`, `unzip`, `udisksctl` (udisks2), `umount` (util-linux), `eject`, `xdg-open`, shared-mime-info, gvfs (Trash on other mounts), Adwaita Sans | No |
+| `bingux-files-app` | `bingux-files` | `bingux-files` | `bingux-files.desktop` (`inode/directory`, `x-scheme-handler/bingux-files`) | `/usr/bin`, desktop entry, hicolor SVG, metainfo, man page | `tar`, `unzip`, `udisksctl` (udisks2), `umount` (util-linux), `eject`, `xdg-open`, shared-mime-info, gvfs (Trash on other mounts), Adwaita Sans; recommends `bingux-preview-host` | No |
+| `bingux-preview-host` | `bingux-preview-host` | `bingux-preview-host` | none | `/usr/bin` (next to `bingux-files`, where Files looks first; then `PATH`; `BINGUX_PREVIEW_HOST` overrides both) | GStreamer base and good plugins, poppler-glib; recommends the libav, bad-free and openh264 plugins and PipeWire's GStreamer plugin | No; Files starts it per preview (at most two at once) and it dies with Files |
 | `bingux-taxonomy` | `bingux-taxonomy` | `bingux-taxonomy` | `bingux-taxonomy.desktop` (`x-scheme-handler/bingux-taxonomy`) | `/usr/bin`, desktop entry, hicolor SVG, metainfo, man page | The GUI libraries only | No |
 | `bingux-config` | `bingux-config` | `bingux-config` | none | `/usr/bin`, man page | none | No; the shell calls it |
 | `bingux-audio-effects` | `bingux-effects` | `bingux-audio-effects` | none | `/usr/bin`, `bingux-effects@.service`, man page | PipeWire (the `pipewire` program runs the filter chain), `pw-cli` for live control, `systemctl --user` | Yes, after the user turns effects on: one unit per direction |
@@ -273,7 +275,7 @@ what it installs and whether it runs without being opened.
 | `bingux-wayland-sync`, `bingux-text-layout` | QML modules | `bingux` | none | `$libdir/bingux/qml/Bingux/{Wayland,Text}` | Qt 6 | No |
 | `bingux-inventory` | `bingux-inventory.py` | not packaged | none | not installed by `install-shell.py` | python3 | `[INFERENCE]` a development helper; question 11 |
 | `bingux-quickshell`, `bingux-qmltermwidget` | patched Quickshell and terminal widget sources | not packaged here | none | the packages require `/usr/bin/qs` instead | Qt 6 | No |
-| `bingux-ui`, `bingux-files`, `bingux-search`, `bingux-data-usage` | libraries | linked in, not installed | none | none | none | No |
+| `bingux-ui`, `bingux-files`, `bingux-preview-core`, `bingux-search`, `bingux-data-usage` | libraries | linked in, not installed | none | none | none | No |
 | `vendor/` | patched `freya-*` crates (scroll feel) | linked in, not installed | none | none | none | No |
 | `shell/bingux`, `shell/gnoblin` | QML shell, Python helpers, Gnoblin scripts | `bingux` | none | `/usr/share/bingux/shell`, `/usr/share/bingux/gnoblin` | Quickshell, Python 3, PyGObject, Pillow, ffmpeg | The shell runs from Gnoblin's autostart |
 

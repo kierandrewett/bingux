@@ -42,6 +42,9 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from app_env import isolated  # noqa: E402
+
 REPO = Path(__file__).resolve().parent.parent
 SETTINGS = REPO / "packages" / "bingux-settings"
 DEFAULT_BINARY = (
@@ -102,7 +105,7 @@ def run_page(binary: Path, panel: str, out: Path, timeout: int) -> str:
     """Run the walk for one page. Returns a short status for the report."""
     frames_root = out / "frames"
     shutil.rmtree(frames_root / panel, ignore_errors=True)
-    env = dict(os.environ)
+    env = isolated()  # Settings writes through gsettings: no write may reach the person's dconf
     env["BINGUX_SETTINGS_SNAPSHOT_FRAMES"] = str(frames_root)
     env["BINGUX_SETTINGS_SNAPSHOT_SCRIPT"] = walk_script(panel)
     log = out / "logs" / f"{panel}.log"

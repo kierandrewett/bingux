@@ -12,12 +12,11 @@ use freya::winit::window::WindowId;
 use super::editor::{self, Def, Editor, Group as PropGroup, RAW};
 use super::snapshot::{Kind, Node, Snapshot};
 use crate::component::{Prop, PropKind, Published};
-use crate::controls::colour_picker::{self, colour_chip, colour_picker};
+use crate::controls::colour_picker::colour_button;
 use crate::controls::{action_button, dropdown, icon_button, property_row, switch, text_field};
 use crate::group::Group;
 use crate::icons::Icon;
 use crate::shell::overlays::Overlays;
-use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
@@ -512,8 +511,6 @@ impl Component for DefField {
         // Picking "Raw value" keeps the value and shows its field; the value
         // may still be a token's, so the pick alone changes nothing.
         let raw_mode = use_state(|| false);
-        let picker_open = use_state(|| false);
-        let swatch_area = use_state(Area::default);
 
         let commit = {
             let original = original.clone();
@@ -593,14 +590,7 @@ impl Component for DefField {
                     .tw(&tokens, &[flex_col(), gap(S1), items(Align::End)])
                     .child(menu);
                 if raw_shown && colour {
-                    column = column.child(raw_colour(
-                        &tokens,
-                        &def,
-                        draft,
-                        picker_open,
-                        swatch_area,
-                        commit.clone(),
-                    ));
+                    column = column.child(raw_colour(&tokens, &def, draft, commit.clone()));
                 } else if raw_shown {
                     let commit_arrow = commit.clone();
                     let mut draft_arrow = draft;
@@ -627,54 +617,34 @@ impl Component for DefField {
     }
 }
 
-/// The custom colour of a colour property: a swatch that opens the picker, and
-/// the hex field beside it.
+/// The custom colour of a colour property: a swatch button that opens the
+/// picker, and the hex field beside it. The page behind shows the colour as it
+/// is dragged, so the button is live.
 fn raw_colour(
     tokens: &Tokens,
     def: &Def,
     draft: State<String>,
-    picker_open: State<bool>,
-    swatch_area: State<Area>,
     commit: impl Fn(&str) + Clone + 'static,
 ) -> Element {
     let tokens = *tokens;
     let colour = def
         .swatch
         .unwrap_or_else(|| Paint::Transparent.color(&tokens));
-    let mut open = picker_open;
-    let mut close = picker_open;
-    let mut area_set = swatch_area;
     let mut draft_pick = draft;
     let commit_pick = commit.clone();
-    let panel = Panel::new(
-        PanelKind::Menu,
-        picker_open(),
-        PanelTrigger::Control(PanelRect::from_area(&swatch_area.read())),
-        vec![Element::from(colour_picker(colour, move |next: Color| {
-            let hex = colour_to_hex(next);
-            draft_pick.set(hex.clone());
-            commit_pick(&hex);
-        }))],
-    )
-    .size(
-        colour_picker::WIDTH + 2.0 * S2.px(),
-        colour_picker::height(),
-    )
-    .on_dismiss(EventHandler::new(move |_: ()| close.set(false)));
     rect()
         .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
         .child(
-            rect()
-                .on_sized(move |event: Event<SizedEventData>| {
-                    area_set.set_if_modified(event.area);
-                })
-                .on_pointer_down(move |_: Event<PointerEventData>| {
-                    let next = !*open.peek();
-                    open.set(next);
-                })
-                .child(colour_chip(tokens, colour, Dim::Swatch.px())),
+            colour_button(colour, move |next: Color| {
+                let hex = colour_to_hex(next);
+                draft_pick.set(hex.clone());
+                commit_pick(&hex);
+            })
+            .alpha(true)
+            .live(true)
+            .dense()
+            .title("Colour"),
         )
-        .child(panel)
         .child(
             text_field(draft, move |text: String| commit(&text))
                 .dense()

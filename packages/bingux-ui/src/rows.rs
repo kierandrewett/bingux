@@ -21,7 +21,8 @@ use crate::controls::slider::slider;
 use crate::controls::switch::{Switch, switch};
 use crate::controls::{ActionButton, Checkbox, Dropdown, IconButton, RowButton, Segmented, SplitButton, Stepper};
 use crate::controls::adaptive::{
-    ControlFacts, LabelFacts, LineFit, LineMode, choose_filled_line, choose_line, label_cell_width,
+    ControlFacts, LabelFacts, LineFit, LineMode, ValueFacts, ValueLine, choose_filled_line, choose_line,
+    choose_value_line, label_cell_width,
 };
 use crate::controls::text_field::{TextField, text_field};
 use crate::group::{SlotFilter, card_rows, use_row_match, use_row_slot};
@@ -31,7 +32,7 @@ use crate::motion::{
     MOVE_MS, RingSize, use_ring_size, use_tween, wrap_focusable_with,
 };
 use crate::search_highlight::{self, MatchSink};
-use crate::shell::menu::{MenuItem, menu_item};
+use crate::shell::menu::MenuItem;
 use crate::shell::overlays::Overlays;
 use crate::style::*;
 use crate::surface::{provide_enabled, use_tokens};
@@ -103,9 +104,12 @@ pub struct Row {
     /// the title leaves instead of keeping its width, or goes under the title
     /// when there is not room. See [`Row::trailing`].
     trailing_fluid: bool,
-    /// Whether the trailing content is a read-only value. The title and the
-    /// value then share the row evenly, and a long value is cut to its half.
+    /// Whether the trailing content is a read-only value, which takes what
+    /// its title leaves and wraps in it rather than being cut.
     value_trailing: bool,
+    /// The read-only value, when the trailing content is one: what the row
+    /// measures to lay it out. See [`Row::value`].
+    value: Option<RowValue>,
     /// Whether the subtitle is kept to one line, cut with an ellipsis, and the
     /// row takes the subtitle height. See [`Row::subtitle_one_line`].
     subtitle_one_line: bool,
@@ -115,6 +119,9 @@ pub struct Row {
     title_marks: Option<Vec<Range<usize>>>,
     /// Byte ranges of the subtitle drawn on the search mark.
     subtitle_marks: Option<Vec<Range<usize>>>,
+    /// Set by [`Row::disclosure`]: whether the content under this row is
+    /// open, and what Left and Right ask for.
+    disclosure: Option<(bool, EventHandler<bool>)>,
 }
 
 pub fn row(title: impl Into<String>) -> Row {
@@ -139,6 +146,7 @@ pub fn row(title: impl Into<String>) -> Row {
         nested: None,
         font: None,
         value_trailing: false,
+        value: None,
         subtitle_one_line: false,
         trailing_control: false,
         trailing_fit: false,
@@ -147,10 +155,23 @@ pub fn row(title: impl Into<String>) -> Row {
         radio: None,
         title_marks: None,
         subtitle_marks: None,
+        disclosure: None,
     }
 }
 
 impl Row {
+    /// Makes this row the header of content that it opens and closes (see
+    /// [`expander_row`]): it reports `open` to assistive technology, Right
+    /// opens it and Left closes it (`on_set` gets the wanted state), its
+    /// title and subtitle wrap to every line they need, as the name of a
+    /// section is never cut, and a hairline separates it from its
+    /// [`nested`](Row::nested) rows. Pressing the row is the caller's
+    /// [`on_press`](Row::on_press).
+    pub fn disclosure(mut self, open: bool, on_set: impl Into<EventHandler<bool>>) -> Self {
+        self.disclosure = Some((open, on_set.into()));
+        self
+    }
+
     /// Draws these byte ranges of the title on the search mark: where a search
     /// hit (`bingux_ui::search`) matched. The row then does not look for the
     /// pane's query itself, so a hit list marks what the engine matched, with
@@ -214,6 +235,7 @@ impl Row {
             TypeId::of::<Dropdown>(),
             TypeId::of::<ActionButton>(),
             TypeId::of::<IconButton>(),
+            TypeId::of::<crate::controls::RowAction>(),
             TypeId::of::<RowButton>(),
             TypeId::of::<Stepper>(),
             TypeId::of::<Segmented>(),
@@ -224,6 +246,7 @@ impl Row {
             TypeId::of::<Dropdown>(),
             TypeId::of::<ActionButton>(),
             TypeId::of::<IconButton>(),
+            TypeId::of::<crate::controls::RowAction>(),
             TypeId::of::<RowButton>(),
             TypeId::of::<Segmented>(),
             TypeId::of::<SplitButton>(),
@@ -239,6 +262,17 @@ impl Row {
     /// directly, such as a switch beside a spinner.
     pub fn trailing_control(mut self) -> Self {
         self.trailing_control = true;
+        self
+    }
+
+    /// Marks trailing content that is not passed directly but ends in a
+    /// button (a switch beside an icon button) as one that fills the row with
+    /// [`ROW_INSET`] on every side, as a button passed to [`Row::trailing`]
+    /// does. Without it the row keeps its gutter at the end and the button
+    /// sits further from the end than from the top and bottom.
+    pub fn trailing_fit(mut self) -> Self {
+        self.trailing_control = true;
+        self.trailing_fit = true;
         self
     }
 
@@ -335,43 +369,40 @@ impl Row {
         self
     }
 
-    /// A muted value on the right, for read-only rows.
-    pub fn value(mut self, value: impl Into<String>) -> Self {
-        let value = value.into();
-        if value.is_empty() {
-            return self;
-        }
-        self.value_trailing = true;
-        self.trailing(ValueText {
-            text: value,
-            mono: false,
-        })
+    /// A muted value on the right, for read-only rows. It is selectable and
+    /// never cut with an ellipsis: when it does not fit beside the title on
+    /// one line it wraps (on a desktop, up to two lines, aligned to the row's
+    /// end) or the row stacks it under the title at the full width, which
+    /// the row decides from the measured text and its width.
+    pub fn value(self, value: impl Into<String>) -> Self {
+        self.with_value(value.into(), ValueKind::Plain)
     }
 
     /// Like [`Row::value`] in the monospace face, for addresses, keys and
-    /// other values read character by character.
-    pub fn mono_value(mut self, value: impl Into<String>) -> Self {
-        let value = value.into();
-        if value.is_empty() {
-            return self;
-        }
-        self.value_trailing = true;
-        self.trailing(ValueText {
-            text: value,
-            mono: true,
-        })
+    /// other values read character by character. A word too wide for the
+    /// line breaks wherever the line ends.
+    pub fn mono_value(self, value: impl Into<String>) -> Self {
+        self.with_value(value.into(), ValueKind::Mono)
     }
 
-    /// Like [`Row::value`] for a path: when it does not fit it is shortened
-    /// by what matters least (see `path_label`), the full path is the
-    /// tooltip, and a right click offers Copy path.
-    pub fn path_value(mut self, path: impl Into<String>) -> Self {
-        let path = path.into();
-        if path.is_empty() {
+    /// Like [`Row::value`] for a path, a URL or an identifier: a word too
+    /// wide for the line breaks wherever the line ends, so the whole path is
+    /// always shown, and a right click offers Copy path.
+    pub fn path_value(self, path: impl Into<String>) -> Self {
+        self.with_value(path.into(), ValueKind::Path)
+    }
+
+    fn with_value(self, text: String, kind: ValueKind) -> Self {
+        if text.is_empty() {
             return self;
         }
-        self.value_trailing = true;
-        self.trailing(PathValue { path })
+        let value = RowValue { text, kind };
+        let mut row = self.trailing(ValueText {
+            value: value.clone(),
+        });
+        row.value = Some(value);
+        row.value_trailing = true;
+        row
     }
 
     /// Right click opens `items` as a context menu at the pointer. Use it for
@@ -430,94 +461,99 @@ fn begin_row_touch(
     press.begin(event, long);
 }
 
-/// A read-only value on the right of a row. It is selectable: Ctrl+C copies
-/// it, and a right click offers Copy. It stays on one line. It fills the
-/// half of the row that `Row` gives a value, aligned to its end, and a long
-/// value is cut there with an ellipsis.
+/// How a read-only value is typed and where it may break.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ValueKind {
+    /// Words in the muted value style: breaks between words.
+    Plain,
+    /// A value read letter by letter (a key, an address, a hash, a MIME type)
+    /// in the monospace face: breaks anywhere when a word is too wide.
+    Mono,
+    /// A path, a URL or an identifier: breaks anywhere, copied as "Copy path".
+    Path,
+}
+
+/// The value of an info row, kept on the row so the row can measure it.
+#[derive(Clone, PartialEq)]
+struct RowValue {
+    text: String,
+    kind: ValueKind,
+}
+
+impl RowValue {
+    fn style(&self) -> crate::typography::TextStyle {
+        crate::typography::TextStyle {
+            mono: self.kind == ValueKind::Mono,
+            ..VALUE
+        }
+    }
+
+    /// Whether the value has no word to protect: it may break wherever the
+    /// line ends.
+    fn breaks_anywhere(&self) -> bool {
+        self.kind != ValueKind::Plain
+    }
+}
+
+/// Whether the row stacks its value under its title, which the value reads to
+/// align itself: to the row's end beside the title, to its start under it.
+#[derive(Clone, Copy, PartialEq)]
+struct ValueFlow(State<bool>);
+
+/// The width the rows below a surface will have, for a surface that knows it
+/// before layout: a dialog of a set size. Rows lay their values out against
+/// it on their first frame, so the frame the row mounts in is the one it
+/// settles in. See [`provide_row_width`].
+#[derive(Clone, Copy, PartialEq)]
+struct RowWidthHint(State<f32>);
+
+/// Tells every [`Row`] below the calling component how wide its card will be,
+/// in px. Call it once per render, whatever the width, so the hooks agree.
+pub(crate) fn provide_row_width(width: f32) {
+    let mut hint = use_provide_context(|| RowWidthHint(State::create(width)));
+    hint.0.set_if_modified(width);
+}
+
+thread_local! {
+    /// The window width and the row width last measured in it: rows of one
+    /// page have one width, so a row that mounts later lays its value out
+    /// for the width it will settle at, not for the window's.
+    static LAST_FACE: std::cell::Cell<(f32, f32)> = const { std::cell::Cell::new((0.0, 0.0)) };
+}
+
+fn remember_face(window: f32, face: f32) {
+    if face > 0.0 {
+        LAST_FACE.with(|last| last.set((window, face)));
+    }
+}
+
+fn remembered_face(window: f32) -> Option<f32> {
+    let (was, face) = LAST_FACE.with(std::cell::Cell::get);
+    (was == window && face > 0.0).then_some(face)
+}
+
+/// A read-only value on the right of a row. It is selectable (Ctrl+C copies
+/// the selection, a right click or a long press offers Copy) and never cut:
+/// the row wraps it or stacks it under the title (see `choose_value_line`).
 #[derive(PartialEq)]
 struct ValueText {
-    text: String,
-    mono: bool,
+    value: RowValue,
 }
 
 impl Component for ValueText {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let overlays = try_consume_context::<Overlays>();
-        let press = use_press();
-        let style = crate::typography::TextStyle {
-            mono: self.mono,
-            ..VALUE
-        };
-        let pressable = use_in_pressable_row();
-        // A selection would take the press that opens a pressable row, so
-        // there the value is plain text; elsewhere it can be selected.
-        let value: Element = if pressable {
-            style
-                .label(&tokens, self.text.clone())
-                .max_lines(1)
-                .line_height(VALUE.leading)
-                .text_align(TextAlign::End)
-                .text_overflow(TextOverflow::Ellipsis)
-                .width(Size::fill())
-                .into()
-        } else {
-            // Read-only text is not a control: it can be selected and copied
-            // with the pointer, but it is not a Tab stop.
-            SelectableText::new()
-                .span(style.span(&tokens, self.text.clone()))
-                .max_lines(1)
-                .line_height(VALUE.leading)
-                .text_align(TextAlign::End)
-                .text_overflow(TextOverflow::Ellipsis)
-                .width(Size::fill())
-                .a11y_focusable(false)
-                .into()
-        };
-        let text = self.text.clone();
+        let stacked = use_try_consume::<ValueFlow>().is_some_and(|flow| (flow.0)());
+        let value = &self.value;
+        let text = crate::controls::select_text(value.text.clone())
+            .style(value.style())
+            .align(if stacked { TextAlign::Start } else { TextAlign::End })
+            .copy_label(if value.kind == ValueKind::Path { "Copy path" } else { "Copy" });
+        let text = if value.breaks_anywhere() { text.breaks_anywhere() } else { text };
         rect()
             .component("ValueText")
             .tw(&tokens, &[w_flex()])
-            .on_pointer_down(move |event: Event<PointerEventData>| {
-                let text = text.clone();
-                let items = vec![menu_item("Copy", move |_| {
-                    if let Some(overlays) = overlays {
-                        copy_text(overlays, text.clone());
-                    }
-                })];
-                open_row_menu(overlays, &items, &event);
-                begin_row_touch(press, overlays, &items, &event);
-            })
-            .on_global_pointer_up(move |_| press.release())
-            .on_global_pointer_move(move |event: Event<PointerEventData>| press.moved(&event))
-            .child(value)
-    }
-}
-
-/// The trailing path of [`Row::path_value`]: the half of the row that a
-/// value gets, aligned to its end.
-#[derive(PartialEq)]
-struct PathValue {
-    path: String,
-}
-
-impl Component for PathValue {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        rect().component("ValuePath").tw(&tokens, &[w_flex()]).child(
-            crate::controls::path_label(self.path.clone())
-                .style(VALUE)
-                .end()
-                .copyable(true),
-        )
-    }
-}
-
-/// Copies `text` to the clipboard and says so, or says that it could not.
-fn copy_text(overlays: Overlays, text: String) {
-    match freya::clipboard::Clipboard::set(text) {
-        Ok(()) => overlays.toast("Copied."),
-        Err(_) => overlays.toast("The text could not be copied."),
+            .child(Element::from(text))
     }
 }
 
@@ -567,22 +603,53 @@ impl Component for Row {
         let filling = self.trailing_fluid && plain_line && is_compact();
         // The room the title and the control share: the face less its gutters
         // and any icon or avatar before the title.
-        let line_inner = || {
-            let leading = if self.leading.is_some() || self.leading_space || self.leading_signal.is_some() {
-                Dim::IconRow.px() + S3.px()
-            } else if self.leading_avatar.is_some() || self.leading_app.is_some() {
-                Dim::Box9.px() + S3.px()
-            } else {
-                0.0
-            };
-            (face_size().0 - 2.0 * GUTTER.px() - leading).max(0.0)
+        let leading_width = if self.leading.is_some() || self.leading_space || self.leading_signal.is_some() {
+            Dim::IconRow.px() + S3.px()
+        } else if self.leading_avatar.is_some() || self.leading_app.is_some() {
+            Dim::Box9.px() + S3.px()
+        } else {
+            0.0
         };
+        let window_width = Platform::get().current_window().root_size.read().width;
+        let inner_of = |face: f32| (face - 2.0 * GUTTER.px() - leading_width).max(0.0);
+        let line_inner = || inner_of(face_size().0);
         let filled = filling.then(|| {
             choose_filled_line(
                 line_inner(),
                 S3.px() + S1.px(),
                 LabelFacts::measure(&self.title, BODY),
                 Dim::FieldMin.px(),
+            )
+        });
+        // How a read-only value is laid out (see `choose_value_line`): it is
+        // measured against the row's width once the row has been sized, and
+        // before that against the width its surface told it (a dialog knows
+        // its own), else the width the last row of this window had, else the
+        // window's own. A value is never cut.
+        let hint = use_try_consume::<RowWidthHint>().map(|hint| (hint.0)());
+        let value_line = self.value.as_ref().map(|value| {
+            let face = if face_size().0 > 0.0 {
+                face_size().0
+            } else if let Some(hinted) = hint.filter(|width| *width > 0.0) {
+                hinted
+            } else {
+                remembered_face(window_width).unwrap_or(window_width)
+            };
+            let beyond = if self.navigates || self.selected || self.disclosure.is_some() {
+                IconSize::Mark.px() + S2.px()
+            } else {
+                0.0
+            };
+            // The gap the row lays out between the title's cell and the value: the row's own
+            // (`S3`) and the trailing area's margin (`S1`, see `ROW_TRAILING`). Less than that
+            // gives the value 4 px under what it was promised, and a title that was shrunk to
+            // leave the value its width wraps it ("3 adapters" a letter to a line).
+            choose_value_line(
+                (inner_of(face) - beyond).max(0.0),
+                S3.px() + S1.px(),
+                LabelFacts::measure(&self.title, BODY),
+                ValueFacts::measure(&value.text, value.style(), value.breaks_anywhere()),
+                is_compact(),
             )
         });
         // Until the row and its control have been sized there is nothing to
@@ -600,16 +667,23 @@ impl Component for Row {
                 LabelFacts::measure(&self.title, BODY),
                 control,
             ) == LineMode::Stacked
-        }) || filled == Some(LineMode::Stacked);
-        // The title's width in a line the field fills: its own, at most its share.
-        let title_cell = match filled {
-            Some(LineMode::Shrunk { label }) => Some(label_cell_width(label)),
+        }) || filled == Some(LineMode::Stacked)
+            || value_line == Some(ValueLine::Stacked);
+        // The title's width in a line the field fills, or beside a value: its
+        // own, at most its share.
+        let title_cell = match (filled, value_line) {
+            (Some(LineMode::Shrunk { label }), _) => Some(label_cell_width(label)),
+            (_, Some(ValueLine::Beside { label } | ValueLine::Wrapped { label })) => {
+                Some(label_cell_width(label))
+            }
             _ => None,
         };
         LineFit::provide(filled.is_some());
         let fit = self.trailing_fit && !stacked;
         let mut fitting = use_provide_context(|| RowFit(State::create(fit)));
         fitting.0.set_if_modified(fit);
+        let mut value_flow = use_provide_context(|| ValueFlow(State::create(false)));
+        value_flow.0.set_if_modified(stacked);
         let mut row_title = use_provide_context(|| RowTitle(State::create(self.title.clone())));
         row_title.0.set_if_modified(self.title.clone());
         // Only a row that opens something, such as one with a chevron, lights
@@ -636,7 +710,10 @@ impl Component for Row {
             (activatable && (hovering() || pressing())) || self.selected,
             row_hit || nested_hit,
         );
-        let single_line = self.subtitle.is_none() && !stacked;
+        // A value that wraps beside its title makes the row as tall as its
+        // lines, so a row never clips what it holds.
+        let wraps_beside = matches!(value_line, Some(ValueLine::Wrapped { .. }));
+        let single_line = self.subtitle.is_none() && !stacked && !wraps_beside;
         let ink = if !self.enabled {
             Ink::Muted
         } else if self.destructive {
@@ -667,17 +744,29 @@ impl Component for Row {
             },
         };
         // On a phone a long title wraps onto a second line rather than
-        // being cut, as a narrow row has little room beside its control.
-        let wrapped = is_compact()
+        // being cut, as a narrow row has little room beside its control. The
+        // title of a row with a value, or that discloses rows, wraps on a
+        // desktop too, and has no line limit: the row gives a title its floor
+        // and nothing is ever cut.
+        let wrapped = (is_compact() || self.value.is_some() || self.disclosure.is_some())
             && self.badge.is_none()
             && self.font.is_none()
             && self.title_marks.is_none();
+        // The words of a disclosure row's title, or of a row with a value, are never cut,
+        // whatever their number. With no line limit an ellipsis would still hold the text to one
+        // line (a shortcut's title in a row of 251 px stopped at "…"), so it is clipped (at the
+        // box, which is never narrower than a word).
+        let overflow = if self.disclosure.is_some() || self.value.is_some() {
+            TextOverflow::Clip
+        } else {
+            TextOverflow::Ellipsis
+        };
         let title_line: Element = match &self.badge {
             None if wrapped => search_highlight::marked(BODY.in_ink(ink), &tokens, &self.title)
                 .unwrap_or_else(|| BODY.in_ink(ink).paragraph(&tokens, self.title.clone()))
                 .width(Size::fill())
-                .max_lines(2)
-                .text_overflow(TextOverflow::Ellipsis)
+                .max_lines((self.disclosure.is_none() && self.value.is_none()).then_some(2))
+                .text_overflow(overflow.clone())
                 .into(),
             None => title,
             Some(badge) => rect()
@@ -688,13 +777,20 @@ impl Component for Row {
                 .child(
                     rect().tw(&tokens, &[mt(S1)]).child(
                         rect()
+                            .component("Badge")
                             .tw(&tokens, BADGE_BOX)
                             .child(BADGE.label(&tokens, badge.clone()).max_lines(1)),
                     ),
                 )
                 .into(),
         };
-        let subtitle_lines = if self.subtitle_one_line { 1 } else { 3 };
+        let subtitle_lines: Option<usize> = if self.subtitle_one_line {
+            Some(1)
+        } else if self.disclosure.is_some() {
+            None
+        } else {
+            Some(3)
+        };
         // A subtitle wraps onto a second or third line, so a row that has one
         // grows to fit it. A row without one has the row height, and its
         // text is centred by the row.
@@ -713,13 +809,13 @@ impl Component for Row {
                     self.subtitle_marks.as_deref().unwrap_or_default(),
                 )
                 .max_lines(subtitle_lines)
-                .text_overflow(TextOverflow::Ellipsis)
+                .text_overflow(overflow.clone())
                 .width(Size::fill())
                 .into(),
                 None => match search_highlight::marked(CAPTION, &tokens, subtitle) {
                     Some(marked) => marked
                         .max_lines(subtitle_lines)
-                        .text_overflow(TextOverflow::Ellipsis)
+                        .text_overflow(overflow.clone())
                         .width(Size::fill())
                         .into(),
                     // Plain text, not selectable: Freya makes selectable text a
@@ -727,7 +823,7 @@ impl Component for Row {
                     None => CAPTION
                         .paragraph(&tokens, subtitle.clone())
                         .max_lines(subtitle_lines)
-                        .text_overflow(TextOverflow::Ellipsis)
+                        .text_overflow(overflow.clone())
                         .width(Size::fill())
                         .into(),
                 },
@@ -745,7 +841,7 @@ impl Component for Row {
             .maybe_child(subtitle_line)
             .maybe_child(stacked.then(|| {
                 rect()
-                    .tw(&tokens, &[flex_row(), w_full(), mt(S2)])
+                    .tw(&tokens, &[flex_row(), grow_children(), w_full(), mt(S2)])
                     .maybe_child(self.trailing.clone())
             }));
         // A row with a control and a chevron is split in two: the body, which
@@ -753,7 +849,13 @@ impl Component for Row {
         // pressed, and the chevron zone, a target of its own beyond a divider.
         let split =
             self.navigates && self.trailing_control && self.trailing.is_some() && radio.is_none();
-        let trailing = (!stacked && (self.trailing.is_some() || self.selected || (self.navigates && !split)))
+        // A value that is stacked under its title leaves its place beside the
+        // title empty; a chevron or a check still ends the row.
+        let trailing_child = (!stacked).then(|| self.trailing.clone()).flatten();
+        let trailing = (trailing_child.is_some()
+            || self.selected
+            || self.disclosure.is_some()
+            || (self.navigates && !split))
             .then(|| {
             rect()
                 .tw(&tokens, ROW_TRAILING)
@@ -766,7 +868,7 @@ impl Component for Row {
                 // cannot shrink an overflowing child, so a cap on this area
                 // would push a chevron or a dropdown past the box edge. A text
                 // field on a phone takes what the title's own width leaves.
-                .maybe(self.value_trailing, |element| {
+                .maybe(self.value_trailing && !stacked, |element| {
                     element.tw(&tokens, &[w_flex(), grow_children(), justify(Align::End)])
                 })
                 .maybe(title_cell.is_some(), |element| {
@@ -774,13 +876,18 @@ impl Component for Row {
                         .tw(&tokens, &[w_flex(), grow_children()])
                         .min_width(Size::px(0.0))
                 })
-                .maybe_child(self.trailing.clone())
+                .maybe_child(trailing_child)
                 .maybe_child((self.selected && !self.navigates).then(|| {
                     icons::icon(Icon::Check, IconSize::Mark, Paint::Accent.color(&tokens))
                 }))
                 .maybe_child((self.navigates && !split).then(|| {
                     icons::icon(Icon::GoNext, IconSize::Mark, Paint::Muted.color(&tokens))
                 }))
+                .maybe_child(
+                    self.disclosure
+                        .as_ref()
+                        .map(|(open, _)| DisclosureChevron { open: *open }),
+                )
         });
 
         let mut content: Vec<Element> = Vec::new();
@@ -990,6 +1097,10 @@ impl Component for Row {
             } else {
                 AccessibilityRole::GenericContainer
             })
+            .maybe(self.disclosure.is_some(), |element| {
+                let open = self.disclosure.as_ref().is_some_and(|(open, _)| *open);
+                element.a11y_builder(move |builder| builder.set_expanded(open))
+            })
             .maybe(radio.is_some(), |element| {
                 let checked = radio.is_some_and(|choice| choice.selected);
                 element.a11y_builder(move |builder| builder.set_toggled(Toggled::from(checked)))
@@ -1056,6 +1167,7 @@ impl Component for Row {
             .maybe_child(anchor.flash())
             .on_sized(move |event: Event<SizedEventData>| {
                 face_size.set_if_modified((event.area.width(), event.area.height()));
+                remember_face(window_width, event.area.width());
                 anchor.on_sized().call(event);
             });
         // The ring is measured from the face, so a padded row that takes its
@@ -1073,11 +1185,30 @@ impl Component for Row {
             )
         }
         .tw(&tokens, &[w_full()]);
+        let direction = crate::controls::direction::use_direction();
         let face = match radio.and_then(|choice| choice.nav.clone()) {
             Some(nav) => {
-                face.on_key_down(move |event: Event<KeyboardEventData>| radio_arrow(&nav, event))
+                face.on_key_down(move |event: Event<KeyboardEventData>| radio_arrow(&nav, event, direction))
             }
             None => face,
+        };
+        // Right opens a disclosure and Left closes it; Enter and Space press.
+        let face = match &self.disclosure {
+            Some((open, on_set)) if interactive => {
+                let (open, on_set) = (*open, on_set.clone());
+                face.on_key_down(move |event: Event<KeyboardEventData>| {
+                    let want = match &direction.reading_key(&event.key) {
+                        Key::Named(NamedKey::ArrowRight) => true,
+                        Key::Named(NamedKey::ArrowLeft) => false,
+                        _ => return,
+                    };
+                    event.stop_propagation();
+                    if want != open {
+                        on_set.call(want);
+                    }
+                })
+            }
+            _ => face,
         };
         let Some((_, rows)) = &self.nested else {
             return face.into_element();
@@ -1098,6 +1229,7 @@ impl Component for Row {
                         rows: rows.clone(),
                         lit: nested_lit,
                         filter,
+                        divided: self.disclosure.is_some(),
                     },
                 )
                 .lazy(),
@@ -1115,6 +1247,8 @@ struct NestedRows {
     rows: Vec<Element>,
     lit: State<Vec<usize>>,
     filter: SlotFilter,
+    /// A hairline above the first row, as between any two rows of a card.
+    divided: bool,
 }
 
 impl Component for NestedRows {
@@ -1125,6 +1259,7 @@ impl Component for NestedRows {
         rect()
             .component("NestedRows")
             .tw(&tokens, &[flex_col(), w_full(), pl(GUTTER)])
+            .maybe_child(self.divided.then(|| rect().tw(&tokens, SEPARATOR)))
             .children(card_rows(self.rows.clone(), self.lit, self.filter))
     }
 }
@@ -1487,8 +1622,8 @@ struct NavItem {
 
 /// Moves a radio group's selection with the arrow keys: the next or previous
 /// option that can be chosen is selected and takes focus, wrapping at the ends.
-fn radio_arrow(nav: &RadioNav, event: Event<KeyboardEventData>) {
-    let forward = match &event.key {
+fn radio_arrow(nav: &RadioNav, event: Event<KeyboardEventData>, direction: crate::controls::direction::Direction) {
+    let forward = match &direction.reading_key(&event.key) {
         Key::Named(NamedKey::ArrowDown | NamedKey::ArrowRight) => true,
         Key::Named(NamedKey::ArrowUp | NamedKey::ArrowLeft) => false,
         _ => return,
@@ -1615,15 +1750,9 @@ pub fn text_row(
 }
 
 /// A read-only fact: title on the left, value on the right, for About
-/// pages. The value stays on one line; a long one is cut with an ellipsis,
-/// and it can be selected and copied.
+/// pages. See [`Row::value`].
 pub fn property_row(title: impl Into<String>, value: impl Into<String>) -> Row {
-    let mut row = row(title);
-    row.value_trailing = true;
-    row.trailing(ValueText {
-        text: value.into(),
-        mono: false,
-    })
+    row(title).value(value)
 }
 
 /// A row whose trailing text is editable in place: click to edit, Enter
@@ -1670,13 +1799,23 @@ impl Component for EntryRow {
     }
 }
 
-/// A row that reveals child rows below it when pressed. The chevron
-/// rotates and the children fade in over 160 ms (none under reduced
-/// motion).
+/// A row that reveals child rows below it when pressed, set in by one gutter
+/// with the hairlines of a card. The chevron turns and the children grow
+/// into place together over the same 160 ms (none under reduced motion).
+///
+/// It is a [`Row`] that discloses its [`nested`](Row::nested) rows
+/// ([`Row::disclosure`]), so its header has the padding, height, hover fill,
+/// focus ring and a phone's touch height of every other row, its title and
+/// subtitle wrap instead of being cut, the rows are laid out at the width
+/// they are shown at, and a closed expander has none of its rows mounted, so
+/// nothing hidden takes focus. It reports its state to assistive technology;
+/// Enter and Space press it, Right opens it and Left closes it.
 pub fn expander_row(title: impl Into<String>, children: Vec<Element>) -> ExpanderRow {
     ExpanderRow {
         title: title.into(),
         subtitle: None,
+        leading: None,
+        value: None,
         children,
         expanded: None,
     }
@@ -1687,6 +1826,8 @@ pub fn expander_row(title: impl Into<String>, children: Vec<Element>) -> Expande
 pub struct ExpanderRow {
     title: String,
     subtitle: Option<String>,
+    leading: Option<Icon>,
+    value: Option<String>,
     children: Vec<Element>,
     expanded: Option<bool>,
 }
@@ -1694,6 +1835,19 @@ pub struct ExpanderRow {
 impl ExpanderRow {
     pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
         self.subtitle = Some(subtitle.into());
+        self
+    }
+
+    /// An icon before the title, as [`Row::leading`].
+    pub fn leading(mut self, icon: Icon) -> Self {
+        self.leading = Some(icon);
+        self
+    }
+
+    /// A read-only value before the chevron, as [`Row::value`]: what the
+    /// expander holds, such as a count.
+    pub fn value(mut self, value: impl Into<String>) -> Self {
+        self.value = Some(value.into());
         self
     }
 
@@ -1709,33 +1863,42 @@ impl Component for ExpanderRow {
         let tokens = use_tokens();
         let initial = self.expanded.unwrap_or(false);
         let mut open = use_state(move || initial);
-        let progress = use_tween(if open() { 1.0 } else { 0.0 }, tokens.motion(MOVE_MS));
-        let chevron = rect().rotate(progress * 90.0).child(icons::icon(
-            Icon::GoNext,
-            IconSize::Mark,
-            Paint::Muted.color(&tokens),
-        ));
-        let header = row(self.title.clone())
+        let mut header = row(self.title.clone())
             .maybe_subtitle(self.subtitle.clone())
-            .trailing(chevron)
-            .on_press(move |_| open.set(!open()));
-        // Child rows are set in by one gutter, with the same hairlines as
-        // the rows of a card.
-        let mut children = Vec::with_capacity(self.children.len() * 2);
-        for child in &self.children {
-            children.push(rect().tw(&tokens, SEPARATOR).into());
-            children.push(child.clone());
+            .disclosure(open(), move |want: bool| open.set(want))
+            .on_press(move |_| open.set(!open()))
+            .nested(open(), self.children.clone());
+        if let Some(icon) = self.leading {
+            header = header.leading(icon);
+        }
+        if let Some(value) = &self.value {
+            header = header.value(value.clone());
         }
         rect()
             .component("ExpanderRow")
             .tw(&tokens, &[flex_col(), w_full()])
             .child(header)
-            .child(crate::motion::reveal(
-                open(),
-                rect()
-                    .tw(&tokens, &[flex_col(), w_full(), pl(GUTTER)])
-                    .children(children),
-            ))
+    }
+}
+
+/// The chevron of a [`Row::disclosure`]: it points right while closed and
+/// down while open, and turns between them as the rows below grow, with the
+/// same duration and easing. It keeps the size and place of the chevron of a
+/// row that navigates, so the two line up in one card.
+#[derive(PartialEq)]
+struct DisclosureChevron {
+    open: bool,
+}
+
+impl Component for DisclosureChevron {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let progress = use_tween(if self.open { 1.0 } else { 0.0 }, tokens.motion(MOVE_MS));
+        rect().component("DisclosureChevron").rotate(progress * 90.0).child(icons::icon(
+            Icon::GoNext,
+            IconSize::Mark,
+            Paint::Muted.color(&tokens),
+        ))
     }
 }
 
@@ -2192,5 +2355,209 @@ mod phone_fields {
             "the field is {} px wide",
             line.field.width(),
         );
+    }
+}
+
+/// A read-only value is never cut: it sits beside its title when it fits,
+/// and otherwise wraps or goes under the title, from the first frame.
+#[cfg(all(test, feature = "testing"))]
+mod value_rows {
+    use std::time::Duration;
+
+    use torin::prelude::Area;
+
+    use super::*;
+    use crate::group::Group;
+    use crate::inspector::layout_checks::{Rule, check};
+    use crate::inspector::snapshot::Snapshot as Tree;
+    use crate::snapshot::Snapshot;
+
+    const LICENCES: &str = "Apache-2.0 AND MIT AND Zlib AND BSD-3-Clause AND Unicode-3.0";
+    const HASH: &str = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+
+    #[derive(PartialEq, Clone)]
+    struct Scene {
+        title: &'static str,
+        value: &'static str,
+        kind: ValueKind,
+    }
+
+    impl Component for Scene {
+        fn render(&self) -> impl IntoElement {
+            let tokens = crate::theme::provide_tokens();
+            let line = row(self.title);
+            let line = match self.kind {
+                ValueKind::Plain => line.value(self.value),
+                ValueKind::Mono => line.mono_value(self.value),
+                ValueKind::Path => line.path_value(self.value),
+            };
+            rect()
+                .expanded()
+                .tw(&tokens, &[p(S4)])
+                .child(crate::shell::OverlayHost::new(
+                    Group::new(None::<String>).rows(vec![line.into_element()]),
+                ))
+        }
+    }
+
+    /// Where the row, its title and its value are, and what the checks say.
+    struct Look {
+        row: Area,
+        title: Area,
+        value: Area,
+        tree: Tree,
+    }
+
+    fn area_of(tree: &Tree, text: &str) -> Area {
+        tree.nodes
+            .iter()
+            .filter(|node| node.text.as_deref().is_some_and(|shown| shown.contains(text)))
+            .find_map(|node| node.area)
+            .unwrap_or_else(|| panic!("no text {text:?} in the tree"))
+    }
+
+    fn look(shot: &mut Snapshot, title: &str, value: &str) -> Look {
+        let tree = Tree::capture_headless(shot.runner(), 1.0);
+        let row = tree
+            .nodes
+            .iter()
+            .filter(|node| node.a11y.component.as_deref() == Some("Row"))
+            .find_map(|node| node.area)
+            .expect("a row");
+        Look {
+            row,
+            title: area_of(&tree, title),
+            value: area_of(&tree, value),
+            tree,
+        }
+    }
+
+    fn mount(scene: Scene, size: (f32, f32)) -> Snapshot {
+        Snapshot::new(move || scene.clone().into(), size)
+    }
+
+    fn settled(scene: Scene, size: (f32, f32)) -> Look {
+        let (title, value) = (scene.title, scene.value);
+        let mut shot = mount(scene, size);
+        shot.settle(Duration::from_millis(500));
+        look(&mut shot, title, value)
+    }
+
+    fn first_frame(scene: Scene, size: (f32, f32)) -> Look {
+        let (title, value) = (scene.title, scene.value);
+        let mut shot = mount(scene, size);
+        look(&mut shot, title, value)
+    }
+
+    fn near(a: f32, b: f32) -> bool {
+        (a - b).abs() < 1.0
+    }
+
+    /// No rule that sees a cut, a clip, a broken word or a box out of its
+    /// parent has anything to say about the row.
+    fn assert_whole(look: &Look, what: &str) {
+        let findings = check(&look.tree);
+        for rule in [
+            Rule::ValueEllipsised,
+            Rule::Overflow,
+            Rule::Wrapped,
+            Rule::OutsideParent,
+            Rule::HorizontalScroll,
+            Rule::Clipped,
+        ] {
+            let found: Vec<_> = findings.iter().filter(|finding| finding.rule == rule).collect();
+            assert!(found.is_empty(), "{what}: {rule:?}: {found:?}");
+        }
+    }
+
+    #[test]
+    fn a_long_value_on_a_phone_goes_under_its_title_in_full() {
+        let look = settled(
+            Scene { title: "Licences", value: LICENCES, kind: ValueKind::Plain },
+            (390.0, 600.0),
+        );
+        assert!(look.value.min_y() >= look.title.max_y() - 0.5, "the value is under the title");
+        assert!(near(look.value.min_x(), look.title.min_x()), "and starts where the title does");
+        assert!(look.value.width() >= look.row.width() - 2.0 * GUTTER.px_in(SizeClass::Compact) - 2.0);
+        assert_whole(&look, "phone licences");
+    }
+
+    #[test]
+    fn the_same_value_on_a_desktop_sits_beside_its_title_at_the_rows_end() {
+        let look = settled(
+            Scene { title: "Licences", value: LICENCES, kind: ValueKind::Plain },
+            (900.0, 400.0),
+        );
+        assert!(look.value.min_x() >= look.title.max_x(), "beside the title");
+        assert!(
+            near(look.value.max_x(), look.row.max_x() - GUTTER.px_in(SizeClass::Regular)),
+            "{} is not a gutter from the row's end {}",
+            look.value.max_x(),
+            look.row.max_x()
+        );
+        assert_whole(&look, "desktop licences");
+    }
+
+    #[test]
+    fn a_hash_and_a_path_wrap_by_breaking_anywhere_and_are_shown_whole() {
+        for kind in [ValueKind::Mono, ValueKind::Path] {
+            let value = if kind == ValueKind::Mono {
+                HASH
+            } else {
+                "/home/kieran/Projects/Annual-reports-and-statutory-filings-2026/Quarter-three-final/note"
+            };
+            for size in [(390.0, 600.0), (900.0, 400.0)] {
+                let look = settled(Scene { title: "Location", value, kind }, size);
+                assert_whole(&look, &format!("{value} at {size:?}"));
+                assert!(
+                    look.value.max_x() <= look.row.max_x(),
+                    "{value} at {size:?}: the value ends at {} past the row's {}",
+                    look.value.max_x(),
+                    look.row.max_x()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_short_value_stays_on_the_titles_line_at_the_height_of_one_row() {
+        for size in [(390.0, 600.0), (900.0, 400.0)] {
+            let look = settled(
+                Scene { title: "Version", value: "0.1.0", kind: ValueKind::Plain },
+                size,
+            );
+            assert!(near(look.value.center().y, look.title.center().y), "{size:?}");
+            assert!(look.row.height() <= 60.0, "{size:?}: {}", look.row.height());
+            assert_whole(&look, "version");
+        }
+    }
+
+    /// What the row looked like on the frame it mounted in is what it settles
+    /// as: nothing moves once the row has been measured.
+    #[test]
+    fn the_first_frame_is_the_settled_frame() {
+        for (title, value, kind, size) in [
+            ("Licences", LICENCES, ValueKind::Plain, (390.0, 600.0)),
+            ("Licences", LICENCES, ValueKind::Plain, (900.0, 400.0)),
+            ("Version", "0.1.0", ValueKind::Plain, (390.0, 600.0)),
+            ("SHA-256", HASH, ValueKind::Mono, (390.0, 600.0)),
+        ] {
+            let scene = || Scene { title, value, kind };
+            let first = first_frame(scene(), size);
+            let settled = settled(scene(), size);
+            for (name, a, b) in [
+                ("row", first.row, settled.row),
+                ("title", first.title, settled.title),
+                ("value", first.value, settled.value),
+            ] {
+                assert!(
+                    near(a.min_x(), b.min_x())
+                        && near(a.min_y(), b.min_y())
+                        && near(a.width(), b.width())
+                        && near(a.height(), b.height()),
+                    "{title} at {size:?}: the {name} was {a:?} on the first frame and {b:?} settled"
+                );
+            }
+        }
     }
 }

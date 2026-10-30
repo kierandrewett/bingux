@@ -11,9 +11,21 @@
 //!   the swap, so the container never shrinks mid-swap. When the new child is
 //!   smaller, the box settles to it at the end of the swap; wrap the child in
 //!   [`reveal`] if that step matters.
-//! - [`use_tween`] and [`animated_number`] change values, not the size of the
-//!   box around them. Give text a fixed width when its digits must not move
-//!   neighbours.
+//! - [`use_tween`] changes a value, not the size of the box it sits in. Give
+//!   text a fixed width when its digits must not move neighbours.
+//! - [`animated_number`] rolls each digit that changes in a clipped column of
+//!   its own, as the shell's clock does. Digits are tabular, so counting keeps
+//!   the width; only a number that gains or loses a digit changes its width,
+//!   and then smoothly.
+//! - [`use_cycle`] is the clock of every loop (a spinner, an indeterminate
+//!   bar): a phase from 0 to 1 that starts over, owned by the component that
+//!   calls it. It is the one motion reduced motion does not stop.
+//! - [`icon_morph`] turns one icon into another inside one fixed square: the
+//!   first quarter-turns, shrinks and fades as the second turns to rest,
+//!   grows and fades in. `IconButton::morph` drives it from [`use_tween`], so
+//!   a button can change its glyph without changing its size.
+//! - [`use_dwell`] shows a state late and holds it, so one that is true for a
+//!   moment does not flicker (the Stop state of a loading folder).
 //!
 //! Durations go through [`Tokens::motion`], so reduced motion turns every
 //! animation into an instant change.
@@ -31,15 +43,22 @@ use crate::focus::{FocusCore, InsideScope, claim_press, use_focus_core};
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
-use crate::typography::{NUMERIC, TextStyle, styled_label};
+
+mod animated_number;
+mod dwell;
+mod icon_morph;
+pub use animated_number::{AnimatedNumber, NumberFormat, animated_number};
+pub use dwell::{Dwell, DwellGate, use_dwell};
+pub use icon_morph::{MORPH_SMALLEST, MORPH_TURN, MorphLayer, icon_morph, morph_layers};
+pub(crate) use icon_morph::MorphGlyph;
 
 /// The default duration of a motion, in milliseconds, before reduced motion.
 pub const MOVE_MS: u64 = 160;
 
-/// How long an [`animated_number`] rolls, in milliseconds.
-const ROLL_MS: u64 = 320;
-/// How far below its place an [`animated_number`] starts, in pixels.
-const ROLL_LIFT: f32 = 8.0;
+/// How long a digit of an [`animated_number`] rolls, in milliseconds: the
+/// shell clock's `RollingNumber.qml`, which slides a changed digit for 140 ms
+/// along an ease-out cubic.
+pub const ROLL_MS: u64 = 140;
 
 /// A [`presence`] starts this far scaled down and grows to full size.
 pub const PRESENCE_SCALE: f32 = 0.96;
@@ -58,6 +77,32 @@ pub fn use_tween(target: f32, ms: u64) -> f32 {
 /// mounted when focus first reaches it arrives like this, from 0 to 1.
 pub fn use_tween_from(start: f32, target: f32, ms: u64) -> f32 {
     use_tween_with(start, target, ms, Function::Quad)
+}
+
+/// The phase of a cycle that never ends: it runs from 0 up to 1 over `ms`
+/// milliseconds and starts over from 0 as it gets there, for as long as the
+/// caller is mounted. Every looping indicator (the spinner, the sweep and the
+/// pulse of an indeterminate bar) reads its position from this one clock, so
+/// they all loop the same way.
+///
+/// The clock belongs to the caller's own scope, so the caller drawing again
+/// (a parent re-rendering, a label changing) never restarts it, and it stops
+/// when the caller unmounts. A change of `ms` starts a new cycle from 0.
+///
+/// This is the one motion that ignores [`Tokens::reduced_motion`]: a progress
+/// indicator that stood still would look frozen. The caller picks a longer,
+/// gentler cycle for reduced motion instead.
+pub fn use_cycle(ms: u64) -> f32 {
+    let animation = use_animation_with_dependencies(&ms.max(1), |conf, &ms| {
+        conf.on_creation(OnCreation::Run);
+        conf.on_change(OnChange::Rerun);
+        conf.on_finish(OnFinish::restart());
+        AnimNum::new(0.0, 1.0)
+            .time(ms)
+            .function(Function::Linear)
+            .ease(Ease::InOut)
+    });
+    animation.get().value()
 }
 
 /// [`use_tween`] along another curve than the standard one, such as the
@@ -516,70 +561,6 @@ impl Component for Crossfade {
             );
         }
         container
-    }
-}
-
-/// A number that counts to `value` instead of jumping.
-#[derive(Clone, PartialEq)]
-pub struct AnimatedNumber {
-    value: f32,
-    decimals: usize,
-    style: TextStyle,
-}
-
-/// An [`AnimatedNumber`] that shows `value`, with the numeric text style.
-pub fn animated_number(value: f32) -> AnimatedNumber {
-    AnimatedNumber {
-        value,
-        decimals: 0,
-        style: NUMERIC,
-    }
-}
-
-impl AnimatedNumber {
-    /// Digits shown after the decimal point.
-    pub fn decimals(mut self, decimals: usize) -> Self {
-        self.decimals = decimals;
-        self
-    }
-
-    /// The text style of the number.
-    pub fn style(mut self, style: TextStyle) -> Self {
-        self.style = style;
-        self
-    }
-}
-
-impl Component for AnimatedNumber {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        // The digits count through the values between, and each change also
-        // lifts the number in from below while it fades up, so a step of one
-        // (which counts through no value at all) still reads as a change.
-        let shown = use_tween(self.value, tokens.motion(ROLL_MS));
-        let bump_ms = tokens.motion(ROLL_MS);
-        let bump = use_animation(move |_| {
-            AnimNum::new(0.0, 1.0)
-                .time(bump_ms)
-                .function(Function::Quad)
-                .ease(Ease::Out)
-        });
-        use_side_effect_with_deps(&self.value.to_bits(), move |_| {
-            let mut bump = bump;
-            bump.start();
-        });
-        let progress = if *bump.has_run_yet().read() {
-            bump.get().value()
-        } else {
-            1.0
-        };
-        rect()
-            .offset_y((1.0 - progress) * ROLL_LIFT)
-            .opacity(0.35 + 0.65 * progress)
-            .child(styled_label(
-                self.style,
-                format!("{:.*}", self.decimals, shown),
-            ))
     }
 }
 

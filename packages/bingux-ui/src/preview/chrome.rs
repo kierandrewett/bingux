@@ -1,13 +1,15 @@
-//! The chrome every preview shares: the header, the footer line and the Info
-//! panel. One header, in one order: the file's icon and name, its position,
-//! then Open, Info, the mode switch, full screen, and Close at the trailing
-//! end where every Bingux header has it.
+//! The chrome every preview shares: one slim title line and the Info panel.
+//! The title line has the file's icon and name and its position, then at most
+//! four buttons: Open, Info, the mode switch, and Close at the trailing end
+//! where every Bingux header has it. Full screen is the F key. There is no
+//! footer: the facts of the file are in Info.
 
 use bingux_files::Kind;
 use bingux_preview_core::PreviewSource;
 use freya::prelude::*;
 
 use super::info::InfoRow;
+use super::keys::Keyboard;
 use super::mode::Mode;
 use super::step::Step;
 use crate::component::ComponentName;
@@ -39,6 +41,13 @@ pub struct PreviewNav {
     pub on_properties: Option<EventHandler<()>>,
     /// Switch to another frame: the owner closes this one and shows that.
     pub on_mode: Option<EventHandler<Mode>>,
+    /// A popup takes the keyboard when it opens (see [`PreviewNav::takes_focus`]).
+    pub focus: bool,
+    /// Whether the preview's own keys (scroll, zoom, play) are live: always
+    /// in a popup; in a pane only after a click in it.
+    pub(super) keyboard: Keyboard,
+    /// Give the keyboard back to the owner's list (a pane's Escape).
+    pub on_release: Option<EventHandler<()>>,
     pub on_close: EventHandler<()>,
 }
 
@@ -53,8 +62,19 @@ impl PreviewNav {
             on_open: None,
             on_properties: None,
             on_mode: None,
+            focus: true,
+            keyboard: Keyboard::always(),
+            on_release: None,
             on_close: on_close.into(),
         }
+    }
+
+    /// Whether a popup takes the keyboard when it opens. It does by default;
+    /// a preview shown in the middle of a page (the taxonomy's specimens) must
+    /// not, or the page scrolls to wherever the last one is.
+    pub fn takes_focus(mut self, takes: bool) -> Self {
+        self.focus = takes;
+        self
     }
 
     /// The file is number `at` (counting from 1) of `of`.
@@ -71,6 +91,20 @@ impl PreviewNav {
     /// The owner can dock this preview into a pane beside its list.
     pub fn dockable(mut self, dock: bool) -> Self {
         self.dock = dock;
+        self
+    }
+
+    /// The preview is a docked pane; `held` is true while the pane has the
+    /// keyboard for its own keys (the owner clears it when it takes the
+    /// keyboard back). The arrows step the file either way.
+    pub fn pane_keys(mut self, held: State<bool>) -> Self {
+        self.keyboard = Keyboard::pane(held);
+        self
+    }
+
+    /// What gives the keyboard back to the owner's list.
+    pub fn on_release(mut self, handler: impl Into<EventHandler<()>>) -> Self {
+        self.on_release = Some(handler.into());
         self
     }
 
@@ -160,26 +194,10 @@ pub(super) fn header(
         };
         bar = bar.trailing(icon_button(icon, move |_| switch.call(to)).tooltip(tip));
     }
-    if let Some(switch) = nav.on_mode.clone().filter(|_| mode != Mode::Pane && !compact) {
-        let (icon, tip, to) = if mode == Mode::Fullscreen {
-            (Icon::ViewRestore, "Leave full screen (F)", Mode::Popup)
-        } else {
-            (Icon::ViewFullscreen, "Full screen (F)", Mode::Fullscreen)
-        };
-        bar = bar.trailing(icon_button(icon, move |_| switch.call(to)).tooltip(tip));
-    }
     let close = nav.on_close.clone();
     bar.trailing(
         icon_button(Icon::WindowClose, move |_| close.call(())).tooltip(if mode == Mode::Pane { "Hide the preview" } else { "Close (Space)" }),
     )
-}
-
-/// The line under the content.
-pub(super) fn footer(tokens: &Tokens, text: String) -> Element {
-    rect()
-        .tw(tokens, &[w_full(), h(Dim::Header), px(S4), flex_row(), items(Align::Center)])
-        .child(CAPTION.in_ink(Ink::Muted).label(tokens, text).max_lines(1).text_overflow(TextOverflow::Ellipsis))
-        .into()
 }
 
 /// The Info panel: the facts of the file, a name above each value, and the

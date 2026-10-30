@@ -64,12 +64,12 @@ use super::directory::Wants;
 use super::file_grid::GridView;
 use super::hover_card::{Hover, HoverCard, HoverFeed, use_hover_feed};
 use super::search::SearchView;
-use super::scroll_memory::{Owner, SearchTop, came_from, recall, remember};
+use super::scroll_memory::{Owner, SearchTop, came_from, measure, measured, recall, register, remember, unregister};
 use super::file_list::ListView;
 use super::interaction::{DRAG_SLOP, Hits, Lattice, Span, reveal_offset};
 use super::status_line::{SearchLine, StatusInfo, status_line};
 use super::view_state;
-use super::zoom::{DEFAULT_PX, Pinch, ViewKind, Zoom, cap_for_width, kind_of, use_pinch, use_zoom, zoom_hud};
+use super::zoom::{Pinch, ViewKind, Zoom, cap_for_width, default_zoom_px, kind_of, use_pinch, use_zoom, zoom_hud};
 use crate::component::ComponentName;
 use crate::controls::press::{Press, is_touch, point_of, use_press};
 use crate::motion::Focusable;
@@ -225,6 +225,9 @@ pub(super) struct Ctx {
     pub wants: Wants,
     /// The docked preview pane is open.
     pub pane: State<bool>,
+    /// The docked pane has the keyboard for its own keys (a click in it put it
+    /// there); the list has it otherwise.
+    pub pane_keys: State<bool>,
     /// The row that holds the list and the pane, in window coordinates.
     pub pane_row: State<Area>,
 }
@@ -287,7 +290,7 @@ impl Ctx {
     /// Location column and the detail card tell it. `None` outside results.
     pub fn result_folder(&self, entry: &Entry) -> Option<String> {
         let deep = self.search.as_ref()?.deep.as_ref()?;
-        let folder = bingux_files::search::relative_folder(&entry.path, &deep.root);
+        let folder = bingux_files::find::relative_folder(&entry.path, &deep.root);
         Some(if folder.is_empty() { "This folder".to_string() } else { folder })
     }
 
@@ -1248,16 +1251,31 @@ impl FileView {
 }
 
 impl Component for FileView {
+    fn render_key(&self) -> DiffKey {
+        // A view belongs to one tab and one folder: another tab, or another
+        // folder, is a new view, scrolled to where that tab left it. The
+        // listing of the same folder arriving, growing or changing is not.
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        std::hash::Hash::hash(&self.owner, &mut hasher);
+        std::hash::Hash::hash(&self.listing.path, &mut hasher);
+        std::hash::Hash::hash(&self.listing.recent, &mut hasher);
+        DiffKey::U64(std::hash::Hasher::finish(&hasher))
+    }
+
     fn render(&self) -> impl IntoElement {
+        let direction = crate::controls::direction::use_direction();
         #[cfg(test)]
         super::hover_card::renders::view();
         let tokens = use_tokens();
         let compact = is_compact();
         let overlays = use_overlays();
         let ui = use_ui();
-        let own_level = use_state(|| DEFAULT_PX);
+        let own_level = use_state(default_zoom_px);
         let level = self.icon_px.unwrap_or(own_level);
-        let viewport = use_state(Area::default);
+        // The size the last view of this tab had: the first frame is laid
+        // out in it, not in nothing (see `scroll_memory::Measured`).
+        let mounted = measured(self.owner);
+        let viewport = use_state(move || mounted.viewport);
         let zoom = use_zoom(level, cap_for_width(viewport.read().width()));
         let pinch = use_pinch(zoom);
         // A level the person chooses is remembered for the folder. The one the
@@ -1312,35 +1330,42 @@ impl Component for FileView {
             move || ScrollController::new(0, saved)
         });
         let selection = self.selection;
-        use_hook({
-            let restored = restored.clone();
-            let folder = self.listing.path.clone();
-            let listing = self.listing.clone();
-            move || {
-                let mut selection = selection;
-                if !selection.peek().is_empty() {
-                    return;
-                }
-                if let Some(remembered) = restored {
-                    let present: Vec<&Path> = remembered
-                        .selection
-                        .iter()
-                        .map(PathBuf::as_path)
-                        .filter(|path| listing.entries.iter().any(|entry| entry.path == *path))
-                        .collect();
-                    if !present.is_empty() {
+        // What was selected here before comes back once the rows are in: at
+        // once for a listing that is whole, when the folder has been read for
+        // one that is not.
+        let selection_restored = use_hook(|| Rc::new(Cell::new(false)));
+        if !selection_restored.get() {
+            let mut selection = selection;
+            let listing = &self.listing;
+            let has = |path: &Path| listing.entries.iter().any(|entry| entry.path == *path);
+            let wanted: &[PathBuf] = restored.as_ref().map_or(&[], |remembered| &remembered.selection);
+            let from = came_from(owner, &key);
+            if !selection.peek().is_empty() || (wanted.is_empty() && from.is_none()) {
+                selection_restored.set(true);
+            } else {
+                let present: Vec<&Path> = wanted
+                    .iter()
+                    .map(PathBuf::as_path)
+                    .filter(|path| has(path))
+                    .collect();
+                let child = from.filter(|child| has(child));
+                if !present.is_empty() {
+                    // Rows that are still coming may hold more of it.
+                    if present.len() == wanted.len() || listing.complete {
                         selection.write().select_all(&present);
-                        return;
+                        selection_restored.set(true);
                     }
-                }
-                if let Some(child) = came_from(owner, &folder)
-                    && listing.entries.iter().any(|entry| entry.path == child)
-                {
+                } else if let Some(child) = child {
                     selection.write().select_only(&child);
+                    selection_restored.set(true);
+                } else if listing.complete {
+                    selection_restored.set(true);
                 }
             }
-        });
-        use_drop({
+        }
+        // Recording the folder is what the drop does, and what a move of the
+        // tab to another window asks for while this view is still on show.
+        let record: Rc<dyn Fn()> = Rc::new({
             let path = key.clone();
             let results_now = results_now.clone();
             move || {
@@ -1351,6 +1376,16 @@ impl Component for FileView {
                 let paths = selection.peek().paths().to_vec();
                 remember(owner, &path, <(i32, i32)>::from(scroll).1, paths);
             }
+        });
+        let flush_token = use_hook({
+            let record = record.clone();
+            move || (owner != 0).then(|| register(owner, move || record()))
+        });
+        use_drop(move || {
+            if let Some(token) = flush_token {
+                unregister(token);
+            }
+            record();
         });
         // Rows that come and go under a resting pointer leave no hover to
         // end: forget it, so the detail card of a row that is gone hides. A
@@ -1399,7 +1434,15 @@ impl Component for FileView {
         // toolbar button for it, else the view's own.
         let own_pane = use_state(|| false);
         let pane = self.pane.unwrap_or(own_pane);
-        let pane_row = use_state(Area::default);
+        let pane_row = use_state(move || mounted.pane_row);
+        let pane_keys = use_state(|| false);
+        // What this view measured is what the next one of the tab starts from.
+        use_side_effect_with_deps(&(*viewport.read(), *pane_row.read()), move |&(viewport, pane_row)| {
+            measure(owner, |measured| {
+                measured.viewport = viewport;
+                measured.pane_row = pane_row;
+            });
+        });
         let env = Env {
             folder,
             home: home.clone(),
@@ -1469,6 +1512,7 @@ impl Component for FileView {
                 home: home.clone(),
                 wants: wants.clone(),
                 pane,
+                pane_keys,
                 pane_row,
             }))))
         });
@@ -1498,6 +1542,7 @@ impl Component for FileView {
             home: home.clone(),
             wants: wants.clone(),
             pane,
+            pane_keys,
             pane_row,
         });
         *preview_target.borrow_mut() = Some(shared.downgrade());
@@ -1632,7 +1677,7 @@ impl Component for FileView {
                     return;
                 }
                 let handled = if ctx.zoom.kind() == ViewKind::Grid {
-                    super::file_grid::navigate(&ctx, &event)
+                    super::file_grid::navigate(&ctx, &event, direction)
                 } else {
                     super::file_list::navigate(&ctx, &event)
                 };
@@ -1789,7 +1834,16 @@ fn status_info(view: &FileView, ctx: &Ctx) -> StatusInfo {
         .filter(|entry| !entry.is_dir())
         .map(|entry| entry.size)
         .sum();
+    // One link selected: the pill says where it leads. `readlink` does not
+    // touch the target, so a stalled mount cannot hold the pill.
+    let link = match selected.as_slice() {
+        [one] if one.symlink => std::fs::read_link(&one.path)
+            .ok()
+            .map(|target| target.to_string_lossy().into_owned()),
+        _ => None,
+    };
     StatusInfo {
+        link,
         shown: view.order.len(),
         total_listed: view.listing.entries.len(),
         selected: selected.len(),
@@ -1812,6 +1866,7 @@ fn status_info(view: &FileView, ctx: &Ctx) -> StatusInfo {
         ) != actions::TrashView::No,
         complete: true,
         unresponsive: false,
+        stopped: view.listing.stopped,
     }
 }
 
@@ -1837,7 +1892,7 @@ impl Component for BandOverlay {
         let span = Span::between(band.start, band.current);
         rect()
             .interactive(false)
-            .layer(Layer::Overlay)
+            .layer(crate::layers::VIEW_CARD)
             .position(
                 Position::new_absolute()
                     .left(span.x0)
@@ -1882,7 +1937,7 @@ impl Component for DragChip {
         };
         rect()
             .interactive(false)
-            .layer(Layer::Overlay)
+            .layer(crate::layers::VIEW_CARD)
             .position(
                 Position::new_absolute()
                     .left(at.0 - origin.min_x() + S4.px())

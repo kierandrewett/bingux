@@ -342,7 +342,7 @@ fn convolver_row(fx: Fx, slot: &PluginSlot) -> Element {
         .map_or_else(|| "None".to_string(), |name| name.to_string_lossy().into_owned());
     row("File")
         .value(name)
-        .trailing(action_button("Choose...", move |_| {
+        .trailing(action_button("Choose…", move |_| {
             let id = id.clone();
             choose(
                 fx.window,

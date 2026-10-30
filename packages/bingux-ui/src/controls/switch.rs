@@ -5,7 +5,7 @@ use accesskit::Toggled;
 use freya::animation::*;
 use freya::prelude::*;
 
-use super::press::use_press;
+use super::press::{hit_area, use_press};
 use crate::component::{ComponentName, Prop, Published, prop_override};
 use crate::motion::Focusable;
 use crate::style::*;
@@ -102,13 +102,18 @@ impl Component for Switch {
             )
             .maybe(!on, |element| element.tw(&tokens, &[border(Line::Outline)]))
             .maybe(!enabled, |element| element.opacity(DISABLED_OPACITY))
-            .maybe(enabled, |element| {
+            // At compact density the hit area reads the hover (see `hit_area`): the
+            // switch's own box ends at its face, so a pointer in the ring never reaches it.
+            .maybe(enabled && !is_compact(), |element| {
                 element
-                    .on_pointer_enter(move |_| hovering.set(true))
-                    .on_pointer_leave(move |_| {
+                    .on_pointer_over(move |_| hovering.set(true))
+                    .on_pointer_out(move |_| {
                         hovering.set(false);
                         pressing.set_if_modified(false);
                     })
+            })
+            .maybe(enabled, |element| {
+                element
                     .on_pointer_down(move |event: Event<PointerEventData>| {
                         event.stop_propagation();
                         pressing.set(true);
@@ -158,6 +163,13 @@ impl Component for Switch {
                         &tokens,
                         &[h(Dim::SwitchThumb), rounded(Radius::Pill), bg(thumb)],
                     ),
-            ).focusable(focus())
+            )
+            // At compact density the painted switch is 28 px tall and a finger
+            // needs 44: the hit area is widened, the drawing is not.
+            .maybe_child(is_compact().then(|| {
+                let face = (Dim::SwitchWidth.px(), Dim::SwitchHeight.px());
+                hit_area(face, (face.0.max(TOUCH_MIN), TOUCH_MIN), hovering, pressing)
+            }))
+            .focusable(focus())
     }
 }

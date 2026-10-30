@@ -103,6 +103,12 @@ pub const FIELD_ROW_INSET: Space = Space::new(10.0, 8.0);
 /// on a phone), so the icon sits in an even margin at both densities.
 pub const NAV_INSET: Space = Space::new(8.0, 16.0);
 
+/// The side padding of a file row (list, header and name cell): [`NAV_INSET`]
+/// at regular density, held there on a phone. A file's icon sits the same
+/// distance from the list's edge at every width; only the rows' height and
+/// their two lines change with the density.
+pub const FILE_ROW_INSET: Space = Space::new(8.0, 8.0);
+
 /// The space between a list of selectable items and the edge of its
 /// container, on each side. A row's fill stops this far short of the edge, so
 /// its rounded ends show: sidebar pages, places and file rows all keep it, and
@@ -265,6 +271,13 @@ impl IconSize {
         resolve(regular, compact)
     }
 
+    /// The size in logical pixels at `class`, for a tool that reads another
+    /// window's density.
+    pub fn px_in(self, class: SizeClass) -> f32 {
+        let (regular, compact) = self.sizes();
+        class.pick(regular, compact)
+    }
+
     /// The (regular, compact) sizes. Icons grow about one seventh in the
     /// compact class, so they stay in step with the text beside them.
     const fn sizes(self) -> (f32, f32) {
@@ -359,6 +372,10 @@ pub enum Dim {
     SliderTrackActive,
     /// A slider thumb: 16 px, 22 px for a finger.
     SliderThumb,
+    /// The large slider of a colour picker's hue and alpha strips: a 14 px
+    /// track (16 px for a finger) and a 22 px thumb (28 px for a finger).
+    SliderTrackLarge,
+    SliderThumbLarge,
     /// A stepper's square half: 28 px.
     StepperHalf,
     /// A button inside a field or a chip, such as a password's reveal or a
@@ -390,6 +407,20 @@ pub enum Dim {
     /// 128 px on a phone, where the close slot is a whole 44 px touch target
     /// and a title still needs room beside it. The widest is [`Dim::Field`].
     TabMin,
+    /// The height of a strip of tabs, which is the window's title bar when it
+    /// holds them: 40 px, 44 px at compact density, where a tab is the whole
+    /// touch target. It is taller than a field ([`Dim::Control`]) so the tabs
+    /// and the window's buttons have room.
+    TabBar,
+    /// A button at the end of a strip of tabs (New tab, the tab list) and in
+    /// its bar: the strip less [`FIELD_INSET`] above and below, so it is the
+    /// same distance from the strip's top, bottom and trailing edge: 32 px,
+    /// 44 px at compact density, where there is no inset.
+    TabButton,
+    /// How far the end of a line of text that does not fit fades out, instead
+    /// of ending in an ellipsis: 24 px, at the end of the line in the reading
+    /// direction (see `controls::fade_text`).
+    TextFade,
     /// A colour scheme preview card: 144 x 96.
     PreviewWidth,
     PreviewHeight,
@@ -435,9 +466,21 @@ pub enum Dim {
     SignalBar,
     /// The keyboard focus ring and selection rings: 2 px.
     Ring,
-    /// A round colour-picker thumb: 12 px.
-    Thumb,
-    /// A colour-picker swatch: 16 px.
+    /// The saturation and value plane of a colour picker: 168 px high, 200 px
+    /// for a finger.
+    PickerPlane,
+    /// The knob a colour picker's plane draws: 20 px, 24 px for a finger. The
+    /// target around it is [`Dim::PickerHandle`].
+    PickerKnob,
+    /// The target of a colour picker's plane handle, centred on the knob: 32 px,
+    /// 44 px for a finger.
+    PickerHandle,
+    /// One preset swatch of a colour picker: 32 px, 44 px for a finger.
+    PickerSwatch,
+    /// A colour picker's content width on a desktop: 264 px. A phone's picker
+    /// fills its sheet.
+    PickerWidth,
+    /// The default size of a colour chip in a list or a property row: 16 px.
     Swatch,
     /// The label column of a property row, left of its controls: 96 px.
     Label,
@@ -480,8 +523,6 @@ pub enum Dim {
     DenseField,
     /// A row of the DOM tree and code views: 22 px.
     CodeRow,
-    /// The indent of one level in the DOM tree: 14 px.
-    TreeIndent,
     /// The find strip docked at the top of a pane: 26 px.
     FlatField,
     /// A file chooser popup: 880 x 700 px, until the window is smaller.
@@ -530,8 +571,13 @@ impl Dim {
             | Dim::NavItem
             | Dim::WindowControlTarget
             | Dim::StepperHalf
+            | Dim::PickerPlane
+            | Dim::PickerHandle
+            | Dim::PickerSwatch
             | Dim::InlineButton
             | Dim::RowButton
+            | Dim::TabBar
+            | Dim::TabButton
             | Dim::SpeakerButton => true,
             Dim::MenuSeparator
             | Dim::NavIcon
@@ -559,6 +605,10 @@ impl Dim {
             | Dim::SliderTrack
             | Dim::SliderTrackActive
             | Dim::SliderThumb
+            | Dim::SliderTrackLarge
+            | Dim::SliderThumbLarge
+            | Dim::PickerKnob
+            | Dim::PickerWidth
             | Dim::Sidebar
             | Dim::Page
             | Dim::PagePhone
@@ -568,6 +618,7 @@ impl Dim {
             | Dim::Box11
             | Dim::Box24
             | Dim::TabMin
+            | Dim::TextFade
             | Dim::PreviewWidth
             | Dim::PreviewHeight
             | Dim::PreviewRow
@@ -590,7 +641,6 @@ impl Dim {
             | Dim::IconBox
             | Dim::SignalBar
             | Dim::Ring
-            | Dim::Thumb
             | Dim::Swatch
             | Dim::Label
             | Dim::Hairline
@@ -610,7 +660,6 @@ impl Dim {
             | Dim::Timeline
             | Dim::DenseField
             | Dim::CodeRow
-            | Dim::TreeIndent
             | Dim::FlatField
             | Dim::ChooserWidth
             | Dim::ChooserHeight
@@ -659,6 +708,8 @@ impl Dim {
             Dim::SliderTrack => same(6.0),
             Dim::SliderTrackActive => same(8.0),
             Dim::SliderThumb => (16.0, 22.0),
+            Dim::SliderTrackLarge => (14.0, 16.0),
+            Dim::SliderThumbLarge => (22.0, 28.0),
             Dim::StepperHalf => (28.0, TOUCH_MIN),
             Dim::InlineButton => (28.0, TOUCH_MIN),
             Dim::RowButton => (40.0, TOUCH_MIN),
@@ -671,6 +722,9 @@ impl Dim {
             Dim::Box11 => same(44.0),
             Dim::Box24 => same(96.0),
             Dim::TabMin => (96.0, 128.0),
+            Dim::TabBar => (40.0, TOUCH_MIN),
+            Dim::TabButton => (32.0, TOUCH_MIN),
+            Dim::TextFade => same(24.0),
             Dim::PreviewWidth => same(144.0),
             Dim::PreviewHeight => same(96.0),
             Dim::PreviewRow => same(464.0),
@@ -697,7 +751,11 @@ impl Dim {
             Dim::IconBox => IconSize::Row.sizes(),
             Dim::SignalBar => same(3.0),
             Dim::Ring => same(2.0),
-            Dim::Thumb => same(12.0),
+            Dim::PickerPlane => (168.0, 200.0),
+            Dim::PickerKnob => (20.0, 24.0),
+            Dim::PickerHandle => (32.0, TOUCH_MIN),
+            Dim::PickerSwatch => (32.0, TOUCH_MIN),
+            Dim::PickerWidth => same(264.0),
             Dim::Swatch => same(16.0),
             Dim::Label => same(96.0),
             Dim::Hairline => same(1.0),
@@ -719,11 +777,12 @@ impl Dim {
             Dim::Timeline => same(72.0),
             Dim::DenseField => same(140.0),
             Dim::CodeRow => same(22.0),
-            Dim::TreeIndent => same(14.0),
             Dim::FlatField => same(26.0),
             Dim::ChooserWidth => same(880.0),
             Dim::ChooserHeight => same(700.0),
-            Dim::PlacesColumn => same(200.0),
+            // 216: the usage line of a drive ("120 GB free of 500 GB", 137 px at the caption size) is shown in
+            // full (TX-01); at 200 the row left it 131.
+            Dim::PlacesColumn => same(216.0),
             Dim::FileSizeColumn => same(88.0),
             Dim::FileModifiedColumn => same(112.0),
             Dim::GridTile => same(132.0),
@@ -760,10 +819,9 @@ pub enum Paint {
     Frosted,
     /// The sidebar and the window frame around the page panel.
     Sidebar,
-    /// The strip behind a window's tabs: one step darker than [`Paint::Bg`],
-    /// so the selected tab and the content under it, both `Bg`, read as one
-    /// shape rising out of it.
-    TabStrip,
+    /// The recess behind a viewer's content (an image, a PDF page): one step
+    /// darker than [`Paint::Bg`], so the picture stands out of it.
+    Recess,
     /// Group cards.
     Card,
     /// Buttons, fields, dropdowns and segmented tracks.
@@ -856,8 +914,10 @@ pub enum Paint {
     InspectShadow,
     /// The opaque tinted fill of a banner or toast of this kind.
     NoticeFill(BannerKind),
-    /// The 1 px edge of a banner or toast: the hue at 3:1 on its fill.
+    /// The faint 1 px edge of a banner or toast: its ink at low alpha on its fill.
     NoticeEdge(BannerKind),
+    /// The leading icon of a banner or toast: the kind's hue at 3:1 on its fill.
+    NoticeGlyph(BannerKind),
     /// Syntax colours of markup: a tag name, an attribute name, an
     /// attribute value, text and a comment.
     SyntaxTag,
@@ -913,7 +973,7 @@ impl Paint {
             Paint::Surface => tokens.surface,
             Paint::Frosted => tokens.bg.with_af32(0.82),
             Paint::Sidebar => tokens.sidebar,
-            Paint::TabStrip => tokens.tab_strip,
+            Paint::Recess => tokens.recess,
             Paint::Card => tokens.card,
             Paint::Control => tokens.control,
             Paint::Raised => tokens.raised,
@@ -946,6 +1006,7 @@ impl Paint {
             Paint::FloatingOutline => tokens.floating_outline,
             Paint::NoticeFill(kind) => tokens.notice(kind).fill,
             Paint::NoticeEdge(kind) => tokens.notice(kind).edge,
+            Paint::NoticeGlyph(kind) => tokens.notice(kind).glyph,
             Paint::Track => tokens.text.with_af32(0.22),
             Paint::Swatch(name) => crate::theme::accent_for(name, tokens.scheme.is_dark()),
             Paint::MockDarkWindow => Color::from_rgb(38, 38, 42),
@@ -975,8 +1036,9 @@ impl Paint {
     }
 }
 
-/// Parses `#rrggbb` or `#rrggbbaa` (the `#` optional), the form CSS writes and
-/// the inspector shows and commits.
+/// Parses `#rrggbb`, `#rrggbbaa` and CSS's shorthands `#rgb` and `#rgba` (the
+/// `#` optional): the forms CSS writes, the inspector shows and commits and
+/// the colour picker's hex field takes. Any other length is `None`.
 pub fn colour_from_hex(text: &str) -> Option<Color> {
     let text = text.trim();
     let digits = text.strip_prefix('#').unwrap_or(text);
@@ -984,7 +1046,14 @@ pub fn colour_from_hex(text: &str) -> Option<Color> {
         return None;
     }
     let value = u32::from_str_radix(digits, 16).ok()?;
+    // A shorthand digit stands for itself twice: `f` is `ff`.
+    let nibble = |shift: u32| {
+        let digit = ((value >> shift) & 0xf) as u8;
+        digit * 17
+    };
     match digits.len() {
+        3 => Some(colour_from_argb(255, nibble(8), nibble(4), nibble(0))),
+        4 => Some(colour_from_argb(nibble(0), nibble(12), nibble(8), nibble(4))),
         6 => Some(colour_from_argb(
             255,
             (value >> 16) as u8,
@@ -1310,6 +1379,27 @@ mod touch_tests {
                 "{class:?}: a field row is a row tall"
             );
         }
+    }
+
+    /// A strip of tabs stands on its bottom edge, a field inset below the top
+    /// of the bar; its end buttons and the fill of a hovered tab are the bar
+    /// less the inset above and below, and a tab's close button is inset again
+    /// inside that fill: so every button in the strip is the same distance
+    /// from the strip's top and bottom, and nests in the one outside it.
+    #[test]
+    fn the_tab_bar_and_its_buttons_share_one_inset() {
+        for class in [SizeClass::Regular, SizeClass::Compact] {
+            let inset = FIELD_INSET.px_in(class);
+            let (bar, button) = (Dim::TabBar.px_in(class), Dim::TabButton.px_in(class));
+            assert_eq!(bar - button, 2.0 * inset, "{class:?}: the end buttons are the bar less two insets");
+            // The fill of a tab is as tall as an end button; its close button is that
+            // less an inset above and below: 24 px, and the whole 44 px target at compact.
+            let close = if inset > 0.0 { Dim::DenseControl } else { Dim::InlineButton };
+            assert_eq!(button - 2.0 * inset, close.px_in(class), "{class:?}: the close button");
+            assert!(bar >= Dim::Control.px_in(class), "{class:?}: the strip is not shorter than a field");
+        }
+        assert_eq!((Dim::TabBar.px_in(SizeClass::Regular), Dim::TabButton.px_in(SizeClass::Regular)), (40.0, 32.0));
+        assert_eq!(Dim::TabBar.px_in(SizeClass::Compact), TOUCH_MIN);
     }
 
     #[test]

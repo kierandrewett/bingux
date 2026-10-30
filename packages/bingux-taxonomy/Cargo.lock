@@ -534,7 +534,9 @@ dependencies = [
 name = "bingux-files"
 version = "0.1.0"
 dependencies = [
+ "bingux-search",
  "libc",
+ "regex",
 ]
 
 [[package]]
@@ -561,6 +563,7 @@ dependencies = [
 name = "bingux-taxonomy"
 version = "0.1.0"
 dependencies = [
+ "bingux-preview-core",
  "bingux-ui",
  "freya",
 ]
@@ -2317,6 +2320,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
+ "libm",
 ]
 
 [[package]]
@@ -3877,13 +3881,14 @@ checksum = "06bdbd8cfc056b8d2e2e85f29b56a3bdbecb527cef81eb39e3e7b98af4652770"
 
 [[package]]
 name = "torin"
-version = "0.5.0-rc.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3079cd5023f533dc0308963ff3f394ac5975018d08cfe70491ac386a6890d6b9"
+version = "0.5.0-rc.13"
 dependencies = [
  "euclid",
+ "hashbrown 0.16.1",
  "itertools",
+ "libm",
  "rustc-hash",
+ "serde",
  "tracing",
 ]
 
@@ -4508,8 +4513,6 @@ checksum = "d6bbff5f0aada427a1e5a6da5f1f98158182f26556f345ac9e04d36d0ebed650"
 [[package]]
 name = "winit"
 version = "0.30.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6755fa58a9f8350bd1e472d4c3fcc25f824ec358933bba33306d0b63df5978d"
 dependencies = [
  "ahash",
  "android-activity",

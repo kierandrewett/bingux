@@ -68,6 +68,10 @@ impl Snapshot {
         size: SnapshotSize,
         scale: f64,
     ) -> Self {
+        // A headless run presses real controls: the Settings pages write through the
+        // `gsettings` command, and a test, a sweep or a capture must never change the
+        // person's dconf.
+        crate::runtime::isolate_system_settings();
         // Mount the same root integration the windowed app gets, so Tab and
         // arrow keys move accessibility focus exactly as they do on screen.
         let app: std::rc::Rc<dyn Fn() -> Element> = std::rc::Rc::new(app);
@@ -145,6 +149,26 @@ impl Snapshot {
         self
     }
 
+    /// Drive the runner one 16 ms step at a time until `done` is true, or until `cap` has passed.
+    /// Returns whether `done` was reached.
+    ///
+    /// [`Snapshot::settle`] waits out its whole duration whatever is on screen: a duration long
+    /// enough for a loaded machine is a long wait on an idle one, and one that suits the idle
+    /// machine fails on a loaded one. A test that waits for something to appear says what, with a
+    /// generous cap, and goes on the moment it is there. The caller asserts on the result.
+    pub fn settle_until(&mut self, cap: Duration, mut done: impl FnMut(&mut Snapshot) -> bool) -> bool {
+        let end = Instant::now() + cap;
+        loop {
+            if done(self) {
+                return true;
+            }
+            if Instant::now() >= end {
+                return false;
+            }
+            self.settle(FRAME);
+        }
+    }
+
     /// Click at a logical point.
     pub fn click(&mut self, x: f32, y: f32) -> &mut Self {
         self.runner.run_in(|| {
@@ -164,6 +188,68 @@ impl Snapshot {
     /// exact match. Returns false, and notes it in the manifest, when no
     /// label has text containing `text`.
     pub fn click_text(&mut self, text: &str) -> bool {
+        let Some((x, y)) = self.label_centre(text) else {
+            self.mark(&format!("click-text not found: {text}"));
+            return false;
+        };
+        self.click(x, y);
+        true
+    }
+
+    /// Click the centre of the first box a component named `name` made, for a
+    /// control that has no text of its own to click (a colour swatch, a
+    /// slider). Returns false, and notes it in the manifest, when none is
+    /// on screen.
+    pub fn click_component(&mut self, name: &str) -> bool {
+        let tree = crate::inspector::snapshot::Snapshot::capture_headless(&self.runner, 1.0);
+        let found = tree
+            .nodes
+            .iter()
+            .filter(|node| node.a11y.component.as_deref() == Some(name))
+            .find_map(|node| node.area);
+        let Some(area) = found else {
+            self.mark(&format!("click-component not found: {name}"));
+            return false;
+        };
+        let centre = area.center();
+        self.click(centre.x, centre.y);
+        true
+    }
+
+    /// Click the centre of the first box whose accessible name is `name`: a
+    /// control that is named and has no text of its own (the chevron of a split
+    /// button is "View options" to a screen reader and draws only an icon).
+    /// Returns false, and notes it in the manifest, when none is on screen.
+    pub fn click_name(&mut self, name: &str) -> bool {
+        let tree = crate::inspector::snapshot::Snapshot::capture_headless(&self.runner, 1.0);
+        let found = tree
+            .nodes
+            .iter()
+            .filter(|node| node.a11y.name.as_deref() == Some(name))
+            .find_map(|node| node.area);
+        let Some(area) = found else {
+            self.mark(&format!("click-name not found: {name}"));
+            return false;
+        };
+        let centre = area.center();
+        self.click(centre.x, centre.y);
+        true
+    }
+
+    /// [`Snapshot::click_text`] with the right mouse button.
+    pub fn right_click_text(&mut self, text: &str) -> bool {
+        let Some((x, y)) = self.label_centre(text) else {
+            self.mark(&format!("rclick-text not found: {text}"));
+            return false;
+        };
+        self.right_click(x, y);
+        true
+    }
+
+    /// The centre of the label whose text is `text`, preferring an exact
+    /// match to one that only contains it; with no such label, the first
+    /// paragraph whose text contains `text` (a tree row is one).
+    fn label_centre(&mut self, text: &str) -> Option<(f32, f32)> {
         let hits: Vec<(bool, f32, f32)> = self.runner.find_many(|node, element| {
             let label = Label::try_downcast(element)?;
             if !label.text.contains(text) {
@@ -172,12 +258,19 @@ impl Snapshot {
             let centre = node.layout().area.center();
             Some((label.text == text, centre.x, centre.y))
         });
-        let Some(&(_, x, y)) = hits.iter().find(|hit| hit.0).or_else(|| hits.first()) else {
-            self.mark(&format!("click-text not found: {text}"));
-            return false;
-        };
-        self.click(x, y);
-        true
+        if let Some(&(_, x, y)) = hits.iter().find(|hit| hit.0).or_else(|| hits.first()) {
+            return Some((x, y));
+        }
+        let paragraphs: Vec<(f32, f32)> = self.runner.find_many(|node, element| {
+            let paragraph = Paragraph::try_downcast(element)?;
+            let plain: String = paragraph.spans.iter().map(|span| span.text.to_string()).collect();
+            if !plain.contains(text) {
+                return None;
+            }
+            let centre = node.layout().area.center();
+            Some((centre.x, centre.y))
+        });
+        paragraphs.first().copied()
     }
 
     /// Press and release the right mouse button at a logical point.
@@ -201,6 +294,22 @@ impl Snapshot {
         self.input(format!("touch {x},{y}"));
         self.send_touch(TouchEventName::TouchStart, x, y);
         self.send_touch(TouchEventName::TouchEnd, x, y);
+        self.capture_frame();
+        self
+    }
+
+    /// Drag one finger from `from` to `to` in steps and lift it, as a swipe
+    /// that scrolls a page does. A control that acts on a tap must not act on it.
+    pub fn swipe(&mut self, from: (f32, f32), to: (f32, f32)) -> &mut Self {
+        const STEPS: u32 = 8;
+        self.input(format!("swipe {},{},{},{}", from.0, from.1, to.0, to.1));
+        self.send_touch(TouchEventName::TouchStart, from.0, from.1);
+        for step in 1..=STEPS {
+            let t = step as f32 / STEPS as f32;
+            let at = (from.0 + (to.0 - from.0) * t, from.1 + (to.1 - from.1) * t);
+            self.send_touch(TouchEventName::TouchMove, at.0, at.1);
+        }
+        self.send_touch(TouchEventName::TouchEnd, to.0, to.1);
         self.capture_frame();
         self
     }
@@ -290,6 +399,18 @@ impl Snapshot {
         self
     }
 
+    /// Hover the centre of the label, or else the paragraph, whose text is
+    /// `text`, as [`Snapshot::click_text`] finds it. Returns false when none
+    /// contains `text`.
+    pub fn hover_text(&mut self, text: &str) -> bool {
+        let Some((x, y)) = self.label_centre(text) else {
+            self.mark(&format!("hover-text not found: {text}"));
+            return false;
+        };
+        self.hover(x, y);
+        true
+    }
+
     /// Scroll the wheel by `dy` logical pixels over a point; negative moves
     /// the content up.
     pub fn scroll(&mut self, x: f32, y: f32, dy: f32) -> &mut Self {
@@ -350,6 +471,7 @@ impl Snapshot {
     /// - `scroll x,y,dy`, `drag x1,y1,x2,y2`, `down x,y`/`move x,y`/`up x,y`
     /// - `key escape|return|tab|space|left|right|up|down|CHARACTER`, with `shift+`, `ctrl+` or `alt+` in front
     /// - `click-text TEXT`: click the label with that text
+    /// - `click-name NAME`: click the control with that accessible name (one with no text of its own)
     /// - `address LOCATION`: open a location (a URI or a bare path of `scheme`),
     ///   e.g. `address network/wifi/saved`
     /// - `wait MS`: let the app run for that long, recording frames
@@ -442,6 +564,8 @@ impl Snapshot {
                         "return" => Key::Named(NamedKey::Enter),
                         "tab" => Key::Named(NamedKey::Tab),
                         "f3" => Key::Named(NamedKey::F3),
+                        "f2" => Key::Named(NamedKey::F2),
+                        "f10" => Key::Named(NamedKey::F10),
                         "f6" => Key::Named(NamedKey::F6),
                         "f11" => Key::Named(NamedKey::F11),
                         "delete" => Key::Named(NamedKey::Delete),
@@ -461,9 +585,29 @@ impl Snapshot {
                         self.key(Key::Character(character.to_string()));
                     }
                 }
+                "hover-text" => {
+                    if !self.hover_text(rest) {
+                        eprintln!("[snapshot] hover-text found no label: {rest}");
+                    }
+                }
                 "click-text" => {
                     if !self.click_text(rest) {
                         eprintln!("[snapshot] click-text found no label: {rest}");
+                    }
+                }
+                "click-name" => {
+                    if !self.click_name(rest) {
+                        eprintln!("[snapshot] click-name found no control: {rest}");
+                    }
+                }
+                "click-component" => {
+                    if !self.click_component(rest) {
+                        eprintln!("[snapshot] click-component found no component: {rest}");
+                    }
+                }
+                "rclick-text" => {
+                    if !self.right_click_text(rest) {
+                        eprintln!("[snapshot] rclick-text found no label: {rest}");
                     }
                 }
                 "address" => {
@@ -542,6 +686,43 @@ impl Snapshot {
         }
     }
 
+    /// With `BINGUX_UI_TOOLTIP_CHECK=FILE` set, appends one JSON line to FILE
+    /// for each capture: the PNG's path, how many named icon buttons the frame
+    /// has, how many showed a bubble, and what is wrong with the bubbles
+    /// ([`Snapshot::tooltip_findings`]). It runs after the PNG is written, so
+    /// the pointer it moves is not in the capture. `scripts/tooltip-check.py`
+    /// reads it.
+    fn lint_tooltips(&mut self, shot: &Path) {
+        let Some(file) = std::env::var_os("BINGUX_UI_TOOLTIP_CHECK") else {
+            return;
+        };
+        let report = self.tooltip_findings();
+        let findings: Vec<_> = report
+            .findings
+            .iter()
+            .map(|found| {
+                serde_json::json!({
+                    "name": found.name,
+                    "rule": found.rule,
+                    "detail": found.detail,
+                    "control": [found.control.min_x(), found.control.min_y(), found.control.width(), found.control.height()],
+                    "bubble": [found.bubble.min_x(), found.bubble.min_y(), found.bubble.width(), found.bubble.height()],
+                })
+            })
+            .collect();
+        let line = serde_json::json!({
+            "capture": shot.to_string_lossy(),
+            "controls": report.controls,
+            "shown": report.shown,
+            "missing": report.missing,
+            "findings": findings,
+        });
+        use std::io::Write;
+        if let Ok(mut out) = fs::OpenOptions::new().create(true).append(true).open(file) {
+            let _ = writeln!(out, "{line}");
+        }
+    }
+
     /// Write a PNG of the current frame.
     pub fn save(&mut self, path: impl AsRef<Path>) -> &mut Self {
         if let Some(parent) = path.as_ref().parent() {
@@ -550,6 +731,9 @@ impl Snapshot {
         self.runner.render_to_file(path.as_ref().to_path_buf());
         self.lint_layout(path.as_ref());
         self.lint_rings(path.as_ref());
+        self.lint_tooltips(path.as_ref());
+        self.lint_states(path.as_ref());
+        self.lint_probe(path.as_ref());
         self
     }
 
@@ -592,17 +776,62 @@ impl Snapshot {
 
     /// With `BINGUX_UI_LAYOUT_LINT=FILE` set, appends one JSON line to FILE
     /// for each capture: the PNG's path and the layout findings of the frame
-    /// it shows. `scripts/layout-lint.py` reads it.
+    /// it shows. `scripts/layout-lint.py` reads it. With
+    /// `BINGUX_UI_LAYOUT_TREE` set as well, the frame's tree is written next
+    /// to the PNG as `NAME.tree.txt`, to read a finding against.
+    ///
+    /// With `BINGUX_UI_LAYOUT_MIRROR=DIR` set too, the run is one half of a
+    /// mirror check (`scripts/layout-lint.py --rtl`): a run that reads left to
+    /// right saves the shape of the frame in DIR as `NAME.json`, and a run
+    /// that reads right to left (`BINGUX_DIRECTION=rtl`) compares its frame
+    /// with that file and adds the `direction-asymmetric` findings.
     fn lint_layout(&mut self, shot: &Path) {
+        use crate::controls::direction::Direction;
+        use crate::inspector::layout_checks::{self, Structure};
         let Some(file) = std::env::var_os("BINGUX_UI_LAYOUT_LINT") else {
             return;
         };
-        let findings: Vec<_> = self
-            .layout_findings()
-            .iter()
-            .map(|finding| finding.json())
-            .collect();
-        let line = serde_json::json!({ "capture": shot.to_string_lossy(), "findings": findings });
+        let tree =
+            crate::inspector::snapshot::Snapshot::capture_headless(&self.runner, scale_factor() as f32);
+        if std::env::var_os("BINGUX_UI_LAYOUT_TREE").is_some() {
+            let _ = fs::write(shot.with_extension("tree.txt"), tree.outline());
+        }
+        let mut found = layout_checks::check(&tree);
+        if let (Some(dir), Some(name)) = (
+            std::env::var_os("BINGUX_UI_LAYOUT_MIRROR"),
+            shot.file_name().and_then(|name| name.to_str()),
+        ) {
+            let kept = Path::new(&dir).join(format!("{name}.json"));
+            if Direction::system().is_rtl() {
+                let before = fs::read_to_string(&kept)
+                    .ok()
+                    .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+                    .and_then(|value| Structure::from_json(&value));
+                if let Some(before) = before {
+                    found.extend(layout_checks::direction_asymmetric(&before, &tree));
+                }
+            } else {
+                let _ = fs::create_dir_all(&dir);
+                let _ = fs::write(&kept, Structure::of(&tree).json().to_string());
+            }
+        }
+        let findings: Vec<_> = found.iter().map(|finding| finding.json()).collect();
+        // The named insets by "Class/name", each value with how often it was
+        // measured, for `scripts/layout-lint.py --parity`.
+        let mut metrics: std::collections::BTreeMap<String, std::collections::BTreeMap<String, u32>> =
+            Default::default();
+        for metric in crate::inspector::layout_checks::metrics(&tree) {
+            *metrics
+                .entry(format!("{}/{}", metric.class, metric.name))
+                .or_default()
+                .entry(format!("{:.1}", metric.value))
+                .or_default() += 1;
+        }
+        let line = serde_json::json!({
+            "capture": shot.to_string_lossy(),
+            "findings": findings,
+            "metrics": metrics,
+        });
         use std::io::Write;
         if let Ok(mut out) = fs::OpenOptions::new().create(true).append(true).open(file) {
             let _ = writeln!(out, "{line}");
@@ -724,7 +953,7 @@ pub fn snapshot(
 /// The display scale to render at: `BINGUX_SNAPSHOT_SCALE`, default 1.0. A
 /// fractional value such as 1.25 or 1.5 shows pixel-rounding problems that a
 /// scale of 1 hides.
-fn scale_factor() -> f64 {
+pub(crate) fn scale_factor() -> f64 {
     std::env::var("BINGUX_SNAPSHOT_SCALE")
         .ok()
         .and_then(|value| value.parse().ok())

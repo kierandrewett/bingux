@@ -542,7 +542,7 @@ impl Component for DateBody {
             .child(reveal_block_if(
                 S6,
                 setting().then(|| {
-                    Element::from(status(Status::Loading("Setting the clock...".to_string())))
+                    Element::from(status(Status::Loading("Setting the clock…".to_string())))
                 }),
             ))
     }
@@ -657,7 +657,7 @@ impl Component for DateTimePage {
         // or disabled state of its own.
         let time_row = row("Set date and time")
             .on_press(move |_| open_date_sheet(window, form, now))
-            .context_menu(vec![menu_item("Set date and time...", move |_| {
+            .context_menu(vec![menu_item("Set date and time…", move |_| {
                 open_date_sheet(window, form, now)
             })]);
         let auto_zone_on = model_data.auto_zone.unwrap_or(false);

@@ -19,6 +19,13 @@
 //! The label and the detail take their own paints, so a tree can colour a name
 //! and its text as a code view does. `TreeView::find` marks a search text
 //! inside the rows, and `TreeView::code` sets the rows in the code face.
+//!
+//! A row is a lead, an icon, the label run and a badge. The lead is one level
+//! column per ancestor, each with a one-pixel guide at the middle of that
+//! ancestor's chevron slot, then the row's own chevron slot (empty on a leaf,
+//! so labels line up). A level's guides run the full height of every row below
+//! its ancestor, so they join and end with the last descendant. See
+//! `docs/bingux-ui.md`, "Tree guides".
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
@@ -27,6 +34,7 @@ use std::time::{Duration, Instant};
 
 use freya::prelude::*;
 
+use super::direction::use_direction;
 use super::tree_motion::{Slot, Timeline};
 use crate::component::ComponentName;
 use crate::icons::{self, Icon};
@@ -389,6 +397,7 @@ fn lower(c: char) -> char {
 impl Component for TreeView {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let direction = use_direction();
         let a11y_id = use_hook(AccessibilityId::new_unique);
         let focus = use_focus(a11y_id);
         let mut scroll = use_scroll_controller(ScrollConfig::default);
@@ -432,6 +441,12 @@ impl Component for TreeView {
         let viewport_height = viewport.read().height();
         let page = ((viewport_height / row_height) as usize).max(1);
         let selected_id = *selected.read();
+        let indent = indent_for(
+            rows.iter().map(|row| row.depth).max().unwrap_or(0),
+            viewport.read().width(),
+            Dim::IconControl.px(),
+            S2.px(),
+        );
         let selected_index = selected_id.and_then(|id| rows.iter().position(|row| row.id == id));
 
         // Keeps the selected row in view when the selection changes from
@@ -516,7 +531,8 @@ impl Component for TreeView {
                     }
                     return;
                 }
-                let Key::Named(named) = &event.key else {
+                let key = direction.reading_key(&event.key);
+                let Key::Named(named) = &key else {
                     return;
                 };
                 let target = match named {
@@ -604,6 +620,7 @@ impl Component for TreeView {
                 selected: is_selected,
                 code: self.code,
                 counts: self.counts,
+                indent,
                 needle: needle.clone(),
                 mark,
                 focus_id: a11y_id,
@@ -685,6 +702,8 @@ struct TreeRow {
     selected: bool,
     code: bool,
     counts: bool,
+    /// The width of one level, see [`indent_for`].
+    indent: f32,
     needle: String,
     mark: Paint,
     focus_id: AccessibilityId,
@@ -707,20 +726,19 @@ impl Component for TreeRow {
         let on_hover_leave = self.on_hover.clone();
         let on_context = self.on_context.clone();
 
-        // A guide line per level, so a deep row shows which branch it is in.
-        let indent = (0..self.row.depth).map(|_| {
-            rect().tw(
-                &tokens,
-                &[w(Dim::TreeIndent), h_full(), border(Line::HairlineRight)],
-            )
-        });
+        // One guide per ancestor level, each hung from the chevron of that
+        // ancestor and running the full height of every row below it, so the
+        // lines join from row to row and stop with the last descendant.
+        let indent = self.indent;
+        let guides = (0..self.row.depth).map(|_| guide_column(&tokens, indent));
+
         // One chevron that turns, so opening and closing read as one motion.
         let turn = use_tween(
             if self.row.branch == Branch::Open { 1.0 } else { 0.0 },
             tokens.motion(MOVE_MS),
         );
         let chevron = (self.row.branch != Branch::Leaf).then_some(Icon::PanEnd);
-        let mut toggle_slot = rect().tw(
+        let mut toggle_slot = rect().component("TreeChevron").tw(
             &tokens,
             &[
                 w(Dim::IconControl),
@@ -780,11 +798,13 @@ impl Component for TreeRow {
         // The line is exactly the row's height: a long label or a run of
         // chips is cut at the right edge, never wrapped, so the chevron slot
         // stays centred on the line and indentation only moves the row
-        // sideways.
+        // sideways. It grows its flexible child, so the badge keeps its own
+        // width and ends at the row's padding.
         let mut line = rect().tw(
             &tokens,
             &[
                 flex_row(),
+                grow_children(),
                 items(Align::Center),
                 w_full(),
                 h_full(),
@@ -793,7 +813,13 @@ impl Component for TreeRow {
                 clip(),
             ],
         );
-        line = line.children(indent).child(toggle_slot);
+        // The guides and the chevron slot touch, one level wide each, so a
+        // guide's x is a whole number of levels plus the slot's middle.
+        let lead = rect()
+            .tw(&tokens, &[flex_row(), h_full()])
+            .children(guides)
+            .child(toggle_slot);
+        line = line.child(lead);
         if let Some(icon) = self.row.icon.clone() {
             line = line.child(icons::icon(icon, IconSize::Row, Ink::Muted.color(&tokens)));
         }
@@ -886,6 +912,44 @@ impl Component for TreeRow {
                 on_press.call(id);
             })
     }
+}
+
+/// The least room, in chevron slots, a label keeps when [`indent_for`] narrows
+/// the levels of a deep tree.
+const LABEL_SLOTS: f32 = 6.0;
+
+/// The width of one level of the tree: the chevron slot, so a child's chevron
+/// sits exactly one slot right of its parent's and the guide through the
+/// parent's chevron is one slot from the next. When `depth` levels would leave
+/// the label less than `LABEL_SLOTS` slots in a view `width` wide, the level
+/// narrows to a whole number of pixels, no less than `least`, so every guide
+/// stays on a pixel; past that the label is what shrinks, to an ellipsis.
+/// `width` is 0 until the view is measured.
+pub(super) fn indent_for(depth: usize, width: f32, slot: f32, least: f32) -> f32 {
+    if width <= 0.0 || depth == 0 {
+        return slot;
+    }
+    let room = width - 2.0 * least - slot - LABEL_SLOTS * slot;
+    (room / depth as f32).floor().clamp(least, slot)
+}
+
+/// One level of guide: a column one level wide with a 1 px line starting at
+/// the middle of the chevron slot of the ancestor whose level it is. The line
+/// starts on a whole pixel (the slot's half, rounded down), so it covers whole
+/// device pixels at 1x and 2x, and it is the row's full height, so the lines
+/// of two rows join. It is `Paint::MutedFaint`: the separator's 8 % is too
+/// faint to follow down a tree.
+fn guide_column(tokens: &Tokens, level: f32) -> Element {
+    let middle = (Dim::IconControl.px() / 2.0).floor();
+    rect()
+        .tw(tokens, &[flex_row(), h_full()])
+        .width(Size::px(level))
+        .child(rect().width(Size::px(middle)))
+        .child(rect().component("TreeGuide").tw(
+            tokens,
+            &[w(Dim::Hairline), h_full(), bg(Paint::MutedFaint)],
+        ))
+        .into()
 }
 
 /// The chip for one value: muted type on a rounded control fill, with the

@@ -77,31 +77,6 @@ pub fn rows(resolved: &Resolved) -> Vec<InfoRow> {
     rows
 }
 
-/// The one line under the content: type, size, then what the viewer read.
-pub fn summary(resolved: &Resolved) -> String {
-    let facts = &resolved.facts;
-    let mut parts = vec![facts.description.to_owned()];
-    if let Some(size) = facts.size {
-        parts.push(display::size(size));
-    }
-    match &resolved.loaded {
-        Loaded::Image(Some(info)) => parts.push(info.dimensions()),
-        Loaded::Media(Some(info)) => {
-            parts.extend(info.seconds.map(bingux_preview_core::media::clock));
-            parts.extend(info.codec_line());
-        }
-        Loaded::Archive(listing) => {
-            let (files, _) = listing.totals();
-            parts.push(format!("{files} {}", if files == 1 { "file" } else { "files" }));
-        }
-        _ => {}
-    }
-    if let Some(modified) = facts.modified {
-        parts.push(format!("Modified {}", display::modified(modified)));
-    }
-    parts.join(" · ")
-}
-
 #[cfg(test)]
 mod tests {
     use bingux_preview_core::media::{AvInfo, ImageInfo};
@@ -134,7 +109,6 @@ mod tests {
         };
         info.exif.camera = Some("Canon EOS R5".into());
         let picture = resolved("holiday.png", 2_500_000, Loaded::Image(Some(info)), ViewerId::Image);
-        assert_eq!(summary(&picture), "PNG image · 2.5 MB · 4032 × 3024");
         let rows = rows(&picture);
         let labels: Vec<_> = rows.iter().map(|row| row.label).collect();
         assert_eq!(labels, ["Name", "Type", "Size", "Dimensions", "Resolution", "Camera"]);
@@ -151,7 +125,9 @@ mod tests {
             })),
             ViewerId::Media,
         );
-        assert_eq!(summary(&song), "FLAC audio · 30 MB · 3:07 · FLAC");
+        let values: Vec<String> = rows(&song).into_iter().map(|row| row.value).collect();
+        assert!(values.iter().any(|value| value.contains("3:07")), "{values:?}");
+        assert!(values.iter().any(|value| value.contains("FLAC")), "{values:?}");
     }
 
     #[test]

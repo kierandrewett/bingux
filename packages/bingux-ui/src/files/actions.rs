@@ -129,6 +129,28 @@ pub(super) struct Busy {
     pub cancel: Option<Cancel>,
 }
 
+/// How many file operations (copy, move, compress, extract, emptying the
+/// Trash) are running in this process. Each is counted from when it claims
+/// the busy slot until it finishes, on the window's own task, so it is right
+/// also when the tab that began it was closed meanwhile.
+static RUNNING: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// An operation claimed the busy slot.
+pub(super) fn operation_began() {
+    RUNNING.fetch_add(1, Ordering::AcqRel);
+}
+
+/// An operation gave the busy slot up.
+pub(super) fn operation_ended() {
+    let _ = RUNNING.fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| count.checked_sub(1));
+}
+
+/// Whether a file operation is running: closing the window now would stop
+/// it half way, so the host asks first.
+pub fn operations_running() -> bool {
+    RUNNING.load(Ordering::Acquire) > 0
+}
+
 /// Cheap `Copy` state the view owns and shares with its rows and tiles.
 #[derive(Clone, Copy, PartialEq)]
 pub(super) struct Ui {
@@ -386,18 +408,27 @@ impl TrashView {
 }
 
 /// What the Trash changes about the rules. Nothing is made, renamed, cut,
-/// pasted, packed or bookmarked there; the only delete is the permanent one
-/// (it always asks); the rest follows the ordinary rules (`None`).
+/// packed or bookmarked there (making says why it cannot); a paste into the
+/// Trash itself is a move to the Trash, and into a folder of it is refused;
+/// the only delete is the permanent one (it always asks); the rest follows
+/// the ordinary rules (`None`).
 fn in_trash(facts: &Facts, command: &Command) -> Option<Availability> {
-    use Availability::{Enabled, Hidden};
+    use Availability::{Disabled, Enabled, Hidden};
     Some(match command {
+        Command::NewFolder | Command::NewFile | Command::NewFromTemplate(_) => {
+            Disabled("Nothing can be made in the Trash.")
+        }
+        Command::Paste if facts.trash == TrashView::Root => {
+            if facts.can_paste {
+                Enabled
+            } else {
+                Disabled("There is nothing to paste.")
+            }
+        }
+        Command::Paste => Disabled("Nothing can be put inside a folder in the Trash."),
         Command::Cut
-        | Command::Paste
         | Command::PasteInto(_)
         | Command::Rename
-        | Command::NewFolder
-        | Command::NewFile
-        | Command::NewFromTemplate(_)
         | Command::Trash
         | Command::Compress
         | Command::CompressSelection
@@ -1214,7 +1245,7 @@ mod tests {
         let mut file = facts(Capabilities::FILES_APP, 1, 0);
         assert!(matches!(state(&file, Command::Undo), Availability::Disabled(_)));
         assert_eq!(state(&file, Command::Extract), Availability::Hidden);
-        file.undo = Some("Undo Rename");
+        file.undo = Some("Undo rename");
         file.extractable = true;
         assert!(state(&file, Command::Undo).is_enabled());
         assert!(state(&file, Command::Extract).is_enabled());

@@ -11,7 +11,7 @@ changes.
 | ----- | ----- | ------------ | ------------------------ |
 | Settings index | `packages/bingux-settings/src/settings_index.rs` | A `&[(PageId, title, keywords)]` table, ~330 rows. `matching(query)` lower-cases `title + keywords` once (`LazyLock`) and keeps rows that contain every whitespace-separated query word as a **substring**. `matching_pages` does the same for page titles. | Linear scan, substring only (no word boundaries, no typo tolerance, no ranking: index order), runs on the UI thread, private to Settings. The table has no breadcrumb, anchor or icon, so a hit can only open a page. |
 | In-place filtering | `bingux-ui/src/search_highlight.rs`, `shell/sections.rs`, `shell/navigation.rs`, `settings/src/search_results.rs` | Pages not marked `index_only` render their real controls while the search has text; every `Row`/`Group` calls `use_match` and hides itself unless its text contains every query word; the sidebar lists the blocks that stayed visible (`sections::hits`, registered through `on_sized`). | It needs the whole page tree mounted, so it cannot work for anything outside the app (Spotlight) or for data that is not a row. Choosing a result only opens the page; no row is singled out. |
-| Files name matcher | `packages/bingux-files/src/search.rs` | `Query::matches` gives a `Tier` (exact, prefix, word-start, substring, all words, fuzzy subsequence) over file names; `walk` is a cancellable BFS. | Right for "filter this folder" (names only, keeps the user's sort, no index). Stays as is. The file view's address-bar search may adopt `bingux_ui::search` later; **not migrated now**. |
+| Files name matcher | `packages/bingux-files/src/search.rs` | `Query::matches` gives a `Tier` (exact, prefix, word-start, substring, all words, fuzzy subsequence) over file names; `walk` is a cancellable BFS. | Replaced by `bingux_files::find` (see `design/files-search.md`): a typed query language, a names index built on this engine for the home folder, and the live walk. Files still registers no `Searchable`. |
 | bingux-searchd | `packages/bingux-searchd` | The Spotlight daemon. The shell speaks protocol v1 over `$XDG_RUNTIME_DIR/bingux/search-v1.sock` (newline JSON, `query` / `activate` / `cancel`, records ≤ 64 KiB, socket 0600 in a 0700 directory). Built-in providers: applications (desktop files), files (bounded walker + optional plocate), calculation, weather, web, SQLite, AI chat. External providers are **subprocesses** declared by manifests (`bingux.search-provider`) speaking `hello` / `query` / `activate` on stdio, with `timeoutMs` ≤ 10 s, `priority` ≤ 1000, lazy/eager start and bounded backoff restarts. Results are `ProviderResult { resultId, kind, title, subtitle, icon, score }`; the daemon turns result ids into short-lived opaque activation ids. Ranking is `score` desc, then `0.001 × priority`, then stable fields; each local source contributes at most 5 results. | It already has the aggregator machinery (deadlines, cancellation, activation registry, limits). It has no notion of a running app's live data, of typed documents, facets or highlights, or of "the app is closed". It is extended, not replaced (section 8.6). |
 
 The old Settings matcher is not slow (330 rows, tens of microseconds); the
@@ -426,8 +426,8 @@ that are not apps (web suggestions).
    fragment names the row to flash.
 3. In-place filtering of live page trees (`search_highlight::section`,
    `use_match`) goes away for Settings; the helpers stay in bingux-ui for apps
-   that still use them. The file view's address-bar search is **not** migrated
-   now.
+   that still use them. The file view's search is not a Settings concern; it
+   has its own bar and backend (`design/files-search.md`).
 4. Dynamic documents (Wi-Fi networks, Bluetooth devices): only when already
    known to the page, `category: "Device"`, never `external`. Not done when the
    page has no cheap list.
@@ -500,7 +500,7 @@ Reading it against the goals:
   own that data in their own resources and there is no shared list to read;
   publishing one would also put names of devices in an index. Installed
   applications are indexed (private, loaded from the cached list).
-- The file view's address-bar search is not migrated.
+- The file view's search uses the engine for an index of names under the home folder, in process only; it is not a `Searchable`, it is not shared with searchd, and nothing is written to disk (`design/files-search.md` section 2.9).
 - Common-word multi-word queries at a million documents are above the 10 ms
   goal (section 11). A block-skipping list format or per-pair proximity indexes
   would fix it; neither is justified by an app that has such a corpus today.

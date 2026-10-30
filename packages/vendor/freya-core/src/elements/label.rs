@@ -36,7 +36,10 @@ use crate::{
         LayoutContext,
         RenderContext,
     },
-    elements::paragraph::ParagraphPaintExt,
+    elements::{
+        paragraph::ParagraphPaintExt,
+        text_layout::{fit, layout_paragraph},
+    },
     layers::Layer,
     prelude::{
         AccessibilityExt,
@@ -238,6 +241,7 @@ impl ElementExt for LabelElement {
                     paragraph_style.set_text_style(&text_style);
                     paragraph_style.set_max_lines(self.max_lines);
                     paragraph_style.set_text_align(context.text_style_state.text_align.into());
+                    paragraph_style.set_text_direction(context.text_style_state.direction.into());
 
                     let mut paragraph_builder =
                         ParagraphBuilder::new(&paragraph_style, &*context.font_collection);
@@ -246,15 +250,21 @@ impl ElementExt for LabelElement {
                     paragraph_builder.add_text(&self.text);
 
                     let mut paragraph = paragraph_builder.build();
-                    paragraph.layout(
-                        if self.max_lines == Some(1)
-                            && context.text_style_state.text_align == TextAlign::default()
-                            && !paragraph_style.ellipsized()
-                        {
-                            f32::MAX
-                        } else {
-                            content_area_size.width + 1.0
-                        },
+                    let width = if self.max_lines == Some(1)
+                        && context.text_style_state.text_align == TextAlign::default()
+                        && !paragraph_style.ellipsized()
+                    {
+                        f32::MAX
+                    } else {
+                        content_area_size.width + 1.0
+                    };
+                    let (room, inner_sized) = fit(context.torin_node, content_area_size.width);
+                    layout_paragraph(
+                        &mut paragraph,
+                        width,
+                        room,
+                        context.text_style_state.direction.is_rtl(),
+                        inner_sized,
                     );
                     paragraph
                 };

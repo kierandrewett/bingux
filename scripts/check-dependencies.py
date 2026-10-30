@@ -230,7 +230,7 @@ def main():
             failures.append(f"{label} not found: {command}")
 
     if available(args.pkg_config):
-        for package in ("gio-2.0", "libpulse", "wayland-client", "Qt6WaylandClient", "gtk4", "libadwaita-1"):
+        for package in ("gio-2.0", "libpulse", "wayland-client", "Qt6WaylandClient", "gtk4", "libadwaita-1", "gstreamer-1.0", "gstreamer-app-1.0", "gstreamer-video-1.0", "poppler-glib"):
             result = subprocess.run([args.pkg_config, "--exists", package], check=False)
             if result.returncode != 0:
                 failures.append(f"pkg-config dependency missing: {package}")

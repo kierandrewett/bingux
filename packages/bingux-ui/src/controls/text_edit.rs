@@ -92,7 +92,7 @@ pub(crate) fn handle(
     let height = (caret.bottom - caret.top).max(0.0);
     let hit = handle_rect(caret);
     rect()
-        .layer(Layer::Overlay)
+        .layer(crate::layers::INLINE_EDITOR)
         .position(Position::new_global().left(hit.x).top(hit.y))
         .width(Size::px(hit.width))
         .height(Size::px(hit.height))

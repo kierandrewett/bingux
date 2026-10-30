@@ -14,6 +14,11 @@ use super::location::Location;
 use super::table::{Mode, RouteKind, RouteTable, Transition};
 use crate::icons::Icon;
 
+/// How many places a linear history ([`Mode::Linear`]: the file views) keeps
+/// behind the current one. A longer trail forgets its oldest entry, as a
+/// browser's does; Back and Forward and their menus never list more.
+pub const HISTORY_LIMIT: usize = 100;
+
 /// One place in the stack.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entry {
@@ -756,7 +761,14 @@ impl NavModel {
         let entry = self.make(to, title);
         self.back.push(from.clone());
         self.current = entry.clone();
-        let removed = std::mem::take(&mut self.forward);
+        let mut removed = std::mem::take(&mut self.forward);
+        // A linear history is a browser's: it keeps the last
+        // `HISTORY_LIMIT` places and forgets the oldest. (Forward is empty
+        // here, so back and forward together never exceed the limit.)
+        if self.table.mode == Mode::Linear {
+            let extra = self.back.len().saturating_sub(HISTORY_LIMIT);
+            removed.extend(self.back.drain(..extra));
+        }
         Outcome::Changed(Change {
             transition: self.transition_between(&from.location, &entry.location, None),
             from,

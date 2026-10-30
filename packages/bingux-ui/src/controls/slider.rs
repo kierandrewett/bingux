@@ -5,6 +5,7 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use super::capture::{CaptureEvent, Phase, use_capture};
+use super::direction::use_direction;
 use crate::component::ComponentName;
 use crate::motion::{Focusable, use_tween_with};
 use crate::style::*;
@@ -18,7 +19,10 @@ const DANGER_TRACK_OPACITY: f32 = 0.45;
 /// Height of the 100% tick, as a fraction of the thumb: taller than the track.
 const TICK_HEIGHT: f32 = 0.9;
 /// Thumb scale while pressed and while dragging.
-const SCALE_PRESSED: f32 = 1.1;
+/// The knob grows a little under the pointer, more while it is held and most
+/// while it is dragged, so each step reads on its own (ST-06).
+const SCALE_HOVER: f32 = 1.12;
+const SCALE_PRESSED: f32 = 1.2;
 const SCALE_DRAGGING: f32 = 1.3;
 const SCALE_MS: u64 = 120;
 const PERCENT: f64 = 100.0;
@@ -44,8 +48,18 @@ pub struct Slider {
     fluid: bool,
     step: Option<f64>,
     show_value: bool,
-    /// Colour stops across the track, in percent and RGB. Replaces the accent fill.
-    gradient: Option<Vec<(f64, (u8, u8, u8))>>,
+    /// Colour stops across the track, in percent and colour (alpha allowed).
+    /// Replaces the accent fill.
+    gradient: Option<Vec<(f64, Color)>>,
+    /// A checkerboard under the gradient, so a translucent stop shows its alpha.
+    checker: bool,
+    /// The colour the thumb's centre shows, ringed by the thumb's own white.
+    thumb_fill: Option<Color>,
+    /// The colour picker's size: a 14 px track and a 22 px thumb (16 and 28 px
+    /// for a finger).
+    large: bool,
+    /// What assistive technology calls the slider.
+    label: Option<String>,
 }
 
 pub fn slider(value: f64, on_moved: impl Into<EventHandler<f64>>) -> Slider {
@@ -61,6 +75,10 @@ pub fn slider(value: f64, on_moved: impl Into<EventHandler<f64>>) -> Slider {
         step: None,
         show_value: false,
         gradient: None,
+        checker: false,
+        thumb_fill: None,
+        large: false,
+        label: None,
     }
 }
 
@@ -99,8 +117,47 @@ impl Slider {
     /// Paints the track as a colour gradient instead of the accent fill. Each
     /// stop is a percent of the track and an RGB colour: a colour temperature
     /// strip, a hue bar or a brightness ramp. The knob and keys work as before.
-    pub fn gradient(mut self, stops: Vec<(f64, (u8, u8, u8))>) -> Self {
+    pub fn gradient(self, stops: Vec<(f64, (u8, u8, u8))>) -> Self {
+        self.gradient_colours(
+            stops
+                .into_iter()
+                .map(|(at, (red, green, blue))| (at, colour_from_argb(255, red, green, blue)))
+                .collect(),
+        )
+    }
+
+    /// [`gradient`](Self::gradient) with stops that may be translucent, such
+    /// as an alpha strip that fades a colour in from nothing. Pair it with
+    /// [`checkerboard`](Self::checkerboard).
+    pub fn gradient_colours(mut self, stops: Vec<(f64, Color)>) -> Self {
         self.gradient = Some(stops);
+        self
+    }
+
+    /// Draws a checkerboard under the gradient, so the translucent part of
+    /// it shows against a pattern.
+    pub fn checkerboard(mut self) -> Self {
+        self.checker = true;
+        self
+    }
+
+    /// Shows `colour` in the thumb's centre, inside a ring of the thumb's own
+    /// colour: a hue strip's thumb is the hue it is on.
+    pub fn thumb_fill(mut self, colour: Color) -> Self {
+        self.thumb_fill = Some(colour);
+        self
+    }
+
+    /// The colour picker's size: a 14 px track and a 22 px thumb, and 16 and
+    /// 28 px for a finger. The press target is the same control-high row.
+    pub fn large(mut self) -> Self {
+        self.large = true;
+        self
+    }
+
+    /// What a screen reader calls the slider, such as "Hue".
+    pub fn label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
         self
     }
 
@@ -127,21 +184,25 @@ impl Slider {
     }
 }
 
-/// The SVG for a gradient track: one rounded rectangle filled with a linear
-/// gradient through the stops, left to right.
-fn gradient_svg(stops: &[(f64, (u8, u8, u8))], width: f32, height: f32) -> String {
-    use std::fmt::Write as _;
-    let mut body = String::new();
-    for (at, (red, green, blue)) in stops {
-        let _ = write!(
-            body,
-            r##"<stop offset="{at}%" stop-color="#{red:02x}{green:02x}{blue:02x}"/>"##
-        );
+/// The gradient a coloured track is painted with, left to right. The stops
+/// are percents of the thumb's travel, which runs between the thumb's centres
+/// at its two ends, so the colour under the thumb is the colour of its value;
+/// the track beyond the travel, half a thumb at each end, is the end colour.
+fn track_gradient(stops: &[(f64, Color)], width: f32, thumb: f32) -> LinearGradient {
+    let travel = (width - thumb).max(1.0);
+    let place = |at: f64| (thumb / 2.0 + travel * (at as f32 / 100.0)) / width.max(1.0) * 100.0;
+    // Freya's gradient `angle` is not CSS's: 270 runs left to right.
+    let mut gradient = LinearGradient::new().angle(270.0);
+    if let Some((_, first)) = stops.first() {
+        gradient = gradient.stop(GradientStop::new(*first, 0.0));
     }
-    let radius = height / 2.0;
-    format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}"><defs><linearGradient id="track" x1="0" y1="0" x2="1" y2="0">{body}</linearGradient></defs><rect width="{width}" height="{height}" rx="{radius}" fill="url(#track)"/></svg>"#
-    )
+    for (at, colour) in stops {
+        gradient = gradient.stop(GradientStop::new(*colour, place(*at)));
+    }
+    if let Some((_, last)) = stops.last() {
+        gradient = gradient.stop(GradientStop::new(*last, 100.0));
+    }
+    gradient
 }
 
 impl Component for Slider {
@@ -150,11 +211,16 @@ impl Component for Slider {
         // thumb. Every part of the slider is placed from the centre of the hit
         // row, so the track, the fill and the thumb share one centre whatever
         // size the track and thumb are at that frame.
-        let thumb_size = Dim::SliderThumb.px();
+        let thumb_size = if self.large {
+            Dim::SliderThumbLarge.px()
+        } else {
+            Dim::SliderThumb.px()
+        };
         let hit = Dim::Control.px();
         let centre = hit / 2.0;
         let tokens = use_tokens();
         let mut pressing = use_state(|| false);
+        let mut hovering = use_state(|| false);
         let mut dragging = use_state(|| false);
         let mut size = use_state(Area::default);
         let a11y_id = use_a11y();
@@ -170,6 +236,8 @@ impl Component for Slider {
             SCALE_DRAGGING
         } else if pressing() {
             SCALE_PRESSED
+        } else if hovering() && enabled {
+            SCALE_HOVER
         } else {
             1.0
         };
@@ -191,8 +259,12 @@ impl Component for Slider {
                 None => percent,
             }
         };
+        // The pointer is on the screen and the track is in reading order: a slider that
+        // reads from the right has its start, the least, at its right end.
+        let direction = use_direction();
         let percent_at = move |x: f64| -> f64 {
             let half = thumb_size as f64 / 2.0;
+            let x = if direction.is_rtl() { width as f64 - x } else { x };
             snap(((x - half) / travel as f64 * max).clamp(0.0, max))
         };
         // The press, the drag wherever the pointer goes, and the release are
@@ -225,10 +297,16 @@ impl Component for Slider {
         let on_key_down = {
             let on_moved = on_moved.clone();
             move |event: Event<KeyboardEventData>| {
-                let delta = step.unwrap_or(5.0);
+                // Shift moves ten steps, as the colour picker's plane does.
+                let delta = step.unwrap_or(5.0)
+                    * if event.modifiers.contains(Modifiers::SHIFT) { 10.0 } else { 1.0 };
+                // The value grows towards the end of the reading direction: Left in a
+                // right-to-left interface.
+                let along = direction.along(&event.key).unwrap_or(0) as f64;
                 let delta = match event.key {
-                    Key::Named(NamedKey::ArrowLeft) | Key::Named(NamedKey::ArrowDown) => -delta,
-                    Key::Named(NamedKey::ArrowRight) | Key::Named(NamedKey::ArrowUp) => delta,
+                    Key::Named(NamedKey::ArrowDown) => -delta,
+                    Key::Named(NamedKey::ArrowUp) => delta,
+                    Key::Named(NamedKey::ArrowLeft | NamedKey::ArrowRight) => delta * along,
                     Key::Named(NamedKey::Home) => -value,
                     Key::Named(NamedKey::End) => max - value,
                     Key::Named(NamedKey::PageUp) => PAGE_STEP,
@@ -239,7 +317,9 @@ impl Component for Slider {
             }
         };
 
-        let track_height = if interacting || self.gradient.is_some() {
+        let track_height = if self.large {
+            Dim::SliderTrackLarge.px()
+        } else if interacting || self.gradient.is_some() {
             Dim::SliderTrackActive.px()
         } else {
             Dim::SliderTrack.px()
@@ -252,14 +332,17 @@ impl Component for Slider {
         let fill_width = centre_x;
         let gradient = self
             .gradient
-            .as_ref()
-            .map(|stops| gradient_svg(stops, width, track_height));
+            .as_deref()
+            .map(|stops| track_gradient(stops, width, thumb_size));
 
         let row = rect()
             .a11y_id(a11y_id)
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::Slider)
+            .maybe(self.label.is_some(), |element| {
+                element.a11y_alt(self.label.clone().unwrap_or_default())
+            })
             .a11y_builder(move |builder| {
                 builder.set_numeric_value(value);
                 builder.set_min_numeric_value(0.0);
@@ -278,22 +361,40 @@ impl Component for Slider {
                 tracker.sized(&event);
             })
             .maybe(enabled, |element| {
-                capture.handlers(element).on_key_down(on_key_down)
+                capture
+                    .handlers(element)
+                    .on_key_down(on_key_down)
+                    .on_pointer_enter(move |_| hovering.set(true))
+                    .on_pointer_leave(move |_| hovering.set(false))
             })
             .child(match &gradient {
-                Some(svg) => rect()
-                    .position(
-                        Position::new_absolute()
-                            .top(centre - track_height / 2.0)
-                            .left(0.0),
-                    )
-                    .width(Size::px(width))
-                    .height(Size::px(track_height))
-                    .child(
-                        SvgViewer::new((svg.clone(), Bytes::from(svg.clone())))
-                            .width(Size::px(width))
-                            .height(Size::px(track_height)),
-                    ),
+                Some(paint) => {
+                    let track = rect()
+                        .position(
+                            Position::new_absolute()
+                                .top(centre - track_height / 2.0)
+                                .left(0.0),
+                        )
+                        .width(Size::px(width))
+                        .height(Size::px(track_height))
+                        .tw(&tokens, &[rounded(Radius::Pill), clip()]);
+                    let track = if self.checker {
+                        painted(
+                            track,
+                            checker(
+                                Paint::Knob.color(&tokens),
+                                Paint::Control.color(&tokens),
+                                track_height / 2.0,
+                            ),
+                        )
+                    } else {
+                        track
+                    };
+                    track.child(gradient_fill(
+                        rect().width(Size::fill()).height(Size::fill()),
+                        paint.clone(),
+                    ))
+                }
                 None => rect()
                     .position(
                         Position::new_absolute()
@@ -394,8 +495,8 @@ impl Component for Slider {
                             .tw(&tokens, &[rounded(Radius::Pill)]).focusable(focus()),
                     )
             }))
-            .child(
-                rect()
+            .child({
+                let knob = rect()
                     .layer(Layer::Relative(3))
                     .position(
                         Position::new_absolute()
@@ -407,12 +508,27 @@ impl Component for Slider {
                     .tw(
                         &tokens,
                         &[
+                            center(),
                             rounded(Radius::Pill),
                             bg(Paint::Knob),
                             shadow(Elevation::Knob),
                         ],
+                    );
+                // The centre colour sits a ring's width inside the knob.
+                let inner = (thumb - 2.0 * S1.px()).max(0.0);
+                match self.thumb_fill {
+                    Some(colour) => knob.child(
+                        rect()
+                            .width(Size::px(inner))
+                            .height(Size::px(inner))
+                            .tw(
+                                &tokens,
+                                &[rounded(Radius::Pill), fill(colour), border(Line::Hairline)],
+                            ),
                     ),
-            );
+                    None => knob,
+                }
+            });
         if !self.show_value {
             return Element::from(row);
         }

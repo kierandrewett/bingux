@@ -14,3 +14,32 @@ use freya::prelude::*;
 pub(crate) fn painted(rect: Rect, draw: impl FnMut(&mut FillRenderContext) + 'static) -> Rect {
     rect.background(Fill::Callback(RenderCallback::new(draw)))
 }
+
+/// A checkerboard of square cells `cell` px across, `light` and `dark`, for
+/// the box to paint behind a translucent colour so its alpha shows against a
+/// pattern. The first cell, at the top left, is `light`. Cells are drawn
+/// whole, clipped by the box's own rounded corners, so the pattern is the
+/// same at every size and a track and a swatch share one look.
+pub(crate) fn checker(light: Color, dark: Color, cell: f32) -> impl FnMut(&mut FillRenderContext) + 'static {
+    use freya::engine::prelude::{Paint as Pen, PaintStyle, Rect as Cell};
+    move |context| {
+        let (width, height) = (context.size.width, context.size.height);
+        let mut pen = Pen::default();
+        pen.set_style(PaintStyle::Fill);
+        pen.set_color(dark);
+        context.canvas.draw_rect(Cell::from_xywh(0.0, 0.0, width, height), &pen);
+        pen.set_color(light);
+        let cell = cell.max(1.0);
+        let (columns, rows) = ((width / cell).ceil() as usize, (height / cell).ceil() as usize);
+        for row in 0..rows {
+            for column in 0..columns {
+                if (row + column) % 2 != 0 {
+                    continue;
+                }
+                let (x, y) = (column as f32 * cell, row as f32 * cell);
+                let cell = Cell::from_xywh(x, y, cell.min(width - x), cell.min(height - y));
+                context.canvas.draw_rect(cell, &pen);
+            }
+        }
+    }
+}

@@ -1742,7 +1742,7 @@ fn channel_group(
         .filter(|_| kind == Kind::Output)
         .cloned()
         .map(|test_mix| {
-            action_button("Test...", move |_| open_test(ctx, test_mix.clone())).compact()
+            action_button("Test…", move |_| open_test(ctx, test_mix.clone())).compact()
         });
     let meter = level.as_ref().map(|level| LevelMeter {
         node: level.id,

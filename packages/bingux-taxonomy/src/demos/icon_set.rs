@@ -1,12 +1,16 @@
-//! The Icons page: every SVG in `packages/bingux-ui/icons`, searchable.
+//! The Icons page: every SVG in `packages/bingux-ui/icons` as one grid.
 //!
-//! One card per file, from `icon_table::ICON_FILES` (written by `build.rs`
-//! from the directory, so a file added to `icons/` shows up here). A card
-//! shows the file's name and its `Icon` variant, where the label sheet says
-//! the icon is used and which fork glyph and weight it is drawn from, and the
-//! glyph at the six sizes the icon sheet uses (12, 14, 16, 18, 20 and 48 px)
-//! on a light and a dark background. Pressing a card copies `Icon::Name`.
+//! One cell per file, from `icon_table::ICON_FILES` (written by `build.rs`
+//! from the directory, so a file added to `icons/` shows up here), sorted by
+//! file name: the glyph with its name under it. A segmented control picks the
+//! glyph size (16 to 48 px, 24 by default) and a search field filters by name.
+//! Hovering a cell shows the name in a tooltip; pressing it copies the name.
+//! Under the symbolic grid, "Colour file icons" lists the colour set of the Files
+//! app (`ColourIcon::ALL`, `scripts/icons/colour`) the same way, in the theme's
+//! tones, with the same size control and search.
 
+use bingux_ui::component::ComponentName;
+use bingux_ui::files::{ColourIcon, colour_icon_view};
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 
@@ -14,8 +18,38 @@ use super::common::rows;
 use crate::icon_table::{ICON_FILES, IconFile};
 use crate::model::Spec;
 
-/// The sizes the icon sheet draws, in pixels.
-pub const SIZES: [u32; 6] = [12, 14, 16, 18, 20, 48];
+/// The glyph sizes the control offers, in pixels.
+pub const SIZES: [u32; 5] = [16, 20, 24, 32, 48];
+/// The size the grid opens at.
+const DEFAULT_SIZE: u32 = 24;
+
+/// The names the grid shows for `needle` (empty shows all): the file names of
+/// the icon table, alphabetical.
+pub fn grid_names(needle: &str) -> Vec<&'static str> {
+    let needle = needle.trim().to_lowercase();
+    let mut names: Vec<&'static str> = ICON_FILES
+        .iter()
+        .map(|file| file.file)
+        .filter(|name| needle.is_empty() || name.to_lowercase().contains(&needle))
+        .collect();
+    names.sort_unstable();
+    names
+}
+
+/// The colour icons the grid shows for `needle` (empty shows all): those whose
+/// name or family contains it, in the set's order.
+pub fn colour_names(needle: &str) -> Vec<ColourIcon> {
+    let needle = needle.trim().to_lowercase();
+    ColourIcon::ALL
+        .iter()
+        .copied()
+        .filter(|icon| {
+            needle.is_empty()
+                || icon.name().contains(&needle)
+                || icon.family().to_lowercase().contains(&needle)
+        })
+        .collect()
+}
 
 /// The custom body of the "Icon set" entry.
 pub fn icon_set() -> Element {
@@ -29,226 +63,196 @@ impl Component for IconSet {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let query = use_state(String::new);
-        let mut group = use_state(|| "all".to_string());
-        let needle = query.read().to_lowercase();
-        let wanted = group.read().clone();
-        let mut groups: Vec<&str> = ICON_FILES
+        let mut size = use_state(|| DEFAULT_SIZE);
+        let names = grid_names(&query.read());
+        let options: Vec<(String, String)> = SIZES
             .iter()
-            .map(|file| file.group)
-            .filter(|group| !group.is_empty())
+            .map(|px| (px.to_string(), px.to_string()))
             .collect();
-        groups.sort();
-        groups.dedup();
-        let mut options = vec![("all".to_string(), "All groups".to_string())];
-        options.extend(
-            groups
-                .iter()
-                .map(|name| (name.to_string(), name.to_string())),
-        );
-        options.push(("unlisted".to_string(), "In no group".to_string()));
-        let shown: Vec<usize> = ICON_FILES
-            .iter()
-            .enumerate()
-            .filter(|(_, file)| match wanted.as_str() {
-                "all" => true,
-                "unlisted" => file.group.is_empty(),
-                name => file.group == name,
-            })
-            .filter(|(_, file)| matches(file, &needle))
-            .map(|(index, _)| index)
-            .collect();
-        let with_variant = ICON_FILES
-            .iter()
-            .filter(|file| file.variant.is_some())
-            .count();
+        let mut grid = rect().tw(&tokens, &[w_full(), flex_row(), wrap(S2), gap(S2)]);
+        for name in &names {
+            grid = grid.child(IconCell { name, size: size() });
+        }
         let mut column = vstack(S3)
             .tw(&tokens, &[w_full()])
             .child(
                 hstack(S2)
-                    .child(search_field(query, |_| {}).fill_width())
-                    .child(
-                        dropdown(options, wanted, move |key: String| group.set(key))
-                            .title("Group"),
-                    ),
-            )
-            .child(caption(format!(
-                "{} of {} icon files shown; {} have an Icon variant. Press a card to copy its name.",
-                shown.len(),
-                ICON_FILES.len(),
-                with_variant
-            )));
-        if shown.is_empty() {
+                    .child(search_field(query, |_| {}).width(Dim::Field))
+                    .child(segmented(options, &size().to_string(), move |key: String| {
+                        if let Ok(px) = key.parse() {
+                            size.set(px);
+                        }
+                    })),
+            );
+        let colour = colour_names(&query.read());
+        if names.is_empty() && colour.is_empty() {
             column = column.child(status(Status::Empty("No icon matches.".into())));
         }
-        for index in shown {
-            column = column.child(IconCard { index });
+        column = column.child(grid);
+        if !colour.is_empty() {
+            let mut colours = rect().tw(&tokens, &[w_full(), flex_row(), wrap(S2), gap(S2)]);
+            for icon in colour {
+                colours = colours.child(ColourCell { icon, size: size() });
+            }
+            column = column
+                .child(
+                    typography::HEADING
+                        .label(&tokens, "Colour file icons".to_string()),
+                )
+                .child(
+                    typography::CAPTION
+                        .in_ink(Ink::Muted)
+                        .label(&tokens, "The file and folder icons of the Files app: the page, the accent and the glyph follow the theme.".to_string()),
+                )
+                .child(colours);
         }
         column
     }
 }
 
-/// Whether `file` matches the search text: its file name, variant, where it
-/// is used, its metaphor or its glyph.
-fn matches(file: &IconFile, needle: &str) -> bool {
-    needle.is_empty()
-        || [
-            file.file,
-            file.variant.unwrap_or_default(),
-            file.place,
-            file.metaphor,
-            file.glyph,
-            file.group,
-        ]
-        .iter()
-        .any(|text| text.to_lowercase().contains(needle))
-}
-
-/// What pressing a card copies: the Rust name, or the file when the set has
-/// no variant for it.
-fn copy_text(file: &IconFile) -> String {
-    match file.variant {
-        Some(variant) => format!("Icon::{variant}"),
-        None => format!("icons/{}-symbolic.svg", file.file),
-    }
-}
-
+/// One colour icon over its name, as [`IconCell`] shows a symbolic one.
 #[derive(PartialEq)]
-struct IconCard {
-    index: usize,
+struct ColourCell {
+    icon: ColourIcon,
+    size: u32,
 }
 
-impl Component for IconCard {
+impl Component for ColourCell {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let overlays = use_overlays();
         let mut hovering = use_state(|| false);
-        let file = &ICON_FILES[self.index];
-        let text = copy_text(file);
-        let copied = text.clone();
-        let accent = tokens.accent_name;
-        let light = Tokens::new(accent, Scheme::PreferLight, false);
-        let dark = Tokens::new(accent, Scheme::PreferDark, false);
-        let info = vstack(S1)
-            .tw(&tokens, &[w(Dim::FieldWide), max_w(Dim::FieldWide)])
-            .child(
-                typography::EMPHASIS
-                    .label(&tokens, file.file.to_string())
-                    .max_lines(1),
-            )
-            .child(
-                typography::CODE
-                    .in_ink(if file.variant.is_some() {
-                        Ink::Accent
-                    } else {
-                        Ink::Muted
-                    })
-                    .label(
-                        &tokens,
-                        file.variant.map_or("no Icon variant".to_string(), |name| {
-                            format!("Icon::{name}")
-                        }),
-                    ),
-            )
-            .child(
-                typography::CAPTION
-                    .in_ink(Ink::Muted)
-                    .paragraph(
-                        &tokens,
-                        if file.place.is_empty() {
-                            "Not in labels.tsv"
-                        } else {
-                            file.place
-                        },
-                    )
-                    .max_lines(3),
-            )
-            .child(
-                typography::CAPTION
-                    .in_ink(Ink::Muted)
-                    .paragraph(&tokens, format!("{}{}", glyph_line(file), group_line(file)))
-                    .max_lines(3),
-            );
-        let panels = hstack(S2)
-            .child(sizes_panel(file, &light))
-            .child(sizes_panel(file, &dark));
-        let card = rect()
+        let name = self.icon.name();
+        let cell = rect()
             .tw(
                 &tokens,
                 &[
-                    w_full(),
-                    flex_row(),
-                    wrap(S3),
-                    gap(S3),
-                    p(S3),
-                    rounded(Radius::Card),
-                    surface(Paint::Card, hovering(), false, false),
-                    border(Line::Hairline),
+                    w(Dim::GridTile),
+                    flex_col(),
+                    items(Align::Center),
+                    gap(S1),
+                    p(S2),
+                    rounded(Radius::Control),
+                    surface(Paint::Bg, hovering(), false, false),
                 ],
             )
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| hovering.set(false))
             .on_press(move |_| {
-                if freya::clipboard::Clipboard::set(copied.clone()).is_ok() {
-                    overlays.toast(format!("Copied {copied}"));
+                if freya::clipboard::Clipboard::set(name.to_string()).is_ok() {
+                    overlays.toast(format!("Copied {name}"));
                 }
             })
             .a11y_role(AccessibilityRole::Button)
-            .a11y_alt(format!("Copy {text}"))
-            .child(info)
-            .child(panels);
-        card
-    }
-}
-
-fn glyph_line(file: &IconFile) -> String {
-    if file.glyph.is_empty() {
-        String::new()
-    } else {
-        format!("Glyph: {}", file.glyph)
-    }
-}
-
-fn group_line(file: &IconFile) -> String {
-    if file.group.is_empty() {
-        String::new()
-    } else {
-        format!(" · sheet: {}", file.group)
-    }
-}
-
-/// The glyph at every size on one background, each with its size under it.
-fn sizes_panel(file: &IconFile, shown_in: &Tokens) -> Element {
-    let ink = Paint::Text.color(&shown_in);
-    let mut line = rect().tw(
-        shown_in,
-        &[
-            flex_row(),
-            items(Align::End),
-            gap(S3),
-            p(S3),
-            rounded(Radius::Control),
-            bg(Paint::Bg),
-            border(Line::Hairline),
-        ],
-    );
-    for size in SIZES {
-        line = line.child(
-            vstack(S1)
-                .tw(shown_in, &[items(Align::Center), justify(Align::End)])
-                .child(
-                    SvgViewer::new(file.svg)
-                        .width(Size::px(size as f32))
-                        .height(Size::px(size as f32))
-                        .fill(ink),
-                )
-                .child(
+            .a11y_alt(format!("Copy {name}"))
+            .child(colour_icon_view(&tokens, self.icon, self.size as f32))
+            // The name is cut on purpose and the tile's tooltip shows it whole: `Elided` says so
+            // to the layout checks.
+            .child(
+                rect().component("Elided").child(
                     typography::CAPTION
                         .in_ink(Ink::Muted)
-                        .label(shown_in, size.to_string()),
+                        .label(&tokens, name.to_string())
+                        .max_lines(1)
+                        .text_overflow(TextOverflow::Ellipsis),
                 ),
-        );
+            );
+        hover_tip(cell, format!("{name}: {}", self.icon.family()))
     }
-    line.into_element()
+}
+
+/// One icon over its name. Pressing copies the name; the tooltip shows it whole
+/// when the caption is cut.
+#[derive(PartialEq)]
+struct IconCell {
+    name: &'static str,
+    size: u32,
+}
+
+impl Component for IconCell {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let overlays = use_overlays();
+        let mut hovering = use_state(|| false);
+        let file: &IconFile = ICON_FILES
+            .iter()
+            .find(|file| file.file == self.name)
+            .expect("a grid name comes from the icon table");
+        let name = file.file;
+        let cell = rect()
+            .tw(
+                &tokens,
+                &[
+                    w(Dim::GridTile),
+                    flex_col(),
+                    items(Align::Center),
+                    gap(S1),
+                    p(S2),
+                    rounded(Radius::Control),
+                    surface(Paint::Bg, hovering(), false, false),
+                ],
+            )
+            .on_pointer_enter(move |_| hovering.set(true))
+            .on_pointer_leave(move |_| hovering.set(false))
+            .on_press(move |_| {
+                if freya::clipboard::Clipboard::set(name.to_string()).is_ok() {
+                    overlays.toast(format!("Copied {name}"));
+                }
+            })
+            .a11y_role(AccessibilityRole::Button)
+            .a11y_alt(format!("Copy {name}"))
+            .child(
+                SvgViewer::new(file.svg)
+                    .width(Size::px(self.size as f32))
+                    .height(Size::px(self.size as f32))
+                    .fill(Paint::Text.color(&tokens)),
+            )
+            .child(
+                rect().component("Elided").child(
+                    typography::CAPTION
+                        .in_ink(Ink::Muted)
+                        .label(&tokens, name.to_string())
+                        .max_lines(1)
+                        .text_overflow(TextOverflow::Ellipsis),
+                ),
+            );
+        hover_tip(cell, name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every catalogue icon is in the grid once, and nothing else is.
+    #[test]
+    fn grid_lists_the_catalogue_once() {
+        let mut catalogue: Vec<&str> = ICON_FILES.iter().map(|file| file.file).collect();
+        catalogue.sort_unstable();
+        assert!(!catalogue.is_empty());
+        assert_eq!(grid_names(""), catalogue);
+        let mut unique = catalogue.clone();
+        unique.dedup();
+        assert_eq!(unique.len(), catalogue.len(), "a file name is listed twice");
+    }
+
+    /// Every colour icon is in the colour grid once, and a search finds one by
+    /// its name or its family.
+    #[test]
+    fn colour_grid_lists_the_colour_set() {
+        assert_eq!(colour_names(""), ColourIcon::ALL);
+        assert_eq!(colour_names("file-pdf"), [ColourIcon::FilePdf]);
+        assert!(colour_names("spreadsheet").contains(&ColourIcon::FileSpreadsheet));
+        assert!(colour_names("no-such-icon-anywhere").is_empty());
+    }
+
+    #[test]
+    fn filter_narrows_the_grid() {
+        let first = grid_names("")[0];
+        let hits = grid_names(&first.to_uppercase());
+        assert!(hits.contains(&first));
+        assert!(grid_names("no-such-icon-anywhere").is_empty());
+    }
 }
 
 /// The "Application icons" demo: full-colour theme icons, as the dock shows.

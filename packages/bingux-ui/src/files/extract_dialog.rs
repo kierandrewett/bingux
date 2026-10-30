@@ -33,7 +33,7 @@ use crate::shell::{form_dialog, open_form, use_overlays};
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::task::{spawn_blocking, use_resource};
-use crate::window::use_window;
+use crate::window::Window;
 
 struct Launch {
     env: Env,
@@ -91,7 +91,8 @@ impl Component for ExtractDialog {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let overlays = use_overlays();
-        let window = use_window();
+        let in_context = use_try_consume::<Window>();
+        let window = self.launch.0.env.window.or(in_context);
         let launch = self.launch.0.clone();
         let parent = launch.archive.parent().map(Path::to_path_buf).unwrap_or_default();
         let mut destination = use_state({
@@ -159,6 +160,7 @@ impl Component for ExtractDialog {
         let choose_where = EventHandler::new({
             let start = destination.read().clone();
             move |()| {
+                let Some(window) = window else { return };
                 choose(
                     window,
                     ChooserRequest::select_folder()

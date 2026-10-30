@@ -12,17 +12,26 @@ pub mod menu;
 #[cfg(all(test, feature = "testing"))]
 mod menu_first_frame_tests;
 #[cfg(all(test, feature = "testing"))]
+mod menu_over_dialog_tests;
+#[cfg(all(test, feature = "testing"))]
 mod app_menu_tests;
+#[cfg(all(test, feature = "testing"))]
+mod menu_cascade_tests;
 #[cfg(all(test, feature = "testing"))]
 mod notice_tests;
 #[cfg(all(test, feature = "testing"))]
 mod rest_fill_tests;
+#[cfg(all(test, feature = "testing"))]
+mod page_motion_tests;
 pub(crate) mod menu_nav;
 pub(crate) mod menu_query;
 pub(crate) mod type_ahead;
 pub mod navigation;
 pub(crate) mod panel;
 pub(crate) mod sheet_gesture;
+pub(crate) mod sheet_motion;
+#[cfg(all(test, feature = "testing"))]
+mod sheet_motion_frame_tests;
 pub(crate) mod tooltip_place;
 pub mod overlays;
 pub mod sections;
@@ -33,8 +42,8 @@ pub use menu::{
     MenuButton, MenuItem, app_menu_item, app_menu_items, menu_button, menu_item, menu_separator,
     submenu,
 };
-pub use back_button::{BackButton, ForwardButton, history_menu};
-pub use navigation::{NavigationSplitView, PageAction, PageHead, Profile, SearchField, use_page_busy};
+pub use back_button::{BackButton, ForwardButton, history_menu, history_menu_with};
+pub use navigation::{NavigationSplitView, PageAction, PageHead, Profile, use_page_busy};
 pub use dialog::{
     CANCEL_ID, Dialog, DialogFrame, DialogIcon, DialogResponse, ResponseKind, dialog, framed_dialog,
 };

@@ -52,6 +52,7 @@ pub fn paragraph(style: TextStyle, tokens: &Tokens, text: &str) -> Element {
         None => SelectableText::new()
             .span(style.span(tokens, text))
             .line_height(style.leading)
+            .a11y_focusable(false)
             .into(),
         Some(paragraph) => paragraph.into(),
     }

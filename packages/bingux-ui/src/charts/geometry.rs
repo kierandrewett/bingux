@@ -64,12 +64,35 @@ pub(crate) const RING_SIZE: f32 = 120.0;
 pub(crate) const RING_STROKE: f32 = 10.0;
 pub(crate) const RING_TRACK_OPACITY: f32 = 0.18;
 pub(crate) const RING_FROM_OPACITY: f32 = 0.55;
+/// A donut beside its legend is this wide. Above its legend it is as wide as
+/// the room it has, up to `DONUT_MAX` (both grow with the text scale).
 pub(crate) const DONUT_SIZE: f32 = 128.0;
-pub(crate) const DONUT_STROKE: f32 = 14.0;
+pub(crate) const DONUT_MAX: f32 = 200.0;
+/// The legend beside a donut needs at least this much width.
+pub(crate) const DONUT_LEGEND_MIN: f32 = 200.0;
+/// The ring's thickness as a share of its size, and its limits.
+pub(crate) const DONUT_STROKE_RATIO: f32 = 0.11;
+pub(crate) const DONUT_STROKE_MIN: f32 = 6.0;
+pub(crate) const DONUT_STROKE_MAX: f32 = 24.0;
+/// The gap kept between the ring's inner edge and the centre text.
+pub(crate) const DONUT_HOLE_MARGIN: f32 = S1.fixed_px();
+/// The gap between two segments, in radians.
 pub(crate) const DONUT_GAP: f32 = 0.05;
+/// A legend row at the regular density. At the compact density a row is
+/// `TOUCH_MIN` tall, a finger's target.
 pub(crate) const DONUT_ROW: f32 = 36.0;
-/// Line height of the centre value inside a donut or ring hole (HEADING style).
-pub(crate) const CENTRE_LINE: f32 = 22.0;
+/// A press or hover this far from the middle, as a share of the radius,
+/// or beyond, picks the segment it is on. See `donut::segment_at`.
+pub(crate) const DONUT_HIT_INNER: f32 = 0.4;
+/// The centre text shrinks by this step, down to this share of its size,
+/// to fit the hole; the gap between its two lines.
+pub(crate) const CENTRE_STEP: f32 = 0.05;
+pub(crate) const CENTRE_MIN_SCALE: f32 = 0.55;
+pub(crate) const CENTRE_GAP: f32 = S0_5.fixed_px();
+/// A legend row keeps at least this many ems of its name's text size beside
+/// the numbers. Short of that the row stacks: the name on one line and the
+/// numbers under it.
+pub(crate) const DONUT_NAME_EMS: f32 = 5.0;
 /// Width of the box for a constant series' value label.
 pub(crate) const POINT_LABEL_WIDTH: f32 = 72.0;
 /// A gauge is a 270 degree arc opening at the bottom, starting at 225 degrees.

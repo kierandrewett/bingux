@@ -37,25 +37,25 @@ use crate::surface::use_tokens;
 
 /// The measurements of one layout of the grid, in whole pixels.
 #[derive(Clone, Copy, PartialEq, Debug)]
-struct Metrics {
-    columns: usize,
-    tile: f32,
+pub(super) struct Metrics {
+    pub(super) columns: usize,
+    pub(super) tile: f32,
     /// The icon or picture, a square of this edge.
-    icon: f32,
-    gap: f32,
+    pub(super) icon: f32,
+    pub(super) gap: f32,
     /// The height of the name's line.
-    caption: f32,
+    pub(super) caption: f32,
     /// A tile: the inset, the icon, a small gap, the name and the inset.
-    tile_height: f32,
+    pub(super) tile_height: f32,
     /// A line of tiles with the gap above it.
-    line: f32,
+    pub(super) line: f32,
 }
 
 impl Metrics {
     /// The layout of tiles with icons of `icon_px` in `width` pixels. Every
     /// tile has the one width the icon asks for, and the line holds as many
     /// as fit between margins of one gap.
-    fn new(width: f32, icon_px: u16, caption: f32, name_gap: f32) -> Metrics {
+    pub(super) fn new(width: f32, icon_px: u16, caption: f32, name_gap: f32) -> Metrics {
         let gap = TILE_GAP;
         let tile = tile_width(icon_px);
         let inner = (width - 2.0 * gap).max(tile);
@@ -165,6 +165,8 @@ impl Component for GridView {
         )
         .length(lines)
         .item_size(metrics.line)
+        // The first frame has the lines and the scrollbar the grid had last.
+        .initial_size(viewport.peek().size)
         .drag_scrolling(is_compact())
         .pass_ctrl_wheel(true)
         .on_sized({
@@ -178,7 +180,7 @@ impl Component for GridView {
 }
 
 /// The keys of the grid that move the cursor. Returns true when used.
-pub(super) fn navigate(ctx: &Ctx, event: &Event<KeyboardEventData>) -> bool {
+pub(super) fn navigate(ctx: &Ctx, event: &Event<KeyboardEventData>, direction: crate::controls::direction::Direction) -> bool {
     let count = ctx.rows.len();
     if count == 0 {
         return false;
@@ -190,7 +192,10 @@ pub(super) fn navigate(ctx: &Ctx, event: &Event<KeyboardEventData>) -> bool {
     let last = count - 1;
     let from = ctx.cursor_row();
     let visible_lines = ((ctx.viewport.peek().height() / pitch) as usize).max(1);
-    let target = match &event.key {
+    // The grid reads in the interface's direction: the next cell is on the left in a window that reads
+    // from the right.
+    let key = direction.reading_key(&event.key);
+    let target = match &key {
         Key::Named(NamedKey::ArrowRight) => from.map_or(0, |at| at + 1),
         Key::Named(NamedKey::ArrowLeft) => from.map_or(last, |at| at.saturating_sub(1)),
         Key::Named(NamedKey::ArrowDown) => from.map_or(0, |at| at + columns),

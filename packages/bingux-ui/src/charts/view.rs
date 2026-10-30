@@ -11,13 +11,14 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use super::data::{self, Point, Segment, Series, SeriesColour};
+use super::donut::{DonutLayout, Fit, RowSizes, centre_fit, rows_stack, segment_at};
 use super::format::{Formatter, Unit, ValueText, format_tick, format_value};
 use super::geometry::*;
 use super::palette;
 use super::path::{self, Pt};
 use super::scale::{Domain, Linear, lone, nice, time};
 use super::svg::{self, Svg, clip_rect, num, stroke_line};
-use crate::controls::press::{is_touch, use_press};
+use crate::controls::press::{Press, is_touch, use_press};
 use crate::focus::{FocusCore, use_focus_core};
 use crate::motion::wrap_focusable_with;
 use crate::style::*;
@@ -416,7 +417,7 @@ impl Spec {
             Spec::Line(chart) => chart.height,
             Spec::Bars(chart) => chart.height,
             Spec::Ring(_) => RING_SIZE,
-            Spec::Donut(donut) => DONUT_SIZE.max(donut.segments.len() as f32 * DONUT_ROW),
+            Spec::Donut(_) => DONUT_SIZE,
         }
     }
 
@@ -468,7 +469,14 @@ impl Component for Chart {
         let spec = &self.spec;
         match spec {
             Spec::Ring(ring) => return ring_element(&tokens, ring, progress),
-            Spec::Donut(donut) => return donut_element(&tokens, donut, progress),
+            Spec::Donut(donut) => {
+                let controls = DonutControls {
+                    size,
+                    active,
+                    press,
+                };
+                return donut_element(&tokens, donut, progress, controls);
+            }
             Spec::Sparkline(_) | Spec::Line(_) | Spec::Bars(_) => {}
         }
 
@@ -602,6 +610,9 @@ pub(super) struct Text {
     text: String,
     style: TextStyle,
     align: Align,
+    /// The share of the style's size the text is set at: a centre value that
+    /// must fit a hole shrinks, and is never larger.
+    scale: f32,
 }
 
 impl Text {
@@ -620,7 +631,14 @@ impl Text {
             text: text.into(),
             style,
             align,
+            scale: 1.0,
         }
+    }
+
+    /// The same text at `scale` of its style's size.
+    pub(super) fn scaled(mut self, scale: f32) -> Self {
+        self.scale = scale;
+        self
     }
 }
 
@@ -648,17 +666,19 @@ pub(super) fn anchored(
     )
 }
 
+/// The slot is as tall as its label, whatever style and density the label is
+/// set in: a centre value in the HEADING style is taller than the caption
+/// line, and a slot of the caption's height left it hanging out of the box.
 pub(super) fn text_element(tokens: &Tokens, text: Text) -> impl IntoElement {
+    let label = if text.scale < 1.0 {
+        text.style.label_scaled(tokens, text.text, text.scale)
+    } else {
+        text.style.label(tokens, text.text)
+    };
     rect()
         .position(Position::new_absolute().top(text.top).left(text.left))
         .width(Size::px(text.width))
-        .height(Size::px(LABEL_HEIGHT))
-        .child(
-            text.style
-                .label(tokens, text.text)
-                .max_lines(1)
-                .text_align(text_align(text.align)),
-        )
+        .child(label.max_lines(1).text_align(text_align(text.align)))
 }
 
 /// What a chart draws: its SVG, labels over it, hover stops and a tooltip.
@@ -712,9 +732,15 @@ fn build(spec: &Spec, tokens: &Tokens, width: f32, progress: f32, active: Option
 }
 
 /// The chart box: the SVG at its size, then its labels.
+///
+/// A plot reads left to right in every language, as Material's bidirectionality
+/// guidance has it (charts and graphs are not mirrored): the SVG is drawn in
+/// pixels, so the labels placed over it must be too, or the axis would run the
+/// other way from the curve. The legend under it follows the page.
 fn drawing(scene: Scene, tokens: &Tokens, width: f32, height: f32) -> Rect {
     let Scene { svg, texts, .. } = scene;
     let mut area = rect()
+        .text_direction(TextDirection::Ltr)
         .width(Size::px(width))
         .height(Size::px(height))
         .child(
@@ -1696,32 +1722,16 @@ fn ring_scene(ring: &Ring, tokens: &Tokens, progress: f32) -> Scene {
         ));
     }
 
-    let caption_height = match &ring.caption {
-        Some(_) => S0_5.px() + LABEL_HEIGHT,
-        None => 0.0,
-    };
-    let top = centre - (CENTRE_LINE + caption_height) / 2.0;
-    let inner = RING_SIZE - (RING_STROKE + S1.px()) * 2.0;
-    let mut texts = vec![anchored(
-        typography::HEADING.in_ink(Ink::Text),
-        format_value((f64::from(value * progress) * 100.0).round(), Unit::Percent),
-        centre,
-        top,
-        inner,
-        Align::Centre,
+    let hole = (RING_SIZE - (RING_STROKE + DONUT_HOLE_MARGIN) * 2.0).max(0.0);
+    let texts = centre_texts(
         RING_SIZE,
-    )];
-    if let Some(caption) = &ring.caption {
-        texts.push(anchored(
-            CAPTION,
-            caption.clone(),
-            centre,
-            top + CENTRE_LINE + S0_5.px(),
-            inner,
-            Align::Centre,
-            RING_SIZE,
-        ));
-    }
+        hole,
+        (
+            typography::HEADING.in_ink(Ink::Text),
+            format_value((f64::from(value * progress) * 100.0).round(), Unit::Percent),
+        ),
+        ring.caption.clone().map(|caption| (CAPTION, caption)),
+    );
     Scene {
         svg: svg.finish(),
         texts,
@@ -1754,11 +1764,86 @@ fn donut_values(donut: &Donut) -> (Vec<f64>, f64) {
     (values, total)
 }
 
-fn donut_scene(donut: &Donut, tokens: &Tokens, progress: f32) -> Scene {
+/// The text scale a donut sizes itself by: 1, or up to 2 at the largest
+/// accessibility setting. The ring grows with it so its centre text keeps
+/// its size.
+fn text_unit() -> f32 {
+    crate::stress::text_scale().clamp(1.0, 2.0)
+}
+
+/// A share of a whole, the same width of text for every row.
+fn share_text(share: f64) -> String {
+    format!("{share:.1}%")
+}
+
+/// The centre text of a ring or donut hole: `value` over an optional
+/// `caption`, fitted to the hole by [`centre_fit`] so neither is wider than
+/// the hole at its height.
+fn centre_texts(
+    size: f32,
+    hole: f32,
+    value: (TextStyle, String),
+    caption: Option<(TextStyle, String)>,
+) -> Vec<Text> {
+    let (value_style, value_text) = value;
+    // The width is estimated from what is drawn: a pseudo-locale lengthens it.
+    let value_drawn = crate::stress::localised(value_text.clone());
+    let caption_drawn = caption
+        .as_ref()
+        .map(|(_, text)| crate::stress::localised(text.clone()));
+    fn fit(style: TextStyle, text: &str) -> Fit<'_> {
+        Fit {
+            text,
+            px: style.size.px(),
+            leading: style.leading,
+        }
+    }
+    let centre = centre_fit(
+        size,
+        hole,
+        fit(value_style, &value_drawn),
+        caption
+            .as_ref()
+            .zip(caption_drawn.as_deref())
+            .map(|((style, _), text)| fit(*style, text)),
+    );
+    let middle = size / 2.0;
+    let mut texts = vec![
+        anchored(
+            value_style,
+            value_text,
+            middle,
+            centre.value.top,
+            centre.value.width,
+            Align::Centre,
+            size,
+        )
+        .scaled(centre.value.scale),
+    ];
+    if let (Some((style, text)), Some(slot)) = (caption, centre.caption) {
+        texts.push(
+            anchored(style, text, middle, slot.top, slot.width, Align::Centre, size)
+                .scaled(slot.scale),
+        );
+    }
+    texts
+}
+
+/// The donut's ring: a track, one arc a segment and the centre text. The
+/// `active` segment keeps its colour and the others dim, and the centre
+/// reads that segment's value and share.
+fn donut_scene(
+    donut: &Donut,
+    tokens: &Tokens,
+    progress: f32,
+    layout: DonutLayout,
+    active: Option<usize>,
+) -> Scene {
     let (values, total) = donut_values(donut);
-    let centre = DONUT_SIZE / 2.0;
-    let radius = centre - DONUT_STROKE / 2.0 - 1.0;
-    let mut svg = Svg::new(DONUT_SIZE, DONUT_SIZE);
+    let size = layout.size;
+    let centre = size / 2.0;
+    let radius = layout.radius();
+    let mut svg = Svg::new(size, size);
     svg.push(format!(
         r#"<path d="{}" fill="none" {} stroke-width="{}"/>"#,
         path::arc(centre, centre, radius, 0.0, TAU),
@@ -1766,12 +1851,11 @@ fn donut_scene(donut: &Donut, tokens: &Tokens, progress: f32) -> Scene {
             "stroke",
             Paint::Muted.color(tokens).with_af32(RING_TRACK_OPACITY)
         ),
-        num(DONUT_STROKE),
+        num(layout.stroke),
     ));
 
-    let mut texts = Vec::new();
-    let inner = DONUT_SIZE - (DONUT_STROKE + S1.px()) * 2.0;
-    if total > 0.0 {
+    let hole = layout.hole();
+    let texts = if total > 0.0 {
         let segments = values.iter().filter(|&&value| value > 0.0).count();
         let gap = if segments > 1 { DONUT_GAP } else { 0.0 };
         let mut cumulative = 0.0;
@@ -1787,52 +1871,35 @@ fn donut_scene(donut: &Donut, tokens: &Tokens, progress: f32) -> Scene {
             if to <= from {
                 continue;
             }
+            let colour = palette::resolve(tokens, donut.segments[index].colour, index);
+            let colour = if active.is_some_and(|chosen| chosen != index) {
+                colour.with_af32(BAR_DIM)
+            } else {
+                colour
+            };
             svg.push(format!(
                 r#"<path d="{}" fill="none" {} stroke-width="{}"/>"#,
                 path::arc(centre, centre, radius, from, to),
-                svg::paint(
-                    "stroke",
-                    palette::resolve(tokens, donut.segments[index].colour, index)
-                ),
-                num(DONUT_STROKE),
+                svg::paint("stroke", colour),
+                num(layout.stroke),
             ));
         }
-        let caption_height = match donut.caption {
-            Some(_) => S0_5.px() + LABEL_HEIGHT,
-            None => 0.0,
+        let (value, caption) = match active {
+            Some(index) => (
+                format_value(values[index], donut.unit),
+                (donut.unit != Unit::Percent).then(|| share_text(values[index] / total * 100.0)),
+            ),
+            None => (format_value(total, donut.unit), donut.caption.clone()),
         };
-        let top = centre - (CENTRE_LINE + caption_height) / 2.0;
-        texts.push(anchored(
-            typography::HEADING.in_ink(Ink::Text),
-            format_value(total, donut.unit),
-            centre,
-            top,
-            inner,
-            Align::Centre,
-            DONUT_SIZE,
-        ));
-        if let Some(caption) = &donut.caption {
-            texts.push(anchored(
-                CAPTION,
-                caption.clone(),
-                centre,
-                top + CENTRE_LINE + S0_5.px(),
-                inner,
-                Align::Centre,
-                DONUT_SIZE,
-            ));
-        }
+        centre_texts(
+            size,
+            hole,
+            (typography::HEADING.in_ink(Ink::Text), value),
+            caption.map(|caption| (CAPTION, caption)),
+        )
     } else {
-        texts.push(anchored(
-            CAPTION,
-            EMPTY_TEXT,
-            centre,
-            centre - LABEL_HEIGHT / 2.0,
-            inner,
-            Align::Centre,
-            DONUT_SIZE,
-        ));
-    }
+        centre_texts(size, hole, (CAPTION, EMPTY_TEXT.to_string()), None)
+    };
     Scene {
         svg: svg.finish(),
         texts,
@@ -1848,8 +1915,55 @@ struct DonutRow {
     share: Option<String>,
 }
 
-fn donut_element(tokens: &Tokens, donut: &Donut, progress: f32) -> Element {
+/// What a donut's pointer handlers read and write: the donut's measured
+/// box, the segment shown now, and a finger's tap state.
+///
+/// A mouse shows a segment by hovering the ring or its legend row. A finger
+/// cannot hover, so a tap on the ring or a row selects that segment and a
+/// second tap on it, or a tap in the hole, clears it. A finger that scrolls
+/// the page over the donut selects nothing.
+#[derive(Clone, Copy)]
+struct DonutControls {
+    size: State<Area>,
+    active: State<Option<usize>>,
+    press: Press,
+}
+
+impl DonutControls {
+    /// A tap on segment `index`: it takes the selection, or gives it up if
+    /// it already has it.
+    fn toggle(self, index: Option<usize>) {
+        let mut active = self.active;
+        let current = *active.peek();
+        active.set_if_modified(if index.is_some() && index == current {
+            None
+        } else {
+            index
+        });
+    }
+}
+
+fn donut_element(
+    tokens: &Tokens,
+    donut: &Donut,
+    progress: f32,
+    controls: DonutControls,
+) -> Element {
+    let DonutControls {
+        size: mut area,
+        mut active,
+        press,
+    } = controls;
     let (values, total) = donut_values(donut);
+    let compact = is_compact();
+    let measured = area.read().width();
+    let width = if measured >= 1.0 {
+        measured
+    } else {
+        DEFAULT_WIDTH
+    };
+    let layout = DonutLayout::new(width, compact, S4.px(), text_unit());
+    let selected = active().filter(|&index| values.get(index).is_some_and(|&value| value > 0.0));
     let rows: Vec<DonutRow> = donut
         .segments
         .iter()
@@ -1865,65 +1979,211 @@ fn donut_element(tokens: &Tokens, donut: &Donut, progress: f32) -> Element {
                 colour: palette::resolve(tokens, segment.colour, index),
                 name: segment.name.clone(),
                 value: format_value(value, donut.unit),
-                share: (donut.unit != Unit::Percent).then(|| format_value(share, Unit::Percent)),
+                share: (donut.unit != Unit::Percent).then(|| share_text(share)),
             }
         })
         .collect();
-    let height = DONUT_SIZE.max(rows.len() as f32 * DONUT_ROW);
-    let scene = donut_scene(donut, tokens, progress);
+    let scene = donut_scene(donut, tokens, progress, layout, selected);
     let alt = donut
         .label
         .clone()
         .unwrap_or_else(|| "Donut chart".to_string());
+    let row_height = if compact { TOUCH_MIN } else { DONUT_ROW };
+    // The legend is as wide as the donut, below the ring, or what is left
+    // of it beside the ring.
+    let legend = if layout.beside {
+        width - layout.size - S4.px()
+    } else {
+        width
+    };
+    let stacked = rows_stack(
+        legend,
+        rows.iter()
+            .map(|row| (row.value.as_str(), row.share.as_deref())),
+        RowSizes {
+            value_px: typography::NUMERIC.size.px(),
+            share_px: CAPTION.size.px(),
+            name_px: LEGEND.size.px(),
+            gap: S3.px(),
+            swatch: SWATCH + S2.px(),
+        },
+    );
+    let look = RowLook {
+        height: row_height,
+        stacked,
+    };
+
+    let hover_values = values.clone();
+    let tap_values = values;
+    let ring_size = layout.size;
+    let ring = drawing(scene, tokens, layout.size, layout.size)
+        .on_pointer_move(move |event: Event<PointerEventData>| {
+            if is_touch(&event) {
+                return;
+            }
+            let at = event.element_location();
+            active.set_if_modified(segment_at(
+                &hover_values,
+                total,
+                ring_size,
+                at.x as f32,
+                at.y as f32,
+            ));
+        })
+        .on_pointer_leave(move |event: Event<PointerEventData>| {
+            if !is_touch(&event) {
+                active.set_if_modified(None);
+            }
+        })
+        .on_pointer_down(move |event: Event<PointerEventData>| press.begin(&event, None))
+        .on_press(move |event: Event<PressEventData>| {
+            let PressEventData::Touch(touch) = event.data() else {
+                return;
+            };
+            let at = touch.element_location;
+            if press.tap(&event) {
+                controls.toggle(segment_at(
+                    &tap_values,
+                    total,
+                    ring_size,
+                    at.x as f32,
+                    at.y as f32,
+                ));
+            }
+        });
+
+    let direction = if layout.beside {
+        flex_row()
+    } else {
+        flex_col()
+    };
     rect()
         .width(Size::fill())
-        .height(Size::px(height))
+        .min_width(Size::px(NO_MIN))
         .tw(
             tokens,
-            &[flex_row(), gap(S4), items(crate::style::Align::Center)],
+            &[direction, gap(S4), items(crate::style::Align::Center)],
         )
         .a11y_alt(alt)
-        .child(drawing(scene, tokens, DONUT_SIZE, DONUT_SIZE))
+        .on_sized(move |event: Event<SizedEventData>| area.set(event.area))
+        .on_global_pointer_move(move |event: Event<PointerEventData>| press.moved(&event))
+        .on_global_pointer_up(move |_: Event<PointerEventData>| press.release())
+        .child(ring)
         .child(
             rect()
                 .width(Size::fill())
-                .children(rows.into_iter().map(|row| donut_row(tokens, row))),
+                .min_width(Size::px(NO_MIN))
+                .children(rows.into_iter().enumerate().map(|(index, row)| {
+                    let dimmed = selected.is_some_and(|chosen| chosen != index);
+                    donut_row(tokens, row, index, look, dimmed, controls)
+                })),
         )
         .into_element()
 }
 
-fn donut_row(tokens: &Tokens, row: DonutRow) -> Rect {
-    rect()
-        .width(Size::fill())
-        .height(Size::px(DONUT_ROW))
+/// How a legend row is laid out: its height and whether its numbers sit under
+/// its name rather than beside it.
+#[derive(Clone, Copy)]
+struct RowLook {
+    height: f32,
+    stacked: bool,
+}
+
+fn donut_row(
+    tokens: &Tokens,
+    row: DonutRow,
+    index: usize,
+    look: RowLook,
+    dimmed: bool,
+    controls: DonutControls,
+) -> Rect {
+    let DonutControls {
+        mut active, press, ..
+    } = controls;
+    // A name wraps onto a second line rather than being cut early, as a
+    // title does in a row, and is cut with an ellipsis after that.
+    let name = LEGEND
+        .paragraph(tokens, row.name)
+        .width(Size::flex(1.0))
+        .max_lines(2)
+        .text_overflow(TextOverflow::Ellipsis);
+    let head = rect()
         .tw(
             tokens,
             &[
+                // A flex share beside the numbers; the whole row above them.
+                if look.stacked { w_full() } else { w_flex() },
                 flex_row(),
+                grow_children(),
+                gap(S2),
                 items(crate::style::Align::Center),
-                justify(crate::style::Align::Between),
             ],
         )
-        .child(
-            rect()
-                .tw(
-                    tokens,
-                    &[flex_row(), gap(S2), items(crate::style::Align::Center)],
-                )
-                .child(palette::swatch(row.colour))
-                .child(CAPTION.in_ink(Ink::Text).label(tokens, row.name)),
+        .child(palette::swatch(row.colour))
+        .child(name);
+    let numbers = rect()
+        .tw(
+            tokens,
+            &[flex_row(), gap(S3), items(crate::style::Align::Center)],
         )
         .child(
-            rect()
-                .tw(
-                    tokens,
-                    &[flex_row(), gap(S3), items(crate::style::Align::Center)],
-                )
-                .child(
-                    typography::NUMERIC
-                        .in_ink(Ink::Text)
-                        .label(tokens, row.value),
-                )
-                .children(row.share.map(|share| CAPTION.label(tokens, share))),
+            typography::NUMERIC
+                .in_ink(Ink::Text)
+                .label(tokens, row.value)
+                .max_lines(1),
         )
+        .children(
+            row.share
+                .map(|share| CAPTION.label(tokens, share).max_lines(1)),
+        );
+    // Stacked, the numbers start under the name, not under the swatch.
+    let indent = SWATCH + S2.px();
+    let numbers: Element = if look.stacked {
+        rect()
+            .tw(tokens, &[flex_row()])
+            .child(rect().width(Size::px(indent)))
+            .child(numbers)
+            .into_element()
+    } else {
+        numbers.into_element()
+    };
+    let layout: &[Util] = if look.stacked {
+        &[
+            flex_col(),
+            justify(crate::style::Align::Center),
+            gap(S1),
+            py(S1),
+        ]
+    } else {
+        &[
+            flex_row(),
+            grow_children(),
+            items(crate::style::Align::Center),
+            gap(S3),
+            py(S1),
+        ]
+    };
+    rect()
+        .width(Size::fill())
+        .min_height(Size::px(look.height))
+        .tw(tokens, layout)
+        .maybe(dimmed, |row| row.opacity(BAR_DIM))
+        .on_pointer_enter(move |event: Event<PointerEventData>| {
+            if !is_touch(&event) {
+                active.set_if_modified(Some(index));
+            }
+        })
+        .on_pointer_leave(move |event: Event<PointerEventData>| {
+            if !is_touch(&event) {
+                active.set_if_modified(None);
+            }
+        })
+        .on_pointer_down(move |event: Event<PointerEventData>| press.begin(&event, None))
+        .on_press(move |event: Event<PressEventData>| {
+            if matches!(event.data(), PressEventData::Touch(_)) && press.tap(&event) {
+                controls.toggle(Some(index));
+            }
+        })
+        .child(head)
+        .child(numbers)
 }

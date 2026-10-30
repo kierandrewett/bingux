@@ -162,7 +162,7 @@ fn buttons_fill_the_notice_with_an_equal_inset_in_a_banner_and_a_toast() {
                             .iter()
                             .copied()
                             .filter(|b| {
-                                near(b[3] - b[2], button) && b[1] - b[0] > button && b[1] < dismiss[0]
+                                near(b[3] - b[2], button) && b[1] - b[0] > button && b[1] <= dismiss[0] + 0.51
                             })
                             .max_by(|a, b| a[1].total_cmp(&b[1]))
                             .unwrap_or_else(|| panic!("{label}: no action button"));
@@ -172,6 +172,40 @@ fn buttons_fill_the_notice_with_an_equal_inset_in_a_banner_and_a_toast() {
                 }
         }
     }
+}
+
+/// The action and the dismiss cross abut: no gap between their rects, the
+/// same height on the same line, the cross ends one padding from the end (the
+/// same as above and below), and only the message is spaced from the group.
+/// In every kind, banner and toast, desktop and phone.
+#[test]
+fn the_action_and_the_dismiss_cross_sit_flush() {
+    for (name, class, size) in SIZES {
+        let pad = NOTICE_PAD.px_in(class);
+        for place in [Place::Inline, Place::Toast] {
+            for kind in BannerKind::ALL {
+                let label = format!("{name} {kind:?}");
+                let mut shot = scene(place, "Saved", true, kind, size);
+                let bar = named(&mut shot, "Banner")[0];
+                let group = named(&mut shot, "NoticeButtons")[0];
+                let action = named(&mut shot, "NoticeAction")[0];
+                let dismiss = named(&mut shot, "IconButton")[0];
+                assert!(near(action[1], dismiss[0]), "{label}: gap between action and dismiss: {action:?} {dismiss:?}");
+                assert!(near(action[2], dismiss[2]) && near(action[3], dismiss[3]), "{label}: equal heights");
+                assert!(near(group[0], action[0]) && near(group[1], dismiss[1]), "{label}: the group is just the buttons");
+                assert!(near(bar[1] - dismiss[1], pad), "{label}: right inset {pad}");
+                assert!(near(dismiss[2] - bar[2], pad), "{label}: top inset equals right inset");
+                assert!(action[0] - bar[0] > pad, "{label}: the message stays spaced from the group");
+            }
+        }
+    }
+    // Two actions and the cross: one flush run.
+    let mut shot = Snapshot::new(|| TwoActions.into(), (900.0, 400.0));
+    shot.settle(Duration::from_millis(700));
+    let mut actions = named(&mut shot, "NoticeAction");
+    actions.sort_by(|a, b| a[0].total_cmp(&b[0]));
+    let dismiss = named(&mut shot, "IconButton")[0];
+    assert!(near(actions[0][1], actions[1][0]) && near(actions[1][1], dismiss[0]), "two actions and the cross abut");
 }
 
 /// A one-line notice is a pill and its buttons are concentric with it: the
@@ -486,6 +520,14 @@ fn every_kind_reads_in_both_schemes_and_every_accent() {
                 let name = format!("{accent} {scheme:?} {kind:?}");
                 let text = ratio(colours.ink, colours.fill);
                 assert!(text >= AA_TEXT, "{name}: ink on fill is {text:.2}");
+                // The edge is a faint hairline, never a coloured outline; the
+                // saturated hue is the leading icon, at 3:1 on the fill.
+                let edge = ratio(colours.edge, colours.fill);
+                assert!(edge > 1.02 && edge < 1.6, "{name}: the edge is faint, got {edge:.2}");
+                assert!(Oklch::from_colour(colours.edge).c <= 0.05, "{name}: the edge is not a saturated outline");
+                if kind != BannerKind::Neutral {
+                    assert!(ratio(colours.glyph, colours.fill) >= 3.0 - 0.05, "{name}: the icon reaches 3:1");
+                }
                 if kind == BannerKind::Neutral {
                     continue;
                 }

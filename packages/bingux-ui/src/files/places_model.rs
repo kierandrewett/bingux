@@ -175,6 +175,7 @@ pub(crate) fn is_trash(item: &Item) -> bool {
 /// Give the Trash row the icon for a Trash with something in it (`full`) or
 /// nothing in it, from [`FileIcon::for_trash`].
 pub(crate) fn trash_state(sections: &mut [Section], full: bool) {
+    super::named::note_trash_full(full);
     for item in sections.iter_mut().flat_map(|section| section.items.iter_mut()) {
         if is_trash(item) {
             item.icon = FileIcon::for_trash(full);
@@ -200,6 +201,12 @@ pub(crate) fn selected(
         })
     };
     if let Some(found) = find(&|item| item.target == *current) {
+        return Some(found);
+    }
+    // A folder inside the Trash is still the Trash, not the drive the bin is on.
+    if super::named::Roots::current().inside_of(current) == Some(super::named::Root::Trash)
+        && let Some(found) = find(&|item| is_trash(item))
+    {
         return Some(found);
     }
     let Where::Folder(path) = current else {
@@ -437,6 +444,20 @@ mod tests {
             trash.path(),
             Some(Path::new("/home/a/.local/share/Trash/files"))
         );
+    }
+
+    #[test]
+    fn a_folder_inside_the_trash_selects_the_trash_and_not_the_drive_it_is_on() {
+        let bin = bingux_files::ops::trash_folder().expect("a data home");
+        let mut places = sample();
+        places.standard.push(place(PlaceKind::Trash, "Trash", bin.to_str()));
+        let mounts = vec![mount("/", "root", MountKind::Local, known(100, 50))];
+        let out = sections(&places, &[], &mounts, &[], true);
+        let trash = (0, out[0].items.len() - 1);
+        assert_eq!(out[0].items[trash.1].label, "Trash");
+        for at in [bin.clone(), bin.join("Old photos"), bin.join("Old photos/2025/Summer")] {
+            assert_eq!(selected(&out, &Where::Folder(at.clone()), &mounts), Some(trash), "{}", at.display());
+        }
     }
 
     #[test]

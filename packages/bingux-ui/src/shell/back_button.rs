@@ -9,6 +9,8 @@
 //! keeps its own [`NavModel`](crate::nav::NavModel) (the file chooser) builds
 //! the same menu with [`history_menu`].
 
+use std::rc::Rc;
+
 use freya::prelude::*;
 
 use crate::controls::{IconButton, icon_button};
@@ -23,14 +25,31 @@ pub fn history_menu(
     items: Vec<HistoryItem>,
     on_pick: impl Fn(u64) + Clone + 'static,
 ) -> Vec<MenuItem> {
+    history_menu_with(items, on_pick, |_| None)
+}
+
+/// [`history_menu`] where a row can also answer a middle click: `on_middle`
+/// is asked for each item and returns what a middle click on it does (the
+/// file views open the place in a new tab), or `None` for a row with no such
+/// action.
+pub fn history_menu_with(
+    items: Vec<HistoryItem>,
+    on_pick: impl Fn(u64) + Clone + 'static,
+    on_middle: impl Fn(&HistoryItem) -> Option<Rc<dyn Fn()>>,
+) -> Vec<MenuItem> {
     items
         .into_iter()
         .map(|item| {
             let pick = on_pick.clone();
             let entry = item.entry;
+            let middle = on_middle(&item);
             let row = menu_item(item.title, move |_| pick(entry));
-            match item.icon {
+            let row = match item.icon {
                 Some(icon) => row.icon(icon),
+                None => row,
+            };
+            match middle {
+                Some(middle) => row.on_middle(move |_| middle()),
                 None => row,
             }
         })

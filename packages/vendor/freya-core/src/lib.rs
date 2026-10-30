@@ -160,6 +160,7 @@ pub mod prelude {
             shadow::*,
             text_align::*,
             text_decoration::*,
+            text_direction::*,
             text_height::*,
             text_overflow::*,
             text_shadow::*,

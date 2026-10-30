@@ -87,6 +87,19 @@ The changes are panic resilience (`freya-core`, `freya-winit`) and scroll feel f
   `ScrollView::scrollbar_inset_top(px)` does the same at the top
   (`start_inset`), so the bar starts below a header that floats over the
   content.
+- `freya-components/src/scrollviews/scrollbar.rs`: the track is placed by an
+  absolute `left(-20)` (`top(-20)` for a horizontal bar) instead of an
+  `offset_x`/`offset_y` on the absolute box (upstream). A right to left window
+  mirrors an absolute position with its holder, but an offset on a mirrored box
+  was applied twice once the bar's subtree was measured again (a page that
+  changes height under it), putting the bar 40 px outside the window
+  (`controls::direction_tests::a_page_scrollbar_in_a_phone_window_...`).
+- `freya-components/src/scrollviews/virtual_scrollview.rs`:
+  `VirtualScrollView::initial_size(Size2D)` seeds the measured size of the
+  visible area. A scroll view knows its size only after its first layout, so
+  its first render builds one row and, as the content outgrows a viewport of
+  nothing, a scrollbar; the Files view passes the size its tab's last view had
+  and draws the settled rows, scrollbar and columns in the first frame.
 - `freya-components/src/scrollviews/activity.rs` (new), `scrollview.rs` and
   `virtual_scrollview.rs`: a window-level scroll signal. `ScrollActivity` is
   provided once per window (`provide_scroll_activity`, called by `WindowHost`);
@@ -116,6 +129,10 @@ The changes are panic resilience (`freya-core`, `freya-winit`) and scroll feel f
   right click on a focused field no longer blurs it (upstream blurred it on any
   press that was not a touch tap). The `trailing` element is no longer wrapped
   in 8 px of right padding: the app sets its own inset from the field's edge.
+- `freya-components/src/input.rs`: the `leading` element is no longer wrapped in
+  8 px of left padding (the app sets its own inset, as for `trailing`), and
+  `Input::role(AccessibilityRole)` replaces the role the mode gives (a search
+  field is a `SearchInput`). Upstream gives every input its text role.
 - `freya-components/src/input.rs`: `Input::keep_focus_when(Callback<(), bool>)`.
   The input's global pointer-up blurs a focused input for any release outside
   it, but the shield of a popup the input owns (its context menu) takes the
@@ -176,3 +193,64 @@ The changes are panic resilience (`freya-core`, `freya-winit`) and scroll feel f
 These crates are MIT licensed by the Freya authors. Tests, benches and examples are
 not copied. Drop this directory and the patch entries when upstream exposes these
 settings and catches panics itself.
+
+## `torin` and right to left
+
+`torin` 0.5.0-rc.13 is vendored too (patched in all four app manifests, like the Freya crates) so
+the layout engine can mirror. `Node::rtl` reflects a node's stacked and absolute children about its
+box after they are laid out left to right (margins are swapped with the child, global positions stay
+physical, scroll offsets keep their sign), and the cached-layout fast path re-measures a child whose
+mirrored place changed. `Size::inner_sized` is public. The unused optional `hotpath` dependency is
+removed so `cargo test` runs in place (`tests/rtl.rs` is the mirroring suite).
+The scroll fast path (a node whose only change is its `offset_x`/`offset_y`, `DirtyReason::InnerLayout`)
+returns "not revalidated": the node keeps the place its parent gave it, which is already mirrored, and the
+parent must not mirror it a second time (it did, so a scrolled strip of tabs in a right-to-left window ended
+up a content width off the screen; `tests/rtl.rs`, `a_scrolled_node_in_a_mirrored_parent_...`). The
+fast path is also skipped when the parent is measured again (it places its children again in its own left
+to right frame, which a cached, already mirrored place is not in), and a node measured as the root of a
+partial relayout is mirrored in its mirrored parent (`Torin::measure`), so every relayout matches a layout
+from scratch (`a_subtree_measured_again_from_a_root_below_a_mirrored_parent_...`).
+
+`freya-core` carries the other half: an inherited `TextDirection` (`.text_direction(..)`), the
+`Node::rtl` flag synced from it by `Tree` (also for a replaced element, `set_scale_factor` and a
+changed direction), paragraphs shaped and laid out in that direction (`elements/text_layout.rs`), the
+default `TextAlign::Start`, the resolved alignment kept in `ParagraphHolderInner::align` for a caret
+in an empty line, and borders, corner radii, shadows and linear gradients drawn reflected
+(`render_rect` takes the direction). In left to right every one of these is the identity.
+
+`freya-core/src/elements/text_layout.rs` (`fit`): a label or paragraph is "shrink-wrapped" (laid out at its own
+width, so right to left it is aligned to the right of a box exactly as wide as the text) when its width is
+`Inner` and it has no minimum width. Torin's default minimum width is `Size::Inner`, not zero pixels; `fit` took
+only `Pixels(0)` for "no minimum", so every ordinary label counted as having one, was laid out at the whole room
+of its row and drawn that far toward the end of a box as wide as the text. A tab title was cut ("Folde"), a file
+name in a list or a sidebar row was painted outside its cell (nothing visible), a header title ran off the bar.
+`controls::tab_tests` (`a_title_that_fits_...`, `a_tabs_title_is_drawn_whole_...`) draw it in both directions.
+
+## `winit` and popup windows
+
+`winit` 0.30.13 is vendored (patched in all four app manifests, like the Freya crates) so a window can be
+an `xdg_popup`: a menu, dropdown list or popover the compositor places against its parent, which can
+leave the parent's bounds. `design/popup-windows.md` has the evidence and the decisions. Changes:
+
+- `platform/wayland.rs`, `platform_impl/linux/mod.rs`: `WindowAttributesExtWayland::with_popup(PopupAttributes)`
+  (parent, anchor rect, anchor, gravity, offset, constraint adjustment, card size, shadow `margin`, grab).
+- `platform_impl/linux/wayland/window/role.rs` (new): `Role`, the `xdg_toplevel` or `xdg_popup` behind a
+  window. `window/popup.rs` (new): the positioner. `window/{mod,state}.rs`: popup creation (fails with `Err`
+  when refused), geometry and input region = the card, `request_inner_size` = `xdg_popup.reposition`,
+  `WindowAttributes::with_parent_window` sets `xdg_toplevel.set_parent`. `state.rs`: `PopupHandler`
+  (`Moved` = the compositor's placement, `popup_done` = `CloseRequested`). `event_loop/mod.rs`: the deepest
+  popup is destroyed first, a window with an open popup waits (the other order ends the connection).
+- `Cargo.toml` has no examples, tests or dev-dependencies.
+
+`freya-core/src/lifecycle/context.rs`: `snapshot_contexts` / `provide_context_snapshot` copy every context
+visible from a scope into another window's runner (a popup's content reads its opener's tokens and state).
+
+`freya-winit`: `popup.rs` (new: `supported`, `placed`, `PopupMarker`), `config.rs` (`with_popup`, `with_parent`),
+`window.rs` and `renderer.rs` (parent handle, popup creation that cannot take the app down, a popup's keys go to
+the window it grew from, focus swallowed between a window and its popups), `extensions.rs` (`try_launch_window`).
+- `freya-core/src/tree.rs`: a removal by index checks that the child at that index is the removed node and
+  otherwise removes it by id. A node removed after a sibling of the same parent was at a shifted index, so
+  removing by position took the wrong sibling out and left the removed node listed as a child with no
+  element; the tree walk of the test runner (`find_many`) then unwrapped `None` (taxonomy page
+  `files/file-manager-and-chooser`, `freya-testing` `lib.rs:663`). A guard for this is
+  `controls::tooltip::tests`' neighbours in `bingux-taxonomy` (`tests.rs`, every page opens).

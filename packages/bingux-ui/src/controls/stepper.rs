@@ -4,6 +4,7 @@
 
 use freya::prelude::*;
 
+use super::direction::use_direction;
 use crate::component::ComponentName;
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
@@ -65,6 +66,7 @@ impl Stepper {
 impl Component for Stepper {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let direction = use_direction();
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
         let value = self.value.clamp(self.min, self.max);
@@ -89,7 +91,7 @@ impl Component for Stepper {
             let decrement = decrement.clone();
             let increment = increment.clone();
             move |event: Event<KeyboardEventData>| {
-                match event.key {
+                match direction.reading_key(&event.key) {
                     Key::Named(NamedKey::ArrowDown) | Key::Named(NamedKey::ArrowLeft) => {
                         if can_decrement {
                             decrement()

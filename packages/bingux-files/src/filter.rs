@@ -325,6 +325,13 @@ pub fn glob_match(pattern: &str, name: &str) -> bool {
     glob_chars(&pattern, name)
 }
 
+/// [`glob_match`] where upper and lower case differ.
+pub fn glob_match_exact(pattern: &str, name: &str) -> bool {
+    let pattern: Vec<char> = pattern.chars().collect();
+    let name: Vec<char> = name.chars().collect();
+    glob_chars(&pattern, &name)
+}
+
 /// [`glob_match`] on text that is lower-case already.
 fn glob_chars(pattern: &[char], name: &[char]) -> bool {
     let (mut p, mut n) = (0, 0);

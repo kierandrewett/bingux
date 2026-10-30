@@ -13,8 +13,11 @@
 //! every wheel notch and key press and throws the list back to where it
 //! started.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
+
+use freya::prelude::Area;
 
 use super::view::Rows;
 
@@ -78,6 +81,45 @@ pub(super) fn recall(owner: Owner, path: &Path) -> Option<Remembered> {
     })
 }
 
+/// How to record a view that is on show now, for the owner it belongs to.
+type Flush = Rc<dyn Fn()>;
+
+thread_local! {
+    /// The views on show, most recent last: a view records itself when it is
+    /// dropped, and when its tab is moved to another window, whose view must
+    /// find the record at once, long before this one is dropped.
+    static LIVE: RefCell<Vec<(u64, Owner, Flush)>> = const { RefCell::new(Vec::new()) };
+    static LIVE_TOKEN: Cell<u64> = const { Cell::new(0) };
+}
+
+/// Let [`flush`] record `owner`'s view, which is on show, by calling `record`.
+/// Returns the token to [`unregister`] it with.
+pub(super) fn register(owner: Owner, record: impl Fn() + 'static) -> u64 {
+    let token = LIVE_TOKEN.with(|next| {
+        next.set(next.get() + 1);
+        next.get()
+    });
+    LIVE.with_borrow_mut(|live| live.push((token, owner, Rc::new(record))));
+    token
+}
+
+/// The view registered with `token` is gone.
+pub(super) fn unregister(token: u64) {
+    LIVE.with_borrow_mut(|live| live.retain(|(other, _, _)| *other != token));
+}
+
+/// Record, now, where `owner`'s view is scrolled and what it has selected, if
+/// it is on show.
+pub(super) fn flush(owner: Owner) {
+    // Called outside the borrow: recording writes to the memory.
+    let records: Vec<Flush> = LIVE.with_borrow(|live| {
+        live.iter().filter(|(_, other, _)| *other == owner).map(|(_, _, record)| record.clone()).collect()
+    });
+    for record in records {
+        record();
+    }
+}
+
 /// The folder `owner` left last, if it lies directly in `folder`: going up
 /// selects the folder you came out of.
 pub(super) fn came_from(owner: Owner, folder: &Path) -> Option<PathBuf> {
@@ -89,6 +131,61 @@ pub(super) fn came_from(owner: Owner, folder: &Path) -> Option<PathBuf> {
             .map(|(_, left)| left.clone())
             .filter(|left| left.parent() == Some(folder))
     })
+}
+
+/// How large the parts of a view were the last time one of an owner was on
+/// show. A view knows its size only after its first layout, so it starts from
+/// this one: the rows, the columns, the scrollbar and the docked pane of its
+/// first frame are those of the frame after it, and a tab that is shown again
+/// does not draw a layout that the next frame changes.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(super) struct Measured {
+    /// What the list or the grid is laid out in, below the column header.
+    pub viewport: Area,
+    /// The row that holds the view and the docked pane beside it.
+    pub pane_row: Area,
+}
+
+/// How many owners keep what they measured.
+const OWNERS: usize = 64;
+
+thread_local! {
+    /// Most recent last.
+    static MEASURED: RefCell<Vec<(Owner, Measured)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// What `owner`'s view measured last, or what any view did, or nothing.
+pub(super) fn measured(owner: Owner) -> Measured {
+    MEASURED.with_borrow(|all| {
+        all.iter()
+            .find(|(other, _)| *other == owner)
+            .or_else(|| all.last())
+            .map_or_else(Measured::default, |(_, measured)| *measured)
+    })
+}
+
+/// Change what `owner`'s view measured. Nothing is stored when `change` leaves
+/// it as it was.
+pub(super) fn measure(owner: Owner, change: impl FnOnce(&mut Measured)) {
+    MEASURED.with_borrow_mut(|all| {
+        let at = all.iter().position(|(other, _)| *other == owner);
+        let mut now = at.map_or_else(
+            || all.last().map_or_else(Measured::default, |(_, last)| *last),
+            |at| all[at].1,
+        );
+        let before = now;
+        change(&mut now);
+        if at.is_some() && now == before {
+            return;
+        }
+        if let Some(at) = at {
+            all.remove(at);
+        }
+        all.push((owner, now));
+        if all.len() > OWNERS {
+            all.remove(0);
+        }
+    });
 }
 
 /// The search a view was last shown with: its text, and whether the rows are
@@ -240,5 +337,55 @@ mod tests {
         assert!(!top.moves(key("re", true), &rows(&["report", "readme"])));
         // The new text shows the two files already on screen.
         assert!(!top.moves(key("rea", true), &rows(&["report", "readme"])));
+    }
+}
+
+#[cfg(test)]
+mod measured_tests {
+    use super::*;
+
+    fn area(width: f32, height: f32) -> Area {
+        Area::new((0.0, 0.0).into(), (width, height).into())
+    }
+
+    #[test]
+    fn a_view_starts_from_what_the_last_view_of_its_tab_measured() {
+        measure(41, |measured| measured.viewport = area(900.0, 500.0));
+        measure(42, |measured| measured.viewport = area(700.0, 500.0));
+        assert_eq!(measured(41).viewport, area(900.0, 500.0));
+        assert_eq!(measured(42).viewport, area(700.0, 500.0));
+    }
+
+    #[test]
+    fn a_new_tab_starts_from_the_window_as_the_last_view_found_it() {
+        measure(43, |measured| {
+            measured.viewport = area(1000.0, 480.0);
+            measured.pane_row = area(1000.0, 520.0);
+        });
+        let fresh = measured(u64::MAX);
+        assert_eq!(fresh.viewport, area(1000.0, 480.0));
+        assert_eq!(fresh.pane_row, area(1000.0, 520.0));
+    }
+
+    #[test]
+    fn measuring_one_part_leaves_the_others() {
+        measure(44, |measured| {
+            measured.viewport = area(800.0, 400.0);
+            measured.pane_row = area(800.0, 440.0);
+        });
+        measure(44, |measured| measured.viewport = area(600.0, 400.0));
+        let now = measured(44);
+        assert_eq!(now.viewport, area(600.0, 400.0));
+        assert_eq!(now.pane_row, area(800.0, 440.0));
+    }
+
+    #[test]
+    fn only_so_many_tabs_keep_what_they_measured() {
+        for tab in 100..100 + OWNERS as u64 + 1 {
+            measure(tab, |measured| measured.viewport = area(tab as f32, 1.0));
+        }
+        // The oldest is forgotten; it then starts from the newest, not from nothing.
+        assert_eq!(measured(100).viewport, area((100 + OWNERS) as f32, 1.0));
+        assert_eq!(measured(101).viewport, area(101.0, 1.0));
     }
 }

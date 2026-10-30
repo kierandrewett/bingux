@@ -152,6 +152,102 @@ pub fn choose_filled_line(inner: f32, gap: f32, label: LabelFacts, least: f32) -
     }
 }
 
+/// What a read-only value needs, in px at its type style.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ValueFacts {
+    /// The width of the whole value on one line.
+    pub natural: f32,
+    /// The width of its longest word, `0` for a value that may break
+    /// anywhere (a path, a hash, an address), which has no word to protect.
+    pub longest_word: f32,
+}
+
+impl ValueFacts {
+    /// Measures `text` in `style` with the engine that draws it. A value that
+    /// `breaks_anywhere` has no longest word.
+    pub fn measure(text: &str, style: TextStyle, breaks_anywhere: bool) -> Self {
+        Self {
+            // The room the cell is rounded up by, so a value that fits to the
+            // pixel is not wrapped at its last word.
+            natural: text_width(text, style) + LABEL_SLACK * 2.0,
+            longest_word: if breaks_anywhere {
+                0.0
+            } else {
+                text.split_whitespace()
+                    .map(|word| text_width(word, style))
+                    .fold(0.0, f32::max)
+            },
+        }
+    }
+}
+
+/// How a row with a read-only value is laid out.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ValueLine {
+    /// Title and value on one line: the value in one line at its natural
+    /// width, the title in what it leaves (never less than its floor).
+    Beside {
+        /// The title's cell, in px.
+        label: f32,
+    },
+    /// Title and value in a row, the value wrapped onto a few lines in what
+    /// the title's floor leaves, aligned to the row's end.
+    Wrapped {
+        /// The title's cell, in px.
+        label: f32,
+    },
+    /// The title above the value, which takes the full width and wraps.
+    Stacked,
+}
+
+/// The most lines a value may wrap to beside its title before the row stacks.
+pub const VALUE_LINES_BESIDE: f32 = 2.0;
+/// The part of a line that a wrapped value's last line may not fill, so the
+/// estimate of its lines errs towards stacking.
+const WRAP_SLACK: f32 = 0.9;
+
+/// Decides how a row of `inner` px (its content width), with `gap` px between
+/// title and value, is laid out. A value is never cut with an ellipsis: it
+/// fits beside its title on one line ([`ValueLine::Beside`]), or on a desktop
+/// wraps onto up to [`VALUE_LINES_BESIDE`] lines beside it
+/// ([`ValueLine::Wrapped`]), or the row stacks the value under its title at
+/// the full width ([`ValueLine::Stacked`]). A compact (phone) row skips the
+/// wrapped form: a value that does not fit on one line stacks. The title
+/// keeps its floor in every form (see [`choose_line`]): at `inner <= 0` the
+/// row has not been measured and is laid out as `Wrapped`, which is valid at
+/// any width.
+pub fn choose_value_line(
+    inner: f32,
+    gap: f32,
+    label: LabelFacts,
+    value: ValueFacts,
+    compact: bool,
+) -> ValueLine {
+    if inner <= 0.0 {
+        return ValueLine::Wrapped {
+            label: label.natural,
+        };
+    }
+    let floor = label.natural.min(LABEL_SHARE * inner);
+    // A title word that does not fit the floor would break inside itself.
+    if label.longest_word > floor + 0.5 {
+        return ValueLine::Stacked;
+    }
+    let room = inner - gap - floor;
+    if value.natural <= room {
+        return ValueLine::Beside {
+            label: label.natural.min(inner - gap - value.natural),
+        };
+    }
+    if !compact && room > 0.0 && value.longest_word <= room {
+        let lines = (value.natural / (room * WRAP_SLACK)).ceil();
+        if lines <= VALUE_LINES_BESIDE {
+            return ValueLine::Wrapped { label: floor };
+        }
+    }
+    ValueLine::Stacked
+}
+
 /// What a line tells its control: whether to fill the cell it is given, and
 /// the control's reply that it can.
 #[derive(Clone, Copy, PartialEq)]
@@ -459,6 +555,95 @@ mod tests {
                         assert!(inner - ROW_GAP - taken >= FIELD_MIN, "{inner}");
                     }
                     LineMode::Stacked => {}
+                }
+            }
+        }
+    }
+
+    fn value(natural: f32, longest_word: f32) -> ValueFacts {
+        ValueFacts { natural, longest_word }
+    }
+
+    #[test]
+    fn a_short_value_sits_beside_its_title_whatever_the_width() {
+        // 'Licence' and 'GPL-3.0-or-later' (110 px) in a phone row of 322 px.
+        assert_eq!(
+            choose_value_line(322.0, ROW_GAP, label(60.0, 60.0), value(110.0, 110.0), true),
+            ValueLine::Beside { label: 60.0 }
+        );
+    }
+
+    #[test]
+    fn the_licence_expression_of_the_screenshot_stacks_on_a_phone_and_wraps_on_a_desktop() {
+        // 'Apache-2.0 AND MIT AND Zlib AND BSD-3-Clause' is 330 px. On a
+        // phone the row has 322 px of content and 'Licences' (70 px)
+        // leaves 236: it does not fit, so it stacks. A 560 px desktop row
+        // leaves 560 - 16 - 70 = 474, so it fits beside.
+        let licences = value(330.0, 70.0);
+        assert_eq!(
+            choose_value_line(322.0, ROW_GAP, label(70.0, 70.0), licences, true),
+            ValueLine::Stacked
+        );
+        assert!(matches!(
+            choose_value_line(560.0, ROW_GAP, label(70.0, 70.0), licences, false),
+            ValueLine::Beside { .. }
+        ));
+        // A 340 px desktop row leaves 254 px: two lines.
+        assert!(matches!(
+            choose_value_line(340.0, ROW_GAP, label(70.0, 70.0), licences, false),
+            ValueLine::Wrapped { .. }
+        ));
+    }
+
+    #[test]
+    fn a_value_that_needs_more_than_two_lines_beside_its_title_stacks() {
+        // A 64-character hash, 520 px, may break anywhere, in a 340 px row.
+        assert_eq!(
+            choose_value_line(340.0, ROW_GAP, label(70.0, 70.0), value(520.0, 0.0), false),
+            ValueLine::Stacked
+        );
+    }
+
+    #[test]
+    fn a_word_wider_than_the_room_beside_the_title_stacks_instead_of_breaking() {
+        assert_eq!(
+            choose_value_line(340.0, ROW_GAP, label(70.0, 70.0), value(300.0, 280.0), false),
+            ValueLine::Stacked
+        );
+    }
+
+    #[test]
+    fn a_row_that_has_not_been_measured_wraps_the_value_and_keeps_the_title_whole() {
+        assert_eq!(
+            choose_value_line(0.0, ROW_GAP, label(70.0, 70.0), value(900.0, 0.0), true),
+            ValueLine::Wrapped { label: 70.0 }
+        );
+    }
+
+    #[test]
+    fn the_title_never_gets_less_than_its_floor_and_a_value_is_never_cut_at_any_width() {
+        for inner in 80..900 {
+            let inner = inner as f32;
+            for compact in [false, true] {
+                for (label, value) in [
+                    (label(70.0, 70.0), value(110.0, 110.0)),
+                    (label(155.0, 95.0), value(330.0, 70.0)),
+                    (label(70.0, 70.0), value(520.0, 0.0)),
+                    (label(310.0, 190.0), value(90.0, 90.0)),
+                ] {
+                    let floor = label.natural.min(LABEL_SHARE * inner);
+                    match choose_value_line(inner, ROW_GAP, label, value, compact) {
+                        ValueLine::Beside { label: taken } => {
+                            assert!(taken >= floor - 0.01, "{inner}");
+                            assert!(taken + ROW_GAP + value.natural <= inner + 0.01, "{inner}: it fits on one line");
+                        }
+                        ValueLine::Wrapped { label: taken } => {
+                            assert!(!compact, "{inner}: a phone row never wraps beside");
+                            assert!(taken >= floor - 0.01, "{inner}");
+                            assert!(inner - ROW_GAP - taken >= value.longest_word, "{inner}");
+                        }
+                        ValueLine::Stacked => {}
+                    }
                 }
             }
         }

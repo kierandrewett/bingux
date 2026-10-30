@@ -4,8 +4,8 @@
 //! three weights are 3 MB of data that an application should not carry.
 //!
 //! The set the apps use is `Icon`'s named variants, built by
-//! `scripts/icons/build.py`, which fits each glyph to the 16 px grid (size,
-//! centre, whole-pixel strokes, snapped edges). A fork icon drawn through this
+//! `scripts/icons/build.py`, which puts each glyph on the 16 px grid (the
+//! fork's own outline, moved by at most half a pixel). A fork icon drawn through this
 //! module is the fork's own outline scaled by 1/16 and nothing else, so it can
 //! look softer than the named icons. To adopt one, add a row for it in
 //! `scripts/icons/labels.tsv`; `scripts/icons/review.py candidates Name:weight`

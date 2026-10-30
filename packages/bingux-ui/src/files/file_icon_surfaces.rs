@@ -12,16 +12,18 @@ use std::time::Duration;
 
 use bingux_files::{Entry, Kind, Listing, Place, PlaceKind, Selection};
 use freya::prelude::*;
+use freya_components::cache::AssetCacher;
 
 use super::address_crumbs::subfolder_icon;
 use super::address_list::{Lead, ListRow, Part};
-use super::file_icon::FileIcon;
+use super::file_icon::{FileIcon, file_icon_view};
 use crate::component::Published;
 use super::places_view::probe_row;
 use super::view::FileView;
 use crate::shell::OverlayHost;
 use crate::shell::menu_query::Mark;
 use crate::snapshot::Snapshot;
+use crate::style::*;
 use crate::theme::provide_tokens;
 
 const SIZE: (f32, f32) = (700.0, 400.0);
@@ -137,6 +139,78 @@ fn a_bookmark_that_is_no_user_folder_is_the_plain_folder_everywhere() {
                 ["Folder"],
                 "{what} at {px} px draws {name} as {drawn:?}, not the plain folder"
             );
+        }
+    }
+}
+
+/// Whether the page has asked for icons and every one has landed: the rasteriser's worker is done
+/// with them all.
+fn icons_landed(shot: &mut Snapshot) -> bool {
+    shot.runner().run_in(|| {
+        AssetCacher::try_get().is_some_and(|cache| cache.cached_size() > 0 && cache.cached_size() == cache.size())
+    })
+}
+
+/// A special folder as a listing row carries it, a link or not, drawn alone on
+/// the page at `px`, as PNG bytes.
+fn pixels(link: bool, name: &'static str, px: u16, selected: bool, scale: f64) -> Vec<u8> {
+    let entry = Entry::named(
+        home().join(name),
+        name.to_owned(),
+        Kind::Directory,
+        link,
+        false,
+    );
+    let edge = f32::from(px) + 8.0;
+    let mut shot = Snapshot::with_scale(
+        move || {
+            let tokens = provide_tokens();
+            let spec = FileIcon::for_entry(&entry);
+            rect()
+                .tw(&tokens, &[w_full(), h_full(), bg(Paint::Bg), p(S1)])
+                .child(file_icon_view(&tokens, &spec, px, selected))
+                .into()
+        },
+        (edge, edge),
+        scale,
+    );
+    // Icons are rasterised on a worker, behind those of every other test of the run: a frame
+    // taken before they land has a blank where the picture goes, and differs between two
+    // identical pages. Wait until every icon the page asked for has landed.
+    shot.settle(Duration::from_millis(50));
+    shot.settle_until(Duration::from_secs(60), icons_landed);
+    shot.settle(Duration::from_millis(50));
+    // A file of this thread's own: a run of the same test in another process, or this test's own
+    // next frame, never overwrites the one being read.
+    let path = std::env::temp_dir().join(format!(
+        "link-emblem-probe-{}-{:?}.png",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    shot.save(&path);
+    let frame = crate::runtime::read_file(&path).expect("the frame was saved");
+    let _ = std::fs::remove_file(&path);
+    frame
+}
+
+#[test]
+fn a_linked_user_folder_is_drawn_as_the_plain_one_below_64_px_and_has_the_emblem_at_64() {
+    for name in ["Documents", "Downloads"] {
+        for selected in [false, true] {
+            for scale in [1.0, 2.0] {
+                for px in [16u16, 18, 20, 24, 32] {
+                    assert!(
+                        pixels(true, name, px, selected, scale) == pixels(false, name, px, selected, scale),
+                        "{name} at {px} px (selected {selected}, {scale}x) differs when linked"
+                    );
+                }
+                for px in [64u16, 128] {
+                    assert!(
+                        pixels(true, name, px, selected, scale) != pixels(false, name, px, selected, scale),
+                        "{name} at {px} px (selected {selected}, {scale}x) has no emblem when linked"
+                    );
+                }
+            }
         }
     }
 }

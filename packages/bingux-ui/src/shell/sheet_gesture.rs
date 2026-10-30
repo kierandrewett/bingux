@@ -41,6 +41,11 @@ pub(crate) const DRAG_SLOP: f32 = 8.0;
 
 const SAMPLES: usize = 12;
 
+/// How much of a sheet's overhang it may lift into above rest.
+pub(crate) fn lift_limit(overhang: f32) -> f32 {
+    overhang * 0.75
+}
+
 /// The sheet's geometry, which a release and a rubber band depend on.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Metrics {
@@ -60,7 +65,7 @@ impl Metrics {
         Self {
             travel: height + overhang,
             dismiss_at: distance.min(height * 0.5).max(1.0),
-            lift_limit: overhang * 0.75,
+            lift_limit: lift_limit(overhang),
         }
     }
 }

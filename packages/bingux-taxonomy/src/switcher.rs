@@ -6,7 +6,8 @@
 //! at 200 %, as `scripts/overflow-check.py` runs it.
 //!
 //! On a desktop window the choices sit in the header bar as dense
-//! dropdowns. At phone density there is no room, so the header holds one
+//! dropdowns. At phone density, or in a window too narrow for six of them
+//! beside the window buttons, there is no room, so the header holds one
 //! button that opens them in a sheet, which is also how an app built on
 //! bingux-ui puts a window-level tool on a phone.
 
@@ -20,10 +21,16 @@ use crate::env::{DensityMode, Env, SCALES, TEXT_SCALES, ThemeMode, apply_window,
 #[derive(PartialEq)]
 pub struct Switcher;
 
+/// The narrowest window whose header holds the six dropdowns beside the window's own buttons.
+/// The taxonomy's default window (1320 px) is wider; below it the header's trailing side would
+/// run over the sidebar's search field, so the dropdowns go in the sheet a phone gets.
+const DENSE_FROM: f32 = 1240.0;
+
 impl Component for Switcher {
     fn render(&self) -> impl IntoElement {
         let window = use_window();
-        if is_compact() {
+        let width = Platform::get().current_window().root_size.read().width;
+        if is_compact() || width < DENSE_FROM {
             icon_button(Icon::Appearance, move |_| {
                 window.open(popup("Display", SwitcherSheet).width(Dim::PopupNarrow));
             })
@@ -122,8 +129,8 @@ impl Component for Choices {
         .title("Text size");
         let strings = dropdown(
             vec![
-                ("as-written".to_string(), "Strings: as written".to_string()),
-                ("pseudo".to_string(), "Strings: pseudo-locale".to_string()),
+                ("as-written".to_string(), "Strings: plain".to_string()),
+                ("pseudo".to_string(), "Strings: pseudo".to_string()),
             ],
             if now.pseudo { "pseudo" } else { "as-written" },
             move |key: String| {

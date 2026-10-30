@@ -100,6 +100,29 @@ pub(super) fn show_properties(env: &Env, selected: &[Entry]) {
     );
 }
 
+/// Open the same dialog for a folder or drive that is no row of a listing:
+/// a place of the sidebar. `name` is what the dialog calls it (the folder's
+/// own name; "Trash" for the Trash's folder, which is named `files`).
+/// `closed` gives the focus back.
+pub(super) fn show_folder_properties(
+    folder: PathBuf,
+    name: String,
+    overlays: Overlays,
+    open_folder: EventHandler<PathBuf>,
+    closed: EventHandler<()>,
+) {
+    show(
+        Body {
+            entries: vec![Entry::named(folder, name, Kind::Directory, false, false)],
+            overlays,
+            open_folder,
+            open_with: false,
+            home: super::directory::home_folder(),
+        },
+        closed,
+    );
+}
+
 /// Put the dialog for `body` on screen, calling `closed` when it has gone.
 fn show(body: Body, closed: EventHandler<()>) {
     let title = match body.entries.as_slice() {
@@ -572,6 +595,8 @@ impl Component for Body {
             .map(|tab| text_width(tab.title(), BODY))
             .fold(0.0, f32::max);
         let card = frame_width(Dim::PopupWidth.px()) - 2.0 * S4.px();
+        // The rows below know their width on their first frame.
+        crate::rows::provide_row_width(card);
         let bar = if tab_model::fits_filled(widest, tabs.len(), card, S2.px(), S1.px()) {
             bar.fill()
         } else {

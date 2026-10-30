@@ -26,6 +26,29 @@ pub const PROGRESS: &[Spec] = &[
     Spec::live("Indeterminate", || {
         progress_bar(None).width(Size::fill()).into_element()
     }),
+    Spec::live("Indeterminate, reduced motion (breathes, does not travel)", || {
+        Reduced(|| progress_bar(None).width(Size::fill()).into_element()).into_element()
+    }),
+    Spec::live("Indeterminate in a dialog", || {
+        let overlays = use_overlays();
+        action_button("Open dialog", move |_| {
+            overlays.show_dialog(
+                dialog("Copying “Holiday photos”", "This can take a while.")
+                    .content(progress_bar(None))
+                    .cancel("Stop"),
+            )
+        })
+        .into_element()
+    })
+    .script("click-text Open dialog; wait 500; save {out}"),
+    Spec::live("Indeterminate in a popup", || {
+        let window = use_window();
+        action_button("Open popup", move |_| {
+            window.open(popup("Checking for updates", Checking));
+        })
+        .into_element()
+    })
+    .script("click-text Open popup; wait 600; save {out}"),
     Spec::forced("With text", || {
         progress_bar(0.6)
             .text("Copying 6 of 10 files")
@@ -48,10 +71,43 @@ pub const SPINNER: &[Spec] = &[
     Spec::live("With text", || {
         spinner(SpinnerSize::Large).text("Loading").into_element()
     }),
+    Spec::live("Reduced motion (turns slowly)", || {
+        Reduced(|| spinner(SpinnerSize::Large).text("Loading").into_element()).into_element()
+    }),
     Spec::forced("In a button", || {
         action_button("Saving", |_| {}).loading(true).into_element()
     }),
 ];
+
+/// The body of the popup that holds an indeterminate bar and a spinner.
+#[derive(PartialEq)]
+struct Checking;
+
+impl Component for Checking {
+    fn render(&self) -> impl IntoElement {
+        popup_column().child(
+            vstack(S4)
+                .child(progress_bar(None).text("Checking for updates"))
+                .child(spinner(SpinnerSize::Large).text("Loading")),
+        )
+    }
+}
+
+/// Its child, drawn under reduced motion whatever the window says: the loops
+/// that stay (a spinner, an indeterminate bar) must still show activity.
+#[derive(PartialEq)]
+struct Reduced(fn() -> Element);
+
+impl Component for Reduced {
+    fn render(&self) -> impl IntoElement {
+        let outer = use_tokens();
+        let tokens = Tokens::new(outer.accent_name, outer.scheme, true);
+        let shared = use_provide_context(|| SharedTokens(State::create(tokens)));
+        let mut palette = shared.0;
+        palette.set_if_modified(tokens);
+        (self.0)()
+    }
+}
 
 pub const TOOLTIP: &[Spec] = &[
     Spec::live("Hover the icon", || {
@@ -111,6 +167,34 @@ pub const TOOLTIP: &[Spec] = &[
             ),
             "A tooltip is at most 280 px wide. Longer text wraps onto as many as four lines, and is cut after that.",
         )
+    }),
+    Spec::live("In a cell narrower than the text", || {
+        // Each cell is as wide as its button and clips what is outside it, as
+        // the tab strip's cells do: the bubble is still as wide as its text.
+        let tokens = use_tokens();
+        let cell = |button: Element| -> Element {
+            rect()
+                .tw(&tokens, &[w(Dim::Control), h(Dim::Control), clip()])
+                .child(button)
+                .into_element()
+        };
+        hstack(S1)
+            .child(cell(icon_button(Icon::ListAdd, |_| {}).tooltip("New tab").into_element()))
+            .child(cell(icon_button(Icon::Refresh, |_| {}).tooltip("Refresh (F5)").into_element()))
+            .child(cell(icon_button(Icon::Delete, |_| {}).tooltip("Move to Trash").into_element()))
+            .into_element()
+    }),
+    Spec::live("A long label on a small control", || {
+        // Sixty characters or so, on a button in a clipped cell.
+        let tokens = use_tokens();
+        rect()
+            .tw(&tokens, &[w(Dim::Control), h(Dim::Control), clip()])
+            .child(
+                icon_button(Icon::DialogInformation, |_| {})
+                    .tooltip("Copies the selected files and folders into the folder open in the other tab")
+                    .into_element(),
+            )
+            .into_element()
     }),
 ];
 
@@ -256,18 +340,28 @@ pub const PATH_LABEL: &[Spec] = &[
 pub const FOCUS_STOP: &[Spec] = &[
     Spec::live("Tab to the box: the ring animates in", || {
         let tokens = use_tokens();
-        focus_stop(
+        let mut hovering = use_state(|| false);
+        let pressing = use_state(|| false);
+        // The stop is the ring and the press; the box lights under the pointer and while held.
+        focus_stop_press(
             rect()
                 .tw(
                     &tokens,
-                    &[p(S3), rounded(Radius::Control), bg(Paint::Control)],
+                    &[
+                        p(S3),
+                        rounded(Radius::Control),
+                        surface(Paint::Control, hovering(), pressing(), false),
+                    ],
                 )
+                .on_pointer_enter(move |_| hovering.set(true))
+                .on_pointer_leave(move |_| hovering.set(false))
                 .child(styled_label(typography::BODY, "A custom control")),
             "A custom control",
             AccessibilityRole::Button,
             true,
             Radius::Control,
             |_| {},
+            pressing,
         )
         .into_element()
     })
@@ -291,12 +385,21 @@ pub const FOCUS_STOP: &[Spec] = &[
     }),
     Spec::live("With a context menu", || {
         let tokens = use_tokens();
-        focus_stop_menu(
+        let mut hovering = use_state(|| false);
+        let pressing = use_state(|| false);
+        focus_stop_pressed(
+            use_a11y(),
             rect()
                 .tw(
                     &tokens,
-                    &[p(S3), rounded(Radius::Control), bg(Paint::Control)],
+                    &[
+                        p(S3),
+                        rounded(Radius::Control),
+                        surface(Paint::Control, hovering(), pressing(), false),
+                    ],
                 )
+                .on_pointer_enter(move |_| hovering.set(true))
+                .on_pointer_leave(move |_| hovering.set(false))
                 .child(styled_label(typography::BODY, "Right-click, or Shift+F10")),
             "Right-click me",
             AccessibilityRole::Button,
@@ -307,6 +410,8 @@ pub const FOCUS_STOP: &[Spec] = &[
                 menu_item("Rename", |_| {}),
                 menu_item("Delete", |_| {}).destructive(),
             ],
+            StopRing::Outside,
+            Some(pressing),
         )
         .into_element()
     }),

@@ -31,6 +31,8 @@ pub mod layout;
 pub mod drag;
 pub mod motion;
 pub mod resilience;
+pub(crate) mod popup_windows;
+pub mod layers;
 pub mod reorder;
 pub mod rows;
 pub mod runtime;
@@ -49,6 +51,8 @@ pub mod typography;
 mod warm;
 #[cfg(all(test, feature = "testing"))]
 mod mount_tests;
+#[cfg(all(test, feature = "testing"))]
+mod expander_tests;
 pub mod window;
 
 /// Everything an application window normally needs.
@@ -75,7 +79,7 @@ pub mod prelude {
         boxed, clamp, divider, hstack, page_column, popup_column, spacer, tile_rows, vstack,
     };
     pub use crate::motion::{
-        AnimatedNumber, Crossfade, Presence, Reveal, RevealBlock, animated_number, crossfade, presence, reveal,
+        AnimatedNumber, Crossfade, NumberFormat, Presence, Reveal, RevealBlock, animated_number, crossfade, presence, reveal,
         reveal_block,
         use_presence, use_tween,
     };
@@ -89,7 +93,7 @@ pub mod prelude {
         BackButton, Banner, BannerKind, CANCEL_ID, Dialog, DialogIcon, ForwardButton, HeaderBar,
         MenuButton, MenuItem, app_menu_item, app_menu_items,
         NavigationSplitView, OverlayHost, Overlays, PageAction, PageHead, Profile, ResponseKind,
-        SearchField, StatusPage, Toast, WindowControls, banner, dialog, framed_dialog, history_menu,
+        StatusPage, Toast, WindowControls, banner, dialog, framed_dialog, history_menu,
         menu_button, menu_item, menu_separator, status_page, submenu, use_overlays, use_page_busy,
     };
     pub use crate::search::{SearchState, use_search};

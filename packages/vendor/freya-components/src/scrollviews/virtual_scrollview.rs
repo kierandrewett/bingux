@@ -8,7 +8,10 @@ use torin::{
         Size2D,
     },
     node::Node,
-    prelude::Direction,
+    prelude::{
+        Area,
+        Direction,
+    },
     size::Size,
 };
 
@@ -198,6 +201,7 @@ pub struct VirtualScrollView<D, B: Fn(VirtualItem, &D) -> Element> {
     scroll_with_arrows: bool,
     scroll_controller: Option<ScrollController>,
     on_sized: Option<EventHandler<Event<SizedEventData>>>,
+    initial_size: Option<Size2D>,
     invert_scroll_wheel: bool,
     drag_scrolling: bool,
     pass_ctrl_wheel: bool,
@@ -254,6 +258,7 @@ impl<B: Fn(VirtualItem, &()) -> Element> VirtualScrollView<(), B> {
             scroll_with_arrows: true,
             scroll_controller: None,
             on_sized: None,
+            initial_size: None,
             invert_scroll_wheel: false,
             drag_scrolling: true,
             pass_ctrl_wheel: false,
@@ -280,6 +285,7 @@ impl<B: Fn(VirtualItem, &()) -> Element> VirtualScrollView<(), B> {
             scroll_with_arrows: true,
             scroll_controller: Some(scroll_controller),
             on_sized: None,
+            initial_size: None,
             invert_scroll_wheel: false,
             drag_scrolling: true,
             pass_ctrl_wheel: false,
@@ -330,6 +336,7 @@ impl<D, B: Fn(VirtualItem, &D) -> Element> VirtualScrollView<D, B> {
             scroll_with_arrows: true,
             scroll_controller: None,
             on_sized: None,
+            initial_size: None,
             invert_scroll_wheel: false,
             drag_scrolling: true,
             pass_ctrl_wheel: false,
@@ -361,6 +368,7 @@ impl<D, B: Fn(VirtualItem, &D) -> Element> VirtualScrollView<D, B> {
             scroll_with_arrows: true,
             scroll_controller: Some(scroll_controller),
             on_sized: None,
+            initial_size: None,
             invert_scroll_wheel: false,
             drag_scrolling: true,
             pass_ctrl_wheel: false,
@@ -450,6 +458,18 @@ impl<D, B: Fn(VirtualItem, &D) -> Element> VirtualScrollView<D, B> {
         self
     }
 
+    /// Bingux patch: the size of the visible area the last time this list was on
+    /// show. A scroll view knows its size only after its first layout, so the
+    /// first render builds one row and, as the content then outgrows a zero-sized
+    /// viewport, a scrollbar; the second render corrects both. An owner that mounts
+    /// the list again in a window of the same size passes the old size here and gets
+    /// the right rows, scroll position and scrollbar in the first frame. The
+    /// measured size replaces it as soon as the layout has one.
+    pub fn initial_size(mut self, size: Size2D) -> Self {
+        self.initial_size = Some(size);
+        self
+    }
+
     /// Sets the minimum width the scroll view can shrink to.
     pub fn min_width(mut self, min_width: impl Into<Size>) -> Self {
         self.layout.minimum_width = min_width.into();
@@ -490,7 +510,15 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
             )))
         });
         let mut clicking_scrollbar = use_state::<Option<(Axis, f64)>>(|| None);
-        let mut size = use_state(SizedEventData::default);
+        let initial_size = self.initial_size;
+        let mut size = use_state(move || match initial_size {
+            Some(size) => SizedEventData {
+                area: Area::from_size(size),
+                visible_area: Area::from_size(size),
+                inner_sizes: size,
+            },
+            None => SizedEventData::default(),
+        });
         let mut scroll_controller = self
             .scroll_controller
             .unwrap_or_else(|| use_scroll_controller(ScrollConfig::default));

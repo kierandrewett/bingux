@@ -49,6 +49,7 @@ use crate::{
         scale::Scale,
         shadow::Shadow,
         text_align::TextAlign,
+        text_direction::TextDirection,
         text_decoration::TextDecoration,
         text_height::TextHeightBehavior,
         text_overflow::TextOverflow,
@@ -128,6 +129,8 @@ pub struct TextStyleState {
     pub font_size: FontSize,
     pub color: Fill,
     pub text_align: TextAlign,
+    /// Inherited from the parent unless set; see [`TextDirection`].
+    pub direction: TextDirection,
     pub font_families: Vec<Cow<'static, str>>,
     pub text_height: TextHeightBehavior,
     pub text_overflow: TextOverflow,
@@ -146,6 +149,7 @@ impl Default for TextStyleState {
             font_size: FontSize::default(),
             color: Fill::Color(Color::BLACK),
             text_align: TextAlign::default(),
+            direction: TextDirection::default(),
             font_families: Vec::new(),
             text_height: TextHeightBehavior::default(),
             text_overflow: TextOverflow::default(),
@@ -161,10 +165,25 @@ impl Default for TextStyleState {
 }
 
 impl TextStyleState {
+    /// The alignment with `Start` and `End` resolved against the direction, so
+    /// a cursor in an empty line is put on the right side.
+    pub fn resolved_align(&self) -> TextAlign {
+        match (self.text_align, self.direction) {
+            (TextAlign::Start, TextDirection::Ltr) | (TextAlign::End, TextDirection::Rtl) => {
+                TextAlign::Left
+            }
+            (TextAlign::Start, TextDirection::Rtl) | (TextAlign::End, TextDirection::Ltr) => {
+                TextAlign::Right
+            }
+            (align, _) => align,
+        }
+    }
+
     pub fn from_data(parent: &TextStyleState, data: &TextStyleData) -> Self {
         let color = data.color.as_ref().unwrap_or(&parent.color).clone();
 
         let text_align = data.text_align.unwrap_or_default();
+        let direction = data.direction.unwrap_or(parent.direction);
         let text_height = data.text_height.unwrap_or_default();
         let text_overflow = data.text_overflow.clone().unwrap_or_default();
         let text_shadows = data.text_shadows.clone();
@@ -184,6 +203,7 @@ impl TextStyleState {
         Self {
             color,
             text_align,
+            direction,
             text_height,
             text_overflow,
             text_shadows,
@@ -227,6 +247,8 @@ pub struct TextStyleData {
     pub font_size: Option<FontSize>,
     pub font_families: Vec<Cow<'static, str>>,
     pub text_align: Option<TextAlign>,
+    /// Inherited: `None` keeps the parent's.
+    pub direction: Option<TextDirection>,
     pub text_height: Option<TextHeightBehavior>,
     pub text_overflow: Option<TextOverflow>,
     pub text_shadows: Vec<TextShadow>,

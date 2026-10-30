@@ -309,7 +309,10 @@ impl Component for Stage {
                 ],
             )
             .font_family(bingux_ui::theme::font_family())
-            .width(Size::px(width));
+            .width(Size::px(width))
+            // A phone-sized window has a page column narrower than the phone
+            // stage: the stage gives way, so it is not cut by the window edge.
+            .max_width(Size::percent(100.0));
         let stage = match frame.height() {
             Some(height) => stage.height(Size::px(height)),
             None => stage,

@@ -385,10 +385,13 @@ impl Component for SchemeCard {
             )
             .child(self.picture.clone());
         let caption = if selected { EMPHASIS } else { BODY };
+        // The card fills the wrapper `focus_stop` returns, and the wrapper takes
+        // the card's share of the row: a flex share on the card inside a wrapper
+        // that is as wide as its content gives the first card the whole row.
         let card = rect()
             .tw(
                 &tokens,
-                &[flex_col(), w_flex(), gap(S2), items(Align::Center)],
+                &[flex_col(), w_full(), gap(S2), items(Align::Center)],
             )
             .child(frame)
             .child(caption.label(&tokens, self.title));
@@ -400,6 +403,7 @@ impl Component for SchemeCard {
             Radius::Card,
             self.on_press.clone(),
         )
+        .tw(&tokens, &[w_flex()])
     }
 }
 

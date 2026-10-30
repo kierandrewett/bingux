@@ -5,11 +5,11 @@
 
 use freya::prelude::*;
 
-use super::focus_stop::focus_stop;
+use super::focus_stop::{StopRing, focus_stop_pressed};
 use crate::component::ComponentName;
 use crate::icons::{self, Icon};
 use crate::style::*;
-use crate::surface::use_tokens;
+use crate::surface::{Interaction, use_tokens};
 use crate::typography::{BODY, CODE, Ink};
 
 /// A row of crumbs. `crumbs` pairs each crumb's key with its label, outermost
@@ -169,6 +169,7 @@ struct Crumb<K: Clone + PartialEq + 'static> {
 impl<K: Clone + PartialEq + 'static> Component for Crumb<K> {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let face = Interaction::use_interaction();
         let ink = if self.current { Ink::Text } else { Ink::Muted };
         let label = if self.code {
             CODE.in_ink(ink)
@@ -181,8 +182,11 @@ impl<K: Clone + PartialEq + 'static> Component for Crumb<K> {
         };
         let key = self.key.clone();
         let on_select = self.on_select.clone();
-        let content = rect()
-            .tw(
+        // The stop is the box and carries the ring; the face inside it is lit by the pointer
+        // and by a press. The trail clips what is past its edge, so the ring is drawn inside
+        // the box: outside, the trail's own clip would cut it off above and below.
+        let content = rect().tw(&tokens, &[h_full()]).child(
+            face.attach(rect().tw(
                 &tokens,
                 &[
                     flex_row(),
@@ -190,16 +194,22 @@ impl<K: Clone + PartialEq + 'static> Component for Crumb<K> {
                     items(Align::Center),
                     px(S1),
                     rounded(Radius::Mark),
+                    surface(Paint::Transparent, face.hovering(), face.pressing(), false),
                 ],
-            )
-            .child(label);
-        focus_stop(
+            ))
+            .child(label),
+        );
+        focus_stop_pressed(
+            use_a11y(),
             content,
             self.text.clone(),
             AccessibilityRole::Button,
             true,
             Radius::Mark,
             move |_| on_select.call(key.clone()),
+            Vec::new(),
+            StopRing::Inside,
+            Some(face.pressing),
         )
         .tw(&tokens, &[h_full()])
         .into_element()

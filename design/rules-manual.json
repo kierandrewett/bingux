@@ -1,0 +1,26 @@
+{
+ "version": 1,
+ "note": "Rules no script or test can judge: a person looks. Hand-maintained; seeded from the proposed_check of the rules that said 'manual'. A rule listed here that a check cites is reported as enforced and flagged in the registry integrity section. scripts/rules-check.py reads this file; the key is the rule ID, the value says why it is manual and what the person looks at.",
+ "rules": {
+  "SP-17": "Manual review plus a frame-walk at 390x800: title top padding at scroll 0 > desktop value; monotone shrink with scroll.",
+  "AL-05": "Manual review of the Row taxonomy page; pixel golden of row-with-subtitle at both sizes.",
+  "SZ-08": "Manual review; list the pages that still use ROW_STACKED.",
+  "SZ-09": "Manual review. See conflict C-04 against the phone top padding rule.",
+  "FC-10": "Manual review of the focus-ring-sheet contact sheet in light and dark; contrast stays in the matrix.",
+  "TX-08": "Manual review (needs a human to know a string names a control); grep for known control labels outside quotes.",
+  "TX-14": "Manual review; list rows whose subtitle is a quality word.",
+  "CL-06": "Manual review.",
+  "IC-02": "Manual review of the sheets in /var/tmp/IconReview against labels.tsv.",
+  "IC-15": "Manual.",
+  "MN-10": "Manual coverage review of the taxonomy (a context menu entry per specimen).",
+  "DG-03": "Manual review; list popups taller than 80% of the window.",
+  "FL-05": "Manual plus unit tests of TrashRules.",
+  "NV-08": "Manual. Page-length check: no page above N rows (propose 25) without subpages.",
+  "NV-09": "Manual.",
+  "IN-04": "Manual review against the gtk inspector.",
+  "DR-01": "Manual review against a Bingux shell screenshot in the same theme; no automation.",
+  "DR-02": "Manual review.",
+  "PR-07": "Manual.",
+  "PR-08": "Manual."
+ }
+}

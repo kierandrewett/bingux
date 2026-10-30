@@ -100,12 +100,18 @@ const LISTING_BLOCK: usize = 40;
 
 impl Component for AboutBody {
     fn render(&self) -> impl IntoElement {
+        let direction = crate::controls::direction::use_direction();
         let tokens = use_tokens();
         let overlays = self.overlays;
         let info = &self.info;
         let start = self.start;
         let mut page = use_state(move || start);
         let current = page();
+        // The rows of its pages know their width on their first frame: the
+        // card's, less the page's padding on both sides.
+        crate::rows::provide_row_width(
+            crate::shell::dialog::frame_width(Dim::Dialog.px()) - 2.0 * S4.px(),
+        );
         let scrolls = [
             use_scroll_controller(ScrollConfig::default),
             use_scroll_controller(ScrollConfig::default),
@@ -148,9 +154,11 @@ impl Component for AboutBody {
             .component("About")
             .tw(&tokens, &[flex_col(), grow_children(), w_full(), h_full()])
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
-                // Alt+Left goes back, as it does in every window with a Back.
+                // Alt+Left goes back, as it does in every window with a Back (Alt+Right where the
+                // window reads from the right).
                 let back = event.modifiers.contains(Modifiers::ALT)
-                    && event.key == Key::Named(NamedKey::ArrowLeft);
+                    && direction.reading_key(&event.key)
+                        == Key::Named(NamedKey::ArrowLeft);
                 if back && *page.peek() != Page::Main {
                     event.stop_propagation();
                     page.set(Page::Main);
@@ -302,7 +310,7 @@ fn licence_page(tokens: &Tokens, info: &AppInfo) -> Vec<Element> {
         };
         elements.push(caption(note));
     } else {
-        elements.push(text_card(tokens, BODY, &details::paragraphs(&info.licence_text)));
+        elements.push(text_card(None, tokens, BODY, &details::paragraphs(&info.licence_text)));
     }
     elements
 }
@@ -358,10 +366,10 @@ fn legal_page(tokens: &Tokens, info: &AppInfo, legal: Option<Legal>) -> Vec<Elem
         );
     }
     if crates.is_empty() {
-        elements.push(text_card(tokens, LISTING, &details::paragraphs(&legal.text)));
+        elements.push(text_card(None, tokens, LISTING, &details::paragraphs(&legal.text)));
     } else {
         let blocks: Vec<String> = crates.chunks(LISTING_BLOCK).map(|lines| lines.join("\n")).collect();
-        elements.push(text_card(tokens, LISTING, &blocks));
+        elements.push(text_card(Some("Licences of each library"), tokens, LISTING, &blocks));
     }
     if let Some(path) = legal.path {
         elements.push(caption(format!("The full licence texts are in {path}.")));
@@ -369,11 +377,16 @@ fn legal_page(tokens: &Tokens, info: &AppInfo, legal: Option<Legal>) -> Vec<Elem
     elements
 }
 
-/// Paragraphs of `style` on one card, as a group's content.
-fn text_card(tokens: &Tokens, style: TextStyle, paragraphs: &[String]) -> Element {
+/// Paragraphs of `style` on one card, as a group's content, under `heading`
+/// when there is one. The text is selectable (drag, double and triple click,
+/// Ctrl+C, Copy in the right-click menu) and is a Tab stop, so a keyboard
+/// user can select all of it: a licence is a text people copy from.
+fn text_card(heading: Option<&str>, tokens: &Tokens, style: TextStyle, paragraphs: &[String]) -> Element {
     let mut column = rect().tw(tokens, &[flex_col(), w_full(), gap(S3)]);
     for text in paragraphs {
-        column = column.child(style.paragraph(tokens, text.clone()).width(Size::fill()));
+        let block = crate::controls::select_text(text.clone()).style(style).tab_stop(true);
+        let block = if style.mono { block.breaks_anywhere() } else { block };
+        column = column.child(Element::from(block));
     }
-    Group::new(None::<String>).content(column).into()
+    Group::new(heading.map(str::to_owned)).content(column).into()
 }

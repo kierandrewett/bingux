@@ -679,7 +679,7 @@ fn sim_group(ctx: NetCtx, modem_state: ModemState, modem: &Modem) -> Group {
     );
     if modem.pin_lock {
         group = group.row(
-            row("Change PIN...")
+            row("Change PIN…")
                 .navigates()
                 .on_press(move |_| sim::open(ctx, modem_state, PinTask::Change, sim_id.clone())),
         );

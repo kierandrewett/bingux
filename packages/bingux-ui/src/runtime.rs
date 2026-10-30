@@ -136,6 +136,18 @@ static SLOW_SOURCES: std::sync::LazyLock<Option<Duration>> = std::sync::LazyLock
         .map(Duration::from_millis)
 });
 
+/// Whether this process is a test, a capture or a sweep: its commands must not change the
+/// person's desktop settings.
+static SYSTEM_SETTINGS_ISOLATED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// From now on every command [`run`] starts gets `GSETTINGS_BACKEND=memory`, so `gsettings set`
+/// changes nothing outside the command. The headless harness (`Snapshot`) calls it: Settings
+/// pages write through `gsettings`, and a sweep that presses their sliders would otherwise
+/// change the real dconf. The scripts do the same for the whole process (`scripts/app_env.py`).
+pub fn isolate_system_settings() {
+    SYSTEM_SETTINGS_ISOLATED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// Like [`run`] with data written to the command's stdin.
 pub fn run_with_stdin(
     program: &str,
@@ -148,7 +160,11 @@ pub fn run_with_stdin(
         // A debug knob, not behaviour: see `SLOW_SOURCES`.
         std::thread::sleep(delay);
     }
-    let mut child = Command::new(program)
+    let mut command = Command::new(program);
+    if SYSTEM_SETTINGS_ISOLATED.load(std::sync::atomic::Ordering::Relaxed) {
+        command.env("GSETTINGS_BACKEND", "memory");
+    }
+    let mut child = command
         .args(args)
         .stdin(if stdin.is_some() {
             Stdio::piped()

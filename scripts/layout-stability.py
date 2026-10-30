@@ -52,6 +52,9 @@ frame_walk = importlib.util.module_from_spec(spec)
 sys.modules["frame_walk"] = frame_walk
 spec.loader.exec_module(frame_walk)
 
+sys.path.insert(0, str(HERE))
+from app_env import isolated  # noqa: E402
+
 DESKTOP = "default"
 PHONE = "390x800"
 
@@ -114,7 +117,7 @@ def run_one(binary: Path, address: str, size: str, out: Path, delay_ms: int, tim
     slug = address.replace("/", "_")
     frames_root = out / "frames" / size
     shutil.rmtree(frames_root / slug, ignore_errors=True)
-    env = {**os.environ, **FAKES, **EXTRA_FAKES.get(address, {})}
+    env = isolated({**os.environ, **FAKES, **EXTRA_FAKES.get(address, {})})
     env["BINGUX_SETTINGS_SNAPSHOT_FRAMES"] = str(frames_root)
     env["BINGUX_SETTINGS_SNAPSHOT_SETTLE_MS"] = str(delay_ms + 2500)
     env["BINGUX_UI_RESULT_DELAY_MS"] = str(delay_ms)

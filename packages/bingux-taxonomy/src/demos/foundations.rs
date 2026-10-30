@@ -20,15 +20,18 @@ use bingux_ui::motion::Focusable;
 use super::common::LONG;
 use crate::model::Spec;
 
-/// A name at the left of a table row, the cells after it.
+/// A name at the left of a table row, the cells after it. The name column is
+/// as wide as a field when there is room and gives way before the cells do,
+/// so a value never wraps a letter to a line on a narrow stage.
 fn table_row(tokens: &Tokens, name: &str, cells: Vec<Element>) -> Element {
     hstack(S3)
-        .tw(tokens, &[w_full()])
+        .tw(tokens, &[w_full(), grow_children()])
         .child(
-            rect().tw(tokens, &[w(Dim::Field)]).child(
+            rect().tw(tokens, &[w_flex(), max_w(Dim::Field)]).child(
                 typography::BODY
                     .label(tokens, name.to_string())
-                    .max_lines(1),
+                    .max_lines(1)
+                    .text_overflow(TextOverflow::Ellipsis),
             ),
         )
         .children(cells)
@@ -472,11 +475,9 @@ pub const LAYERS: &[Spec] = &[
                 "INSET_SCALE {}: the window content behind a sheet",
                 INSET_SCALE
             )))
-            .child(
-                rect()
-                    .opacity(DISABLED_OPACITY)
-                    .child(action_button("A disabled look", |_| {}).compact()),
-            )
+            // A disabled button: it is dimmed to DISABLED_OPACITY and takes neither the pointer nor
+            // focus, which is the look the caption names.
+            .child(action_button("A disabled look", |_| {}).compact().enabled(false))
             .child(rect().tw(&tokens, &[h(Dim::Hairline)]))
             .into_element()
     }),
@@ -597,12 +598,19 @@ pub const RECIPES: &[Spec] = &[Spec::forced("Each recipe on a box", || {
     ];
     let mut column = vstack(S2);
     for (name, recipe) in recipes {
+        // The tooltip recipe fills with the dark floating paint, so its text is the ink for that
+        // paint, as the tooltip's own is (pixel-check.py found it dark on dark in the light scheme).
+        let label = if name == "TOOLTIP" {
+            typography::BODY.in_ink(Ink::OnFloating).label(&tokens, name)
+        } else {
+            typography::BODY.label(&tokens, name)
+        };
         column = column.child(
             hstack(S3).child(
                 rect()
                     .tw(&tokens, recipe)
                     .tw(&tokens, &[w(Dim::Field)])
-                    .child(typography::BODY.label(&tokens, name)),
+                    .child(label),
             ),
         );
     }
@@ -657,7 +665,36 @@ pub const MOTION: &[Spec] = &[
                     tokens.reduced_motion
                 ))],
             ))
+            .child(table_row(
+                &tokens,
+                "Dwell::LOADING",
+                vec![caption(format!(
+                    "shown after {} ms, held at least {} ms",
+                    bingux_ui::motion::Dwell::LOADING.show_after.as_millis(),
+                    bingux_ui::motion::Dwell::LOADING.hold.as_millis()
+                ))],
+            ))
             .into_element()
+    }),
+    // One icon turning into another, frozen at five points of the progress:
+    // the icons of a Reload button that becomes Stop while a folder loads.
+    Spec::forced("Icon morph", || {
+        let tokens = use_tokens();
+        let mut strip = hstack(S5);
+        for progress in [0.0_f32, 0.25, 0.5, 0.75, 1.0] {
+            strip = strip.child(
+                vstack(S1)
+                    .child(bingux_ui::motion::icon_morph(
+                        Icon::Refresh,
+                        Icon::MediaPlaybackStop,
+                        IconSize::Row,
+                        Ink::Text.color(&tokens),
+                        progress,
+                    ))
+                    .child(caption(format!("{progress}"))),
+            );
+        }
+        strip.into_element()
     }),
     // The ring as it settles on each kind of face: its box is the face's box
     // grown by FOCUS_GAP and FOCUS_WIDTH, and each corner is the face's own
@@ -786,11 +823,130 @@ pub const MOTION: &[Spec] = &[
             )))
             .into_element()
     }),
-    Spec::live("Animated number", || {
-        let mut count = use_state(|| 0_u32);
-        hstack(S3)
-            .child(animated_number(count() as f32))
+    // The digits roll as the shell clock's do: each one that changes slides in
+    // a clipped column of its own, up for a value that went up and down for
+    // one that went down. The text around a number never moves while it counts.
+    Spec::live("Animated number: counting up and down, a jump", || {
+        let mut count = use_state(|| 128_i64);
+        vstack(S2)
+            .child(
+                hstack(S2)
+                    .child(styled_label(typography::BODY, "Selected"))
+                    .child(animated_number(count() as f64))
+                    .child(styled_label(typography::BODY, "items")),
+            )
+            .child(
+                hstack(S2)
+                    .child(action_button("Up", move |_| count.set(count() + 1)).compact())
+                    .child(action_button("Down", move |_| count.set(count() - 1)).compact())
+                    .child(action_button("Jump", move |_| count.set(count() * 7 % 1000 + 3)).compact())
+                    .child(action_button("Reset", move |_| count.set(0)).compact()),
+            )
+            .into_element()
+    }),
+    Spec::live("Animated number: a digit more or less (99 and 100)", || {
+        let mut wide = use_state(|| false);
+        vstack(S2)
+            .child(
+                hstack(S2)
+                    .child(styled_label(typography::BODY, "Download"))
+                    .child(animated_number(if wide() { 100.0 } else { 99.0 }).suffix("%"))
+                    .child(styled_label(typography::BODY, "done")),
+            )
+            .child(switch_row("Three digits", wide(), move |next| wide.set(next)))
+            .child(caption("The number grows and shrinks smoothly; the words after it follow."))
+            .into_element()
+    }),
+    Spec::live("Animated number: clock-like (zero padded, 59 wraps to 00)", || {
+        let mut seconds = use_state(|| 12 * 3600 + 59 * 60 + 56_i64);
+        let now = seconds();
+        let (hours, minutes, secs) = (now / 3600 % 24, now / 60 % 60, now % 60);
+        let colon = || styled_label(typography::NUMERIC, ":");
+        vstack(S2)
+            .child(
+                hstack(S0)
+                    .child(animated_number(hours as f64).min_digits(2))
+                    .child(colon())
+                    .child(animated_number(minutes as f64).min_digits(2))
+                    .child(colon())
+                    .child(animated_number(secs as f64).min_digits(2)),
+            )
+            .child(
+                hstack(S2)
+                    .child(action_button("+1 s", move |_| seconds.set(seconds() + 1)).compact())
+                    .child(action_button("+1 min", move |_| seconds.set(seconds() + 60)).compact())
+                    .child(action_button("-1 s", move |_| seconds.set(seconds() - 1)).compact()),
+            )
+            .into_element()
+    }),
+    Spec::live("Animated number: percent", || {
+        let mut level = use_state(|| 87_i64);
+        vstack(S2)
+            .child(
+                hstack(S2)
+                    .child(styled_label(typography::BODY, "Battery"))
+                    .child(animated_number(level() as f64).suffix("%")),
+            )
+            .child(
+                hstack(S2)
+                    .child(action_button("Drain", move |_| level.set((level() - 1).max(0))).compact())
+                    .child(action_button("Charge", move |_| level.set((level() + 1).min(100))).compact())
+                    .child(action_button("Full", move |_| level.set(100)).compact())
+                    .child(action_button("Empty", move |_| level.set(0)).compact()),
+            )
+            .into_element()
+    }),
+    Spec::live("Animated number: speed with decimals and a unit", || {
+        let mut tenths = use_state(|| 99_i64);
+        vstack(S2)
+            .child(
+                hstack(S2)
+                    .child(styled_label(typography::BODY, "Download"))
+                    .child(animated_number(tenths() as f64 / 10.0).decimals(1).suffix(" MB/s")),
+            )
+            .child(
+                hstack(S2)
+                    .child(action_button("Faster", move |_| tenths.set(tenths() + 7)).compact())
+                    .child(action_button("Slower", move |_| tenths.set((tenths() - 7).max(0))).compact()),
+            )
+            .into_element()
+    }),
+    Spec::live("Animated number: big display, grouped, signed", || {
+        let mut value = use_state(|| 1_999_i64);
+        vstack(S2)
+            .child(animated_number(value() as f64).style(typography::HERO).grouped())
+            .child(
+                hstack(S2)
+                    .child(action_button("+1", move |_| value.set(value() + 1)).compact())
+                    .child(action_button("x10", move |_| value.set(value() * 10)).compact())
+                    .child(action_button("Negate", move |_| value.set(-value())).compact())
+                    .child(action_button("Reset", move |_| value.set(1_999)).compact()),
+            )
+            .into_element()
+    }),
+    Spec::live("Animated number: small caption", || {
+        let mut count = use_state(|| 41_i64);
+        hstack(S2)
+            .child(animated_number(count() as f64).style(typography::CAPTION).suffix(" unread"))
             .child(action_button("Add", move |_| count.set(count() + 1)).compact())
+            .into_element()
+    }),
+    Spec::live("Animated number: many updates in a row", || {
+        let mut count = use_state(|| 0_i64);
+        hstack(S2)
+            .child(animated_number(count() as f64))
+            .child(
+                action_button("Count to 100", move |_| {
+                    count.set(0);
+                    spawn(async move {
+                        for _ in 0..100 {
+                            timer(std::time::Duration::from_millis(30)).await;
+                            count.set(count() + 1);
+                        }
+                    });
+                })
+                .compact(),
+            )
             .into_element()
     }),
 ];

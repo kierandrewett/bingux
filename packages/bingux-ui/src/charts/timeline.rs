@@ -529,7 +529,10 @@ impl Component for TimelineChart {
             active.set(Some(next));
         };
 
+        // The time axis is drawn in pixels left to right whatever the page reads
+        // (see `view::drawing`).
         let mut chart = rect()
+            .text_direction(TextDirection::Ltr)
             .width(Size::fill())
             .min_width(Size::px(NO_MIN))
             .height(Size::px(height))

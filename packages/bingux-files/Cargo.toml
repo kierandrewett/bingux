@@ -11,3 +11,5 @@ path = "src/lib.rs"
 
 [dependencies]
 libc = "0.2"
+regex = { version = "1", default-features = false, features = ["std", "perf", "unicode"] }
+bingux-search = { path = "../bingux-search" }

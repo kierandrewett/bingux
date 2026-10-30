@@ -34,6 +34,8 @@ freya-winit = { path = "../vendor/freya-winit" }
 freya-core = { path = "../vendor/freya-core" }
 freya-animation = { path = "../vendor/freya-animation" }
 freya-components = { path = "../vendor/freya-components" }
+torin = { path = "../vendor/torin" }
+winit = { path = "../vendor/winit" }
 
 # A debug build runs Freya's layout, Skia glue and the UI controls unoptimised,
 # which makes scrolling and page changes visibly slow. Optimise every

@@ -124,6 +124,13 @@ pub struct WindowConfig {
     pub(crate) window_handle_hook: Option<WindowHandleHook>,
     /// Hook function called when the window is requested to close.
     pub(crate) on_close: Option<OnCloseHook>,
+    /// Set when the window is a popup of another window.
+    #[cfg(target_os = "linux")]
+    pub(crate) popup: Option<winit::platform::wayland::PopupAttributes>,
+    /// The window this one is a child of.
+    pub(crate) parent: Option<WindowId>,
+    /// The parent's window handle, found by the renderer when the window is launched.
+    pub(crate) parent_handle: Option<winit::raw_window_handle::RawWindowHandle>,
 }
 
 impl Debug for WindowConfig {
@@ -175,6 +182,10 @@ impl WindowConfig {
             window_attributes_hook: None,
             window_handle_hook: None,
             on_close: None,
+            #[cfg(target_os = "linux")]
+            popup: None,
+            parent: None,
+            parent_handle: None,
         }
     }
 
@@ -294,6 +305,39 @@ impl WindowConfig {
     ) -> Self {
         self.on_close = Some(Box::new(on_close));
         self
+    }
+
+    /// Make this window a popup: an `xdg_popup` the compositor places against `popup.parent`
+    /// (see [`crate::popup`]). It is transparent and undecorated, so its content draws its own
+    /// card and shadow inside `popup.margin`. Only for a process where
+    /// [`popup::supported`](crate::popup::supported) is true; elsewhere the window would be an
+    /// ordinary toplevel.
+    #[cfg(target_os = "linux")]
+    pub fn with_popup(mut self, popup: winit::platform::wayland::PopupAttributes) -> Self {
+        self.transparent = true;
+        self.decorations = false;
+        self.resizable = false;
+        self.popup = Some(popup);
+        self
+    }
+
+    /// Make this window a child of `parent`: the compositor keeps it above its parent and moves
+    /// it with it (`xdg_toplevel.set_parent`). Used for dialogs and tool windows.
+    pub fn with_parent(mut self, parent: WindowId) -> Self {
+        self.parent = Some(parent);
+        self
+    }
+
+    /// Whether this window is a popup of another window.
+    pub(crate) fn is_popup(&self) -> bool {
+        #[cfg(target_os = "linux")]
+        {
+            self.popup.is_some()
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            false
+        }
     }
 }
 

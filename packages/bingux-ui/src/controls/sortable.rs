@@ -67,7 +67,7 @@ const LIFT_FADE: f32 = 0.06;
 /// it passes whatever their depth in the tree (Freya adds a node's depth to its
 /// layer, so a deep node of a neighbouring row would otherwise outrank a
 /// shallow one of the held row).
-const HELD_LAYER: Layer = Layer::Overlay;
+const HELD_LAYER: Layer = crate::layers::DRAG_CARRY;
 /// The layer of the drop line: above the held row, which it marks the place
 /// under.
 const LINE_LAYER: Layer = Layer::Relative(i16::MAX / 16 + 64);
@@ -603,6 +603,7 @@ impl Component for Grip {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
+        let mut pressing = use_state(|| false);
         let focus = use_focus(self.id);
         let movable = self.count > 1;
         let on_down = self.on_down.clone();
@@ -613,7 +614,8 @@ impl Component for Grip {
             format!("Reorder {}", self.label)
         };
         let (position, count) = (self.index + 1, self.count);
-        let glow = movable && (hovering() || self.held);
+        let down = movable && (self.held || pressing());
+        let glow = movable && (hovering() || down);
         rect()
             .component("SortableGrip")
             .a11y_id(self.id)
@@ -632,14 +634,22 @@ impl Component for Grip {
                     w(Dim::RowButton),
                     h(Dim::RowButton),
                     rounded(Radius::Inner),
-                    surface(Paint::Transparent, glow && !self.held, self.held, false),
+                    surface(Paint::Transparent, glow && !down, down, false),
                 ],
             )
             .cursor(if self.held { CursorIcon::Grabbing } else { CursorIcon::Grab })
             .maybe(!movable, |grip| grip.opacity(0.4))
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| hovering.set(false))
-            .on_pointer_down(move |event: Event<PointerEventData>| on_down.call(event))
+            .on_pointer_down(move |event: Event<PointerEventData>| {
+                // A mouse press picks the row up only once it moves: the grip looks pressed
+                // from the press, as every button does.
+                if movable {
+                    pressing.set(true);
+                }
+                on_down.call(event)
+            })
+            .on_global_pointer_up(move |_| pressing.set_if_modified(false))
             .on_key_down(move |event: Event<KeyboardEventData>| {
                 let step = match &event.key {
                     Key::Named(NamedKey::ArrowUp) => Move::Up,

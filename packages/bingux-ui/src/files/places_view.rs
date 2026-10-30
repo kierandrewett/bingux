@@ -8,8 +8,10 @@
 //!
 //! Every row is a Tab stop. Up and Down walk the rows, Home and End go to the
 //! first and the last, a letter jumps to the next row that starts with it,
-//! Enter opens, Delete removes a bookmark, and the Menu key or Shift+F10
-//! opens the row's menu. A right click or a long press opens it too.
+//! Enter opens, Alt+Enter shows Properties, F2 renames a bookmark, Delete
+//! removes it, Ctrl+Shift+C copies the path, and the Menu key or Shift+F10
+//! opens the row's menu. A right click or a long press opens it too. The
+//! menu's rows and these keys are one list (`place_menu.rs`).
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -23,16 +25,17 @@ use freya::prelude::*;
 use super::directory::Where;
 use super::drives::{Drives, use_drives};
 use super::file_icon::{FileIcon, file_icon_view};
+use super::place_menu::{PlaceCmd, PlaceEnv, PlaceFacts, Subject, key_command, offered, place_menu};
 use super::places_model::{
     Item, ItemKind, Release, Section, UsageLine, current_name, release_for, sections, selected,
     type_ahead, usage_line, volume_text,
 };
 use crate::component::ComponentName;
-use crate::controls::{StopRing, focus_stop, focus_stop_with, path_label, text_field, usage_bar};
+use crate::controls::{StopRing, focus_stop_press, focus_stop_pressed, path_label, text_field, usage_bar};
 use crate::focus::{focus_node, step_focus};
 use crate::icons::{self, Icon};
 use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
-use crate::shell::{MenuItem, Overlays, ResponseKind, dialog, menu_item, menu_separator};
+use crate::shell::{MenuItem, Overlays, ResponseKind, dialog};
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::task::spawn_blocking;
@@ -53,7 +56,6 @@ pub struct PlacesSidebar {
     recent: bool,
     on_open: EventHandler<Where>,
     on_open_new_tab: Option<EventHandler<Where>>,
-    on_properties: Option<EventHandler<Where>>,
     on_empty_trash: Option<EventHandler<()>>,
     reload: Option<State<u32>>,
 }
@@ -67,7 +69,6 @@ impl PlacesSidebar {
             recent: true,
             on_open: on_open.into(),
             on_open_new_tab: None,
-            on_properties: None,
             on_empty_trash: None,
             reload: None,
         }
@@ -84,13 +85,6 @@ impl PlacesSidebar {
     /// place. Without it the item is left out.
     pub fn on_open_new_tab(mut self, handler: impl Into<EventHandler<Where>>) -> Self {
         self.on_open_new_tab = Some(handler.into());
-        self
-    }
-
-    /// Adds "Properties" to the row menus. The handler receives the place.
-    /// Without it the item is left out.
-    pub fn on_properties(mut self, handler: impl Into<EventHandler<Where>>) -> Self {
-        self.on_properties = Some(handler.into());
         self
     }
 
@@ -152,7 +146,7 @@ impl Component for PlacesSidebar {
                                 actions: Actions {
                                     on_open: self.on_open.clone(),
                                     on_open_new_tab: self.on_open_new_tab.clone(),
-                                    on_properties: self.on_properties.clone(),
+                                    dismiss: None,
                                     on_empty_trash: self.on_empty_trash.clone(),
                                     trash_full: trash_full(),
                                 },
@@ -174,7 +168,6 @@ pub struct PlacesMenu {
     recent: bool,
     on_open: EventHandler<Where>,
     on_open_new_tab: Option<EventHandler<Where>>,
-    on_properties: Option<EventHandler<Where>>,
     reload: Option<State<u32>>,
 }
 
@@ -187,7 +180,6 @@ impl PlacesMenu {
             recent: true,
             on_open: on_open.into(),
             on_open_new_tab: None,
-            on_properties: None,
             reload: None,
         }
     }
@@ -204,12 +196,6 @@ impl PlacesMenu {
         self
     }
 
-    /// See [`PlacesSidebar::on_properties`].
-    pub fn on_properties(mut self, handler: impl Into<EventHandler<Where>>) -> Self {
-        self.on_properties = Some(handler.into());
-        self
-    }
-
     /// See [`PlacesSidebar::reload`].
     pub fn reload(mut self, reload: State<u32>) -> Self {
         self.reload = Some(reload);
@@ -222,6 +208,7 @@ impl Component for PlacesMenu {
         let tokens = use_tokens();
         let mut open = use_state(|| false);
         let mut hovering = use_state(|| false);
+        let mut pressing = use_state(|| false);
         let mut area = use_state(Area::default);
         let measured = use_state(|| 0.0_f32);
         let scroll = use_scroll_controller(ScrollConfig::default);
@@ -252,12 +239,15 @@ impl Component for PlacesMenu {
                     px(S3),
                     gap(S2),
                     rounded(Radius::Control),
-                    surface(Paint::Control, hovering() || open(), false, false),
+                    surface(Paint::Control, hovering() || open(), pressing(), false),
                 ],
             )
             .on_sized(move |event: Event<SizedEventData>| area.set_if_modified(event.area))
             .on_pointer_enter(move |_| hovering.set(true))
-            .on_pointer_leave(move |_| hovering.set(false))
+            .on_pointer_leave(move |_| {
+                hovering.set(false);
+                pressing.set_if_modified(false);
+            })
             .child(file_icon_view(&tokens, &icon, IconSize::Control, false))
             .child(
                 rect().tw(&tokens, &[w_flex()]).child(
@@ -269,16 +259,17 @@ impl Component for PlacesMenu {
             )
             .child(icons::icon(
                 Icon::PanDown,
-                IconSize::Row,
+                IconSize::Mark,
                 Paint::Muted.color(&tokens),
             ));
-        let button = focus_stop(
+        let button = focus_stop_press(
             content,
             "Places",
             AccessibilityRole::Button,
             true,
             Radius::Control,
             move |_: ()| open.set(!open()),
+            pressing,
         );
 
         let close = {
@@ -306,9 +297,9 @@ impl Component for PlacesMenu {
             actions: Actions {
                 on_open: close,
                 on_open_new_tab: wrap(&self.on_open_new_tab),
-                on_properties: wrap(&self.on_properties),
                 on_empty_trash: None,
                 trash_full: false,
+                dismiss: Some(EventHandler::new(move |_: ()| open.set(false))),
             },
             measure: Some(measured),
             on_escape: Some(EventHandler::new(move |_: ()| open.set(false))),
@@ -453,11 +444,12 @@ impl Bookmarks {
 struct Actions {
     on_open: EventHandler<Where>,
     on_open_new_tab: Option<EventHandler<Where>>,
-    on_properties: Option<EventHandler<Where>>,
     /// Empty Trash on the Trash row's menu.
     on_empty_trash: Option<EventHandler<()>>,
     /// The Trash has something in it, so Empty Trash is not greyed.
     trash_full: bool,
+    /// Closes the sheet the list is in, before a dialog opens over it.
+    dismiss: Option<EventHandler<()>>,
 }
 
 /// The groups and rows, and the keys that walk them.
@@ -477,136 +469,124 @@ struct PlaceList {
 }
 
 impl PlaceList {
-    /// The menu of a row. Text only, like every menu of the file views: what
-    /// the row offers is in its context menu, not in buttons on the row.
-    fn menu(
+    /// What a row can be asked to do: the facts its menu is chosen from and
+    /// the handler that does it. The menu and the keys of the row both send
+    /// their commands here, so they cannot disagree (see `place_menu.rs`).
+    /// `id` is the row's focus node, which a dialog gives the focus back to.
+    fn commands(
         &self,
         item: &Item,
         open: EventHandler<()>,
         release: Option<Release>,
         busy: bool,
         draft: State<String>,
-    ) -> Vec<MenuItem> {
+        id: AccessibilityId,
+    ) -> (PlaceFacts, EventHandler<PlaceCmd>) {
         let actions = &self.actions;
+        let facts = PlaceFacts::of(
+            item,
+            actions.on_open_new_tab.is_some(),
+            release,
+            busy,
+            actions.on_empty_trash.is_some(),
+            actions.trash_full,
+        );
         let target = item.target.clone();
-        let mut menu = vec![menu_item(
-            if item.volume.is_some() { "Mount" } else { "Open" },
-            move |_: ()| open.call(()),
-        )];
-        if let Some(handler) = &actions.on_open_new_tab {
-            let handler = handler.clone();
-            let target = target.clone();
-            menu.push(menu_item("Open in new tab", move |_: ()| {
-                handler.call(target.clone())
-            }));
-        }
-        let Some(path) = item.path() else {
-            return menu;
+        let path = item.path().map(Path::to_path_buf);
+        let name = item.label.clone();
+        // What the Properties dialog calls the place: the folder's own name,
+        // except where that is not a name (the Trash's folder is `files`, the
+        // root has none) and a drive, which has its label.
+        let properties_name = match Subject::of(item) {
+            Subject::Trash | Subject::Computer | Subject::Drive => item.label.clone(),
+            _ => path
+                .as_deref()
+                .and_then(Path::file_name)
+                .map_or_else(|| item.label.clone(), |name| name.to_string_lossy().into_owned()),
         };
-        let bookmarks = self.bookmarks;
-        let source = self.bookmark_source.clone();
-        let (path_buf, name) = (path.to_path_buf(), item.label.clone());
-        let mut own = Vec::new();
-        if item.kind == ItemKind::Bookmark {
-            let (source, path_buf, name) = (source.clone(), path_buf.clone(), name.clone());
-            own.push(menu_item("Rename…", move |_: ()| {
-                let Some(overlays) = bookmarks.overlays else {
-                    return;
-                };
-                let mut draft = draft;
-                draft.set(name.clone());
-                let (source, path_buf) = (source.clone(), path_buf.clone());
-                overlays.show_dialog(
-                    dialog("Rename bookmark", "")
-                        .content(Element::from(
-                            text_field(draft, |_: String| {})
-                                .fill_width()
-                                .placeholder("Bookmark name")
-                                .autofocus(),
-                        ))
-                        .cancel("Cancel")
-                        .response("Rename", ResponseKind::Suggested, move |_: ()| {
-                            bookmarks.rename(
-                                source.clone(),
-                                path_buf.clone(),
-                                draft.peek().clone(),
-                            )
-                        }),
-                );
-            }));
-        }
-        if let (Some(mount), Some(how)) = (&item.mount, release) {
-            let drives = self.drives;
-            let with = |how: Release| {
-                let mount = mount.clone();
-                let item = menu_item(how.label(), move |_: ()| drives.release(mount.clone(), how));
-                if busy { item.disabled() } else { item }
-            };
-            own.push(with(how));
-            if how == Release::Eject {
-                own.push(with(Release::Unmount));
-            }
-        }
-        // A user folder is in the list already, and the model hides a
-        // bookmark of it, so only bookmarks and drives can be (un)bookmarked.
-        if item.kind != ItemKind::Place {
-            own.push(if item.bookmarked {
-                menu_item("Remove from bookmarks", {
-                    let (source, path_buf, name) = (source.clone(), path_buf.clone(), name.clone());
-                    move |_: ()| bookmarks.change(source.clone(), path_buf.clone(), false, name.clone())
-                })
-            } else {
-                menu_item("Add to bookmarks", {
-                    let (source, path_buf, name) = (source.clone(), path_buf.clone(), name.clone());
-                    move |_: ()| bookmarks.change(source.clone(), path_buf.clone(), true, name.clone())
-                })
-            });
-        }
-        if !own.is_empty() {
-            menu.push(menu_separator());
-            menu.extend(own);
-        }
-        // The Trash row says what the Trash holds: Open, Empty Trash (greyed
-        // while it is empty) and Properties.
-        if super::places_model::is_trash(item) {
-            if let Some(handler) = &actions.on_empty_trash {
-                let handler = handler.clone();
-                let entry = menu_item("Empty Trash", move |_: ()| handler.call(()));
-                menu.push(menu_separator());
-                menu.push(if actions.trash_full { entry.destructive() } else { entry.disabled() });
-            }
-            if let Some(handler) = &actions.on_properties {
-                let handler = handler.clone();
-                menu.push(menu_separator());
-                menu.push(menu_item("Properties", move |_: ()| handler.call(target.clone())));
-            }
-            return menu;
-        }
-        menu.push(menu_separator());
-        let text = path.display().to_string();
-        let overlays = self.bookmarks.overlays;
-        menu.push(menu_item(
-            "Copy path",
-            move |_: ()| match freya::clipboard::Clipboard::set(text.clone()) {
-                Ok(()) => {
-                    if let Some(overlays) = overlays {
-                        overlays.toast("Copied.");
+        let (bookmarks, source, drives) = (self.bookmarks, self.bookmark_source.clone(), self.drives);
+        let mount = item.mount.clone();
+        let on_new_tab = actions.on_open_new_tab.clone();
+        let on_empty_trash = actions.on_empty_trash.clone();
+        let on_open = actions.on_open.clone();
+        let dismiss = actions.dismiss.clone();
+        let act = EventHandler::new(move |cmd: PlaceCmd| {
+            let overlays = bookmarks.overlays;
+            match cmd {
+                PlaceCmd::Open => open.call(()),
+                PlaceCmd::OpenInNewTab => {
+                    if let Some(handler) = &on_new_tab {
+                        handler.call(target.clone());
                     }
                 }
-                Err(_) => {
-                    if let Some(overlays) = overlays {
-                        overlays.toast("The path could not be copied.");
+                PlaceCmd::Rename => {
+                    let (Some(overlays), Some(path)) = (overlays, path.clone()) else {
+                        return;
+                    };
+                    let mut draft = draft;
+                    draft.set(name.clone());
+                    let source = source.clone();
+                    overlays.show_dialog(
+                        dialog("Rename bookmark", "")
+                            .content(Element::from(
+                                text_field(draft, |_: String| {})
+                                    .fill_width()
+                                    .placeholder("Bookmark name")
+                                    .autofocus(),
+                            ))
+                            .cancel("Cancel")
+                            .response("Rename", ResponseKind::Suggested, move |_: ()| {
+                                bookmarks.rename(source.clone(), path.clone(), draft.peek().clone())
+                            }),
+                    );
+                }
+                PlaceCmd::Release(how) => {
+                    if let Some(mount) = &mount {
+                        drives.release(mount.clone(), how);
                     }
                 }
-            },
-        ));
-        if let Some(handler) = &actions.on_properties {
-            let handler = handler.clone();
-            menu.push(menu_item("Properties", move |_: ()| {
-                handler.call(target.clone())
-            }));
-        }
-        menu
+                PlaceCmd::EmptyTrash => {
+                    if let Some(handler) = &on_empty_trash {
+                        handler.call(());
+                    }
+                }
+                PlaceCmd::CopyPath => {
+                    let Some(path) = &path else {
+                        return;
+                    };
+                    let said = match freya::clipboard::Clipboard::set(path.display().to_string()) {
+                        Ok(()) => "Copied.",
+                        Err(_) => "The path could not be copied.",
+                    };
+                    if let Some(overlays) = overlays {
+                        overlays.toast(said);
+                    }
+                }
+                PlaceCmd::AddBookmark | PlaceCmd::RemoveBookmark => {
+                    if let Some(path) = &path {
+                        let add = cmd == PlaceCmd::AddBookmark;
+                        bookmarks.change(source.clone(), path.clone(), add, name.clone());
+                    }
+                }
+                PlaceCmd::Properties => {
+                    let (Some(overlays), Some(path)) = (overlays, &path) else {
+                        return;
+                    };
+                    if let Some(dismiss) = &dismiss {
+                        dismiss.call(());
+                    }
+                    let on_open = on_open.clone();
+                    super::properties::show_folder_properties(
+                        path.clone(),
+                        properties_name.clone(),
+                        overlays,
+                        EventHandler::new(move |folder: PathBuf| on_open.call(Where::Folder(folder))),
+                        EventHandler::new(move |()| focus_node(id)),
+                    );
+                }
+            }
+        });
+        (facts, act)
     }
 }
 
@@ -650,7 +630,7 @@ impl Component for PlaceList {
                 }
             });
         let mut labels = Vec::with_capacity(total);
-        let mut removable: Vec<Option<(PathBuf, String)>> = Vec::with_capacity(total);
+        let mut commands: Vec<(PlaceFacts, EventHandler<PlaceCmd>)> = Vec::with_capacity(total);
         let mut index = 0;
         for (group_index, group) in self.sections.iter().enumerate() {
             if let Some(title) = group.title {
@@ -669,12 +649,6 @@ impl Component for PlaceList {
                     .or_else(|| item.volume.as_ref().map(|volume| volume.busy_id()))
                     .is_some_and(|id| self.drives.is_busy(id));
                 labels.push(item.label.clone());
-                removable.push(match (item.kind, item.path()) {
-                    (ItemKind::Bookmark, Some(path)) => {
-                        Some((path.to_path_buf(), item.label.clone()))
-                    }
-                    _ => None,
-                });
                 let on_open = {
                     let handler = self.actions.on_open.clone();
                     let target = item.target.clone();
@@ -689,6 +663,12 @@ impl Component for PlaceList {
                         None => EventHandler::new(move |_: ()| handler.call(target.clone())),
                     }
                 };
+                let (facts, act) = self.commands(item, on_open.clone(), release, busy, rename_draft, ids[index]);
+                let menu = place_menu(PlaceEnv {
+                    facts: facts.clone(),
+                    act: act.clone(),
+                });
+                commands.push((facts, act));
                 column = column.child(Element::from(PlaceRow {
                     key: row_key(item),
                     id: ids[index],
@@ -700,7 +680,7 @@ impl Component for PlaceList {
                         Some(volume) => UsageLine::Text(volume_text(volume)),
                         None => usage_line(item.mount.as_ref(), self.settled),
                     },
-                    menu: self.menu(item, on_open.clone(), release, busy, rename_draft),
+                    menu,
                     on_open,
                     drop: item.path().map(Path::to_path_buf),
                 }));
@@ -708,8 +688,6 @@ impl Component for PlaceList {
             }
         }
 
-        let bookmarks = self.bookmarks;
-        let source = self.bookmark_source.clone();
         let on_escape = self.on_escape.clone();
         column.on_key_down(move |event: Event<KeyboardEventData>| {
             let focused = *Platform::get()
@@ -717,6 +695,25 @@ impl Component for PlaceList {
                 .focused_accessibility_id
                 .peek();
             let at = ids.iter().position(|id| *id == focused);
+            // A key of the menu does what its row does, when the row has it.
+            if let Some(at) = at
+                && let Some(cmd) = key_command(&event.key, event.modifiers)
+                && let Some((facts, act)) = commands.get(at)
+                && offered(facts, cmd)
+            {
+                event.stop_propagation();
+                // Focus stays in the list: on the row that follows, or the
+                // one before when the last row goes.
+                if cmd == PlaceCmd::RemoveBookmark
+                    && let Some(next) = ids
+                        .get(at + 1)
+                        .or_else(|| at.checked_sub(1).and_then(|before| ids.get(before)))
+                {
+                    focus_node(*next);
+                }
+                act.call(cmd);
+                return;
+            }
             match &event.key {
                 Key::Named(NamedKey::ArrowDown) => {
                     event.stop_propagation();
@@ -736,22 +733,6 @@ impl Component for PlaceList {
                     if let Some(id) = ids.last() {
                         event.stop_propagation();
                         focus_node(*id);
-                    }
-                }
-                Key::Named(NamedKey::Delete) => {
-                    if let Some(at) = at
-                        && let Some(Some((path, name))) = removable.get(at)
-                    {
-                        event.stop_propagation();
-                        // Focus stays in the list: on the row that follows,
-                        // or the one before when the last row goes.
-                        if let Some(next) = ids
-                            .get(at + 1)
-                            .or_else(|| at.checked_sub(1).and_then(|before| ids.get(before)))
-                        {
-                            focus_node(*next);
-                        }
-                        bookmarks.change(source.clone(), path.clone(), false, name.clone());
                     }
                 }
                 Key::Named(NamedKey::Escape) => {
@@ -815,6 +796,7 @@ impl Component for PlaceRow {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
+        let mut pressing = use_state(|| false);
         let session = use_hook(super::drag::file_drag);
         let drop_here = match (&session, &self.drop) {
             (Some(session), Some(folder)) => session.is_over(folder),
@@ -897,7 +879,7 @@ impl Component for PlaceRow {
                         Paint::Transparent
                     },
                     hovering(),
-                    false,
+                    pressing(),
                     self.selected,
                 )],
             )
@@ -914,6 +896,7 @@ impl Component for PlaceRow {
                 let (session, folder) = (session, self.drop.clone());
                 move |_| {
                     hovering.set(false);
+                    pressing.set_if_modified(false);
                     if let (Some(session), Some(folder)) = (session, &folder) {
                         session.leave(folder);
                     }
@@ -940,7 +923,7 @@ impl Component for PlaceRow {
             None => self.label.clone(),
         };
         let on_open = self.on_open.clone();
-        focus_stop_with(
+        focus_stop_pressed(
             self.id,
             content,
             spoken,
@@ -950,6 +933,7 @@ impl Component for PlaceRow {
             move |_: ()| on_open.call(()),
             self.menu.clone(),
             StopRing::Inside,
+            Some(pressing),
         )
         .tw(&tokens, &[w_full()])
     }

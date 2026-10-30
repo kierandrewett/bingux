@@ -25,6 +25,7 @@ use std::time::{Duration, Instant};
 
 use freya::prelude::*;
 
+use crate::controls::direction::{Direction, use_direction};
 use super::menu_nav::{Ms, NavKey};
 use super::menu_query::{self, Candidate, Mark, Pill, Reaction, TypeAhead};
 use crate::search_highlight;
@@ -44,9 +45,11 @@ pub(crate) fn now_ms() -> Ms {
 
 /// The menu key of a key press, or `None` when the menu does not read it: a
 /// letter with Ctrl, Alt or the logo key held is a shortcut for someone else,
-/// except the few that edit the query (Ctrl+A, Ctrl+Backspace).
-pub(crate) fn nav_key(event: &Event<KeyboardEventData>) -> Option<NavKey> {
+/// except the few that edit the query (Ctrl+A, Ctrl+Backspace). `direction` is
+/// the one the list reads in (`use_direction()` where it is drawn).
+pub(crate) fn nav_key(event: &Event<KeyboardEventData>, direction: Direction) -> Option<NavKey> {
     let modifiers = event.modifiers;
+    let rtl = direction.is_rtl();
     let ctrl = modifiers.contains(Modifiers::CONTROL);
     let other = modifiers.contains(Modifiers::ALT) || modifiers.contains(Modifiers::META);
     match &event.key {
@@ -59,8 +62,10 @@ pub(crate) fn nav_key(event: &Event<KeyboardEventData>) -> Option<NavKey> {
             }
             Some(match named {
                 NamedKey::Escape => NavKey::Escape,
-                NamedKey::ArrowLeft => NavKey::Left,
-                NamedKey::ArrowRight => NavKey::Right,
+                // The menu's Right is towards the end: it opens a submenu, which a window that
+                // reads from the right opens on the left, so there the key is Left.
+                NamedKey::ArrowLeft => if rtl { NavKey::Right } else { NavKey::Left },
+                NamedKey::ArrowRight => if rtl { NavKey::Left } else { NavKey::Right },
                 NamedKey::ArrowDown => NavKey::Down,
                 NamedKey::ArrowUp => NavKey::Up,
                 NamedKey::Home => NavKey::Home,
@@ -125,6 +130,8 @@ pub(crate) struct ListQuery {
     /// Counts changes of mind: a pending shut-list reset only runs if the
     /// count is still the one it was made for.
     epoch: State<u64>,
+    /// The direction the list reads in, for its horizontal keys.
+    direction: Direction,
 }
 
 /// How long a shut dropdown keeps what was typed on it. Open lists never
@@ -136,6 +143,7 @@ pub(crate) fn use_list_query() -> ListQuery {
     ListQuery {
         ahead: use_state(TypeAhead::default),
         epoch: use_state(|| 0),
+        direction: use_direction(),
     }
 }
 
@@ -151,7 +159,7 @@ impl ListQuery {
         focused: Option<usize>,
         open: bool,
     ) -> Reaction {
-        let Some(key) = nav_key(event) else {
+        let Some(key) = nav_key(event, self.direction) else {
             return Reaction::Ignored;
         };
         // Escape is the panel's, which hears it anywhere in the window.
@@ -235,7 +243,8 @@ pub(crate) fn dimmed(mark: &Mark) -> Option<f32> {
 }
 
 /// A one-line label for a list row, filling the space it is given. A match
-/// has its letters marked.
+/// has its letters marked. The text starts at the row's start edge, which a
+/// right-to-left interface has on the right.
 pub(crate) fn marked_label(tokens: &Tokens, ink: Ink, text: &str, mark: &Mark) -> Element {
     match mark {
         Mark::Hit(range) => {

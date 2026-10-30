@@ -696,16 +696,20 @@ impl Component for SkeletonRow {
     }
 }
 
+/// A placeholder bar of a set width that never grows past the box it is in, so
+/// a narrow row squeezes it and not the bar beside it.
 fn skeleton_bar(tokens: &Tokens, width: Dim) -> impl IntoElement {
-    rect().tw(
-        tokens,
-        &[
-            w(width),
-            h(Dim::SkeletonLine),
-            rounded(Radius::Mark),
-            bg(Paint::Control),
-        ],
-    )
+    rect()
+        .tw(
+            tokens,
+            &[
+                w(width),
+                h(Dim::SkeletonLine),
+                rounded(Radius::Mark),
+                bg(Paint::Control),
+            ],
+        )
+        .max_width(Size::percent(100.0))
 }
 
 /// A title for in-page headers such as a details view.

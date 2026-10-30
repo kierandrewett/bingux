@@ -398,10 +398,12 @@ fn main() {
 
 - `size(w, h)` and `min_size(w, h)` set the window size. They default to
   `theme::WINDOW_SIZE` and `theme::WINDOW_MIN_SIZE`.
-- A second launch does not open a second window. It sends its URI to the
-  running copy over `$XDG_RUNTIME_DIR/<app-id>.sock` and exits with status 0.
-  The running copy navigates to it and raises its window. A socket left by a
-  crash is replaced.
+- A second launch does not open a second window. It sends each address named
+  on its command line to the running copy over `$XDG_RUNTIME_DIR/<app-id>.sock`
+  and exits with status 0. The running copy opens each (a hierarchical app
+  navigates to it; Files opens a tab) and raises its window. A socket left by a
+  crash is replaced. An option other than `--help` is refused (see the
+  navigation contract), never forwarded.
 - **The inspector comes with it.** `Application::run` is the only way to start
   a bingux-ui window: it builds the one launch configuration (interface font,
   the inspector plugin, the borderless plugin) in a private function, so every
@@ -599,9 +601,45 @@ or more, completes the pop; a leftward fling of 500 px/s or more, or dragging
 back past the start, cancels it with a spring. A touch that moves vertically
 first belongs to the page's scroll. The gesture does not start when there is no
 page below, and a swipe while a menu or dialog is open dismisses that instead of
-leaving the page. The same pose plays for Back on a compact window; a desktop
-window slides the page out over 320 ms. Under reduced motion it is a cross-fade
-with no spring.
+leaving the page. The same pose plays for Back on a compact window. Back on
+a desktop window slides the page out. Every one of them takes `SLIDE_MS` (320 ms,
+the time a subpage takes to open) on the one slide curve, so a close never
+differs from an open in time or in shape. A swipe released past its threshold
+carries on at the speed of the finger (see the next paragraph). A cancelled
+swipe springs back over 240 ms. Under reduced motion it is a cross-fade with
+no spring.
+
+**The slide curve.** Every slide, in and out (a subpage push and pop, predictive
+back that is not a swipe, a sheet opening and closing), is `slide(t)` in
+`nav/gesture.rs`: the symmetric ease `t^k / (t^k + (1 - t)^k)`, `k` being the
+one named constant `SLIDE_SHARPNESS` (2.0). The curve is point-symmetric about
+its middle, `slide(1 - t) = 1 - slide(t)`, so a close is the open played
+backwards and also the open mirrored in space: the same speed and shape by
+either reading, and it has no slow start that reads as lag (an expo-out open
+reversed does) and no fast start that reads as a snap (an expo-out close does).
+Turn `SLIDE_SHARPNESS` for a snappier (3) or softer (1.5) slide, `SLIDE_MS` for
+a faster or slower one; every slide follows. How far along the way a slide is:
+
+| ms | original open, and close | close as the open reversed | now, open and close |
+| - | - | - | - |
+| 16 | 29.3 % | 0.0 % | 0.3 % |
+| 48 | 64.7 % | 0.2 % | 3.0 % |
+| 96 | 87.6 % | 0.7 % | 15.5 % |
+| 128 | 93.8 % | 1.5 % | 30.8 % |
+| 160 | 97.0 % | 3.0 % | 50.0 % |
+| 224 | 99.3 % | 12.4 % | 84.5 % |
+| 256 | 99.7 % | 24.9 % | 94.1 % |
+| 288 | 99.9 % | 50.0 % | 98.8 % |
+| 320 | 100 % | 100 % | 100 % |
+| 5 % / 50 % / 90 % reached at | 2 / 32 / 106 ms | 183 / 288 / 315 ms | 60 / 160 / 240 ms |
+| peak speed, times the average | 6.9 | 6.9 | 2.0 |
+
+(Sharpness 3: 5 % / 50 % / 90 % at 87 / 160 / 216 ms, a peak of 3; sharpness
+1.5: 39 / 160 / 260 ms, a peak of 1.5.) A swipe released past its threshold
+leaves on a cubic Hermite curve (`release_curve`) that starts at the finger's
+speed (`release_slope`, at most 3 times the average) and stops dead, so it
+never stands still where the finger let go; a finger at rest starts it from
+rest.
 
 ### The history menu
 
@@ -611,7 +649,38 @@ primary button) of the button. Choosing a row is one `pop_to` or `forward_to`.
 The hover tooltip closes when the menu opens. The rows are the route titles (and
 the route's icon when it has one). An app with its own button builds the same
 menu with `IconButton::context_menu(history_menu(model.back_menu(), on_pick))`;
-the file chooser and Files do.
+the file chooser and Files do, with `history_menu_with` to give a row a
+**middle click** too (`MenuItem::on_middle`: Files opens that folder in a new
+tab). The mouse's own Back and Forward buttons (8 and 9) call `back()` and
+`forward()` in a window of Settings and in a file view.
+
+### The navigation contract
+
+There is one model, `NavModel` (`nav/model.rs`), and one router around it.
+Settings (`Mode::Hierarchical`), the file views and the chooser
+(`Mode::Linear`) differ only in the table's mode; nothing keeps a second
+history. The rules, tested in `nav/model.rs` and, for the file views, by a
+seeded random walk of 12,000 histories against a browser's (`files/history_fuzz.rs`)
+and 10,000 windows of tabs (`bingux-files-app/src/fuzz.rs`):
+
+| Rule | Hierarchical (Settings) | Linear (Files, the chooser) |
+| ---- | ----------------------- | --------------------------- |
+| What the stack is | The page's ancestors: Back leaves a page, Forward does not exist | A history: back list, current, forward list |
+| `push`/`navigate` to the current place | Nothing (a changed fragment only scrolls to the anchor) | Nothing |
+| `push`/`navigate` elsewhere | A new entry; a deep link builds the ancestors | A new entry after the current one; the forward list is forgotten |
+| Only the query changed | The top entry is replaced in place, unless the key `query_pushes` | Same |
+| Back, `pop_to` | Leaves; what was left is dropped | Moves; what was left becomes Forward |
+| Cap | The depth of the route tree | The last `HISTORY_LIMIT` (100) entries behind the current one; the oldest is forgotten |
+| Transition | `Push` deeper or sideways, `Pop` shallower, `Fade` another root or the index on a wide window, `None` the same path | `None` always |
+| Entry state | Retained by entry id (scroll, `use_retained_state`), dropped when the entry leaves the stack | Kept by the host per folder and tab (see `docs/files.md`) |
+| A launch (second copy, `open_uri`) | `navigate_to`: a deep link, then the window is raised | `reset`: the window's router holds the one location of the last launch and the host opens it in a tab; no history grows |
+
+A command line is parsed once, by `Application::run`: `--help`/`-h` print the
+usage, `--` ends the options, any other argument starting with `-` is an
+*unknown option* (a message and the usage on stderr, status 2, nothing
+opened), and every other argument is an address, in order, so a flag can never
+become a location. An application's `normalise` turns each address into the
+text of a location and may refuse it by returning an empty address.
 
 ### Guidelines
 
@@ -630,13 +699,42 @@ the file chooser and Files do.
 
 The file chooser, the Files window's tabs and the Files window's router all use
 `bingux_ui::files::folder_table()`: a linear table where `file:///home/me/Documents`
-is a folder, `recent:///` the recent files and `bingux-files://` an alias of
+is a folder, `recent:///` the recent files, `trash:///` the Trash (and
+`trash:///Old%20folder` a folder in it) and `bingux-files://` an alias of
 `file:`. A tab's folder, Back and Forward are a `NavModel` on it, so the toolbar's
 Back and Forward buttons have the history menu above, and a tab shown again is
 where it was left. `files::location_of(&Where)` and `files::place_of(&Location)`
-convert between a place and its location. A location is text, so a folder whose
-name is not valid UTF-8 is recorded with a lossy name: going Back to it opens a
-folder that is not there, and the view says so.
+convert between a place and its location. A folder whose name is not valid UTF-8
+is recorded byte for byte (percent-encoded in the URI), so going Back to it opens
+that exact folder; only its title shows replacement characters.
+
+**Named roots** (`bingux_ui::files::named`, exported as `Root`, `Roots`,
+`Typed`). A place is a `Where`: a folder or Recent. The Trash is the
+`Where::Folder` of the home bin's `files` folder, so everything a view keys on
+(the listing, the history, the watcher, the sidebar's selected row, the Trash
+rules of `actions::TrashView`) is the one path and a real path to it is the same
+place as `trash:///`. What is *named* is every way of saying a place, and
+`Roots` is the only code that does it: `uri` (what Copy location gives),
+`edit_text` (the address field), `parse` (the text typed back: `recent:///`,
+`trash:` and `trash://` and `trash:///a/b` with `..` held inside the Trash,
+a real path, `~`, `file://`), `by_word` (`Trash` or `Recent` alone, when no
+folder has the name), `crumbs`, `title` (tabs, the window, history rows),
+`icon`, `parent` (Up; none from the Trash) and `completion_text` (a
+`trash:///na` being typed is completed from the bin's folder). Inside the Trash
+the first name below it is the item's name *before it was deleted*
+(`Roots::crumbs`, `title`), read from its `.trashinfo`; the address keeps the
+name in the bin. `Roots::new(home, Some(bin_files))` makes up roots for a test;
+`Roots::current()` reads `$HOME` and `$XDG_DATA_HOME`. A new named root (a
+network place, a drive by its label) is a `Root` variant and a row in those
+functions; no caller learns its name.
+
+Every move of a file view's history goes through `bingux_ui::files::history`
+(`visit`, `up`; Back, Forward and the menu choices are the model's own): it
+admits only places (an absolute folder path, cleaned by name and never resolved
+through a link, or the recent files), so text that is not a place never becomes
+an entry. The rules a person feels are in `docs/files.md`, "History". The
+window's router in such an app carries only the location of the last launch,
+as a stack of one (see the contract below).
 
 ### The inspector
 
@@ -653,10 +751,11 @@ dialogs (top first). It reads `Router::snapshot()` each time the pane renders.
 | Controls         | `switch`, `checkbox` (tri-state), `slider` (`step`, `show_value`, `fill`, `gradient(stops)`: the track is a colour ramp instead of the accent fill; the night light's colour temperature uses it, and a hue or brightness ramp is the same call), `segmented` (`fill` for equal segments; only the selected segment is raised, a hovered one brightens its text), `dropdown` (`width`; a list of applications is `app_dropdown(Vec<AppChoice>, ..)`, which icons it), `stepper`, `usage_meter` (a figure, its total and a thin bar), `qr_code` (`ecc`, `label`, `size`: a pure-Rust QR encoder, versions 1 to 15, drawn black on a white tile with the quiet zone in every theme; `QrMatrix::encode` gives the modules; too-long data draws an empty tile), `action_strip` of `strip_action` (two to four icon-over-label actions in one rounded bar), `text_field` (`password`, `invalid`, `clearable`), `search_field`, `progress_bar`, `spinner` |
 | Navigation       | `segmented(options, selected, on_select).tabs()` (the tab bar: each tab a real button with the segmented look, only the selected one raised, Left, Right, Home and End move the selection and focus; `scroll()` for a narrow container; an app's view tabs and the inspector's tabs use it too), `breadcrumb(crumbs, on_select)` (crumbs separated by chevrons, each a Tab stop, the last in normal ink; `code` for a code-face trail; a file manager path uses it too) |
 | Buttons          | `action_button` (`suggested`, `destructive`, `flat`, `loading`, `icon`), `primary_button`, `row_button`, `icon_button` (`tooltip`, `danger`, `busy` (a spinner in place of the icon, the size unchanged), `radius`: `Control` like every button by default), `split_button(icon)` or `SplitButton::new(icon)` (a primary action and a menu in one control: `on_press`, `tooltip` or `label` (the primary segment's name), `menu(items)` or `on_menu(handler)` for the chevron, `menu_label` (the chevron's name), `enabled`; see Split buttons) |
-| Rows             | `row` (`subtitle`, `value` (selectable, one line), `badge`, `leading`, `leading_tone` (draws the leading icon in the accent, warning or danger colour, for a row that reports a state), `leading_space` (a blank icon column so text lines up), `leading_app`, `navigates`, `selected`, `destructive`, `context_menu`, `on_press` (makes the row activatable)), `radio_row(title, selected, on_select)` (a radio on the leading edge; the whole row selects; `subtitle`, `value`, `leading_app` as for `row`), `radio_rows(title, rows)` (a group of radio rows: Up and Down move the selection, and only the selected row is in the Tab order), `switch_row` (`nested` for sub-rows shown while on), `slider_row` (a `level_row` for a setting), `level_row` (title on the left and a slider filling the rest of the line; `control` such as a mute button sits between them, `footer` under the track, `mark` and `mark_label` for a tick such as 100%, `danger_from`, `value_text`, `max`, `leading`, `context_menu`), `choice_row`, `text_row`, `entry_row`, `expander_row`, `property_row` |
+| Rows             | `row` (`subtitle`, `value`, `mono_value` and `path_value` (a read-only value: selectable, never cut: it sits beside the title, wraps, or goes under it; see Info rows below), `badge`, `leading`, `leading_tone` (draws the leading icon in the accent, warning or danger colour, for a row that reports a state), `leading_space` (a blank icon column so text lines up), `leading_app`, `navigates`, `selected`, `destructive`, `context_menu`, `on_press` (makes the row activatable)), `radio_row(title, selected, on_select)` (a radio on the leading edge; the whole row selects; `subtitle`, `value`, `leading_app` as for `row`), `radio_rows(title, rows)` (a group of radio rows: Up and Down move the selection, and only the selected row is in the Tab order), `switch_row` (`nested` for sub-rows shown while on), `slider_row` (a `level_row` for a setting), `level_row` (title on the left and a slider filling the rest of the line; `control` such as a mute button sits between them, `footer` under the track, `mark` and `mark_label` for a tick such as 100%, `danger_from`, `value_text`, `max`, `leading`, `context_menu`), `choice_row`, `text_row`, `entry_row`, `expander_row` (`subtitle`, `leading`, `value`, `expanded`; see Expander rows below), `Row::disclosure` (a row that opens its `nested` rows), `property_row` |
 | Icons            | `icon` (bundled symbolic glyphs), `app_icon` (full-colour application icons from the icon theme)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | Groups and text  | `Group` (`description`, `content` for a chart or other free content), `section_label`, `group_head(title, trailing)` (a group's title and toolbar with no card, for a page that lists several cards under one name), `caption`, `centered_caption`, `action_row`, `heading`, `status` (loading, empty, error, info blocks)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Path text        | `path_label(path)` (one line that shortens a long path by what matters least, so the full way stays readable: `/home/kieran/…/design/final-report-2026.pdf`, `/h/k/…/design/…`, `final-rep…2026.pdf`; `style`, `ink`, `name` for a file name, `middle` for other text, `selectable`, `copyable`; see Path text below). `elide_path`, `elide_name`, `elide_middle` (module `elide`) are the same cuts as pure functions of a width and a `Measure`; `distinguish` labels paths that share a name |
+| Selectable text  | `select_text(text)` (text that can be selected with the pointer and copied: `style`, `align`, `fill`, `tab_stop`, `breaks_anywhere`, `copy_label`; see Selectable text below). `Row::value`, `mono_value` and `path_value`, `property_row`, the licence blocks of About and the Properties values use it |
 | Layout           | `hstack(Space)`, `vstack(Space)`, `spacer`, `divider`, `card`, `clamp(Dim, child)`, `page_column`, `tile_rows(tokens, tiles, height)` (two tiles a row on a phone, four on a desktop)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | Shell            | `NavigationSplitView` with `NavItem` and `subpage`, `HeaderBar`, `WindowControls`, `status_page`, `banner`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Page header      | `PageHead` (`subtitle`, `action`, `switch`): the title block that starts each page's content, with a status line under the title and one action or master switch at the right                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -696,6 +795,20 @@ focus on open unless a field is marked `autofocus()`, and Enter in a
 single-line field runs the primary action. Each control has an accessibility
 role and a focus ring.
 Animations are short (80 to 200 ms) and stop when `BINGUX_REDUCED_MOTION=1` is set.
+
+### Tree guides
+
+A `tree_view` row is `lead`, an optional icon, the label run (label, detail, chips, child count) and an optional badge. `lead` is one `Dim::IconControl` column per ancestor level followed by the row's own chevron slot, and every row has the slot, empty on a leaf, so a leaf's label starts where a sibling folder's does and each level is exactly one slot to the right of its parent's.
+
+- **Guide.** Each ancestor level draws a 1 px `Paint::MutedFaint` line (component `TreeGuide`; the separator's 8 % was too faint to follow down a tree) starting `floor(slot / 2)` from its column's left edge, which is the middle of that ancestor's chevron slot. The line starts on a whole pixel, so it covers whole device pixels at 1x and 2x; that puts it half a pixel right of an even slot's exact middle, because a one-pixel line cannot be centred on a whole pixel without blurring at 1x. The slot is 16 px, 18 px at compact density.
+- **Continuous.** The guide is the row's full height and the rows sit with no gap, so a level's guides join through every descendant row, whatever each row holds. A row draws one guide per ancestor and nothing else, so a level begins on the row under its parent and **ends at the bottom of the parent's last visible descendant**, never below it; a closed branch has no descendant rows and so no guide. There is no elbow.
+- **Fills.** The selected, hovered and pressed fill belongs to the row's box, and the guides are children of that row, drawn over the fill in the same token, so a guide reads the same on a filled row and nothing is cut at the fill.
+- **Badge.** The line grows its label run (`grow_children()`), so the badge keeps its own width and ends at the row's padding (`S2`) on the right, with the label shortening to an ellipsis before it. Chips and the child count are inside the label run and are cut, never wrapped.
+- **Deep trees.** The view has no horizontal scroll. When `levels x slot` would leave the rest of the row (label run and badge) under six slots, `indent_for` narrows the level to the room left, a whole number of pixels and no less than `S2`; guides and chevrons narrow together, so a guide is still on its ancestor's chevron. Past that the label is what shrinks.
+- **Right to left.** The tree mirrors with the window (see Direction): the chevron slot, the guides and the indent are at the start edge, a row's chevron points the way the tree opens (`PanEnd` is mirrored) and Left and Right expand and collapse by the reading direction (`Direction::reading_key`).
+- **Motion.** Rows that enter or leave grow and shrink in height inside a clipping slot, with their guides, which are part of the row. No guide is drawn on its own, so none outlives its row.
+
+The taxonomy's Tree view entry shows five levels with a closed branch, a selected deep row, a hovered row (a script captures it), all collapsed, and a ten-level chain. `controls/tree_view_tests.rs` reads the laid-out frame at desktop and phone density and at scales 1 and 2: guide x against the ancestor's chevron, joins between rows, the end of each guide, label alignment, the badge inside the row, row height, whole device pixels, and a twenty-level chain.
 
 ### Split buttons
 
@@ -737,6 +850,22 @@ A row that holds a control (a switch, checkbox, dropdown or button) and also ope
 
 The taxonomy's Row entry shows it under "Control and chevron" and "Button, dropdown and chevron".
 
+### Expander rows
+
+`expander_row(title, children)` is a row that opens rows under it: `.subtitle(text)`, `.leading(icon)`, `.value(text)` (a count, read-only, as `Row::value`) and `.expanded(true)` to mount open. It is a `Row` and not a second kind of row: `Row::disclosure(open, on_set)` turns any row into the header of the rows given to `Row::nested`, and `expander_row` is that row with the chevron and the state. A page that needs more than the expander offers builds the row itself.
+
+| Part | Behaviour |
+| --- | --- |
+| Header | The row's own padding, `Dim::Row` height (60 px at compact density, never under `TOUCH_MIN` there), hover and pressed fill, focus ring and `GUTTER`, on every width. It grows with its text. |
+| Title and subtitle | They wrap to every line they need, on a desktop and on a phone, and are never cut with an ellipsis (an ordinary row cuts a title after two lines and a subtitle after three on a phone). The chevron, and a value, keep their place beside the text. |
+| Chevron | One `DisclosureChevron` in the row's trailing slot: the size of the chevron of a row that navigates and in the same place (`GUTTER` from the trailing edge, centred on the header however tall it is), so one card of both lines up. It points right while closed and turns to point down as the rows grow, with the same 160 ms and easing; the header does not move while it does. |
+| Rows inside | Set in by one `GUTTER`, ending where the header ends, with a hairline between the header and the first row and between every pair (the ones between rows are hidden while either neighbour is lit, as in a card). They are laid out at the width they are shown at, so a long title wraps and a value stacks under its title as it would in the card, and the height of the reveal is that of the laid-out rows. An expander inside the rows is set in by one more gutter. |
+| Closed | The rows are not mounted: nothing hidden takes focus or is read out. |
+| Motion | The rows below move together by the height the content has at that frame, the rows above and the header never move, and the motion ends at the height a mount of the other state has. A page that scrolls is not scrolled by it. Under reduced motion it is one step. |
+| Keyboard and assistive technology | The header is a button and reports `expanded`. Enter and Space press it, Right opens it and Left closes it. |
+
+The geometry is held at 390, 360 and 320 px and on a desktop by `expander_tests` (the header is a row of the card, the chevron's slot, wrapping, the rows' inset, nesting, the frames of an opening and a closing, opening at the bottom of a scrolled page, the keys, the accessibility state); `BINGUX_EXPANDER_DIR=dir cargo test --lib --features testing expander_matrix -- --ignored` writes the cases as PNGs (`BINGUX_TEXT_SCALE=2`, `BINGUX_SETTINGS_SNAPSHOT_SCHEME=prefer-light` for the other conditions). The taxonomy's Expander row entry shows it open and closed, with an icon, a subtitle and a value, with a long title, nested, and on a phone page 390, 360 and 320 px wide.
+
 ### Trailing buttons and switches: one inset
 
 When the trailing content of a row is a button (`action_button(..).compact()`, `row_button`, `icon_button`), a `dropdown`, a `segmented` or a `split_button`, passed directly to `trailing`, the button fills the row: it is `Dim::RowButton` tall (the row height less `ROW_INSET` above and below: 40 px, 44 px at compact density), it sits `ROW_INSET` (`S2`, 8 px) from the row's trailing edge, and its radius, and its focus ring, is the group's `Radius::Card` less that inset, which is `Radius::Inner`. The title keeps the usual `GUTTER`. The row does this once: it provides the fit to its trailing control, and each of those controls reads it with `rows::use_row_fitted()`. A page writes nothing extra and a new button-like control calls `use_row_fitted()` once and takes `Dim::RowButton` and `Radius::Inner` when it is true. In a tall row (a subtitle) the button stays centred with at least `ROW_INSET` above and below. Beside a chevron the divider is `ROW_INSET` from the button.
@@ -763,9 +892,11 @@ overlays.show_toast(Toast::new("Could not reach the network.")
 
 **Shape.** The pill is the button height (`NOTICE_BUTTON`, the control height: 36 px, 44 px on a phone) plus `NOTICE_PAD` (`S1`) above and below. The action buttons and the dismiss `icon_button` are that height, centred, and the last one is `S1` from the top, bottom and trailing edge. Text sits `S4` from the leading edge (`S4` from the trailing edge too when there are no buttons). A button's radius is its container's radius less the padding between them: the container is `Radius::Pill`, so the buttons are pills. A banner that wraps to three lines or more is tall, and takes `Radius::Overlay` with `Radius::Card` buttons (20 px less the 4 px padding), so the corners stay concentric and the text clear of them. A toast keeps two lines and ends the rest with an ellipsis, in at most 60 % of the window width; an inline banner fills the page column and wraps all of its text.
 
+**Flush buttons.** The trailing buttons are one group (`NoticeButtons`, a row with no gap): the actions and the dismiss cross abut, so their hit areas touch, their hover and pressed fills meet without dead space, and all are `NOTICE_BUTTON` tall on one line. The banner's own gap (`S2`) is only between the message and the group, and the last button ends `NOTICE_PAD` from the edge, the same as above and below, so the cross is optically centred at the end of the pill. Every button takes the container's nested radius, so the end of the group follows the pill's curve (this is how the GNOME banner and the Material snackbar close a notice). It is implemented once in `Banner`; a toast and every specimen get it. Held by `shell/notice_tests.rs` (`the_action_and_the_dismiss_cross_sit_flush`: zero gap, equal heights, equal inset, in every kind, banner and toast, desktop and phone). On a phone the stacked actions row is flush the same way. The dismiss tooltip ("Dismiss") is a bubble as wide as its text, never the width of the cross; `controls/tooltip_layout_tests.rs` hovers it in a banner and in a toast (`Place::Banner`, `Place::Toast`).
+
 **Several actions.** `.action(..)` can be called again. On a desktop the buttons share the row with the message; on a phone (compact density) a banner with more than one action puts them on a row of its own under the message, end-aligned, with the dismiss cross at the top corner, so the message is never squeezed to a word a line. That banner is tall, so it takes the tall radii above.
 
-**Colour.** `BannerKind` decides every colour, from `tokens.notice(kind)` (`NoticePalette`): `fill`, `ink`, `edge`. For a tinted kind the fill is the kind's hue (the accent for Info, `success`, `warning`, `danger`) as an opaque low-chroma tint, so it reads over whatever a toast floats on. The text, the leading icon, the dismiss glyph and the label of an action button are that same hue moved in lightness: darker than the fill on a light scheme, lighter on a dark one, until they reach 7:1 (AAA) on the fill. The 1 px edge is the hue at 3:1 on the fill. An action button is **quiet**: no fill at rest, its label in that ink, the hover and pressed layers of every control over the fill, the focus ring, a nested-radius pill the same height and inset as the dismiss cross, so the notice reads as one calm surface. `Neutral` is the dark floating surface of a tooltip (`on_floating` ink). Paints: `Paint::NoticeFill/NoticeEdge(kind)`, ink `Ink::Notice(kind)`; `icon_button(..).ink(Ink::Notice(kind))` draws a glyph in it. Every kind, in both schemes and for every accent, is in the contrast matrix, including the quiet action label at rest, hover and press.
+**Colour.** `BannerKind` decides every colour, from `tokens.notice(kind)` (`NoticePalette`): `fill`, `ink`, `glyph`, `edge`. For a tinted kind the fill is a soft tint of the kind's hue (the accent for Info, `success`, `warning`, `danger`): a hint of it, lightness 0.965 on a light scheme and 0.27 on a dark one with a fifth of the hue's chroma, opaque so it reads over whatever a toast floats on. The text, the dismiss glyph and the label of an action button are that same hue moved in lightness: darker than the fill on a light scheme, lighter on a dark one, until they reach 7:1 (AAA) on the fill. The saturated colour is the leading kind icon alone (`Paint::NoticeGlyph`, the hue at 3:1 on the fill). The edge is not an outline: a 1 px hairline of the ink at 12% over the fill (`Paint::NoticeEdge`), the same for every kind including Neutral, exempt from the contrast matrix as decoration. An action button is **quiet**: no fill at rest, its label in that ink, the hover and pressed layers of every control over the fill, the focus ring, a nested-radius pill the same height and inset as the dismiss cross, so the notice reads as one calm surface. `Neutral` is the dark floating surface of a tooltip (`on_floating` ink). Paints: `Paint::NoticeFill/NoticeEdge(kind)`, ink `Ink::Notice(kind)`; `icon_button(..).ink(Ink::Notice(kind))` draws a glyph in it. Every kind, in both schemes and for every accent, is in the contrast matrix, including the quiet action label at rest, hover and press.
 
 **Icons.** Info, Success, Warning and Error lead with `DialogInformation`, `Check`, `DialogWarning` and `DialogError`, so the kind is not told by colour alone; `.icon(Icon)` picks another, `.without_icon()` none. A neutral banner has none.
 
@@ -773,46 +904,65 @@ overlays.show_toast(Toast::new("Could not reach the network.")
 
 **Floating.** The toast shell adds only the part that floats: a layer above the dialog and menus, the `Elevation::Raised` shadow, bottom-centre placement (`S6` above the bottom edge plus `Dim::SafeBottom` on a phone), a 140 ms slide-and-fade, a queue (toasts show one at a time, in the order they were queued) and a timer: four seconds, six with an action, set with `Toast::timeout`. The timer is a pure state machine, `shell::hide_clock::HideClock` (tested with a fake clock), held by three things: the pointer anywhere over the toast's own box (padding, gaps, text and buttons: the shell listens to `pointer_over` and `pointer_out`, which a button inside it does not steal), a finger down on it, and keyboard focus on one of its buttons. While held the clock does not run and the toast never closes; when the last hold lets go the **whole** delay starts again from zero (not from where it paused), and entering again pauses again. A toast that arrives while one is held waits behind it. On a touch screen a sideways drag of 72 px or more dismisses it; a shorter one springs back. Pressing an action also dismisses the toast.
 
+### Progress bars and spinners
+
+`progress_bar(fraction)` takes `Some(0.0..=1.0)`, which fills in the accent and eases to each new value, or `None`, which is indeterminate; `spinner(size)` is the round one. An indeterminate bar and a spinner loop for as long as they are on screen, and a caller does nothing to keep them going: a label or width that changes on the bar, or a page that draws again, never restarts the loop (it starts over only when the bar is mounted again). A determinate bar runs no loop at all.
+
+- **Indeterminate bar.** A segment, 30% of the track, sweeps from just off the left edge to just off the right edge in 1.4 s (sine in and out) and starts over from the left; the track clips it. Until the track has been measured the bar draws no segment, so its first frame is already at the start.
+- **Spinner.** A turning half ring over a faint full ring, one turn in 800 ms. `.ink(paint)` and `.text(caption)` change the arc's colour and add a caption.
+- **Reduced motion.** Progress is essential motion, the one kind that reduced motion slows and does not stop, because a bar that stood still looks frozen. The bar's segment does not travel: the whole fill breathes between 30% opacity and solid over 2.4 s. The spinner turns once in 2.4 s.
+
+Every loop reads its position from `motion::use_cycle(ms)`: a phase from 0 to 1 that starts over, kept in the scope of the component that calls it (see Motion). Build a new looping indicator on it, not on `use_animation` with `OnFinish::restart()`; `scripts/ui-lint.py` fails an `OnFinish::restart` or `reverse` outside `motion.rs`.
+
+`offset_x` and `offset_y` shift a box's **children**, not the box. The sweep moves its segment by offsetting the strip that holds it; the segment's own `offset_x` moved nothing, which is why every indeterminate bar once stood still while its animation value kept changing. Position what moves from the box above it, or use `Position::new_absolute()`.
+
+`controls/progress_tests.rs` holds the checks. It steps the animation clock and reads where the segment is laid out and what the renderer draws on each step: the segment starts off the left edge, moves on every step, reaches the right edge and starts again from the left, stays inside the track, goes on from where it was after the page draws again, a determinate bar has none, a bar and a spinner under reduced motion still change on every step, and `use_cycle` runs 0 to 1 and starts over. `scripts/loop-check.py` is the same check on the taxonomy's rendered pages, and the taxonomy's Progress bar and Spinner pages hold the live specimens, with a dialog and a popup that carry an indeterminate bar and a reduced-motion one of each.
+
 ### Tab strip
 
-`tab_strip(tabs, selected)` is the tab strip of a window that holds several views of one kind: the folders of Files, the documents of an editor. It is Chromium's tab strip: the selected tab is the same surface as the content under it, with rounded top corners and a concave flare at each foot that joins the strip's bottom edge, and the other tabs are flat and recessed on a darker strip. The model, the sources it follows and the numbers are in `design/tabs.md`. The host owns the list and the selected id; the strip holds no state. Use `segmented(..).tabs()` instead for a few fixed pages that cannot be closed and have no content of their own to attach to (the inspector's tabs, the Properties dialog).
+`tab_strip(tabs, selected)` is the tab strip of a window that holds several views of one kind: the folders of Files, the documents of an editor. A tab is a rounded rectangle of `Radius::Control`, the corner of a button and of a sidebar row; the selected tab has the fill of a selected sidebar row (`Paint::Selection`), the pointer's fill is `Paint::Hover` and a press is `Paint::Pressed`. The tabs are separate from the content under them, as the segmented control is from the page it switches: nothing joins them. The design thesis, what it replaced and the numbers are in `design/tabs.md`. The host owns the list and the selected id; the strip holds no state. `.on_detach(f)` lets a tab be torn off (dragged a strip height past the strip, released there, or, for a lone tab, dragged at all; `f` gets `Detach { id, pointer, press, grab, released }` and the strip puts the tab back and ends its drag, the host takes it out of its list); `.insertion(Some(i))` draws the accent marker of where a tab brought from another window would land; `.probe(&StripProbe)` publishes the tab bodies' places (`StripLayout::index_at`, `boundary`) so a host can work out that place. The thresholds and hysteresis (`TearGate`) are in `controls/tab_tear.rs`; what the compositors allow is in `design/tab-tearoff.md`. `bingux_ui::app::open_window(seed, location, size)` opens another window of the application and `use_window_seed::<T>()` hands the seed to its root; `Application::transparent()` gives windows an alpha channel so one can be drawn faded. Use `segmented(..).tabs()` instead for a few fixed pages that cannot be closed and have no content of their own to attach to (the inspector's tabs, the Properties dialog).
 
-The strip sits in a `tab_frame(bar, content)`, which owns the two facts that make the tabs attached. The **surface**: the content is painted in `Paint::Bg` (or `.surface(paint)`) and the strip inside fills the selected tab with the same value, so tab and content are one colour and one shape, with no line between them; the bar behind the tabs is `Paint::TabStrip`, one step darker. The **seam**: the bar is `Dim::Header` tall and the content begins at its bottom edge, with no gap and no overlap; a hairline runs along the bar's bottom edge and the selected tab's outline starts and ends on it, so it is drawn everywhere but under the selected tab. The bar is either a `HeaderBar` filled with `Paint::Transparent` whose `.tab_slot(strip)` holds the strip from the start of the room between its controls (the window controls share the row, and the band above the tabs still drags the window), or any row that holds the strip.
+The strip is the title of a `HeaderBar`: `.tab_slot(strip)` holds it from the start of the room between the bar's controls, and the header bar *is* the strip (`Dim::TabBar` tall, 40 px, so the window has no second row above its tabs; the window controls share the row; its icon buttons are `Dim::TabButton`, the height of a tab; the band above and below the tabs still drags the window). The bar keeps its default fill, `Paint::Surface`, which is the page's colour (`Paint::Bg`), so the bar and the page under it are one colour and nothing is drawn between them: no darker strip, no card, no hairline, no flare. The page runs from the bar's bottom edge to the window's left, right and bottom edges, square, as the Settings page does; the window's rounding is the compositor's. A tab is `FIELD_INSET` from the bar's top and bottom, so there is a gap between a tab and the page. A strip outside a header bar draws the same tabs on whatever is behind it, which should be `Paint::Surface`: the fades at its overflowing edges dissolve into that. Use `segmented(..).tabs()` instead for a few fixed pages that cannot be closed and have no content of their own to attach to (the inspector's tabs, the Properties dialog).
 
 ```rust
-tab_frame(
-    HeaderBar::new("Files")
-        .fill(Paint::Transparent)
-        .trailing(WindowControls)
-        .tab_slot(
-            tab_strip(
-                tabs.iter().map(|tab| TabItem::new(tab.id, tab.title.clone()).icon(Icon::Folder)).collect(),
-                active,
-            )
-            .on_select(move |id| select(id))
-            .on_close(move |id| close(id))
-            .on_new(move |_| open_new())                 // the New tab button; Ctrl+T on a tab
-            .on_reorder(move |(id, to)| reorder(id, to)) // drag a tab, or Move left / right in its menu
-            .on_hover(move |(id, over)| hover(id, over)) // pointer over a tab, for drops
-            .drop_target(highlighted),                   // the tab a drag would drop on
-        ),
-    page,
-)
+HeaderBar::new("Files")
+    .trailing(WindowControls)
+    .tab_slot(
+        tab_strip(
+            tabs.iter().map(|tab| TabItem::new(tab.id, tab.title.clone()).icon(Icon::Folder)).collect(),
+            active,
+        )
+        .on_select(move |id| select(id))
+        .on_close(move |id| close(id))
+        .on_new(move |_| open_new())                 // the New tab button; Ctrl+T on a tab
+        .on_reorder(move |(id, to)| reorder(id, to)) // drag a tab, or Move left / right in its menu
+        .on_hover(move |(id, over)| hover(id, over)) // pointer over a tab, for drops
+        .drop_target(highlighted),                   // the tab a drag would drop on
+    )
+// then the page, a sibling under the bar: no frame round it
 ```
 
-Every length is a token. A tab is `Dim::Control` tall (the height of a header button; 44 px at compact density) and stands on the bottom edge of the `Dim::Header` bar, so 12 px of the bar stay above the tabs. Its top corners are `Radius::Control`; its feet flare out by that radius less `FIELD_INSET` (`Radius::Control.nested(FIELD_INSET)`: 8 px at mouse density, 12 px at compact density where there is no inset), and the foot is also the gap between two tabs. The close button is `Dim::Box5` (the whole `Dim::InlineButton` at compact density) `FIELD_INSET` from the tab's end, with the tab's corner nested by that inset; the New tab and Tab list buttons are `Dim::InlineButton`, level with the tabs, with the same corner. The strip never overflows its container: it is as wide as its tabs (so the New tab button follows the last tab) and no wider than the room it is given, and every part is laid out from the measured width, so nothing can spill out of it.
+Every length is a token. The strip is `Dim::TabBar` tall (40 px, 44 px at compact density; 8 px shorter than the `Dim::Header` bar it replaced at mouse density and 12 px at compact). A tab is the strip less `FIELD_INSET` above and below (`Dim::TabButton`): it stands 4 px from the top edge and is 32 px tall, the same distance from the strip's top and bottom, and as tall as the New tab button; at compact density there is no inset and the tab is the whole 44 px touch target. Its corners are all `Radius::Control`; two tabs are `S1` (4 px) apart, and the first starts at the header bar's `S2` padding. The icon is 16 px and the title is `CAPTION`, the small type step. The close button is the standard `icon_button`, `Dim::DenseControl` (24 px; the whole 44 px `Dim::InlineButton` at compact density) centred in the tab, `FIELD_INSET` from its edges, with the tab's corner nested by that inset (`Radius::Inner`); the New tab and Tab list buttons are `Dim::TabButton` in one cluster at the end of the strip, with a tab's corner. The strip never overflows its container: it is as wide as its tabs (so the New tab button follows the last tab) and no wider than the room it is given, and every part is laid out from the measured width, so nothing can spill out of it.
 
 | Part | Behaviour |
 | ---- | --------- |
-| Width | Tabs share one width: `Dim::Field` at most, shrinking together as tabs are added down to `Dim::TabMin` (96 px; 128 px on a phone, where the close slot is a whole touch target and a title still needs room beside it). Beyond that the strip scrolls sideways (wheel, drag with a finger, or Left and Right) instead of squeezing, the strip fills its container, and the tabs fade into the bar where they continue. The selected tab is scrolled into view by the shortest distance whenever the selection moves. |
-| Tab | `[icon] [title] [close]` on one row. The title takes the room that is left and is cut with an ellipsis before the close slot. The close slot is always laid out, so a tab never changes width when the button appears. The button is the standard `icon_button`, drawn on the selected tab and on a hovered one (not on a touch screen's other tabs), named "Close <title>"; pressing it neither selects nor drags the tab. A lone tab has no close slot. The selected tab is the attached shape; an unselected one is flat, shows `Ink::Muted` text (4.5:1 on the strip, and under the hover and pressed fills), fills with `Paint::Hover` under the pointer and `Paint::Pressed` under a finger, and has a short separator after it that hides next to the selected tab and the tab the pointer is on. |
-| End of the strip | The New tab button (`on_new`) follows the last tab, an `icon_button` the tab's height. It never scrolls. When tabs overflow, a Tab list button (`Icon::PanDown`) before it opens a menu of every tab, the selected one checked. |
-| Motion | Adding a tab grows it in and the others narrow to make room; closing one shrinks it away and the others widen (`MOVE_MS`, instant with reduced motion). The widths are laid out from one clock, so the strip never exceeds its container during the motion. |
-| Pointer | A press selects (a mouse as it goes down, a finger when it lifts). A middle click closes. With `on_reorder`, a tab dragged more than 6 px follows the pointer, drawn over the others, which slide aside on the springs of `crate::reorder`; letting go settles it into its place and calls `on_reorder(id, to)` once, after it has settled. Dragging past the strip's end scrolls it. Escape, or letting go more than a header's height above or below the strip, puts the tab back. The strip uses `crate::drag::PointerDrag` and `crate::reorder::Reorder`, as `sortable` does. A right click, or a finger held on a tab, opens its menu: Close tab, and Move left and Move right with `on_reorder`, which is how touch reorders. `on_hover` reports the pointer entering and leaving a tab, so a host can accept a drag on it (see Files below). |
-| Keyboard | Only the selected tab is in the tab order. Left, Right, Home and End move the selection and the focus; Ctrl+Shift+Left and Right move the selected tab (`on_reorder`); Delete or Ctrl+W closes the selected tab and the focus follows to its neighbour; Ctrl+T calls `on_new`. The tab's focus ring is drawn inside the tab, with its top corners, so the scroll region cannot clip it. |
+| Width | Tabs share one width: `Dim::Field` at most, shrinking together as tabs are added down to `Dim::TabMin` (96 px; 128 px on a phone, where the close slot is a whole touch target and a title still needs room beside it). Beyond that the strip scrolls sideways instead of squeezing, the strip fills its container, and the tabs fade into the bar where they continue. **Scrolling**: the wheel over the strip (the vertical wheel too, forwards when turned down), a touchpad's two-finger movement and a finger dragged along the tabs scroll it; a wheel notch glides on `MOVE_MS`, a touchpad and a finger are followed at once; the selected tab is scrolled into view by the shortest distance whenever the selection moves. The offset is kept from the strip's start edge (`controls/tab_scroll.rs`), so the same rules hold right to left. |
+| Tab | `[icon] [title] [close]` on one row (mirrored right to left). The title takes the room that is left; one that does not fit fades out over its last 24 px (`fade_text`) before the close slot, which is never faded. The close slot is always laid out, so a tab never changes width when the button appears. The button is the standard `icon_button` (a 24 px hit target, 44 px at compact density, centred in the fill and inset by `FIELD_INSET`, so a press on it is stopped before it can reach the header bar's window drag), named "Close <title>", drawn (fading in with the fill) on the selected tab, on a tab the pointer is over, and on every tab on a touch screen and at compact density; pressing it neither selects nor drags the tab. **Every tab closes, a lone one too**: the strip reports the id and the host decides (Files closes the window). The selected tab is the attached shape; an unselected one is flat, shows `Ink::Muted` text (4.5:1 on the strip, and under the hover and pressed fills), and has a short separator after it that fades out next to the selected tab and the tab the pointer is on. |
+| End of the strip | The New tab button (`on_new`) follows the last tab, an `icon_button` of `Dim::TabButton` (32 px square, 44 px at compact density) in a cluster as tall as the strip: its fill is `FIELD_INSET` from the strip's top, its bottom, the last tab and the strip's trailing edge (flush at compact density). It never scrolls. When tabs overflow, a Tab list button (`Icon::PanDown`) before it opens a menu of every tab: each tab's icon, its name (`MenuItem::name()`: cut in the middle, the whole name the tooltip), the selected one ticked at the end of its row, mirrored in a right-to-left interface. |
+| Motion | Adding a tab grows it in and the others narrow to make room; closing one shrinks it away and the others widen (`MOVE_MS`, instant with reduced motion). The widths are laid out from one clock, so the strip never exceeds its container during the motion. **Rapid closure**: after a tab is closed with its button or a middle click the others keep their width until the pointer leaves the strip's row, so the next close button comes under the pointer (and is shown as hovered though the pointer has not moved); the widths then grow to the room. `tab_close::RapidClose` is the state machine, over a clock the strip passes in. Closing with the keyboard or the menu, or adding a tab, does not hold. |
+| Pointer | A press selects (a mouse as it goes down, a finger when it lifts). A middle click closes. **The tab the pointer is on is worked out from where the pointer and the tabs are**, not from enter and leave events, so exactly one tab is hovered and it stays right when the tabs move under a pointer that does not (a wheel notch, a tab closing, a rapid close); its fill (`Paint::Hover`, the whole tab, corner `Radius::Control`) fades in and out on `MOVE_MS`; pressed (`Paint::Pressed`) is at once; the selected tab has the selection fill, as one opaque colour over the bar so a held tab hides the titles it slides over; a held tab is lifted. With `on_reorder`, a tab dragged more than 6 px follows the pointer, drawn over the others, which slide aside on the springs of `crate::reorder`; letting go settles it into its place and calls `on_reorder(id, to)` once, after it has settled. Dragging past the strip's end scrolls it. Escape, or letting go more than a header's height above or below the strip, puts the tab back. The strip uses `crate::drag::PointerDrag` and `crate::reorder::Reorder`, as `sortable` does. A right click, or a finger held on a tab, opens its menu (`tab_close::menu_rows`): Close tab (Ctrl+W), Close other tabs, Close tabs to the left (greyed out on the first tab) and Close tabs to the right (with `on_close_many`, which gets the ids in strip order), Duplicate tab (`on_duplicate`), Reopen closed tab (Ctrl+Shift+T, `on_reopen(available, f)`; greyed out without a closed tab), and Move left and Move right with `on_reorder`, which is how touch reorders. `on_hover` reports each change of the tab the pointer is on, so a host can accept a drag on it (see Files below). |
+| Keyboard | Only the selected tab is in the tab order. The arrows are the screen's: Left and Right move the selection and the focus (Right goes back in a right-to-left strip), Home and End go to the first and the last; Ctrl+Shift+Left and Right move the selected tab (`on_reorder`); Delete or Ctrl+W closes the selected tab (also a lone one) and the focus follows to its neighbour; Ctrl+T calls `on_new`; Ctrl+Shift+T calls `on_reopen`. The tab's focus ring is drawn inside the tab, with its rounded corners, so the scroll region cannot clip it. The dragged tab is lifted by a layer (`HELD_LAYER`) because Freya paints by depth in the tree, so a tab's contents would otherwise draw over a neighbour's fill. A tab wider than the room left in a scrolling region shows its start. |
 | Accessibility | The strip is a `TabList` named "Tabs"; each tab is a `Tab` named by its title with its selected state. The buttons are named "Close <title>", "Tab list" and "New tab". |
 
-The taxonomy's Tabs entry shows each state in a frame at both densities: select, close and add with drag; many tabs; nine tabs; long titles; icons; a single tab; no New tab button; keyboard focus; a frame painted in a card's surface. `controls/tab_shape.rs` holds the geometry and path tests (the tab ends where the strip does, nested flare radius, the outline stays in its box and ends on the hairline), `controls/tabs.rs` the layout and contrast tests, and `controls/tab_tests.rs` renders strips at mouse and compact density: the selected tab's bottom edge is the content's top edge at every width, everything is inside the strip, tab widths are uniform, the seam and the flares are checked to the pixel in both schemes, and the keyboard, drag and motion behaviour.
+When a tab closes the host picks the tab that takes the selection: `tab_close::selection_after_close(ids, closed, selected)` is the browser's rule (the neighbour to the right, else the left; the selection stays if another tab closed), and `tab_close::others`, `tab_close::to_the_left` and `tab_close::to_the_right` give the sets for the three menu items. Files keeps its tabs as a plain `TabSet` (new tabs open beside the one on show; `files::ClosedTabs` is the stack behind Reopen closed tab: the last 10 closed tabs with their place and their `TabMemory`, so Back and Forward come back too, and a closed group (others, to the left, to the right) comes back left to right at its places; `TabMemory::duplicate` is Duplicate tab). Closing the last tab closes the window, with a confirmation only if `files::operations_running()` (a copy, move or compression is going).
+
+The taxonomy's Tabs entry shows each state in a bar over a page at both densities: select, close and add with drag; every close route and the menu; many tabs; the first, a middle and the last tab selected; nine tabs; long titles (faded); icons; a lone tab with its close button; no New tab button; keyboard focus; a right-to-left strip; the pointer on one tab. `controls/tab_geometry.rs` holds the geometry tests (the strip is a tab bar tall, a tab is the same distance from the strip's top and bottom and as tall as an end button, the content width and its inverse), `controls/tab_tests.rs` the rendered ones (every width, density and reading direction; a tab's four corners are one radius and its fill is the selection, hover or bar colour in both schemes; the page's corners and top edge are the page's colour whichever tab is selected), `controls/tab_close.rs` the closing rules (selection, `to_the_left`, `others`, `to_the_right`, the menu's rows and their order, rapid closure with a fake clock), `controls/tab_scroll.rs` the scroll rules (logical and screen offsets, wheel and finger, scroll into view, mirrored), `controls/tab_tear.rs` the tear thresholds and the layout a host asks (`index_at`, `boundary`, both directions), `controls/tabs.rs` the layout, the fill and the hit-test, and `controls/tab_tests.rs` renders strips at mouse and compact density: the selected tab's bottom edge is the content's top edge at every width, the card's margins are equal on the left, right and bottom and its corners are checked to the pixel, the New tab button is the same distance from the top, the bottom, the last tab and the trailing edge, everything is inside the strip, tab widths are uniform, the seam and the flares are checked to the pixel in both schemes, the close button's size, its press not reaching the drag region, the selection after a close, the menu (with Close tabs to the left), Reopen, rapid closure, and the keyboard, drag and motion behaviour.
+
+### Fading text and reading direction
+
+`fade_text(text).style(CAPTION).grow()` is a line of text that does not fit: instead of ending in an ellipsis its last `Dim::TextFade` (24 px) fade out. The fade is the glyphs' own alpha (the text's paint is a gradient from the ink to the ink at no alpha), not a coloured overlay, so what is behind the text (a hovered tab's fill, the selected tab's surface, the strip) shows through and the neighbour at the end of the line, a close button, is never touched. It is the end of the *reading direction*: the right edge in a left-to-right interface, the left edge in a right-to-left one. Text that fits is drawn plain. The label inside is a plain `label`, so the text is in the accessibility tree and found by a test like any label. Use it for a title cut beside a control; use `path_label` where the end of a name matters (it cuts the middle).
+
+The layout engine reads a direction (see Direction). In a tab strip the first tab is at the right, a tab's icon is at its right and its close button at its left, the New tab button follows the last tab on its left, the strip scrolls forward leftwards, a tab dragged to a later place goes left, the arrow keys are the screen's and `StripLayout { rtl }` counts the place a torn tab would land from the right. The engine does the mirroring; the code does only the pixel maths.
 
 ### Sortable list
 
@@ -845,6 +995,35 @@ sortable(
 | Reduced motion | Every move is instant: no lift animation, no slide, the order reported on release. |
 
 Rows may have their own controls (a `switch`, a delete button): the grip is a separate target to their right, and a drag never presses the row it started on. The taxonomy shows a four-row list, a list with switches and a twelve-row list with the drop line under "Sortable list".
+
+### Info rows: a value is never cut
+
+A row with a read-only value (`value`, `mono_value`, `path_value`,
+`property_row`) shows it in full. `choose_value_line` (in `controls::adaptive`,
+a pure function of widths, tested without a window) decides from the measured
+title and value and the row's width:
+
+| Form | When | Layout |
+| --- | --- | --- |
+| `Beside` | the value fits on one line beside the title's floor | title in what the value leaves, value on one line at the row's end |
+| `Wrapped` | desktop only: the value needs two lines or fewer in what the title's floor leaves | the value wraps, aligned to the row's end; the row grows |
+| `Stacked` | anything else, and every value on a phone that does not fit on one line | title above, value under it at the full width, left-aligned, wrapping |
+
+The title keeps its floor in every form (its natural width, or 40% of the line
+when less, never less than its longest word) and wraps between words with no
+line limit. The gap between the title's cell and the value is the row's `S3`
+plus the trailing area's `S1` margin (`ROW_TRAILING`): the decision counts both,
+or a title shrunk to leave the value its width leaves it 4 px less and wraps it
+(`expander_tests::the_layout_rules_find_nothing_in_any_case`). A value that may
+break anywhere (`mono_value`, `path_value`) has no longest word. A very long list (licences) is not a row: it is a `select_text`
+block under a heading, as in the About window's Legal page.
+
+The row's width is taken from its own size once laid out, before that from the
+width its surface told it (`rows::provide_row_width`; About and Properties know
+theirs), else from the last row laid out in this window at this width, else the
+window's. A wrong first guess wraps the value (valid at any width) and the next
+frame moves it under its title if it needs the room; only a row that mounts
+first in a window with no surface that knows its width can move once.
 
 ### Path text
 
@@ -928,6 +1107,22 @@ between the pointer and the submenu, and a rest of 300 ms in the triangle ends
 it. The pointer and key rules are `shell/menu_nav.rs`, a pure state machine
 with an injected clock; `menu.rs` only draws it.
 
+**A cascade is a stack of opaque cards.** A submenu opens beside its parent and
+goes the way its parent went, so it never lies over the menus it came from; with
+no room that way it opens on the other side, which can put a third or fourth
+level over the root (a 700 px window, or a menu near the right edge). Every
+level is the same surface (`Paint::Popover` fill, hairline, `Radius::Overlay`,
+`Elevation::Raised`) and each is painted above everything the level before it
+holds: Freya paints a node at its parent's layer plus one per level of depth,
+so the rows of one card outrank a sibling card's fill, and two cards on one layer
+would let the earlier card's labels, highlight and chevrons show through the later
+one. `Panel::nested(level)` puts level *n* on `layers::cascade(n)`
+(`n × CASCADE_STEP` relative layers, 256 each, so a level is above the deepest card
+before it). `shell/menu_cascade_tests.rs` covers it: at 700 px (compact), 760 px
+(regular), on a phone, in both directions and for three and four levels, the last
+card has the fill of the root and is the same pixels when the text under it changes
+or when the window is wide enough that nothing is under it.
+
 **Type-ahead.** Typing while a menu, dropdown list or crumb folder list is open
 does not close it. The letters build a query, and **an open list's query never
 times out**: a pause of any length, as a slow typist or someone using assistive
@@ -994,19 +1189,58 @@ an Open with submenu, a dropdown of applications and the compact sheet.
 an application list and builds a menu or dropdown from it without `AppChoice`.
 `MenuItem::shortcut("Ctrl+C")` shows a muted hint at the trailing edge; the app handles the keys. A menu panel with any hint is `Dim::MenuWide` (300 px) instead of `Dim::Menu` (220 px).
 
-Popups share one motion, all with an ease-out curve and all scaled by
+Popups share one motion, all with an ease-out curve (a sheet and a subpage move
+on the slide curve instead: see below) and all scaled by
 `tokens.motion(ms)`, so they are instant under `BINGUX_REDUCED_MOTION=1`.
 Each layer stays on screen until its exit finishes.
 
-- Popup: fades in and scales from 94% to 100% in 150 ms. The scrim fades with it. Closing reverses it.
+- Popup: fades in and scales from 94% to 100% in 150 ms. The scrim fades with it. Closing reverses it. (On a narrow window a popup is a sheet: see Sheet below.)
 - Dialog: fades in and scales from 96% to 100% in 120 ms. The scrim fades with it.
 - Menu: fades in and scales from 96% to 100% in 90 ms, pivoting on its top-left corner (the anchor).
 - Toast: slides up 8 px and fades in over 140 ms. Dismissing it slides it back down and fades it out; a swipe moves it with the finger. An inline banner opens and closes by height (`reveal`).
 - Dropdown: on a phone a sheet (see Panel); on a desktop it fades and scales in over 90 ms, the same easing as the menu, anchored to its button.
-- Subpage: a push slides the new page in from the right over 320 ms on an expo ease-out, and the page beneath stays still; a pop slides it back out to the right. The moving page is a card while it moves: its leading corners take `Radius::Window`, and a soft shadow (`sheet_edge_shadow`: 24 px offset, 32 px blur, black at 0.5 alpha at full amount) falls on the page beneath. Both scale to nothing over its last 15 %. The window's own buttons stay at the window's top right while it moves. A sidebar switch cross-fades over 120 ms. A move that starts mid-slide continues from where the slide is.
-- Sheet (a popup on a narrow window, or a dropdown on a phone): slides up from the bottom on the same ease-out as every panel, and is as tall as its content up to a share of the window (70 % for a choice, 92 % for a popup). The grabber, the title strip and a finger dragging the list down from its top pull it. The sheet moves as one piece: `shell/panel.rs` puts the motion (`offset_y`) on a slot *around* the card, because `offset_y` shifts an element's children and not the element, so an offset on the card itself leaves its background behind. Above rest the pull is rubber-banded and stays inside the card's overhang below the window edge. A release dismisses when the pull, projected 120 ms ahead along the release velocity, passes `SHEET_DISMISS_DISTANCE` (96 px, or half a short sheet), so a fast flick dismisses and an upward flick rests; otherwise it springs back with the opening ease. The scrim follows the drag. The gesture is a pure state machine in `shell/sheet_gesture.rs` (drag, fling, snap, list hand-over) tested with a fake clock. A list in a sheet scrolls by wheel and by finger; a finger drag at the list's top hands over to the sheet and back when the finger returns. The list ends with `sheet_bottom()` (`SHEET_BOTTOM` + `Dim::SafeBottom`) as scroll content, so its last row scrolls clear of the window edge. Escape and a press on the scrim close it. `controls/dropdown_rows_tests.rs` reads the frame the renderer drew and fails if any option row of an open dropdown (short and 200-row lists, popover and sheet, both schemes, with icons, with a typed query, in every frame of the opening) shows no label: its text, opacity and ink contrast against the row's own fill, and the pixels inside the label's box, are checked for every row, scrolling the list end to end.
+- Subpage: a push slides the new page in from the right over `SLIDE_MS` (320 ms) and the page beneath stays still. It moves on `slide`, the symmetric ease-in-out above: it is moving within three frames and has 90 % of the way done after 240 ms. A pop is the same slide leaving: the page goes over the same 320 ms on the same curve, which is the push played backwards and the push mirrored in space at once, so a close is neither faster nor slower than an open and neither begins by standing still. A swipe released past its threshold is the exception. It carries on from where the finger left it (`release_curve` from the finger's speed), because the finger already supplied the start of the motion. The moving page is a card while it moves: its leading corners take `Radius::Window`, and a soft shadow (`sheet_edge_shadow`: 24 px offset, 32 px blur, black at 0.5 alpha at full amount) falls on the page beneath. Both scale to nothing over the last 15 % of its way, whichever way it goes: the look follows where the page is, not the time. The window's own buttons stay at the window's top right while it moves. A sidebar switch cross-fades over 120 ms. A move that starts mid-slide continues from where the slide is (a page that is turned round at once starts from rest, as every ease-in-out does). `shell/page_motion_tests.rs` steps the animation clock in fixed 16 ms steps and compares the open and the close frame by frame, at desktop and phone width.
+- Sheet (a popup on a narrow window, or a dropdown on a phone): is as tall as its content up to a share of the window (70 % for a choice, 92 % for a popup). It is laid out once at its final size and only translated (`offset_y`), so nothing in it reflows while it moves, and a popup's sheet does not start until its body is measured, so no frame draws it anywhere but off the window or in place. It moves on the same tokens as a subpage (`nav/gesture.rs`), by the one clock in `shell/sheet_motion.rs` (`use_sheet_clock`, 0 to 1 over `SLIDE_MS`, 320 ms), and its openness is `slide(clock)`:
+  - **Open** is `slide`, the symmetric ease-in-out of a subpage: 3 % of the travel in the first 48 ms, half at 160 ms, 90 % at 240 ms. The scrim is its own box under the sheet and follows the sheet's position (`scrim_amount`), so it fades with exactly the sheet's timing and the sheet itself never fades.
+  - **Close** (Cancel, the accept button, Escape, a press on the scrim, Back) runs the same clock backwards over the same 320 ms. `slide` is point-symmetric, so that is the sheet retracing its opening at the same speed and also the opening mirrored: it has gone 3 % of the way in the first 48 ms and half at 160 ms, exactly as the open had. To soften or sharpen every open and close at once, change `SLIDE_SHARPNESS` (or `SLIDE_MS`): the sheet follows.
+  - **Interrupted** at any point, the clock turns round where it is and has only the time that is left to run: a sheet closed half way up goes back down the path it came up, and a close that is reopened goes up again. The position never jumps.
+  - **A release past the dismiss distance** carries on from the pull at the speed the finger had (`release_offset`: a cubic Hermite curve from the pull and the release velocity to a dead stop off the window, over `SLIDE_MS`; a finger at rest starts it from rest, a flick starts it at the flick's speed, up to 3 times the average). The inset behind it and the scrim follow it.
+  - **A release short of it** springs back from where it is, over `SPRING_MS` (240 ms), on the page spring (`spring`, `SPRING_ZETA`, `SPRING_OMEGA`) plus the same spring's response to the release velocity (`spring_back`); it never rises more than `lift_limit` above rest. A finger that catches a sheet that is still springing takes it from where it is.
+  - Reduced motion jumps the clock and the spring: the sheet is in place or gone on the next frame, with its scrim.
 
-A popup with `PopupFlags::INSET_VIEWPORT` shrinks the window behind it into a rounded card on black: the window scales to `INSET_SCALE` (0.96) and its corners take the `Card` radius, both in step with the popup's open and close. On a sheet the inset also follows the pull: full at rest, it eases down in proportion to the drag and reaches zero at the dismiss distance, then springs back with the sheet on release. Desktop popups do not inset.
+  The grabber, the title strip and a finger dragging the list down from its top pull it. `shell/panel.rs` puts the motion on a slot *around* the card, because `offset_y` shifts an element's children and not the element, so an offset on the card itself leaves its background behind. Above rest the pull is rubber-banded and stays inside the card's overhang below the window edge. A release dismisses when the pull, projected 120 ms ahead along the release velocity, passes `SHEET_DISMISS_DISTANCE` (96 px, or half a short sheet), so a fast flick dismisses and an upward flick rests. The gesture is a pure state machine in `shell/sheet_gesture.rs` (drag, fling, snap, list hand-over) tested with a fake clock. The curves are pure functions in `shell/sheet_motion.rs`, tested for monotonicity, easing, exact ends and continuity; `shell/sheet_motion_frame_tests.rs` renders a popup sheet on a 390 x 800 window in fixed 16 ms animation steps and checks the frames (open, each way to close, both releases, a turn half way up; `BINGUX_SHEET_TABLES=1` prints them). A list in a sheet scrolls by wheel and by finger; a finger drag at the list's top hands over to the sheet and back when the finger returns. The list ends with `sheet_bottom()` (`SHEET_BOTTOM` + `Dim::SafeBottom`) as scroll content, so its last row scrolls clear of the window edge. Escape and a press on the scrim close it. `controls/dropdown_rows_tests.rs` reads the frame the renderer drew and fails if any option row of an open dropdown (short and 200-row lists, popover and sheet, both schemes, with icons, with a typed query, in every frame of the opening) shows no label: its text, opacity and ink contrast against the row's own fill, and the pixels inside the label's box, are checked for every row, scrolling the list end to end.
+
+A popup with `PopupFlags::INSET_VIEWPORT` shrinks the window behind it into a rounded card on black: the window scales to `INSET_SCALE` (0.96) and its corners take the `Card` radius, both in step with the popup's open and close. On a sheet the inset runs on the sheet's own clock and curve (`openness`), so the card shrinks as the sheet rises and springs back as it leaves. It also follows the pull: full at rest, it eases down in proportion to the drag and reaches zero at the dismiss distance, then springs back with the sheet on release. Desktop popups do not inset.
+
+### Popup windows and window layering
+
+Menus, dropdown lists, popovers and submenus are **windows of their own on Wayland** (`xdg_popup`), so a context menu can leave its window as it does in GTK. `shell/panel.rs` is still the one entry point: `overlays.show_menu`, `menu_button`, `Dropdown`, the colour picker and the Files popovers call `Panel` as before and nothing in a caller changes. `Panel` chooses a route when it renders (`popup_windows::backend()`):
+
+| Surface | Route |
+|---|---|
+| Menu, context/tab/history/hamburger/path menu, submenu, dropdown list, popover | Popup window (Wayland, window not phone-sized) |
+| `PanelKind::Choice` on a phone-sized window | In-window bottom sheet |
+| Dialog, About, forms, chooser | In-window modal card (belongs to its window, as in libadwaita) |
+| Text edit bar | In-window, pinned to the caret |
+| Tooltips, hover cards | In-window: small, on every hover, no grab; a window per hover costs a surface and a graphics context. `tooltip_place` clamps them inside the window. |
+| X11, headless snapshot, a compositor that refuses a popup | In-window, unchanged (one refusal switches the session) |
+
+The popup window has its own Freya runner. `Panel` builds the card as before and hands it to the popup (`popup_windows::PopupContent`); the popup's root provides a `ContextSnapshot` of every context visible at the panel (tokens, direction, router, overlays) and renders it in an error boundary of its own. The opener keeps the clear shield (a press on it dismisses and is swallowed), the focus node and the menu's key handler: the renderer delivers a popup's keys to the window it grew from (sway sends them there; mutter sends them to the popup). The compositor's grab dismisses the popup on a press anywhere outside the app (`CloseRequested` then `on_dismiss`). A submenu is a nested `Panel` and opens a child popup anchored to its row (`ParentSlot`); closing a popup closes its children first (destroying a parent first ends the connection, so winit orders it too). `popup_windows::place` turns a `PanelTrigger` into the `xdg_positioner` request (anchor rectangle, anchor, gravity, flip/slide; the gap is part of the anchor rectangle) and has a reference implementation of the compositor's placement for tests. The card sits in a 36 px transparent margin that holds its shadow; the window geometry and input region are the card. `design/popup-windows.md` has the evidence, the sway proof and the vendored winit patch.
+
+`layers.rs` is the one table of paint layers (`TAB_*`, `SLIDE_*`, `BACK_*`, `HEADER`, `POPUP_OUTLINE`, and the overlay levels `LEVEL_MENU < LEVEL_POPUP < LEVEL_DIALOG < LEVEL_TOAST < LEVEL_MENU_OVER_DIALOG`) and `WindowStack`, the model of how windows stack: a window opens above the last window of its parent's family, a parentless window opens on top, menus are above every non-popup of their family, closing returns to the window below, focusing raises the family root with its children, a modal blocks its ancestors. Popup windows register in it; `BINGUX_DEBUG_LAYERS=1` prints the stack on every change (`layers::dump_stack()`).
+
+Which windows are children and which are independent toplevels:
+
+| Window | Kind | Link |
+|---|---|---|
+| App window, a second Files window, the window a tab is torn off into (`app::open_window`) | Independent toplevel | none: it stacks, raises and closes on its own |
+| The inspector (`WindowStack::open_tool`) | Child toplevel, kind `Tool` | `xdg_toplevel.set_parent` to the window it inspects (an inspector of an inspector hangs from that inspector): the compositor keeps it above its target and the stack raises and closes it with it. It never blocks the target. On a tiling compositor such as sway a window with a parent is floated; the harness rule `for_window [title="^Inspector"] floating disable` tiles it beside the app again |
+| Menu, submenu, dropdown list, popover on Wayland | Popup window (`xdg_popup`) | `Parent::Window` / `Parent::Popup`: above its parent, closed with it, newest first |
+| In-window sub-window (`use_window().open(popup(..))`: chooser, properties, form) | Modal child in `WindowStack` | `WindowManager` registers it under the popup it was opened from, or the window |
+| A dialog or tool window that has to be a real window (`app::open_child_window(parent, ..)`) | Child toplevel | `xdg_toplevel.set_parent`: the compositor keeps it above its parent; `WindowStack` records the link |
+| In-window dialogs (About, confirmations) | Part of their window | drawn at `LEVEL_DIALOG`; a menu opened from one is `LEVEL_MENU_OVER_DIALOG` |
+
+Floating cards painted with `Layer::Overlay` are named in `layers.rs` (`PANEL`, `TOOLTIP`, `HOVER_CARD`, `INLINE_EDITOR`, `STATUS_PILL`, `VIEW_CARD`, `VIEWER_CONTROLS`, `DRAG_CARRY`), so a call site says what it is.
 
 ### Popups size to their content
 
@@ -1030,13 +1264,16 @@ Every action in a text field (the password reveal, the clear button of a search 
 
 - **A new label does not move the bubble.** The bubble draws the text it was last measured with, at that size. The new text is laid out in a hidden copy first, and once its size is known the bubble swaps to the new text and the new place in one frame, so no frame draws text at the size of other text. The bubble stays on the same side of its control, centred on it, with the edge that touches the control in the same place: it grows away from the control.
 - **Where it sits** is one pure decision, `shell/tooltip_place.rs`: `decide(anchor, size, window, previous_side) -> Placement { x, y, side }`. It opens below the control, else above, right, then left, centred on the control along its edge, `PANEL_GAP` away and `PANEL_EDGE` inside the window. It is never over the control. The side is remembered while the tip is up and kept while it has room: it leaves a side only when staying would put it outside the window. Near an edge the side therefore cannot flip back and forth, and a bubble does not move while the pointer rests. Only when no side has room (a window smaller than control and bubble together) does it take the roomiest side and run past the window edge, still off the control.
-- **Long text wraps** inside `Dim::TooltipMax` (280 px) onto at most four lines, then is cut with an ellipsis. The size comes from the hidden copy, so the wrap never reflows after the bubble is drawn.
+- **The bubble is as wide as its text, never as wide as what it hangs from.** On one line up to `Dim::TooltipMax` (280 px) or the window less its `PANEL_EDGE` margins, whichever is less; longer text wraps inside that onto at most four lines, then is cut with an ellipsis. The size comes from the hidden copy, so the wrap never reflows after the bubble is drawn. A text element wraps at the room its ancestors give it, and an element placed absolutely is given the room of the nearest ancestor that has a size of its own: a 36 px icon button, or the clipped cell of the tab strip's New tab button. So the bubble (and the hidden copy) sits in a *slot*, a `room` wide box of its own (`controls/tooltip.rs`, `slot`), and nothing it hangs from can narrow it. The bug this closed drew "New tab", "Close Home" and "Search" as one-to-three letters a line. Never lay a bubble, or any overlay that holds text, out directly under a sized control: give the overlay a width of its own. The text cache (`freya-core`'s `TextCache`) already keys a paragraph by its width, so it was not at fault.
 - **One clock per window.** While a tip is up, and for 300 ms after the last one went, the next control's tip opens at once, in full, instead of waiting 500 ms. The tip it replaces stays as it was until the new bubble has its size and is drawn, and goes in that same frame: moving along a row of controls is one bubble that changes place, with no frame between them that draws nothing and none that draws two. After 300 ms with no tip, the 500 ms rest applies again. `WindowHost` provides the shared state (`provide_tooltips`); a tip with no host keeps its own.
 - **Never over a menu.** No tip opens while a menu or dialog is open, and one that is up goes when it opens (`Overlays::menu_open`).
 - **Scrolling takes tips down.** Content that scrolls moves under a resting pointer, so no tip is up while anything scrolls. Every `ScrollView` and `VirtualScrollView` tells its window, through one window-level signal (`ScrollActivity`, vendored in `freya-components`, provided by `WindowHost` and read by the tooltip hub), when its content moves: from a wheel notch, and from every frame in which the content has a new position (a glide, a scrollbar drag, the keys, a drag of the content). The window is scrolling from then until the content has stood still for 200 ms (`SCROLL_STILL`). A tip that is up goes in the frame the signal rises, with no fade. A tip that was waiting for the pointer to rest, or whose pointer arrives meanwhile, opens no bubble while it is set; when it clears, a tip whose pointer is still on its control waits the usual 500 ms rest (no 300 ms grace after a scroll) and opens. Tips subscribe to the signal only while they are up or waiting, so an idle tip does not render for it. A host that does not provide the signal (a test that mounts a view bare) never scrolls, as before.
 
 `controls/tooltip_tests.rs` steps the headless app frame by frame with the pointer on real icon buttons: a label that changes while hovered (the bubble is centred on its control, at the same distance, in every frame), neighbouring controls (never two bubbles, the second at once), the wait coming back, a long label wrapping and flipping once at the window edge, and a menu taking the tip down. The taxonomy's Tooltip specimens (Feedback) are the same cases to try by hand.
 `controls/tooltip_tests.rs` also scrolls with a tip up: it goes within two frames, none opens for a pointer that arrives while the content moves, and it returns once the content is still.
+`controls/tooltip_layout_tests.rs` is the size rule: a 44 px icon button in the open, in a 40 px clipped box, in a scrolled box, in the tab strip (its New tab button), in a window corner and in a window narrower than the text, with five labels (`New tab`, `Refresh (F5)`, `Move to Trash`, a 76-character one, non-ASCII) and a 60-character one. For each it checks that the bubble is as wide as the text on one line (or the room, wrapped on two to four lines with at least three characters a line), one line high for a short label, inside the window and off its control, and that its pixels are painted. Every case runs a second time after the same text was laid out at 20 px in the same window. Wide, tall controls in a free place cannot see this bug; these can.
+
+`scripts/tooltip-check.py` is the same rule on the real windows: with `BINGUX_UI_TOOLTIP_CHECK=FILE`, every capture the headless apps save first hovers each named icon button of its frame (`Snapshot::tooltip_findings`, `controls/tooltip_check.rs`) and records a bubble that wraps while narrower than the cap, a column of letters, a bubble outside the window or over its control. It runs every Settings page and popup at both sizes, every taxonomy page and the Files window (`bingux-files --snapshot`). Run it after changing a tooltip, an icon button or a header.
 
 ### Panel
 
@@ -1059,7 +1296,57 @@ A control that turns a pointer drag into a value (the slider, and the colour pic
 
 `crate::drag` (`PointerDrag`) carries an item such as a tab or a list row with the pointer; capture reads a position off it. The sheet grabber, the popup resize handles and the scrollbar thumbs keep their own gesture code: each has state beyond a position (velocity, edges, the scroll controller).
 
-`colour_picker(value, on_change)` edits a colour held as hue, saturation, value and alpha (`controls::hsva::Hsva`), never as RGB converted back, because RGB cannot say which hue a grey was on: the hue thumb stays where it was when the saturation reaches 0, and the saturation thumb when the value reaches 0. A `value` that is the colour the picker just reported changes nothing; any other (the caller set it, a swatch or the hex field made it) is taken in as an edit of the colour on screen, so a grey keeps its hue and a black its saturation, and it is not taken in while a drag is on (the caller's echo is late). The hue strip changes the hue only; the alpha strip changes the alpha only. `on_change` is called at most once a frame during a drag. The square, hue strip and alpha strip are Tab stops with the slider role and the focus ring; arrows move one percent (one degree on the hue strip), Shift or Page Up and Page Down ten, Home and End go to the ends of a strip. The swatches are focus stops (a press or Enter chooses, keeping the alpha). The hex field applies a valid entry as it is typed (six digits keep the alpha, eight say their own) and is rewritten only when the colour changes to one the text does not already say; Enter tidies it. The picker is drawn from pure white and black, not theme colours, so the corner a pointer picks is the corner it shows. Freya's `LinearGradient::angle` is not CSS's: 0 runs top to bottom, 90 right to left, 180 bottom to top and 270 left to right.
+Picking a colour has two forms over one state model: `controls::colour_picker` is described below, under [The colour picker and the colour button](#the-colour-picker-and-the-colour-button).
+
+### The colour picker and the colour button
+
+**Two forms, one picker.** `colour_picker(value, on_change)` is the full view, inline. `colour_button(value, on_change)` is a control-high square holding the colour in a ring, which opens the same picker in a popover anchored to it on a desktop and in a bottom sheet on a phone. Both are in `bingux_ui::controls::colour_picker`, and the button builds a `ColourPicker`, it does not copy one. The colours they take and give are Freya `Color`s.
+
+```rust
+// Inline, in a page: everything, with an opacity strip.
+colour_picker(colour(), move |next| colour.set(next)).alpha(true)
+
+// In a row: the swatch that opens it. Live: the page shows the colour as it is dragged.
+colour_button(colour(), move |next| colour.set(next)).title("Accent colour").live(true)
+```
+
+Builder, on `ColourPicker` (the button has the same `alpha`, `accents`, `presets` and `recent`):
+
+| Call                         | What it does                                                                                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `alpha(bool)`                | The opacity strip and box. Without them the picker only makes opaque colours, whatever opacity the `value` has.                                    |
+| `accents(bool)`              | The system accent colours in the palette, named. On by default.                                                                                  |
+| `presets(Vec<Color>)`        | The swatches after the accents, instead of `PRESETS` (white, a grey, black). `vec![]` for none.                                                   |
+| `recent(list, on_change)`    | The recent colours the app keeps, newest first, and what to tell it when one is added (at most `RECENT_MAX`, 6). The app saves them where it likes. |
+| `recents(bool)`              | The recent row at all. Its room is kept whether or not a colour has been chosen yet.                                                              |
+| `original(Color)`            | What the preview's old half shows and a press on it restores. Default: the `value` the picker was first given.                                    |
+| `fill()`                     | Fill the width it is given. A phone's picker does without being asked; a desktop's is `Dim::PickerWidth` (264 px).                              |
+| `ColourPicker::height()`     | The height it is drawn at, for a popover or sheet that must know before it draws.                                                                 |
+
+On `ColourButton` only: `live(bool)`, `title(text)` (the sheet's title and the button's spoken name), `dense()` (a tool's row: `Dim::DenseControl`, 24 px, not on a phone) and `enabled(bool)`.
+
+**The model.** `Hsva` (hue 0 to 360, saturation and value 0 to 1, alpha 0 to 255) is the truth and the RGB colour is only ever produced from it, because RGB cannot say which hue a grey was on: the hue stays where it was when the saturation reaches 0, and the saturation when the value reaches 0. Every constructor clamps; a NaN is 0. `Hsva::editing(colour)` takes an outside colour in as an edit of the one being edited, keeping what it cannot say, and is the identity for the colour the picker itself just made, so a caller that echoes the colour back moves nothing. `hsl`/`from_hsl`, `with_rgb`, `to_hex(with_alpha)` and `edited_by_hex(text)` are the conversions; `from_float_rgb` brings a colour from outside the sRGB gamut in and says whether it clipped it (`Gamut`). `parse_hex` reads `#rgb`, `#rgba`, `#rrggbb` and `#rrggbbaa` (the `#` optional, either case, white space ignored) or says why not (`HexError::{Empty, BadDigit, Length}`, each with a one-line `message()`); `style::colour_from_hex` reads the same forms. `Mode::{Rgb, Hsl, Hsv}` is the arithmetic of the numeric boxes: `fields(colour)` are the whole numbers shown, `edited(colour, box, number)` the colour after a number is typed, clamped to the box's range with the other boxes as they are shown. All of it is pure and tested over a grid of the RGB cube (the round trips through HSV, HSL and hex are exact for HSV and hex and within the rounding of whole percentages for the boxes). A `value` that is not what the picker is editing is taken in; while a drag is on it is not (the caller's echo is late).
+
+**What is drawn.** From the top: the saturation and value plane; the hue strip; the opacity strip when asked; the preview (old half, new half, over a checkerboard; a press on the old half restores it); the hex field with the line under it that says what is wrong; the mode switch (`segmented(..).fill()`, which stays a rail on a phone) and its three boxes, with the opacity box as a fourth when asked; the palette; the recent colours. The group order and every length are `colour_picker/geometry.rs`, from the tokens: `Dim::PickerPlane`, `PickerKnob`, `PickerHandle`, `PickerSwatch`, `PickerWidth`, `SliderThumbLarge` and `SliderTrackLarge`, plus `Dim::Control`. Nothing in the picker changes size when a colour is chosen, an entry is wrong or the first recent colour arrives: the hex message, the letters under the boxes and the recent row are all kept free, and a test measures the drawn picker against `height()` at both densities after each of those.
+
+- **The plane is one Skia draw**, not stacked boxes: a horizontal gradient from white to the pure hue multiplied by a vertical one from white to black, with dithering, painted into the plane's own rounded box (`painted`, `Fill::Callback`; the shaders are `shaders::linear_gradient` and `shaders::blend` with `BlendMode::Multiply`). That is exactly hue x saturation x value at every pixel, so a pointer's position and the pixel under it are the same colour (a test reads the frame back), there is no seam, and 8-bit banding is dithered. It is drawn when its hue changes and costs one rectangle. The plane has a 1 px inner edge (`Line::Hairline`) and the radius of a control; the handle's knob is a dark outline, a white ring and the chosen colour in the middle, which shows on white, on black and on every hue between.
+- **The strips are the library `slider`** with `.large()` (a 14 px track and a 22 px thumb, 16 and 28 px for a finger), `.gradient_colours(..)` (a Skia gradient with alpha), `.checkerboard()` under the opacity strip, `.thumb_fill(colour)` (the thumb shows the hue it is on) and `.label(..)`. They are the controls every slider is, so their capture, keys and focus ring are the slider's; Shift now makes a slider key press ten steps, everywhere.
+- **Targets.** The handle's target (`ColourHandle`) is `Dim::PickerHandle` across, 32 px on a desktop and 44 px on a phone, centred on a smaller knob (20 px and 24 px); a press inside it but outside the knob moves the handle there. (A target that overhangs the plane at an edge is not pressed beyond the plane's own box: the layout engine hits only what is inside the plane.) A swatch is `Dim::PickerSwatch` (32 and 44 px); the strips' rows, the boxes and the buttons are control-high. Pressing anywhere on the plane moves the handle there; the drag is a `controls::capture`, so it follows the pointer wherever it goes and is clamped to the plane.
+- **Keys.** The plane: arrows move 1 %, Shift 10 %; Home and End go to no saturation and full saturation; Page Up and Page Down move the value 10 %. A strip: the slider's, in degrees on the hue (Shift ten, Home, End). Up and Down in a box step it, Shift ten. Tab runs plane, hue, opacity, the old colour (when it can restore), the hex field, the mode switch, the boxes, the swatches; Shift+Tab reverses it.
+- **Assistive technology.** The plane and the strips are sliders named "Saturation and brightness", "Hue" and "Opacity", the plane with a value ("Saturation 62%, brightness 40%"); each swatch is a button named "Colour Blue, #3584e4" that says whether it is selected (and shows a check mark and a ring, so selection is not colour alone); the preview says both colours; the hex message is a status; the button is "Accent colour, #3584e4" and says whether it is expanded.
+- **Direction.** A colour axis is not text: right is more saturation and more hue in every language and the strip's red is at its left end, so its pointer maths is physical, not a reading direction (a test holds the plane and the strips centred in the picker). Run the picker under `BINGUX_DIRECTION=rtl` before changing it.
+- **Recent colours.** A colour is added when an edit of it is over: the pointer or a key comes up, Enter in a field, a swatch is pressed. With `recent(list, on_change)` the app owns the list; without it the picker keeps it in memory for the life of the process (`remembered()` in tests). The app has no settings store for them (`runtime::cached_persistent` is a cache of loaded pages, not preferences), so an app that wants them across runs saves the list it is told.
+- **No eyedropper.** The one way to read a screen pixel from an app is `org.freedesktop.portal.Screenshot.PickColor`, which answers through a `Response` signal on a request object owned by the caller's own D-Bus connection. The settings app reaches D-Bus through `busctl` and `gdbus` child processes, and neither can hold a connection across a call and a signal, and this crate has no D-Bus client. So there is no button that does nothing; add one when `bingux-ui` has a connection to hold (a `zbus` dependency).
+
+**The button's popover.** A press, Enter or Space on the button opens `Panel` (`PanelKind::Choice`: anchored on a desktop, a sheet on a phone, taller than a list's sheet with `Panel::tall`). On a desktop the content is the picker and a Cancel and Done row; on a phone the same picker under a Cancel, title and Done row (a sheet scrolls, and the buttons stay in reach). It closes on Escape, on a press outside, on Back and on its buttons, and it opens over whatever holds the button, a dialog included. One limit it shares with every popover and dropdown: Escape is heard by each open panel, so over a dialog it closes the dialog as well.
+
+- **Commit on close** (the default): the picker edits a draft; `on_change` hears nothing until Done, which reports it once. Cancel, Escape, a press outside and Back drop the draft; nothing was reported, so there is nothing to put back, and the next opening starts from the colour the button holds. The recent colours are added on Done.
+- **Live** (`live(true)`): `on_change` hears every colour as it is dragged (at most once a frame), so the page behind shows it. There is no Cancel, as nothing is held back; Done, Escape and a press outside close and keep what was shown.
+
+The inspector's colour property (`inspector/props.rs`) is a live dense `colour_button` beside its hex field. The Settings accent row is not a colour picker: GNOME's `accent-color` takes one of nine names and nothing else, so it stays the named swatch row (`pages/appearance.rs`), which already has this picker's swatch look (a ring, a check mark, a name on hover).
+
+The taxonomy pages Controls > Selection show both forms: the inline picker in each variation and at both densities, the button at rest, with opacity, disabled, dense, open (a popover; the phone sheet is in the Phone column of the same page when the window is a phone) and live. `controls::colour_picker::live_tests` measures every target at both densities, drags the handle with real pointer and touch events (it follows the pointer and clamps at every edge), checks the keys, the hex field, the boxes, the swatches and the recent row, and opens, closes, cancels and commits the button on a desktop, on a phone and inside a dialog.
+
 
 ## Files and the file chooser
 
@@ -1097,9 +1384,9 @@ What the dialog has:
 
 | Part | Behaviour |
 | ---- | --------- |
-| Toolbar | Back, Forward, Parent folder (a folder with an arrow out of it), Refresh, the address bar, the file type dropdown, New folder, a list or thumbnails switch and the view menu (sort, hidden files). Every button follows the `Control` radius like any other button, and the view menu opens against its own button, not at the pointer. Refresh (also F5 and Ctrl+R) reads the folder again even when no change was seen, as a network or removable drive sends none; the selection, scroll position and filter stay, and the button shows a spinner of the same size while it reads. |
-| Address bar (`AddressBar`) | The path as crumbs, and the search box (see [Search](#search-in-the-file-views)). The field takes the `Control` radius and a 4 px padding, so each crumb inside it takes the `Inner` radius (12 less 4). Each crumb has a chevron that lists that folder's subfolders. A trail that does not fit keeps its first and last crumb and hides the middle behind one `…` menu. Click the empty end, press Ctrl+L, or type `/` or `~` to edit the path as text. Typing shows completions (folders first); Tab completes, Up and Down choose, Enter opens, Escape closes. Errors show inline: not found, not a folder, no permission, not responding. `~`, relative paths and `file://` work. |
-| Sidebar (`PlacesSidebar`) | Recent, Home and the user folders (with their own icons by path), Bookmarks, then Drives: Computer and every mount, each with a usage bar and "X free of Y". A drive that does not answer says "Not responding". There are no buttons on the rows: every row has a context menu (right click, long press, the Menu key or Shift+F10) of text items. A bookmark offers Open, Open in new tab, Rename… and Remove from bookmarks; a drive Open, Unmount or Eject, Add to bookmarks, Copy path and Properties. The folders have their own icons: a folder with a page for Documents, a down arrow for Downloads, and so on. A phone gets `PlacesMenu`, a sheet with the same rows. |
+| Toolbar | Back, Forward, Parent folder (a folder with an arrow out of it), Refresh, the address bar, the file type dropdown, New folder, a list or thumbnails switch and the view menu (sort, hidden files). Every button follows the `Control` radius like any other button, and the view menu opens against its own button, not at the pointer. Refresh (also F5 and Ctrl+R) reads the folder again even when no change was seen, as a network or removable drive sends none; the selection, scroll position and filter stay. While a folder is being read (a first load, the check of a cached listing, a read F5 asked for, a subfolder search) the same button turns into Stop: `icon_button(Icon::Refresh, f).morph(Icon::MediaPlaybackStop, stopping)`, so its box, hover, pressed and focus state carry through, and its tooltip and name are `Refresh (F5)` and `Stop (Esc)`. Stop shows after 150 ms of reading and stays at least 300 ms (`Dwell::LOADING`); pressing it, or Escape while it shows, stops the read (`Reload::stop`) and keeps the listing. See "Reload and Stop" in `docs/files.md`. |
+| Address bar (`AddressBar`) | The path as crumbs (search is the bar under the toolbar, see [Search](#search-in-the-file-views)). The field takes the `Control` radius and a 4 px padding, so each crumb inside it takes the `Inner` radius (12 less 4). Each crumb has a chevron that lists that folder's subfolders. A trail that does not fit keeps its first and last crumb and hides the middle behind one `…` menu. Click the empty end, press Ctrl+L, or type `/` or `~` to edit the path as text. Typing shows completions (folders first); Tab completes, Up and Down choose, Enter opens, Escape closes. Errors show inline: not found, not a folder, no permission, not responding. `~`, relative paths and `file://` work. A **named place** shows its icon and name, never a path: Home, **Trash** (field `trash:///`, and `trash:///Old folder/` inside it, completed from the bin) and **Recent** (`recent:///`); typing any spelling of one (`trash://`, `~/.local/share/Trash/files`, `Trash`) opens it. See [File views](#file-views). |
+| Sidebar (`PlacesSidebar`) | Recent, Home and the user folders (with their own icons by path), Bookmarks, then Drives: Computer and every mount, each with a usage bar and "X free of Y". A drive that does not answer says "Not responding". There are no buttons on the rows: every row has a context menu (right click, long press, the Menu key or Shift+F10) of text items, built in `files/place_menu.rs` from `PlaceFacts` by a pure `place_plan` that the tests read, in the list menu's grouping: open (Open or, for a drive that is not mounted, Mount; Open in new tab where the window has tabs), what changes the place (Rename… for a bookmark, Eject and Unmount or Unmount for a drive, Empty Trash on the Trash, grey while it is empty), the path and bookmark (Copy path, Add to or Remove from bookmarks), then Properties. Properties opens the list's Properties dialog for the place's folder (`properties::show_folder_properties`; the Trash shows its item count and size, a drive its free space bar); Recent and a drive that is not mounted have none. The menu's shortcut hints are keys the focused row answers to through the same command handler: Enter, Alt+Enter, F2, Delete, Ctrl+Shift+C. The folders have their own icons: a folder with a page for Documents, a down arrow for Downloads, and so on. A phone gets `PlacesMenu`, a sheet with the same rows that closes before Properties opens. |
 | File type filter | A dropdown in the toolbar on a desktop; on a phone a "File type" row at the bottom. The sidebar runs the dialog's full height: there is no footer under it, and the name field of Save, the request's choices and any problem sit in a strip at the bottom of the content pane. With no filters in the request it offers All files, Images, Audio, Video, Documents, Archives and Text. `presets(true)` adds those after the request's own. The list shows only matching files (folders always stay) and the empty state says when the filter hides everything. The status pill floats over the bottom-right corner of the list on an opaque floating surface and takes no row. It says `95 items`, `1 of 95 selected (19 kB)` when something is selected, `3 of 120 match` while a search is on, and what a running operation is doing; it does not report hidden files or what the filter hides. It follows the pointer over the whole window: when the pointer comes within a small margin it slides to the other bottom corner, and it returns when the pointer leaves the list. |
 | New folder | The toolbar button, Ctrl+Shift+N and the empty-space menu make a folder and start renaming it in the list, with the name checked as you type. |
 | View | `FileView`: columns, zoom, rubber band selection and context menus. Each folder remembers its icon size and sort. |
@@ -1115,9 +1402,19 @@ What the dialog has:
 
 `files/hover_tests.rs` runs the view headless over three thousand files: the card down within two frames of the first notch and not drawn in any frame of a second of scrolling, back for the row then under the pointer once the content is still, the same after a scroll by keys (which sends no pointer event at all), a swap between rows with no frame without a card, and the view and list not rendering again for sixty scroll ticks. A zoom or a resize lays the rows out again with no pointer event, so it forgets the card too.
 
-**Context menus of the file view.** A menu is grouped by task and holds only what can apply: a row that can never apply in that place is left out, not greyed. The empty-space menu is, in order: New folder, New file (a submenu of Empty file and the files of the XDG Templates folder when that folder has any, otherwise one row); Paste (greyed until something is copied, left out in Recent) and, only when there is something to take back, a named Undo such as "Undo Rename" (there is no Redo); Select all and Invert selection (left out in an empty folder); one View submenu; then Refresh and Properties. View holds List and Grid, Icon size (the sizes of the view on show, from the zoom ladder), Sort by (Name, Size, Type and Modified; Ascending and Descending; Folders first) and Show hidden files. Choices are ticked rows in one leading column, so labels line up. The header menu's Sort by is the same submenu. Shortcuts show on the right.
+**Context menus of the file view.** A menu is grouped by task and holds only what can apply: a row that can never apply in that place is left out, not greyed. The empty-space menu is, in order: New folder, New file (a submenu of Empty file and the files of the XDG Templates folder when that folder has any, otherwise one row); Paste (greyed until something is copied, left out in Recent) and, only when there is something to take back, a named Undo such as "Undo rename" (there is no Redo); Select all and Invert selection (left out in an empty folder); one View submenu; then Refresh and Properties. View holds List and Grid, Icon size (the sizes of the view on show, from the zoom ladder), Sort by (Name, Size, Type and Modified; Ascending and Descending; Folders first) and Show hidden files. Choices are ticked rows in one leading column, so labels line up. The header menu's Sort by is the same submenu. Shortcuts show on the right.
 
-**Quick Look.** Space on the selected file opens a large card over a dimmed scrim, as macOS Quick Look and GNOME Sushi do; the context menu has Preview too. Space or Escape closes it; Left and Right (Up and Down too in a grid, and in a list they step one file) move the selection to the neighbouring file and update the card without closing it; Enter closes it and opens the file as a double click does; Alt+Enter or Ctrl+I closes it and shows Properties. Space only opens it when the file view itself has the keyboard: never while a rename field, the address bar or a filter has it, and not in the middle of a word typed to jump to a file. It works in the chooser dialog as well. What it shows depends on the type: a picture scaled to fit with its proportions kept; the first 64 KiB of a text, code, markup or JSON file in a monospace face, with a notice that says how much is shown when the file is longer; the largest thumbnail the desktop has made for a PDF, document, song or film, with the type's icon when there is none; a folder's item count and total size, counted while the card is open; an unknown type as text if it is text, else as its icon. The footer says the type, size, picture size or length and codec, and date. Everything loads off the UI thread. The stage is a fixed box and the type's icon is the placeholder at the size the content will have, so nothing moves when the content arrives, and stepping to another file drops the load of the last one (a folder count stops after its current entry).
+**Preview (Quick Look).** Space on the selected file shows it in a popup over a dimmed scrim, as macOS Quick Look and GNOME Sushi do, whether or not a pane is docked; the context menu has Preview too, and the chooser dialog has it as well. Alt+P or F3 docks the same preview as a pane at the right edge of the list, where it follows the selection and the list keeps the keyboard; the header button, or the same keys, undock it again, and the pane's edge drags it wider (the width is remembered). A window narrower than `MIN_WINDOW` (600 px) has one frame, a sheet over the window; F goes full screen. One component, `PreviewHost::new(source, mode, nav)`, is every frame (`preview::open(overlays, source)` shows the popup; `PreviewDock::new(open, row_area, source, nav)` is the pane, always mounted so it can slide), and it picks the viewer from the file's type. Space only opens it when the file view itself has the keyboard: never while a rename field, the address bar or a filter has it, and not in the middle of a word typed to jump to a file. Everything loads off the UI thread; the stage is a fixed box with the type's icon as placeholder, so nothing moves when the content arrives, and stepping to another file drops the load of the last one.
+
+**The arrows choose the file.** In every frame and in every viewer, Left, Right, Up and Down (and Alt with an arrow) move the file view's selection and the preview follows: `keys::route(key, modifiers, grid)` has no viewer parameter, so no viewer can take an arrow, and Up and Down step a line in a grid. They never scroll, seek or pan; those are the wheel and the touchpad, Page Up, Page Down, Home and End, J and L, and Shift with an arrow. A popup has the keyboard from the moment it opens; Space and Escape close it and `on_closed` returns the keyboard to the list. A docked pane leaves the keyboard with the list; a press in the pane gives it the pane's own keys (`PreviewNav::pane_keys(state)`, the state lives in the file view's `Ctx`), a press anywhere else or Escape takes them back (`on_release` focuses the list), and while it holds them the pane steps the list's selection itself (`on_step`), so the arrows work after a click in the pane exactly as before it. In a pane that holds the keys Space and Shift+Space page a document and play and pause a film.
+
+**What each type shows**, under one slim title line (icon, name, "5 of 14", then Open, Info, dock or pop out, Close; no footer, the facts are behind Info, I): a **picture** scaled to fit with its proportions kept (zoom buttons appear while the pointer is on it; `+`, `-`, `0`, `1` zoom, R rotates); the first 64 KiB (4 MiB once scrolled) of a **text, code, markup or JSON file** in plain monospace, with a notice only when the preview stops early (W wraps lines); a **folder**'s item count and total size, counted while it is on show; an **archive**'s listing; a **font**'s specimen; a **film or song**, played; a **PDF**, rendered a page at a time; anything else as its icon, its facts and Open. Enter closes the popup and opens the file as a double click does; Alt+Enter or Ctrl+I closes it and shows Properties. In the pane Escape gives the keyboard back to the list.
+
+**The player.** A film or song is decoded by the helper `bingux-preview-host` (GStreamer) and drawn letterboxed on black with the control bar floating over it: play and pause, a seek bar with the buffered range ahead of the thumb, the position and the length, volume with mute, the speed menu, and subtitles when the file has a track or a `.srt` or `.vtt` named like it; full screen is the F key. A song is the file's card with the same bar. The bar fades in on pointer movement or a key and out 2.5 s later while playing; while paused, hovered or failed it stays. **Starting** is decided by who asked: the popup was asked for this file, so it plays at once, with sound; the pane follows the selection, so it never makes a sound by itself: it shows the first frame with a centred play button and plays on a click, and what the person set the volume to is kept for the next file. Keys (while the player has the keyboard): K plays and pauses (Space does in a pane that has been clicked; in a popup it closes); Shift with Left or Right seeks 5 s; J and L seek 10 s; 0 to 9 jump to that tenth; Home to the start; Shift with Up or Down the volume; M mutes; `[` and `]` change the speed; C cycles the subtitles. In a pane the bar is compact (play, position, seek, mute) and a bar given no width measures itself and picks its form. The player is `Playback` in `preview/viewers/media.rs`; its bar, `MediaControls::new(ControlState, on_action).docked(bool).width(w)`, is public and shown in the taxonomy.
+
+**The PDF viewer.** The same helper opens a PDF with poppler and answers four questions: where each page is and how big, a page rendered at a scale into shared memory, the words of a page with their boxes, and a search. The viewer opens **fitted to the page** (the whole first page, centred; a stack shorter than the viewport sits in the middle of it), keeps the pages in one scrolling column, draws only those near the viewport at the scale on screen (times the display scale), shows the nearest scale it has until the right one arrives so a zoom never flashes white, and cancels the renders that scrolled away. The toolbar (`DocumentControls`) is the page field and "of N", zoom out, the zoom menu (fit width, fit page, percentages, in a slot as wide as "Fit width" so nothing moves when the label changes), zoom in, and find, the same in a popup, a pane and a phone sheet; a menu opened from the toolbar is drawn above the popup (the window's menu layer is raised above an open dialog). Keys: Page Up, Page Down, Home and End scroll; `+`, `-`, `0`, `1` and `9` zoom (in, out, fit width, 100 %, fit page); Ctrl and the wheel zoom, Shift and the wheel scrolls sideways; Ctrl+F finds (Enter and Shift+Enter, or F3, step through the hits, Escape closes the bar); F9 the thumbnails; dragging over the text selects words and Ctrl+C copies them.
+
+**The helper.** `bingux-preview-host` is a separate binary so GStreamer and poppler stay out of the application. `HostLink` (`preview/host_link.rs`) starts it on a socket pair with the file as a descriptor, ties its life to the application (`PR_SET_PDEATHSIG`), gives it only the environment it needs, bounds its queue, gives it 15 s to open a file and 600 ms to leave, and takes only the newest frame, so a slow window skips pictures and never queues them. Nothing here waits on it. A helper that is missing, crashes, times out or cannot decode the file is the file's card with the reason, Open, and Try again where a retry can help; the window is untouched. A process runs at most `MAX_LIVE` (2: a pane and a popup) helpers and starting a third ends the oldest ("stopped to make room"); an app that shows many previews at once, as the taxonomy page does, raises it with `preview::allow_helpers(n)`, and a preview in the middle of a page sets `PreviewNav::takes_focus(false)` so that its popup does not take the keyboard and scroll the page to itself. The program is found the way the packages lay it out: `BINGUX_PREVIEW_HOST` (a file that must exist), else beside the application (`/usr/bin`, or the `bin` of an install prefix), else on `PATH`; a debug build run from a cargo target directory also finds the one beside `deps/`. `preview::host_available()` says whether it is there; without it films, songs and PDFs show their card and a note.
 
 **Properties.** Alt+Enter, Ctrl+I or the menu's Properties row opens a tabbed dialog for the selection, or for the folder on show when nothing is selected. The tabs are `segmented(...).tabs()`, the same bar the inspector uses, under the standard `HeaderBar`: Left, Right, Home and End move between them, Ctrl+1 to Ctrl+4 pick one, Ctrl+Tab and Ctrl+Shift+Tab step through them and wrap, Escape closes. On a phone the bar scrolls sideways when four titles do not fit. The last tab you used is the one the next dialog opens on (kept for the session; a selection that has no such tab opens on Basic).
 
@@ -1171,70 +1468,59 @@ touches the disk, so it costs nothing on a network mount.
 
 ### Search in the file views
 
-The address bar is the search box. One text field takes a path or a search, and
-it decides from what is typed, without touching the disk:
+Search has its own bar under the toolbar, not the address bar. The address bar
+holds a place (trail or typed path) and nothing else. User-facing behaviour is
+in `docs/files.md` ("Search"); the design, numbers and gaps are in
+`design/files-search.md`. This is how an app builds it.
 
-| Typed | Is |
-| ----- | -- |
-| starts with `/`, `~`, `./`, `../`, or a scheme such as `smb://` | a path |
-| the name of an entry in the folder (`Documents`, `Documents/Sub`) | a path |
-| anything else (`report`, `2024 invoice`) | a search |
+```text
+toolbar
+[ SearchField ........... ]  [ Search in: dropdown ]  [ Filters (n) ]     SearchBar row 1
+[ token x ] [ token x ]  Clear all                      status  [Stop]     SearchBar row 2
+list or grid, with a Location column for results
+```
 
-The bar has three states that share one frame and one height, so nothing moves
-when it changes: the **trail** of crumbs, the **path** field with folder
-completions (Ctrl+L), and the **search** field, which has the search glyph and
-a chip `in <Folder>` inside it. The chip's close button, or Escape, ends the
-search. Going to another folder ends it too.
+**State.** `Find` (`files/search.rs`) is the search a tab is making apart from
+its words: `open`, `scope` ([`Scope`](bingux_files::find::Scope): This folder,
+Subfolders, Home, Everywhere, a place), `filters`
+([`Filters`](bingux_files::find::Filters)), `filters_open` and a focus counter.
+The words are the text of the field, kept by the owner (`words`, a
+`State<String>`). `Find::query(words)` is the typed
+[`Query`](bingux_files::find::Query) of the two together. A `key:value` typed
+in the field is lifted into `Find::filters` when a space ends it
+(`Find::lift`), and the field is given back the words that are left, so the
+text and the Filters panel never disagree; a key still being typed
+(`type:imag`) is not part of the query (`find::split_pending`).
 
-**Filter this folder.** Ctrl+F, or typing a letter on the list, focuses the bar
-in search mode (the list's jump-to-a-name is replaced by this). The loaded
-listing is filtered as each letter is typed; nothing is read from the disk.
-Matching ignores case and looks at names only, in this order: the exact name,
-a name that starts with the text, a word that starts with it, the text
-anywhere, every word of it in any order, and last the letters in order (`rpt`
-finds `my_report.txt`, for three letters or more). The list keeps your sort
-inside each of those groups. Matched letters are drawn on an accent tint, and
-the status pill reads "3 of 120 match". Up and Down move the selected
-match without leaving the field, Enter opens it (a folder is entered, a file is
-opened or chosen; with no match it searches the subfolders), and Escape clears
-the text, shows the whole folder and gives back the selection you had before.
-Clicking a result keeps the filter until Escape.
+**Pieces.**
 
-**Search the subfolders.** While there is text, the last row under the field is
-always *Search subfolders for "text"*; Ctrl+Enter or Shift+Enter does the same.
-Results stream into the list as a background walker finds them, shallow folders
-first, with a live count in the row and the status pill; the row says **Stop** and
-pressing it ends the walk (what was found stays). Changing the text, going to another folder or
-closing the dialog cancels the walk. Each result shows its name and, in a list,
-a **Location** column with its folder below the folder searched (a grid shows it
-on the detail card, and a phone's list on the second line). The walker:
+| Piece | What it is |
+| ----- | ---------- |
+| `SearchBar` (`files/search_bar.rs`) | The bar. Row 1 is the library `search_field` (with its new `on_arrow`), a `dropdown` for the scope (the user folders and bookmarks of the sidebar after the four core scopes) and the Filters button. Row 2 is the tokens (`FilterToken`: caption text on `AccentSoft`, a `Dim::InlineButton` remove button) and the status line (`status_text`, a polite `Status` region, Stop while it runs). On a phone the field has a row to itself and the scope and Filters share the next. |
+| `FiltersButton` (`files/search_filters.rs`) | The button (`Filters (2)`) and the panel it opens: a `Panel` of `PanelKind::Choice`, so a popover on a desktop and a sheet on a phone. Rows of label and `dropdown`, a range shows two `text_field`s, three `switch` rows, Reset and Done. Every row is `Dim::Control` tall, so the panel's height is a sum of tokens (`form_height`). |
+| `use_search_run(RunKey, mount) -> Deep` | Runs `bingux_files::find::run` on a thread of its own while a search of folders is on show, publishes every 60 ms, cancels when the key changes, on Stop, or when the component goes. `Deep::latest`, `running`, `stop`. |
+| `select_shown` (`files/chooser.rs`) | The rows: the folder narrowed in memory, or the results (arrival order while running, the chosen order once). |
+| `no_results_state` (`files/states.rs`) | "Nothing found" with a button per way out. |
 
-- reads one folder at a time on one thread, breadth first, and stops at
-  10,000 results and says so;
-- skips hidden folders and hidden files unless *Show hidden files* is on;
-- never follows a symbolic link, never enters another filesystem (a mounted
-  drive or network share, `/proc`) and never enters a folder twice;
-- looks in everything you could browse to, including `node_modules`, `target`
-  and `.git` (when hidden files show), because the view menu's **Search build and
-  dependency folders** switch is on by default. Turn it off to skip
-  `node_modules`, `.git`, `.hg`, `.svn`, `target`, `__pycache__`, `.venv`, `.tox`,
-  `.gradle` and `.cache`. The switch lasts for the dialog.
+**Rules.** The first row never changes size while results stream; the second
+row's height is fixed unless tokens wrap, which only a person's own filter
+choice causes. Results are appended while a search runs: nothing already on
+show moves, whatever the sort; the list is ordered once when the search ends.
+The previous results stay until the new search has its first. Column headers
+sort results (a second press goes back to relevance); the header marks nothing
+while the order is relevance. A navigation, Escape in the list, or Escape in an
+empty field ends the search; the scope is kept.
 
-The Bingux search service (`bingux-searchd`) is not used: it is a launcher
-search over a fixed set of roots, with results capped at the launcher's size,
-over a private socket; it cannot be limited to a folder or say which folders it
-covers. File **contents** are not searched, only names.
+**Keys.** Ctrl+F opens or focuses; Ctrl+Shift+F toggles the panel; Enter opens
+the selected result or the first; Down moves to the list; Up steps up in the
+field; Escape clears, then closes. With the field empty and focused the recent
+searches drop down (`Recents`, eight, in `$XDG_STATE_HOME/bingux/files/recent-searches`).
 
-The file type filter of a chooser is a separate thing. It stays on during a
-search, so searching a "Pictures" chooser finds only pictures (folders still
-appear). In the folder it narrows the list silently (the empty state says when it hides everything); in
-the subfolders the walker applies the filter before it counts, so rejected files
-neither show nor use up the 10,000 results. In the model
-(`bingux_files::search`) a search is a `Query`; a filter is a `Filter`; the two
-never share a type. Apps build the same behaviour with
-`AddressBar::search(SearchLink::new(find, selection, folder)...)`,
-`FileView::search(..)` / `.on_search(..)` and `use_subfolder_search(..)`; the
-chooser is the reference.
+**The backend** (`bingux_files::find`, UI-free) is described in
+`design/files-search.md`: `Query` (parse and print, tested by round trip), `Matcher`
+(tiers, filters, `Rank`), `NameIndex` (the names under home in `bingux-search`),
+`walk` and `run`. A chooser's file type filter (`Filter`) is a different thing,
+it still applies to results, and neither type holds the other.
 
 ### File icons
 
@@ -1259,11 +1545,13 @@ file_icon_view(&tokens, &spec, IconSize::Row, selected)  // a token size ...
 file_icon_view(&tokens, &spec, 64u16, selected)          // ... or pixels (the view's zoom)
 ```
 
-A `FileIcon` is data: the `glyph`, the `kind` (`FileKind`), an optional
-`emblem`, a `tint` and `thumbnail`, where a picture of the file may come from
-(the view replaces the glyph with it when it can; a folder never has one).
-`FileKind::of_mime` is the one classification of a MIME type, shared with the
-file-type rows in Settings.
+A `FileIcon` is data: the `glyph` (its symbolic stand-in), the `kind`
+(`FileKind`), the `colour` icon it is drawn as (`ColourIcon`; `None` for a drive
+or Recent), an optional `emblem`, a `tint` and `thumbnail`, where a picture of
+the file may come from (the view replaces the glyph with it when it can; a
+folder never has one). `FileKind::of_mime` is the one classification of a MIME
+type, shared with the file-type rows in Settings. `FileKind` has 23 kinds, the
+families below; `FileKind::colour()` is the colour icon of each, one to one.
 
 **Which glyph.**
 
@@ -1279,38 +1567,145 @@ file-type rows in Settings.
   does not. Any other folder, a bookmark such as Projects included, has the
   plain folder, in the sidebar and in a list alike. Only a directory is asked:
   a file called `Downloads` is a file.
-- A **file** is its MIME type's kind: image, audio, video, text, code, PDF,
-  archive, spreadsheet, presentation, document, font, program or unknown. A
-  type's own name decides first (`application/pdf`); the extension table's
-  coarse category decides when the name says nothing; an extension-less file
-  that is executable and of no known type is a program.
+- A **file** is its MIME type's kind: image, audio, video, text, code, data
+  (JSON, YAML, TOML, desktop entries), markup (HTML, Markdown, XML, TeX), PDF,
+  archive, disk image (ISO, IMG, DMG, QCOW2), spreadsheet, presentation,
+  document (word processor), other document (PostScript, calendar, DjVu),
+  e-book (EPUB, MOBI, comic books), font, program (and shared libraries,
+  AppImages, `.exe`), 3D model, database (SQLite, KeePass), certificate or key
+  (PEM, PKCS, OpenPGP, SSH), torrent, or unknown. The families are tried from the
+  most specific, so an EPUB (a ZIP) is an e-book. A type's own name decides
+  first (`application/pdf`); the extension table's coarse category decides when
+  the name says nothing; an extension-less file that is executable and of no
+  known type is a program. `bingux_files::mime::known_extensions()` lists every
+  extension the table classifies; a test walks them all and fails when one has
+  no colour icon.
 - A **drive** has the glyph of its kind (disk, removable, network, optical).
-- A **symbolic link** keeps the glyph of what it is and gains the link emblem,
-  a disc with an arrow, at half the glyph's size and never below 8 px, over the
-  lower right corner. Only a listed entry carries it: places and crumbs never
-  read the disk.
+- A **symbolic link** keeps the glyph of what it is and gains the link emblem
+  only on a glyph of 64 px or more (`EMBLEM_MIN_PX`): a small disc with an arrow
+  cut out, a quarter of the glyph, ringed by the page colour, over the lower
+  right corner. Smaller glyphs (list rows, sidebar, crumbs, menus) are left
+  whole; the link is told by the hover card, Properties and the status pill.
+  Only a listed entry carries it: places and crumbs never read the disk.
 - A **hidden** file or folder is drawn faint.
 
-**Which colour.** One rule on every surface: the glyph is the **accent only
-when its row or tile is selected**, muted otherwise, fainter when hidden or
-when a drive does not answer. A folder is told from a file by its shape, not
-its colour. On a floating surface (the drag chip) `file_icon_view_floating`
-uses the ink that reads there.
+**Which colour.** Files and folders are **colour icons** (`files/colour.rs`), a
+second set beside the symbolic one, drawn in the language of the Bingux Files
+app icon (`packages/bingux-files-app/bingux-files.svg`) and following the theme.
+
+*The design language.* Every shape is rounded by one radius ratio (about one
+eighth of the width: 2 px at 16, 2.5 at 20, 3 at 24, 4 at 32, 14 at the 128
+grid), the folded corner and the folder's tab included; the light falls from
+above (a pale sheen on the top edge fading half way down, a soft shade at the
+foot), so an icon reads as a lit surface and not a flat tile; a **back layer**
+is darker than the **front layer** (the folder's tab and back behind its panel;
+a bin's lid over its can); a thin white highlight runs along the top edge of a
+front panel, and a 1 px lip under it; a sheet of paper stands in the folder
+(from 32 px) with a line of text on it; glyphs have round caps and joins on the
+vector and sit set into the face. A pixel grid keeps its straight edges on whole
+pixels and turns only its corners, so a 16 px icon stays crisp and is still
+clearly a folder or a page; from 40 px up the vector draws every curve.
+
+- A **folder** (the plain folder, the user folders, the home folder, the Trash)
+  is the user's **accent colour** (`Tokens::accent`), always: resting, selected
+  or hidden, in the list, the grid, the sidebar and the address bar, and it
+  changes with the system accent setting. The front panel shows the accent on
+  the dark scheme (whose accent is already pale) and a paler lift of it on the
+  light one: the body is lifted by a white layer (`FACE_LIGHT`, 28 %) with the
+  sheen on top (`LIT_TOP`, 32 %), pale like the app icon's, and the back and the
+  tab are the body under a black layer (`SHADE`, 22 %). Its glyph (Documents, Downloads,
+  Music, Pictures, Videos, Desktop, Home, Templates, Public) is a deep tone of
+  the accent set into that panel, moved until it reads 4.5:1 on it. The Trash
+  is a bin: closed and faint while empty, paper over its rim when it has items.
+- A **file** is a rounded page with a rounded folded corner in the colour of its
+  family, one hue per family (`ColourIcon::hue`), and a glyph; from 24 px up the
+  glyph of text, spreadsheets, presentations, PDFs, documents, archives and disk
+  images is a label of two to four letters (`TXT`, `XLS`, `PPT`, `PDF`, `DOC`,
+  `ZIP`, `ISO`): a pixel font at 24 and 32, rounded strokes on the vector.
+  The page is OKLCH lightness 0.76 on the dark scheme (a deep ink of its own hue)
+  and 0.52 on the light one (white ink; the yellows, hue 70 to 128, start 0.28
+  lighter and 1.3 times as saturated there and take a deep ink: darkened to
+  stand off white at 3:1 they went olive and brown), at the family's hue and
+  chroma, with the sheen at the top (`LIT_TOP`) and a shade at the foot
+  (`DEEP_BOTTOM`, 10 %). Its silhouette is held by a **rim** (`RIM`, 26 % black
+  over the page, 1 px wide inside the outline, 3 px on the vector; the compiler
+  draws it as an outline stroke clipped to the page): the rim, not the body,
+  must stand off every ground, so a light body can keep its hue and the body
+  itself only has to stand apart by `PAGE_BODY` (1.4:1).
+  The body is moved along lightness until every edge of the picture shows on
+  every ground a row is drawn on (the five layers, and each under hover, press
+  and selection; `edges`, `edge_limits`): a page's rim over its body and over its
+  foot (under the shade) at 3:1 and over its top (under the sheen) at 2:1; a
+  folder's panel at 2.2:1, its top at 1.5:1 and its back at 1.5:1, since the pale
+  panel holds a folder's silhouette. The ink reads 4.5:1 under the share of sheen
+  and shade a glyph sits in (`glyph_grounds`). `colour_tone(icon, &tokens)` gives
+  the two colours (`Tone { body, ink }`); a test checks every family and every
+  accent in both schemes, and that the yellow families are light and saturated
+  on the light scheme. `colour.py --sheet DIR --tones FILE` draws contact sheets
+  in these tones (`BINGUX_COLOUR_TONES=FILE cargo test -p bingux-ui --features
+  testing --lib the_tones_can_be_written` writes FILE).
+- The colour is the same selected or not; the selection fill is one of the
+  grounds the tone is checked against. A hidden file or folder is drawn at half
+  strength until it is selected.
+- **Drives, Recent and the drag chip** keep the symbolic glyph: muted, the
+  accent only when selected, fainter when a drive does not answer (and
+  `file_icon_view_floating` uses the ink that reads on the floating surface).
+- The SVGs hold roles, not colours: the body is the viewer's `fill`, the ink is
+  `currentColor`, and the depth is white and black laid over the body: the
+  gradients `lit` and `deep` (white fading out, black fading in), the flat
+  `shade` and `light`, and a near-white `paper` for a sheet. The viewer sets
+  two colours; the overlays are neutral, so the same file serves every accent
+  and both schemes. One viewer, one raster, cached by (icon, size, colours).
+
+**The colour set.** The sources are plain SVGs in `scripts/icons/colour/` (34:
+22 file families, 10 folders, the Trash empty and full): the pixel art on a 16
+grid, plus a `<g data-grid="128">` with the same glyph drawn smoothly on a 128
+grid for large sizes. `scripts/icons/colour.py` compiles each for five grids,
+16, 20, 24, 32 and 128, into `packages/bingux-ui/icons/colour/<name>-<grid>.svg`.
+The chrome (the page, the folder, its paper and lip) is drawn by the compiler
+from per-grid tables (`PAGE`, `FOLDER`, `RADIUS`); on the pixel grids
+rectangles are on whole pixels, strokes on the pixel centre (odd widths) or the
+pixel edge (even), nothing warped or thickened, and a label is in a 3 x 5 (24
+grid) or 5 x 7 (32 grid) pixel font; the 128 grid is copied as authored. An icon
+of 40 px or less is drawn from the pixel grid whose whole multiple is its size
+(`colour_grid(px)`): 16, 20, 24 and 32 px and their 2x are on the lattice, 40 is
+2 x the 20 grid; a larger one (48, 64, 96, 128, 192, 256) is the vector, drawn at
+any scale. The colour icons do not go through `build.py`'s fit and weight policy
+(they are not tinted glyphs): `scripts/icons/colour.py --check` (in `make
+icons-check`) is their check: sources valid, output current, `colour_icons!` in
+`colour.rs` matching the sources, every pixel shape on the lattice, every
+coordinate inside its box, only role colours; `scripts/icons/golden.py` holds
+their pixel grids to the approved drawing. `scripts/icons/colour.py --sheet DIR`
+writes contact sheets at 1x and 2x. To add one, write
+`scripts/icons/colour/<name>.svg` (`data-chrome="page"` for a file, `"folder"`
+for a folder, `"none"` for the bin; shapes use `ink`, `body`, `shade`, `light`,
+`lit`, `deep` and `paper` fills; a rect may have `rx`), add a line to
+`colour_icons!` and a `ColourIcon` variant, map it from a `FileKind` or a
+special folder, and run `scripts/icons/colour.py`.
+
+A list row has the same horizontal padding, icon column and gap at every
+density (`FILE_ROW_INSET`, `columns::row_padding`); a phone's row differs in its
+height (56 px), its two lines and its icon: a folder opens at
+`default_zoom_px()`, 16 px on a desktop and 32 px on a phone (the last list
+level of the ladder, the one that fills the 56 px row and stays a list), and the
+name starts the same distance after the icon as on a desktop.
 
 **Adding a glyph.** If a kind or special folder needs a glyph the set lacks, add
 it through `scripts/icons` (see the icon set above): a row in `labels.tsv` with
 where it is used, `build.py --check` passing, then the `Icon` variant. Never draw
 a surface's own glyph.
 
-The inspector shows each icon as `FileIcon` with its glyph and size; the
-taxonomy page "File icon" shows every kind at 16, 32, 64 and 128 px, resting and
-selected, the folders a path decides, places and drives, and the emblem.
+The inspector shows each icon as `FileIcon` with its glyph, colour icon and
+size; the taxonomy page "File icon" shows every kind in colour at 16, 20, 24,
+32, 64 and 128 px, resting and selected, the folders in the accent (resting,
+selected, hidden, the Trash empty and full), the folders a path decides, places
+and drives, the colour set by name, and the emblem (at 64 and 128 px).
 
 ### Layers
 
 | Layer | Where | Depends on |
 | ----- | ----- | ---------- |
-| Filesystem model: listing, MIME, places, bookmarks, recent files, filters, name search and the subfolder walker, sort, inotify watching, selection, request and answer types, what accepting does | `packages/bingux-files` (crate `bingux-files`, `libc` only, unit tests) | nothing |
+| Filesystem model: listing, MIME, places, bookmarks, recent files, filters, the file search (query language, matcher, names index, walker), sort, inotify watching, selection, request and answer types, what accepting does | `packages/bingux-files` (crate `bingux-files`, `libc`, `regex` and `bingux-search`, unit tests) | nothing |
 | Views: `PlacesSidebar`, `PlacesMenu`, `AddressBar`, `FileView`, `use_directory`, `use_places`, `empty_state`, `error_state` | `bingux_ui::files` | the model, bingux-ui controls |
 | The dialog: `choose` | `bingux_ui::files` (also in the prelude as `files`, `ChooserRequest`, `Chosen`) | the views |
 | The Files window: `browse` | `bingux_ui::files`, hosted by `packages/bingux-files-app` | the dialog's body |
@@ -1426,6 +1821,34 @@ to make `~/Downloads` a link to a folder outside the home. Set
 `BINGUX_FILES_STATE=FILE` to keep your own remembered views out of the
 captures. With `FILE_CHOOSER_LIVE=SCENARIO` the example opens a real window
 that reopens the chooser after every answer, for driving with real input.
+
+### Tab switching contract (`browse`)
+
+`browse(Browse::new(tab_memory))` is the chooser's body for a window with tabs.
+The host mounts it **once** and passes the `TabMemory` of the tab on show; it
+must not key the body by tab. The contract:
+
+- The body keeps the states of every tab it has shown (`TabBank`: history,
+  selection, sort, icon size, hidden files, preview pane, typed path, search)
+  and reads the ones of the current `TabMemory::id()`. Switching is a change of
+  which `State`s are read; nothing is written while the new tab renders, so the
+  toolbar, crumb bar, sidebar and status line neither remount nor re-measure.
+  The states of a tab are let go of when the host drops its last `TabMemory`
+  clone (a closed tab kept for Reopen keeps them).
+- The file view is keyed by tab and folder (`FileView::render_key`). It starts
+  from `scroll_memory::measured(tab)` (the viewport and pane row the tab's last
+  view had) and passes the viewport to `VirtualScrollView::initial_size`
+  (vendored patch), so the first frame has the rows, the scrollbar, the column
+  plan and the pane width of the settled frame. Selection and scroll come back
+  from `scroll_memory::recall`.
+- `use_directory` returns a `Directory`: `read(&place)` is the load of that
+  place, else the last whole listing the process had of it (a bounded in-memory
+  list, 16 folders / 60,000 entries), else `Load::Loading`. The body derives
+  the rows from what the render read (no `use_memo`, which lags a pass). A
+  folder not read yet is the file view with an empty listing and a placeholder
+  in the rows' height, never a different layout.
+- Tests: `files::tab_tests` (pass-by-pass) and `scripts/files-shift.py` (real
+  window, every frame).
 
 ## Search
 
@@ -1629,12 +2052,16 @@ answers `{"v":1,"type":"result","id":"q1","response":{...OpenSearch...}}`;
 `index_not_found_exception`. The whole protocol is in `design/search.md`
 section 8.
 
-### Searching a folder is not this
+### Searching files is not this, but uses it
 
-The file view's address-bar search (`bingux_files::search`) matches file names
-of one folder, keeps the user's sort and reads no index; it stays as it is.
-The engine is for records an app owns (settings, applications, contacts,
-notes, devices), up to about a million short documents.
+The file view's search (`bingux_files::find`, see [Search in the file
+views](#search-in-the-file-views)) does not register a `Searchable`: file
+names are not records an app owns, and the crawl and the swap of a fresh index
+for the old one are its own. It does use the engine: the names under the home
+folder are an `Index` of `bingux-search`, which answers a search there before
+the walker has read a folder. The engine is for records an app owns (settings,
+applications, contacts, notes, devices), up to about a million short
+documents.
 
 ## Charts
 
@@ -1673,6 +2100,43 @@ line_chart([Series::new("Charge", points)])
 
 `Series::new(name, points)` takes `(x, y)` pairs, and `Series::values` reads
 values by position. `Segment::new(name, value)` is one slice of a donut.
+
+**Donut.** Unlike the other charts a donut has no fixed height: it is its ring
+and its legend rows, so it depends on the width it is given. The ring is
+always a square (it never stretches to an ellipse) and
+its thickness is 11 % of its size, so the proportions hold at every size.
+Where there is room (the regular density, and at least 344 px of card
+content: 128 px of ring, a 16 px gap and 200 px of legend) the legend sits
+beside the ring, which is 128 px. Anywhere else (a phone, a narrow card, or
+text scaled to 200 %, which needs twice the room) the ring is as wide as the
+card's content up to 200 px, centred, and the legend is under it with
+full-width rows. The legend then has exactly the card's own padding, 16 px at
+the regular density and 18 px at the compact one, and a chart never makes a
+page wider: it is built to hold at 320 px. A legend row is 44 px tall at the
+compact density, a finger's target, and 36 px at the regular one. A long name
+wraps onto a second line, at either density, and is cut with an ellipsis after
+that. When the numbers of a row (value and share) would leave its name under
+about five letters of room, as at 200 % text in a narrow card, every row puts
+them on a second line under the name.
+
+The centre text is fitted to the hole, not to the ring: the value and its
+caption shrink together (to 55 % at the least) until each is narrower than the
+hole is at its height, and the caption is dropped before the value is made
+unreadable. The ring grows with the text scale (up to 2), so large text keeps
+its size when the card has the room. A segment is chosen by hover, or on touch
+by a tap on the ring or on its row (a second tap, or a tap in the hole,
+clears it): the others dim, the legend row stays lit, and the centre reads that
+segment's value and its share of the whole. A finger that swipes over the ring
+to scroll the page chooses nothing. A tap counts anywhere in the band between
+the middle of the hole and the outer edge, not only on the stroke, because the
+stroke is thinner than a finger. `ring(value)` is a gauge with the same
+centre-text fit but a fixed 120 px box.
+
+The taxonomy's Charts page shows the donut in 360 and 320 px columns, with
+long names, with seven segments and with no data, in both schemes and at both
+densities; `charts/donut_tests.rs` holds the layout tests (square ring, text
+inside the hole, legend inside the card, nothing wider than the card, tap and
+hover) at 390, 360 and 320 px.
 
 `timeline_chart(bars)` takes `Bar::new(at, width, value)` in ascending order of
 `at`. `x_range` and `y_max` fix the axes, `x_unit` and `y_unit` format them,
@@ -1751,11 +2215,42 @@ steps of at least 1.25x, and a weight or colour change at each step. Use
 normal in Adwaita Sans; medium is only checked by eye, so re-check it if
 `LINK` ever looks like normal text.
 
-Row values are drawn with `SelectableText` and `TextStyle::span`, not a
-paragraph, so a user can select them with the mouse and copy them with Ctrl+C
-or a right-click Copy. This covers the `value` of `row` and the value of
-`property_row`. A value stays on one line, and a long value is cut with an
-ellipsis.
+Row values are drawn with `select_text` (the shared selectable-text control,
+see Selectable text below), so a user can select them with the mouse and copy
+them with Ctrl+C or a right-click Copy. This covers the `value`, `mono_value`
+and `path_value` of `row` and the value of `property_row`. A value is never cut
+with an ellipsis: the row wraps it or stacks it under its title (see Info rows).
+
+### Selectable text
+
+`select_text(text)` (module `controls::select_text`) is the one control for
+text worth copying: a value (a path, an address, a version, a hash, a licence),
+a block of licence text, error details. It wraps Freya's `SelectableText`:
+a drag selects, a double click selects a word, a triple click a line, Shift and
+the arrows extend, Ctrl+A selects all, Ctrl+C copies the selection through the
+window's clipboard. The control adds:
+
+- The selection is drawn in `Paint::Selection` (the vendored `SelectableText`
+  gained `highlight_color`; upstream draws a fixed blue).
+- A right click, or a touch that rests for a long press, offers **Copy** (the
+  whole text; `copy_label("Copy path")` renames it). The long press watches the
+  window's touches, because a selection stops the pointer-down a touch starts
+  from.
+- Not a Tab stop unless `tab_stop(true)` (the licence list sets it). Role
+  `Label`, label the text.
+- It wraps between words and never cuts. `breaks_anywhere()` declares a text with
+  no space to break at (path, hash, device id, MIME type); the `BreaksAnywhere`
+  component is what the Layout checks read, so a word broken in the middle is a
+  finding unless declared.
+- A selection is a fill behind the glyphs and moves nothing.
+- In a row that presses (`on_press`, `navigates`) the text is plain, so the
+  selection does not take the press; Copy on a right click still works.
+
+The About window's licence list and licence text are columns of `select_text`
+blocks that are Tab stops. A selection does not run from one block to the next
+(the list is cut into blocks of 40 lines for the text engine). Tests replace the
+clipboard with memory (`select_text::test_clipboard::install()`): the system's
+belongs to the person at the desk.
 
 `TextStyle::selectable` is the one path for selectable text that wraps. It
 backs the `centered_caption`, the status block, the text field's invalid
@@ -1765,6 +2260,47 @@ selectable text takes the pointer-down that a press starts from, so a row with
 cannot be selected there. While a search marks words in a text, it is a
 paragraph with the marks instead, so it is not selectable until the search
 clears.
+
+## Direction
+
+A window reads left to right or right to left, and the engine does the mirroring, as a
+browser does for `dir="rtl"`. `design/rtl.md` has the rules and the reasons.
+
+- **Where it comes from.** `Direction::system()` is `BINGUX_DIRECTION=rtl|ltr` when set, else the
+  first of `LC_ALL`, `LC_MESSAGES`, `LANGUAGE` and `LANG` (Arabic, Hebrew, Persian, Urdu and the
+  other right-to-left scripts read from the right). Every window is rooted in
+  `window_directed(Direction::system(), ..)` (the window boundary does it; a snapshot does it).
+  `directed(direction, child)` reads a subtree in another direction: a specimen, a test.
+- **What the engine does.** The vendored Torin has `Node::rtl`: a node's stacked and absolute
+  children are reflected about its box, so a row runs from the right, a column's children align to
+  its right edge, a start padding or margin and an absolute `left` are on the right, and a scrolled
+  content starts at its right end. freya-core inherits a `TextDirection` (`.text_direction(..)`):
+  paragraphs are shaped right to left (a trailing `.` falls on the left, `TextAlign::Start`, the
+  default, is the right edge, and a paragraph with a minimum width, as a text field's text has, is
+  aligned inside that width), borders, corner radii, shadows and linear gradients are drawn
+  reflected, and a caret in an empty line is placed by the resolved alignment. Write code for left
+  to right and read it as start and end: `pl` is the start padding, `Align::Start` the start. The
+  flag follows the inherited direction through a replaced element and a changed direction.
+- **What the code does.** What the engine cannot know is physical: a pointer, a canvas, a key.
+  `use_direction()` is the direction the subtree reads; `Direction::left_edge`, `sign`,
+  `reading_key` (Left and Right swap, so a control's `ArrowRight` arm is "towards the end") and
+  `along` are the helpers. Slider, split pane, stepper, segmented control, tree view, menus,
+  disclosure rows, the back swipe (from the right edge), popup alignment and the Files key handling
+  read them.
+- **Icons.** `Icon::mirrors_in_rtl()` (`#mirror_rtl` in `scripts/icons/labels.tsv`): go-next,
+  go-previous, pan-end, sidebar-show, send-to, view-list, help-browser, emblem-symbolic-link. A
+  test keeps the Rust set and the directive equal and `build.py --check` reads it.
+- **Not mirrored.** Charts and graphs (the plot is drawn in pixels, left to right, as Material's
+  bidirectionality guidance has it), the media bar, clocks and numbers (digits stay in Latin
+  order), a colour axis, checks, logos and circular arrows.
+- **Pseudo-localisation.** `BINGUX_PSEUDO_LOCALE=ar|he` turns every letter of a visible string into
+  Arabic or Hebrew and keeps digits and punctuation.
+- **Checks.** `layout-lint.py --rtl` (in `make layout-check`) captures each page twice and reports a
+  `direction-asymmetric` finding for a box that is not the reflection of where it is left to right;
+  allow one in `ALLOWED` with the reason. `controls/direction_tests.rs` renders a box, border,
+  radius, shadow, gradient and row in both directions and compares the pixels; it also guards that
+  a node whose element is replaced keeps mirroring its children and that a subtree that changes
+  direction is laid out again.
 
 ## Styling with tokens
 
@@ -1855,6 +2391,12 @@ values are:
 | `HEADER_BUTTON` (`Dim::Control`)    | 36 px           | 44 px           |
 | `Dim::SwitchWidth` x `SwitchHeight` | 36 x 20 px      | 48 x 28 px      |
 | `Dim::SliderThumb`                  | 16 px           | 22 px           |
+| `Dim::SliderThumbLarge`             | 22 px           | 28 px           |
+| `Dim::SliderTrackLarge`             | 14 px           | 16 px           |
+| `Dim::PickerPlane` (height)         | 168 px          | 200 px          |
+| `Dim::PickerKnob`                   | 20 px           | 24 px           |
+| `Dim::PickerHandle` (target)        | 32 px           | 44 px           |
+| `Dim::PickerSwatch`                 | 32 px           | 44 px           |
 | `Dim::StepperHalf`                  | 28 px           | 36 px           |
 | `Dim::Field`                        | 240 px          | 168 px          |
 | `Space::S3` / `S4` / `S5`           | 12 / 16 / 20 px | 14 / 18 / 22 px |
@@ -1984,10 +2526,30 @@ load)` loads a `Resource<T>` in the background: it is `Loading`, then
 - **Segmented controls** sit on a `Control` rail with `Radius::Inner` segments.
   The selected segment is a `Card` chip with a `Knob` shadow. A usage meter's
   fill is `Accent`, not text.
-- **Search fields** centre the search glyph vertically. The clear button
+- **The search field** (`search_field(value, on_change)`, `SearchField`) is the
+  one control for a filter, a find bar and a "search for" well; no screen draws
+  its own. It is a `text_field` with the search glyph in a **square slot as
+  wide as the field is tall** (`Dim::Control`: 36 px at mouse density, 44 px at
+  touch density; `dense()` 24 px; `flat()` `Dim::FlatField`), the glyph at
+  `IconSize::Control` centred in it on both axes, so the glyph's centre is the
+  slot's centre by construction, not by a margin. The text starts `S1` after the
+  slot. While the field has text, the clear button sits at the trailing edge in
+  the same kind of square slot (the text field's inline button, centred on the
+  field's height and as far from the end as the glyph is from the start). The
+  accessibility role is `SearchInput`. Escape clears the text, reports the empty
+  text through `on_change` and keeps focus; with the field empty it leaves the
+  field, and with `on_escape` set it is the owner's (a find bar closes with
+  it). `on_submit` runs on Enter. The placeholder is `Search` unless
+  `placeholder(text)` says what is searched (`Search pictures`). `well()` is the
+  elevated fill for a page or sidebar, `fill_width()` fills the container,
+  `enabled(false)` greys it out and takes it out of focus order. A field under
+  the pointer takes the control hover layer; focus is the ring. The clear button
   acts on left pointer-down: a press on the Freya input's own handler does not
-  reach a child's `on_press`. Scrollbars in the dropdown list and the popup
-  auto-hide, so they are not pinned open.
+  reach a child's `on_press`. Any `text_field` with `leading(icon)` (the Files
+  address field's folder glyph) gets the same slot; the layout lint's
+  `icon-not-centred` rule (see Layout checks) holds every such slot and every
+  icon button to it. Scrollbars in the dropdown list and the popup auto-hide, so
+  they are not pinned open.
 - **An action row** (`action_row`) is a form's last row: a small muted
   note at the left and a compact button at the right, on the row height and
   the gutter. Put it inside a group, or under the last group on a page.
@@ -2034,13 +2596,20 @@ load)` loads a `Resource<T>` in the background: it is `Loading`, then
   true the header shows a small spinner beside the title, with a "Working"
   tooltip. Never show a loading block in the page: it pushes the content down.
 - **Page motion** runs in the split view's content column, not per page. A
-  subpage slides in from the right over 320 ms, ease-out, over the page it was
-  opened from. That page stays in place and dims slightly, and the new page is
-  a card with a soft shadow on its leading edge, while the window's buttons
-  stay at its top right. A pop slides the top page out to the right,
-  revealing the page below, which undims. A second navigation during a slide
-  starts from where the page is, with no snap. A sidebar switch cross-fades over
-  120 ms. Motion is off under reduced motion (`tokens.motion(ms)` returns 0).
+  subpage slides in from the right over 320 ms (`SLIDE_MS`) on the symmetric
+  ease-in-out `slide` (`SLIDE_SHARPNESS`), over the page it was opened from.
+  That page stays in place and dims slightly, and the new page is a card with
+  a soft shadow on its leading edge, while the window's buttons stay at its
+  top right. A pop is the same slide over the same 320 ms on the same curve,
+  which is the open played backwards and the open mirrored in space at once,
+  so the top page leaves as it came in, revealing the page below, which
+  undims. A close on a compact window is predictive back over the same
+  320 ms. Never give a close its own duration or curve, and never use an
+  asymmetric ease (an expo-out, a Material decelerate) for a slide: its close
+  either starts like lag or ends in a snap. A second navigation during a slide
+  starts from where the page is, with no snap. A sidebar switch cross-fades
+  over 120 ms. Motion is off under reduced motion (`tokens.motion(ms)`
+  returns 0).
 - Icons are the Bingux set under `packages/bingux-ui/icons/`; see
   [Icons](#icons) for how to use one and how to add another.
 - A dropdown draws a symbolic icon before each option with `.icons(Vec<Icon>)`,
@@ -2051,11 +2620,21 @@ load)` loads a `Resource<T>` in the background: it is `Loading`, then
 The icon set is the chat app's icon fork (`@chat/icons`, a rounded fork of
 Phosphor: continuous "squircle" corners, its fill and weight choices and its own
 custom icons). Icons are the fork's drawings, not redrawn: `scripts/icons/build.py`
-takes the fork's outline, fits it to a 16 px grid (size, centre, whole-pixel strokes,
-edges on pixel lines, see [Fitting](#fitting-the-pixel-rules)) and writes one SVG per
+takes the fork's outline, puts it on the 16 px grid (one uniform scale at most, and a
+shift of at most half a pixel that leaves the fewest soft edges, see
+[Fitting](#fitting-the-pixel-rules)) and writes one SVG per
 icon, tinted with the text colour at draw time. The Rust names (`Icon::NetworkWired`)
 and the SVG file names (`network-wired-symbolic.svg`) follow Adwaita's symbolic
 vocabulary, which the QML shell also uses.
+
+**Colour icons are a separate set.** The file and folder icons of the Files app
+(34: the 22 file families, ten folders, the Trash empty and full) are lit,
+rounded pictures in the style of the Files app icon, not tinted glyphs, so they do not go through `build.py`: their
+sources are `scripts/icons/colour/*.svg`, their compiler and check is
+`scripts/icons/colour.py` and their output is `packages/bingux-ui/icons/colour/`
+(see [File icons](#file-icons)). The taxonomy's Icons page lists them with the
+symbolic set (`ColourIcon::ALL`, `name()`, `family()`, drawn by
+`colour_icon_view(&tokens, icon, px)`).
 
 ```rust
 use bingux_ui::icons::{Icon, icon};
@@ -2094,65 +2673,68 @@ shows chosen glyphs side by side; to adopt one, give it a row in `labels.tsv`.
 
 Each icon in `scripts/icons/labels.tsv` has a category (`#policy <category>: ...`
 lines) and the category decides its fork weight; `build.py --check` fails an icon
-whose weight does not match.
+whose weight does not match. The look is the one released in commit `5d49113`: outlines
+are the fork's `bold` weight (strokes 1.5 px at 16 px, exactly as the fork draws them) and
+objects are `fill`. The fork's `regular` weight (1 px wire) is not used by a named icon:
+at 16 px it reads thin, small and rounder than the neighbouring fills, because the
+corner radius of the fork's drawing is large next to a 1 px line. A named icon is never
+thickened or thinned to a whole pixel (an offset with round joins also rounds the
+corners): a 1.5 px stroke has one half-covered pixel row per edge, which is
+how it looks, and is accepted.
 
-| Category    | Weight           | What belongs there                                                                                  |
-| ----------- | ---------------- | --------------------------------------------------------------------------------------------------- |
-| `object`    | `fill`           | Things: devices (laptop, printer, webcam, headphones), places (folders, home, trash), tools, lock, bell, sun/moon |
-| `status`    | `fill`           | Badges whose meaning is the mass: error, info, warning, help, secure/insecure, VPN, pause, eject, starred |
-| `detail`    | `regular`        | Things recognised by their inner structure: globe, envelope, calendar, phone, tablet, keyboard shortcuts, text and document files, eye, touchpad |
-| `section`   | `regular`        | The settings sidebar: Network, Bluetooth, Displays, Sound, Power, Keyboard, Mouse, Appearance, Desktop, Search, Date and time, Users, Accessibility, About, Applications (`DotsNine` bold: its dots are not a stroke) |
-| `action`    | `regular`        | Verbs: copy, delete, share, filter, refresh, list/grid view, sidebar toggle                         |
-| `indicator` | `regular`        | Levels and states: battery, volume, Bluetooth, wired network, hotspot                               |
-| `control`   | `bold` (2 px)    | Chevrons, tick, plus, minus, close, menu, more, window controls, outline star, power                 |
-| `drawn`     | strokes          | Drawn by hand: the Wi-Fi family (two 1 px arcs and a dot), never a fork glyph                       |
+| Category    | Weight            | What belongs there                                                                                  |
+| ----------- | ----------------- | --------------------------------------------------------------------------------------------------- |
+| `object`    | `fill`            | Things: devices (laptop, printer, webcam, headphones), places (folders, home, trash), tools, lock, bell, sun/moon |
+| `status`    | `fill`            | Badges whose meaning is the mass: error, info, warning, help, secure/insecure, VPN, play, pause, eject, starred |
+| `detail`    | `bold` or `fill`  | Things recognised by their inner structure: globe, envelope, calendar, phone, tablet, text and document files (`fill`), keyboard shortcuts, eye, touchpad (`bold`) |
+| `section`   | `bold` or `fill`  | The settings sidebar: Network, Bluetooth, Keyboard, Mouse, Desktop, Search, Power and Applications (`DotsNine`: nine round dots) are outlines; Displays, Sound, Appearance, Accessibility, Date and time, Users and About are fills |
+| `action`    | `bold` or `fill`  | Verbs: copy, share, refresh, search, zoom, rotate, full screen (`bold`); delete, filter, grid view, sidebar toggle (`fill`) |
+| `indicator` | `bold` or `fill`  | Levels and states: battery, Bluetooth, wired network, hotspot (`bold`); volume (`fill`)              |
+| `control`   | `bold`            | Chevrons, tick, plus, minus, close, menu, more, drag handle, window controls, outline star, power     |
+| `drawn`     | strokes           | Drawn by hand: the Wi-Fi family (two 2 px arcs and a dot, symmetric about x = 8), the symbolic-link badge, never a fork glyph |
 
-Why `regular`, not `bold`, for outlines: `bold` strokes are 1.5 px, which fitting must
-make 2 px to be crisp; at 2 px the counters of a keyboard, a mouse or an ethernet
-tree close up into blobs. `regular` strokes are 1 px, already whole pixels, and keep
-every counter open. Simple strokes (chevron, tick, plus) have no counters and keep the
-heavier `bold` as the click target. A solid slab with one small cut (a phone, a tablet,
-a shield) reads worse than its outline; a lone mass (a folder, a bell) reads better
-filled. Default applications: Web, Mail and Calendar are `detail` outlines; Files, Photos,
-Music and Video stay `object` fills; Text and Documents have their own icons
-(`default-app-text`, `default-app-documents`) so changing them never changes
-`document-edit` or `document-open`.
+Default applications: Web, Mail, Calendar, Text and Documents are fills, like Files,
+Photos, Music and Video; Text and Documents have their own icons (`default-app-text`,
+`default-app-documents`) so changing them never changes `document-edit` or
+`document-open`.
 
 ### Fitting: the pixel rules
 
-`build.py` fits a fork glyph with five steps, each a per-icon attribute that
-`map-fork.py` writes into the source from `labels.tsv`
-(`CaretRight bold scale=1.1 dx=0.25 dy=-0.1`):
+`build.py` places a fork glyph with three per-icon attributes, which `map-fork.py` writes
+into the source from `labels.tsv` (`Bluetooth bold scale=1.1`):
 
 1. `mirror=left|right`: keep that half, replace the other with its mirror (the fork's
    `User` fill is lopsided: its right shoulder reaches about 0.8 px further from the middle than the left, so the
-   avatar uses `mirror=left`);
-2. `scale` about the middle of the box (the fork leaves 1 to 2 px of margin);
-3. whole-pixel strokes: a bold stroke (1.5 px times the scale) is grown to the next
-   whole pixel, a regular stroke (1 px) kept at 1 px, by offsetting the outline with
-   round joins (at most 0.3 px a side). `stroke=none` keeps the fork's width;
-4. `dx`, `dy`: move the whole drawing so edges meet pixel lines and the ink is centred;
-5. snap: every long horizontal or vertical edge and curve extreme goes to the nearest
-   pixel line by a monotone piecewise-linear warp (at most half a pixel, the outermost
-   edges never outwards, `snap=none` turns it off). A symmetric icon is warped on
-   one half and mirrored.
+   avatar uses `mirror=left`, and is never moved sideways, so it stays symmetric about x = 8);
+2. `scale`: one factor on both axes about the middle of the box. Only Bluetooth uses it
+   (1.1): the other glyphs keep the size the fork draws, 10 px (the nine dots) to 16 px (a battery);
+3. `dx`, `dy` (rare) and the automatic shift: of the translations of at most half a pixel
+   (in quarter pixels) that keep the ink in the box, the one that leaves the fewest soft
+   edge pixels at 16 px (ties: the smallest move). `align=none` turns the automatic
+   shift off.
 
-Curves and corners are never redrawn. Rules, checked on the rasterised icon
+A glyph is only ever moved and scaled uniformly. Nothing warps one axis, thickens a stroke,
+snaps an edge or flattens a curve, so circles stay circles (the Applications dots, the
+battery cells' ends, Bluetooth's loops) and the fork's corners are the fork's own: when
+an edge cannot meet a pixel line it renders soft. `build.py` raises an error for a
+non-uniform scale (`affine`). When there is no `mirror`, the SVG is the fork's own path data
+under `translate(..) scale(..)`, byte for byte.
+
+Rules, checked on the rasterised icon
 (`scripts/icons/raster.py`: exact-area coverage, no hinting; the ink box is read from a
 64 px raster):
 
 | Rule | Limit | Applies to |
 | ---- | ----- | ---------- |
-| Ink long side, `compact` (aspect < 1.3: round, square) | 13 to 15 px (about 14) | every icon not in `#mark` |
-| Ink long side, `elongated` (aspect 1.3 or more: wide or tall) | 14 to 15.5 px (the long side fills the box) | the same |
+| Ink long side | 10 to 16 px | every icon not in `#mark`: the fork's own sizes (nine dots 10.5 px, battery 16 px); catches a glyph that is lost or leaves the box |
 | Ink long side, `mark` | 8 to 13 px | `#mark`: chevrons, tick, plus, minus, close, more, window controls |
-| Margin | at least 0.25 px on every side | every icon |
-| Centre of the ink from the centre of the box | at most 0.5 px each axis | every icon |
-| Soft edge pixels at 16 px | at most 10 | every icon: pixels with 15 to 85 % coverage in a straight run of 3 or more on a horizontal or vertical edge |
+| Ink in the box | no ink outside the 16 x 16 box | every icon (checked when it is compiled) |
+| Centre of the ink from the centre of the box | at most 1.5 px each axis | every icon: the fork centres glyphs by their mass (a lock's shackle, a play triangle, headphones), which puts the ink box up to 1.4 px off |
+| Soft edge pixels at 16 px | at most 1.35 x the fewest any placement gives, plus 6 | every icon: pixels with 15 to 85 % coverage in a straight run of 3 or more on a horizontal or vertical edge. A bold stroke always leaves such a row, so the limit is relative to the icon's own best translation (quarter pixels, at most half a pixel) |
 | Soft edge pixels at 14, 18, 20 px | at most 100, 120, 140 | every icon: scaled copies cannot be crisp, the bound catches regressions |
-| Symmetry | centre within 0.05 px; mirrored coverage differs by at most 0.15 at any pixel, 0.03 on average | `#symmetric`: avatar, Wi-Fi fan, accessibility, error, warning, clear, grids, close, plus, minus, chevrons, power, brightness, display, mouse, microphone, headphones, bookmark, lock, star, laptop, phone, tablet, gear, globe |
+| Symmetry | centre within 0.05 px; mirrored coverage differs by at most 0.15 at any pixel, 0.03 on average | `#symmetric`: the avatar and the Wi-Fi family. The other glyphs are symmetric in the fork but may be shifted half a pixel for crispness |
 | Counters | a fork glyph keeps every hole and cut-out | every fork icon (`#exempt counters:` to waive) |
-| Sidebar set | outline weight; ink covers 10 to 30 % of the box | the icons of `groups.txt` `[sidebar]` |
+| Sidebar set | ink covers 10 to 55 % of the box | the icons of `groups.txt` `[sidebar]`: fills 40 to 50 %, outlines 10 to 40 % |
 | Policy | weight matches the category | every icon |
 
 `#exempt size|centre|soft: ...` lines waive a rule where the footprint is the point:
@@ -2167,19 +2749,22 @@ scripts/icons/build.py --check      # sources valid, output current, every rule 
                                     # prints the icons with the most soft edge pixels
 scripts/icons/build.py --measure    # every icon: class, ink size, centre, soft pixels
 scripts/icons/build.py --lint --src DIR   # the rules on a draft directory (a probe icon)
-scripts/icons/build.py --suggest [icon ...]  # scale, dx, dy that satisfy the rules
-make icons-check                    # the first two
+scripts/icons/build.py --suggest [icon ...]  # the scale that brings a glyph into the size rule
+make icons-check                    # the first two, the colour icons and golden.py
+scripts/icons/golden.py             # every icon at 16-32 px, 1x and 2x, against golden.json (see "Visual integrity checks")
+scripts/icons/golden.py --update    # approve a change you have looked at (--sheet FILE draws the set)
 ```
 
 A failing check names the icon, the number and the fix: `probe-small: ink is 4.00 x
-4.00 px (compact): the long side must be 13 to 15 px; change scale`, `probe-soft: 48
-soft edge pixels at 16 px (limit 10)`, `avatar-default: not left-right symmetric`.
+4.00 px (icon): the long side must be 10 to 16 px; change scale`, `probe-soft: 48
+soft edge pixels at 16 px, 20 at its best placement (allowed 33)`, `avatar-default: not
+left-right symmetric`.
 After editing `scale`, `dx` or `dy` in `labels.tsv`, run `map-fork.py`, `build.py` and
 `build.py --check`; never edit `packages/bingux-ui/icons/*.svg` (they are written).
 
 Icons that show a state (Wi-Fi signal, battery level, volume) are one drawing per
 state with the same footprint, so the glyph does not jump when the state changes:
-the battery levels share one `scale`/`dx`/`dy`, as do the four volume icons.
+the battery levels share one glyph position (the same fork box), as do the four volume icons.
 
 ### Choose the icon for where it is used
 
@@ -2192,15 +2777,15 @@ weak, and what was decided:
 
 | Icon | Was | Problem | Now |
 | ---- | --- | ------- | --- |
-| `input-touchpad` | `HandTap` bold | a scribble at 16 px | `HandPointing` regular |
-| `network-vpn` | `Shield` fill | a plain slab, same as the security icons; `ShieldChevron` read as a cup | `ShieldCheckered` fill |
-| `preferences-desktop-wallpaper` | `ImageSquare` bold | frame with a diagonal; read as "no image" | `Mountains` regular |
-| `view-app-grid` | solid nine-dot square | a solid blob | `DotsNine` bold (nine dots, no mass) |
-| `input-tablet`, `phone` | fill | solid slab with one tiny cut | `DeviceTablet`, `DeviceMobile` regular |
-| `web-browser`, `mail-unread`, `x-office-calendar` | fill | solid blobs in the Default applications list | outline (`detail`) |
-| Default applications: Text | `document-edit` (`NotePencil` fill) | an editor, not a text file | `default-app-text`: `FileText` regular |
-| Default applications: Documents | `document-open` (`FolderOpen`) | a folder, not a document | `default-app-documents`: `FileDoc` regular |
-| `help-about` | `Info` fill, same file glyph as `dialog-information` | the sidebar is outline | `Info` regular (`dialog-information` stays filled) |
+| `input-touchpad` | `HandPointing` regular | 1 px wire, thinner than its neighbours | `HandTap` bold, as in `5d49113` |
+| `network-vpn` | `ShieldCheckered` fill | a different silhouette from every other fill | `Shield` fill, as in `5d49113` |
+| `preferences-desktop-wallpaper` | `Mountains` regular | 1 px wire, thinner than its neighbours | `ImageSquare` bold, as in `5d49113` |
+| `view-app-grid` | solid nine-dot square | a solid blob | `DotsNine` bold (nine round dots, no mass) |
+| `input-tablet`, `phone` | `regular` outline | 1 px wire beside the filled devices | `DeviceTablet`, `DeviceMobile` fill |
+| `web-browser`, `mail-unread`, `x-office-calendar` | `regular` outline | 1 px wire beside the filled applications | `Globe`, `EnvelopeSimple`, `CalendarBlank` fill |
+| Default applications: Text | `document-edit` (`NotePencil` fill) | an editor, not a text file | `default-app-text`: `FileText` fill |
+| Default applications: Documents | `document-open` (`FolderOpen`) | a folder, not a document | `default-app-documents`: `FileDoc` fill |
+| `help-about` | `Info` regular | 1 px wire in a set of fills and bold outlines | `Info` fill, as in `5d49113` |
 | `audio-volume-low` | `SpeakerNone` | a bare cone can read as mute | kept: 0, 1, 2 waves are monotone and mute has the X |
 | `battery-level-*` | five fork glyphs for eleven levels | levels share a glyph | kept: no finer glyph exists |
 | `battery-level-*-charging` | `BatteryCharging` | the bolt is small at 16 px, level is lost | kept: the fork has no level-and-bolt glyph |
@@ -2221,8 +2806,9 @@ weak, and what was decided:
    category of the fork piece.
 3. `scripts/icons/import-chat.py` vendors the whole fork (it only needs to run when the
    chat package changes).
-4. `scripts/icons/build.py --suggest <file>` prints `scale`, `dx` and `dy`; put them in
-   the row. `scripts/icons/map-fork.py` writes the source, `scripts/icons/build.py`
+4. `scripts/icons/build.py --suggest <file>` prints the `scale` that brings the glyph
+   into the size rule (nothing prints when 1 fits; there is nothing else to fit).
+   `scripts/icons/map-fork.py` writes the source, `scripts/icons/build.py`
    compiles it into `packages/bingux-ui/icons/` and the shell's copy,
    `scripts/icons/build.py --check` judges it.
 5. Add the variant to `Icon`, to `Icon::ALL` and to `Icon::bytes()` in
@@ -2233,6 +2819,10 @@ weak, and what was decided:
    `review.py compare BEFORE_DIR AFTER_DIR --group sidebar` shows a set before and
    after. `scripts/icons/sheets.py --out /tmp/icons` renders the same at 12 to 48 px
    with Freya's own rasteriser, beside the Adwaita originals, plus a top-bar mock.
+   The taxonomy's Icons / Icon set page is one grid of every file in `icons/`, sorted by
+   file name: the glyph (16 to 48 px, 24 by default) with its name under it, a name
+   filter, the name in a tooltip, a press copies it. It carries no per-icon detail; that
+   is `review.py`'s job.
 
 The fork's geometry is MIT-licensed Phosphor work; `packages/bingux-ui/icons/COPYING`
 carries the licence and attribution.
@@ -2422,8 +3012,9 @@ layouts and fails on any finding the script's `ALLOWED` list does not justify:
   name in `bingux_ui::stress::data(..)`.
 - Narrow windows: 390x800, 320x600, and every popup at 320 px, the least a popup
   can be dragged to (`BINGUX_POPUP_WIDTH=320`).
-- Right-to-left is not run. The layout engine has no text direction to
-  mirror; the script says so.
+- Right to left: `BINGUX_DIRECTION=rtl`, with `BINGUX_PSEUDO_LOCALE=ar` or `he` to swap every
+  letter for Arabic or Hebrew. `layout-lint.py --rtl` compares it with the left-to-right
+  capture (see Direction).
 
 The taxonomy header has the same two toggles, pseudo-locale and text scale, so a
 specimen can be looked at under them. `--list` shows the scenarios,
@@ -2467,10 +3058,84 @@ animation so motion never shifts the layout around it. Each keeps layout stable:
   and new sizes during the swap, so the container never shrinks mid-swap. When
   the new child is smaller, the box settles to it once the swap ends. Wrap the
   child in `reveal` if that step must animate.
-- `use_tween(target, ms)` and `animated_number(value)` change values, not the
-  size of the box they sit in. Give numbers a fixed width if neighbours must not
-  move. `use_tween` starts at its target, retargets from the value on screen
-  when the target changes (an interrupted motion never snaps), and jumps at 0 ms.
+- `use_tween(target, ms)` changes a value, not the size of the box it sits in.
+  Give text a fixed width if neighbours must not move. `use_tween` starts at its
+  target, retargets from the value on screen when the target changes (an
+  interrupted motion never snaps), and jumps at 0 ms.
+- `icon_morph(from, to, size, colour, progress)` draws two icons stacked in one
+  `size` square and sets both from one `progress` (0 shows `from`, 1 shows `to`):
+  `from` turns a quarter turn clockwise while it shrinks to `MORPH_SMALLEST`
+  (0.5) and fades out, `to` turns in from a quarter turn the other way while it
+  grows and fades up, all along one smoothstep, with the opacities adding up to
+  1. The square never changes size, and both glyphs stay mounted (the hidden one
+  at opacity 0) so neither is rasterised for the first time mid-motion. The
+  layers are the pure function `morph_layers(progress)`, so the motion is
+  continuous exactly when the progress is. `IconButton::morph(to, on)` drives it
+  with `use_tween(on, tokens.motion(MOVE_MS))`: 160 ms, instant under reduced
+  motion, a flip half way continues from the icon on screen, and a button that
+  mounts with `on` set does not animate. The caller changes the tooltip (which is
+  the accessible name) and the press handler with the state. The taxonomy shows
+  it on the Buttons page ("Morph: Reload and Stop") and on the Motion page
+  (frozen at five points); `motion/icon_morph_tests.rs` steps the animation clock
+  16 ms at a time and reads the button's pixels, box and name.
+- `use_dwell(active, Dwell { show_after, hold })` is a state that shows late and
+  goes late, so one that is true for a moment does not flicker: it is shown once
+  `active` has held for `show_after` without a break, and once shown it stays at
+  least `hold` from the moment it was shown, and while `active` stays true.
+  `Dwell::LOADING` (150 ms, 300 ms) is the Stop state of a loading folder. The
+  state machine is `DwellGate::update(active, now)` on a clock the caller
+  passes in (tests use a fake one); the hook reads the real clock and draws the
+  component again when the answer changes by time alone.
+- `animated_number(value)` rolls its digits as the shell's clock does
+  (`RollingNumber.qml`). Every cell of the number is a clipped column one line
+  tall; a digit that changes slides out of its place while the new one slides
+  in, 140 ms (`ROLL_MS`), ease-out cubic, the two cross-fading (the old digit
+  at `1 - p`, the new at `p`). A value that went up rolls the digits up; one
+  that went down rolls them down, and a wrap (9 to 0, 59 to 00) still rolls up.
+  Digits that do not change do not move, and a digit that changes passes no
+  digits between (3 to 8 is one slide, as on the clock). The position of a
+  column is a tween over numbered slots, so a new value mid-roll adds a slot
+  ahead and the digit carries on from the point it had reached; a value that
+  comes back turns the roll around where it is. Nothing queues and nothing
+  snaps. Reduced motion changes the digits at once.
+  - The builder: `.decimals(n)`, `.min_digits(n)` (zero padding, for a clock
+    with `:` labels between three numbers), `.style(TextStyle)`, `.grouped()` /
+    `.locale("de_DE")` / `.format(NumberFormat)` for the thousands and decimal
+    marks (English, no grouping by default; Latin digits always), `.prefix(..)`
+    and `.suffix(..)` for a unit that stays put (`%`, ` MB/s`), `.silent()`.
+    The value is any `impl Into<f64>`. A negative number has a real minus (U+2212)
+    that cross-fades in place; a value that rounds to zero has no sign.
+  - Width: digits are tabular and every digit column is as wide as the widest
+    digit of the style (measured with the same engine as the labels), so counting
+    never changes the width and the text beside the number never moves. A number
+    that gains or loses a digit changes its width smoothly: the new column grows
+    from nothing while its digit rises in, and a lost column shrinks while its digit
+    leaves. Separators and signs cross-fade in place; only digits travel. Put the
+    number in a box of its own width, aligned right, when even that must not move
+    a neighbour.
+  - Height: a column is one line of the style, so the number sits on the same
+    baseline as a label of that style beside it, from `NUMERIC` to `HERO`. There
+    is no alpha mask in the renderer; the clip edge fades because each glyph's own
+    opacity falls to 0 as it leaves, so it works on any surface.
+  - Assistive technology: the number is one polite live region
+    (`Role::Status`) whose label and value are the final text with its prefix and
+    suffix, set from the first frame of a change; the columns and the units are
+    hidden from the tree, so a screen reader hears `130%` once, not digits and not
+    frames. `.silent()` makes it a plain label.
+  - Right to left: the digits are always laid out left to right in Latin order. The
+    number is a block; a mirrored layout may move the block, but never reverses
+    the digits. The layout engine reads the window's direction (see Direction).
+  - Not selectable: the digits are drawn one column each, so the final text cannot
+    be selected or copied from the number. An overlay of invisible `SelectableText`
+    was tried and did not take a drag in the headless harness, so it was left out;
+    give a copyable value its own `TextStyle::selectable` text.
+- `use_cycle(ms)` is the clock of every loop: a phase from 0 to 1 over `ms` that
+  starts over as it gets there, for as long as the calling component is
+  mounted. Its state lives in the caller's scope, so the caller drawing again
+  never restarts it. It is the one motion that ignores reduced motion (a
+  progress indicator that stood still looks frozen); the caller picks a
+  longer, gentler cycle instead. The spinner and the indeterminate bar are
+  built on it (see Progress bars and spinners).
 
 Durations go through `tokens.motion(MOVE_MS)`, so reduced motion makes every
 motion an instant change. `use_presence` is the hook under `presence`; overlays,
@@ -2635,7 +3300,8 @@ Every change to bingux-ui lands with its entry. In five steps:
    for the real component, `Spec::forced(label, || ..)` for a state its props
    hold. The closure builds an `Element` and may use hooks. `.wide()` or
    `.page(height)` give it room, and `.script("click-text Open; wait 300; save
-   {out}")` adds a snapshot of a state a still image cannot reach.
+   {out}")` adds a snapshot of a state a still image cannot reach (`click-name
+   NAME` clicks an icon-only control by its accessible name).
 2. Add an `Entry` to `ENTRIES` in `src/registry.rs`: its name, category and
    sidebar page, the API in one line, the `doc` anchor (a heading of this
    file), `covers` (the Rust names it shows) and its `body`.
@@ -2652,9 +3318,78 @@ Every change to bingux-ui lands with its entry. In five steps:
 
 ### Layout checks
 
-The inspector's Layout tab (beside Elements, Performance and Accessibility) lists visual defects that are not accessibility problems: uneven padding (a box with the same padding on both sides of an axis whose content sits nearer one side, measured as the ink bounding box against the padding box), an item off the centre line of a row that centres its items, siblings of one component with different heights in a row, a box with a fixed height and more than 32 px empty under its content, ink clipped by a box that clips, partly overlapping controls, one-line text cut off while its container has room, and unaligned baselines of same-size texts in a row. Each finding shows the rule, the measured numbers and how to fix it; pressing it selects the node in Elements and outlines it in the app. The rules are pure functions over the inspector's snapshot (`inspector/layout_checks.rs`, tested on hand-made trees). The touch-target minimum on a phone stays an Accessibility check.
+Which check holds which design rule, and how to run them all and read the result (`make rules-check`, the report in `design/rules-report.md`): `design/rules-checks.md`. A new check or rule cites its rule IDs there; the layout rules below do it in every finding or in `RULE_IDS` of `scripts/layout-lint.py`.
 
-`python3 scripts/layout-lint.py` runs the same rules headlessly (no compositor) over every Settings page and subpage, the Settings popups that open from a click, and every taxonomy page, at desktop size and 390x800, and exits 1 on a finding. `--build` builds the binaries first; `--only settings|taxonomy`, `--pages a,b`, `--sizes 390x800` narrow it. Fix the component or token. Where a box is lopsided on purpose, add an entry to `ALLOWED` in the script with the reason. With `BINGUX_UI_LAYOUT_LINT=FILE` any `bingux_ui::snapshot` run appends the findings of each saved capture to FILE.
+The inspector's Layout tab (beside Elements, Performance and Accessibility) lists visual defects that are not accessibility problems. **Uneven padding** is a box with the same padding on both sides of an axis whose content sits nearer one side. The content is the boxes of the box's children (a child's own padding is not counted against its container), and only an axis the content sizes is judged: a card as wide as its page, a flex cell or a percentage starts its content at the leading edge on purpose. The other rules are an item off the centre line of a row that centres its items; siblings of one component with different heights in a row; a box with a fixed height and more than 32 px empty under its content; ink clipped by a box that clips; partly overlapping controls; one-line text cut off while its container has room for all of it; unaligned baselines of same-size texts in a row; text broken inside a word or into more lines than it is given; text that overflows its box without an ellipsis; a box outside its parent; content wider than its scroll view; a control whose label is hidden; texts that lie on each other (only the part a clip leaves visible counts); and a focus ring that is not around the box its control paints. Text inside a text field is left out of the text rules, because a long value scrolls there by design. Each finding shows the rule, the measured numbers and how to fix it; pressing it selects the node in Elements and outlines it in the app. The rules are pure functions over the inspector's snapshot (`inspector/layout_checks.rs`, tested on hand-made trees). The touch-target minimum on a phone stays an Accessibility check.
+
+**Icon off centre** (`icon-not-centred`) is an icon inside a field's leading slot (the `IconSlot` component) or an icon button whose centre lies more than half a pixel (`ICON_CENTRE`) from the centre of that slot on either axis. It exists because a glyph set by hand with a margin (the search field's, once 8 px from the edge in a 36 px field, so 2 px left of the middle) looks wrong at once and is not found by the padding rules. The measure is the centre of the icon's box; the unit tests of `search_field` measure the ink on the rendered pixels for the same slot.
+
+**Spacing and alignment checks.** Eight more rules hold the padding model of `design/rules.md` (the table "The padding model") to the measured tree. They are in `inspector/checks/` (one registration point, `checks/mod.rs`: `run`, `meta`, `EXEMPT`), every finding starts with its rule IDs from `design/rules.json` (`[SP-01]`), and each has a known-bad and a clean fixture in `checks/tests.rs`.
+
+- **Inset asymmetry** (`inset-asymmetry`, SP-01): a card (the painted box a `Group` draws round its rows), row, header, banner, dialog or popup has the same room above and below its content and, where the content spans the box, at its start and its end, whatever padding it declares (`uneven-padding` only sees boxes that declare equal padding). A row, property row or header is measured on its ink (a leading slot taller than its icon is not content); a card on its children's boxes (its rows are flush). The start and end are compared on boxes, so a slot kept for an icon or a trailing control still counts; an end that is a control is `trailing-inset`'s. A box taller than the window is a virtual list and is not measured.
+- **Trailing inset** (`trailing-inset`, SP-02, AL-09, SP-12, SZ-12): the last control (button, switch, dropdown, icon button) of a row, field, toast, banner or strip is the same distance from the top, the bottom and the end of its box. The chevron zone and a tab strip's end cell are flush, so all three are 0. Not held: a field or slider in a row (`NOT_BUTTONS` in `checks/mod.rs`, each with its reason), a tab's own close button, a header (its 36 px buttons sit in 48: 6 above, 8 at the side; `EXEMPT`), a control stacked under a banner's text, and in a row or banner taller than one line only the vertical centring (a 40 px button in a 63 px row is 11.5 from the top and cannot also be 8 from the end on the scale). A button in a row that is not passed straight to `Row::trailing` (a tooltip wraps it, or a switch sits beside it) needs `Row::trailing_fit()`, or the row keeps its gutter at the end.
+- **Column aligned** (`column-aligned`, AL-01, SZ-05): rows of one kind with the same left edge, width and icon-slot width put their icon slots at one x and their labels at one x; trailing dropdowns of one card are one width. The slot is the square box round the glyph (an avatar and a glyph in a 24 px slot share a column).
+- **List row inset** (`list-row-inset`, SP-09): a sidebar or place row's icon is as far from the start of the row as from its top (`NAV_INSET` = the space above and below the icon), at both densities. A second line (a drive's usage) makes the row taller than a nav item and exempts it; file rows (SP-10) keep `FILE_ROW_INSET` and are held by the parity pass instead.
+- **Field text start** (`field-text-start`, AL-03, SF-01): text in a field with an `IconSlot` starts S1 (4 px) after the slot.
+- **Header measure** (`header-measure`, AL-04, SZ-02): a centred header title (the one on its own out-of-flow layer, not a `title_start` one) is centred on the whole bar unless a control leaves it no room, and every icon button, segmented control, split button and action button in a header is `Dim::Control` tall (36, or 44 in a window narrower than 740 px; a wider window may hold a compact specimen, so either passes there). A bar that holds tabs is a tab strip and is skipped.
+- **Radius not concentric** (`radius-concentric`, BR-01, BR-02): a painted box that shares a corner with its painted ancestor, an even inset d in from both sides and at most half the ancestor's radius, has `Radius::nested` of that radius and d (flush, it is square or the same radius). A capsule (a pill wider than it is tall) is only in a component of `PILLS` (switch, notice, dock preview, media bar, count badge, each with its reason), and a circle is round unless it is the face of a button component (`IconButton`, `ActionButton`, ...): icon buttons follow the radii.
+- **Off-scale spacing** (`off-scale-spacing`, SP-15, SP-21): every padding, margin and gap of the tree is a `Space` step or a held inset token (10, 16 and 18 are `FIELD_ROW_INSET`, `NAV_INSET`, `SWITCH_INSET`). A window narrower than 740 px must use the compact values; a wider one may hold a compact specimen, so either set passes. A thin box (a scrollbar thumb) is placed by its margin and is not measured.
+
+**Parity** (`python3 scripts/layout-lint.py --parity`, which `make layout-check` passes). One window shows one density, so parity compares two captures of the same page. Each capture's line in `BINGUX_UI_LAYOUT_LINT` carries `metrics`: the named insets of each component class (padding, gap, radius, a row's icon-left, label-start and trailing-end, a card's content-top, -bottom and -start) with how often each value was measured. `--parity` takes the most common value of each between the desktop and the phone capture of every page (Settings pages and popups, Files, and each taxonomy page with its `.phone` twin) and fails where an inset that scales (`PH-01`) is smaller on the phone or more than 1.4 times the desktop value, or where an inset that `PARITY_HELD` lists as held equal (radii, `FILE_ROW_INSET`, `DIALOG_INSET`, the header's end inset; `PH-03`) differs. A difference that is intended is an `ALLOWED` entry for the rule `parity`.
+
+**Value cut off** (`value-ellipsised`) is any text that ends in an ellipsis because it does not fit, whose line limit leaves part of it out, that a path label shortened, or whose ink a clipping box cuts off. A value is read in full or it is useless (a licence, a path, an address, a version), so plain text is never allowed to be cut, in a row, a property, a table cell or a dialog. It is not loosened for spare room or for a few visible glyphs. Not findings: text in a text input (it scrolls), text a scroll view or a box whose content is larger than itself moves out of view (scrolled, not cut), and a path or name that a `path_label` shortens by design while its full text is the hover tooltip (it lies under an `Elided` box; a closed dropdown whose label does not fit does the same). Fix: let the value wrap or stack under its title (an info row does this itself, see Info rows), put a long list in a `select_text` block, or use `path_label`. `python3 scripts/layout-lint.py --rule value-ellipsised` reports only this rule. The lint also runs Bingux Files: the folder list and the Properties dialog (Basic, Permissions, Details) of a file, a link and a folder with names, paths and a link target far too long, at 1100x760 and 390x800.
+
+`python3 scripts/layout-lint.py` runs the same rules headlessly (no compositor, fixed fakes for the machine's data) over every Settings page and subpage, the Settings popups that open from a click, and every taxonomy page, at desktop size and 390x800, and exits 1 on a finding. `make layout-check` is the same run with `--build` (it builds the snapshot binaries first, a no-op when they are current) and `make check` calls it together with `make overflow-check`, so a change that adds a finding does not pass. `--only settings|taxonomy`, `--pages a,b`, `--sizes 390x800` and `--jobs N` narrow or widen it; `--json FILE` writes every finding and `--keep DIR` keeps the captures. With `BINGUX_UI_LAYOUT_LINT=FILE` any `bingux_ui::snapshot` run appends the findings of each saved capture to FILE, and with `BINGUX_UI_LAYOUT_TREE=1` as well it writes the measured tree (`<capture>.tree.txt`, one node a line with its id, component, box, padding and sizing) beside each capture: read that to see why a box measured as it did. A full run takes about five minutes.
+
+Fix the component or token. Where a finding is right by design, add an entry to the script's `ALLOWED` list (`scripts/overflow-check.py` and `scripts/tooltip-check.py` have their own, of the same shape): the rule's key (`dead-space`, `outside-parent`, ... see `Rule::key`), a regex that must match the capture's name (`popup-wifi-join-`), a regex for the component path or node description it is scoped to (`Dialog "Join network"`), and one line saying why the box is meant to look like this. Never a blanket entry: a rule alone, or a page alone, allows nothing. An entry that matches no finding is reported as unused, so the list cannot rot. Where the rule is wrong rather than the box (a fixed-height specimen stage, text inside a text field, content a clip hides on purpose), change the rule in `inspector/layout_checks.rs` and add to its tests a tree that is now clean and one that stays a finding.
+
+### State checks
+
+The layout rules read one captured tree. `python3 scripts/state-check.py` (`make state-check`, called by `make check`) reads what a window *does*: it drives every Settings page, popup, taxonomy page and the Files window headlessly, moves the pointer onto each interactive node, presses it, focuses it, tabs through the page, opens every menu and renders what a person would see. The code is `packages/bingux-ui/src/inspector/state_checks/` (`Snapshot::state_report`), the same `bingux_ui::snapshot` machinery the other checks use; with `BINGUX_UI_STATE_CHECK=FILE` every capture an app saves appends its report to FILE. The animation clock is switched off while it runs, so each state is finished one frame after it starts; what is measured is what is on screen after the transition, and the transitions themselves are the motion checks' work. An interactive node is a node with `a11y_focusable(true)` and an id; a *control* (a role a person presses, toggles, picks or types into) is held to every rule, a focusable region (a page of selectable text, a window) only to the Tab and ring rules. Each finding names its rule IDs from `design/rules.json` (`[ST-06]`).
+
+| Rule key | IDs | What it holds |
+|---|---|---|
+| `state-hover` | ST-06 | Pixels in the node's box differ between rest and hover (a changed pixel is a channel off by at least 4; at least 0.5 % of the box and 8 pixels). |
+| `state-press` | ST-06 | Pressed differs from hover. The press is let go off the control, so no click lands. |
+| `state-focus`, `ring-clipped` | FC-01, FC-04 | Keyboard focus draws a ring (the face's `FocusRing` node, at 2 px, 2 px off the face) on all four sides, in the ring's own box; a side that is not drawn names what cuts it: the clipping ancestor, the window edge (`focusable_inside`), or the node painted over it. The ring is read where the control is drawn after the focus (focus scrolls a control at its scroller's edge into view) against a rest frame at that scroll position with focus elsewhere (a popup keeps focus on its first field, so that field is judged against a frame where another control has it). A ring over a fill of its own colour (the accent ring over a slider's accent track) counts as drawn there once another side shows it. A control under an open panel (a completion list, a menu) is not measured: the pointer and the ring land on the panel. |
+| `state-selected`, `hover-collateral` | ST-05, ST-09 | A selected sibling looks different from an unselected one at rest; hovering another item leaves the selected item's pixels alone. |
+| `row-hover` | ST-01 | A row that is not activatable paints no hover fill (read at the ends of its middle line, where no tooltip or caret is). |
+| `state-open` | ST-06 | A dropdown or menu button opened from the keyboard has the fill it has under the pointer (not on a phone, where the sheet's scrim dims the page). |
+| `state-disabled` | ST-04 | A control with `a11y_enabled(false)` is dimmed to `DISABLED_OPACITY` (+ 0.15) and its declared fill does not change under the pointer (read from the tree, so a tooltip that opens on it is not a fill). |
+| `touch-target` | SZ-01, SZ-11, PH-04 | At compact density (a window narrower than 740 px) every control's hit area, the face plus any transparent absolute box inside it (`hit_area`), is 44 x 44 px or more. |
+| `resize-clearance`, `scrollbar-clearance` | SZ-06, SC-01, SC-02 | No control's box reaches into a popup's eight resize handles (an edge band of 6 px, 2 inside the panel, and 12 px corner squares), the cursor over a control is never a resize cursor, and a scrollbar's gutter is clear of the handles and of the header bar. |
+| `tab-reach`, `tab-order`, `tab-ring`, `tab-trap`, `popup-escape` | FC-04, FC-05, FC-07 | Tab through the page from no focus: every focusable node is one stop and none is a stop twice, the lap comes round and covers the page (a lap that ends part way is one finding at its last stop; a control that swallows Tab, or a lap that never closes, is a trap), no step between controls goes back up its column (read from the layout at the moment of the step, because a Tab scrolls), every stop shows its ring (a control cut by the viewport or half under the floating header is not held to it), Shift+Tab retraces the lap, in a window with a modal scope no stop is outside it, and Escape closes it (twice when a text field is focused: the first leaves the field, controls/text_field.rs). |
+| `menu-keys` | FC-11, MN-02, MN-03 | Every dropdown and menu button in full view is opened with Enter and walked (on a phone, where a menu is a sheet with no keyboard highlight, only the open and the close): Home and End highlight the first and last pickable row, Down and Up move one row, typing the first two letters of a row highlights a row that contains them and keeps the query for 2.5 s, the first Escape takes the query back and the second closes the menu and returns focus to the button, and in a dropdown outside a header Enter picks the highlighted row and closes the list. |
+| `cursor-map` | ST-03 | The cursor with the pointer on the middle of each control is the arrow; the I-beam only over a text field, a pointing hand nowhere, a resize cursor only on a handle. |
+| `text-under-glyph`, `chevron-size` | AL-12, PH-07, SZ-04 | A dropdown's, menu button's or field's text never overlaps a glyph beside it, and the trailing chevron of a dropdown or split button is `IconSize::Mark` at the control's own size class (12 px, 14 px at a 44 px control). |
+
+Fix the component. Where a control is meant not to do what a rule asks, add an entry to `ALLOW` in `state_checks/mod.rs` (a component's doing, with its reason: a selected segment has no hover, a stepper's middle is a value) or to the script's `ALLOWED` (one capture's: a rule key, a regex for the capture's name, a regex for the control's label, and why). An `ALLOWED` or `KNOWN` entry that matches nothing is reported as unused, so those lists cannot rot. `KNOWN` is for a defect found and not fixed: it names what is wrong and who owns the code, is printed on every run and does not fail it, and goes the day the defect does. `python3 scripts/state-check.py --fixtures` runs the check on its own known-bad controls (no hover, no ring, a ring cut off by its clip, a 30 px control at 390x800, a pointing hand, a Tab order that goes back up the page, a label under its chevron) and on the shared controls, which must pass every rule (`cargo test --lib --features testing state_checks`).
+
+Narrow it with `--only settings|taxonomy|files`, `--job REGEX` (the captures whose name matches, such as `popup-wifi-join-desktop|taxonomy-controls`), `--pages a,b`, `--sizes 390x800`, `--scope static,cursor,tab,sweep,menu` (`BINGUX_UI_STATE_SCOPE`), `--limit N` (the most controls swept per capture, `BINGUX_UI_STATE_LIMIT`), `--rules rule,rule`, `--kinds` (the nodes by role and component) and `--notes` (what a run could not do, such as a press that changed the window, which ends that capture's sweep). The sweep tries three controls of each kind (`BINGUX_UI_STATE_PER_KIND`) in a time budget of 40 s a capture (`BINGUX_UI_STATE_BUDGET`): a taxonomy page is 12000 px tall and a frame of it takes a second, so a capture says "stopped at the time budget" rather than run on. `BINGUX_UI_STATE_KEEP=DIR` writes the frame a ring or hover finding is about to DIR, and `BINGUX_UI_STATE_TRACE=1` prints what a menu walk read.
+
+### Running an app from a script or a test
+
+The Settings pages read and write desktop settings through the `gsettings` command (mouse speed, double-click time, key repeat, the interface and power keys). A sweep that presses sliders and switches would change the real dconf of the person who ran it, so every check that starts an app builds its child's environment with `isolated()` of `scripts/app_env.py`: `GSETTINGS_BACKEND=memory`, and no `WAYLAND_DISPLAY`, `DISPLAY` or `DCONF_PROFILE`. `probe_lib.run_job` and `layout-lint.run_job` (and so every check that goes through them), `frame-gate`, `frame-walk`, `frame-time`, `loop-check`, `nav-slide`, `number-roll-check`, `mobile-walk`, `files-shift`, `focus-ring-sheet` and `state-check` use it, and the harness sessions (`session.sh`, `files-session.sh`) export `GSETTINGS_BACKEND=memory`. `tests/app-env.test.py` runs both runners with `env` as the app and holds that no script that starts an app skips the helper. The in-process harness does the same: `Snapshot::new` calls `runtime::isolate_system_settings()`, after which every command `runtime::run` starts gets the memory backend, so `cargo test` and the `--snapshot` captures of the three apps cannot write dconf either. A new script that runs an app belongs in `LAUNCHERS` of that test.
+
+### Tests that run side by side
+
+Every `cargo test` test runs on a thread of its own, even with `--test-threads=1`, and the threads share one process: its environment, its files, its statics. A thread-local is therefore a test's own, and anything else is every test's. Two rules keep the order and the number of threads from mattering. State a window keeps on disk is the test thread's own in a test build: the recent searches (`files::search_bar::recents_file`, which asks `files::test_state` for a file that goes with the thread) and the remembered folder views (`files::view_state`, held in memory per thread), so no test opens with what another one searched for, and none writes the person's `~/.local/state`. A new thing a window keeps in a file takes its path from one function like these, never from `std::env::var` at the point of use, and never from a test that sets an environment variable for the whole process.
+
+A test waits for what it expects, not for a time. `Snapshot::settle(d)` always runs for the whole of `d`, so a duration that suits an idle machine fails on a loaded one and one that suits a loaded one is slow on every other. `Snapshot::settle_until(cap, |shot| ..)` steps the window until the condition holds and returns at once, with `cap` generous (30 s in the search tests): the cap costs nothing when the machine keeps up. Keep `settle(d)` for what must not happen. A test seam that paces a background thread by the clock has the same flaw: the `-slow-walk` folders of the search tests hold the walk after its first batch until it is stopped (`holds_the_walk` in `files/search.rs`), not for some milliseconds a batch.
+
+A test that opens a film or a song does not play it through the machine's sound server. `spawn_host` (`preview/host_link.rs`) starts the helper of a unit test with `--audio-sink fakesink`, as the helper's own tests do. Two helpers that opened a film at once on the default output (here a PipeWire sink) stood at their first picture until the helper's own 20 s open timer stopped them ("The preview took too long and was stopped"), whatever budget the test allowed; each opened in under a second alone. A budget is not the fix for a helper waiting on a device: take the device away.
+
+### Visual integrity checks
+
+These hold the rules of `design/rules.md` (the IDs are in `design/rules.json`) that a token test cannot see, by what a window looks like. Each check prints findings tagged with the IDs (`[BR-03]`), has `--fixtures` (the check on its own known-bad and clean cases, with no binary needed, so a check that stops finding things fails first), an `ALLOWED` list of the same shape as the layout lint's (a rule key, a regex for the capture, a regex for the node, a reason; an entry that matches nothing is reported), and is run by `make check`. The apps run through `bingux_ui::snapshot`; with `BINGUX_UI_PROBE=FILE` every capture also appends one JSON line (`inspector/probe_checks`): the node tree with flags, the text nodes with their declared colour and size, each modal scope with the painted card it draws as, and the scroll containers. `scripts/probe_lib.py` runs the captures (the page, popup and Files lists of `layout-lint.py`, so a new page is covered at once) at a scheme and a scale (`--variants dark,light,darkx2,lightx2`) and reads PNG and probe together.
+
+- **Icons** (`scripts/icons/golden.py`, CK-01, IC-01, IC-03, IC-05, IC-06, AL-15; `make icons-check`). Every icon of the set, symbolic and colour, is drawn with the exact-area rasteriser of `raster.py` at 16, 18, 20, 24 and 32 px at 1x and 2x and measured: the ink box, coverage (falls when strokes thin, rises when corners lose their roundness), soft edge pixels, the weight of the line (twice area over outline length), every dot (width, height, share of its box) and a 16 px picture. `scripts/icons/golden.json` is the approved record, one line an icon; a difference is a finding when an edge moves 0.15 px, coverage 2%, the stroke 0.06 grid units, a dot changes shape or the picture differs by 2.5% of its ink. A new or removed icon is one too, so a change to an icon commits `golden.json` with it: look at `golden.py --sheet /tmp/icons.png`, then `golden.py --update` (which refuses while an absolute rule fails). The absolute rules: a dot of a drawn icon is round (fills 0.70 to 0.88 of its box), a Wi-Fi icon has at most two arcs above its dot, a `#symmetric` icon is its own mirror image, nothing is empty or leaves its box. The look the golden holds is the set as it was on 2026-10-29.
+- **Stability** (`scripts/structure-stability.py` and `scripts/scroll-continuity.py`, CK-02 and CK-22, LS-01, LS-02, LS-03, LS-05, LS-06, TX-16). The first frame the harness can give and the settled one of every Settings page and subpage (both sizes, with every background result held back 1.5 s), every click-opened popup and sheet, every taxonomy page, the Files folder list, a new tab, switching back, Properties and the preview pane, and Displays with a display held mid-drag. Nodes are paired by their path from the root; one whose position in its parent or size changed by more than a pixel is a `layout-shift` (the outermost only; a text is judged on its height and vertical place, not on the width a changed value gives it), one only in the settled tree is `appears` (or `title-late` for a `PageHead`), one only in the first is `disappears`. There is no list of exempt pages; the three entries in `ALLOWED` are a tab opening by width (design/tabs.md), the preview pane taking its width and a phone folder's rows arriving with the listing. `scripts/layout-stability.py` is still the frame by frame version for Settings. `scroll-continuity.py` scrolls a page, does the thing and requires the same offset to 1 px (a virtual Files list has no offset in the tree, so it requires the same first row): Network scrolled then a subpage pushed and popped, a page scrolled while its data lands, Files through a new tab and Alt+1, and into the parent folder by its crumb and Back. A walk that never scrolled fails rather than passes.
+- **Pixels** (`scripts/pixel-check.py`, CK-20 and CK-07). `text-contrast` (CL-04): the colour that covers most of a text's box in the PNG is its ground, the text colour the layout resolved (or, for a text that inherits one the headless capture does not resolve, the pixel furthest from the ground) is its ink; under 4.5:1, or 3:1 for text of 24 px or 18.66 px bold, is a finding. Dimmed text (opacity under 1), text on a busy ground, text under an overlay and a box with nothing drawn in it (a frame with its own origin, a fade) are counted, not judged. `notice-edge` (BR-07): a banner's or toast's edge against its fill at most 1.3:1; `floating-dark` (CL-03): a toast darker than the window. `popup-perimeter` (BR-03): each side of every popup, dialog, menu and sheet card is cut into eight runs and each corner sampled on its arc, and the ring (the card's own edge pixels), the inside and the outside (where the shadow falls) are compared; a run is visible from 1.10:1 (a corner from 1.05:1), in both schemes at 1x and 2x, and `popup-perimeter-structure` requires every header bar on the card's top edge to be inside the node that carries the border. A side on the window edge is not measured. Two pitfalls it works around: numpy 2.2.6 here returns wrong values from `**` on arrays over about 30000 elements (`probe_lib.to_linear` works in pieces), and the harness panics at 2x on the taxonomy's address bar page (`TAXONOMY_SKIP_AT_SCALE`).
+- **Copy** (`scripts/copy-lint.py`, CK-06, TX-01, TX-05 to TX-11). A lexer reads the string literals of the apps and bingux-ui outside comments, attributes, `#[cfg(test)]` blocks, log and panic messages; the same rules run on the text of every label in every capture, where a subtitle is also held against its title (token overlap, and a row's, not a banner's, subtitle may not instruct, end in a full stop or run past 90 characters). Rules: `percent-space`, `show-more`, `click-here`, `exclamation`, `three-dots` (the ellipsis is `…`), `filler`, `title-case` (source only: names in a capture are data), `quote-mix`, `password-mask`, `computer-label`, `value-ellipsis`, `subtitle-restates`, `instruction-subtitle`, `subtitle-period`, `subtitle-long`. No rule in `design/rules.md` fixes straight against curly quotes (Settings uses straight, Files curly), so only a string that mixes the two is a finding; the run prints the counts.
+- **Motion** (`scripts/loop-check.py --all`, `number-roll-check.py`, `nav-slide.py`, `nav/slide_users_tests.rs`, `frame-gate.py`; CK-19, CK-09, CK-08). `loop-check --all` renders every taxonomy page and state twice at two settle times in both motion modes: a bar or a spinner that changed is a loop that runs; anything else that changed is motion on a page that should be still (`ALLOWED_MOTION`). `number-roll-check` walks the Animated number specimens at a tenth of the animation clock and reads the frames: the share of the way to the last picture never goes back by more than 15%, at least 3 looks are between the first and the last, nothing outside the digits' columns changes and what changes stays inside one line. `nav-slide.py` reads p(t) of each push and pop from the pixels and requires the pop to be the push backwards and mirrored within 0.12 and as long within 40%; the Rust test holds what a loaded machine cannot: the shared curve is its own mirror to 1e-5, every file that draws a slide is in its table (a new one fails until added) and no motion has an `_IN_MS` that differs from its `_OUT_MS` (the focus ring's, 160 and 120, is listed). `frame-gate.py` mounts each page N times from the Power page through `BINGUX_SETTINGS_SNAPSHOT_TIMING` and gates the best of the rounds against `scripts/frame-budget.json`: over `warn_ms` (20, about a frame) it warns, over `fail_ms` (50, the blocked-thread limit of `frame-time.py`) or when a page cannot be timed it fails; budgets scale by how slow this machine runs a fixed piece of Python (at most 4x), a median over three times the best is flagged `noisy`, and `BINGUX_FRAME_GATE=report` never fails. It needs no sway session; `frame-time.py` still measures real input and presenting.
+
+First runs (2026-10-29, before fixes), what they found and what became of it. Pixels: 22 texts in the light scheme at under 4.5:1, namely the taxonomy's TOOLTIP recipe specimen (dark ink on the floating surface) and the Files audio and video player's card (dark ink on its black backdrop); fixed in `demos/foundations.rs` and `preview/viewers/card.rs`. A banner's edge was 1.35 to 1.43:1 in the dark scheme at 12% ink; `NOTICE_EDGE_ALPHA` is 0.07. A phone sheet had no hairline (its top edge was the fill against the dimmed page, 1.07:1); `window/popup.rs` draws the outline on the sheet too. Rendering at 2x panicked in two unwraps of the vendored freya-core (an accessibility child and an effect-cascade node that were removed in the same frame); both are guarded. Copy: 17 three-dot ellipses in Settings and 10 trailing full stops in subtitles were written out, the Files undo labels are sentence case, and two taxonomy subtitles that instructed or ran long were cut. Open: the Files preview video specimen draws its loading spinner at the top, over the header's "2 of 5" (seen in the light scheme: the text is under it, so the pixel check cannot judge it), the history menu and tab title still call the file system root "Computer" (TX-09), and `frame-gate.py` has no 1000-item Applications or Fonts fixture (BH-04).
 
 ## Inspector
 
@@ -2685,8 +3420,7 @@ preview all act on that window and no other, and its window is titled with it:
   else.
 - The shortcut is matched on the physical key (`KeyI`) or the character, with
   Ctrl, Alt and Shift all held in any order; lock keys are ignored and a held
-  key toggles once. If a desktop does not deliver it, the inspector header has
-  an "Inspect this inspector" button, and `BINGUX_INSPECT_KEYLOG=1` prints every
+  key toggles once. `BINGUX_INSPECT_KEYLOG=1` prints every
   key event the plugin sees (`[inspector-key] window … key=… code=… mods=…`) to
   stderr. A new inspector window asks for keyboard focus when it opens and when
   the pointer enters it.

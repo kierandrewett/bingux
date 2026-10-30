@@ -27,6 +27,7 @@ pub struct SelectableText {
     event_handlers: EventHandlers,
     layer: Layer,
     max_lines: Option<usize>,
+    highlight_color: Option<Color>,
     line_height: Option<f32>,
     key: DiffKey,
 }
@@ -85,6 +86,7 @@ impl SelectableText {
             event_handlers: EventHandlers::default(),
             layer: Layer::default(),
             max_lines: None,
+            highlight_color: None,
             line_height: None,
             key: DiffKey::None,
         }
@@ -110,6 +112,12 @@ impl SelectableText {
 
     pub fn line_height(mut self, line_height: impl Into<Option<f32>>) -> Self {
         self.line_height = line_height.into();
+        self
+    }
+
+    /// The colour the selection is drawn in (upstream draws a fixed blue).
+    pub fn highlight_color(mut self, highlight_color: impl Into<Color>) -> Self {
+        self.highlight_color = Some(highlight_color.into());
         self
     }
 
@@ -253,6 +261,10 @@ impl Component for SelectableText {
             .on_global_pointer_up(on_global_pointer_up)
             .on_key_down(on_key_down)
             .on_key_up(on_key_up);
+
+        if let Some(colour) = self.highlight_color {
+            paragraph = paragraph.highlight_color(colour);
+        }
 
         for content in &self.contents {
             paragraph = match content {

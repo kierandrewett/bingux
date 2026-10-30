@@ -61,7 +61,10 @@ use crate::{
         PostMeasureContext,
         RenderContext,
     },
-    elements::rect::rect,
+    elements::{
+        rect::rect,
+        text_layout::{fit, layout_paragraph},
+    },
     layers::Layer,
     node_id::NodeId,
     prelude::{
@@ -111,6 +114,9 @@ pub struct ParagraphHolderInner {
     pub paragraph: Rc<SkParagraph>,
     pub scale_factor: f64,
     pub padding: Gaps,
+    /// The paragraph's alignment with `Start` and `End` resolved against its
+    /// text direction: what a caret in an empty line is placed by.
+    pub align: TextAlign,
 }
 
 /// A shared slot that receives the laid-out paragraph, so callers can hit-test and measure
@@ -349,12 +355,15 @@ impl ElementExt for ParagraphElement {
                     content_area_size.width + 1.0
                 };
 
+                let (room, inner_sized) = fit(context.torin_node, content_area_size.width);
                 let paragraph = self.build_paragraph(
                     context.text_style_state,
                     context.fallback_fonts,
                     context.scale_factor,
                     context.font_collection,
                     width,
+                    room,
+                    inner_sized,
                     &[],
                 );
                 context
@@ -373,6 +382,7 @@ impl ElementExt for ParagraphElement {
                 paragraph,
                 scale_factor: context.scale_factor,
                 padding: context.torin_node.padding,
+                align: context.text_style_state.resolved_align(),
             });
 
         Some((size, Rc::new(())))
@@ -421,6 +431,8 @@ impl ElementExt for ParagraphElement {
             context.scale_factor,
             context.font_collection,
             width,
+            None,
+            false,
             &placeholders,
         );
         let rects = paragraph.get_rects_for_placeholders();
@@ -435,6 +447,7 @@ impl ElementExt for ParagraphElement {
                 paragraph: Rc::new(paragraph),
                 scale_factor: context.scale_factor,
                 padding: self.layout.layout.padding,
+                align: context.text_style_state.resolved_align(),
             });
 
         let inner_area = context.node_layout.inner_area;
@@ -526,7 +539,7 @@ impl ElementExt for ParagraphElement {
 
             if rects.is_empty() && *from == 0 {
                 let caret_rect =
-                    paragraph.cursor_rect(&self.text(), *from, context.text_style_state.text_align);
+                    paragraph.cursor_rect(&self.text(), *from, context.text_style_state.resolved_align());
                 context
                     .canvas
                     .draw_rect(to_cursor_area(caret_rect), &highlights_paint);
@@ -558,7 +571,7 @@ impl ElementExt for ParagraphElement {
             let mut cursor_rect = paragraph.cursor_rect(
                 &self.text(),
                 cursor_index,
-                context.text_style_state.text_align,
+                context.text_style_state.resolved_align(),
             );
             let width = (cursor_rect.right - cursor_rect.left).max(6.0);
             cursor_rect.right = cursor_rect.left + width;
@@ -595,7 +608,7 @@ impl ElementExt for ParagraphElement {
             let mut cursor_rect = paragraph.cursor_rect(
                 &self.text(),
                 cursor_index,
-                context.text_style_state.text_align,
+                context.text_style_state.resolved_align(),
             );
             match self.cursor_style {
                 CursorStyle::Underline => cursor_rect.top = cursor_rect.bottom - 2.,
@@ -650,6 +663,8 @@ impl ParagraphElement {
         scale_factor: f64,
         font_collection: &FontCollection,
         width: f32,
+        room: Option<f32>,
+        inner_sized: bool,
         placeholders: &[Size2D],
     ) -> SkParagraph {
         let build = |fill_area: Area| {
@@ -667,6 +682,7 @@ impl ParagraphElement {
             ));
             paragraph_style.set_max_lines(self.max_lines);
             paragraph_style.set_text_align(text_style_state.text_align.into());
+            paragraph_style.set_text_direction(text_style_state.direction.into());
 
             let mut paragraph_builder = ParagraphBuilder::new(&paragraph_style, font_collection);
 
@@ -701,7 +717,7 @@ impl ParagraphElement {
             }
 
             let mut paragraph = paragraph_builder.build();
-            paragraph.layout(width);
+            layout_paragraph(&mut paragraph, width, room, text_style_state.direction.is_rtl(), inner_sized);
             paragraph
         };
 
@@ -756,10 +772,15 @@ impl ParagraphCursorExt for SkParagraph {
                 RectHeightStyle::Tight,
                 RectWidthStyle::Tight,
             );
-            if let Some(rect) = rects.first() {
-                let mut rect = rect.rect;
+            if let Some(text_box) = rects.first() {
+                let mut rect = text_box.rect;
                 if cluster.end <= cursor_index {
-                    rect.left = rect.right;
+                    // After the character: at its right edge, or at its left
+                    // when the character is set right to left.
+                    match text_box.direct {
+                        freya_engine::prelude::TextDirection::LTR => rect.left = rect.right,
+                        freya_engine::prelude::TextDirection::RTL => rect.right = rect.left,
+                    }
                 }
                 return Some(rect);
             }

@@ -35,12 +35,20 @@
 //! Keyboard: a chart with points is focusable. Left and Right move between
 //! points, Home and End jump to the ends, and the tooltip follows.
 //!
+//! A [`donut`] is a square ring with a legend. The legend sits beside it when
+//! there is room, and below it, full width, on a phone or in a narrow card,
+//! where the ring is as wide as the card up to 200 px, centred. Its centre text
+//! is fitted to the hole. Hover or tap a segment or a legend row to read it.
+//!
 //! Two charts are not about series: [`timeline_chart`] places bars along a time
 //! axis with a limit line and a draggable range (frame times, round trips),
 //! and [`flame_graph`] draws a tree of weighted parts as stacked bars (where
 //! CPU time goes, which folders hold the bytes).
 
 mod data;
+mod donut;
+#[cfg(all(test, feature = "testing"))]
+mod donut_tests;
 mod flame;
 mod format;
 mod geometry;

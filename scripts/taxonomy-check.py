@@ -35,6 +35,10 @@ import re
 import sys
 from pathlib import Path
 
+# The rules of design/rules.json this check holds, `*` for any problem it prints (read by scripts/rules-check.py).
+RULE_IDS = {"*": ["PR-02"]}
+RULE_MESSAGES = {"taxonomy": r"^  \S"}
+
 ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "packages/bingux-ui"
 SRC = UI / "src"

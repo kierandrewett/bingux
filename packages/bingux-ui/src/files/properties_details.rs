@@ -159,15 +159,9 @@ fn checksum(page: &Page, hash: &HashView) -> Group {
     let block = rect()
         .tw(&tokens, &[flex_col(), w_full(), gap(S2)])
         .child(progress_bar(fraction))
-        .child(
-            CAPTION.in_ink(ink)
-                .label(&tokens, status)
-                .width(Size::fill())
-                .max_lines(1)
-                .text_overflow(TextOverflow::Ellipsis),
-        )
-        .child(mono.selectable(&tokens, first).max_lines(1).width(Size::fill()))
-        .child(mono.selectable(&tokens, second).max_lines(1).width(Size::fill()));
+        .child(crate::controls::select_text(status).style(CAPTION.in_ink(ink)))
+        .child(crate::controls::select_text(first).style(mono).breaks_anywhere())
+        .child(crate::controls::select_text(second).style(mono).breaks_anywhere());
 
     Group::titled("Checksum")
         .row(row("SHA-256").trailing(action).trailing_control())
@@ -197,7 +191,7 @@ fn attributes(page: &Page) -> Group {
     match page.loaded.and_then(|facts| facts.details.as_ref()) {
         Some(details) if !details.xattrs.is_empty() => {
             for attribute in &details.xattrs {
-                group = group.row(property_row(attribute.name.clone(), attribute.value.clone()));
+                group = group.row(row(attribute.name.clone()).mono_value(attribute.value.clone()));
             }
         }
         Some(_) => group = group.row(property_row("None", NONE)),

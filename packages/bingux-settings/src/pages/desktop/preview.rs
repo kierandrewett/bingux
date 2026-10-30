@@ -9,6 +9,7 @@
 
 use std::path::PathBuf;
 
+use bingux_ui::component::ComponentName;
 use freya::prelude::*;
 
 use super::{Change, Ctx, Model, write};
@@ -220,7 +221,12 @@ fn dock_slot(tokens: &Tokens, icon: Dim, app: &str, running: bool) -> Element {
             .child(
                 rect()
                     .tw(tokens, &[w(icon), h(icon), center()])
-                    .child(app_icon(app.to_string(), IconSize::App)),
+                    // The glyph is never bigger than its slot (a 32 px icon in a 20 px slot
+                    // stuck out of the pill and over its neighbours).
+                    .child(app_icon(
+                        app.to_string(),
+                        if matches!(icon, Dim::Box9) { IconSize::App } else { IconSize::AppSmall },
+                    )),
             )
             .child(rect().tw(
                 tokens,
@@ -241,26 +247,33 @@ fn dock_slot(tokens: &Tokens, icon: Dim, app: &str, running: bool) -> Element {
 /// The dock: a pill of app icons at the bottom, placed as the alignment
 /// setting says. The row's vertical padding keeps the running dot off the
 /// frame edge.
-fn dock_row(tokens: &Tokens, dock: &Dock, bar: Paint, menus: Option<Ctx>) -> Element {
-    let icon = icon_box(dock.size);
+///
+/// A scheme card is a picture a third of a phone's width: its dock is the miniature of the
+/// dock, three small icons with the half step between them, so the pill stays inside the
+/// picture (the hero, which is as wide as the page, shows the dock at the size the setting says).
+fn dock_row(tokens: &Tokens, dock: &Dock, bar: Paint, frame: Frame, menus: Option<Ctx>) -> Element {
+    let miniature = frame == Frame::Card;
+    let icon = if miniature { Dim::Box5 } else { icon_box(dock.size) };
+    let apps = if miniature { &DOCK_APPS[..3] } else { &DOCK_APPS[..] };
+    let (between, inset) = if miniature { (S0_5, S0_5) } else { (S1, S1) };
     let placed = match dock.alignment {
         "left" => Align::Start,
         "right" => Align::End,
         _ => Align::Center,
     };
-    let mut pill = rect().tw(
+    let mut pill = rect().component("DockPreview").tw(
         tokens,
         &[
             flex_row(),
             items(Align::Center),
-            gap(S1),
-            p(S1),
+            gap(between),
+            p(inset),
             rounded(Radius::Pill),
             border(Line::Hairline),
             bg(bar),
         ],
     );
-    for (index, app) in DOCK_APPS.iter().enumerate() {
+    for (index, app) in apps.iter().enumerate() {
         pill = pill.child(dock_slot(tokens, icon, app, index == 0));
     }
     let row = rect()
@@ -353,8 +366,11 @@ fn top_bar(tokens: &Tokens, bar: Paint, stub: Paint) -> Element {
 }
 
 /// The window in the middle: a title strip with three small control dots,
-/// then a sidebar column beside the content.
-fn window_card(tokens: &Tokens, window: Paint, stub: Paint) -> Element {
+/// then a sidebar column beside the content. In a scheme card (`miniature`) the
+/// window is about 32 px wide, less than the sidebar column and a content line
+/// of the full-size picture, so it keeps the content alone: the column was laid
+/// out 4 px (on a phone, 29 px) outside the window.
+fn window_card(tokens: &Tokens, window: Paint, stub: Paint, miniature: bool) -> Element {
     let control = |paint: Paint| {
         rect().tw(
             tokens,
@@ -399,12 +415,12 @@ fn window_card(tokens: &Tokens, window: Paint, stub: Paint) -> Element {
         .child(stub_line(tokens, w_full(), stub));
     let content = rect()
         .tw(tokens, &[w_flex(), h_full(), flex_col(), gap(S1), p(S1)])
-        .child(stub_line(tokens, w(Dim::PreviewLine), Paint::Accent))
+        .child(stub_line(tokens, if miniature { w_full() } else { w(Dim::PreviewLine) }, Paint::Accent))
         .child(stub_line(tokens, w_full(), stub))
         .child(stub_line(tokens, w_full(), stub));
     let body = rect()
         .tw(tokens, &[w_full(), h_flex(), flex_row()])
-        .child(sidebar)
+        .maybe_child((!miniature).then_some(sidebar))
         .child(content);
     Element::from(
         rect()
@@ -493,7 +509,7 @@ pub(crate) fn scene(tokens: &Tokens, picture: &Scene, frame: Frame, menus: Optio
         middle = middle.child(sidebar_panel(tokens, Edge::Left, bar, stub, menus));
     }
     middle = middle
-        .child(window_card(tokens, window, stub))
+        .child(window_card(tokens, window, stub, frame == Frame::Card))
         .child(rect().tw(tokens, &[w_flex(), h_full()]));
     if edge == Some(Edge::Right) {
         middle = middle.child(sidebar_panel(tokens, Edge::Right, bar, stub, menus));
@@ -501,7 +517,7 @@ pub(crate) fn scene(tokens: &Tokens, picture: &Scene, frame: Frame, menus: Optio
     desktop_layer = desktop_layer.child(middle);
 
     if let Some(dock) = &picture.dock {
-        desktop_layer = desktop_layer.child(dock_row(tokens, dock, bar, menus));
+        desktop_layer = desktop_layer.child(dock_row(tokens, dock, bar, frame, menus));
     }
 
     Element::from(

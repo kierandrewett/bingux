@@ -1,9 +1,10 @@
-# One source package, six binary packages:
+# One source package, seven binary packages:
 #
 #   bingux               the desktop shell, its helper daemons and user units
 #   bingux-config        the configuration CLI the shell and Settings share
 #   bingux-settings      Settings
 #   bingux-files         Files
+#   bingux-preview-host  the helper Files runs to play media and render PDFs
 #   bingux-audio-effects the sound effects engine and its LADSPA plugins
 #   bingux-taxonomy      the Bingux UI reference window (development tool)
 #
@@ -35,6 +36,11 @@ BuildRequires:  util-linux
 BuildRequires:  desktop-file-utils
 BuildRequires:  appstream
 BuildRequires:  pkgconfig(gio-2.0)
+BuildRequires:  pkgconfig(gstreamer-1.0)
+BuildRequires:  pkgconfig(gstreamer-app-1.0)
+BuildRequires:  pkgconfig(gstreamer-video-1.0)
+BuildRequires:  pkgconfig(poppler-glib)
+BuildRequires:  pkgconfig(cairo)
 BuildRequires:  pkgconfig(libpulse)
 BuildRequires:  pkgconfig(wayland-client)
 BuildRequires:  pkgconfig(gtk4)
@@ -183,12 +189,34 @@ Recommends:     tar
 Recommends:     util-linux
 Recommends:     eject
 Recommends:     unzip
+# Films, songs and PDFs preview through this helper; without it the preview
+# shows the file's card and Open with.
+Recommends:     bingux-preview-host = %{version}-%{release}
 Suggests:       bingux-settings = %{version}-%{release}
 
 %description files
 Files is the Bingux desktop's file manager. It has tabs, a places sidebar,
 list and grid views, previews, search and file operations with undo. It opens
 folders and bingux-files:// addresses.
+
+%package preview-host
+Summary:        Helper process that plays media and renders PDFs for Bingux previews
+License:        GPL-3.0-or-later AND MIT AND Unicode-3.0
+Requires:       gstreamer1-plugins-base
+Requires:       gstreamer1-plugins-good
+Requires:       poppler-glib
+# More decoders: H.264 and the rest. Without them a film that needs one shows
+# "This computer has no decoder for ..." and Open with.
+Recommends:     gstreamer1-plugin-libav
+Recommends:     gstreamer1-plugins-bad-free
+Recommends:     gstreamer1-plugin-openh264
+Recommends:     pipewire-gstreamer
+
+%description preview-host
+bingux-preview-host plays audio and video (GStreamer) and renders PDF pages
+(poppler) for the Files preview. It is a separate program so that a damaged
+file crashes it and not the file manager, and so that Files itself links
+neither library. Files finds it beside its own program or on the PATH.
 
 %package audio-effects
 Summary:        Sound effects for the Bingux desktop
@@ -347,6 +375,11 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/dev.drewett.bingux.Ta
 %{_metainfodir}/dev.drewett.bingux.Files.metainfo.xml
 %{_mandir}/man1/bingux-files.1*
 
+%files preview-host
+%license COPYING
+%license build/licenses/bingux-preview-host.LICENSE.dependencies
+%{_bindir}/bingux-preview-host
+
 %files audio-effects
 %license COPYING
 %license build/licenses/bingux-effects.LICENSE.dependencies
@@ -369,6 +402,8 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/dev.drewett.bingux.Ta
 
 %changelog
 * Wed Oct 28 2026 Kieran Drewett <kieran@drewett.dev> - 0.1.0-1
+- Add bingux-preview-host, the helper process behind the Files preview of
+  films, songs and PDFs; Files recommends it.
 - Split the package: Settings, Files, the sound effects engine, the
   configuration command and the Taxonomy reference window are their own
   packages, each with desktop entry, AppStream metainfo, icon and man page.

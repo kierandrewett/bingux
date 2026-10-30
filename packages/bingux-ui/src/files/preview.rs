@@ -10,7 +10,7 @@
 //!
 //! | Key | Does |
 //! | --- | ---- |
-//! | Space | preview the selected file in the last frame used (popup or pane); with the pane open, hide it |
+//! | Space | Quick Look: the selected file in a popup, whether or not the pane is docked |
 //! | Alt+P, F3 | show or hide the docked pane |
 //!
 //! Space only opens the preview when the file view itself has the keyboard:
@@ -23,13 +23,9 @@ use freya::prelude::*;
 
 use super::actions::{self, Command};
 use super::view::{Ctx, Shared};
-use super::view_state::{load as remembered, save as remember};
 use super::zoom::ViewKind;
 use crate::preview::{Mode, MIN_WINDOW, PreviewDock, PreviewHost, PreviewNav, PreviewSource, Step, card_size, neighbour, show as show_frame};
 use crate::style::is_compact;
-
-/// What the view remembers of the frame the person last chose.
-const MODE_KEY: &str = "preview.mode";
 
 // ---------------------------------------------------------------------------
 // Which keys open it
@@ -102,27 +98,11 @@ pub(super) fn wants_pane(ctx: &Ctx, event: &Event<KeyboardEventData>, typing_ahe
 // Opening it
 // ---------------------------------------------------------------------------
 
-fn last_mode() -> Mode {
-    remembered::<String>(MODE_KEY)
-        .and_then(|name| Mode::from_name(&name))
-        .unwrap_or(Mode::Popup)
-}
-
-fn remember_mode(mode: Mode) {
-    if matches!(mode, Mode::Popup | Mode::Pane) {
-        remember(MODE_KEY, &mode.name().to_owned());
-    }
-}
-
-/// Space, the menu's Preview: show the preview in the frame the person used
-/// last, or hide the pane when it is open.
+/// Space, the menu's Preview: Quick Look, a popup over the window. It opens
+/// whether or not the pane is docked (the pane stays where it is) and Space
+/// or Escape closes it; the pane is Alt+P's.
 pub(super) fn toggle(shared: &Shared) {
-    let ctx = shared.get();
-    if *ctx.pane.peek() {
-        close_pane(&ctx);
-        return;
-    }
-    open_in(shared, last_mode());
+    open_in(shared, Mode::Popup);
 }
 
 /// Alt+P, F3, the toolbar button: show or hide the pane.
@@ -148,7 +128,6 @@ fn open_in(shared: &Shared, mode: Mode) {
     let mode = if mode == Mode::Pane && !room { Mode::Popup } else { mode.available(is_compact()) };
     match mode {
         Mode::Pane => {
-            remember_mode(Mode::Pane);
             let mut pane = ctx.pane;
             pane.set(true);
         }
@@ -156,7 +135,6 @@ fn open_in(shared: &Shared, mode: Mode) {
             if subject_row(&ctx).is_none() {
                 return;
             }
-            remember_mode(Mode::Popup);
             show_popup(shared, mode);
         }
     }
@@ -165,6 +143,9 @@ fn open_in(shared: &Shared, mode: Mode) {
 /// Open the popup (or the full-screen sheet) over the view `shared` belongs to.
 fn show_popup(shared: &Shared, mode: Mode) {
     let ctx = shared.get();
+    // The popup has the keyboard: the pane gives its keys up.
+    let mut pane_keys = ctx.pane_keys;
+    pane_keys.set_if_modified(false);
     let overlays = ctx.env.overlays;
     // The dialog took the keyboard when it opened; give it back when it goes.
     let focus = ctx.focus;
@@ -261,21 +242,35 @@ fn nav(shared: &Shared, mode: Mode) -> PreviewNav {
                 if *ctx.pane.peek() {
                     close_pane(&ctx);
                 }
-                remember_mode(Mode::Popup);
                 show_popup(&shared, other);
             }
         }
     });
+    let ctx = shared.get();
+    let nav = nav.grid(ctx.zoom.kind() == ViewKind::Grid).on_step({
+        let shared = shared.clone();
+        move |direction: Step| {
+            // A click in the pane gives the pane its keys, but the list still holds the
+            // keyboard focus and steps itself on the same key: the pane stepping as well
+            // moved two files for one press. The pane steps only when the list does not.
+            if mode == Mode::Pane {
+                let focused = *Platform::get().current_window().focused_accessibility_id.peek();
+                if focused == shared.get().focus {
+                    return;
+                }
+            }
+            step(&shared, direction)
+        }
+    });
     if mode == Mode::Pane {
-        nav
-    } else {
-        let ctx = shared.get();
-        let selected = ctx.env.selection.read().paths().len();
-        let _ = selected;
-        nav.grid(ctx.zoom.kind() == ViewKind::Grid).on_step({
-            let shared = shared.clone();
-            move |direction: Step| step(&shared, direction)
+        // The list keeps the keyboard unless a click put it in the pane;
+        // Escape in the pane hands it back.
+        nav.pane_keys(ctx.pane_keys).on_release({
+            let focus = ctx.focus;
+            move |()| focus.request_focus()
         })
+    } else {
+        nav
     }
 }
 

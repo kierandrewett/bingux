@@ -178,7 +178,7 @@ impl Component for Chooser {
             );
         }
         let import = Group::titled("From a file").row(
-            row("Import from file...")
+            row("Import from file…")
                 .leading(Icon::DocumentOpen)
                 .navigates()
                 .on_press(open("import")),
@@ -761,7 +761,7 @@ impl Component for ImportForm {
             )
             .row(action_row(
                 Some("Or choose the file from your folders."),
-                action_button("Browse...", move |_| {
+                action_button("Browse…", move |_| {
                     browse(ctx, move |file| {
                         let mut path = path;
                         path.set(file);

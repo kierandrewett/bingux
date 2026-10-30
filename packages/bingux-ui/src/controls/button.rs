@@ -13,7 +13,7 @@ use crate::component::{ComponentName, Prop, Published};
 use crate::controls::progress::{SpinnerSize, spinner};
 use crate::focus::{press_focus, use_focus_core};
 use crate::icons::{self, Icon};
-use crate::motion::Focusable;
+use crate::motion::{Focusable, MorphGlyph};
 use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
 use crate::typography::{BODY, EMPHASIS, Ink};
@@ -441,6 +441,12 @@ pub struct IconButton {
     /// tinted notice.
     ink: Option<Ink>,
     id: Option<AccessibilityId>,
+    /// The hover and pressed layers, in place of the page's own: on a surface
+    /// they would not show on (a dark toast in a light window).
+    layers: Option<(Color, Color)>,
+    /// The glyph the icon turns into while the flag is set, see
+    /// [`IconButton::morph`].
+    morph: Option<(Icon, bool)>,
 }
 
 pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconButton {
@@ -460,6 +466,8 @@ pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconBut
         pointer_only: false,
         ink: None,
         id: None,
+        layers: None,
+        morph: None,
     }
 }
 
@@ -506,6 +514,14 @@ impl IconButton {
     /// tinted surface such as a banner.
     pub fn ink(mut self, ink: Ink) -> Self {
         self.ink = Some(ink);
+        self
+    }
+
+    /// The layers a hover and a press lay over the button, in place of the
+    /// window's own, for a button on a surface those would not show on: a dark
+    /// notice in a light window takes a light layer, so pass its ink's.
+    pub fn layers(mut self, hover: Color, pressed: Color) -> Self {
+        self.layers = Some((hover, pressed));
         self
     }
 
@@ -556,6 +572,21 @@ impl IconButton {
         self.pointer_only = true;
         self
     }
+
+    /// Turn the icon into `to` while `on` is true, and back when it is not:
+    /// the icon quarter-turns, shrinks and fades out as `to` turns to rest,
+    /// grows and fades in (`motion::icon_morph`), over the motion token's
+    /// duration, instantly under reduced motion. Both glyphs share the
+    /// button's icon slot, so the button keeps its size, hover, pressed and
+    /// focus state and keyboard focus through the change; a flip in the middle
+    /// of the motion goes back from where the icon is. The caller sets the
+    /// tooltip (which is also the button's accessible name) and the press
+    /// handler to match the state it is in: Reload and Stop is
+    /// `icon_button(Icon::Refresh, f).morph(Icon::MediaPlaybackStop, loading)`.
+    pub fn morph(mut self, to: Icon, on: bool) -> Self {
+        self.morph = Some((to, on));
+        self
+    }
 }
 
 /// Marks the subtree of a header bar: icon buttons in it are
@@ -563,10 +594,21 @@ impl IconButton {
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct InHeader;
 
+/// Provided by a header bar with the flag set when it holds a strip of tabs:
+/// the bar is then a tab bar tall, so its icon buttons are the tab button,
+/// 32 px (the 44 px touch target at compact density), centred in it: the same
+/// size and the same distance from the bar's top and bottom as the strip's
+/// own New tab button.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) struct InTabBar(pub bool);
+
 /// The size an icon button takes when its caller sets none: [`HEADER_BUTTON`]
-/// inside a header bar, `outside` elsewhere.
+/// inside a header bar, [`Dim::TabButton`] inside one that holds tabs,
+/// `outside` elsewhere.
 pub(crate) fn header_size(outside: Dim) -> Dim {
-    if try_consume_context::<InHeader>().is_some() {
+    if try_consume_context::<InTabBar>().is_some_and(|bar| bar.0) {
+        Dim::TabButton
+    } else if try_consume_context::<InHeader>().is_some() {
         HEADER_BUTTON
     } else {
         outside
@@ -629,6 +671,16 @@ impl Component for IconButton {
         } else {
             Paint::Transparent
         };
+        let state = match self.layers {
+            Some((hover, pressed)) => fill(if pressing() {
+                pressed
+            } else if hovering() {
+                hover
+            } else {
+                Paint::Transparent.color(&tokens)
+            }),
+            None => surface(base, hovering(), pressing(), false),
+        };
         let button = rect()
             .component("IconButton")
             .a11y_id(a11y_id)
@@ -644,7 +696,7 @@ impl Component for IconButton {
                 &[
                     w(size),
                     h(size),
-                    surface(base, hovering(), pressing(), false),
+                    state,
                     rounded(radius),
                 ],
             )
@@ -699,18 +751,23 @@ impl Component for IconButton {
             .child(if self.busy {
                 Element::from(spinner(SpinnerSize::Small))
             } else {
-                icons::icon(
-                    self.icon,
-                    IconSize::Control,
-                    if self.danger && hovering() {
-                        Paint::OnDanger.color(&tokens)
-                    } else if self.active {
-                        Ink::Accent.color(&tokens)
-                    } else {
-                        self.ink.unwrap_or(Ink::Text).color(&tokens)
-                    },
-                )
-                .into()
+                let ink = if self.danger && hovering() {
+                    Paint::OnDanger.color(&tokens)
+                } else if self.active {
+                    Ink::Accent.color(&tokens)
+                } else {
+                    self.ink.unwrap_or(Ink::Text).color(&tokens)
+                };
+                match self.morph {
+                    Some((to, on)) => Element::from(MorphGlyph {
+                        from: self.icon,
+                        to,
+                        size: IconSize::Control,
+                        color: ink,
+                        on,
+                    }),
+                    None => icons::icon(self.icon, IconSize::Control, ink).into(),
+                }
             }).focusable(focus());
         match &self.tooltip {
             Some(text) => hover_tip(button, text.clone()),

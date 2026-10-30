@@ -32,18 +32,18 @@ pub(super) fn group(fx: Fx, data: &Loaded, runtime: &Runtime) -> Group {
     let menu = menu_button(
         "Preset actions",
         vec![
-            menu_item("New preset...", move |_| new_preset(fx)),
+            menu_item("New preset…", move |_| new_preset(fx)),
             menu_item("Duplicate", {
                 let current = current.clone();
                 move |_| duplicate(fx, current.clone())
             }),
-            menu_item("Rename...", {
+            menu_item("Rename…", {
                 let current = current.clone();
                 move |_| rename(fx, current.clone())
             }),
             menu_separator(),
-            menu_item("Import...", move |_| import_file(fx)),
-            menu_item("Export...", {
+            menu_item("Import…", move |_| import_file(fx)),
+            menu_item("Export…", {
                 let current = current.clone();
                 move |_| export_file(fx, current.clone())
             }),

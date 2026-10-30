@@ -16,7 +16,7 @@ use std::rc::Rc;
 use freya::prelude::*;
 
 use super::snapshot::{Node, Props, Snapshot};
-use crate::controls::{TreeNode, breadcrumb, icon_button, text_field, tree_view};
+use crate::controls::{TreeNode, breadcrumb, icon_button, search_field, tree_view};
 use crate::icons::Icon;
 use crate::shell::menu::{MenuItem, menu_item, menu_separator};
 use crate::shell::overlays::Overlays;
@@ -531,18 +531,17 @@ fn find_bar(
             ],
         )
         .child(
-            text_field(query, move |_: String| {
-                step_match(hit, selected, &submit_matches, hit_index, 1);
-            })
-            .flat()
-            .placeholder("Find in tree")
-            .leading(Icon::Search)
-            .autofocus()
-            .on_change(move |text: String| {
+            search_field(query, move |text: String| {
                 hit_state.set(0);
                 if let Some(&first) = find_matches(&typed_snap, &text, show_wrappers).first() {
                     selected_state.set(Some(first));
                 }
+            })
+            .flat()
+            .placeholder("Find in tree")
+            .autofocus()
+            .on_submit(move |_: String| {
+                step_match(hit, selected, &submit_matches, hit_index, 1);
             }),
         )
         .child(CAPTION.in_ink(Ink::Muted).label(tokens, summary))

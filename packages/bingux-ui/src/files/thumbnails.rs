@@ -61,7 +61,7 @@ pub enum Preview {
 /// What stands for `entry` in a square slot `px` wide: its picture when
 /// `preview` allows one and the file can have one (the icon until it loads,
 /// and when it cannot be loaded), otherwise its icon, drawn by
-/// [`file_icon_view`] with the accent when `selected`. The slot is always
+/// [`file_icon_view`] (a colour icon, the same selected or not). The slot is always
 /// `px` square and clips the picture to the small corner radius of the nested
 /// box, [`Radius::Mark`].
 pub fn face(

@@ -30,7 +30,9 @@ use crate::controls::press::{is_touch, use_press};
 use crate::focus::{RegionKind, claim_press, use_focus_core, use_region};
 use crate::icons::{self, Icon};
 use crate::motion::{Focusable, crossfade};
-use crate::nav::gesture::{BackGesture, Pose, Release, Update};
+use crate::nav::gesture::{
+    BackGesture, DRAG_SHARE, Pose, Release, SLIDE_MS, Update, release_curve, release_slope, slide,
+};
 use crate::nav::router::EntryContext;
 use crate::nav::{Change, Entry, Location, NavModel, RouteKind, RouteTable, Transition, use_router};
 use crate::shell::back_button::BackButton;
@@ -205,7 +207,7 @@ impl Component for ProfileCard {
         };
         rect()
             .component("ProfileCard")
-            .tw(&tokens, &[w_full(), px(S2), pt(S1), pb(S2)])
+            .tw(&tokens, &[w_full(), px(S2), py(S2)])
             .child(Element::from(row))
     }
 }
@@ -369,11 +371,13 @@ enum Motion {
 }
 
 impl Motion {
+    /// How long the move takes. A subpage opening and closing take the same
+    /// time: [`SLIDE_MS`], a compact close (predictive back) and a swipe
+    /// released past its threshold included.
     fn ms(self) -> u64 {
         match self {
             Motion::Fade => 120,
-            Motion::Push | Motion::Pop => 320,
-            Motion::Predictive => 280,
+            Motion::Push | Motion::Pop | Motion::Predictive => SLIDE_MS,
         }
     }
 }
@@ -394,16 +398,16 @@ fn motion_for(transition: Transition, compact: bool) -> Option<Motion> {
 /// one, so the rows of a deep page sit several layers up and paint over a
 /// shallow sheet. The moving sheet sits above the window header, which it
 /// covers as it moves; its own header strip sits above the sheet's rows.
-const SLIDE_SHEET_LAYER: i16 = 1600;
-const SLIDE_HEADER_LAYER: i16 = 500;
+const SLIDE_SHEET_LAYER: i16 = crate::layers::SLIDE_SHEET;
+const SLIDE_HEADER_LAYER: i16 = crate::layers::SLIDE_HEADER;
 /// The layer of the veil over the screen beneath a predictive-back drag: above
 /// that screen's rows, below the screen that moves.
-const BACK_VEIL_LAYER: i16 = 1000;
+const BACK_VEIL_LAYER: i16 = crate::layers::BACK_VEIL;
 /// The layer of the shield that takes the touch while a back drag runs.
-const BACK_SHIELD_LAYER: i16 = 3000;
+const BACK_SHIELD_LAYER: i16 = crate::layers::BACK_SHIELD;
 /// The layer of the window buttons lifted over a moving sheet, above the
 /// sheet's own header strip.
-const SLIDE_CONTROLS_LAYER: i16 = 2600;
+const SLIDE_CONTROLS_LAYER: i16 = crate::layers::SLIDE_CONTROLS;
 
 /// A slide in progress: the page that moved away, its header strip when it was
 /// a sheet, and where the moving page starts from. The value runs from the last
@@ -414,6 +418,9 @@ struct Slide {
     /// The drag progress a predictive pop continues from: 0 for a pop that
     /// was not a swipe.
     d0: f32,
+    /// How fast the finger was going as it let go, in drag progress per
+    /// second: what a swipe's pop carries on at.
+    speed: f32,
     outgoing: Element,
     outgoing_header: Option<Element>,
     /// A compact window moves whole screens: the one that went away, with its
@@ -444,6 +451,7 @@ impl Slide {
         Self {
             motion,
             d0: 0.0,
+            speed: 0.0,
             outgoing,
             outgoing_header,
             outgoing_screen: None,
@@ -452,26 +460,56 @@ impl Slide {
         }
     }
 
-    /// The moving page's offset, as a fraction of the width, at `progress`.
-    fn at(&self, progress: f32) -> f32 {
-        match self.motion {
-            Motion::Push => self.start_x * (1.0 - progress),
-            Motion::Pop => self.start_x + (1.0 - self.start_x) * progress,
-            Motion::Fade | Motion::Predictive => 0.0,
-        }
+    /// How far along the move is, 0 to 1, a moment `time` (0 to 1) into it.
+    fn eased(&self, time: f32) -> f32 {
+        curve(self.motion, swipe_slope(self.d0, self.speed), time)
+    }
+
+    /// The moving page's offset, as a fraction of the width, `time` (0 to 1)
+    /// into the move.
+    fn at(&self, time: f32) -> f32 {
+        offset(self.motion, self.start_x, self.eased(time))
     }
 }
 
-/// How far a moving page is in its card look at `progress`. A push is a card
-/// while it slides in and flat over its last 15 %; a pop is flat, then a card
-/// over its first 15 %.
-fn card_amount(motion: Motion, progress: f32) -> f32 {
-    const EDGE: f32 = 0.15;
+/// How far along a move is, 0 to 1, a moment `time` (0 to 1) into it. One
+/// curve for every slide, [`slide`], which is point-symmetric: a page that
+/// arrives and a page that leaves are the same motion, the close being the
+/// open both played backwards and mirrored in space. A swipe released past
+/// its threshold (`swipe`, the slope of its release) carries on from the
+/// finger's speed instead, so it never stands still where the finger let go.
+fn curve(motion: Motion, swipe: Option<f32>, time: f32) -> f32 {
+    match (motion, swipe) {
+        (Motion::Predictive, Some(slope)) => release_curve(time, slope),
+        _ => slide(time),
+    }
+}
+
+/// The start of the curve a swiped pop takes, as a multiple of its average
+/// speed: the finger's `speed` (drag progress per second) as it let go at
+/// drag progress `d0`, read in commit progress (the drag pose finishes over
+/// [`DRAG_SHARE`] of it). `None` for a move that is not a released swipe.
+fn swipe_slope(d0: f32, speed: f32) -> Option<f32> {
+    (d0 > 0.0).then(|| release_slope(speed * DRAG_SHARE, 1.0 - d0))
+}
+
+/// Where the moving page is, as a fraction of the width, once the move is
+/// `progress` of the way, for a slide that starts at `start_x`.
+fn offset(motion: Motion, start_x: f32, progress: f32) -> f32 {
     match motion {
-        Motion::Push => ((1.0 - progress) / EDGE).clamp(0.0, 1.0),
-        Motion::Pop => (progress / EDGE).clamp(0.0, 1.0),
+        Motion::Push => start_x * (1.0 - progress),
+        Motion::Pop => start_x + (1.0 - start_x) * progress,
         Motion::Fade | Motion::Predictive => 0.0,
     }
+}
+
+/// How far a moving page is in its card look when its edge is `x` of the
+/// width from its place: a card over the first 15 % of the way, flat at rest.
+/// A function of where the page is, not of the time, so a page leaving and a
+/// page arriving look the same at the same place.
+fn card_amount(x: f32) -> f32 {
+    const EDGE: f32 = 0.15;
+    (x / EDGE).clamp(0.0, 1.0)
 }
 
 
@@ -513,6 +551,14 @@ fn card_look(page: Rect, tokens: &Tokens, amount: f32) -> Rect {
             )
             .child(page),
     )
+}
+
+/// A pointer's x as the back gesture reads it: the gesture is written for a
+/// window that reads from the left (a press in the edge zone at the start, a
+/// swipe towards the end), so in a window that reads from the right the pointer
+/// is reflected and the swipe starts at the right edge.
+fn swipe_x(x: f32, width: f32, direction: crate::controls::direction::Direction) -> f32 {
+    if direction.is_rtl() { width - x } else { x }
 }
 
 /// Places a page in a slide. The offset lives on a frame around the page, not
@@ -588,8 +634,9 @@ struct ViewMemory {
     scrolls: HashMap<u64, ScrollController>,
     /// The screen under a back swipe, built once when the swipe starts.
     preview: Option<(u64, Element)>,
-    /// How far a back swipe had gone when it committed, for the pop's slide.
-    commit_from: Option<f32>,
+    /// How far a back swipe had gone when it committed, and how fast the
+    /// finger was going, for the pop's slide.
+    commit: Option<(f32, f32)>,
 }
 
 impl ViewMemory {
@@ -889,6 +936,7 @@ impl NavigationSplitView {
 
 impl Component for NavigationSplitView {
     fn render(&self) -> impl IntoElement {
+        let direction = crate::controls::direction::use_direction();
         let tokens = use_tokens();
         let router = use_router();
         let table = router.table();
@@ -1012,8 +1060,8 @@ impl Component for NavigationSplitView {
         let anim = use_animation_transition(generation(), move |_, _| {
             AnimNum::new(0.0, 1.0)
                 .time(anim_memory.borrow().duration)
-                .function(Function::Expo)
-                .ease(Ease::Out)
+                .function(Function::Linear)
+                .ease(Ease::In)
         });
         let runs = anim.runs();
         let effect_memory = memory.clone();
@@ -1054,7 +1102,7 @@ impl Component for NavigationSplitView {
                             outgoing_scroll,
                         );
                         if motion == Motion::Predictive {
-                            slide.d0 = memory.commit_from.unwrap_or(0.0);
+                            (slide.d0, slide.speed) = memory.commit.unwrap_or((0.0, 0.0));
                         }
                         slide.outgoing_screen = memory.screen.clone();
                         Some(slide)
@@ -1064,7 +1112,7 @@ impl Component for NavigationSplitView {
                         None
                     }
                 };
-                memory.commit_from = None;
+                memory.commit = None;
             }
         }
         // The animation restarts after this render, so until its run count
@@ -1078,10 +1126,12 @@ impl Component for NavigationSplitView {
         // the read is what subscribes this component to the animation's ticks.
         // Without it a slide that restarts while waiting never re-renders.
         let value = anim.get().value().clamp(0.0, 1.0);
-        let progress = if changed || waiting { 0.0 } else { value };
+        // How far into the move's time the slide is, 0 to 1. The curve each
+        // move follows is `Slide::eased`.
+        let time = if changed || waiting { 0.0 } else { value };
         let active = {
             let mut memory = memory.borrow_mut();
-            if !changed && progress >= 1.0 {
+            if !changed && time >= 1.0 {
                 memory.active = None;
                 memory.shown = None;
             }
@@ -1113,7 +1163,7 @@ impl Component for NavigationSplitView {
                 crate::nav::gesture::Phase::Dragging
                     | crate::nav::gesture::Phase::Settling { commit: false, .. }
             );
-        let reduced = tokens.motion(Motion::Predictive.ms()) == 0;
+        let reduced = tokens.motion(SLIDE_MS) == 0;
         crate::task::set_sliding(active.is_some() || swiping);
 
         // ---- the desktop page ------------------------------------------------
@@ -1134,10 +1184,11 @@ impl Component for NavigationSplitView {
 
         let (page_offset, page_opacity, page_sheet, page_header, outgoing) = match active.clone() {
             Some(slide) if !narrow => {
-                let x = slide.at(progress);
+                let x = slide.at(time);
                 let moved = x * width;
+                let progress = slide.eased(time);
                 // The sheet is rounded and shadowed while it moves, and flat at rest.
-                let card = card_amount(slide.motion, progress);
+                let card = card_amount(x);
                 match slide.motion {
                     Motion::Fade | Motion::Predictive => (
                         0.0,
@@ -1338,7 +1389,7 @@ impl Component for NavigationSplitView {
             };
             let built: Rect = match &active {
                 Some(slide) if slide.motion == Motion::Predictive => {
-                    let pose = pose_of(slide.d0, progress);
+                    let pose = pose_of(slide.d0, slide.eased(time));
                     let outgoing = slide
                         .outgoing_screen
                         .clone()
@@ -1349,9 +1400,10 @@ impl Component for NavigationSplitView {
                         .child(lifted_screen(&tokens, outgoing, &pose, width))
                 }
                 Some(slide) if slide.motion == Motion::Push => {
-                    let moved = slide.at(progress) * width;
-                    let card = card_amount(slide.motion, progress);
-                    memory.borrow_mut().shown = Some((slide.motion, slide.at(progress)));
+                    let x = slide.at(time);
+                    let moved = x * width;
+                    let card = card_amount(x);
+                    memory.borrow_mut().shown = Some((slide.motion, x));
                     let outgoing = slide.outgoing_screen.clone().unwrap_or_else(|| rect().into());
                     stage.child(at_rest(outgoing)).child(slide_frame(
                         moved,
@@ -1364,8 +1416,8 @@ impl Component for NavigationSplitView {
                 Some(slide) => {
                     let outgoing = slide.outgoing_screen.clone().unwrap_or_else(|| rect().into());
                     stage
-                        .child(slide_frame(0.0, 1.0 - progress, None, &tokens, rect().width(Size::fill()).height(Size::fill()).child(outgoing)))
-                        .child(slide_frame(0.0, progress, None, &tokens, rect().width(Size::fill()).height(Size::fill()).child(screen)))
+                        .child(slide_frame(0.0, 1.0 - slide.eased(time), None, &tokens, rect().width(Size::fill()).height(Size::fill()).child(outgoing)))
+                        .child(slide_frame(0.0, slide.eased(time), None, &tokens, rect().width(Size::fill()).height(Size::fill()).child(screen)))
                 }
                 None if swiping => {
                     let previous = model.previous().cloned();
@@ -1464,13 +1516,12 @@ impl Component for NavigationSplitView {
                     Key::Character(text) if control => text.to_lowercase(),
                     _ => String::new(),
                 };
-                if event.modifiers == Modifiers::ALT
-                    && event.key == Key::Named(NamedKey::ArrowLeft)
-                {
+                // Back is towards the start of the reading direction: Alt+Right in a window
+                // that reads from the right.
+                let towards = direction.reading_key(&event.key);
+                if event.modifiers == Modifiers::ALT && towards == Key::Named(NamedKey::ArrowLeft) {
                     router.back();
-                } else if event.modifiers == Modifiers::ALT
-                    && event.key == Key::Named(NamedKey::ArrowRight)
-                {
+                } else if event.modifiers == Modifiers::ALT && towards == Key::Named(NamedKey::ArrowRight) {
                     router.forward();
                 } else if control && letter == "f" {
                     // Focus the search. A narrow window shows the list first.
@@ -1511,7 +1562,7 @@ impl Component for NavigationSplitView {
                 let allowed = back_router.model().can_go_back() && back_memory.borrow().active.is_none();
                 back_gesture.borrow_mut().down(
                     clock.elapsed(),
-                    (at.x as f32, at.y as f32),
+                    (swipe_x(at.x as f32, width, direction), at.y as f32),
                     width,
                     allowed,
                 );
@@ -1523,7 +1574,7 @@ impl Component for NavigationSplitView {
                     if !gesture.is_pressed() {
                         return;
                     }
-                    gesture.moved(clock.elapsed(), (at.x as f32, at.y as f32))
+                    gesture.moved(clock.elapsed(), (swipe_x(at.x as f32, width, direction), at.y as f32))
                 };
                 match update {
                     Update::Started | Update::Progress(_) => *redraw.write() += 1,
@@ -1541,13 +1592,13 @@ impl Component for NavigationSplitView {
             .on_global_pointer_up(move |_| {
                 let release = up_gesture.borrow_mut().up(clock.elapsed());
                 match release {
-                    Release::Commit { from } => {
-                        up_memory.borrow_mut().commit_from = Some(from);
+                    Release::Commit { from, speed } => {
+                        up_memory.borrow_mut().commit = Some((from, speed));
                         let outcome = router.run(crate::nav::Op::Back, false);
                         if !matches!(outcome, crate::nav::Outcome::Changed(_)) {
                             // A modal closed, or the page vetoed leaving: nothing
                             // popped, so the screen springs back.
-                            up_memory.borrow_mut().commit_from = None;
+                            up_memory.borrow_mut().commit = None;
                             up_gesture.borrow_mut().abort();
                             *redraw.write() += 1;
                         }
@@ -1597,7 +1648,7 @@ impl Component for NavigationSplitView {
 const HEADER_BLUR: f32 = 20.0;
 /// The layer the floating header bar draws on. Layers add up with element
 /// depth, so this sits above the deepest page content and below overlays.
-const HEADER_LAYER: i16 = 1500;
+const HEADER_LAYER: i16 = crate::layers::HEADER;
 
 /// The scroll distance, in pixels, where the header title starts to appear.
 /// Above it the title row at the top of the page is still fully visible.
@@ -1917,19 +1968,6 @@ pub(crate) fn section_top() -> f32 {
     Dim::Header.px() + S2.px()
 }
 
-/// The sidebar search field: a rounded well with a search glyph, on the top band.
-#[derive(PartialEq)]
-pub struct SearchField {
-    pub query: State<String>,
-}
-
-impl Component for SearchField {
-    fn render(&self) -> impl IntoElement {
-        let search_id = use_a11y();
-        search_band(self.query, search_id)
-    }
-}
-
 /// The top band of the sidebar. It is the header height, like the page
 /// header, so the search field sits on the window-control line.
 fn search_band(query: State<String>, search_id: AccessibilityId) -> impl IntoElement {
@@ -1937,9 +1975,122 @@ fn search_band(query: State<String>, search_id: AccessibilityId) -> impl IntoEle
         search_field(query, |_: String| {})
             .a11y_id(search_id)
             .well()
-            // The glyph shares the page icons' 24 px column, so it sits above
-            // them and the placeholder lines up with the page names.
-            .leading_column(Dim::NavIcon)
             .fill_width(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::theme::Scheme;
+
+    const SLIDES: [Motion; 3] = [Motion::Push, Motion::Pop, Motion::Predictive];
+
+    #[test]
+    fn opening_and_closing_take_one_duration() {
+        for motion in SLIDES {
+            assert_eq!(motion.ms(), SLIDE_MS, "{motion:?}");
+        }
+        // A cross-fade between pages is its own, shorter move.
+        assert!(Motion::Fade.ms() < SLIDE_MS);
+    }
+
+    #[test]
+    fn every_slide_is_instant_under_reduced_motion() {
+        let reduced = Tokens::new("blue", Scheme::PreferDark, true);
+        let normal = Tokens::new("blue", Scheme::PreferDark, false);
+        for motion in SLIDES.into_iter().chain([Motion::Fade]) {
+            assert_eq!(reduced.motion(motion.ms()), 0, "{motion:?}");
+            assert_eq!(normal.motion(motion.ms()), motion.ms(), "{motion:?}");
+        }
+    }
+
+    /// Where the page that moves is, as a fraction of the width, `time` into
+    /// its move: an arriving page starts at the right edge, a leaving page at
+    /// its place.
+    fn page_at(motion: Motion, time: f32) -> f32 {
+        let start = if motion == Motion::Push { 1.0 } else { 0.0 };
+        offset(motion, start, curve(motion, None, time))
+    }
+
+    #[test]
+    fn a_closing_page_retraces_the_path_of_an_opening_one() {
+        for step in 0..=320 {
+            let time = step as f32 / 320.0;
+            let opening = page_at(Motion::Push, 1.0 - time);
+            let closing = page_at(Motion::Pop, time);
+            assert!((opening - closing).abs() < 1e-5, "{step} ms: {opening} against {closing}");
+        }
+        assert_eq!(page_at(Motion::Push, 0.0), 1.0);
+        assert_eq!(page_at(Motion::Push, 1.0), 0.0);
+        assert_eq!(page_at(Motion::Pop, 0.0), 0.0);
+        assert_eq!(page_at(Motion::Pop, 1.0), 1.0);
+    }
+
+    #[test]
+    fn an_open_and_a_close_cross_every_milestone_at_mirrored_times() {
+        // How long the page is within `share` of the width of its place: the
+        // open reaches it as late as the close leaves it.
+        let within = |motion: Motion, share: f32| {
+            (0..=3200)
+                .filter(|step| page_at(motion, *step as f32 / 3200.0) <= share)
+                .count() as f32
+                / 3200.0
+        };
+        for share in [0.05, 0.25, 0.5, 0.9] {
+            let open_in = within(Motion::Push, share);
+            let close_in = within(Motion::Pop, share);
+            assert!((open_in - close_in).abs() < 1e-3, "{share}: {open_in} against {close_in}");
+        }
+    }
+
+    #[test]
+    fn the_card_look_follows_where_the_page_is() {
+        // The same place gives the same look, arriving or leaving.
+        assert_eq!(card_amount(0.0), 0.0);
+        assert_eq!(card_amount(0.15), 1.0);
+        assert_eq!(card_amount(1.0), 1.0);
+        for step in 0..=100 {
+            let time = step as f32 / 100.0;
+            let opening = card_amount(page_at(Motion::Push, 1.0 - time));
+            let closing = card_amount(page_at(Motion::Pop, time));
+            assert!((opening - closing).abs() < 1e-5);
+        }
+    }
+
+    #[test]
+    fn a_swipe_released_past_its_threshold_carries_on_from_the_finger_and_a_press_is_a_slide() {
+        for step in 0..=100 {
+            let time = step as f32 / 100.0;
+            // A press, and a swipe let go at rest, are the same curve as every slide.
+            assert_eq!(curve(Motion::Predictive, None, time), slide(time));
+            assert_eq!(curve(Motion::Predictive, None, time), curve(Motion::Pop, None, time));
+            assert_eq!(curve(Motion::Push, None, time), slide(time));
+        }
+        // A swipe let go going faster starts faster, and every one ends at 1.
+        assert_eq!(swipe_slope(0.0, 2.5), None, "not a swipe");
+        assert_eq!(swipe_slope(0.5, 0.0), Some(0.0), "let go at rest");
+        // 2.5 widths a second with 0.5 of the way left: the drag pose
+        // finishes over the first 40 % of the commit, so the commit starts at
+        // 0.4 * 2.5 * 0.32 / 0.5 times its average speed.
+        let slope = swipe_slope(0.5, 2.5).unwrap();
+        assert!((slope - DRAG_SHARE * 2.5 * 0.32 / 0.5).abs() < 1e-6, "{slope}");
+        // The drag then moves at 2.5 widths a second as the finger did: no stall.
+        let dt = 0.001;
+        let k_speed = curve(Motion::Predictive, Some(slope), dt / 0.32) / dt;
+        let d_speed = 0.5 * k_speed / DRAG_SHARE;
+        assert!((d_speed - 2.5).abs() < 0.05, "{d_speed}");
+        assert_eq!(curve(Motion::Predictive, Some(slope), 0.0), 0.0);
+        assert!((curve(Motion::Predictive, Some(slope), 1.0) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_move_that_interrupts_another_continues_from_where_the_page_is() {
+        // A close that begins with the page 30 % across starts there and ends off screen.
+        assert!((offset(Motion::Pop, 0.3, 0.0) - 0.3).abs() < 1e-6);
+        assert_eq!(offset(Motion::Pop, 0.3, 1.0), 1.0);
+        // An open that begins with it 60 % across starts there and ends in place.
+        assert!((offset(Motion::Push, 0.6, 0.0) - 0.6).abs() < 1e-6);
+        assert_eq!(offset(Motion::Push, 0.6, 1.0), 0.0);
+    }
 }

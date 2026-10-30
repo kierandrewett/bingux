@@ -27,6 +27,7 @@ use freya::prelude::*;
 use freya::torin::prelude::Size2D;
 
 use super::super::subject::Resolved;
+use super::super::keys::Keyboard;
 use crate::component::ComponentName;
 use crate::controls::icon_button;
 use crate::icons::Icon;
@@ -182,6 +183,8 @@ impl Component for ImageView {
         let view = use_state(View::default);
         let viewport = use_state(|| (0.0f32, 0.0f32));
         let drag = use_state(|| None::<((f32, f32), (f32, f32))>);
+        let mut hovering = use_state(|| false);
+        let keyboard = use_try_consume::<Keyboard>().unwrap_or_else(Keyboard::always);
         let natural = natural_size(&self.resolved);
         let source = self.resolved.source.clone();
         let current = *view.read();
@@ -205,6 +208,10 @@ impl Component for ImageView {
         };
 
         let on_key = move |event: Event<KeyboardEventData>| {
+            // A pane leaves its keys with the list until it is clicked.
+            if !keyboard.held() {
+                return;
+            }
             if let Some(action) = route(&event.key, event.modifiers) {
                 event.stop_propagation();
                 apply(action);
@@ -246,24 +253,28 @@ impl Component for ImageView {
         let fit_percent = current.percent(natural, (vw, vh));
         let label = fit_percent.unwrap_or_else(|| format!("{}%", (current.zoom * 100.0).round() as u32));
         let label_width = crate::controls::path_label::measure_text("3200%", CAPTION) + 8.0;
-        let controls = rect()
-            .tw(&tokens, &[flex_row(), items(Align::Center), gap(S1), p(S1), rounded(Radius::Pill), bg(Paint::Floating), shadow(Elevation::Floating)])
-            .child(icon_button(Icon::ZoomOut, move |_| apply(Action::ZoomOut)).ink(Ink::OnFloating).tooltip("Zoom out (-)").enabled(current.zoom > MIN_ZOOM))
-            .child(
-                rect()
-                    .width(Size::px(label_width))
-                    .tw(&tokens, &[flex_row(), justify(Align::Center)])
-                    .child(CAPTION.in_ink(Ink::OnFloating).label(&tokens, label).max_lines(1)),
-            )
-            .child(icon_button(Icon::ZoomIn, move |_| apply(Action::ZoomIn)).ink(Ink::OnFloating).tooltip("Zoom in (+)").enabled(current.zoom < MAX_ZOOM))
-            .child(icon_button(Icon::ZoomFitBest, move |_| apply(Action::Fit)).ink(Ink::OnFloating).tooltip("Fit to window (0)"))
-            .child(icon_button(Icon::ObjectRotateLeft, move |_| apply(Action::Rotate(false))).ink(Ink::OnFloating).tooltip("Rotate left (Shift+R)"))
-            .child(icon_button(Icon::ObjectRotateRight, move |_| apply(Action::Rotate(true))).ink(Ink::OnFloating).tooltip("Rotate right (R)"));
+        // Zoom out, the percentage, zoom in, fit: shown while the pointer is on
+        // the picture or the picture is zoomed in. (R and Shift+R rotate.)
+        let controls = (*hovering.read() || current.zoom != 1.0).then(|| {
+            rect()
+                .tw(&tokens, &[flex_row(), items(Align::Center), gap(S1), p(S1), rounded(Radius::Pill), bg(Paint::Floating), shadow(Elevation::Floating)])
+                .child(icon_button(Icon::ZoomOut, move |_| apply(Action::ZoomOut)).ink(Ink::OnFloating).tooltip("Zoom out (-)").enabled(current.zoom > MIN_ZOOM))
+                .child(
+                    rect()
+                        .width(Size::px(label_width))
+                        .tw(&tokens, &[flex_row(), justify(Align::Center)])
+                        .child(CAPTION.in_ink(Ink::OnFloating).label(&tokens, label).max_lines(1)),
+                )
+                .child(icon_button(Icon::ZoomIn, move |_| apply(Action::ZoomIn)).ink(Ink::OnFloating).tooltip("Zoom in (+)").enabled(current.zoom < MAX_ZOOM))
+                .child(icon_button(Icon::ZoomFitBest, move |_| apply(Action::Fit)).ink(Ink::OnFloating).tooltip("Fit to window (0)"))
+        });
 
         rect()
             .component("PreviewImage")
-            .tw(&tokens, &[w_full(), h_full(), clip(), bg(Paint::TabStrip)])
+            .tw(&tokens, &[w_full(), h_full(), clip(), bg(Paint::Recess)])
             .on_global_key_down(on_key)
+            .on_pointer_enter(move |_| hovering.set_if_modified(true))
+            .on_pointer_leave(move |_| hovering.set_if_modified(false))
             .on_sized(move |event: Event<SizedEventData>| {
                 let (mut viewport, mut view) = (viewport, view);
                 let size = (event.area.width(), event.area.height());
@@ -304,14 +315,14 @@ impl Component for ImageView {
                     .rotate(f32::from(current.turns) * 90.0)
                     .child(picture),
             )
-            .child(
+            .maybe_child(controls.map(|controls| {
                 rect()
-                    .layer(Layer::Overlay)
+                    .layer(crate::layers::VIEWER_CONTROLS)
                     .position(Position::new_absolute().bottom(tokens_gap()).left(0.0))
                     .width(Size::fill())
                     .tw(&tokens, &[flex_row(), justify(Align::Center)])
-                    .child(controls),
-            )
+                    .child(controls)
+            }))
     }
 }
 

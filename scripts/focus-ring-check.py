@@ -80,6 +80,8 @@ PHONE = lint.PHONE
 # the capture's name, a regex that must match the face's component path, and why.
 # An entry that matches nothing is reported, so the list cannot rot.
 ALLOWED: list[dict] = []
+# The rules of design/rules.json this check holds (read by scripts/rules-check.py).
+RULE_IDS = {"*": ["FC-01", "FC-02"]}
 
 
 def allowed(finding: dict) -> dict | None:

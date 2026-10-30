@@ -89,6 +89,21 @@ pub const ICON_BUTTON: &[Spec] = &[
             .busy(true)
             .into_element()
     }),
+    // Press it: the reload arrows turn, shrink and fade as the stop square
+    // turns in, and back. The name follows the state, not the motion.
+    Spec::live("Morph: Reload and Stop", || {
+        let mut stopping = use_state(|| false);
+        icon_button(Icon::Refresh, move |_| stopping.set(!stopping()))
+            .morph(Icon::MediaPlaybackStop, stopping())
+            .tooltip(if stopping() { "Stop (Esc)" } else { "Refresh (F5)" })
+            .into_element()
+    }),
+    Spec::forced("Morph, stopped", || {
+        icon_button(Icon::Refresh, |_| {})
+            .morph(Icon::MediaPlaybackStop, true)
+            .tooltip("Stop (Esc)")
+            .into_element()
+    }),
     Spec::forced("Disabled", || {
         icon_button(Icon::OpenMenu, |_| {})
             .enabled(false)
@@ -118,7 +133,7 @@ pub const SPLIT_BUTTON: &[Spec] = &[
         .menu(view_items(view))
         .into_element()
     })
-    .script("click-text View options; wait 300; save {out}"),
+    .script("click-name View options; wait 300; save {out}"),
     Spec::live("With a label", || {
         split_button(Icon::Folder)
             .label("Open")

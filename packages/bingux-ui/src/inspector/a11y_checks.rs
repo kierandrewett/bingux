@@ -48,6 +48,7 @@ const INTERACTIVE_ROLES: &[&str] = &[
     "MenuItem",
     "MultilineTextInput",
     "RadioButton",
+    "SearchInput",
     "SpinButton",
     "Slider",
     "Switch",

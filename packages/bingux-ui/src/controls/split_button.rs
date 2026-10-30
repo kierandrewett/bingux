@@ -398,7 +398,7 @@ impl Component for SplitButton {
                 )
                 .child(icons::icon(
                     Icon::PanDown,
-                    IconSize::Control,
+                    IconSize::Mark,
                     Paint::Text.color(&tokens),
                 ))
                 .focusable(

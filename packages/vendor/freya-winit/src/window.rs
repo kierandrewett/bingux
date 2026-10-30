@@ -133,6 +133,10 @@ pub struct AppWindow {
 
     pub(crate) renderer: RendererPreference,
 
+    /// The window this one is a popup of: its keys go to that window, and it does not take
+    /// the focus of the window it grew from.
+    pub(crate) popup_parent: Option<WindowId>,
+
     #[cfg(feature = "hotreload")]
     pub(crate) hot_reload_pending: Arc<std::sync::atomic::AtomicBool>,
 }
@@ -224,6 +228,17 @@ impl AppWindow {
             use winit::platform::wayland::WindowAttributesExtWayland;
             window_attributes = window_attributes.with_name(&app_id, &app_id);
         }
+        let mut popup_parent: Option<WindowId> = None;
+        #[cfg(target_os = "linux")]
+        if let Some(popup) = window_config.popup.take() {
+            use winit::platform::wayland::WindowAttributesExtWayland;
+            popup_parent = Some(popup.parent);
+            window_attributes = window_attributes.with_popup(popup);
+        }
+        if let Some(parent_handle) = window_config.parent_handle.take() {
+            // SAFETY: the renderer took the handle from a live window of this process.
+            window_attributes = unsafe { window_attributes.with_parent_window(Some(parent_handle)) };
+        }
         if let Some(window_attributes_hook) = window_config.window_attributes_hook.take() {
             window_attributes = window_attributes_hook(window_attributes, active_event_loop);
         }
@@ -289,7 +304,9 @@ impl AppWindow {
                 Some(Theme::Dark) => PreferredTheme::Dark,
                 _ => PreferredTheme::Light,
             };
-            let is_app_focused = window.has_focus();
+            // A popup never has the keyboard itself (its keys go to the window it grew from), but
+            // it is not an unfocused window either.
+            let is_app_focused = window.has_focus() || popup_parent.is_some();
             move || PlatformWindow {
                 id: u64::from(window_id),
                 focused_accessibility_id: State::create(ACCESSIBILITY_ROOT_ID),
@@ -316,6 +333,11 @@ impl AppWindow {
         });
 
         Platform::get().register_window(platform.clone());
+        if popup_parent.is_some() {
+            let placed = runner.run_in(|| State::create(None));
+            crate::popup::track(platform.id, placed);
+            runner.provide_root_context(|| crate::popup::PopupMarker);
+        }
         runner.provide_root_context(|| CurrentWindowId(platform.id));
         runner.provide_root_context(|| tree.accessibility_generator.clone());
 
@@ -448,6 +470,8 @@ impl AppWindow {
             window_attributes,
 
             renderer: window_config.renderer,
+
+            popup_parent,
 
             #[cfg(feature = "hotreload")]
             hot_reload_pending,

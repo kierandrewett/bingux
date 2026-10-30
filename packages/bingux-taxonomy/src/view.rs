@@ -66,16 +66,26 @@ impl Component for EntryView {
         let doc = format!("{DOC_FILE}#{}", entry.doc);
         let copy_doc = doc.clone();
         let covers = entry.covers.join(", ");
+        // Beside the copy button on a desktop window; under it on a phone, where the button's
+        // path leaves the list of what the entry covers a column of letters.
+        let (docs_row, docs_widths, covers_width) = if is_compact() {
+            (vstack(S2), vec![w_full()], w_full())
+        } else {
+            (hstack(S2), vec![w_full(), grow_children()], w_flex())
+        };
         let mut column = vstack(S3)
             .tw(&tokens, &[w_full()])
             .child(heading(entry.name))
+            // The API and what an entry covers are read in full, and copied
+            // from: they wrap, never end in an ellipsis.
+            .child(Element::from(
+                bingux_ui::controls::select_text(entry.api)
+                    .style(CODE)
+                    .breaks_anywhere(),
+            ))
             .child(
-                CODE.label(&tokens, entry.api)
-                    .max_lines(3)
-                    .text_overflow(TextOverflow::Ellipsis),
-            )
-            .child(
-                hstack(S2)
+                docs_row
+                    .tw(&tokens, &docs_widths)
                     .child(
                         action_button(doc, move |_| {
                             // The anchor is a path: copy it so it can be pasted
@@ -89,11 +99,11 @@ impl Component for EntryView {
                         .icon(Icon::EditCopy),
                     )
                     .child(
-                        CAPTION
-                            .in_ink(Ink::Muted)
-                            .label(&tokens, format!("Covers {covers}"))
-                            .max_lines(2)
-                            .text_overflow(TextOverflow::Ellipsis),
+                        rect().tw(&tokens, &[covers_width]).child(Element::from(
+                            bingux_ui::controls::select_text(format!("Covers {covers}"))
+                                .style(CAPTION.in_ink(Ink::Muted))
+                                .breaks_anywhere(),
+                        )),
                     ),
             );
         match entry.body {
@@ -145,7 +155,10 @@ impl Component for StateRow {
         };
         let spec: &Spec = &specs[self.spec];
         let compact_window = is_compact();
-        let mut stages = rect().tw(&tokens, &[w_full(), flex_row(), wrap(S3), gap(S3)]);
+        // The stages stack. A wrapping row of them came out shorter than the
+        // stages in it (a banner that wraps to two lines on the phone stage),
+        // so the next state's heading was laid over the stage above it.
+        let mut stages = vstack(S3).tw(&tokens, &[w_full()]);
         for dark in env.variants() {
             let scheme = match dark {
                 None => "",
@@ -177,13 +190,16 @@ impl Component for StateRow {
         vstack(S2)
             .tw(&tokens, &[w_full()])
             .child(
-                hstack(S2).child(EMPHASIS.label(&tokens, spec.label)).child(
-                    BODY.in_ink(match spec.kind {
-                        crate::model::Kind::Live => Ink::Accent,
-                        crate::model::Kind::Forced => Ink::Muted,
-                    })
-                    .label(&tokens, kind_tag(spec.kind)),
-                ),
+                // On a phone the tag goes under the name: beside a long one it is a column of letters.
+                (if is_compact() { vstack(S1) } else { hstack(S2) })
+                    .child(EMPHASIS.label(&tokens, spec.label))
+                    .child(
+                        BODY.in_ink(match spec.kind {
+                            crate::model::Kind::Live => Ink::Accent,
+                            crate::model::Kind::Forced => Ink::Muted,
+                        })
+                        .label(&tokens, kind_tag(spec.kind)),
+                    ),
             )
             .child(stages)
             .into_element()

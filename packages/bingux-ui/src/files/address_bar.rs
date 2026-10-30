@@ -6,42 +6,39 @@
 //! `~` turns it into a text field ([`address_edit`](super::address_edit)) with
 //! completions. On a phone the trail is one row with the folder's name.
 //!
-//! # Three states, one frame
+//! # Two states, one frame
 //!
-//! The bar is one row of one height, and it is the same size in all three of
-//! its states, so nothing around it moves when it changes:
+//! The bar is one row of one height, and it is the same size in both of its
+//! states, so nothing around it moves when it changes:
 //!
 //! | State | Shows | Entered by |
 //! | ----- | ----- | ---------- |
 //! | Trail | crumbs | resting; Escape, or a folder opened |
 //! | Path | the text field, with folder completions | Ctrl+L, a press on the trail's empty end, `/` or `~` typed on the list |
-//! | Search | the text field, a search glyph and the chip `in <Folder>` | Ctrl+F or a letter typed on the list, or text typed in the field that is not a path |
 //!
-//! With a [`SearchLink`] the field decides from what is typed whether it is a
-//! path or a search; the rules, the keys and the subfolder search are in the
-//! [`search`](super::search) module. A search stays in the field, with the
-//! filtered list, until Escape or the chip's close button, even when the
-//! keyboard moves to the list to pick a result.
+//! Search is not here: it has its own bar under the toolbar
+//! ([`search_bar`](super::search_bar)), so the address bar only ever holds a
+//! place.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use freya::prelude::*;
 
 use super::address_crumbs::{CompactTrail, Crumbs};
 use super::address_edit::Edit;
-use super::search::SearchLink;
 use super::directory::Where;
+use super::named::Roots;
+use super::file_icon::FileKind;
 use crate::component::ComponentName;
 use crate::style::*;
+use crate::icons::{self, Icon};
 use crate::surface::use_tokens;
 
-/// The text a person edits for `location`: its path with a trailing slash.
+/// The text a person edits for `location`: its path with a trailing slash,
+/// or the address of a named root (`recent:///`, `trash:///`; see
+/// [`Roots::edit_text`]).
 pub(super) fn text_of(location: &Where) -> String {
-    match location {
-        Where::Folder(path) if path == Path::new("/") => "/".into(),
-        Where::Folder(path) => format!("{}/", path.display()),
-        Where::Recent => String::new(),
-    }
+    Roots::current().edit_text(location)
 }
 
 /// The address bar. It shows `location` as a trail. Each crumb opens its
@@ -66,7 +63,6 @@ pub struct AddressBar {
     show_hidden: bool,
     on_close_edit: Option<EventHandler<()>>,
     on_bookmarks: Option<EventHandler<()>>,
-    search: Option<SearchLink>,
 }
 
 impl AddressBar {
@@ -92,7 +88,6 @@ impl AddressBar {
             show_hidden: false,
             on_close_edit: None,
             on_bookmarks: None,
-            search: None,
         }
     }
 
@@ -130,14 +125,6 @@ impl AddressBar {
         self
     }
 
-    /// Make the field a search box too: text that is not a path filters the
-    /// folder, and a last row offers to search the subfolders. See
-    /// [`search`](super::search) for the rules.
-    pub fn search(mut self, link: SearchLink) -> Self {
-        self.search = Some(link);
-        self
-    }
-
     /// The text a person edits for `location`: its path with a trailing slash.
     pub fn text_of(location: &Where) -> String {
         text_of(location)
@@ -149,11 +136,17 @@ impl Component for AddressBar {
         let tokens = use_tokens();
         let mut editing = self.editing;
         let mut draft = self.draft;
-        let searching = self
-            .search
-            .as_ref()
-            .is_some_and(|link| link.find.read().scoped);
-        let content: Element = if *editing.read() || searching {
+        // The glyphs the field brings (its folder or search mark, its close
+        // button) are rasterised now, in the colours drawn now, so the first
+        // frame of the field has them and the swap from the trail shows no
+        // frame without its icon. A glyph already cached costs a lookup.
+        let text = Paint::Text.color(&tokens);
+        let muted = Paint::Muted.color(&tokens);
+        icons::warm(FileKind::Folder.glyph(), IconSize::Control, muted);
+        for icon in [Icon::WindowClose, Icon::DocumentEdit] {
+            icons::warm(icon, IconSize::Control, text);
+        }
+        let content: Element = if *editing.read() {
             Edit {
                 location: self.location.clone(),
                 home: self.home.clone(),
@@ -165,7 +158,6 @@ impl Component for AddressBar {
                 on_open: self.on_open.clone(),
                 on_file: self.on_file.clone(),
                 on_close: self.on_close_edit.clone(),
-                search: self.search.clone(),
             }
             .into()
         } else {

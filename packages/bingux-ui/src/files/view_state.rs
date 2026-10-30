@@ -4,8 +4,9 @@
 //!
 //! It is one small JSON file at `$XDG_STATE_HOME/bingux/files/view.json`
 //! (`~/.local/state/...` when that is unset). `BINGUX_FILES_STATE` names
-//! another file, which is how tests and documentation captures keep a real
-//! person's state out of the picture.
+//! another file, which is how documentation captures keep a real person's
+//! state out of the picture. A test thread keeps a store of its own in
+//! memory and never reads or writes the file.
 //!
 //! The file is read once, on first use, and kept in memory. A change is
 //! written by a background thread half a second after the last one, so a
@@ -19,6 +20,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
+#[cfg(not(test))]
 use std::sync::{LazyLock, Mutex, PoisonError};
 use std::time::Duration;
 
@@ -121,24 +123,48 @@ struct Store {
     pending: bool,
 }
 
-fn store() -> &'static Mutex<Store> {
-    static STORE: LazyLock<Mutex<Store>> = LazyLock::new(|| {
-        let path = state_path();
-        let file = path
-            .as_deref()
-            .and_then(|path| std::fs::read_to_string(path).ok())
-            .and_then(|text| serde_json::from_str::<File>(&text).ok())
-            .filter(|file| file.format == FORMAT)
-            .unwrap_or_default();
-        Mutex::new(Store {
-            file,
-            path,
-            pending: false,
-        })
-    });
-    &STORE
+/// Run `f` on the store. A test thread has a store of its own, kept in memory: a test never
+/// reads what another one remembered (a folder shown at another zoom) and never writes the
+/// person's file.
+fn with_store<R>(f: impl FnOnce(&mut Store) -> R) -> R {
+    #[cfg(test)]
+    {
+        thread_local! {
+            static STORE: std::cell::RefCell<Store> = const {
+                std::cell::RefCell::new(Store {
+                    file: File {
+                        format: 0,
+                        values: BTreeMap::new(),
+                        folders: Vec::new(),
+                    },
+                    path: None,
+                    pending: false,
+                })
+            };
+        }
+        STORE.with(|store| f(&mut store.borrow_mut()))
+    }
+    #[cfg(not(test))]
+    {
+        static STORE: LazyLock<Mutex<Store>> = LazyLock::new(|| {
+            let path = state_path();
+            let file = path
+                .as_deref()
+                .and_then(|path| std::fs::read_to_string(path).ok())
+                .and_then(|text| serde_json::from_str::<File>(&text).ok())
+                .filter(|file| file.format == FORMAT)
+                .unwrap_or_default();
+            Mutex::new(Store {
+                file,
+                path,
+                pending: false,
+            })
+        });
+        f(&mut STORE.lock().unwrap_or_else(PoisonError::into_inner))
+    }
 }
 
+#[cfg(not(test))]
 fn state_path() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("BINGUX_FILES_STATE") {
         return Some(PathBuf::from(path));
@@ -154,8 +180,7 @@ fn state_path() -> Option<PathBuf> {
 
 /// The value saved under `key`, if there is one this build can read.
 pub fn load<T: DeserializeOwned>(key: &str) -> Option<T> {
-    let store = store().lock().unwrap_or_else(PoisonError::into_inner);
-    serde_json::from_value(store.file.values.get(key)?.clone()).ok()
+    with_store(|store| serde_json::from_value(store.file.values.get(key)?.clone()).ok())
 }
 
 /// Remember `value` under `key`. Written to disk shortly after the last call.
@@ -163,12 +188,13 @@ pub fn save<T: Serialize>(key: &str, value: &T) {
     let Ok(value) = serde_json::to_value(value) else {
         return;
     };
-    let mut store = store().lock().unwrap_or_else(PoisonError::into_inner);
-    if store.file.values.get(key) == Some(&value) {
-        return;
-    }
-    store.file.values.insert(key.to_string(), value);
-    schedule_write(&mut store);
+    with_store(|store| {
+        if store.file.values.get(key) == Some(&value) {
+            return;
+        }
+        store.file.values.insert(key.to_string(), value);
+        schedule_write(store);
+    });
 }
 
 /// The key a folder is remembered under: its path, byte for byte, so two
@@ -223,16 +249,16 @@ fn put_folder(folders: &mut Vec<(String, FolderView)>, key: String, view: Folder
 
 /// How `folder` was last shown, if the person ever changed it.
 pub fn folder(folder: &Path) -> Option<FolderView> {
-    let store = store().lock().unwrap_or_else(PoisonError::into_inner);
-    find_folder(&store.file.folders, &folder_key(folder))
+    with_store(|store| find_folder(&store.file.folders, &folder_key(folder)))
 }
 
 /// Remember how `folder` is shown.
 pub fn remember_folder(folder: &Path, view: FolderView) {
-    let mut store = store().lock().unwrap_or_else(PoisonError::into_inner);
-    if put_folder(&mut store.file.folders, folder_key(folder).into_owned(), view) {
-        schedule_write(&mut store);
-    }
+    with_store(|store| {
+        if put_folder(&mut store.file.folders, folder_key(folder).into_owned(), view) {
+            schedule_write(store);
+        }
+    });
 }
 
 fn schedule_write(guard: &mut Store) {
@@ -242,19 +268,20 @@ fn schedule_write(guard: &mut Store) {
     guard.pending = true;
     std::thread::spawn(|| {
         std::thread::sleep(WRITE_DELAY);
-        let mut guard = store().lock().unwrap_or_else(PoisonError::into_inner);
-        guard.pending = false;
-        guard.file.format = FORMAT;
-        let (Some(path), Ok(text)) = (&guard.path, serde_json::to_string(&guard.file)) else {
-            return;
-        };
-        if let Some(parent) = path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        let temporary = path.with_extension("json.tmp");
-        if std::fs::write(&temporary, text).is_ok() {
-            let _ = std::fs::rename(&temporary, path);
-        }
+        with_store(|guard| {
+            guard.pending = false;
+            guard.file.format = FORMAT;
+            let (Some(path), Ok(text)) = (&guard.path, serde_json::to_string(&guard.file)) else {
+                return;
+            };
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let temporary = path.with_extension("json.tmp");
+            if std::fs::write(&temporary, text).is_ok() {
+                let _ = std::fs::rename(&temporary, path);
+            }
+        });
     });
 }
 

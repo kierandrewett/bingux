@@ -7,11 +7,6 @@
 //! network folder that does not answer gives "Not responding", not a frozen
 //! window.
 //!
-//! With a [`SearchLink`] the same field is a search box: text that is not a
-//! path (see [`search`](super::search)) is not completed from the disk but
-//! filters the folder on show, the row under the field offers the subfolder
-//! search, and the arrows, Enter and Escape belong to the results.
-
 use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -19,18 +14,17 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use bingux_files::listing::Cancel;
-use bingux_files::location::{self, CompleteOptions, Completer};
+use bingux_files::location::{CompleteOptions, Completer};
 use freya::prelude::*;
 
 use super::address_complete::{Suggestions, step};
 use super::address_list::{Lead, ListRow, NoticeRow, Part, popover, scroll_offset};
 use super::address_target::{DEADLINE, Problem, Target, check};
-use super::search::{SearchLink, SubfolderRow};
 use super::directory::Where;
+use super::named::{Roots, Typed};
 use super::file_icon::{FileIcon, FileKind};
 use bingux_files::Kind;
 use crate::component::ComponentName;
-use crate::controls::button::icon_button;
 use crate::controls::path_label::path_label;
 use crate::controls::text_field;
 use crate::icons::{self, Icon};
@@ -80,7 +74,6 @@ pub(super) struct Edit {
     pub on_open: EventHandler<Where>,
     pub on_file: EventHandler<PathBuf>,
     pub on_close: Option<EventHandler<()>>,
-    pub search: Option<SearchLink>,
 }
 
 impl Edit {
@@ -127,10 +120,6 @@ impl Component for Edit {
             })
         });
 
-        let search = self.search.clone();
-        let scoped = search
-            .as_ref()
-            .is_some_and(|link| link.find.read().scoped);
         let on_close = self.on_close.clone();
         let finish = EventHandler::new(move |_: ()| {
             editing.set(false);
@@ -148,7 +137,6 @@ impl Component for Edit {
             let home = self.home.clone();
             let folders_only = self.folders_only;
             let show_hidden = self.show_hidden;
-            let search = self.search.clone();
             EventHandler::new(move |text: String| {
                 run.cancel.borrow().cancel();
                 let cancel = Cancel::new();
@@ -157,19 +145,6 @@ impl Component for Edit {
                 run.generation.set(generation);
                 searching.set(false);
                 if text.is_empty() {
-                    run.answered.set(generation);
-                    suggestions.set(None);
-                    return;
-                }
-                // A search is answered by the list, not by the disk.
-                let is_search = search.as_ref().is_some_and(|link| {
-                    link.find.peek().scoped
-                        && matches!(
-                            bingux_files::search::classify(&text, |name| link.is_child(name)),
-                            bingux_files::search::Typed::Query(_)
-                        )
-                });
-                if is_search {
                     run.answered.set(generation);
                     suggestions.set(None);
                     return;
@@ -194,15 +169,19 @@ impl Component for Edit {
                         let base = base.clone();
                         let home = home.clone();
                         let answer = spawn_blocking(move || {
+                            // The Trash is typed as `trash:///name`; its
+                            // names are completed from its folder, hidden
+                            // ones too (a deleted file is what it was).
+                            let trash = Roots::at_home(&home).completion_text(&typed);
                             let options = CompleteOptions {
                                 dirs_only: folders_only,
                                 limit: SUGGESTIONS,
-                                show_hidden,
+                                show_hidden: show_hidden || trash.is_some(),
                             };
                             let found = completer
                                 .lock()
                                 .unwrap_or_else(PoisonError::into_inner)
-                                .complete(&typed, &base, &home, options, &worker_cancel);
+                                .complete(trash.as_deref().unwrap_or(&typed), &base, &home, options, &worker_cancel);
                             Suggestions::of(&typed, &found, folders_only)
                         })
                         .await;
@@ -231,15 +210,6 @@ impl Component for Edit {
             })
         };
 
-        // A search started from the list (a letter typed, Ctrl+F) while the
-        // field is open takes the keyboard back.
-        let wanted = search.as_ref().map_or(0, |link| link.find.read().focus);
-        use_side_effect_with_deps(&wanted, move |wanted: &u32| {
-            if *wanted > 0 {
-                id.request_focus();
-            }
-        });
-
         // A text that was not made by this bar (a `/` or `~` that started the
         // typing) is completed from the start.
         use_side_effect({
@@ -259,7 +229,6 @@ impl Component for Edit {
         // a path is being checked.
         use_side_effect_with_deps(&focus().is_focused(), {
             let finish = finish.clone();
-            let search = search.clone();
             move |focused| {
                 if *focused {
                     had_focus.set(true);
@@ -269,13 +238,6 @@ impl Component for Edit {
                     return;
                 }
                 had_focus.set(false);
-                // A search stays in the field while a result is picked.
-                if search
-                    .as_ref()
-                    .is_some_and(|link| link.find.peek().scoped)
-                {
-                    return;
-                }
                 let menu_open = try_consume_context::<crate::shell::Overlays>()
                     .is_some_and(|overlays| overlays.menu_owned_by(id));
                 let in_list = hovered.peek().is_some();
@@ -291,7 +253,7 @@ impl Component for Edit {
             let on_open = self.on_open.clone();
             let on_file = self.on_file.clone();
             let accepts_file = self.accepts_file;
-            let home = self.home.clone();
+            let roots = Roots::at_home(&self.home);
             let base = self.base();
             let run = run.clone();
             EventHandler::new(move |text: String| {
@@ -301,12 +263,28 @@ impl Component for Edit {
                 run.cancel.borrow().cancel();
                 searching.set(false);
                 complaint.set(None);
-                let target = location::resolve(&text, &base, &home);
+                // `recent:///`, `trash:///` and a real path into the Trash
+                // are places by their names: there is nothing to look at on
+                // the disk first (the Trash's folder is not there until the
+                // first item is binned, and is still the Trash).
+                let target = match roots.parse(&text, &base) {
+                    Typed::Recent => {
+                        finish.call(());
+                        on_open.call(Where::Recent);
+                        return;
+                    }
+                    Typed::Folder(path) if roots.trash_folder() == Some(path.as_path()) => {
+                        finish.call(());
+                        on_open.call(Where::Folder(path));
+                        return;
+                    }
+                    Typed::Folder(path) => path,
+                };
                 checking.set(true);
                 let finish = finish.clone();
                 let on_open = on_open.clone();
                 let on_file = on_file.clone();
-                let home = home.clone();
+                let roots = roots.clone();
                 spawn(async move {
                     let asked = target.clone();
                     let found = spawn_blocking(move || check(&asked, DEADLINE)).await;
@@ -321,9 +299,15 @@ impl Component for Edit {
                             on_file.call(path);
                         }
                         Target::File(_) => complaint.set(Some(Complaint::File)),
+                        // `Trash` or `Recent` alone: the root of that name,
+                        // unless a folder of the name is where you are.
+                        Target::Problem(Problem::NotFound) if roots.by_word(&text).is_some() => {
+                            finish.call(());
+                            on_open.call(roots.by_word(&text).map_or(Where::Recent, Typed::place));
+                        }
                         Target::Problem(problem) => complaint.set(Some(Complaint::Path {
                             problem,
-                            shown: shown_path(&target, &home),
+                            shown: shown_path(&target, &roots),
                         })),
                     }
                 });
@@ -356,29 +340,10 @@ impl Component for Edit {
             })
         };
 
-        let enter_keys = use_hook(|| Rc::new(Cell::new(Modifiers::empty())));
         let on_submit = {
             let pick = pick.clone();
             let submit = submit.clone();
-            let search = search.clone();
-            let enter_keys = enter_keys.clone();
             EventHandler::new(move |text: String| {
-                // Enter in a search opens the selected match; Ctrl or Shift
-                // with it searches the subfolders.
-                if let Some(link) = &search
-                    && link.find.peek().scoped
-                {
-                    if link.find.peek().query.is_empty() {
-                        return;
-                    }
-                    let held = enter_keys.get() | freya_winit::modifiers::live();
-                    if held.intersects(Modifiers::CONTROL | Modifiers::SHIFT) {
-                        link.on_deep.call(());
-                    } else {
-                        link.on_open.call(());
-                    }
-                    return;
-                }
                 // Read first: a borrow held across the match would block the
                 // writes a pick makes.
                 let open = *list_open.peek();
@@ -393,7 +358,6 @@ impl Component for Edit {
 
         let on_change = {
             let request = request.clone();
-            let search = search.clone();
             EventHandler::new(move |text: String| {
                 // Select all and other commands that leave the text alone
                 // report a change too.
@@ -404,18 +368,6 @@ impl Component for Edit {
                 list_open.set(true);
                 highlight.set(None);
                 hovered.set(None);
-                if let Some(link) = &search {
-                    let mut find = link.find;
-                    let mut selection = link.selection;
-                    let given_back = find.write().typed(
-                        &text,
-                        |name| link.is_child(name),
-                        &selection.peek(),
-                    );
-                    if let Some(before) = given_back {
-                        selection.set(before);
-                    }
-                }
                 request.call(text);
             })
         };
@@ -440,30 +392,14 @@ impl Component for Edit {
         });
         let on_arrow = {
             let move_highlight = move_highlight.clone();
-            let search = search.clone();
             EventHandler::new(move |amount: f64| {
-                if let Some(link) = &search
-                    && link.find.peek().scoped
-                {
-                    // In a search the arrows walk the matches in the list.
-                    link.on_step.call(if amount < 0.0 { 1 } else { -1 });
-                    return;
-                }
                 move_highlight.call(amount < 0.0)
             })
         };
 
         let on_escape = {
             let finish = finish.clone();
-            let search = search.clone();
             EventHandler::new(move |_: ()| {
-                if let Some(link) = &search
-                    && link.find.peek().scoped
-                {
-                    link.on_clear.call(());
-                    finish.call(());
-                    return;
-                }
                 let showing = complaint.peek().is_some()
                     || (*list_open.peek() && rows_count() > 0)
                     || *checking.peek();
@@ -524,17 +460,9 @@ impl Component for Edit {
         let selects = *draft.peek() == initial;
         let mut field = text_field(draft, on_submit)
             .fill_width()
-            .placeholder(if scoped {
-                "Search by name"
-            } else {
-                "Type a path"
-            })
-            .leading(if scoped { Icon::Search } else { FileKind::Folder.glyph() })
+            .placeholder("Type a path")
+            .leading(FileKind::Folder.glyph())
             .a11y_id(id)
-            .on_enter_modifiers({
-                let enter_keys = enter_keys.clone();
-                move |held: Modifiers| enter_keys.set(held)
-            })
             .autofocus()
             .danger_outline(complaint.read().is_some())
             .on_change(on_change)
@@ -543,67 +471,9 @@ impl Component for Edit {
         if selects {
             field = field.select_all_on_open();
         }
-        if let Some(link) = search.as_ref().filter(|_| scoped) {
-            let clear = link.on_clear.clone();
-            let finish = finish.clone();
-            field = field.leading_chip(
-                link.chip(),
-                format!("Stop searching in {}", link.folder),
-                EventHandler::new(move |_: ()| {
-                    clear.call(());
-                    finish.call(());
-                }),
-            );
-        }
 
         // The list under the field: suggestions, or the one thing to say.
-        let focused = focus().is_focused();
-        // A press on the row takes the keyboard from the field. A field that
-        // is new takes it back at once (as after picking a completion), where
-        // a plain request does not hold.
-        let refocus = EventHandler::new(move |_: ()| {
-            had_focus.set(false);
-            *fresh.write() += 1;
-        });
-        let search_rows = search.as_ref().filter(|_| scoped).map(|link| {
-            let query = link.find.read().query.clone();
-            // The row shows while the field has the keyboard, or the pointer
-            // is on it (its press takes the keyboard for a moment), and
-            // while a search runs, so Stop is always in reach.
-            let running = link.deep.as_ref().is_some_and(|deep| deep.running);
-            if query.is_empty() || !(focused || hovered().is_some() || running) {
-                return Vec::new();
-            }
-            let on_deep = {
-                let on_deep = link.on_deep.clone();
-                let refocus = refocus.clone();
-                EventHandler::new(move |_: ()| {
-                    hovered.set(None);
-                    on_deep.call(());
-                    refocus.call(());
-                })
-            };
-            vec![Element::from(SubfolderRow {
-                query,
-                deep: link.deep.clone(),
-                on_deep,
-                on_stop: {
-                    let on_stop = link.on_stop.clone();
-                    let refocus = refocus.clone();
-                    EventHandler::new(move |_: ()| {
-                        hovered.set(None);
-                        on_stop.call(());
-                        refocus.call(());
-                    })
-                },
-                on_hover: EventHandler::new(move |inside: bool| {
-                    hovered.set(inside.then_some(0));
-                }),
-            })]
-        });
-        let rows: Vec<Element> = if let Some(rows) = search_rows {
-            rows
-        } else if checking() {
+        let rows: Vec<Element> = if checking() {
             vec![NoticeRow::busy("Checking…").into()]
         } else if let Some(complaint) = complaint.read().clone() {
             vec![ComplaintRow { complaint }.into()]
@@ -646,18 +516,12 @@ impl Component for Edit {
         let open = !rows.is_empty();
         let panel = popover(open, &field_area.read(), rows, scroll);
 
-        let close = compact.then(|| {
+        // On a phone the pencil of the trail becomes this button, in the same
+        // place: the field is the trail's box with its text in it.
+        if compact {
             let finish = finish.clone();
-            let search = search.clone();
-            icon_button(Icon::WindowClose, move |_: ()| {
-                if let Some(link) = &search {
-                    link.on_clear.call(());
-                }
-                finish.call(())
-            })
-                .size(Dim::Control)
-                .tooltip("Show the path as folders")
-        });
+            field = field.trailing_action(Icon::WindowClose, "Show the path as folders", move |_: ()| finish.call(()));
+        }
         rect()
             .component("AddressEdit")
             .tw(
@@ -667,7 +531,6 @@ impl Component for Edit {
                     grow_children(),
                     items(Align::Center),
                     w_full(),
-                    gap(S2),
                 ],
             )
             .child(
@@ -680,13 +543,17 @@ impl Component for Edit {
                     .on_key_down(on_key_down)
                     .child(field),
             )
-            .maybe_child(close)
             .child(Element::from(panel))
     }
 }
 
-/// `path` the way a person writes it: `~` for the home folder.
-fn shown_path(path: &Path, home: &Path) -> String {
+/// `path` the way a person writes it: `~` for the home folder, and the
+/// `trash:///` address for what is in the Trash.
+fn shown_path(path: &Path, roots: &Roots) -> String {
+    if roots.below_trash(path).is_some() {
+        return roots.uri(&Where::Folder(path.to_path_buf()));
+    }
+    let home = roots.home();
     match path.strip_prefix(home) {
         Ok(rest) if home != Path::new("/") => {
             if rest.as_os_str().is_empty() {

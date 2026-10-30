@@ -1,8 +1,8 @@
 //! The preview host: one content, three frames.
 //!
 //! [`PreviewHost`] is the content of a preview in every frame: the header
-//! (file, position, buttons), the viewer the registry picked, the Info panel
-//! and the footer line. A popup, a docked pane and a full-screen window put
+//! (file, position, buttons), the viewer the registry picked and the Info
+//! panel. There is no footer line. A popup, a docked pane and a full-screen window put
 //! the same component in different places; the frame decides only where it
 //! sits and which keys reach it.
 //!
@@ -13,12 +13,12 @@
 
 use std::sync::Arc;
 
-use bingux_preview_core::{PreviewSource, ViewerId};
+use bingux_preview_core::PreviewSource;
 use freya::prelude::*;
 
-use super::chrome::{InfoPanel, PreviewNav, footer, header, icon_of};
+use super::chrome::{InfoPanel, PreviewNav, header, icon_of};
 use super::info;
-use super::keys::{self, Command};
+use super::keys::{self, Command, KeyClaim};
 use super::mode::Mode;
 use super::subject::{Resolved, resolve};
 use super::viewers::{self, Placeholder};
@@ -54,9 +54,9 @@ impl Component for PreviewHost {
         // viewer's own keys work at once and no button shows a ring nobody
         // asked for. A docked pane leaves it with the list.
         let a11y_id = use_a11y();
-        let mode = self.mode;
+        let takes_focus = self.mode != Mode::Pane && self.nav.focus;
         use_hook(move || {
-            if mode != Mode::Pane {
+            if takes_focus {
                 a11y_id.request_focus();
             }
         });
@@ -79,7 +79,7 @@ impl Component for PreviewHost {
     }
 }
 
-/// One source on the stage, with its Info panel and footer. Keyed by the
+/// One source on the stage, with its Info panel. Keyed by the
 /// source, so another file starts every load afresh.
 #[derive(PartialEq)]
 struct Subject {
@@ -90,11 +90,11 @@ struct Subject {
     info: State<bool>,
 }
 
-/// The facts of what a subject shows: what the footer and the Info panel say.
-fn facts_of(state: &Option<Result<Arc<Resolved>, String>>) -> (String, Vec<info::InfoRow>) {
+/// The facts of what a subject shows: what the Info panel says.
+fn facts_of(state: &Option<Result<Arc<Resolved>, String>>) -> Vec<info::InfoRow> {
     match state {
-        Some(Ok(resolved)) => (info::summary(resolved), info::rows(resolved)),
-        _ => (String::new(), Vec::new()),
+        Some(Ok(resolved)) => info::rows(resolved),
+        _ => Vec::new(),
     }
 }
 
@@ -106,18 +106,18 @@ impl Component for Subject {
     }
 
     fn render(&self) -> impl IntoElement {
+        let direction = crate::controls::direction::use_direction();
         let tokens = use_tokens();
+        let claim = use_provide_context(KeyClaim::default);
+        let keyboard = self.nav.keyboard;
+        use_provide_context(move || keyboard);
         let loaded = use_resource(self.source.clone(), resolve);
         let state: Option<Result<Arc<Resolved>, String>> = loaded.with(|loaded| match loaded {
             Resource::Ready(resolved) | Resource::Refreshing(resolved) => Some(Ok(resolved.clone())),
             Resource::Error(message) => Some(Err(message.clone())),
             Resource::Loading => None,
         });
-        let viewer = match &state {
-            Some(Ok(resolved)) => resolved.viewer,
-            _ => ViewerId::Card,
-        };
-        let (line, rows) = facts_of(&state);
+        let rows = facts_of(&state);
 
         // A pane has no room for the Info panel beside the viewer: it takes
         // the viewer's place while it is open.
@@ -150,15 +150,30 @@ impl Component for Subject {
         let nav = self.nav.clone();
         let mode = self.mode;
         let info = self.info;
-        // A docked pane leaves the keyboard with the list: the list's own
-        // arrows already step the selection the pane follows.
+        // The arrows choose the file, in every frame and in every viewer. A
+        // docked pane leaves the keyboard with the list until the person clicks
+        // into it; then the pane steps the list's selection itself, and
+        // Escape gives the keyboard back.
         let on_key = move |event: Event<KeyboardEventData>| {
-            if mode == Mode::Pane {
+            // A viewer that is taking typed text keeps every key.
+            if claim.get() || (keyboard.is_pane() && !keyboard.held()) {
                 return;
             }
-            let Some(command) = keys::route(&event.key, event.modifiers, viewer, nav.grid) else {
+            let Some(command) = keys::route(&event.key, event.modifiers, nav.grid, direction) else {
                 return;
             };
+            if keyboard.is_pane() && command == Command::Close {
+                // Space is the viewer's in a pane (a page down, play and pause).
+                if !matches!(event.key, Key::Named(NamedKey::Escape)) {
+                    return;
+                }
+                event.stop_propagation();
+                keyboard.release();
+                if let Some(release) = &nav.on_release {
+                    release.call(());
+                }
+                return;
+            }
             event.stop_propagation();
             run(&nav, mode, info, command);
         };
@@ -186,8 +201,6 @@ impl Component for Subject {
                     )
                     .maybe_child(panel),
             )
-            .child(rect().tw(&tokens, &[w_full(), h(Dim::Hairline), bg(Paint::Separator)]))
-            .child(footer(&tokens, line))
     }
 }
 

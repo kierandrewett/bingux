@@ -194,7 +194,8 @@ The switches on the Date and time page and the clock format row also have a
 right-click menu with the same change.
 
 A subpage slides in from the right over the page, which stays still beneath it,
-and a Back button slides it back out. On a desktop window the window's own buttons stay at the top right while the sheet moves, and the header's own Back appears once the slide
+and a Back button slides it back out the way it came, in the same 320 ms on the same
+ease-in-out curve (an open and a close are one motion: neither starts slowly nor snaps off; see "The slide curve" in `docs/bingux-ui.md`). On a desktop window the window's own buttons stay at the top right while the sheet moves, and the header's own Back appears once the slide
 settles, so only one chevron shows at a time. The header shows a Back button and the subpage
 title is the large title at the top of the page. As the page scrolls, the title
 fades into the centre of the header bar. On a phone the large title also fades
@@ -777,7 +778,7 @@ capture. `BINGUX_SETTINGS_SNAPSHOT_FRAMES=DIR` writes each frame of the
 manifest, from the first load on. `BINGUX_SETTINGS_SNAPSHOT_SCRIPT` then runs
 a walk of `;`-separated commands: `click x,y`, `right_click x,y`,
 `hover x,y`, `scroll x,y,dy`, `drag x1,y1,x2,y2`, `down x,y`, `move x,y` and `up x,y` (a held drag, so a frame can be saved between steps), `touch x,y` (a finger tap), `long_press x,y` (a finger held past the long-press threshold), `touch_down x,y`, `touch_move x,y` and `touch_up x,y` (a held finger, for dragging a text selection handle), `type TEXT` (keys into the focused field), `key escape|return|tab`,
-`click-text LABEL`, `address PAGE[/SUBPAGE]`, `wait MS`, `mark TEXT` (a
+`click-text LABEL`, `click-name NAME` (a control by its accessible name, for one that draws only an icon), `address PAGE[/SUBPAGE]`, `wait MS`, `mark TEXT` (a
 marker in the manifest) and `save NAME`. Pass `@path` instead to read the
 commands from a file. `scripts/frame-walk.py` drives the whole sidebar this
 way: each page's first subpage and back, one popup, and a scroll down and

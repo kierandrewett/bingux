@@ -26,7 +26,7 @@ all of it by construction.
 | Taxonomy | `bingux-taxonomy` (`app.rs`, `model.rs`: `PageId::from_segments`) | The window address names `category/page`; the taxonomy keeps its own address mapping. | Same hand-written plumbing. |
 
 Things worth keeping: the percent-escaped URI form, the single-instance
-hand-off, the slide look (320 ms expo-out, card corners and shadow), the
+hand-off, the slide look (320 ms symmetric ease-in-out, card corners and shadow), the
 per-page scroll memory, `use_page_busy`, `PageHead`.
 
 ## 2. Options compared
@@ -230,8 +230,11 @@ Dragging -> Settling(Commit | Cancel)`.
 * Release: **commit** when progress >= 0.35 or the rightward velocity over the
   last 100 ms is >= 700 px/s (and progress > 3 %); a leftward fling >= 500 px/s
   cancels. Otherwise cancel.
-* `Settling` runs the same pose function to 1 (commit, 260 ms expo-out) or to
-  0 (cancel, 220 ms with a slight overshoot spring). Grabbing the edge again
+* `Settling` runs the same pose function to 1 (commit, `SLIDE_MS` = 320 ms,
+  the time every slide takes, on a cubic Hermite curve, `release_curve`, that
+  starts at the speed the finger had at the lift and stops dead: a finger at
+  rest starts it from rest, a flick up to 3 times the average speed) or to
+  0 (cancel, 240 ms with a slight overshoot spring). Grabbing the edge again
   mid-settle continues from the pose on screen: no jump.
 
 The pose (`PredictivePose`, a pure function of drag `d` and commit `k`):
@@ -251,10 +254,23 @@ It is built once when the gesture starts and kept as the same `Element`, so
 Freya diffs it as unchanged: only the transform, opacity and corner values
 change per frame. Page data does not refresh meanwhile (SettingsSmooth's
 `task::set_sliding` defers background results while a slide or gesture runs).
-A non-gesture pop (Back button, Alt+Left, Esc, mouse Back) on a compact window
-plays the same pose as a synthetic fling (`d` 0 to 1 over the first 40 %, `k`
-0 to 1 over 280 ms); on a desktop window it keeps the 320 ms slide, which is
-the same pop with the pose of a wide window. Reduced motion
+A non-gesture pop (Back button, Alt+Left, mouse Back, the sidebar) on a compact
+window plays the same pose as a synthetic fling (`d` 0 to 1 over the first
+40 % of `k`, `k` 0 to 1 over `SLIDE_MS` = 320 ms); on a desktop window it is
+the 320 ms slide, the same pop with the pose of a wide window. A pop that is
+not a swipe has no finger to carry on from, so `k` follows `slide`, the one
+curve of every push and pop: the symmetric ease
+`t^k / (t^k + (1 - t)^k)` with `k` = `SLIDE_SHARPNESS` (2.0, the one number to
+tune; `SLIDE_MS` is the other). It is point-symmetric, `slide(1 - t) =
+1 - slide(t)`, so the close is the open played backwards and the open mirrored
+in space at once: the same speed in and out. (An expo-out open reversed starts
+with 1.5 % of the way in 128 ms and reads as lag; an expo-out close is off the
+screen within 100 ms and reads as a snap. `slide` covers 3 % in 48 ms, half in
+160 ms and 90 % in 240 ms, both ways.) A swipe released past its threshold
+instead leaves on `release_curve` from the finger's speed, scaled by the 40 %
+the drag pose takes (`DRAG_SHARE`), so the pose never stands still at the
+lift. Escape does not pop a
+page; it closes the menu or dialog above it, or clears a search. Reduced motion
 (`tokens.motion(ms) == 0`) replaces the pose with a cross-fade and the
 settle with no animation.
 
@@ -299,7 +315,11 @@ a split button can use it.
   with `bingux-files:` as an alias and `recent:` as a place of the same
   history, one `*path` route) is used by the chooser, each Files tab's
   `NavModel` (kept in its `TabMemory`) and the Files window's own router, which
-  receives forwarded launches. `files::location_of` and `files::place_of`
+  receives forwarded launches as `reset` (a stack of one: the launch is the
+  location a tab is opened on, never an entry in any history). All moves of a
+  tab's model go through `files::history` (places only; cleaned by name; links
+  not followed), and a linear model keeps the last `HISTORY_LIMIT` entries.
+  `files::location_of` and `files::place_of`
   convert between a `Where` and its location. The toolbar's Back and Forward
   carry the history menu of that model. Up is a `go` to the parent folder, so
   it is a history entry like any navigation in a file view. A folder name is

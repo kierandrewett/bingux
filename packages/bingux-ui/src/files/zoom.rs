@@ -11,7 +11,7 @@
 //!
 //! | Icon | View |
 //! | ---- | ---- |
-//! | 16 px (the default), 20, 24, 32 | a list: rows with columns. The row grows only as far as the icon needs. |
+//! | 16 px (the default; 32 px on a phone), 20, 24, 32 | a list: rows with columns. The row grows only as far as the icon needs. |
 //! | 48, 64, 96, 128, 192 | a grid: a tile with the icon or a picture of the file, and its name under it in the same text size as the list's |
 //!
 //! The view follows the level, so zooming in walks from a list through ever
@@ -82,10 +82,24 @@ use crate::typography::{Ink, NUMERIC};
 /// The icon sizes, in logical pixels, from the smallest to the largest. The
 /// first is the default.
 pub const LADDER: [u16; 9] = [16, 20, 24, 32, 48, 64, 96, 128, 192];
-/// The level a folder opens at: 16 px, in a list.
+/// The level a folder opens at on a desktop: 16 px, in a list.
 pub const DEFAULT_PX: u16 = LADDER[0];
+
+/// The level a folder opens at in the current size class: [`DEFAULT_PX`] on a
+/// desktop, [`COMPACT_DEFAULT_PX`] on a phone. Read the size class: call it
+/// while rendering.
+pub fn default_zoom_px() -> u16 {
+    if is_compact() { COMPACT_DEFAULT_PX } else { DEFAULT_PX }
+}
 /// The largest icon that is shown in a list. Larger ones are shown in a grid.
 pub const LAST_LIST_PX: u16 = 32;
+/// The level a folder opens at on a phone (the compact size class): the
+/// largest list level. A phone row is 56 px high (`Dim::NavItem`), which holds
+/// an icon of 40 px with the row's padding; the ladder has no 40, and 48 is the
+/// first grid level (a tile, not a row), so the list's last step, 32 px, is the
+/// icon that fills the row best and keeps it a list. The text and the side
+/// padding are the desktop's.
+pub const COMPACT_DEFAULT_PX: u16 = LAST_LIST_PX;
 /// The level of a grid that an app asked for with `ViewMode::Grid`, and a
 /// folder has not been shown another way yet.
 pub const REQUESTED_GRID_PX: u16 = 128;
@@ -335,6 +349,8 @@ pub struct Zoom {
     remainder: State<f32>,
     last_wheel: State<Option<Instant>>,
     anchor: State<Option<(f32, f32)>>,
+    /// The level a folder opens at in this size class, for [`Zoom::reset`].
+    default: u16,
     /// The level the person last chose here, and `None` until they do. The
     /// owner setting the level (a folder opening at its remembered one) does
     /// not count: only a choice is worth remembering.
@@ -351,6 +367,7 @@ pub fn use_zoom(level: State<u16>, max_px: u16) -> Zoom {
         last_wheel: use_state::<Option<Instant>>(|| None),
         anchor: use_state::<Option<(f32, f32)>>(|| None),
         chosen: use_state::<Option<u16>>(|| None),
+        default: default_zoom_px(),
     }
 }
 
@@ -400,9 +417,9 @@ impl Zoom {
         }
     }
 
-    /// Back to 16 px, in a list.
+    /// Back to the level a folder opens at: 16 px in a list, 32 px on a phone.
     pub fn reset(&self) {
-        self.set_px(DEFAULT_PX);
+        self.set_px(self.default);
     }
 
     /// Shows a list or a grid: goes to the level of that kind nearest the

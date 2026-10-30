@@ -255,6 +255,39 @@ pub const ROW_EDITORS: &[Spec] = &[
     }),
 ];
 
+const EXPANDER_LONG_TITLE: &str =
+    "Other wired adapters that are not plugged into anything right now";
+const EXPANDER_LONG_SUBTITLE: &str =
+    "Cable unplugged on every one of them, so none can carry traffic until one is connected";
+
+fn expander_children() -> Vec<Element> {
+    vec![
+        switch_row("Connect automatically", true, |_| {}).into_element(),
+        row("Address").value("02:1A:2B:3C:4D:5E").into_element(),
+        row("Metric").subtitle("A lower metric is preferred").into_element(),
+    ]
+}
+
+/// The card of a phone page, `width` px wide (the phone's width less the page's
+/// two 16 px margins: 358, 328 and 288 for 390, 360 and 320), with a long
+/// expander, open and closed, among plain rows.
+fn phone_page(width: f32) -> Element {
+    rect()
+        .width(Size::px(width))
+        .child(rows(vec![
+            row("Before").into_element(),
+            expander_row(EXPANDER_LONG_TITLE, expander_children())
+                .subtitle(EXPANDER_LONG_SUBTITLE)
+                .expanded(true)
+                .into_element(),
+            expander_row("Advanced", vec![row("Option one").into_element()])
+                .subtitle("Closed")
+                .into_element(),
+            row("Compare").value("A value").navigates().into_element(),
+        ]))
+        .into_element()
+}
+
 pub const EXPANDER: &[Spec] = &[
     Spec::live("Closed, open it", || {
         rows(vec![
@@ -265,7 +298,7 @@ pub const EXPANDER: &[Spec] = &[
                     switch_row("Option two", false, |_| {}).into_element(),
                 ],
             )
-            .subtitle("Press to reveal two rows")
+            .subtitle("Two rows")
             .into_element(),
         ])
     }),
@@ -279,6 +312,41 @@ pub const EXPANDER: &[Spec] = &[
             .into_element(),
         ])
     }),
+    Spec::forced("Leading icon and a value", || {
+        rows(vec![
+            expander_row("Other wired adapters", expander_children())
+                .leading(Icon::NetworkWired)
+                .value("3 adapters")
+                .expanded(true)
+                .into_element(),
+        ])
+    }),
+    Spec::forced("Long title and subtitle wrap", || {
+        rows(vec![
+            expander_row(EXPANDER_LONG_TITLE, expander_children())
+                .subtitle(EXPANDER_LONG_SUBTITLE)
+                .expanded(true)
+                .into_element(),
+        ])
+    }),
+    Spec::forced("An expander in an expander", || {
+        rows(vec![
+            expander_row(
+                "Advanced",
+                vec![
+                    expander_row("More", vec![row("Deeper").value("1").into_element()])
+                        .expanded(true)
+                        .into_element(),
+                    row("Sibling").into_element(),
+                ],
+            )
+            .expanded(true)
+            .into_element(),
+        ])
+    }),
+    Spec::forced("Phone page, 390 px wide", || phone_page(358.0)).wide(),
+    Spec::forced("Phone page, 360 px wide", || phone_page(328.0)).wide(),
+    Spec::forced("Phone page, 320 px wide", || phone_page(288.0)).wide(),
     Spec::forced("Property rows", || {
         rows(vec![
             property_row("Kernel", "6.12.0-100.fc43.x86_64").into_element(),
@@ -976,16 +1044,11 @@ pub const STATUS_PAGE: &[Spec] = &[
     }),
     Spec::forced("Title only", || {
         let tokens = use_tokens();
+        // No fixed height: the page is the icon, the title and its padding.
         rect()
             .tw(
                 &tokens,
-                &[
-                    w_full(),
-                    h(Dim::Box24),
-                    rounded(Radius::Card),
-                    bg(Paint::Card),
-                    items(Align::Center),
-                ],
+                &[w_full(), rounded(Radius::Card), bg(Paint::Card)],
             )
             .child(status_page(Icon::Folder, "This folder is empty"))
             .into_element()

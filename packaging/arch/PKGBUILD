@@ -2,8 +2,9 @@
 #
 # Bingux desktop packages for Arch Linux (and Bingux OS, which is Arch-based).
 #
-# One source archive, six packages: the shell, the configuration command,
-# Settings, Files, the sound effects engine and the Taxonomy reference window.
+# One source archive, seven packages: the shell, the configuration command,
+# Settings, Files, the preview helper, the sound effects engine and the
+# Taxonomy reference window.
 # `make install` stages everything once in build(); each package_*() function
 # takes its files out of that stage, and the last one (bingux, the shell) takes
 # whatever is left, so no installed file is dropped.
@@ -14,7 +15,7 @@
 # only the development template: do not publish a package built with it.
 # shellcheck shell=bash disable=SC2034,SC2154
 pkgbase=bingux
-pkgname=(bingux-config bingux-settings bingux-files bingux-audio-effects bingux-taxonomy bingux)
+pkgname=(bingux-config bingux-settings bingux-files bingux-preview-host bingux-audio-effects bingux-taxonomy bingux)
 pkgver=0.1.0
 pkgrel=1
 arch=('x86_64')
@@ -22,7 +23,8 @@ url='https://github.com/kierandrewett/bingux'
 license=('GPL-3.0-or-later')
 makedepends=('cargo' 'gcc' 'make' 'python' 'pkgconf' 'qt6-base' 'qt6-declarative' 'qt6-wayland'
     'qt6-tools' 'wayland' 'wayland-protocols' 'libpulse' 'gtk4' 'libadwaita' 'fontconfig'
-    'freetype2' 'libxkbcommon' 'libglvnd' 'desktop-file-utils' 'appstream')
+    'freetype2' 'libxkbcommon' 'libglvnd' 'desktop-file-utils' 'appstream'
+    'gstreamer' 'gst-plugins-base' 'poppler-glib' 'cairo')
 # !lto: bingux-searchd bundles SQLite through the cc crate; with makepkg's
 # -flto=auto the C objects become GCC bitcode that rustc's linker rejects.
 options=('!lto')
@@ -109,6 +111,7 @@ package_bingux-files() {
         'udisks2: mount and unmount drives'
         'gvfs: more places and trash integration'
         'unzip: open zip archives'
+        'bingux-preview-host: preview films, songs and PDFs'
         'bingux-settings: Settings')
     _take usr/bin/bingux-files \
         usr/share/applications/bingux-files.desktop \
@@ -116,6 +119,17 @@ package_bingux-files() {
         usr/share/metainfo/dev.drewett.bingux.Files.metainfo.xml \
         usr/share/man/man1/bingux-files.1
     _licenses bingux-files
+}
+
+package_bingux-preview-host() {
+    pkgdesc='Helper process that plays media and renders PDFs for Bingux previews'
+    license=('GPL-3.0-or-later' 'MIT' 'Unicode-3.0')
+    depends=('gstreamer' 'gst-plugins-base' 'gst-plugins-good' 'poppler-glib' 'cairo')
+    optdepends=('gst-libav: more video and audio formats'
+        'gst-plugins-bad: more video and audio formats'
+        'gst-plugin-pipewire: audio output through PipeWire')
+    _take usr/bin/bingux-preview-host
+    _licenses bingux-preview-host
 }
 
 package_bingux-audio-effects() {

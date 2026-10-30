@@ -8,8 +8,9 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use super::menu_query::Pill;
-use super::sheet_gesture::{Claim, Metrics, Outcome, Seconds, SheetGesture};
+use super::sheet_gesture::{Claim, Metrics, Outcome, Seconds, SheetGesture, lift_limit};
 use crate::component::ComponentName;
+use crate::controls::direction::{Direction, use_direction};
 use crate::nav::ModalKind;
 use crate::nav::router::use_modal;
 use crate::motion::{PRESENCE_SCALE, use_presence};
@@ -17,7 +18,15 @@ use crate::style::*;
 use crate::focus::{FocusCore, claim_press, release_press, use_focus_core};
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
+use super::sheet_motion::{
+    Release, SHEET_MS, SHEET_SPRING_MS, openness, release_offset, use_sheet_clock, use_sheet_spring,
+};
 use crate::typography::{BODY, CAPTION, EMPHASIS, Ink};
+use crate::popup_windows::backend::{Parent, PopupBackend};
+use crate::popup_windows::place;
+use crate::popup_windows::portal::{NativePopup, ParentSlot, Want, use_native_popup};
+use crate::popup_windows::MARGIN;
+use std::rc::Rc;
 
 /// Space kept between a floating panel and the window edges.
 pub(crate) const PANEL_EDGE: f32 = S2.fixed_px();
@@ -110,9 +119,9 @@ fn gesture_clock() -> Seconds {
     EPOCH.with(|epoch| epoch.elapsed().as_secs_f64())
 }
 
-/// The sheet's pull, eased. It follows the pointer exactly while `dragging`,
-/// and eases to its new value otherwise: the spring back to rest uses the same
-/// curve and time as the sheet opening. A dismiss keeps the pull where it was.
+/// A toast's pull, eased. It follows the pointer exactly while `dragging`, and
+/// eases to its new value otherwise. (A sheet's pull is
+/// [`use_sheet_spring`](super::sheet_motion::use_sheet_spring).)
 pub(crate) fn use_sheet_pull(pull: State<f32>, dragging: bool, motion: u64) -> f32 {
     use_animation_transition(*pull.read(), move |from: f32, to: f32| {
         let time = if dragging { 0 } else { motion };
@@ -125,31 +134,56 @@ pub(crate) fn use_sheet_pull(pull: State<f32>, dragging: bool, motion: u64) -> f
     .value()
 }
 
-/// One sheet's drag: the pure gesture ([`SheetGesture`]) and the pull target
-/// the sheet is eased to. Both are state, so a change redraws the sheet.
+/// One sheet's drag: the pure gesture ([`SheetGesture`]), the pull target the
+/// sheet is eased to, and the release that last let it go. All are state, so
+/// a change redraws the sheet.
 #[derive(Clone, Copy)]
 pub(crate) struct SheetDrag {
     gesture: State<SheetGesture>,
     pull: State<f32>,
+    release: State<Release>,
+    /// The pull on screen when this was made, so a finger that catches a
+    /// settling sheet takes it from where it is.
+    shown: f32,
 }
 
-/// The drag state of the calling sheet. `pull` is where the sheet's pull
-/// target lives: a popup's lives on the window, so the window can inset with it.
-pub(crate) fn use_sheet_drag(pull: State<f32>) -> SheetDrag {
+/// The drag state of the calling sheet. `pull` and `release` are where the
+/// sheet's pull target and its last release live: a popup's live on the window,
+/// so the window can inset with it.
+pub(crate) fn use_sheet_drag(pull: State<f32>, release: State<Release>) -> SheetDrag {
     SheetDrag {
         gesture: use_state(SheetGesture::default),
         pull,
+        release,
+        shown: 0.0,
     }
 }
 
 impl SheetDrag {
+    /// This drag, for a sheet that shows `pull` (see [`use_sheet_spring`]).
+    pub(crate) fn showing(mut self, pull: f32) -> Self {
+        self.shown = pull;
+        self
+    }
+
+    /// A press that catches a sheet still settling keeps the pull it shows,
+    /// so the sheet does not jump under the finger.
+    fn catch(mut self) {
+        if self.shown != 0.0 && !self.gesture.peek().is_active() {
+            self.gesture.write().settle_to(self.shown);
+            self.pull.set_if_modified(self.shown);
+        }
+    }
+
     /// The pointer went down on the grabber at `y`.
     pub(crate) fn grab(mut self, y: f32) {
+        self.catch();
         self.gesture.write().grab(y, gesture_clock());
     }
 
     /// A finger went down in the list at `y`.
     pub(crate) fn press_content(mut self, y: f32) {
+        self.catch();
         self.gesture.write().press_content(y, gesture_clock());
     }
 
@@ -173,13 +207,17 @@ impl SheetDrag {
     }
 
     /// The pointer went up. A sheet that is let go springs back; one that
-    /// is to be dismissed keeps its pull while it leaves.
+    /// is to be dismissed keeps its pull while it leaves. Either carries the
+    /// speed the pointer had.
     pub(crate) fn released(mut self, metrics: &Metrics) -> Outcome {
         if !self.gesture.peek().is_active() {
             return Outcome::None;
         }
-        let outcome = self.gesture.write().release(gesture_clock(), metrics);
-        self.settle(outcome);
+        let now = gesture_clock();
+        let velocity = self.gesture.peek().velocity(now);
+        let pull = self.gesture.peek().pull();
+        let outcome = self.gesture.write().release(now, metrics);
+        self.settle(outcome, pull, velocity);
         outcome
     }
 
@@ -188,12 +226,18 @@ impl SheetDrag {
         if !self.gesture.peek().is_active() {
             return Outcome::None;
         }
+        let pull = self.gesture.peek().pull();
         let outcome = self.gesture.write().cancel();
-        self.settle(outcome);
+        self.settle(outcome, pull, 0.0);
         outcome
     }
 
-    fn settle(mut self, outcome: Outcome) {
+    fn settle(mut self, outcome: Outcome, pull: f32, velocity: f32) {
+        if outcome == Outcome::None {
+            return;
+        }
+        let last = *self.release.peek();
+        self.release.set(last.next(pull, velocity));
         if outcome == Outcome::Rest {
             self.gesture.write().settle_to(0.0);
             self.pull.set_if_modified(0.0);
@@ -213,6 +257,18 @@ impl SheetDrag {
 /// where it is, so it spends no travel off screen.
 pub(crate) fn sheet_offset(progress: f32, pull: f32, travel: f32) -> f32 {
     pull + (1.0 - progress) * (travel - pull).max(0.0)
+}
+
+/// Where a sheet is, in pixels below rest, when its clock reads `clock` (see
+/// [`use_sheet_clock`]) and it shows `pull`. A sheet that is dismissed from a
+/// pull (`exit` is the speed it was let go at) carries on from there at that
+/// speed and comes to rest off the window. Any other sheet is where its opening
+/// puts it, so a close retraces the open.
+pub(crate) fn sheet_position(clock: f32, pull: f32, exit: Option<f32>, travel: f32) -> f32 {
+    match exit {
+        Some(velocity) if pull > 0.0 => release_offset(pull, velocity, travel, 1.0 - clock),
+        _ => sheet_offset(openness(clock), pull, travel),
+    }
 }
 
 /// How much of a sheet's scrim shows: all of it at rest, none once the
@@ -356,8 +412,9 @@ pub(crate) fn place(
     window: (f32, f32),
     prefer: Side,
     gap: f32,
+    direction: Direction,
 ) -> (f32, f32) {
-    place_aligned(anchor, size, window, prefer, gap, EdgeAlign::Start)
+    place_aligned(anchor, size, window, prefer, gap, EdgeAlign::Start, direction)
 }
 
 /// Where a panel of `size` sits beside `anchor` in a window of `window`. It
@@ -374,6 +431,7 @@ pub(crate) fn place_aligned(
     prefer: Side,
     gap: f32,
     align: EdgeAlign,
+    direction: Direction,
 ) -> (f32, f32) {
     let (width, height) = size;
     let (window_width, window_height) = window;
@@ -406,6 +464,16 @@ pub(crate) fn place_aligned(
             };
             let x = match align {
                 EdgeAlign::Centre => anchor.x + anchor.width / 2.0 - width / 2.0,
+                // The start edge is the right one when the window reads from the right: the
+                // panel's right edge lines up with the anchor's, or its left edge when it
+                // would run off the window's left edge.
+                EdgeAlign::Start if direction.is_rtl() => {
+                    if unknown || anchor.right() - width >= PANEL_EDGE {
+                        anchor.right() - width
+                    } else {
+                        anchor.x
+                    }
+                }
                 EdgeAlign::Start => {
                     let start_fits = unknown || anchor.x + width + PANEL_EDGE <= window_width;
                     if start_fits {
@@ -447,13 +515,19 @@ fn clamp_inside(value: f32, size: f32, limit: f32) -> f32 {
 /// Where a menu of `size` opens against its trigger in a window of `window`.
 /// A [`Panel`] of [`PanelKind::Menu`] is placed with this, so a caller that
 /// needs a menu's rectangle before it draws gets the same one.
-pub(crate) fn menu_rect(trigger: PanelTrigger, size: (f32, f32), window: (f32, f32)) -> PanelRect {
+pub(crate) fn menu_rect(
+    trigger: PanelTrigger,
+    size: (f32, f32),
+    window: (f32, f32),
+    direction: Direction,
+) -> PanelRect {
     let (x, y) = place(
         trigger.anchor(),
         size,
         window,
         trigger.preferred_side(),
         PANEL_GAP,
+        direction,
     );
     PanelRect {
         x,
@@ -466,10 +540,15 @@ pub(crate) fn menu_rect(trigger: PanelTrigger, size: (f32, f32), window: (f32, f
 /// Where a text edit bar of `size` sits against a caret or selection: centred
 /// over it, above when there is room under the window header, below otherwise,
 /// held inside the window. The bar never covers the header.
-pub(crate) fn text_bar_rect(anchor: PanelRect, size: (f32, f32), window: (f32, f32)) -> PanelRect {
+pub(crate) fn text_bar_rect(
+    anchor: PanelRect,
+    size: (f32, f32),
+    window: (f32, f32),
+    direction: Direction,
+) -> PanelRect {
     let room_above = anchor.y - PANEL_GAP - size.1 >= Dim::Header.px();
     let prefer = if room_above { Side::Above } else { Side::Below };
-    let (x, y) = place_aligned(anchor, size, window, prefer, PANEL_GAP, EdgeAlign::Centre);
+    let (x, y) = place_aligned(anchor, size, window, prefer, PANEL_GAP, EdgeAlign::Centre, direction);
     PanelRect {
         x,
         y,
@@ -561,6 +640,9 @@ pub(crate) struct Panel {
     /// Draws only the surface, with no shield of its own. A submenu sits
     /// inside the shield of the menu it belongs to.
     nested: bool,
+    /// How deep in its menu's cascade a nested panel is (the first submenu is 1). Each level
+    /// paints above everything the levels before it hold: see [`crate::layers::cascade`].
+    cascade: usize,
     /// Rendered inside the shield after the surface. A menu's submenus go here.
     overlaid: Vec<Element>,
     /// The menu root's keyboard focus, key handler and global pointer-move handler.
@@ -573,6 +655,9 @@ pub(crate) struct Panel {
     pill: Option<Pill>,
     /// What Escape does, when it is more than dismissing.
     on_escape: Option<EventHandler<()>>,
+    /// A choice sheet that may take the taller share of the window a form's
+    /// sheet takes, for content that is a control and not a list of rows.
+    tall: bool,
 }
 
 impl Panel {
@@ -586,7 +671,7 @@ impl Panel {
             kind,
             open,
             trigger,
-            layer: Layer::Overlay,
+            layer: crate::layers::PANEL,
             width: Dim::Menu.px(),
             content_height: 0.0,
             title: None,
@@ -595,6 +680,7 @@ impl Panel {
             on_closed: EventHandler::new(|_: ()| {}),
             children,
             nested: false,
+            cascade: 0,
             overlaid: Vec::new(),
             focus: None,
             on_key: None,
@@ -602,6 +688,7 @@ impl Panel {
             measure: None,
             pill: None,
             on_escape: None,
+            tall: false,
         }
     }
 
@@ -665,9 +752,12 @@ impl Panel {
         self
     }
 
-    /// Draws only the surface, with no shield of its own.
-    pub(crate) fn nested(mut self) -> Self {
+    /// Draws only the surface, with no shield of its own, as level `cascade` of its menu's
+    /// cascade (the first submenu is 1, a panel that is not a submenu 0): it paints above
+    /// every level before it.
+    pub(crate) fn nested(mut self, cascade: usize) -> Self {
         self.nested = true;
+        self.cascade = cascade;
         self
     }
 
@@ -689,6 +779,13 @@ impl Panel {
     /// The panel's own key handler must leave Escape alone, since both hear it.
     pub(crate) fn on_escape(mut self, on_escape: impl Into<EventHandler<()>>) -> Self {
         self.on_escape = Some(on_escape.into());
+        self
+    }
+
+    /// Lets a choice sheet grow as tall as a form's sheet, instead of the
+    /// lower share a list of rows gets. A colour picker's sheet is one.
+    pub(crate) fn tall(mut self) -> Self {
+        self.tall = true;
         self
     }
 
@@ -730,17 +827,51 @@ impl Component for Panel {
         } else {
             90
         };
-        let pull = use_state(|| 0.0_f32);
-        let drag = use_sheet_drag(pull);
-        // A sheet that has left forgets its pull, so it opens at rest again.
-        let progress = use_presence(self.open, tokens.motion(motion), move || {
-            on_closed.call(());
-            drag.reset();
-        });
-        let visible = self.open || progress > 0.0;
-        let root = *Platform::get().current_window().root_size.read();
-        let window = (root.width, root.height);
         let sheet = self.kind == PanelKind::Choice && is_compact();
+        let pull = use_state(|| 0.0_f32);
+        let release = use_state(Release::default);
+        let drag = use_sheet_drag(pull, release);
+        // A sheet that has left forgets its pull, so it opens at rest again. A
+        // sheet is not a presence: it is moved by its own clock, and the
+        // presence only runs for the panels that are not sheets.
+        let sheet_closed = on_closed.clone();
+        let presence = use_presence(self.open, tokens.motion(motion), move || {
+            if !sheet {
+                on_closed.call(());
+                drag.reset();
+            }
+        });
+        let clock = use_sheet_clock(
+            sheet && self.open,
+            self.open,
+            tokens.motion(SHEET_MS),
+            move || {
+                if sheet {
+                    sheet_closed.call(());
+                    drag.reset();
+                }
+            },
+        );
+        let popup = use_native_popup();
+        let parent_slot = use_try_consume::<ParentSlot>();
+        let own_slot = use_provide_context(ParentSlot::new);
+        let native = self.native_backend(&popup);
+        let progress = if native.is_some() {
+            1.0
+        } else if sheet {
+            openness(clock)
+        } else {
+            presence
+        };
+        let visible = if native.is_some() {
+            self.open
+        } else {
+            self.open || if sheet { clock > 0.0 } else { presence > 0.0 }
+        };
+        let root = *Platform::get().current_window().root_size.read();
+        // A popup window is placed by the compositor, which knows the outputs: the window's
+        // size is no limit, and the layout assumes none.
+        let window = if native.is_some() { (0.0, 0.0) } else { (root.width, root.height) };
         let dismiss = self.on_dismiss.clone();
         // Escape closes the panel, unless the panel has something to take back
         // first (a typed query, an open submenu).
@@ -748,13 +879,26 @@ impl Component for Panel {
             .on_escape
             .clone()
             .unwrap_or_else(|| dismiss.clone());
-        let eased = use_sheet_pull(pull, drag.dragging(), tokens.motion(MOTION_MS));
+        let eased = use_sheet_spring(
+            pull,
+            release,
+            drag.dragging(),
+            tokens.motion(SHEET_SPRING_MS),
+            lift_limit(sheet_overhang()),
+        );
+        let drag = drag.showing(eased);
 
         let backdrop = if self.kind == PanelKind::Dialog {
             self.centred(&tokens, core, dismiss, progress)
         } else if sheet {
             let layout = self.sheet_layout(window);
-            let offset = sheet_offset(progress, eased, layout.metrics.travel);
+            let dismissed = !self.open && *pull.read() > 0.0;
+            let offset = sheet_position(
+                clock,
+                eased,
+                dismissed.then(|| release.read().velocity),
+                layout.metrics.travel,
+            );
             // The scrim is a sibling of the sheet, not its parent: a press on
             // the sheet never reaches it, so the sheet needs no handler that
             // stops a touch (which would drop the touch's release).
@@ -767,14 +911,25 @@ impl Component for Panel {
                     dismiss.clone(),
                 ))
                 .child(self.sheet(&tokens, &layout, offset, drag, dismiss.clone()))
+        } else if let Some(backend) = &native {
+            self.native_backdrop(
+                &tokens,
+                core,
+                dismiss.clone(),
+                escape.clone(),
+                &popup,
+                backend,
+                parent_slot,
+                &own_slot,
+            )
         } else if self.kind == PanelKind::Bar {
             self.edit_bar(&tokens, window, progress)
         } else if self.nested {
-            self.menu(&tokens, window, progress)
+            self.menu(&tokens, window, progress, None)
         } else {
             shield(&tokens, core, dismiss.clone(), escape.clone())
                 .layer(self.layer)
-                .child(self.menu(&tokens, window, progress))
+                .child(self.menu(&tokens, window, progress, None))
                 .children(self.overlaid.clone())
         };
 
@@ -785,13 +940,14 @@ impl Component for Panel {
         } else {
             0.0
         };
-        let pill = if visible && !sheet {
-            self.query_pill(&tokens, window, progress)
+        let pill = if visible && !sheet && native.is_none() {
+            self.query_pill(&tokens, window, progress, None)
         } else {
             None
         };
         rect()
             .component("Panel")
+            .layer(crate::layers::cascade(self.cascade))
             .width(Size::px(wrapper_width))
             .height(Size::px(0.0))
             .maybe_child(visible.then_some(backdrop))
@@ -804,54 +960,68 @@ impl Panel {
     /// under the surface (above it when there is no room below), aligned to
     /// its left edge. It sits outside the rows, so nothing in the list
     /// shifts, and it is announced to a screen reader as a polite status.
-    fn query_pill(&self, tokens: &Tokens, window: (f32, f32), progress: f32) -> Option<Rect> {
+    fn query_pill(
+        &self,
+        tokens: &Tokens,
+        window: (f32, f32),
+        progress: f32,
+        local: Option<LocalMenu>,
+    ) -> Option<Rect> {
         let pill = self.pill.as_ref()?;
         let viewport = if self.scroll.is_some() {
             self.content_height.min(Dim::MenuList.px())
         } else {
             self.content_height
         };
-        let placed = menu_rect(
-            self.trigger,
-            (self.width, viewport + 2.0 * S2.px()),
-            window,
-        );
+        let size = (self.width, viewport + 2.0 * S2.px());
+        let placed = match local {
+            Some(local) => PanelRect { x: local.margin, y: local.margin, width: size.0, height: size.1 },
+            None => menu_rect(self.trigger, size, window, use_direction()),
+        };
         let height = Dim::Box7.px();
         let below = placed.bottom() + PANEL_GAP;
-        let y = if below + height + PANEL_EDGE <= window.1 {
+        let y = if local.is_some() || below + height + PANEL_EDGE <= window.1 {
             below
         } else {
             (placed.y - PANEL_GAP - height).max(PANEL_EDGE)
         };
+        // The pill is a stacked child of a box as wide as the menu, not a box placed at the menu's
+        // left: the engine reads the menu's direction and puts it at the start edge, the right
+        // edge of a menu in a window that reads from the right. The box takes no pointer.
         Some(
             rect()
-                .component("QueryPill")
                 .position(Position::new_global().top(y).left(placed.x))
-                .layer(Layer::Overlay)
+                .layer(crate::layers::PANEL)
                 .opacity(progress)
-                .a11y_role(AccessibilityRole::Status)
-                .a11y_alt(pill.announcement())
-                .a11y_builder(|builder| builder.set_live(accesskit::Live::Polite))
-                .tw(
-                    tokens,
-                    &[
-                        flex_row(),
-                        items(Align::Center),
-                        gap(S2),
-                        h(Dim::Box7),
-                        px(S3),
-                        rounded(Radius::Pill),
-                        bg(Paint::Popover),
-                        border(Line::Hairline),
-                        shadow(Elevation::Raised),
-                    ],
-                )
-                .child(BODY.in_ink(Ink::Text).label(tokens, pill.query.clone()).max_lines(1))
+                .width(Size::px(placed.width))
+                .interactive(false)
                 .child(
-                    CAPTION
-                        .in_ink(Ink::Muted)
-                        .label(tokens, pill.count_text())
-                        .max_lines(1),
+                    rect()
+                        .component("QueryPill")
+                        .a11y_role(AccessibilityRole::Status)
+                        .a11y_alt(pill.announcement())
+                        .a11y_builder(|builder| builder.set_live(accesskit::Live::Polite))
+                        .tw(
+                            tokens,
+                            &[
+                                flex_row(),
+                                items(Align::Center),
+                                gap(S2),
+                                h(Dim::Box7),
+                                px(S3),
+                                rounded(Radius::Pill),
+                                bg(Paint::Popover),
+                                border(Line::Hairline),
+                                shadow(Elevation::Raised),
+                            ],
+                        )
+                        .child(BODY.in_ink(Ink::Text).label(tokens, pill.query.clone()).max_lines(1))
+                        .child(
+                            CAPTION
+                                .in_ink(Ink::Muted)
+                                .label(tokens, pill.count_text())
+                                .max_lines(1),
+                        ),
                 ),
         )
     }
@@ -951,7 +1121,13 @@ impl Panel {
 
     /// The anchored surface: a menu or popover placed against its trigger.
     /// A menu's root also takes the keyboard and the pointer's moves.
-    fn menu(&self, tokens: &Tokens, window: (f32, f32), progress: f32) -> Rect {
+    fn menu(
+        &self,
+        tokens: &Tokens,
+        window: (f32, f32),
+        progress: f32,
+        local: Option<LocalMenu>,
+    ) -> Rect {
         let viewport = if self.scroll.is_some() {
             self.content_height.min(Dim::MenuList.px())
         } else {
@@ -959,17 +1135,29 @@ impl Panel {
         };
         let size = (self.width, viewport + 2.0 * S2.px());
         let anchor = self.trigger.anchor();
-        let placed = menu_rect(self.trigger, size, window);
-        // The surface grows from the corner nearest its anchor.
-        let origin = match (placed.y < anchor.y, placed.x < anchor.x) {
-            (true, true) => TransformOrigin::bottom_right(),
-            (true, false) => TransformOrigin::bottom_left(),
-            (false, true) => TransformOrigin::top_right(),
-            (false, false) => TransformOrigin::top_left(),
+        // In a popup window the card sits at the window's margin; its place on the screen is the
+        // compositor's business.
+        let (placed, origin, progress) = match local {
+            Some(local) => (
+                PanelRect { x: local.margin, y: local.margin, width: size.0, height: size.1 },
+                TransformOrigin::top_left(),
+                1.0,
+            ),
+            None => {
+                let placed = menu_rect(self.trigger, size, window, use_direction());
+                // The surface grows from the corner nearest its anchor.
+                let origin = match (placed.y < anchor.y, placed.x < anchor.x) {
+                    (true, true) => TransformOrigin::bottom_right(),
+                    (true, false) => TransformOrigin::bottom_left(),
+                    (false, true) => TransformOrigin::top_right(),
+                    (false, false) => TransformOrigin::top_left(),
+                };
+                (placed, origin, progress)
+            }
         };
         let mut surface = rect()
             .position(Position::new_global().top(placed.y).left(placed.x))
-            .layer(Layer::Overlay)
+            .layer(crate::layers::PANEL)
             .width(Size::px(self.width))
             .opacity(progress)
             .scale(PRESENCE_SCALE + (1.0 - PRESENCE_SCALE) * progress)
@@ -979,17 +1167,22 @@ impl Panel {
             .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
             .on_wheel(|event: Event<WheelEventData>| event.stop_propagation())
             .child(self.body(tokens, viewport, false, 0.0, None));
-        if let Some(focus) = self.focus {
-            surface = surface.a11y_id(focus).a11y_focusable(true);
-        }
-        if let Some(on_key) = self.on_key.clone() {
-            surface =
-                surface.on_key_down(move |event: Event<KeyboardEventData>| on_key.call(event));
+        // A popup window never has the keyboard: the window it grew from holds the focus node
+        // and the key handler (see `native_backdrop`).
+        if local.is_none() {
+            if let Some(focus) = self.focus {
+                surface = surface.a11y_id(focus).a11y_focusable(true);
+            }
+            if let Some(on_key) = self.on_key.clone() {
+                surface =
+                    surface.on_key_down(move |event: Event<KeyboardEventData>| on_key.call(event));
+            }
         }
         if let Some(on_move) = self.on_move.clone() {
+            let shift = local.map_or((0.0, 0.0), |local| local.origin);
             surface = surface.on_global_pointer_move(move |event: Event<PointerEventData>| {
                 let point = event.global_location();
-                on_move.call((point.x as f32, point.y as f32));
+                on_move.call((point.x as f32 + shift.0, point.y as f32 + shift.1));
             });
         }
         surface
@@ -1000,11 +1193,11 @@ impl Panel {
     fn edit_bar(&self, tokens: &Tokens, window: (f32, f32), progress: f32) -> Rect {
         let measure = self.measure;
         let size = measure.and_then(|measure| *measure.read());
-        let at = size.map(|size| text_bar_rect(self.trigger.anchor(), size, window));
+        let at = size.map(|size| text_bar_rect(self.trigger.anchor(), size, window, use_direction()));
         let (x, y) = at.map_or((0.0, 0.0), |rect| (rect.x, rect.y));
         rect()
             .position(Position::new_global().top(y).left(x))
-            .layer(Layer::Overlay)
+            .layer(crate::layers::PANEL)
             .width(Size::Inner)
             .opacity(if at.is_some() { progress } else { 0.0 })
             .scale(PRESENCE_SCALE + (1.0 - PRESENCE_SCALE) * progress)
@@ -1043,7 +1236,7 @@ impl Panel {
         };
         let tail = sheet_bottom();
         let chrome = GRABBER_ROW + header;
-        let percent = if self.kind == PanelKind::Choice {
+        let percent = if self.kind == PanelKind::Choice && !self.tall {
             CHOICE_SHEET_MAX_HEIGHT_PERCENT
         } else {
             SHEET_MAX_HEIGHT_PERCENT
@@ -1152,7 +1345,7 @@ impl Panel {
         rect()
             .component("SheetSlot")
             .position(Position::new_absolute().bottom(-overhang).left(left))
-            .layer(Layer::Overlay)
+            .layer(crate::layers::PANEL)
             .width(width)
             .offset_y(offset)
             .child(card)
@@ -1211,4 +1404,107 @@ fn sheet_scrim(tokens: &Tokens, core: FocusCore, amount: f32, on_dismiss: EventH
             on_dismiss.call(());
         })
         .on_press(move |_: Event<PressEventData>| release_press(&release))
+}
+
+/// A card drawn inside a popup window: where the window's margin puts it, and what its pointer
+/// positions add to be positions in the window the menu was opened in.
+#[derive(Clone, Copy)]
+struct LocalMenu {
+    margin: f32,
+    origin: (f32, f32),
+}
+
+impl Panel {
+    /// The backend this panel opens its popup window through, or `None` when it draws in its
+    /// window: only menus and (on a window that is not phone-sized) choices are popup windows;
+    /// dialogs, sheets and the edit bar belong to their window; without a backend (X11, a
+    /// snapshot, a refusal) everything does.
+    fn native_backend(&self, popup: &NativePopup) -> Option<Rc<dyn PopupBackend>> {
+        if popup.refused() || !matches!(self.kind, PanelKind::Menu | PanelKind::Choice) {
+            return None;
+        }
+        if self.kind == PanelKind::Choice && is_compact() {
+            return None;
+        }
+        crate::popup_windows::backend()
+    }
+
+    /// What a popup window shows: the card, and the query pill under it.
+    fn native_content(&self, tokens: &Tokens, origin: (f32, f32)) -> Element {
+        let local = LocalMenu { margin: MARGIN, origin };
+        rect()
+            .expanded()
+            .child(self.menu(tokens, (0.0, 0.0), 1.0, Some(local)))
+            .maybe_child(self.query_pill(tokens, (0.0, 0.0), 1.0, Some(local)))
+            .into_element()
+    }
+
+    /// The panel as a popup window. The window opens (or closes, or resizes) to match this
+    /// render. What stays in this window is the clear shield (a press on it dismisses, and does
+    /// not reach the page), the focus node and key handler of a menu, and the pointer moves the
+    /// menu's state machine follows; the popup holds only the card.
+    #[allow(clippy::too_many_arguments)]
+    fn native_backdrop(
+        &self,
+        tokens: &Tokens,
+        core: FocusCore,
+        dismiss: EventHandler<()>,
+        escape: EventHandler<()>,
+        popup: &NativePopup,
+        backend: &Rc<dyn PopupBackend>,
+        parent: Option<ParentSlot>,
+        own: &ParentSlot,
+    ) -> Rect {
+        let viewport = if self.scroll.is_some() {
+            self.content_height.min(Dim::MenuList.px())
+        } else {
+            self.content_height
+        };
+        let size = (self.width, viewport + 2.0 * S2.px());
+        // The layout the menu assumes: placed where it asks, with no window to hold it in.
+        let direction = use_direction();
+        let placed = menu_rect(self.trigger, size, (0.0, 0.0), direction);
+        let from = match &parent {
+            Some(slot) => slot.token().map(|token| (Parent::Popup(token), slot.card_origin())),
+            None => Some((Parent::Window(<Platform as freya_winit::WinitPlatformExt>::window_id()), (0.0, 0.0))),
+        };
+        let origin = (placed.x - MARGIN, placed.y - MARGIN);
+        if let Some((parent, card_origin)) = from {
+            let placement = place::request(self.trigger, size, direction)
+                .relative_to(card_origin);
+            popup.sync(
+                backend,
+                Want {
+                    open: self.open,
+                    placement,
+                    parent,
+                    origin,
+                    on_dismiss: dismiss.clone(),
+                    content: self.native_content(tokens, origin),
+                },
+            );
+        }
+        // Submenus open from this popup, at the card's place in this menu's coordinates.
+        own.set(popup.token(), (placed.x, placed.y));
+        if self.nested {
+            return rect().width(Size::px(0.0)).height(Size::px(0.0));
+        }
+        let mut backdrop = shield(tokens, core, dismiss, escape)
+            .layer(self.layer)
+            .children(self.overlaid.clone());
+        if let Some(focus) = self.focus {
+            backdrop = backdrop.a11y_id(focus).a11y_focusable(true);
+        }
+        if let Some(on_key) = self.on_key.clone() {
+            backdrop =
+                backdrop.on_key_down(move |event: Event<KeyboardEventData>| on_key.call(event));
+        }
+        if let Some(on_move) = self.on_move.clone() {
+            backdrop = backdrop.on_global_pointer_move(move |event: Event<PointerEventData>| {
+                let point = event.global_location();
+                on_move.call((point.x as f32, point.y as f32));
+            });
+        }
+        backdrop
+    }
 }

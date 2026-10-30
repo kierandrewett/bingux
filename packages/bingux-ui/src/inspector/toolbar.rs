@@ -66,10 +66,6 @@ pub(super) fn header(
                 .child(tabs),
         )
         .trailing(
-            icon_button(Icon::Application, |_| super::inspect_self())
-                .tooltip("Inspect this inspector (Ctrl+Alt+Shift+I)"),
-        )
-        .trailing(
             icon_button(Icon::Pause, move |_| super::set_paused(!paused))
                 .tooltip(pause_label)
                 .active(paused),

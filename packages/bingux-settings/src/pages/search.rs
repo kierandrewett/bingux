@@ -796,6 +796,7 @@ fn engine_row(engine: Engine, engines: &[Engine], default: &str, ctx: Ctx) -> Ro
         .leading(Icon::WebBrowser)
         .subtitle(format!("Shortcut {}", engine.shortcut))
         .trailing(trailing)
+        .trailing_fit()
         .context_menu(menu)
 }
 
@@ -1046,6 +1047,7 @@ fn files_group(data: &Model, ctx: Ctx) -> Group {
                     row(folder_name(root))
                         .subtitle(folder_location(root))
                         .trailing(trailing)
+                        .trailing_fit()
                         .context_menu(menu),
                 );
             }

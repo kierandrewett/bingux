@@ -1,0 +1,33 @@
+[package]
+name = "bingux-preview-host"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "Bingux preview host: the helper process that plays media (GStreamer) and renders documents (poppler) for file previews"
+authors = ["Kieran Drewett"]
+homepage = "https://github.com/kierandrewett/bingux"
+repository = "https://github.com/kierandrewett/bingux"
+
+[[bin]]
+name = "bingux-preview-host"
+path = "src/main.rs"
+
+[dependencies]
+bingux-preview-core = { path = "../bingux-preview-core" }
+libc = "0.2"
+# Audio and video. Linked here and nowhere else: a codec bug takes this
+# process, not the file manager.
+gstreamer = "0.24"
+gstreamer-app = "0.24"
+gstreamer-video = "0.24"
+# PDF pages and text. `v21_12` is `poppler_document_new_from_fd`, which reads
+# the descriptor the viewer opened instead of a path.
+poppler-rs = { version = "0.25", features = ["v21_12"] }
+glib = "0.21"
+cairo-rs = "0.21"
+
+[profile.dev.package."*"]
+opt-level = 2
+debug-assertions = false
+overflow-checks = false

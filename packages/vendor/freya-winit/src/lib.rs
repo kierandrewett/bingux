@@ -31,6 +31,7 @@ pub mod extensions;
 pub mod modifiers;
 pub mod integration;
 pub mod plugins;
+pub mod popup;
 pub mod renderer;
 #[cfg(feature = "tray")]
 mod tray_icon;

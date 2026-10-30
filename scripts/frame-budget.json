@@ -1,0 +1,69 @@
+{
+  "note": "Budgets of scripts/frame-gate.py, in ms of the best of the rounds, for the machine calibration_ms was taken on (a debug build with opt-level 2 dependencies, bingux-settings itself at 0). measured_ms is what that run read, for comparison; warn_ms and fail_ms are set by hand.",
+  "warn_ms": 20,
+  "fail_ms": 50,
+  "calibration_ms": 24.5,
+  "pages": {
+    "network": {
+      "measured_ms": 2.8
+    },
+    "bluetooth": {
+      "measured_ms": 3.1
+    },
+    "background": {
+      "measured_ms": 2.9,
+      "warn_ms": 30,
+      "fail_ms": 60,
+      "note": "Appearance (the `background` page): the reference for the 21 ms page switch measured with frame-time.py; looser than the rest because it mounts the colour and wallpaper pickers"
+    },
+    "accessibility": {
+      "measured_ms": 2.9
+    },
+    "desktop": {
+      "measured_ms": 2.7
+    },
+    "search": {
+      "measured_ms": 3.1
+    },
+    "display": {
+      "measured_ms": 3.4
+    },
+    "sound": {
+      "measured_ms": 4.0
+    },
+    "power": {
+      "measured_ms": 0.1,
+      "note": "the page every other is mounted from: its own time is not a mount"
+    },
+    "keyboard": {
+      "measured_ms": 3.7
+    },
+    "mouse": {
+      "measured_ms": 3.4
+    },
+    "datetime": {
+      "measured_ms": 3.1
+    },
+    "users": {
+      "measured_ms": 2.8
+    },
+    "applications": {
+      "measured_ms": 4.2
+    },
+    "about": {
+      "measured_ms": 3.6
+    },
+    "network/wifi": {
+      "measured_ms": 2.8
+    },
+    "applications/default": {
+      "measured_ms": 16.4
+    },
+    "background/font": {
+      "measured_ms": 7.7
+    },
+    "keyboard/shortcuts": {
+      "measured_ms": 13.4
+    }
+  }
+}

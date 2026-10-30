@@ -188,7 +188,7 @@ fn films(m: &Media<'_>, tools: &Tools) -> Element {
                 draft.reduce.video.quality = VideoQuality::Crf(crf.round().clamp(f64::from(low), f64::from(high)) as u8);
             })
             .value_text(format!("CRF {crf}"))
-            .subtitle("Higher quality on the right: a bigger file."),
+            .subtitle("Higher quality on the right: a bigger file"),
         )),
     )
     .lazy();
@@ -241,7 +241,7 @@ fn films(m: &Media<'_>, tools: &Tools) -> Element {
             switch_row("Remove location and other tags", options.strip_metadata, move |on: bool| {
                 state.write().reduce.video.strip_metadata = on;
             })
-            .subtitle("Takes out the title, the place and the other tags."),
+            .subtitle("Takes out the title, the place and the other tags"),
         )
         .into()
 }
@@ -280,7 +280,7 @@ fn songs(m: &Media<'_>, tools: &Tools) -> Element {
             switch_row("Remove tags and cover", options.strip_metadata, move |on: bool| {
                 state.write().reduce.audio.strip_metadata = on;
             })
-            .subtitle("Takes out the artist, the title and the picture."),
+            .subtitle("Takes out the artist, the title and the picture"),
         )
         .into()
 }

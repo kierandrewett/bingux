@@ -400,9 +400,11 @@ impl Component for PathLabel {
                 .max_lines(1)
                 .into()
         };
-        // The tooltip is the whole text, and only while it is cut.
+        // The tooltip is the whole text, and only while it is cut. The
+        // `Elided` box is what the Layout checks read as "this text is cut on
+        // purpose, and its full text is the tooltip".
         let text = if cut && self.tooltip {
-            hover_tip(text, self.text.clone())
+            rect().component("Elided").child(hover_tip(text, self.text.clone())).into()
         } else {
             text
         };

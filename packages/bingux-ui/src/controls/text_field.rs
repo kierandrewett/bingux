@@ -25,7 +25,7 @@ use crate::shell::menu::{MenuItem, menu_item, menu_separator};
 use crate::shell::overlays::Overlays;
 use crate::shell::panel::{Panel, PanelRect, PanelTrigger, text_bar_rect};
 use crate::style::*;
-use crate::surface::{use_enabled, use_tokens};
+use crate::surface::{surface_color, use_enabled, use_tokens};
 use crate::typography::{BODY, CAPTION, Ink, mono_family};
 
 /// What a password field shows for each character: a bullet, as the system's
@@ -62,10 +62,13 @@ pub struct TextField {
     /// The text can be selected and copied but not edited.
     read_only: bool,
     leading: Option<Icon>,
-    leading_column: Option<Dim>,
+    /// A search field: the search role, and Escape clears the text first.
+    search: bool,
     /// A removable token before the text; see [`TextField::leading_chip`].
     leading_chip: Option<(String, String, EventHandler<()>)>,
     clearable: bool,
+    /// One icon button at the field's trailing edge; see [`TextField::trailing_action`].
+    action: Option<(Icon, String, EventHandler<()>)>,
     invalid: Option<String>,
     validates: bool,
     revert_to: Option<String>,
@@ -106,9 +109,10 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         enabled: true,
         read_only: false,
         leading: None,
-        leading_column: None,
+        search: false,
         leading_chip: None,
         clearable: false,
+        action: None,
         invalid: None,
         validates: false,
         revert_to: None,
@@ -123,6 +127,19 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         on_enter_modifiers: None,
         edit_extra: Vec::new(),
     }
+}
+
+/// The icon button a field carries at its trailing edge: [`Dim::InlineButton`]
+/// with the corner of the field less [`FIELD_INSET`]. A bar placed where a
+/// field will replace it draws its own button with this, inside a box with
+/// `pr(FIELD_INSET)`, so the button stays where it is when the field comes.
+pub(crate) fn field_action(
+    icon: Icon,
+    on_press: impl Into<EventHandler<()>>,
+) -> crate::controls::button::IconButton {
+    icon_button(icon, on_press)
+        .size(Dim::InlineButton)
+        .radius(Radius::Control.nested(FIELD_INSET.px()))
 }
 
 impl TextField {
@@ -221,16 +238,20 @@ impl TextField {
         self
     }
 
-    /// A muted icon before the text, such as the search glyph.
+    /// A muted icon before the text, such as a folder glyph. It sits in a
+    /// square slot as wide as the field is tall (so the field's own height
+    /// decides the slot at every density), centred in it on both axes; the
+    /// text starts [`S1`] after the slot.
     pub fn leading(mut self, icon: Icon) -> Self {
         self.leading = Some(icon);
         self
     }
 
-    /// Draws the leading glyph centred in a box `column` wide, at row size,
-    /// followed by a gap of S3, so it lines up with a row icon column.
-    pub fn leading_column(mut self, column: Dim) -> Self {
-        self.leading_column = Some(column);
+    /// The field is a search field: the accessibility role is search and
+    /// Escape clears the text before it does anything else. Reached through
+    /// [`SearchField`](crate::controls::SearchField), the only search control.
+    pub(crate) fn search(mut self) -> Self {
+        self.search = true;
         self
     }
 
@@ -253,6 +274,20 @@ impl TextField {
     /// Show a clear button while the field has text.
     pub fn clearable(mut self) -> Self {
         self.clearable = true;
+        self
+    }
+
+    /// An icon button at the field's trailing edge, in the place and size of
+    /// the clear and reveal buttons ([`field_action`]), always shown. A bar
+    /// that turns into this field puts its own button in the same place, so
+    /// the swap moves nothing.
+    pub fn trailing_action(
+        mut self,
+        icon: Icon,
+        label: impl Into<String>,
+        on_press: impl Into<EventHandler<()>>,
+    ) -> Self {
+        self.action = Some((icon, label.into(), on_press.into()));
         self
     }
 
@@ -362,6 +397,8 @@ impl Component for TextField {
         let on_arrow = self.on_arrow.clone();
         let revert_to = self.revert_to.clone();
         let on_escape = self.on_escape.clone();
+        let escape_change = self.on_change.clone();
+        let search = self.search;
         let on_enter_modifiers = self.on_enter_modifiers.clone();
         let multiline = self.multiline;
         let invalid = self.invalid.is_some() || self.danger_outline;
@@ -370,6 +407,7 @@ impl Component for TextField {
         let visual = use_visual_focus(input_id);
         let enabled = use_enabled(self.enabled);
         let mut revealed = use_state(|| false);
+        // (hover is the input's own: see `hover_background` below)
         let mut command = use_state::<Option<InputCommand>>(|| None);
         let touch = use_press();
         let probe = use_state(InputProbe::default);
@@ -408,8 +446,20 @@ impl Component for TextField {
         // (see `Focusable`), so the field draws no edge of its own, and the
         // look while its context menu is open comes from `visual`, the one
         // source of truth for "is this focused".
+        // A field under the pointer takes the control's hover layer, as every
+        // other control does; a focused one keeps its focus fill under the ring.
+        let rest = if self.flat {
+            Paint::Transparent.color(&tokens)
+        } else {
+            fill.color(&tokens)
+        };
+        let hover = if self.flat || self.read_only {
+            rest
+        } else {
+            surface_color(&tokens, rest, true, false, false)
+        };
         let colors = InputColorsThemePartial {
-            background: Some(paint(fill)),
+            background: Some(Preference::Specific(rest)),
             focus_background: Some(paint(fill)),
             border_fill: Some(paint(Paint::Transparent)),
             focus_border_fill: Some(paint(Paint::Transparent)),
@@ -421,19 +471,24 @@ impl Component for TextField {
             (S0, S2)
         } else if self.dense {
             (S0_5, S2)
-        } else if self.leading_column.is_some() {
-            // The glyph column starts where a row's icon column does, so the
-            // text lines up with the row names beside it.
-            (S2, S2)
         } else {
             (S2, S3)
+        };
+        // After a glyph slot the slot is the field's inset, so the text
+        // starts S1 past it; a chip carries its own margin.
+        let pad_left = if self.leading.is_some() && self.leading_chip.is_none() {
+            S1
+        } else {
+            pad_horizontal
         };
         let radius = if self.flat { 0.0 } else { Radius::Control.px() };
         let layout = InputLayoutThemePartial {
             corner_radius: Some(Preference::Specific(CornerRadius::new_all(radius))),
-            padding: Some(Preference::Specific(Gaps::new_symmetric(
+            padding: Some(Preference::Specific(Gaps::new(
                 pad_vertical.px(),
                 pad_horizontal.px(),
+                pad_vertical.px(),
+                pad_left.px(),
             ))),
         };
         let width = self.width.px();
@@ -510,6 +565,7 @@ impl Component for TextField {
             .enabled(enabled)
             .theme_colors(colors)
             .theme_layout(layout)
+            .hover_background(hover)
             .mode(mode)
             .focus_within(visual.within_owner)
             .read_only(self.read_only)
@@ -526,6 +582,16 @@ impl Component for TextField {
                             on_escape.call(());
                             event.stop_propagation();
                             bar_open.set(false);
+                            return false;
+                        }
+                        // A search field with text clears it and stays put; the
+                        // next Escape, with the field empty, leaves it.
+                        if search && !value.peek().is_empty() {
+                            value.set(String::new());
+                            if let Some(on_change) = &escape_change {
+                                on_change.call(String::new());
+                            }
+                            event.stop_propagation();
                             return false;
                         }
                         if let Some(text) = revert_to.clone() {
@@ -580,6 +646,19 @@ impl Component for TextField {
                     }
                     // Tab moves focus, as Freya's own field does.
                     Key::Named(NamedKey::Tab) => false,
+                    // A Ctrl or Meta chord the field has no edit for (Ctrl+F,
+                    // Ctrl+L, Ctrl+Shift+F...) belongs to the window: it must
+                    // not be typed as text, and it keeps bubbling. The field's
+                    // own are select all, copy, cut, paste, undo and redo.
+                    // Alt with Ctrl is how some layouts type a letter (AltGr),
+                    // so that stays text.
+                    Key::Character(text)
+                        if event.modifiers.intersects(Modifiers::ctrl_or_meta())
+                            && !event.modifiers.contains(Modifiers::ALT)
+                            && !matches!(text.to_lowercase().as_str(), "a" | "c" | "x" | "v" | "z" | "y") =>
+                    {
+                        false
+                    }
                     _ => {
                         // Keys the field edits stay here: a multiline Enter
                         // must not trigger a popup's primary action.
@@ -589,6 +668,9 @@ impl Component for TextField {
                     }
                 }
             });
+        if self.search {
+            input = input.role(AccessibilityRole::SearchInput);
+        }
         if !self.multiline {
             input = input.height(Size::px(control_height));
         } else {
@@ -604,28 +686,22 @@ impl Component for TextField {
         }
         let mut leading: Option<Rect> = None;
         if let Some(icon) = self.leading {
-            // With a column the glyph is a fixed-width box at row size, with the
-            // rows' icon-to-text gap, so the glyph and the text line up with the
-            // rows that share the column. Without one the glyph sits at control
-            // size, tucked against the text.
-            let (glyph_size, after) = match self.leading_column {
-                Some(_) => (IconSize::Row, S0),
-                None => (IconSize::Control, S1),
-            };
-            // The field's text cursor belongs to the text. A glyph or button
-            // beside it shows the normal pointer, as every other control does.
-            let mut glyph = rect()
-                .height(Size::fill())
-                .cursor(CursorIcon::default())
-                .tw(&tokens, &[mr(after), flex_row(), center()]);
-            if let Some(column) = self.leading_column {
-                glyph = glyph.tw(&tokens, &[w(column)]);
-            }
-            leading = Some(glyph.child(icons::icon(
-                icon,
-                glyph_size,
-                Paint::Muted.color(&tokens),
-            )));
+            // The slot is as wide as the field is tall and as tall as the
+            // field, the glyph centred in it. The field's text cursor belongs
+            // to the text: a glyph or button beside it shows the normal pointer.
+            leading = Some(
+                rect()
+                    .component("IconSlot")
+                    .width(Size::px(control_height))
+                    .height(Size::fill())
+                    .cursor(CursorIcon::default())
+                    .tw(&tokens, &[flex_row(), center()])
+                    .child(icons::icon(
+                        icon,
+                        IconSize::Control,
+                        Paint::Muted.color(&tokens),
+                    )),
+            );
         }
         if let Some((label, remove_label, on_remove)) = &self.leading_chip {
             let on_remove = on_remove.clone();
@@ -656,10 +732,12 @@ impl Component for TextField {
                         .size(Dim::InlineButton)
                         .tooltip(remove_label),
                 );
+            let bare = leading.is_none();
             leading = Some(
                 rect()
                     .height(Size::fill())
                     .tw(&tokens, &[flex_row(), items(Align::Center)])
+                    .maybe(bare, |row| row.tw(&tokens, &[pl(S2)]))
                     .maybe_child(leading.take())
                     .child(chip),
             );
@@ -667,28 +745,28 @@ impl Component for TextField {
         if let Some(leading) = leading {
             input = input.leading(leading);
         }
-        let clear = self.clearable && has_text;
-        if clear || self.password || self.suffix.is_some() {
+        // A disabled field is inert, so it offers no clear button either.
+        let clear = self.clearable && has_text && enabled;
+        if clear || self.password || self.suffix.is_some() || self.action.is_some() {
             let on_change = on_change.clone();
-            // Every action in a field is the standard icon button, one
-            // field height less twice the inset on each side, centred on
-            // the field's cross axis and the same distance from its
-            // trailing edge. Its corner is the field's less the inset.
+            // Every action in a field is the standard icon button, centred in
+            // a square slot at the trailing edge as wide as the field is
+            // tall: the inset is half of what the button leaves of the
+            // height, so it is the same on the cross axis and from the end.
+            // Its corner is the field's less the inset.
             let small = self.flat || self.dense;
-            let (button, inset, nested) = if small {
-                (Dim::Box5, S0_5, Radius::Mark)
+            let (button, nested) = if small {
+                (Dim::Box5, Radius::Mark)
             } else {
-                (
-                    Dim::InlineButton,
-                    FIELD_INSET,
-                    Radius::Control.nested(FIELD_INSET.px()),
-                )
+                (Dim::InlineButton, Radius::Control.nested(FIELD_INSET.px()))
             };
-            let has_button = clear || self.password;
+            let inset = ((control_height - button.px()) / 2.0).max(0.0);
+            let has_button = clear || self.password || self.action.is_some();
             let mut trailing = rect()
                 .cursor(CursorIcon::default())
                 .tw(&tokens, &[flex_row(), center(), gap(S1)])
-                .tw(&tokens, &[pr(if has_button { inset } else { pad_horizontal })]);
+                // ui-lint: allow(the inset is derived from the measured control and button heights)
+                .padding((0.0, if has_button { inset } else { pad_horizontal.px() }, 0.0, 0.0));
             if let Some(suffix) = &self.suffix {
                 trailing = trailing.child(
                     BODY.in_ink(Ink::Muted)
@@ -722,6 +800,14 @@ impl Component for TextField {
                         .radius(nested)
                         .refocus(input_id)
                         .tooltip(tip),
+                );
+            }
+            if let Some((icon, label, on_press)) = &self.action {
+                trailing = trailing.child(
+                    icon_button(*icon, on_press.clone())
+                        .size(button)
+                        .radius(nested)
+                        .tooltip(label),
                 );
             }
             input = input.trailing(trailing);
@@ -762,8 +848,9 @@ impl Component for TextField {
         };
         // The bar's window rectangle once measured. A press inside it is the bar's.
         let window = *Platform::get().current_window().root_size.read();
+        let direction = crate::controls::direction::use_direction();
         let bar_hit = text_trigger.zip(*bar_size.read()).map(|(trigger, size)| {
-            text_bar_rect(trigger.anchor(), size, (window.width, window.height))
+            text_bar_rect(trigger.anchor(), size, (window.width, window.height), direction)
         });
         // A touch on the bar or a handle is not a tap outside the field, which
         // would take its focus.
@@ -961,84 +1048,6 @@ impl Component for TextField {
     }
 }
 
-/// The search well is the same field with a search glyph and a clear button.
-pub fn search_field(value: State<String>, on_change: impl Into<EventHandler<String>>) -> TextField {
-    text_field(value, |_| {})
-        .leading(Icon::Search)
-        .placeholder("Search")
-        .clearable()
-        .on_change(on_change)
-}
-
-/// The search well's text starts a fixed distance from its glyph at any width.
-#[cfg(all(test, feature = "testing"))]
-mod search_offset_tests {
-    use freya::prelude::*;
-
-    use super::*;
-    use crate::snapshot::Snapshot;
-    use crate::theme::provide_tokens;
-
-    #[derive(PartialEq)]
-    struct Host {
-        width: f32,
-        typed: &'static str,
-    }
-
-    impl Component for Host {
-        fn render(&self) -> impl IntoElement {
-            let _tokens = provide_tokens();
-            let value = use_state(|| self.typed.to_string());
-            rect()
-                .width(Size::px(self.width))
-                .child(search_field(value, |_| {}).fill_width())
-        }
-    }
-
-    /// The text's start from the glyph's right edge, the glyph's distance
-    /// from the field's left edge, and the widest gap the tokens allow.
-    fn offsets(width: f32, typed: &'static str) -> (f32, f32, f32) {
-        let mut shot = Snapshot::new(
-            move || Host { width, typed }.into_element(),
-            (width + 40.0, 120.0),
-        );
-        shot.settle(std::time::Duration::from_millis(200));
-        let (glyph, limit) = shot
-            .runner()
-            .run_in(|| (IconSize::Control.px(), S1.px() + S3.px() + 8.0 + 1.0));
-        let glyphs = shot.runner().find_many(|node, _| {
-            let area = node.layout().area;
-            ((area.width() - glyph).abs() < 0.01 && (area.height() - glyph).abs() < 0.01)
-                .then_some((area.min_x(), area.max_x()))
-        });
-        let texts = shot.runner().find_many(|node, element| {
-            Paragraph::try_downcast(element)?;
-            Some(node.layout().area.min_x())
-        });
-        let glyph = glyphs.first().copied().expect("the search glyph");
-        let text = texts.first().copied().expect("the field's text");
-        eprintln!("width {width} typed {typed:?}: glyph {glyph:?} text {text}");
-        (text - glyph.1, glyph.0, limit)
-    }
-
-    #[test]
-    fn the_text_starts_a_fixed_offset_from_the_glyph_at_any_width() {
-        let mut seen = Vec::new();
-        for width in [96.0, 150.0, 220.0, 289.0, 420.0, 640.0] {
-            for typed in ["", "wifi"] {
-                seen.push(offsets(width, typed));
-            }
-        }
-        let (first_gap, first_edge, limit) = seen[0];
-        for (gap, edge, _) in &seen {
-            assert!((gap - first_gap).abs() < 0.5, "text gap {gap} differs from {first_gap}");
-            assert!((edge - first_edge).abs() < 0.5, "glyph edge {edge} differs from {first_edge}");
-        }
-        // The gap is the glyph's own margin plus the input's padding: never
-        // more than a few tokens, however wide the field is.
-        assert!(first_gap <= limit, "text starts {first_gap} px after the glyph, limit {limit}");
-    }
-}
 
 #[cfg(all(test, feature = "testing"))]
 #[path = "text_field_focus_tests.rs"]

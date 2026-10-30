@@ -392,24 +392,29 @@ pub(crate) enum OverlayStack {
 }
 
 impl OverlayStack {
-    fn menu_layer(self) -> Layer {
+    /// The menu's layer. A menu opened from inside a dialog (a zoom menu in
+    /// the preview card, a dropdown in a form) must be above that dialog, or
+    /// it opens behind the card that owns its button: `over_dialog` says one
+    /// is open.
+    fn menu_layer(self, over_dialog: bool) -> Layer {
         match self {
-            Self::Window => Layer::OverlayLevel(8),
-            Self::Popup => Layer::Overlay,
+            Self::Window if over_dialog => crate::layers::level(crate::layers::LEVEL_MENU_OVER_DIALOG),
+            Self::Window => crate::layers::level(crate::layers::LEVEL_MENU),
+            Self::Popup => crate::layers::PANEL,
         }
     }
 
     fn dialog_layer(self) -> Layer {
         match self {
-            Self::Window => Layer::OverlayLevel(12),
-            Self::Popup => Layer::Overlay,
+            Self::Window => crate::layers::level(crate::layers::LEVEL_DIALOG),
+            Self::Popup => crate::layers::PANEL,
         }
     }
 
     fn toast_layer(self) -> Layer {
         match self {
-            Self::Window => Layer::OverlayLevel(13),
-            Self::Popup => Layer::Overlay,
+            Self::Window => crate::layers::level(crate::layers::LEVEL_TOAST),
+            Self::Popup => crate::layers::PANEL,
         }
     }
 }
@@ -431,6 +436,7 @@ impl Component for OverlayLayers {
         let overlays = self.overlays;
         let stack = self.stack;
         let dialog = overlays.dialog.read().clone();
+        let over_dialog = dialog.is_some();
         let dialog_closing = *overlays.dialog_closing.read();
         let toast = overlays.toasts.read().first().cloned();
         let toast_closing = *overlays.toast_closing.read();
@@ -460,7 +466,7 @@ impl Component for OverlayLayers {
                 overlays,
                 menu,
                 closing: menu_closing,
-                layer: stack.menu_layer(),
+                layer: stack.menu_layer(over_dialog),
             }))
     }
 }

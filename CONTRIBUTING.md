@@ -22,6 +22,12 @@ make check
 `make check` builds both Rust daemons, runs their library and QML socket tests,
 checks native text layout and OSD event routing, and verifies a staged install.
 
+`make rules-check` runs every design check and reports the state of each of
+Kieran's rules: which check holds it, whether it passed in this run, what is not
+enforced. `make rules-check ARGS=--offline` is the quick version that starts no
+app. Where the rules are, what enforces them, how to add one and how to
+allowlist a finding: `design/rules-checks.md`.
+
 To verify native OSD event routing and status-only rendering in a nested
 Gnoblin session, build the status daemon and run:
 
@@ -109,15 +115,31 @@ builder, icon, style token or behaviour) must land with its entry in the
    `bingux-taxonomy <category>/<page>` opens it with the theme, density and
    scale switcher in the header. Put the screenshot paths, or what you saw,
    in the change description.
-4. Run `python3 scripts/layout-lint.py` (after building the settings and
-   taxonomy binaries, or with `--build`) before committing a UI change. It runs
-   the inspector's Layout checks headlessly over every Settings page, popup and
-   taxonomy page at desktop size and at 390x800 and fails on uneven padding,
-   dead space, off-centre or unequal controls, clipping, overlap, cut-off text
-   and misaligned baselines. Fix the component or token; an entry in its
-   `ALLOWED` list needs a reason.
+4. Run `python3 scripts/layout-lint.py --parity` (after building the settings,
+   taxonomy and Files binaries, or with `--build`; `make layout-check` is the
+   same with `--build --parity`, and `make check` calls it) before committing a
+   UI change. It runs the inspector's Layout checks headlessly over every
+   Settings page, popup, taxonomy page and Files at desktop size and at
+   390x800 and fails on uneven padding, dead space, off-centre or unequal
+   controls, icons off the centre of their slot, clipping, overlap, cut-off or
+   broken text, boxes outside their parent and misaligned baselines, and on
+   the spacing and alignment rules (`inset-asymmetry`, `trailing-inset`,
+   `column-aligned`, `list-row-inset`, `field-text-start`, `header-measure`,
+   `radius-concentric`, `off-scale-spacing`, each citing its rule IDs from
+   `design/rules.json`, e.g. `[SP-01]`). `--parity` also compares the insets
+   of every page's desktop and phone capture. Padding and alignment are what
+   gets complained about most: fix the component or token, not the call site.
+   A finding that is right by design gets an entry in the script's `ALLOWED`
+   list: the rule's key, a regex for the capture's name, a regex for the node
+   it is scoped to and a one-line reason (a whole component that a rule leaves
+   alone goes in `EXEMPT`, `NOT_BUTTONS` or `PILLS` in `inspector/checks/`,
+   each with its reason). Never a blanket entry, and an entry that matches
+   nothing is reported as unused. Where the rule is wrong, fix it in
+   `inspector/checks/` with a known-bad and a clean fixture in
+   `checks/tests.rs`. See "Layout checks" in `docs/bingux-ui.md`.
 5. Run `python3 scripts/overflow-check.py` (with `--build`, or after building
-   the same binaries) before committing a UI change. It renders every
+   the same binaries; `make overflow-check` is the same with `--build`, and
+   `make check` calls it) before committing a UI change. It renders every
    Settings page, popup and taxonomy page again under pseudo-localised
    strings (`BINGUX_PSEUDO_LOCALE=expand`, 40 % longer), the 200 % text
    scale, very long unbroken names, 390x800, 320x600 and every popup at 320 px,
@@ -136,6 +158,58 @@ builder, icon, style token or behaviour) must land with its entry in the
    fill and passes that node's radius; see "Focus" in `docs/bingux-ui.md`. The
    same rule is the inspector's Layout rule "Focus ring off its face", so
    `layout-lint.py` fails on it too.
+7. Run `python3 scripts/tooltip-check.py` (with `--build`, or after building the
+   settings, taxonomy and Files binaries; Settings and Files with
+   `--features snapshot`) before committing a change to a tooltip, an icon
+   button, a header, a tab strip or any control that holds an overlay with
+   text. It hovers every named icon button on every Settings page, popup,
+   taxonomy page and the Files window, and fails when a tooltip is narrower
+   than its text on one line (wrapped while under `Dim::TooltipMax`), is a
+   column of letters, leaves the window or covers its control. A bubble is as
+   wide as its text, never as wide as the control or cell it hangs from; see
+   "Tooltips" in `docs/bingux-ui.md`. `cargo test --lib --features testing
+   tooltip` in `packages/bingux-ui` holds the same rule for the cases a page
+   cannot reach (a clipped box, a scrolled one, a narrow window).
+
+Visual integrity (`design/rules.md` CK-01, 02, 03, 06, 07, 08, 09, 12, 13, 14, 15, 16, 18, 19, 20, 22, 25). Each of
+these takes `--fixtures` (the check on its own known-bad and clean cases,
+which needs no binary), most take `--build` and `--show-allowed`, and a finding names the rule IDs of
+`design/rules.json`. `make check` runs them; run the one that matches your change:
+
+- an icon, `scripts/icons/build.py` or `labels.tsv`: `scripts/icons/golden.py`
+  compares the whole set, at 16/18/20/24/32 px and 1x/2x, with `scripts/icons/golden.json`.
+  A change you mean: look at `golden.py --sheet /tmp/icons.png`, then `golden.py --update`
+  and commit `golden.json` with it.
+- any string a person reads: `python3 scripts/copy-lint.py` (percent signs, "show more",
+  filler, three dots for an ellipsis, Title Case, subtitles that restate their title).
+- a colour, surface, popup, dialog, menu or banner: `python3 scripts/pixel-check.py`
+  (text contrast from the rendered pixels, a visible border or shadow on all four
+  sides of every popup card, both schemes, 1x and 2x).
+- a page, a data load, a popup or a tab: `python3 scripts/structure-stability.py` (first
+  frame against settled frame of every page, popup, taxonomy page and Files state) and
+  `python3 scripts/scroll-continuity.py` (the scroll offset kept through a push and pop, a
+  tab switch and data landing).
+- a control, row, menu, dropdown, header, tab strip, popup or focus ring: `python3
+  scripts/state-check.py` (with `--build`; `make state-check` is the same, and `make check`
+  calls it; `--fixtures` runs it on its own known-bad and clean controls). It drives every
+  Settings page, popup, taxonomy page and the Files window: it points at, presses and
+  focuses every interactive node and renders each state, so a control with no hover,
+  pressed or focus look, a ring cut off by a clip or the window edge, a hover fill on a row
+  that does nothing, or a selected item that looks unselected is a finding; it tabs through
+  the page and back (one stop a control, reading order, no trap, Escape closes a popup),
+  walks every menu and dropdown by key (arrows, Home, End, type-ahead, Enter, Escape),
+  measures touch targets at 390x800 (44 px) and clearance from resize handles and the
+  scrollbar, reads the cursor over each control (the arrow, the I-beam only over text), and
+  holds a dropdown's label clear of its chevron. Fix the component. A control that is
+  stateless, small or quiet on purpose is an entry in `ALLOW` in
+  `packages/bingux-ui/src/inspector/state_checks/mod.rs` (a component's doing) or in the
+  script's `ALLOWED` (one capture's), each with its reason. See "State checks" in
+  `docs/bingux-ui.md`.
+- an animation: `python3 scripts/loop-check.py --all`, `python3 scripts/number-roll-check.py`,
+  `python3 scripts/nav-slide.py` (a close is its open mirrored), `cargo test --lib --features
+  testing slide_users_tests` (a new slide must be in its table) and `python3 scripts/frame-gate.py`
+  (every page mounts inside its frame budget; `BINGUX_FRAME_GATE=report` on a noisy runner).
+  See "Visual integrity checks" in `docs/bingux-ui.md`.
 
 A menu, context menu or dropdown that lists applications must show each app's
 icon, through the app list API: `AppChoice` with `app_menu_items` or

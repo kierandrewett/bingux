@@ -60,6 +60,11 @@ pub(super) struct StatusInfo {
     pub search: Option<SearchLine>,
     /// The folder on show is in the Trash: the line says so.
     pub trash: bool,
+    /// Where the one selected item leads, when it is a link.
+    pub link: Option<String>,
+    /// The read of the folder was stopped (Stop, Escape): what is shown is
+    /// what had been read.
+    pub stopped: bool,
 }
 
 /// What a search says about the list.
@@ -67,7 +72,7 @@ pub(super) struct StatusInfo {
 pub(super) enum SearchLine {
     /// The folder on show is filtered: `matches` of its `of` items.
     Folder { matches: usize, of: usize },
-    /// The subfolders are being or have been searched.
+    /// A search of folders is running or has ended.
     Subfolders {
         found: usize,
         folders: usize,
@@ -102,6 +107,9 @@ pub(super) fn status_text(info: &StatusInfo) -> String {
     if info.unresponsive {
         return "Waiting for the drive to answer…".to_owned();
     }
+    if info.stopped {
+        return format!("Stopped · {} read so far", item_count(info.total_listed));
+    }
     if info.loading && !info.complete {
         return format!("Loading… {}", item_count(info.total_listed));
     }
@@ -125,13 +133,13 @@ pub(super) fn status_text(info: &StatusInfo) -> String {
         }) => {
             let mut text = match (running, truncated) {
                 (true, _) => format!(
-                    "Searching subfolders… {} found · {} read",
+                    "Searching… {} found · {} read",
                     grouped(*found),
                     folder_count(*folders)
                 ),
                 (false, true) => format!("{} found · limit reached", grouped(*found)),
                 (false, false) => format!(
-                    "{} found in subfolders · {} read",
+                    "{} found · {} read",
                     grouped(*found),
                     folder_count(*folders)
                 ),
@@ -142,10 +150,13 @@ pub(super) fn status_text(info: &StatusInfo) -> String {
             text
         }
         None if info.selected > 0 => format!(
-            "{}{} of {} selected{size}",
+            "{}{} of {} selected{size}{}",
             if info.trash { "Trash · " } else { "" },
             grouped(info.selected),
-            grouped(info.shown)
+            grouped(info.shown),
+            info.link
+                .as_ref()
+                .map_or_else(String::new, |target| format!(" · Link to {target}"))
         ),
         None if info.trash => format!("Trash · {}", item_count(info.shown)),
         None => item_count(info.shown),
@@ -162,6 +173,7 @@ pub(super) fn status_line(info: StatusInfo, ui: Ui) -> Element {
 fn has_news(info: &StatusInfo) -> bool {
     info.loading
         || info.unresponsive
+        || info.stopped
         || info.shown > 0
         || info.selected > 0
         || info.search.is_some()
@@ -248,7 +260,7 @@ impl Component for StatusLine {
         let surface = |pill: Rect| {
             pill.component("StatusLine")
                 // Above the list's rows, their icons and their hover fills.
-                .layer(Layer::Overlay)
+                .layer(crate::layers::STATUS_PILL)
                 .a11y_role(AccessibilityRole::Status)
                 .tw(
                     &tokens,
@@ -304,7 +316,12 @@ impl Component for StatusLine {
                 .bottom(edge)
                 .left(edge + travel * slide)
         };
+        // The pill is as wide as its text up to the strip less the room it keeps from each edge: a long
+        // text (a link's target) is cut with an ellipsis inside the strip, not laid out wider than it
+        // and pinned past its left edge.
         let pill = surface(rect().position(anchor))
+            // ui-lint: allow(the pill's cap is the strip's measured width less the edge it keeps on each side)
+            .maybe(strip_width > 0.0, |pill| pill.max_width(Size::px((strip_width - 2.0 * edge).max(0.0))))
             .on_sized(move |event: Event<SizedEventData>| {
                 size.set_if_modified((event.area.width(), event.area.height()));
             })
@@ -357,6 +374,16 @@ mod tests {
     }
 
     #[test]
+    fn one_selected_link_says_where_it_leads() {
+        let one = StatusInfo {
+            selected: 1,
+            link: Some("/mnt/x/Downloads".into()),
+            ..info(5)
+        };
+        assert_eq!(status_text(&one), "1 of 5 selected · Link to /mnt/x/Downloads");
+    }
+
+    #[test]
     fn an_empty_folder_has_nothing_to_say() {
         assert!(!has_news(&info(0)));
         assert!(has_news(&info(3)));
@@ -365,6 +392,17 @@ mod tests {
             complete: false,
             ..info(0)
         }));
+    }
+
+    #[test]
+    fn a_stopped_read_says_how_much_it_had_read() {
+        let stopped = StatusInfo {
+            stopped: true,
+            complete: false,
+            ..info(12_000)
+        };
+        assert_eq!(status_text(&stopped), "Stopped · 12,000 items read so far");
+        assert!(has_news(&stopped));
     }
 
     #[test]
@@ -389,9 +427,9 @@ mod tests {
         };
         assert_eq!(
             status_text(&deep(true, false)),
-            "Searching subfolders… 12 found · 340 folders read · 1 selected"
+            "Searching… 12 found · 340 folders read · 1 selected"
         );
-        assert!(status_text(&deep(false, false)).starts_with("12 found in subfolders · 340 folders read"));
+        assert!(status_text(&deep(false, false)).starts_with("12 found · 340 folders read"));
         assert!(status_text(&deep(false, true)).starts_with("12 found · limit reached"));
     }
 

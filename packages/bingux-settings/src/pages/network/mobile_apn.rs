@@ -665,7 +665,7 @@ impl Component for ApnListPage {
         veiled(
             page.child(
                 Group::new(None::<String>).row(
-                    row("Add access point...")
+                    row("Add access point…")
                         .navigates()
                         .on_press(move |_| ctx.router.open(routes::mobile_apn(None))),
                 ),

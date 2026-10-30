@@ -4,6 +4,7 @@
 use freya::prelude::*;
 
 use crate::component::ComponentName;
+use crate::controls::press::hit_area;
 use crate::controls::{SpinnerSize, hover_tip, spinner};
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
@@ -89,11 +90,12 @@ impl HeaderBar {
     }
 
     /// Put a strip of tabs where the title goes: from the start of the room
-    /// between the controls, filling it, and as tall as the bar, so the tabs
-    /// stand on the bar's bottom edge (see [`crate::controls::tab_frame`]).
-    /// The bar should be [`fill`](Self::fill)ed with [`Paint::Transparent`]
-    /// so the frame's strip shows behind the tabs. Replaces the title and
-    /// [`title_slot`](Self::title_slot).
+    /// between the controls, filling it, and as tall as the bar. The bar is
+    /// then the strip, [`Dim::TabBar`] tall rather than a header (the window
+    /// has no second row above its tabs), and its icon buttons are
+    /// [`Dim::TabButton`], the height of a tab. Leave the bar on its default
+    /// fill, [`Paint::Surface`]: the strip fades its overflowing tabs into it.
+    /// Replaces the title and [`title_slot`](Self::title_slot).
     pub fn tab_slot(mut self, strip: impl Into<Element>) -> Self {
         self.tab_slot = Some(strip.into());
         self
@@ -119,8 +121,11 @@ impl HeaderBar {
 impl Component for HeaderBar {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        // Icon buttons below take the header button size (`HEADER_BUTTON`).
+        // Icon buttons below take the header button size (`HEADER_BUTTON`),
+        // or in a bar that holds tabs the inline button size.
         use_provide_context(|| crate::controls::button::InHeader);
+        let tabs = self.tab_slot.is_some();
+        use_provide_context(move || crate::controls::button::InTabBar(tabs));
         // The title is laid out on the whole bar, so its centre is the bar's
         // centre whatever the controls weigh. Its side insets are the wider of
         // the two control clusters, so it never runs under a control.
@@ -128,11 +133,18 @@ impl Component for HeaderBar {
         let mut trailing_width = use_state(|| 0.0_f32);
         let mut title_width = use_state(|| 0.0_f32);
         let inset = leading_width().max(trailing_width()) + S2.px() + S1.px();
-        // The title layer sits in the bar's content box, inside the padding. The
-        // padding is wider on the left of a bar with no leading control, so both
-        // sides are cleared by the wider one and the title is centred on the bar,
-        // not on a content box that is off centre by half the difference.
-        let pad_left = if self.leading.is_empty() { S3 } else { S2 };
+        // The title layer sits in the bar's content box, inside the padding. A
+        // bar whose title starts the bar and that has no leading control keeps
+        // S3 at the start, so the title is clear of the edge; every other bar
+        // has S2 at both ends, equal to its trailing end (`inset-asymmetry`). The
+        // title is centred on the bar either way: both sides are cleared by the
+        // wider padding, not on a content box that is off centre by half the
+        // difference.
+        let pad_left = if self.leading.is_empty() && self.title_start {
+            S3
+        } else {
+            S2
+        };
         let pad_right = S2;
         let pad = pad_left.px().max(pad_right.px());
         let text: Element = match &self.title_slot {
@@ -184,6 +196,8 @@ impl Component for HeaderBar {
         let bar = rect()
             .component("HeaderBar")
             .tw(&tokens, HEADER)
+            // A bar that holds tabs is the strip: a tab bar tall, not a header.
+            .maybe(tabs, |bar| bar.tw(&tokens, &[h(Dim::TabBar)]))
             .tw(
                 &tokens,
                 &[
@@ -198,9 +212,10 @@ impl Component for HeaderBar {
             });
         match &self.tab_slot {
             // A strip of tabs takes the room between the controls, from the
-            // start, and is as tall as the bar so its tabs reach the bottom edge.
+            // start, and is as tall as the bar. An empty leading cluster would
+            // still take a gap, so it is left out.
             Some(strip) => bar
-                .child(leading)
+                .maybe_child((!self.leading.is_empty() || self.busy).then(|| leading))
                 .child(rect().tw(&tokens, &[w_flex(), h_full()]).child(strip.clone()))
                 .child(trailing),
             None if self.title_start => bar
@@ -287,14 +302,14 @@ impl Component for WindowControl {
         let tokens = use_tokens();
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
-        let mut hovering = use_state(|| false);
+        let hovering = use_state(|| false);
+        let mut pressing = use_state(|| false);
         let action = self.action;
         let inert = try_consume_context::<InertControls>().is_some();
-        let fill = match (hovering(), self.danger) {
-            (false, _) => Paint::Transparent,
-            (true, true) => Paint::Danger,
-            (true, false) => Paint::Hover,
-        };
+        // Close lights red under the pointer and darker while pressed; the others
+        // take the hover layer and then the press layer.
+        let danger = self.danger && (hovering() || pressing());
+        let base = if danger { Paint::Danger } else { Paint::Transparent };
         rect()
             .component("WindowControl")
             .tw(
@@ -303,7 +318,7 @@ impl Component for WindowControl {
                     w(Dim::WindowControl),
                     h(Dim::WindowControl),
                     rounded(Radius::Pill),
-                    bg(fill),
+                    surface(base, hovering() && !self.danger, pressing(), false),
                     center(),
                 ],
             )
@@ -311,9 +326,11 @@ impl Component for WindowControl {
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Button)
             .a11y_alt(self.tooltip)
-            .on_pointer_enter(move |_| hovering.set(true))
-            .on_pointer_leave(move |_| hovering.set(false))
-            .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
+            .on_pointer_down(move |event: Event<PointerEventData>| {
+                event.stop_propagation();
+                pressing.set(true);
+            })
+            .on_global_pointer_up(move |_| pressing.set_if_modified(false))
             .on_key_down(move |event: Event<KeyboardEventData>| {
                 if is_activation_key(&event.key) {
                     event.stop_propagation();
@@ -336,11 +353,26 @@ impl Component for WindowControl {
                 } else {
                     Paint::Text.color(&tokens)
                 },
-            )).focusable(focus())
+            ))
+            // The circle is 24 px; what a finger or a hand presses is
+            // Dim::WindowControlTarget (32 px, 44 px at compact density).
+            .child({
+                let side = Dim::WindowControlTarget.px();
+                hit_area((Dim::WindowControl.px(), Dim::WindowControl.px()), (side, side), hovering, pressing)
+            })
+            .focusable(focus())
     }
 }
 
 fn run_window_action(action: Action) {
+    // Test builds record the action; there is no window to act on.
+    #[cfg(all(test, feature = "testing"))]
+    crate::controls::hit_area_tests::record_action(match action {
+        Action::Minimize => "minimise",
+        Action::ToggleMaximize => "maximise",
+        Action::Close => "close",
+    });
+    #[cfg(not(all(test, feature = "testing")))]
     match action {
         Action::Minimize => with_window(|window| window.set_minimized(true)),
         Action::ToggleMaximize => {

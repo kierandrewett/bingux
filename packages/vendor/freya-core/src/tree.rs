@@ -124,8 +124,17 @@ impl Tree {
 
     /// Register an element and its scaled layout node.
     fn insert_element(&mut self, node_id: NodeId, element: Rc<dyn ElementExt>, scale_factor: f32) {
-        self.layout_nodes
-            .insert(node_id, Self::scaled_layout_node(&element, scale_factor));
+        // The mirroring flag is the inherited text direction. A replaced element
+        // (`remove_element` dropped its layout node) is read from the text style
+        // state, which outlives it; a new one has none yet and the text style
+        // cascade sets the flag.
+        let rtl = self
+            .text_style_state
+            .get(&node_id)
+            .is_some_and(|state| state.direction.is_rtl());
+        let mut layout_node = Self::scaled_layout_node(&element, scale_factor);
+        layout_node.rtl = rtl;
+        self.layout_nodes.insert(node_id, layout_node);
         self.elements.insert(node_id, element);
     }
 
@@ -139,8 +148,12 @@ impl Tree {
     pub fn set_scale_factor(&mut self, scale_factor: f32) {
         self.layout_nodes.clear();
         for (node_id, element) in &self.elements {
-            self.layout_nodes
-                .insert(*node_id, Self::scaled_layout_node(element, scale_factor));
+            let mut layout_node = Self::scaled_layout_node(element, scale_factor);
+            layout_node.rtl = self
+                .text_style_state
+                .get(node_id)
+                .is_some_and(|state| state.direction.is_rtl());
+            self.layout_nodes.insert(*node_id, layout_node);
         }
     }
 }
@@ -285,7 +298,16 @@ impl Tree {
                     if let Some(children) = self.children.get_mut(&parent_id) {
                         match remove {
                             MutationRemove::Element { index, .. } => {
-                                children.remove(index as usize);
+                                // Bingux patch: the index is where the node was when the diff was made. Another removal
+                                // of the same parent applied before this one moves it, and removing by position then
+                                // takes a sibling out and leaves this node listed as a child with no element (a walk of
+                                // the tree, such as the test runner's `find_many`, unwraps it: taxonomy
+                                // `files/file-manager-and-chooser`). Take it out by its id when it is not at the index.
+                                if children.get(index as usize) == Some(&node_id) {
+                                    children.remove(index as usize);
+                                } else {
+                                    children.retain(|id| *id != node_id);
+                                }
                             }
                             MutationRemove::Scope { .. } => {
                                 children.retain(|id| *id != node_id);
@@ -594,7 +616,11 @@ impl Tree {
                 buffer.push_front(&effect_root);
 
                 while let Some(node_id) = buffer.pop_front() {
-                    let element = self.elements.get(node_id).unwrap();
+                    // A node removed since the cascade was queued has no element: skip it (seen at
+                    // scale 2 in Files' Properties dialog at 390x800, scripts/pixel-check.py).
+                    let Some(element) = self.elements.get(node_id) else {
+                        continue;
+                    };
                     if let Some(parent_node_id) = self.parents.get(node_id) {
                         let entries = self.effect_state.get_disjoint_two_entries(
                             parent_node_id,
@@ -644,6 +670,10 @@ impl Tree {
                                 element,
                                 &mut self.layout,
                             );
+                            if let Some(layout_node) = self.layout_nodes.get_mut(node_id) {
+                                // The node was just invalidated if its direction changed.
+                                layout_node.rtl = text_style_state.direction.is_rtl();
+                            }
                             if changed
                                 && self
                                     .listeners

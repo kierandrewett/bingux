@@ -24,20 +24,23 @@
 //!   as Projects included, has the plain folder glyph. Paths are compared as
 //!   written: case counts and a trailing slash does not.
 //! - A file is decided by its MIME type through [`FileKind`]: image, audio,
-//!   video, text, code, PDF, archive, spreadsheet, presentation, document,
-//!   font, executable, and unknown. `bingux_files::mime` classifies a name;
+//!   video, text, code, data, markup, PDF, archive, disk image, spreadsheet,
+//!   presentation, document, e-book, font, program, 3D model, database,
+//!   certificate, torrent, and unknown. `bingux_files::mime` classifies a name;
 //!   [`FileKind::of_mime`] classifies a type the system reports.
-//! - A symbolic link keeps the glyph of what it is and gains the small link
-//!   emblem ([`Emblem::Link`]). Places never read the disk, so only an entry
+//! - A symbolic link keeps the glyph of what it is and, on a glyph of
+//!   [`EMBLEM_MIN_PX`] or more (grid tiles), gains a small link emblem
+//!   ([`Emblem::Link`]); smaller glyphs are left whole. Places never read the disk, so only an entry
 //!   (a listing row) carries it.
 //! - A hidden file or folder is drawn faint ([`Tint::Dim`]).
 //!
 //! # What decides the colour
 //!
-//! One rule for every surface: the glyph is the accent only when its row or
-//! tile is selected, muted otherwise, and fainter still when the thing is
-//! hidden or not responding. A folder is not told from a file by colour but
-//! by shape.
+//! A file or a folder is a **colour icon** (see [`colour`]): a folder and the
+//! Trash are the user's accent, always, and a file is the colour of its family,
+//! the same whether or not its row is selected, and half strength when hidden. A
+//! drive or the Recent clock is a symbolic glyph, muted, the accent only when
+//! selected, fainter when it does not answer.
 //!
 //! # Size
 //!
@@ -52,6 +55,7 @@ use bingux_files::places::{SpecialFolder, special_folder};
 use bingux_files::{Category, Entry, Kind, Place, PlaceKind};
 use freya::prelude::*;
 
+use super::colour::{self, ColourIcon};
 use crate::component::{ComponentName, Prop, Published};
 use crate::icons::{self, Icon};
 use crate::style::*;
@@ -64,38 +68,64 @@ pub enum FileKind {
     Image,
     Audio,
     Video,
-    /// Plain text and markup.
+    /// Plain text.
     Text,
     /// Source code and scripts.
     Code,
+    /// Structured data and configuration: JSON, YAML, TOML, desktop entries.
+    Config,
+    /// Markup: HTML, Markdown, XML, TeX.
+    Markup,
     Pdf,
     Archive,
+    /// A disc or a disk image: ISO, IMG, DMG, QCOW2.
+    DiskImage,
     Spreadsheet,
     Presentation,
-    /// A word-processor document or an e-book.
+    /// A word-processor document.
     Document,
+    /// A document that is none of the above: PostScript, a calendar, DjVu.
+    Page,
+    /// An e-book or a comic book.
+    Ebook,
     Font,
     /// A program or a shared library.
     Executable,
+    /// A 3D model: STL, OBJ, glTF, Blender.
+    Model3d,
+    /// A database: SQLite, KeePass, Access.
+    Database,
+    /// A certificate or a key: PEM, PKCS, OpenPGP, SSH.
+    Certificate,
+    Torrent,
     Unknown,
 }
 
 impl FileKind {
     /// Every kind, in the order a catalogue lists them.
-    pub const ALL: [FileKind; 14] = [
+    pub const ALL: [FileKind; 23] = [
         FileKind::Folder,
         FileKind::Image,
         FileKind::Audio,
         FileKind::Video,
         FileKind::Text,
         FileKind::Code,
+        FileKind::Config,
+        FileKind::Markup,
         FileKind::Pdf,
         FileKind::Archive,
+        FileKind::DiskImage,
         FileKind::Spreadsheet,
         FileKind::Presentation,
         FileKind::Document,
+        FileKind::Page,
+        FileKind::Ebook,
         FileKind::Font,
         FileKind::Executable,
+        FileKind::Model3d,
+        FileKind::Database,
+        FileKind::Certificate,
+        FileKind::Torrent,
         FileKind::Unknown,
     ];
 
@@ -108,34 +138,75 @@ impl FileKind {
             FileKind::Video => "Video",
             FileKind::Text => "Text",
             FileKind::Code => "Code",
+            FileKind::Config => "Data",
+            FileKind::Markup => "Markup",
             FileKind::Pdf => "PDF",
             FileKind::Archive => "Archive",
+            FileKind::DiskImage => "Disk image",
             FileKind::Spreadsheet => "Spreadsheet",
             FileKind::Presentation => "Presentation",
             FileKind::Document => "Document",
+            FileKind::Page => "Other document",
+            FileKind::Ebook => "E-book",
             FileKind::Font => "Font",
             FileKind::Executable => "Program",
+            FileKind::Model3d => "3D model",
+            FileKind::Database => "Database",
+            FileKind::Certificate => "Certificate",
+            FileKind::Torrent => "Torrent",
             FileKind::Unknown => "Unknown",
         }
     }
 
-    /// The glyph of this kind.
+    /// The symbolic glyph of this kind: what a surface that has no room for a
+    /// colour icon draws (a tab title, a menu row of Settings).
     pub fn glyph(self) -> Icon {
         match self {
             FileKind::Folder => Icon::Folder,
             FileKind::Image => Icon::ImageGeneric,
             FileKind::Audio => Icon::AudioXGeneric,
             FileKind::Video => Icon::VideoGeneric,
-            FileKind::Text => Icon::TextXGeneric,
+            FileKind::Text | FileKind::Markup | FileKind::Config => Icon::TextXGeneric,
             FileKind::Code => Icon::TextXScript,
             FileKind::Pdf => Icon::ApplicationPdf,
-            FileKind::Archive => Icon::PackageXGeneric,
+            FileKind::Archive | FileKind::DiskImage => Icon::PackageXGeneric,
             FileKind::Spreadsheet => Icon::XOfficeSpreadsheet,
             FileKind::Presentation => Icon::XOfficePresentation,
-            FileKind::Document => Icon::XOfficeDocument,
+            FileKind::Document | FileKind::Page | FileKind::Ebook => Icon::XOfficeDocument,
             FileKind::Font => Icon::FontXGeneric,
             FileKind::Executable => Icon::Application,
-            FileKind::Unknown => Icon::ApplicationXGeneric,
+            FileKind::Model3d | FileKind::Database | FileKind::Certificate | FileKind::Torrent | FileKind::Unknown => {
+                Icon::ApplicationXGeneric
+            }
+        }
+    }
+
+    /// The colour icon of this kind: every kind has its own.
+    pub const fn colour(self) -> ColourIcon {
+        match self {
+            FileKind::Folder => ColourIcon::Folder,
+            FileKind::Image => ColourIcon::FileImage,
+            FileKind::Audio => ColourIcon::FileAudio,
+            FileKind::Video => ColourIcon::FileVideo,
+            FileKind::Text => ColourIcon::FileText,
+            FileKind::Code => ColourIcon::FileCode,
+            FileKind::Config => ColourIcon::FileConfig,
+            FileKind::Markup => ColourIcon::FileMarkup,
+            FileKind::Pdf => ColourIcon::FilePdf,
+            FileKind::Archive => ColourIcon::FileArchive,
+            FileKind::DiskImage => ColourIcon::FileDiskImage,
+            FileKind::Spreadsheet => ColourIcon::FileSpreadsheet,
+            FileKind::Presentation => ColourIcon::FilePresentation,
+            FileKind::Document => ColourIcon::FileDocument,
+            FileKind::Page => ColourIcon::FilePage,
+            FileKind::Ebook => ColourIcon::FileEbook,
+            FileKind::Font => ColourIcon::FileFont,
+            FileKind::Executable => ColourIcon::FileExecutable,
+            FileKind::Model3d => ColourIcon::FileModel,
+            FileKind::Database => ColourIcon::FileDatabase,
+            FileKind::Certificate => ColourIcon::FileCertificate,
+            FileKind::Torrent => ColourIcon::FileTorrent,
+            FileKind::Unknown => ColourIcon::FileUnknown,
         }
     }
 
@@ -147,6 +218,8 @@ impl FileKind {
             FileKind::Video
             | FileKind::Pdf
             | FileKind::Document
+            | FileKind::Page
+            | FileKind::Ebook
             | FileKind::Spreadsheet
             | FileKind::Presentation => Some(Source::Cache),
             _ => None,
@@ -178,7 +251,9 @@ impl FileKind {
     }
 }
 
-/// The kind a MIME type's own name says, or `None` when it says nothing.
+/// The kind a MIME type's own name says, or `None` when it says nothing. The
+/// families are tried from the most specific: a type that names two (an EPUB
+/// is a ZIP, an ODT is a document) takes the first.
 fn kind_of_mime(mime: &str) -> Option<FileKind> {
     let (kind, subtype) = mime.split_once('/').unwrap_or((mime, ""));
     match kind {
@@ -186,6 +261,7 @@ fn kind_of_mime(mime: &str) -> Option<FileKind> {
         "audio" => return Some(FileKind::Audio),
         "video" => return Some(FileKind::Video),
         "font" => return Some(FileKind::Font),
+        "model" => return Some(FileKind::Model3d),
         "inode" if subtype == "directory" => return Some(FileKind::Folder),
         _ => {}
     }
@@ -202,23 +278,45 @@ fn kind_of_mime(mime: &str) -> Option<FileKind> {
     if has(&["presentation", "ms-powerpoint"]) {
         return Some(FileKind::Presentation);
     }
+    if has(&["bittorrent"]) {
+        return Some(FileKind::Torrent);
+    }
     if has(&[
-        "msword",
-        "wordprocessingml",
-        "rtf",
-        "epub",
-        "djvu",
-        "abiword",
-        "fictionbook",
-        "postscript",
-        "openxmlformats",
-        "oasis.opendocument",
-        "vnd.ms-",
-        "x-cbz",
-        "x-cbr",
-        "calendar",
+        "sqlite",
+        "x-dbf",
+        "keepass",
+        "ms-access",
+        "x-msaccess",
+        "x-lmdb",
+        "berkeley-db",
     ]) {
+        return Some(FileKind::Database);
+    }
+    if has(&["x509", "pkcs", "pgp", "pkix", "pem-key", "ssh-key", "x-gnupg"]) {
+        return Some(FileKind::Certificate);
+    }
+    if has(&["blender", "x-3d", "x-3ds", "x-fbx", "x-stl"]) {
+        return Some(FileKind::Model3d);
+    }
+    if has(&[
+        "iso9660",
+        "cd-image",
+        "disk-image",
+        "diskimage",
+        "x-qemu-disk",
+        "x-virtualbox",
+        "x-vmdk",
+    ]) {
+        return Some(FileKind::DiskImage);
+    }
+    if has(&["epub", "mobipocket", "fictionbook", "amazon.ebook", "comicbook", "x-cbz", "x-cbr"]) {
+        return Some(FileKind::Ebook);
+    }
+    if has(&["msword", "wordprocessingml", "rtf", "abiword", "oasis.opendocument.text"]) {
         return Some(FileKind::Document);
+    }
+    if has(&["postscript", "djvu", "calendar", "openxmlformats", "oasis.opendocument", "vnd.ms-"]) {
+        return Some(FileKind::Page);
     }
     if has(&[
         "x-executable",
@@ -231,13 +329,20 @@ fn kind_of_mime(mime: &str) -> Option<FileKind> {
     }
     if has(&[
         "zip", "tar", "gzip", "bzip", "xz", "7z", "rar", "zstd", "compress", "cpio", "archive",
-        "lzma", "lz4", "iso9660", "cd-image", "x-rpm", "debian",
+        "lzma", "lz4", "x-rpm", "debian",
     ]) {
         return Some(FileKind::Archive);
     }
+    if has(&["json", "yaml", "toml", "x-desktop", "openvpn"]) {
+        return Some(FileKind::Config);
+    }
+    if has(&["html", "markdown", "xml", "x-tex", "x-latex", "docbook"]) {
+        return Some(FileKind::Markup);
+    }
+    if subtype == "x-log" {
+        return Some(FileKind::Text);
+    }
     if has(&[
-        "json",
-        "xml",
         "javascript",
         "shellscript",
         "x-python",
@@ -246,10 +351,10 @@ fn kind_of_mime(mime: &str) -> Option<FileKind> {
         "x-php",
         "x-java",
         "sql",
-        "yaml",
-        "toml",
         "x-csrc",
         "wasm",
+        "css",
+        "rust",
     ]) || (kind == "text" && subtype.starts_with("x-"))
     {
         return Some(FileKind::Code);
@@ -303,9 +408,13 @@ pub struct FileIcon {
     pub tint: Tint,
     /// Where a thumbnail may come from; `None` when the icon is final.
     pub thumbnail: Option<Source>,
+    /// The colour icon that stands for it, drawn by [`file_icon_view`]. `None`
+    /// for what is not a file or a folder: a drive, the Recent clock.
+    pub colour: Option<ColourIcon>,
 }
 
 impl FileIcon {
+    /// An icon drawn from the symbolic `glyph` alone (a drive, Recent).
     fn plain(glyph: Icon, kind: FileKind) -> FileIcon {
         FileIcon {
             glyph,
@@ -313,14 +422,20 @@ impl FileIcon {
             emblem: None,
             tint: Tint::Normal,
             thumbnail: None,
+            colour: None,
         }
+    }
+
+    /// An icon drawn as `colour`, with `glyph` as its symbolic stand-in.
+    fn coloured(glyph: Icon, kind: FileKind, colour: ColourIcon) -> FileIcon {
+        FileIcon { colour: Some(colour), ..FileIcon::plain(glyph, kind) }
     }
 
     /// The icon of a kind of file.
     pub fn for_kind(kind: FileKind) -> FileIcon {
         FileIcon {
             thumbnail: kind.thumbnail(),
-            ..FileIcon::plain(kind.glyph(), kind)
+            ..FileIcon::coloured(kind.glyph(), kind, kind.colour())
         }
     }
 
@@ -338,20 +453,20 @@ impl FileIcon {
 
     /// The icon of the folder `special` names.
     pub fn for_special(special: SpecialFolder) -> FileIcon {
-        let glyph = match special {
-            SpecialFolder::Home => Icon::UserHome,
-            SpecialFolder::Desktop => Icon::FolderDesktop,
-            SpecialFolder::Documents => Icon::FolderDocuments,
-            SpecialFolder::Downloads => Icon::FolderDownload,
-            SpecialFolder::Music => Icon::FolderMusic,
-            SpecialFolder::Pictures => Icon::FolderPictures,
-            SpecialFolder::Videos => Icon::FolderVideos,
-            SpecialFolder::Templates => Icon::FolderTemplates,
-            SpecialFolder::PublicShare => Icon::FolderPublicshare,
-            SpecialFolder::Trash => Icon::UserTrash,
-            SpecialFolder::Root => Icon::DriveHarddisk,
+        let (glyph, colour) = match special {
+            SpecialFolder::Home => (Icon::UserHome, Some(ColourIcon::FolderHome)),
+            SpecialFolder::Desktop => (Icon::FolderDesktop, Some(ColourIcon::FolderDesktop)),
+            SpecialFolder::Documents => (Icon::FolderDocuments, Some(ColourIcon::FolderDocuments)),
+            SpecialFolder::Downloads => (Icon::FolderDownload, Some(ColourIcon::FolderDownloads)),
+            SpecialFolder::Music => (Icon::FolderMusic, Some(ColourIcon::FolderMusic)),
+            SpecialFolder::Pictures => (Icon::FolderPictures, Some(ColourIcon::FolderPictures)),
+            SpecialFolder::Videos => (Icon::FolderVideos, Some(ColourIcon::FolderVideos)),
+            SpecialFolder::Templates => (Icon::FolderTemplates, Some(ColourIcon::FolderTemplates)),
+            SpecialFolder::PublicShare => (Icon::FolderPublicshare, Some(ColourIcon::FolderPublic)),
+            SpecialFolder::Trash => (Icon::UserTrash, Some(ColourIcon::TrashEmpty)),
+            SpecialFolder::Root => (Icon::DriveHarddisk, None),
         };
-        FileIcon::plain(glyph, FileKind::Folder)
+        FileIcon { colour, ..FileIcon::plain(glyph, FileKind::Folder) }
     }
 
     /// The icon of the item at `path`, which is a `kind`. A folder is decided
@@ -435,12 +550,17 @@ impl FileIcon {
         }
     }
 
-    /// The sidebar icon of the Trash: the trash can, drawn faint while there is
-    /// nothing in it and as every folder is when there is. This is the one
-    /// place that says so; a row never picks the tint itself.
+    /// The sidebar icon of the Trash: the bin with its lid closed and drawn
+    /// faint while there is nothing in it, the bin with paper over its rim and
+    /// drawn as every folder is when there is. This is the one place that says
+    /// so; a row never picks the picture or the tint itself.
     pub fn for_trash(full: bool) -> FileIcon {
         let icon = FileIcon::for_special(SpecialFolder::Trash);
-        if full { icon } else { icon.dimmed() }
+        if full {
+            FileIcon { colour: Some(ColourIcon::TrashFull), ..icon }
+        } else {
+            icon.dimmed()
+        }
     }
 
     /// The icon of a drive of `kind`.
@@ -474,8 +594,9 @@ impl FileIcon {
         self
     }
 
-    /// The colour of the glyph: the accent when `selected`, otherwise muted,
-    /// or faint for a dim icon.
+    /// The colour of a symbolic glyph (a drive, Recent, the drag chip) and of
+    /// the link emblem: the accent when `selected`, otherwise muted, or faint
+    /// for a dim icon. A colour icon is drawn in its own tones instead.
     pub fn paint(&self, selected: bool) -> Paint {
         if selected {
             Paint::Accent
@@ -518,70 +639,122 @@ impl FileIconSize {
     }
 }
 
-/// The edge of the link emblem on a glyph of `edge` pixels: half of it, and
-/// never so small that its arrow is lost.
-fn emblem_edge(edge: f32) -> f32 {
-    (edge * 0.5).round().max(8.0)
+/// The smallest glyph that carries the link emblem. Below it (list rows,
+/// the sidebar, crumbs, menus, the properties head) the glyph is left whole:
+/// an emblem at 16-32 px covers a quarter of the glyph in a few pixels and
+/// makes it unreadable. A link is told there by the hover card, the status
+/// pill and Properties instead.
+pub const EMBLEM_MIN_PX: f32 = 64.0;
+
+/// Whether a glyph of `edge` pixels is drawn with its emblem.
+pub fn emblem_shown(edge: f32) -> bool {
+    edge >= EMBLEM_MIN_PX
 }
 
-/// Draws `spec` in a square of `size`: its glyph in the colour of
-/// [`FileIcon::paint`], and its emblem over the lower right corner.
+/// The edge of the link emblem on a glyph of `edge` pixels: a quarter of it.
+fn emblem_edge(edge: f32) -> f32 {
+    (edge * 0.25).round()
+}
+
+/// The width of the page-coloured ring round the emblem, in pixels.
+fn emblem_ring(edge: f32) -> f32 {
+    (edge / 64.0).round().max(1.0)
+}
+
+/// How much of a dim colour icon shows: a hidden file, the empty Trash.
+const DIM_OPACITY: f32 = 0.5;
+
+/// What an icon is drawn in.
+#[derive(Clone, Copy)]
+enum Ink {
+    /// The symbolic glyph, tinted one colour.
+    Mono(Color),
+    /// The colour icon, in the tone the theme gives it.
+    Colour(ColourIcon, colour::Tone),
+}
+
+/// Draws `spec` in a square of `size`: its colour icon in the tones of the
+/// theme (see [`colour`]), or its symbolic glyph in the colour of
+/// [`FileIcon::paint`] when it has no colour icon, and its emblem over the lower
+/// right corner.
 pub fn file_icon_view(
     tokens: &Tokens,
     spec: &FileIcon,
     size: impl Into<FileIconSize>,
     selected: bool,
 ) -> Element {
-    drawn(
-        spec,
-        size.into(),
-        spec.paint(selected).color(tokens),
-        Paint::Bg.color(tokens),
-    )
+    let mark = spec.paint(selected).color(tokens);
+    let badge = Paint::Bg.color(tokens);
+    match spec.colour {
+        Some(icon) => {
+            let dim = spec.tint == Tint::Dim && !selected;
+            drawn(spec, size.into(), Ink::Colour(icon, colour::colour_tone(icon, tokens)), mark, badge, dim)
+        }
+        None => drawn(spec, size.into(), Ink::Mono(mark), mark, badge, false),
+    }
 }
 
 /// [`file_icon_view`] for a floating surface (the drag chip, a tooltip): the
-/// ink that reads on it, whatever the tint.
+/// symbolic glyph in the ink that reads on it, whatever the tint.
 pub fn file_icon_view_floating(
     tokens: &Tokens,
     spec: &FileIcon,
     size: impl Into<FileIconSize>,
 ) -> Element {
-    drawn(
-        spec,
-        size.into(),
-        Paint::OnFloating.color(tokens),
-        Paint::Floating.color(tokens),
-    )
+    let ink = Paint::OnFloating.color(tokens);
+    drawn(spec, size.into(), Ink::Mono(ink), ink, Paint::Floating.color(tokens), false)
 }
 
-/// The badge is the disc of the page behind the icon with its arrow cut out,
-/// so the arrow shows in the glyph's own colour, over the folder's corner.
-fn drawn(spec: &FileIcon, size: FileIconSize, color: Color, badge: Color) -> Element {
+/// The emblem is a small disc in `mark` with its arrow cut out, over the
+/// folder's lower right corner, ringed by the page colour (`badge`) so it reads
+/// on any fill. Glyphs under [`EMBLEM_MIN_PX`] have none.
+fn drawn(spec: &FileIcon, size: FileIconSize, ink: Ink, mark: Color, badge: Color, dim: bool) -> Element {
     let edge = size.px();
     let glyph = spec.glyph;
+    let picture: Element = match ink {
+        Ink::Mono(color) => icons::glyph(glyph, edge, color).into(),
+        Ink::Colour(icon, tone) => colour::picture(icon, edge, tone).into(),
+    };
+    let colour_name = match ink {
+        Ink::Colour(icon, _) => Some(icon.name()),
+        Ink::Mono(_) => None,
+    };
     let mut slot = rect()
         .component("FileIcon")
         .published(move || {
-            Published::call("file_icon_view")
+            let call = Published::call("file_icon_view")
                 .arg(Prop::text("glyph", format!("{glyph:?}")))
-                .arg(Prop::text("size", format!("{edge}")))
+                .arg(Prop::text("size", format!("{edge}")));
+            match colour_name {
+                Some(name) => call.arg(Prop::text("colour", name)),
+                None => call,
+            }
         })
         .width(Size::px(edge))
         .height(Size::px(edge))
-        .child(icons::glyph(glyph, edge, color));
-    if let Some(emblem) = spec.emblem {
-        let mark = emblem_edge(edge);
+        .maybe(dim, |slot| slot.opacity(DIM_OPACITY))
+        .child(picture);
+    if let Some(emblem) = spec.emblem.filter(|_| emblem_shown(edge)) {
+        let inner = emblem_edge(edge);
+        let ring = emblem_ring(edge);
+        let outer = inner + 2.0 * ring;
         slot = slot.child(
             rect()
                 .position(
                     Position::new_absolute()
-                        .right((edge * 0.04).round())
-                        .bottom((edge * 0.1).round()),
+                        .right((edge * 0.04).round() - ring)
+                        .bottom((edge * 0.08).round() - ring),
                 )
-                .width(Size::px(mark))
-                .height(Size::px(mark))
-                .child(icons::glyph(emblem.glyph(), mark, badge)),
+                .width(Size::px(outer))
+                .height(Size::px(outer))
+                .child(icons::glyph(emblem.glyph(), outer, badge))
+                .child(
+                    rect()
+                        .position(Position::new_absolute().left(ring).top(ring))
+                        .width(Size::px(inner))
+                        .height(Size::px(inner))
+                        .child(icons::glyph(emblem.glyph(), inner, mark)),
+                ),
         );
     }
     slot.into()
@@ -609,9 +782,15 @@ mod tests {
             ("audio/flac", FileKind::Audio),
             ("video/webm", FileKind::Video),
             ("text/plain", FileKind::Text),
-            ("text/markdown", FileKind::Text),
+            ("text/markdown", FileKind::Markup),
+            ("text/html", FileKind::Markup),
+            ("text/css", FileKind::Code),
+            ("text/x-log", FileKind::Text),
+            ("text/rust", FileKind::Code),
             ("text/x-python", FileKind::Code),
-            ("application/json", FileKind::Code),
+            ("application/json", FileKind::Config),
+            ("application/yaml", FileKind::Config),
+            ("application/xml", FileKind::Markup),
             ("application/x-shellscript", FileKind::Code),
             ("application/pdf", FileKind::Pdf),
             ("application/zip", FileKind::Archive),
@@ -623,7 +802,7 @@ mod tests {
             ("application/vnd.ms-powerpoint", FileKind::Presentation),
             ("application/msword", FileKind::Document),
             ("application/vnd.oasis.opendocument.text", FileKind::Document),
-            ("application/epub+zip", FileKind::Document),
+            ("application/epub+zip", FileKind::Ebook),
             ("font/ttf", FileKind::Font),
             ("application/x-font-ttf", FileKind::Font),
             ("application/x-sharedlib", FileKind::Executable),
@@ -634,14 +813,6 @@ mod tests {
         ] {
             assert_eq!(FileKind::of_mime(mime), kind, "{mime}");
             assert_eq!(FileIcon::for_mime(mime).glyph, kind.glyph(), "{mime}");
-        }
-    }
-
-    #[test]
-    fn every_kind_has_a_glyph_of_its_own() {
-        let glyphs: Vec<Icon> = FileKind::ALL.iter().map(|kind| kind.glyph()).collect();
-        for (index, glyph) in glyphs.iter().enumerate() {
-            assert!(!glyphs[..index].contains(glyph), "{:?} repeats", FileKind::ALL[index]);
         }
     }
 
@@ -792,10 +963,16 @@ mod tests {
     }
 
     #[test]
-    fn the_emblem_is_half_the_glyph_but_never_below_eight_pixels() {
-        assert_eq!(emblem_edge(16.0), 8.0);
-        assert_eq!(emblem_edge(12.0), 8.0);
-        assert_eq!(emblem_edge(64.0), 32.0);
-        assert_eq!(emblem_edge(128.0), 64.0);
+    fn the_emblem_is_a_quarter_of_the_glyph_and_only_from_64_pixels() {
+        for edge in [12.0, 16.0, 18.0, 20.0, 24.0, 32.0, 48.0, 63.0] {
+            assert!(!emblem_shown(edge), "{edge}");
+        }
+        for edge in [64.0, 96.0, 128.0] {
+            assert!(emblem_shown(edge), "{edge}");
+        }
+        assert_eq!(emblem_edge(64.0), 16.0);
+        assert_eq!(emblem_edge(128.0), 32.0);
+        assert_eq!(emblem_ring(64.0), 1.0);
+        assert_eq!(emblem_ring(128.0), 2.0);
     }
 }

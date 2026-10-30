@@ -17,6 +17,7 @@
 //! | [`font`] | A font's names and metrics |
 //! | [`host`] | The wire format of the decoding helper process (`bingux-preview-host`), version 1 |
 //! | [`media`] | A picture's size and camera, a recording's length and codecs, from the header |
+//! | [`testing`] | A PDF and a WAV written byte by byte, for tests and fixture worlds |
 //!
 //! # Choosing a viewer
 //!
@@ -41,6 +42,7 @@ pub mod media;
 pub mod registry;
 pub mod sniff;
 pub mod source;
+pub mod testing;
 pub mod text;
 
 pub use bingux_files::Cancel;

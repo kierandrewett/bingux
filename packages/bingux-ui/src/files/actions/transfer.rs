@@ -40,11 +40,13 @@ pub(super) fn begin(env: &Env, label: String, cancel: Option<Cancel>) -> bool {
             cancel,
         }),
     );
+    super::operation_began();
     true
 }
 
 pub(super) fn finish(env: &Env) {
     set(env.ui.busy, None);
+    super::operation_ended();
 }
 
 /// Select `paths` once they are listed: what a person expects after a paste.

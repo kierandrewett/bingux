@@ -14,7 +14,7 @@ use freya::torin::prelude::Size2D;
 use super::super::chrome::PreviewNav;
 use super::super::subject::Resolved;
 use crate::component::ComponentName;
-use crate::controls::primary_button;
+use crate::controls::{action_button, primary_button};
 use crate::files::{FileIcon, FileIconSize, file_icon_view};
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -41,6 +41,11 @@ pub struct Card {
     /// The thumbnail the desktop made for a document, a song or a film.
     poster: Option<(PathBuf, Option<SystemTime>)>,
     on_open: Option<EventHandler<()>>,
+    on_retry: Option<EventHandler<()>>,
+    /// The card sits on the player's black backdrop, not on the window: its text takes the ink of a
+    /// floating surface, which is light in both schemes (the dark ink of the light scheme was 1.2:1
+    /// on it: `scripts/pixel-check.py`).
+    on_backdrop: bool,
 }
 
 impl Card {
@@ -59,7 +64,28 @@ impl Card {
                 .filter(|_| wants_poster)
                 .map(|path| (path, resolved.facts.modified)),
             on_open: nav.on_open.clone(),
+            on_retry: None,
+            on_backdrop: false,
         }
+    }
+
+    /// This card drawn on the player's backdrop.
+    pub(super) fn on_backdrop(mut self) -> Card {
+        self.on_backdrop = true;
+        self
+    }
+
+    /// This card with `note` added: why the better viewer did not show the file.
+    pub(super) fn noted(mut self, note: String) -> Card {
+        self.notes.push(note);
+        self
+    }
+
+    /// This card with a Try again button beside Open. The card is as tall as its stage, so a button
+    /// put under it is always below the stage's edge: the retry is part of the card's own actions.
+    pub(super) fn retrying(mut self, retry: Option<EventHandler<()>>) -> Card {
+        self.on_retry = retry;
+        self
     }
 }
 
@@ -75,6 +101,8 @@ impl Placeholder {
             notes: note.into_iter().collect(),
             poster: None,
             on_open: None,
+            on_retry: None,
+            on_backdrop: false,
         }
     }
 }
@@ -120,27 +148,38 @@ impl Component for Card {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let _ = Size2D::new(0.0, 0.0);
+        let muted = if self.on_backdrop { Ink::OnFloating } else { Ink::Muted };
         let face = Element::from(
             rect()
                 .tw(&tokens, &[w_full(), h_full(), flex_col(), center(), gap(S3), p(S4)])
                 .child(file_icon_view(&tokens, &self.icon, stage_size(), false))
                 .child(
                     SECTION
+                        .in_ink(if self.on_backdrop { Ink::OnFloating } else { Ink::Text })
                         .label(&tokens, self.title.clone())
                         .max_lines(2)
                         .text_align(TextAlign::Center),
                 )
-                .maybe_child(self.subtitle.clone().map(|text| CAPTION.in_ink(Ink::Muted).label(&tokens, text).max_lines(1)))
+                .maybe_child(self.subtitle.clone().map(|text| CAPTION.in_ink(muted).label(&tokens, text).max_lines(1)))
                 .children(self.notes.iter().map(|note| {
                     Element::from(rect().tw(&tokens, &[w_full(), max_w(Dim::Dialog)]).child(
                         CAPTION
-                            .in_ink(Ink::Muted)
+                            .in_ink(muted)
                             .paragraph(&tokens, note.clone())
                             .width(Size::fill())
                             .text_align(TextAlign::Center),
                     ))
                 }))
-                .maybe_child(self.on_open.clone().map(|open| Element::from(primary_button("Open", move |_| open.call(()))))),
+                .maybe_child((self.on_open.is_some() || self.on_retry.is_some()).then(|| {
+                    // Open and Try again side by side: stacked under the card, the second would be
+                    // below the stage's edge on a short pane.
+                    Element::from(
+                        rect()
+                            .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
+                            .maybe_child(self.on_open.clone().map(|open| Element::from(primary_button("Open", move |_| open.call(())))))
+                            .maybe_child(self.on_retry.clone().map(|retry| Element::from(action_button("Try again", move |_| retry.call(()))))),
+                    )
+                })),
         );
         let stage = match &self.poster {
             Some(key) => Element::from(Poster {

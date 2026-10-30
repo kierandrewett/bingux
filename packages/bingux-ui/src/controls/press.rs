@@ -227,3 +227,57 @@ impl Hold {
         }
     }
 }
+
+/// A transparent box that widens what a pointer or finger can press beyond
+/// what is painted. `painted` is the size of the control's face and `target`
+/// the size of the press area, both centred on the face. It is absolutely
+/// placed, so it takes no room and moves nothing. A `target` no bigger than
+/// `painted` adds nothing.
+///
+/// Freya delivers a pointer event to a node that listens and whose own box
+/// holds the pointer. A press bubbles from there to the node's ancestors, so
+/// the area listens with handlers that do nothing and the control above hears
+/// a press in the ring as if its box were the target. Hover does not bubble:
+/// `pointer_enter` and `pointer_leave` go to the topmost listener only, and
+/// `pointer_over` and `pointer_out` go to every listener whose own box holds
+/// the pointer, so the control's own box, which ends at its face, would never
+/// hear the pointer in the ring. The area therefore carries the control's
+/// hover: `hovering` is set while the pointer is anywhere in the target and
+/// cleared, with `pressing`, when it leaves. The enter and leave pair is the
+/// right one: of two targets that overlap, only the topmost lights. A control
+/// that has a hit area reads its hover from the area and not from its own
+/// handlers.
+///
+/// The area is a layer in front of its siblings. The engine lists the nodes of one layer in no
+/// order a control can rely on, and the control's own solid children (a switch's thumb, a fill
+/// that shows the hover) lie under the pointer at the middle of the face: a sibling listed
+/// after the area took the pointer from it, so the area heard nothing, or heard it leave when
+/// the fill began to show. Whether it did depended on the node ids, so the first switch of a
+/// page lit and the ones below it did not.
+pub(crate) fn hit_area(
+    painted: (f32, f32),
+    target: (f32, f32),
+    hovering: State<bool>,
+    pressing: State<bool>,
+) -> Element {
+    let (width, height) = (target.0.max(painted.0), target.1.max(painted.1));
+    let (mut over, mut out) = (hovering, hovering);
+    let mut released = pressing;
+    rect()
+        .layer(Layer::Relative(1))
+        .width(Size::px(width))
+        .height(Size::px(height))
+        .position(
+            Position::new_absolute()
+                .left((painted.0 - width) / 2.0)
+                .top((painted.1 - height) / 2.0),
+        )
+        .on_pointer_enter(move |_| over.set_if_modified(true))
+        .on_pointer_leave(move |_| {
+            out.set_if_modified(false);
+            released.set_if_modified(false);
+        })
+        .on_pointer_down(|_: Event<PointerEventData>| {})
+        .on_press(|_: Event<PressEventData>| {})
+        .into()
+}

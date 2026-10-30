@@ -210,7 +210,7 @@ impl Component for RenameField {
         };
         let note = message.map(|message| {
             rect()
-                .layer(Layer::Overlay)
+                .layer(crate::layers::INLINE_EDITOR)
                 .position(Position::new_absolute().left(0.0).top(below))
                 .tw(
                     &tokens,

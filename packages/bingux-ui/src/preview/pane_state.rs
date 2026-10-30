@@ -9,9 +9,9 @@
 
 /// The narrowest the pane gets: wide enough for the header's buttons and a
 /// readable column of facts.
-pub const MIN_WIDTH: f32 = 280.0;
+pub const MIN_WIDTH: f32 = 340.0;
 /// The width of a pane that has never been resized.
-pub const DEFAULT_WIDTH: f32 = 360.0;
+pub const DEFAULT_WIDTH: f32 = 380.0;
 /// The share of the view the pane may take.
 pub const MAX_SHARE: f32 = 0.6;
 /// A window narrower than this has no room for a pane beside a list.
@@ -84,8 +84,8 @@ mod tests {
 
     #[test]
     fn dragging_the_edge_sets_the_width_from_the_pointer() {
-        // The row is 1000 wide and ends at x 1100: a pointer at 800 is 300.
-        assert_eq!(drag_width(800.0, 1100.0, 1000.0), 300.0);
+        // The row is 1000 wide and ends at x 1100: a pointer at 700 is 400.
+        assert_eq!(drag_width(700.0, 1100.0, 1000.0), 400.0);
         // Past the limits it sticks.
         assert_eq!(drag_width(1090.0, 1100.0, 1000.0), MIN_WIDTH);
         assert_eq!(drag_width(0.0, 1100.0, 1000.0), 600.0);

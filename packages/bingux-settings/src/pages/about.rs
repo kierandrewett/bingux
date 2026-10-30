@@ -215,7 +215,7 @@ fn collect() -> Facts {
         (vendor, product) => vendor.or(product).unwrap_or_else(|| "Unknown".to_string()),
     };
     let os = os_release("PRETTY_NAME").unwrap_or_else(|| "Unknown".to_string());
-    Facts {
+    let facts = Facts {
         hostname: crate::system::read_to_string("/etc/hostname")
             .map(|text| text.trim().to_string())
             .ok()
@@ -234,7 +234,22 @@ fn collect() -> Facts {
         uptime: uptime(),
         disk: disk(),
         gnoblin: gnoblin_version(),
+    };
+    #[cfg(feature = "snapshot")]
+    let facts = fake_machine(facts);
+    facts
+}
+
+/// Snapshot builds only: `BINGUX_SETTINGS_FAKE_ABOUT` fixes the two facts that change between
+/// two runs on one machine, the uptime and how full the root file system is, so that two
+/// captures of the page (left to right and right to left, say) are the same.
+#[cfg(feature = "snapshot")]
+fn fake_machine(mut facts: Facts) -> Facts {
+    if std::env::var_os("BINGUX_SETTINGS_FAKE_ABOUT").is_some() {
+        facts.uptime = "3 days, 4 hours".to_string();
+        facts.disk = Some((124_000_000_000, 500_000_000_000));
     }
+    facts
 }
 
 /// The rows of the System details group, in reading order.
@@ -461,7 +476,10 @@ impl Component for AboutPage {
                 .tw(&tokens, &[flex_col(), gap(GUTTER), p(GUTTER)])
                 .child(
                     rect()
-                        .tw(&tokens, &[flex_row(), items(Align::Center), gap(GUTTER)])
+                        // Start, not centre: in this row (an inner height, in the page's scroll view) torin
+                        // centred the icon tile in the whole height of the page, and it lay 738 px (773 on a
+                        // phone) below its row, so the logo was never drawn. Layout lint: outside-parent.
+                        .tw(&tokens, &[flex_row(), items(Align::Start), gap(GUTTER)])
                         .child(
                             rect()
                                 .tw(
@@ -487,25 +505,20 @@ impl Component for AboutPage {
                         .child(
                             rect()
                                 .tw(&tokens, &[w_flex(), flex_col(), gap(S1)])
-                                .child(
-                                    TITLE
-                                        .label(&tokens, or_blank(name.clone()))
-                                        .max_lines(1)
-                                        .text_overflow(TextOverflow::Ellipsis),
-                                )
-                                .child(
-                                    EMPHASIS
-                                        .label(&tokens, or_blank(os_line))
-                                        .max_lines(1)
-                                        .text_overflow(TextOverflow::Ellipsis),
-                                )
-                                .child(
-                                    CAPTION
-                                        .in_ink(Ink::Muted)
-                                        .label(&tokens, or_blank(facts.model.clone()))
-                                        .max_lines(1)
-                                        .text_overflow(TextOverflow::Ellipsis),
-                                ),
+                                // The name, the system and the model wrap, never
+                                // end in an ellipsis, and can be selected.
+                                .child(Element::from(
+                                    bingux_ui::controls::select_text(or_blank(name.clone()))
+                                        .style(TITLE),
+                                ))
+                                .child(Element::from(
+                                    bingux_ui::controls::select_text(or_blank(os_line))
+                                        .style(EMPHASIS),
+                                ))
+                                .child(Element::from(
+                                    bingux_ui::controls::select_text(or_blank(facts.model.clone()))
+                                        .style(CAPTION.in_ink(Ink::Muted)),
+                                )),
                         ),
                 )
                 .child(

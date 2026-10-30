@@ -3,3 +3,4 @@ pub mod image;
 pub mod label;
 pub mod paragraph;
 pub mod rect;
+mod text_layout;

@@ -162,6 +162,8 @@ pub struct Input {
     font_family: Option<&'static str>,
     a11y_id: Option<AccessibilityId>,
     leading: Option<Element>,
+    role: Option<AccessibilityRole>,
+    hover_background: Option<Color>,
     trailing: Option<Element>,
     on_pre_key_down: Option<Callback<Event<KeyboardEventData>, bool>>,
     command: Option<State<Option<InputCommand>>>,
@@ -308,6 +310,8 @@ impl Input {
             font_family: None,
             a11y_id: None,
             leading: None,
+            role: None,
+            hover_background: None,
             trailing: None,
             on_pre_key_down: None,
             command: None,
@@ -478,6 +482,19 @@ impl Input {
         self
     }
 
+    /// The accessibility role of the field, in place of the text input one
+    /// its mode gives (a search field is a `SearchInput`).
+    pub fn role(mut self, role: AccessibilityRole) -> Self {
+        self.role = Some(role);
+        self
+    }
+
+    /// The background while the pointer is over the input and it is not focused.
+    pub fn hover_background(mut self, color: Color) -> Self {
+        self.hover_background = Some(color);
+        self
+    }
+
     /// Optional element rendered after the text input.
     pub fn trailing(mut self, trailing: impl Into<Element>) -> Self {
         self.trailing = Some(trailing.into());
@@ -588,7 +605,6 @@ impl Component for Input {
         }
 
         let mode = self.mode;
-        let text_align = self.text_align;
         let padding = theme_layout.padding;
         let multiline = self.multiline;
         let mut follow_cursor = move || {
@@ -601,6 +617,7 @@ impl Component for Input {
             let Some(ParagraphHolderInner {
                 paragraph,
                 scale_factor,
+                align: text_align,
                 ..
             }) = holder.as_ref()
             else {
@@ -622,7 +639,7 @@ impl Component for Input {
                 InputMode::Shown => editor.rope().to_string(),
             };
 
-            let cursor_rect = paragraph.cursor_rect(&text, editor.cursor_pos(), text_align);
+            let cursor_rect = paragraph.cursor_rect(&text, editor.cursor_pos(), *text_align);
             let cursor_location =
                 Point2D::new(cursor_rect.left, cursor_rect.top) / (*scale_factor as f32);
             let visible_cursor_location =
@@ -661,6 +678,7 @@ impl Component for Input {
             let Some(ParagraphHolderInner {
                 paragraph,
                 scale_factor,
+                align: text_align,
                 ..
             }) = holder.as_ref()
             else {
@@ -678,7 +696,7 @@ impl Component for Input {
             let scale = *scale_factor as f32;
             // The paragraph's area includes its padding; glyphs start inside it.
             let caret_at = |index: usize| {
-                let rect = paragraph.cursor_rect(&text, index, text_align);
+                let rect = paragraph.cursor_rect(&text, index, *text_align);
                 InputCaret {
                     x: area_now.min_x() + padding.left() + rect.left / scale,
                     top: area_now.min_y() + padding.top() + rect.top / scale,
@@ -1035,7 +1053,11 @@ impl Component for Input {
                     .get_visible_selection(EditorLine::SingleParagraph),
             )
         } else {
-            (theme_colors.background, None, None)
+            let rest = match (status(), self.hover_background) {
+                (InputStatus::Hovering, Some(hover)) if enabled() => hover,
+                _ => theme_colors.background,
+            };
+            (rest, None, None)
         };
 
         let border = if visual_focus {
@@ -1063,10 +1085,11 @@ impl Component for Input {
             (InputMode::Shown, _) => Cow::Borrowed(value.as_ref()),
         };
 
-        let a11_role = match self.mode {
-            InputMode::Hidden(_) => AccessibilityRole::PasswordInput,
-            _ if self.multiline => AccessibilityRole::MultilineTextInput,
-            _ => AccessibilityRole::TextInput,
+        let a11_role = match (self.role, self.mode) {
+            (Some(role), _) => role,
+            (None, InputMode::Hidden(_)) => AccessibilityRole::PasswordInput,
+            (None, _) if self.multiline => AccessibilityRole::MultilineTextInput,
+            (None, _) => AccessibilityRole::TextInput,
         };
 
         rect()
@@ -1101,11 +1124,7 @@ impl Component for Input {
             .content(Content::Flex)
             .direction(Direction::Horizontal)
             .cross_align(Alignment::center())
-            .maybe_child(
-                self.leading
-                    .clone()
-                    .map(|leading| rect().padding(Gaps::new(0., 0., 0., 8.)).child(leading)),
-            )
+            .maybe_child(self.leading.clone())
             .child(
                 ScrollView::new_controlled(scroll_controller)
                     .width(Size::flex(1.))

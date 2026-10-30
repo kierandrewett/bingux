@@ -40,12 +40,19 @@ bingux-preview-core = { path = "../bingux-preview-core" }
 # responses; no UI of its own).
 bingux-search = { path = "../bingux-search" }
 
+[dev-dependencies]
+# A test's clipboard is memory (`controls::select_text::test_clipboard`): the
+# system's belongs to the person at the desk. The version Freya's clipboard uses.
+copypasta = "0.10"
+
 # Desktop scroll feel; see ../vendor/README.md.
 [patch.crates-io]
 freya-winit = { path = "../vendor/freya-winit" }
 freya-core = { path = "../vendor/freya-core" }
 freya-animation = { path = "../vendor/freya-animation" }
 freya-components = { path = "../vendor/freya-components" }
+torin = { path = "../vendor/torin" }
+winit = { path = "../vendor/winit" }
 
 # Panics unwind, in dev and in release. The error boundaries and guards in the
 # vendored freya-core catch a panic with `catch_unwind`, which does nothing under

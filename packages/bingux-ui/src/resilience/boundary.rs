@@ -20,6 +20,7 @@ use freya_core::guard::{Failure, NoticeSink, RenderSink};
 
 use super::log::{display_path, short_name};
 use crate::component::ComponentName;
+use crate::controls::direction::{Direction, window_directed};
 use crate::controls::button::{action_button, row_button};
 use crate::group::centered_caption;
 use crate::icons::{self, Icon};
@@ -201,7 +202,7 @@ impl Component for ErrorBoundary {
             slot.failure = None;
             slot.bare = false;
         });
-        match current.failure {
+        let body: Element = match current.failure {
             None => BoundaryBody {
                 content: self.content.clone(),
                 epoch: current.epoch,
@@ -220,6 +221,13 @@ impl Component for ErrorBoundary {
                 retry,
             }
             .into_element(),
+        };
+        // The window's root says which way the window reads; everything inside,
+        // a failure card included, inherits it.
+        if self.look == Look::Window {
+            window_directed(Direction::system(), body).into_element()
+        } else {
+            body
         }
     }
 }

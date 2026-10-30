@@ -1,7 +1,8 @@
 //! Bingux files: the filesystem model behind every Bingux file chooser and,
 //! later, the `bingux-files` app and a `bingux-portal` backend.
 //!
-//! This crate has **no UI and no async runtime**: it depends on `libc` only.
+//! This crate has **no UI and no async runtime**: it depends on `libc`, `regex` and
+//! `bingux-search` (the shared search engine) only.
 //! Everything here is a plain function or type that a worker thread, a CLI, a
 //! portal service or a UI can call. `bingux-ui` builds its file views and the
 //! chooser dialog (`bingux_ui::files`) on top of it.
@@ -21,7 +22,7 @@
 //! | [`recent`] | `recently-used.xbel`, read only |
 //! | [`location`] | Typed paths, `~` and `file://` URIs, completion, breadcrumbs, file names |
 //! | [`watch`] | An inotify watcher that reports a changed directory |
-//! | [`search`] | Path or search for a typed text, name matching and ranking, the subfolder walker |
+//! | [`find`] | The file search: the typed query and its text form, name matching and ranking, the names index, the live walk |
 //! | [`selection`] | Multi-selection, cursor movement and type-ahead |
 //! | [`request`] | The chooser request and response, shaped like the portal's |
 //! | [`accept`](request::accept) | What pressing Open or Save does for a request |
@@ -66,6 +67,7 @@ pub mod cache;
 pub mod display;
 pub mod entry;
 pub mod filter;
+pub mod find;
 pub mod listing;
 pub mod loader;
 pub mod location;
@@ -75,7 +77,6 @@ pub mod ops;
 pub mod places;
 pub mod recent;
 pub mod request;
-pub mod search;
 pub mod selection;
 pub mod sort;
 pub mod stat;

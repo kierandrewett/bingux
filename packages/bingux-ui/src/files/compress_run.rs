@@ -59,11 +59,13 @@ fn begin(env: &Env, label: String, cancel: Cancel) -> bool {
             cancel: Some(cancel),
         }),
     );
+    super::actions::operation_began();
     true
 }
 
 fn finish(env: &Env) {
     set(env.ui.busy, None);
+    super::actions::operation_ended();
 }
 
 /// Select `paths` in the view, opening their folder first if it is not the

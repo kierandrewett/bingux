@@ -1,183 +1,183 @@
-//! Search in the file views: the address bar as the search box.
+//! Search in the file views: what is asked, how it runs, what the list is told.
 //!
-//! The address bar ([`AddressBar`](super::AddressBar)) is one text field for
-//! a path and for a search. What is typed decides which, by
-//! [`bingux_files::search::classify`], with no disk access:
+//! The search has its own bar under the toolbar ([`search_bar`](super::search_bar):
+//! the field, the scope and the filters) and its own backend
+//! ([`bingux_files::find`]). `design/files-search.md` says how the pieces fit
+//! and what is not done; this module is the state they share.
 //!
-//! | Typed | Is |
-//! | ----- | -- |
-//! | starts with `/`, `~`, `./`, `../`, or a scheme such as `smb://` | a path |
-//! | names an entry of this folder (`Documents`, `Documents/Sub`) | a path |
-//! | anything else (`report`, `2024 invoice`, `.png`) | a search |
+//! # What is asked
 //!
-//! # Stage 1: filter this folder
+//! [`Find`] holds what the bar edits, per tab: whether the bar is open, where
+//! to look ([`Scope`]), and the filters. The words are the text of the field,
+//! which the owner keeps (`draft`): `report "tax return" -draft`. A
+//! `key:value` typed in the field (`type:image`, `size:>1MB`, the full
+//! language is in [`bingux_files::find::query`]) turns into a filter, shown as
+//! a token under the field, the moment a space ends it. [`Find::query`] is
+//! the typed [`Query`] of the two together; the text and the Filters panel
+//! never disagree, because there is one place the filters live.
 //!
-//! A search filters the loaded listing as each letter is typed. Nothing is
-//! read from the disk: the listing is already in memory, so it costs nothing.
-//! Names match without regard to case. Matches come in the order of
-//! [`Tier`](bingux_files::search::Tier): the exact name, a name that starts
-//! with the text, a word that starts with it, the text anywhere, every word
-//! of it, and last the letters in order (`rpt` finds `my_report.txt`).
-//! Inside one tier the list keeps the sort the person chose. The matched
-//! letters of every name are drawn on an accent tint. The status line reads
-//! "3 of 120 items match".
+//! # Where it runs
 //!
-//! | Key | Does |
-//! | --- | ---- |
-//! | Ctrl+F on the list, or a letter typed on it | focus the address bar as a search of this folder |
-//! | the chip `in <Folder>` in the field | the scope. Its close button, or Escape, ends the search |
-//! | Up, Down | move the selected match, without leaving the field |
-//! | Enter | open the selected match (the first, when none is selected): a folder is entered, a file opened or chosen. With no match it starts the subfolder search |
-//! | Ctrl+Enter, Shift+Enter | search the subfolders for the text now |
-//! | Escape | clear the text, show the whole folder again and give back the selection the person had before searching |
+//! [`Scope::Folder`] filters the listing in memory, as the person types;
+//! nothing is read. Every other scope is a search of folders:
+//! [`use_search_run`] runs [`bingux_files::find::run`] on a thread of its own
+//! (the names index first, then the live walk) and publishes what it finds
+//! every 60 ms. A changed query, a changed scope, another folder, Stop or the
+//! window going away cancels it.
 //!
-//! Going to another folder ends the search. Leaving the field with the
-//! pointer does not: the filter and the field stay until Escape or the chip's
-//! close button, so a result can be clicked.
+//! # What the list does while it runs
 //!
-//! The file type filter of a chooser is a different thing (see
-//! [`bingux_files::filter`]). It stays on during a search, so a search in a
-//! chooser for pictures only finds pictures. In the folder its "hidden by
-//! filter" count is reported separately; the subfolder walker applies the
-//! filter itself ([`WalkOptions::filter`](bingux_files::search::WalkOptions)),
-//! so rejected files neither show nor count toward its limit.
+//! Rows are only appended: nothing already on show moves while the search
+//! runs, whatever the sort. When it ends the list is put in the chosen order
+//! once. The previous results stay on show until the new search has its first
+//! results, so typing one more letter does not blank the list.
 //!
-//! # Stage 2: search the subfolders
-//!
-//! Under the field, the last row is always there while there is text:
-//! **Search subfolders for "text"**. Pressing it, or Ctrl+Enter, starts
-//! [`walk`](bingux_files::search::walk) on a thread of its own. Results
-//! stream into the list as they are found, shallow folders first. The row
-//! becomes "Searching subfolders… 12 found" with **Stop** at its end (the
-//! whole row stops the search), and the status line counts the same. Changing the text, going to another folder or
-//! closing the dialog stops the walk; Stop keeps what has been found.
-//!
-//! What the walk does and does not do:
-//!
-//! - It starts in the folder on show and reads one folder at a time, on one
-//!   thread. Everything it finds is a name match, so folders are results too.
-//! - It skips hidden folders and hidden entries unless Show hidden files is
-//!   on, and never enters a symbolic link, a folder of another filesystem (a
-//!   mounted drive or network share, `/proc`), or the same folder twice.
-//! - By default it looks in everything the person could browse to, including
-//!   `node_modules`, `target` and `.git` when hidden files are shown. The
-//!   view menu's "Search build and dependency folders" switch turns that off
-//!   and skips [`NOISE_FOLDERS`](bingux_files::search::NOISE_FOLDERS).
-//! - It stops at 10,000 results and says so.
-//! - Each result shows its name and, in a list, a Location column with its
-//!   folder below the folder searched; a grid shows it on the detail card.
-//!
-//! The Bingux search service (`bingux-searchd`) is not used. It is a launcher
-//! search over a fixed set of roots, answers over a private socket with
-//! results capped at the launcher's size, cannot be limited to a folder and
-//! does not say which folders it covers, so it cannot give a complete answer
-//! for "this folder and below". The walker is the only source.
-//!
-//! File *contents* are not searched, only names.
+//! [`DeepResults::listing`] is a [`Listing`] of the folder the search started
+//! in, so a file view shows results like any folder: with a Location column
+//! for the folder each result is in.
 
 use std::cell::RefCell;
-use std::path::PathBuf;
+use std::ops::Range;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::Duration;
 
+use bingux_files::find::{
+    self, Event, Filters, Invalid, Matcher, NameIndex, Plan, Query, Scope, SortBy, Summary, split_pending,
+};
 use bingux_files::listing::Cancel;
 use bingux_files::mounts::MountKind;
-use bingux_files::search::{self, Query, Summary, Typed, WalkOptions, Walked};
 use bingux_files::{Entry, Filter, Listing, Selection};
 use freya::prelude::*;
 
 use super::address_target::StopOnDrop;
-use crate::component::ComponentName;
-use crate::controls::{SpinnerSize, spinner};
-use crate::icons::{self, Icon};
-use crate::style::*;
-use crate::surface::use_tokens;
-use crate::typography::{BODY, Ink};
 
-/// How often the UI picks up what the walker found.
+/// How often the UI picks up what the search found.
 const POLL: Duration = Duration::from_millis(60);
 
+/// The most results one search shows.
+pub const MAX_RESULTS: usize = 10_000;
+
 // ---------------------------------------------------------------------------
-// What the person is searching for
+// What the person is asking
 // ---------------------------------------------------------------------------
 
-/// The search the address bar is making. Held by whoever owns the bar (the
-/// chooser), so the bar, the list and the status line read one state.
+/// The search a tab is making, apart from the words. Held by whoever owns the
+/// bar (the chooser), so the bar, the list and the status line read one state.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Find {
-    /// Search mode: the chip shows and an empty field is a search, not a path.
-    pub scoped: bool,
-    /// The search text, trimmed. Empty means no filtering yet.
-    pub query: String,
-    /// The text a subfolder search was started for. It is the search shown
-    /// only while it equals `query`.
-    pub deep: Option<String>,
+    /// The search bar shows, and the list is narrowed by what it asks.
+    pub open: bool,
+    /// Where to look. It stays when the search ends, so a person who
+    /// searches "Everywhere" does not choose it again for the next search.
+    pub scope: Scope,
+    /// Filters, from the Filters panel and from `key:value` typed in the field.
+    pub filters: Filters,
+    /// The Filters panel is open.
+    pub filters_open: bool,
     /// Counts requests to put the keyboard in the field, so a search started
-    /// from the list reaches a field that is already open.
+    /// from the list reaches a bar that is already open.
     pub focus: u32,
     /// The selection from before the search began, given back on Escape.
     restore: Option<Selection>,
 }
 
+/// `typed` laid over `base`: what the field says wins where both say
+/// something; extensions, types and patterns add up.
+pub fn overlay(base: &Filters, typed: Filters) -> Filters {
+    let mut out = base.clone();
+    for kind in typed.kinds {
+        if !out.kinds.contains(&kind) {
+            out.kinds.push(kind);
+        }
+    }
+    out.kinds.sort();
+    for ext in typed.exts {
+        if !out.exts.contains(&ext) {
+            out.exts.push(ext);
+        }
+    }
+    out.globs.extend(typed.globs);
+    out.size = typed.size.or(out.size);
+    out.modified = typed.modified.or(out.modified);
+    out.within = typed.within.or(out.within);
+    if typed.hidden != find::Hidden::Follow {
+        out.hidden = typed.hidden;
+    }
+    out.case_sensitive |= typed.case_sensitive;
+    if typed.name_mode != find::NameMode::Contains {
+        out.name_mode = typed.name_mode;
+    }
+    if typed.sort != SortBy::Relevance {
+        out.sort = typed.sort;
+    }
+    out
+}
+
 impl Find {
-    /// The query in effect, if there is text.
-    pub fn query(&self) -> Option<Query> {
-        if self.scoped {
-            Query::new(&self.query)
-        } else {
-            None
+    /// The query: the words of `text` and the filters. A `key:value` still
+    /// being typed (no space after it yet) is not part of it.
+    pub fn query(&self, text: &str) -> Query {
+        let (committed, _) = split_pending(text);
+        let typed = Query::parse(committed);
+        Query {
+            terms: typed.terms,
+            filters: overlay(&self.filters, typed.filters),
         }
     }
 
-    /// The query of the subfolder search being shown, if there is one.
-    pub fn deep_query(&self) -> Option<Query> {
-        let query = self.query()?;
-        (self.deep.as_deref() == Some(query.text())).then_some(query)
+    /// The query when there is something to narrow the list by, else `None`
+    /// (the bar is closed, or nothing is typed and no filter is set).
+    pub fn active(&self, text: &str) -> Option<Query> {
+        if !self.open {
+            return None;
+        }
+        let query = self.query(text);
+        (!query.is_blank()).then_some(query)
     }
 
-    /// Start a search of the folder with nothing typed yet. `selection` is
-    /// what Escape gives back.
+    /// Open the bar. `selection` is what Escape gives back.
     pub fn begin(&mut self, selection: &Selection) {
-        if !self.scoped {
-            self.scoped = true;
+        if !self.open {
+            self.open = true;
             self.restore = Some(selection.clone());
         }
     }
 
-    /// The text of the field changed. `is_child` says whether a name is an
-    /// entry of the folder on show. Returns the selection to give back when
-    /// the text turned into a path and the search ended.
-    pub fn typed(
-        &mut self,
-        text: &str,
-        is_child: impl Fn(&str) -> bool,
-        selection: &Selection,
-    ) -> Option<Selection> {
-        match search::classify(text, is_child) {
-            Typed::Query(text) => {
-                self.begin(selection);
-                if self.query != text {
-                    self.query = text.to_string();
-                    if self.deep.as_deref() != Some(text) {
-                        self.deep = None;
-                    }
-                }
-                None
-            }
-            Typed::Path if text.trim().is_empty() => {
-                self.query.clear();
-                self.deep = None;
-                None
-            }
-            Typed::Path => self.clear(),
+    /// Turn the `key:value` tokens of `text` into filters. Done when a space
+    /// ends one, or with `finished` (Enter). Returns the text the field
+    /// should hold now, when it is not the text it has.
+    pub fn lift(&mut self, text: &str, finished: bool) -> Option<String> {
+        if !finished && !text.ends_with(char::is_whitespace) {
+            return None;
         }
+        let typed = Query::parse(text);
+        if typed.filters == Filters::default() {
+            return None;
+        }
+        self.filters = overlay(&self.filters, typed.filters);
+        let mut words = Query {
+            terms: typed.terms,
+            filters: Filters::default(),
+        }
+        .to_string();
+        if !finished && !words.is_empty() {
+            words.push(' ');
+        }
+        (words != text).then_some(words)
     }
 
-    /// End the search. Returns the selection to give back.
+    /// End the search: the bar closes and the filters are dropped; the scope
+    /// stays. Returns the selection to give back.
     pub fn clear(&mut self) -> Option<Selection> {
-        std::mem::take(self).restore
+        let restore = self.restore.take();
+        *self = Find {
+            scope: std::mem::take(&mut self.scope),
+            ..Find::default()
+        };
+        restore
     }
 }
 
@@ -185,11 +185,11 @@ impl Find {
 // What the list and the status line are told
 // ---------------------------------------------------------------------------
 
-/// How a subfolder search is going, as the bar, the list and the status line
-/// tell it.
+/// How a search of folders is going, as the bar, the list and the status
+/// line tell it.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct DeepStatus {
-    /// The folder the search started in.
+    /// The folder the search started in: the Location column is relative to it.
     pub root: PathBuf,
     pub found: usize,
     pub folders: usize,
@@ -198,223 +198,63 @@ pub struct DeepStatus {
     pub stopped: bool,
     /// The limit was reached.
     pub truncated: bool,
+    /// Folders that could not be read.
+    pub unreadable: usize,
 }
 
-/// What a file view shows of a search: the query to mark in names, how many
-/// entries the folder has, and the subfolder search when one is shown.
+/// The matcher a search marks names with.
+#[derive(Clone, Debug)]
+pub struct Marks {
+    /// `None` when the query cannot run (a bad regular expression).
+    matcher: Option<Arc<Matcher>>,
+    text: String,
+}
+
+impl Marks {
+    pub fn new(matcher: Option<Arc<Matcher>>, text: String) -> Marks {
+        Marks { matcher, text }
+    }
+
+    /// The bytes of `name` the search matched, to draw marked.
+    pub fn highlight(&self, name: &str) -> Vec<Range<usize>> {
+        self.matcher.as_ref().map(|matcher| matcher.highlight(name)).unwrap_or_default()
+    }
+
+    /// The query as text: what a view's scroll position is keyed by.
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+}
+
+impl PartialEq for Marks {
+    fn eq(&self, other: &Self) -> bool {
+        match (&self.matcher, &other.matcher) {
+            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            (None, None) => self.text == other.text,
+            _ => false,
+        }
+    }
+}
+
+/// What a file view shows of a search: the matcher to mark names with, how
+/// many entries the folder has, and the results of a search of folders when
+/// they are shown.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SearchView {
-    pub query: Query,
+    pub query: Marks,
     /// Entries of the folder on show that the search chose among (hidden
     /// ones and the ones the file type filter removes not counted).
     pub of: usize,
-    /// Set while the list shows a subfolder search.
+    /// Set while the list shows the results of a search of folders.
     pub deep: Option<DeepStatus>,
-}
-
-// ---------------------------------------------------------------------------
-// The bar's side of a search
-// ---------------------------------------------------------------------------
-
-/// Everything the address bar needs to act as a search box; see
-/// [`AddressBar::search`](super::AddressBar::search).
-#[derive(Clone, PartialEq)]
-pub struct SearchLink {
-    pub(super) find: State<Find>,
-    pub(super) selection: State<Selection>,
-    /// The folder on show, to tell paths from searches without the disk.
-    pub(super) listing: Option<Arc<Listing>>,
-    /// The folder's name, for the chip and the field's name.
-    pub(super) folder: String,
-    pub(super) deep: Option<DeepStatus>,
-    pub(super) on_step: EventHandler<i32>,
-    pub(super) on_open: EventHandler<()>,
-    pub(super) on_deep: EventHandler<()>,
-    pub(super) on_stop: EventHandler<()>,
-    pub(super) on_clear: EventHandler<()>,
-}
-
-impl SearchLink {
-    /// A link for `find`. `selection` is the list's, kept so that a search
-    /// can give it back. `folder` is the name of the folder on show.
-    pub fn new(find: State<Find>, selection: State<Selection>, folder: impl Into<String>) -> Self {
-        SearchLink {
-            find,
-            selection,
-            listing: None,
-            folder: folder.into(),
-            deep: None,
-            on_step: EventHandler::new(|_: i32| {}),
-            on_open: EventHandler::new(|_: ()| {}),
-            on_deep: EventHandler::new(|_: ()| {}),
-            on_stop: EventHandler::new(|_: ()| {}),
-            on_clear: EventHandler::new(|_: ()| {}),
-        }
-    }
-
-    /// The folder's entries, to tell a path from a search.
-    pub fn listing(mut self, listing: Option<Arc<Listing>>) -> Self {
-        self.listing = listing;
-        self
-    }
-
-    /// The state of the subfolder search, for the last row.
-    pub fn deep(mut self, deep: Option<DeepStatus>) -> Self {
-        self.deep = deep;
-        self
-    }
-
-    /// Up (-1) or Down (1) in the field: move the selected match.
-    pub fn on_step(mut self, handler: impl Into<EventHandler<i32>>) -> Self {
-        self.on_step = handler.into();
-        self
-    }
-
-    /// Enter: open the selected match.
-    pub fn on_open(mut self, handler: impl Into<EventHandler<()>>) -> Self {
-        self.on_open = handler.into();
-        self
-    }
-
-    /// The last row or Ctrl+Enter: search the subfolders.
-    pub fn on_deep(mut self, handler: impl Into<EventHandler<()>>) -> Self {
-        self.on_deep = handler.into();
-        self
-    }
-
-    /// The Stop button of a running subfolder search.
-    pub fn on_stop(mut self, handler: impl Into<EventHandler<()>>) -> Self {
-        self.on_stop = handler.into();
-        self
-    }
-
-    /// The search ended (Escape, the chip's close button): the owner shows
-    /// the whole folder and gives the selection back.
-    pub fn on_clear(mut self, handler: impl Into<EventHandler<()>>) -> Self {
-        self.on_clear = handler.into();
-        self
-    }
-
-    /// Whether `name` is an entry of the folder on show.
-    pub(super) fn is_child(&self, name: &str) -> bool {
-        self.listing
-            .as_ref()
-            .is_some_and(|listing| listing.entries.iter().any(|entry| entry.name == name))
-    }
-
-    /// The text of the chip: `in Downloads`.
-    pub(super) fn chip(&self) -> String {
-        format!("in {}", self.folder)
-    }
-}
-
-/// Move the cursor of `selection` one row within `order`, for Up and Down in
-/// the field.
-pub fn step_selection(selection: &mut Selection, order: &[&std::path::Path], by: i32) {
-    let key = if by < 0 {
-        bingux_files::selection::Move::Up
-    } else {
-        bingux_files::selection::Move::Down
-    };
-    selection.step(key, order, false);
-}
-
-/// The row under the field: the one place to start the subfolder search, and
-/// where its progress and Stop button are.
-#[derive(PartialEq)]
-pub(super) struct SubfolderRow {
-    pub query: String,
-    pub deep: Option<DeepStatus>,
-    pub on_deep: EventHandler<()>,
-    pub on_stop: EventHandler<()>,
-    pub on_hover: EventHandler<bool>,
-}
-
-impl Component for SubfolderRow {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let mut hovering = use_state(|| false);
-        let on_deep = self.on_deep.clone();
-        let on_enter = self.on_hover.clone();
-        let on_leave = self.on_hover.clone();
-        let (text, busy, offer) = match &self.deep {
-            None => (format!("Search subfolders for “{}”", self.query), false, true),
-            Some(deep) if deep.running => (
-                format!("Searching subfolders… {} found", count(deep.found)),
-                true,
-                false,
-            ),
-            Some(deep) => {
-                let mut text = format!("{} found in subfolders", count(deep.found));
-                if deep.truncated {
-                    text.push_str(" (limit reached)");
-                } else if deep.stopped {
-                    text.push_str(" (stopped)");
-                }
-                (text, false, false)
-            }
-        };
-        let running = self.deep.as_ref().is_some_and(|deep| deep.running);
-        let on_stop = self.on_stop.clone();
-        let row = rect()
-            .component("AddressSubfolderSearch")
-            .a11y_role(AccessibilityRole::MenuItem)
-            .a11y_alt(if running {
-                format!("{text}. Press to stop.")
-            } else {
-                text.clone()
-            })
-            .tw(&tokens, MENU_ITEM)
-            .tw(
-                &tokens,
-                &[surface(
-                    Paint::Transparent,
-                    (offer || running) && hovering(),
-                    false,
-                    false,
-                )],
-            )
-            .on_pointer_enter(move |_| {
-                hovering.set(true);
-                on_enter.call(true);
-            })
-            .on_pointer_leave(move |_| {
-                hovering.set(false);
-                on_leave.call(false);
-            })
-            // A press never reaches the field or the shield under the row.
-            .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
-            .on_press(move |event: Event<PressEventData>| {
-                event.stop_propagation();
-                // The whole row is the button: it starts the search, and
-                // while the search runs it stops it.
-                if offer {
-                    on_deep.call(());
-                } else if running {
-                    on_stop.call(());
-                }
-            });
-        let lead: Element = if busy {
-            spinner(SpinnerSize::Small).into()
-        } else {
-            icons::icon(Icon::Search, IconSize::Control, Paint::Text.color(&tokens)).into()
-        };
-        row.child(lead)
-            .child(
-                BODY.in_ink(if offer { Ink::Text } else { Ink::Muted })
-                    .label(&tokens, text)
-                    .max_lines(1)
-                    .text_overflow(TextOverflow::Ellipsis)
-                    .width(Size::flex(1.0)),
-            )
-            .maybe_child(running.then(|| {
-                Element::from(
-                    BODY.in_ink(Ink::Accent)
-                        .label(&tokens, "Stop".to_string())
-                        .max_lines(1),
-                )
-            }))
-    }
+    /// Where it looks, in words: `Pictures`, `this folder`.
+    pub place: String,
+    /// The query cannot run: what is wrong with it.
+    pub invalid: Option<String>,
+    /// The order the results are in.
+    pub sort: SortBy,
+    /// The words searched for, without the filters.
+    pub words: String,
 }
 
 /// `1204` as `1,204`.
@@ -430,15 +270,26 @@ pub(super) fn count(number: usize) -> String {
     text
 }
 
+/// Move the cursor of `selection` one row within `order`, for Up and Down in
+/// the field.
+pub fn step_selection(selection: &mut Selection, order: &[&Path], by: i32) {
+    let key = if by < 0 {
+        bingux_files::selection::Move::Up
+    } else {
+        bingux_files::selection::Move::Down
+    };
+    selection.step(key, order, false);
+}
+
 // ---------------------------------------------------------------------------
-// The subfolder search, running
+// The search, running
 // ---------------------------------------------------------------------------
 
-/// What a subfolder search has found so far.
+/// What a search of folders has found so far.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DeepResults {
-    /// The text searched for.
-    pub query: String,
+    /// The search these are the results of, as text (query and where).
+    pub key: String,
     /// The matches as a listing of the folder searched, growing while
     /// `listing.complete` is false.
     pub listing: Arc<Listing>,
@@ -447,6 +298,12 @@ pub struct DeepResults {
     pub stopped: bool,
     pub truncated: bool,
     pub unreadable: usize,
+    /// How many of the results the names index answered at once.
+    pub indexed: usize,
+    /// The query could not be run: what is wrong with it.
+    pub invalid: Option<Invalid>,
+    /// `in:` names a folder that is not there.
+    pub missing: Option<String>,
 }
 
 impl DeepResults {
@@ -459,79 +316,97 @@ impl DeepResults {
             running: self.running,
             stopped: self.stopped,
             truncated: self.truncated,
+            unreadable: self.unreadable,
         }
     }
 }
 
-/// The handle to the subfolder search of a view.
+/// The handle to the search of folders of a view.
 #[derive(Clone)]
 pub struct Deep {
     results: State<Option<Arc<DeepResults>>>,
+    /// A search is in flight (the one that publishes `results` or its
+    /// successor, which has not published yet).
+    active: State<bool>,
     stop: Rc<RefCell<Cancel>>,
 }
 
 impl Deep {
-    /// The results for `query`, when that is what the search has.
-    pub fn results_for(&self, query: &Query) -> Option<Arc<DeepResults>> {
-        self.results
-            .read()
-            .as_ref()
-            .filter(|results| results.query == query.text())
-            .cloned()
+    /// The newest results. They may be those of an earlier query while the
+    /// search for the current one has not found anything yet.
+    pub fn latest(&self) -> Option<Arc<DeepResults>> {
+        self.results.read().clone()
+    }
+
+    /// The results of `key`, when that is the search they are of.
+    pub fn results_for(&self, key: &str) -> Option<Arc<DeepResults>> {
+        self.results.read().as_ref().filter(|results| results.key == key).cloned()
     }
 
     /// Stop reading folders. What has been found stays.
     pub fn stop(&self) {
         self.stop.borrow().cancel();
     }
+
+    /// Whether a search is reading folders. Subscribes.
+    pub fn running(&self) -> bool {
+        *self.active.read()
+    }
+
+    /// [`Deep::running`] without subscribing, for a key handler.
+    pub fn running_now(&self) -> bool {
+        *self.active.peek()
+    }
 }
 
+/// Everything that makes one search different from another. The sort is not
+/// among it: sorting the results does not search again.
 #[derive(Clone, PartialEq)]
-struct Key {
-    root: PathBuf,
-    query: String,
-    show_hidden: bool,
-    include_noise: bool,
-    filter: Option<Filter>,
+pub struct RunKey {
+    pub roots: Vec<PathBuf>,
+    pub home: PathBuf,
+    pub query: Query,
+    pub view_hidden: bool,
+    pub include_noise: bool,
+    pub filter: Option<Filter>,
+    /// The folder results are shown relative to.
+    pub base: PathBuf,
+}
+
+impl RunKey {
+    /// The key as the text results are labelled with.
+    fn label(&self) -> String {
+        format!("{}|{}|{:?}", self.query, self.base.display(), self.roots)
+    }
 }
 
 struct Running {
-    key: Key,
+    key: RunKey,
     task: TaskHandle,
 }
 
-/// What the walker's thread tells the task.
+/// What the search's thread tells the task.
 enum Message {
-    Walked(Walked),
+    Event(Event),
     Done(Summary),
 }
 
-/// Run the subfolder search for `query` in `root`, and stop it the moment
-/// `query` changes, `root` changes or the component goes away. `None` for
-/// either means no search runs. `filter` is a chooser's file type filter:
-/// files it rejects are neither found nor counted. Call it once per
+/// Run the search for `key`, and stop it the moment `key` changes or the
+/// component goes away. `None` means no search runs. Call it once per
 /// component, from `render`.
-pub fn use_subfolder_search(
-    root: Option<PathBuf>,
-    query: Option<Query>,
-    show_hidden: bool,
-    include_noise: bool,
-    filter: Option<Filter>,
-    mount: MountKind,
-) -> Deep {
+pub fn use_search_run(key: Option<RunKey>, mount: MountKind) -> Deep {
     let mut results = use_state(|| None::<Arc<DeepResults>>);
+    let active = use_state(|| false);
     let stop = use_hook(|| Rc::new(RefCell::new(Cancel::new())));
     let running = use_hook(|| Rc::new(RefCell::new(None::<Running>)));
     let handle = Deep {
         results,
+        active,
         stop: stop.clone(),
     };
-    let key = root.zip(query).map(|(root, query)| Key {
-        root,
-        query: query.text().to_string(),
-        show_hidden,
-        include_noise,
-        filter,
+    let key = key.map(|mut key| {
+        key.query.filters.sort = SortBy::Relevance;
+        key
     });
     let mut running = running.borrow_mut();
     if running.as_ref().map(|run| &run.key) == key.as_ref() {
@@ -542,34 +417,41 @@ pub fn use_subfolder_search(
         stop.borrow().cancel();
     }
     let Some(key) = key else {
-        spawn(async move { results.set_if_modified(None) });
+        spawn(async move {
+            results.set_if_modified(None);
+            let mut active = active;
+            active.set_if_modified(false);
+        });
         return handle;
     };
     let cancel = Cancel::new();
     *stop.borrow_mut() = cancel.clone();
-    let task = spawn(follow_walk(key.clone(), mount, cancel, results));
+    let task = spawn(follow_run(key.clone(), mount, cancel, results, active));
     *running = Some(Running { key, task });
     handle
 }
 
-async fn follow_walk(
-    key: Key,
+async fn follow_run(
+    key: RunKey,
     mount: MountKind,
     cancel: Cancel,
     mut results: State<Option<Arc<DeepResults>>>,
+    mut active: State<bool>,
 ) {
     let _stop = StopOnDrop(cancel.clone());
-    let Some(query) = Query::new(&key.query) else {
-        return;
-    };
+    active.set(true);
+    let label = key.label();
     let mut state = DeepResults {
-        query: key.query.clone(),
-        listing: Arc::new(Listing::new(key.root.clone())),
+        key: label,
+        listing: Arc::new(Listing::new(key.base.clone())),
         folders: 0,
         running: true,
         stopped: false,
         truncated: false,
         unreadable: 0,
+        indexed: 0,
+        invalid: None,
+        missing: None,
     };
     let mut entries: Vec<Entry> = Vec::new();
     let publish = |state: &DeepResults, entries: &[Entry], done: bool| {
@@ -581,141 +463,172 @@ async fn follow_walk(
         next.listing = Arc::new(listing);
         next
     };
-    state = publish(&state, &entries, false);
-    results.set(Some(Arc::new(state.clone())));
 
     let (send, receive) = mpsc::channel::<Message>();
-    let options = WalkOptions {
-        show_hidden: key.show_hidden,
+    let plan = Plan {
+        query: key.query.clone(),
+        roots: key.roots.clone(),
+        home: key.home.clone(),
+        view_hidden: key.view_hidden,
         include_noise: key.include_noise,
-        filter: key.filter.clone(),
-        ..WalkOptions::default()
+        chooser_filter: key.filter.clone(),
+        max_hits: MAX_RESULTS,
+        index: key.roots.iter().any(|root| root.starts_with(&key.home)).then(|| NameIndex::global(&key.home)),
     };
-    let spawned = std::thread::Builder::new()
-        .name("bingux-subfolder-search".into())
-        .spawn({
-            let root = key.root.clone();
-            let cancel = cancel.clone();
-            move || {
-                let summary = search::walk(&root, &query, &options, &cancel, &mut |walked| {
-                    send.send(Message::Walked(walked)).is_ok()
-                });
-                let _ = send.send(Message::Done(summary));
-            }
-        });
+    let spawned = std::thread::Builder::new().name("bingux-file-search".into()).spawn({
+        let cancel = cancel.clone();
+        move || {
+            #[cfg(test)]
+            let hold = holds_the_walk(&plan.roots);
+            let summary = find::run(&plan, &cancel, &mut |event| {
+                #[cfg(test)]
+                let found = matches!(event, Event::Found(_));
+                let open = send.send(Message::Event(event)).is_ok();
+                #[cfg(test)]
+                if hold && found {
+                    hold_until_stopped(&cancel);
+                }
+                open
+            });
+            let _ = send.send(Message::Done(summary));
+        }
+    });
     if spawned.is_err() {
         state.running = false;
         results.set(Some(Arc::new(state)));
+        active.set(false);
         return;
     }
+    // The first publication replaces the results of the search before this
+    // one: until then they stay on show.
+    let mut published = false;
     loop {
         timer(POLL).await;
         let mut changed = false;
-        let mut finished = None;
+        let mut finished = false;
         while let Ok(message) = receive.try_recv() {
             match message {
-                Message::Walked(Walked::Hits(found)) => {
+                Message::Event(Event::Found(found)) => {
                     entries.extend(found);
                     changed = true;
                 }
-                Message::Walked(Walked::Progress { folders }) => {
+                Message::Event(Event::Progress { folders }) => {
                     state.folders = folders;
                     changed = true;
                 }
                 Message::Done(summary) => {
-                    state.folders = summary.folders;
+                    state.folders = summary.folders.max(state.folders);
                     state.truncated = summary.truncated;
                     state.unreadable = summary.unreadable;
                     state.stopped = summary.cancelled;
+                    state.indexed = summary.indexed;
+                    state.invalid = summary.invalid;
+                    state.missing = summary.missing;
                     state.running = false;
-                    finished = Some(summary);
+                    finished = true;
                     changed = true;
                 }
             }
         }
-        if changed {
-            let next = publish(&state, &entries, finished.is_some());
-            results.set(Some(Arc::new(next)));
+        if changed && (published || !entries.is_empty() || finished) {
+            published = true;
+            results.set(Some(Arc::new(publish(&state, &entries, finished))));
         }
-        if finished.is_some() {
+        if finished {
+            active.set(false);
             return;
         }
+    }
+}
+
+/// How long a held walk waits for Stop before it goes on by itself, so a test that never presses it
+/// does not leave a thread behind for the rest of the run.
+#[cfg(test)]
+const HOLD_CAP: Duration = Duration::from_secs(60);
+
+/// Test seam: a search of a folder whose name ends in `-slow-walk` stops after the first batch of
+/// results it sends and waits there until it is stopped, so a test can press Stop while the walk is
+/// certainly still running. A pause of some milliseconds per batch was not enough: under load a
+/// frame takes longer than the whole walk, and the search was over before Stop was pressed.
+#[cfg(test)]
+fn holds_the_walk(roots: &[PathBuf]) -> bool {
+    roots.iter().any(|root| root.to_string_lossy().ends_with("-slow-walk"))
+}
+
+#[cfg(test)]
+fn hold_until_stopped(cancel: &Cancel) {
+    let until = std::time::Instant::now() + HOLD_CAP;
+    while !cancel.is_cancelled() && std::time::Instant::now() < until {
+        std::thread::sleep(Duration::from_millis(5));
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bingux_files::find::{Hidden, Kind};
 
-    fn names(known: &'static [&'static str]) -> impl Fn(&str) -> bool {
-        move |name| known.contains(&name)
+    fn selection_of(path: &str) -> Selection {
+        let mut selection = Selection::new();
+        selection.select_only(Path::new(path));
+        selection
     }
 
     #[test]
-    fn typed_text_decides_between_a_path_and_a_search() {
-        let selection = Selection::new();
+    fn a_key_typed_in_the_field_becomes_a_filter_when_a_space_ends_it() {
         let mut find = Find::default();
-        let known = names(&["Documents"]);
-        assert_eq!(find.typed("rep", &known, &selection), None);
-        assert!(find.scoped);
-        assert_eq!(find.query, "rep");
-
-        // The text turns into a path: the search ends.
-        let mut chosen = Selection::new();
-        chosen.select_only(std::path::Path::new("/x/a"));
-        let mut find = Find::default();
-        find.begin(&chosen);
-        find.typed("rep", &known, &Selection::new());
-        assert_eq!(find.typed("/home", &known, &Selection::new()), Some(chosen));
-        assert_eq!(find, Find::default());
-
-        // An entry of the folder is a path, not a search.
-        let mut find = Find::default();
-        assert_eq!(find.typed("Documents", &known, &selection), None);
-        assert!(!find.scoped);
+        assert_eq!(find.lift("report type:image", false), None, "not closed yet");
+        assert_eq!(find.filters, Filters::default());
+        assert_eq!(find.lift("report type:image ", false).as_deref(), Some("report "));
+        assert_eq!(find.filters.kinds, [Kind::Image]);
+        // Words alone change nothing.
+        assert_eq!(find.lift("report ", false), None);
+        // Enter closes the token that is still open.
+        assert_eq!(find.lift("tax size:>1MB", true).as_deref(), Some("tax"));
+        assert!(find.filters.size.is_some());
+        // Only filters typed: the field ends up empty.
+        assert_eq!(find.lift("hidden:yes ", false).as_deref(), Some(""));
+        assert_eq!(find.filters.hidden, Hidden::Include);
     }
 
     #[test]
-    fn empty_text_keeps_the_search_open_and_drops_its_results() {
-        let selection = Selection::new();
-        let known = names(&[]);
+    fn the_query_is_the_field_and_the_filters_together() {
         let mut find = Find::default();
-        find.typed("rep", &known, &selection);
-        find.deep = Some("rep".into());
-        assert!(find.deep_query().is_some());
-        find.typed("", &known, &selection);
-        assert!(find.scoped);
-        assert!(find.query().is_none());
-        assert_eq!(find.deep, None);
+        find.filters.kinds = vec![Kind::Image];
+        let query = find.query("beach ext:png ");
+        assert_eq!(query.plain_text(), "beach");
+        assert_eq!(query.filters.kinds, [Kind::Image]);
+        assert_eq!(query.filters.exts, ["png"]);
+        // An open key is left out until a space closes it.
+        assert_eq!(find.query("beach ext:pn").filters.exts, Vec::<String>::new());
+        assert_eq!(find.query("beach ext:pn").plain_text(), "beach");
+        // What is typed wins over what the panel set.
+        find.filters.size = Some(find::SizeCond::Gt(5));
+        assert_eq!(find.query("size:<1k ").filters.size, Some(find::SizeCond::Lt(1000)));
+        // Nothing asked: nothing narrows the list, open or not.
+        assert_eq!(find.active("beach"), None, "closed");
+        find.open = true;
+        assert!(find.active("beach").is_some());
+        assert!(find.active("").is_some(), "a filter alone is a search");
+        find.filters = Filters::default();
+        assert_eq!(find.active(""), None);
+        assert_eq!(find.active("  "), None);
     }
 
     #[test]
-    fn changing_the_text_ends_the_subfolder_search() {
-        let selection = Selection::new();
-        let known = names(&[]);
-        let mut find = Find::default();
-        find.typed("rep", &known, &selection);
-        find.deep = Some("rep".into());
-        find.typed("repo", &known, &selection);
-        assert_eq!(find.deep, None);
-        assert!(find.deep_query().is_none());
-        // A trailing space does not change the query, so the walk goes on.
-        find.typed("repo", &known, &selection);
-        find.deep = Some("repo".into());
-        find.typed("repo ", &known, &selection);
-        assert!(find.deep_query().is_some());
-    }
-
-    #[test]
-    fn clear_gives_the_selection_back_once() {
-        let mut before = Selection::new();
-        before.select_only(std::path::Path::new("/x/keep"));
+    fn closing_the_search_gives_the_selection_back_once_and_keeps_the_scope() {
+        let before = selection_of("/x/keep");
         let mut find = Find::default();
         find.begin(&before);
         find.begin(&Selection::new());
-        find.typed("a", &names(&[]), &Selection::new());
+        find.scope = Scope::Home;
+        find.filters.kinds = vec![Kind::Audio];
+        find.filters_open = true;
         assert_eq!(find.clear(), Some(before));
         assert_eq!(find.clear(), None);
+        assert_eq!(find.scope, Scope::Home);
+        assert!(!find.open && !find.filters_open);
+        assert_eq!(find.filters, Filters::default());
     }
 
     #[test]

@@ -61,6 +61,26 @@ impl Default for AccessibilityTree {
     }
 }
 
+/// Bingux patch: the room, in logical pixels, a focused node keeps from the edge of the scrollable
+/// that scrolls it into view. A focus ring is drawn outside its face (a 2 px gap and a 2 px line in
+/// bingux-ui) and a clip cuts it, so a node flush with an edge lost one side of its ring.
+pub const FOCUS_SCROLL_MARGIN: f32 = 6.0;
+
+/// How far to move a scrollable's content along one axis so that a node `size` long, whose near
+/// edge is `position` from the viewport's near edge, sits [`FOCUS_SCROLL_MARGIN`] inside it.
+/// A node out of view is brought to the near edge; one in view moves only when it is closer
+/// than the margin to either edge and would fit with it.
+fn scroll_delta(position: f32, size: f32, view: f32, outside: bool) -> f32 {
+    let margin = FOCUS_SCROLL_MARGIN;
+    if outside || position < margin {
+        margin - position
+    } else if size + 2.0 * margin <= view && position + size > view - margin {
+        view - margin - size - position
+    } else {
+        0.0
+    }
+}
+
 impl AccessibilityTree {
     pub fn new(focused_id: AccessibilityId) -> Self {
         Self {
@@ -339,6 +359,10 @@ impl AccessibilityTree {
     }
 
     /// Send the necessary wheel events to scroll views so that the given focused [NodeId] is visible on screen.
+    ///
+    /// Bingux patch: the node is kept [`FOCUS_SCROLL_MARGIN`] from the scrollable's edge, so the
+    /// focus ring drawn outside its face is not cut by the clip. A node already in view moves only
+    /// when it is closer than that to an edge.
     fn scroll_to(
         &self,
         node_id: NodeId,
@@ -356,30 +380,23 @@ impl AccessibilityTree {
             // the rest scrollables will in the other hand just have the previous scrollable as target
             let target_layout_node = tree.layout.get(&target_node).unwrap();
             let target_area = target_layout_node.area;
-            let scrollable_layout_node = tree.layout.get(closest_scrollable).unwrap();
-            let scrollable_target_area = scrollable_layout_node.area;
+            let viewport = tree.layout.get(closest_scrollable).unwrap().visible_area();
 
-            // We only want to scroll if it is not visible
-            if !effect_state.is_visible(&tree.layout, &target_area) {
-                let element = tree.elements.get(closest_scrollable).unwrap();
-                let scroll_x = element
-                    .accessibility()
-                    .builder
-                    .scroll_x()
-                    .unwrap_or_default() as f32;
-                let scroll_y = element
-                    .accessibility()
-                    .builder
-                    .scroll_y()
-                    .unwrap_or_default() as f32;
-
-                // Get the relative diff from where the scrollable scroll starts
-                let diff_x = target_area.min_x() - scrollable_target_area.min_x() - scroll_x;
-                let diff_y = target_area.min_y() - scrollable_target_area.min_y() - scroll_y;
-
-                // And get the distance it needs to scroll in order to make the target visible
-                let delta_y = -(scroll_y + diff_y);
-                let delta_x = -(scroll_x + diff_x);
+            // Where the node's near edge sits from the viewport's, and what it needs to move.
+            let outside = !effect_state.is_visible(&tree.layout, &target_area);
+            let delta_x = scroll_delta(
+                target_area.min_x() - viewport.min_x(),
+                target_area.width(),
+                viewport.width(),
+                outside,
+            );
+            let delta_y = scroll_delta(
+                target_area.min_y() - viewport.min_y(),
+                target_area.height(),
+                viewport.height(),
+                outside,
+            );
+            if delta_x != 0.0 || delta_y != 0.0 {
                 emmitable_events.push(EmmitableEvent {
                     name: EventName::Wheel,
                     source_event: EventName::Wheel,
@@ -393,8 +410,11 @@ impl AccessibilityTree {
                     )),
                     bubbles: false,
                 });
-                // Change the target to the current scrollable, so that the next scrollable makes sure this one is visible
-                target_node = *closest_scrollable;
+                // A node that was out of view makes this scrollable the target of the next one, so
+                // that it makes sure this one is visible; a nudge for the ring's margin does not.
+                if outside {
+                    target_node = *closest_scrollable;
+                }
             }
         }
         events_sender
@@ -428,7 +448,10 @@ impl AccessibilityTree {
             .cloned()
             .unwrap_or_default()
             .into_iter()
-            .map(|child| tree.accessibility_state.get(&child).unwrap().a11y_id)
+            // A child mounted this frame may not have its accessibility state yet (seen at scale 2
+            // in the taxonomy's address bar page, scripts/pixel-check.py): leave it out of this
+            // update rather than panic; the next update lists it.
+            .filter_map(|child| tree.accessibility_state.get(&child).map(|state| state.a11y_id))
             .collect::<Vec<_>>();
         accessibility_data.builder.set_children(children);
 
@@ -449,7 +472,7 @@ impl AccessibilityTree {
             .or_else(|| {
                 tree.children.get(&node_id).and_then(|children| {
                     children.iter().find_map(|child| {
-                        let child_element = tree.elements.get(child).unwrap();
+                        let child_element = tree.elements.get(child)?;
                         let mut child_builder = child_element.accessibility().builder.clone();
                         child_element.finish_accessibility(&mut child_builder);
                         child_builder.value().map(String::from)
@@ -514,16 +537,18 @@ impl AccessibilityTree {
                 builder.set_italic();
             }
 
-            builder.set_text_align(match text_style.text_align {
+            builder.set_text_align(match text_style.resolved_align() {
                 TextAlign::Center => accesskit::TextAlign::Center,
                 TextAlign::Justify => accesskit::TextAlign::Justify,
-                // TODO: change the representation of `Start` and `End` once writing modes are supported.
                 TextAlign::Left | TextAlign::Start => accesskit::TextAlign::Left,
                 TextAlign::Right | TextAlign::End => accesskit::TextAlign::Right,
             });
 
-            // TODO: adjust this once text directions other than left to right are supported.
-            builder.set_text_direction(accesskit::TextDirection::LeftToRight);
+            builder.set_text_direction(if text_style.direction.is_rtl() {
+                accesskit::TextDirection::RightToLeft
+            } else {
+                accesskit::TextDirection::LeftToRight
+            });
 
             let decoration = accesskit::TextDecoration {
                 style: accesskit::TextDecorationStyle::Solid,

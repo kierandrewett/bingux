@@ -107,6 +107,10 @@ pub struct Listing {
     /// The folder's drive has stopped answering; what is shown is what was
     /// known. Cleared when it answers again.
     pub unresponsive: bool,
+    /// The person stopped the read before it was done (the Stop button):
+    /// the entries are what had been read, and the folder may hold more.
+    /// Cleared by the next `Done` or `Cached`.
+    pub stopped: bool,
     /// What kind of drive the folder is on.
     pub mount: MountKind,
 }
@@ -144,6 +148,7 @@ impl Listing {
             complete: false,
             from_cache: false,
             unresponsive: false,
+            stopped: false,
             // Until the loader says what the drive is, assume the careful
             // kind: no thumbnails, no reading of file content.
             mount: MountKind::Other,
@@ -199,6 +204,7 @@ impl Listing {
                 self.entries = entries;
                 self.revision += 1;
                 self.complete = false;
+                self.stopped = false;
                 self.from_cache = true;
                 true
             }
@@ -211,6 +217,7 @@ impl Listing {
             Event::Done { .. } => {
                 self.complete = true;
                 self.from_cache = false;
+                self.stopped = false;
                 self.unresponsive = false;
                 false
             }
@@ -251,6 +258,12 @@ impl Listing {
                     }
                 }
                 changed
+            }
+            Event::Stopped => {
+                // A listing that was whole stays as it is: stopping a re-read
+                // takes nothing away.
+                self.stopped = !self.complete;
+                false
             }
             Event::Unresponsive => {
                 self.unresponsive = true;
@@ -526,5 +539,37 @@ mod tests {
             list_dir(Path::new("/etc"), &cancel).unwrap_err(),
             ListError::Cancelled
         );
+    }
+
+    #[test]
+    fn a_stopped_first_read_keeps_what_it_had_and_says_so() {
+        let mut listing = Listing::new("/x");
+        listing.apply_event(Event::Batch(vec![Entry::named("/x/a".into(), "a".into(), Kind::File, false, false)]));
+        listing.apply_event(Event::Stopped);
+        assert!(listing.stopped && !listing.complete);
+        assert_eq!(listing.entries.len(), 1);
+        // Reading on to the end makes it whole again.
+        listing.apply_event(Event::Done { total: 1 });
+        assert!(listing.complete && !listing.stopped);
+    }
+
+    #[test]
+    fn stopping_a_re_read_of_a_whole_listing_changes_nothing() {
+        let mut listing = Listing::new("/x");
+        listing.apply_event(Event::Done { total: 0 });
+        let before = listing.clone();
+        listing.apply_event(Event::Stopped);
+        assert_eq!(listing, before);
+    }
+
+    #[test]
+    fn a_cached_listing_whose_check_was_stopped_stays_unchecked() {
+        let mut listing = Listing::new("/x");
+        listing.apply_event(Event::Cached {
+            entries: vec![Entry::named("/x/a".into(), "a".into(), Kind::File, false, false)],
+        });
+        listing.apply_event(Event::Stopped);
+        assert!(listing.stopped && listing.from_cache && !listing.complete);
+        assert_eq!(listing.entries.len(), 1);
     }
 }

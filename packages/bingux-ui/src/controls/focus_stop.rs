@@ -45,6 +45,32 @@ pub fn focus_stop(
     )
 }
 
+/// [`focus_stop`] that sets `pressing` while a button is down on the box, for
+/// the fill's pressed layer: the stop owns the box's pointer handlers, so a
+/// caller cannot set its own on `content` (ST-06).
+pub fn focus_stop_press(
+    content: Rect,
+    label: impl Into<String>,
+    role: AccessibilityRole,
+    enabled: bool,
+    radius: Radius,
+    on_activate: impl Into<EventHandler<()>>,
+    pressing: State<bool>,
+) -> Rect {
+    focus_stop_pressed(
+        use_a11y(),
+        content,
+        label,
+        role,
+        enabled,
+        radius,
+        on_activate,
+        Vec::new(),
+        StopRing::Outside,
+        Some(pressing),
+    )
+}
+
 /// [`focus_stop`] with a context menu. A right click opens `menu` at the
 /// pointer, a touch that rests opens it where the finger is, and the Menu
 /// key or Shift+F10 opens it against the box. An empty `menu` opens nothing.
@@ -100,6 +126,26 @@ pub fn focus_stop_with(
     menu: Vec<MenuItem>,
     ring: StopRing,
 ) -> Rect {
+    focus_stop_pressed(a11y_id, content, label, role, enabled, radius, on_activate, menu, ring, None)
+}
+
+/// [`focus_stop_with`] that also tells the caller when the box is held down.
+/// The stop owns the box's pointer handlers, so the caller cannot set its own
+/// press state on `content`: `pressing` is set while a button is down on the
+/// box and cleared when it comes up, for the fill's pressed layer (ST-06).
+#[allow(clippy::too_many_arguments)]
+pub fn focus_stop_pressed(
+    a11y_id: AccessibilityId,
+    content: Rect,
+    label: impl Into<String>,
+    role: AccessibilityRole,
+    enabled: bool,
+    radius: Radius,
+    on_activate: impl Into<EventHandler<()>>,
+    menu: Vec<MenuItem>,
+    ring: StopRing,
+    pressing: Option<State<bool>>,
+) -> Rect {
     let core = use_focus_core();
     let focus = use_focus(a11y_id);
     let press = use_press();
@@ -124,6 +170,9 @@ pub fn focus_stop_with(
             element
                 .on_pointer_down(move |event: Event<PointerEventData>| {
                     event.stop_propagation();
+                    if let Some(mut pressing) = pressing {
+                        pressing.set_if_modified(true);
+                    }
                     let right = matches!(
                         event.data(),
                         PointerEventData::Mouse(mouse) if mouse.button == Some(MouseButton::Right)
@@ -153,7 +202,12 @@ pub fn focus_stop_with(
                 .on_global_pointer_move(move |event: Event<PointerEventData>| {
                     press.moved(&event);
                 })
-                .on_global_pointer_up(move |_| press.release())
+                .on_global_pointer_up(move |_| {
+                    press.release();
+                    if let Some(mut pressing) = pressing {
+                        pressing.set_if_modified(false);
+                    }
+                })
                 .on_press(move |event: Event<PressEventData>| {
                     event.stop_propagation();
                     if !press.tap(&event) {
@@ -163,7 +217,8 @@ pub fn focus_stop_with(
                     press_focus(&core, a11y_id);
                 })
                 .on_key_down(move |event: Event<KeyboardEventData>| {
-                    if is_activation_key(&event.key) {
+                    // Alt+Enter is Properties across the file views, not a press.
+                    if is_activation_key(&event.key) && !event.modifiers.contains(Modifiers::ALT) {
                         event.stop_propagation();
                         on_key.call(());
                         return;

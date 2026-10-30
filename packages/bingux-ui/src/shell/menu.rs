@@ -30,6 +30,8 @@ use freya::prelude::*;
 
 use crate::app_icon::{AppChoice, app_icon};
 use crate::component::ComponentName;
+use crate::controls::direction::{Direction, use_direction};
+use crate::controls::path_label::path_label;
 use crate::controls::press::{is_touch, use_press};
 use crate::focus::step_focus;
 use crate::icons::{self, Icon};
@@ -59,13 +61,18 @@ pub struct MenuItem {
     pub(crate) shortcut: Option<String>,
     pub(crate) submenu: Option<Vec<MenuItem>>,
     pub(crate) on_press: EventHandler<()>,
+    pub(crate) on_middle: Option<EventHandler<()>>,
+    /// The label is a name: cut in the middle when it does not fit.
+    pub(crate) name: bool,
 }
 
 impl MenuItem {
     /// Shows an icon before the label. Menus are text: state is a tick
     /// ([`MenuItem::checked`]), and the file views' menus never carry icons.
     /// Use an icon only in a menu whose rows are things the icon names, such
-    /// as the actions of a device or connection row in Settings.
+    /// as the actions of a device or connection row in Settings, or the tabs
+    /// of a tab list. An item with an icon and a tick shows the icon first
+    /// and the tick at the end of the row.
     pub fn icon(mut self, icon: Icon) -> Self {
         self.icon = Some(icon);
         self
@@ -97,6 +104,21 @@ impl MenuItem {
         self.shortcut = Some(shortcut.into());
         self
     }
+
+    /// What a middle click on the row does instead of its action, such as
+    /// opening the choice in a new tab. The menu closes first, as for a press.
+    pub fn on_middle(mut self, on_middle: impl FnMut(()) + 'static) -> Self {
+        self.on_middle = Some(EventHandler::new(on_middle));
+        self
+    }
+
+    /// The label is a name (a tab's, a file's): too long for the row, it is cut
+    /// in the middle, keeping its end, which is what tells two names apart, and
+    /// the whole name is the tooltip. Without it a long label ends in an ellipsis.
+    pub fn name(mut self) -> Self {
+        self.name = true;
+        self
+    }
 }
 
 /// An action for a menu. `on_press` runs after the menu closes.
@@ -112,6 +134,8 @@ pub fn menu_item(label: impl Into<String>, on_press: impl FnMut(()) + 'static) -
         shortcut: None,
         submenu: None,
         on_press: EventHandler::new(on_press),
+        on_middle: None,
+        name: false,
     }
 }
 
@@ -264,10 +288,11 @@ fn layout(
     open: &[usize],
     trigger: PanelTrigger,
     window: (f32, f32),
+    direction: Direction,
 ) -> Vec<(PanelTrigger, PanelRect)> {
     let width = panel_width(root);
     let height = menu_height(root);
-    let mut panels = vec![(trigger, menu_rect(trigger, (width, height), window))];
+    let mut panels = vec![(trigger, menu_rect(trigger, (width, height), window, direction))];
     for (level, &index) in open.iter().enumerate() {
         let parent = panels[level].1;
         let items = panel_items(root, open, level);
@@ -282,11 +307,14 @@ fn layout(
         // padding sits over the row's top edge.
         // A submenu goes the way its parent went: when the parent opened to
         // the left of its own parent, this one does too, so it never lies
-        // over the panels it came from.
-        let side = if level > 0 && parent.x < panels[level - 1].1.x {
-            Side::Left
-        } else {
-            Side::Right
+        // over the panels it came from. The first one opens towards the end of the
+        // reading direction: the left in a window that reads from the right.
+        let went = (level > 0).then(|| parent.x.total_cmp(&panels[level - 1].1.x));
+        let side = match went {
+            Some(std::cmp::Ordering::Less) => Side::Left,
+            Some(std::cmp::Ordering::Greater) => Side::Right,
+            _ if direction.is_rtl() => Side::Left,
+            _ => Side::Right,
         };
         let row = PanelTrigger::Row(
             PanelRect {
@@ -297,15 +325,17 @@ fn layout(
             },
             side,
         );
-        let rect = menu_rect(row, (panel_width(sub), menu_height(sub)), window);
+        let rect = menu_rect(row, (panel_width(sub), menu_height(sub)), window, direction);
         panels.push((row, rect));
     }
     panels
 }
 
+/// The pointer of an event, in the coordinates the menu was opened in: a row in a popup window
+/// reports its position in that window, and the menu's geometry is the opener's.
 fn global_point(event: &Event<PointerEventData>) -> (f32, f32) {
     let at = event.global_location();
-    (at.x as f32, at.y as f32)
+    crate::popup_windows::to_opener_space((at.x as f32, at.y as f32))
 }
 
 fn read_nav(overlays: Overlays) -> MenuNav {
@@ -382,14 +412,14 @@ fn escape_menu(overlays: Overlays, root: &[MenuItem]) {
 }
 
 /// A key was pressed while the menu was open. Keys act on the active panel.
-fn handle_key(overlays: Overlays, root: &[MenuItem], event: Event<KeyboardEventData>) {
+fn handle_key(overlays: Overlays, root: &[MenuItem], event: Event<KeyboardEventData>, direction: Direction) {
     // A key press is keyboard navigation, so the owner's focus ring shows
     // once the menu hands focus back.
     Platform::get()
         .current_window()
         .navigation_mode
         .set(NavigationMode::Keyboard);
-    let Some(key) = nav_key(&event) else {
+    let Some(key) = nav_key(&event, direction) else {
         return;
     };
     // Escape is the panel's: it hears it anywhere in the window, so a menu
@@ -450,12 +480,20 @@ impl Component for MenuLayer {
         });
 
         let nav = read_nav(overlays);
-        let window = *Platform::get().current_window().root_size.read();
+        // A menu drawn as popup windows is placed by the compositor, which knows the outputs:
+        // its layout assumes no window to hold it in.
+        let window = if crate::popup_windows::backend().is_some() {
+            torin::prelude::Size2D::new(0.0, 0.0)
+        } else {
+            *Platform::get().current_window().root_size.read()
+        };
+        let direction = use_direction();
         let panels = layout(
             &self.menu.items,
             nav.open(),
             self.menu.trigger,
             (window.width, window.height),
+            direction,
         );
         let open = !self.closing;
         let active = nav.active();
@@ -508,7 +546,7 @@ impl Component for MenuLayer {
                     Panel::new(PanelKind::Menu, open, *trigger, rows(level))
                         .size(panel_width(items_at(level)), rows_height(items_at(level)))
                         .pill(pill(level))
-                        .nested(),
+                        .nested(level),
                 )
             })
             .collect();
@@ -527,7 +565,7 @@ impl Component for MenuLayer {
             .navigation(
                 a11y_id,
                 EventHandler::new(move |event: Event<KeyboardEventData>| {
-                    handle_key(overlays, &keys, event);
+                    handle_key(overlays, &keys, event, direction);
                 }),
                 EventHandler::new(move |point: (f32, f32)| pointer_moved(overlays, point)),
             )
@@ -578,6 +616,7 @@ impl Component for MenuRow {
         let highlighted = self.highlighted;
         let sub = self.sub;
         let on_press = self.item.on_press.clone();
+        let on_middle = self.item.on_middle.clone();
         let submenu_items = self.item.submenu.clone();
         // A disabled item keeps its colour and fades like any disabled
         // control, so it reads as unavailable at a glance. A row a typed
@@ -594,9 +633,11 @@ impl Component for MenuRow {
             Some(DISABLED_OPACITY)
         };
         // A tick for checked items; the icon otherwise. A panel with either
-        // anywhere keeps the column on every row.
-        let glyph = match (self.item.checked, self.item.icon) {
-            (Some(true), _) => Some(Icon::Check),
+        // anywhere keeps the column on every row. An item with both shows its
+        // icon here and its tick at the trailing edge.
+        let ticked = self.item.checked == Some(true);
+        let glyph = match (ticked, self.item.icon) {
+            (true, None) => Some(Icon::Check),
             (_, icon) => icon,
         };
         let app = self.item.app.clone();
@@ -612,12 +653,41 @@ impl Component for MenuRow {
                     None => glyph.map(|icon| icons::icon(icon, IconSize::Control, text_color).into_element()),
                 })
         });
-        let trailing = has_sub.then(|| icons::icon(Icon::PanEnd, IconSize::Control, text_color));
+        // A submenu's arrow, or the tick of an item that also has an icon (the tab
+        // list: each tab's icon, the selected one ticked at the end of its row).
+        let trailing: Option<Element> = if has_sub {
+            Some(icons::icon(Icon::PanEnd, IconSize::Control, text_color).into_element())
+        } else if ticked && self.item.icon.is_some() {
+            Some(icons::icon(Icon::Check, IconSize::Control, text_color).into_element())
+        } else {
+            None
+        };
         let shortcut = self.item.shortcut.clone().map(|text| {
             CAPTION
                 .label(&tokens, text)
                 .max_lines(1)
         });
+        // A name that is too long is cut in the middle, keeping its end, with the
+        // whole name as the tooltip, as file names are; a row a typed query has
+        // marked keeps its marks, so it is cut at the end.
+        let direction = use_direction();
+        let label: Element = match (&self.mark, self.item.name) {
+            (Mark::Hit(_), _) | (_, false) => marked_label(&tokens, ink, &self.item.label, &self.mark),
+            (_, true) => {
+                let name = path_label(self.item.label.clone()).name().style(BODY).ink(ink);
+                rect()
+                    .width(Size::flex(1.0))
+                    .child(if direction.is_rtl() { name.end() } else { name })
+                    .into_element()
+            }
+        };
+        // The row's pieces in reading order: the engine puts them on the right in an
+        // interface that reads from the right.
+        let mut parts: Vec<Element> = Vec::with_capacity(4);
+        parts.extend(leading.map(Element::from));
+        parts.push(label);
+        parts.extend(shortcut.map(Element::from));
+        parts.extend(trailing);
         rect()
             .component("MenuRow")
             .a11y_role(AccessibilityRole::MenuItem)
@@ -646,6 +716,16 @@ impl Component for MenuRow {
             })
             .on_pointer_down(move |event: Event<PointerEventData>| {
                 event.stop_propagation();
+                // A middle click runs the row's own alternative, when it has one.
+                if let PointerEventData::Mouse(mouse) = event.data()
+                    && mouse.button == Some(MouseButton::Middle)
+                {
+                    if enabled && let Some(middle) = &on_middle {
+                        overlays.close_menu();
+                        middle.call(());
+                    }
+                    return;
+                }
                 if enabled {
                     pressing.set(true);
                     press.begin(&event, None);
@@ -674,10 +754,7 @@ impl Component for MenuRow {
                 overlays.close_menu();
                 on_press.call(());
             })
-            .maybe_child(leading)
-            .child(marked_label(&tokens, ink, &self.item.label, &self.mark))
-            .maybe_child(shortcut)
-            .maybe_child(trailing)
+            .children(parts)
             .into_element()
     }
 }

@@ -328,7 +328,7 @@ impl ElementExt for ImageElement {
     }
 
     fn clip(&self, context: ClipContext) {
-        let rrect = self.render_rect(context.visible_area, context.scale_factor as f32);
+        let rrect = self.render_rect(context.visible_area, context.scale_factor as f32, context.direction);
         context.canvas.clip_rrect(rrect, ClipOp::Intersect, true);
     }
 
@@ -370,7 +370,7 @@ impl ElementExt for ImageElement {
         }
 
         context.canvas.save();
-        let clip_rrect = self.render_rect(&area, context.scale_factor as f32);
+        let clip_rrect = self.render_rect(&area, context.scale_factor as f32, context.text_style_state.direction);
         context
             .canvas
             .clip_rrect(clip_rrect, ClipOp::Intersect, true);

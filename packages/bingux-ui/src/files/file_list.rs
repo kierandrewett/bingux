@@ -125,7 +125,12 @@ impl Component for ListView {
         let settle: Settle = use_hook(|| Rc::new(Cell::new(None)));
         anchor_zoom(&ctx, f32::from(icon_px), row_height, 1, &settle);
 
-        let name_room = plan_name_room(&plan, row_width, icon_px);
+        let name_room = if compact {
+            // A phone row has no columns: its name has the row less the icon slot.
+            (row_width - gutter(f32::from(icon_px)) - 2.0 * CELL_PADDING.px()).max(0.0)
+        } else {
+            plan_name_room(&plan, row_width, icon_px)
+        };
         let bucket = if ctx.thumbnails {
             let device_scale = *Platform::get().current_window().scale_factor.read() as f32;
             bucket_px(f32::from(icon_px), device_scale)
@@ -161,6 +166,9 @@ impl Component for ListView {
         )
         .length(self.rows.len())
         .item_size(row_height)
+        // The first frame has the rows, the scrollbar and the columns the
+        // list had last, not a one-row list in a viewport of nothing.
+        .initial_size(viewport.peek().size)
         .drag_scrolling(compact)
         .pass_ctrl_wheel(true)
         .on_sized({
@@ -286,6 +294,12 @@ pub(super) fn navigate(ctx: &Ctx, event: &Event<KeyboardEventData>) -> bool {
     let page = ((ctx.viewport.peek().height() / row_height) as usize).max(1);
     let from = ctx.cursor_row();
     let last = count - 1;
+    // Ctrl+Page Up and Ctrl+Page Down switch tabs: they are the window's.
+    if event.modifiers.contains(Modifiers::CONTROL)
+        && matches!(event.key, Key::Named(NamedKey::PageUp | NamedKey::PageDown))
+    {
+        return false;
+    }
     let target = match &event.key {
         Key::Named(NamedKey::ArrowDown) => from.map_or(0, |at| at + 1),
         Key::Named(NamedKey::ArrowUp) => from.map_or(last, |at| at.saturating_sub(1)),
@@ -400,6 +414,8 @@ impl Component for FileRow {
             .tw(
                 &tokens,
                 &[
+                    // The same side padding on a phone as on a desktop.
+                    px(FILE_ROW_INSET),
                     grow_children(),
                     h_full(),
                     // The header has no gap between its cells, and the row's
@@ -447,8 +463,9 @@ impl Component for FileRow {
             // A search result says where it is, not how big.
             let detail = ctx.result_folder(entry).unwrap_or(detail);
             line = line.child(
+                // The Name cell of the desktop row: the same padding either side.
                 rect()
-                    .tw(&tokens, &[flex_col(), w_flex()])
+                    .tw(&tokens, &[flex_col(), w_flex(), px(CELL_PADDING)])
                     .child(name)
                     .maybe_child((!detail.is_empty()).then(|| {
                         CAPTION

@@ -318,6 +318,13 @@ pub fn trash_place(path: &Path) -> Option<InBin> {
     locate(path, super::trash::home_trash().as_deref())
 }
 
+/// The `files` folder of the home bin, `$XDG_DATA_HOME/Trash/files`: the
+/// folder the Trash place lists. The folder may not exist until something is
+/// binned. `None` when there is no data home.
+pub fn trash_folder() -> Option<PathBuf> {
+    super::trash::home_trash().map(|bin| bin.join("files"))
+}
+
 /// The item of a bin that `path` is, with what its `.trashinfo` says. Reads
 /// one small file. `None` when `path` is not a direct child of a bin's
 /// `files` folder.

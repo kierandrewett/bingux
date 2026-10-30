@@ -262,5 +262,5 @@ pub(super) fn popover(
     Panel::new(PanelKind::Menu, open, PanelTrigger::Control(anchor), rows)
         .size(anchor.width, height)
         .scroll(scroll)
-        .nested()
+        .nested(0)
 }

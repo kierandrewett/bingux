@@ -463,7 +463,7 @@ impl ElementExt for RectElement {
         let area = context.layout_node.visible_area();
         let cursor = context.cursor.to_f32();
         let local_area = Area::new((0., 0.).into(), area.size);
-        let rounded_rect = self.render_rect(&local_area, context.scale_factor as f32);
+        let rounded_rect = self.render_rect(&local_area, context.scale_factor as f32, context.direction);
         let local_x = cursor.x - area.min_x();
         let local_y = cursor.y - area.min_y();
         rounded_rect.contains(SkRect::new(
@@ -477,7 +477,7 @@ impl ElementExt for RectElement {
     fn clip(&self, context: ClipContext) {
         let area = context.visible_area;
 
-        let rounded_rect = self.render_rect(area, context.scale_factor as f32);
+        let rounded_rect = self.render_rect(area, context.scale_factor as f32, context.direction);
 
         context
             .canvas
@@ -488,18 +488,24 @@ impl ElementExt for RectElement {
         let style = self.style();
 
         let area = context.layout_node.visible_area();
-        let corner_radius = style.corner_radius.with_scale(context.scale_factor as f32);
+        // A box that reads right to left is painted as the reflection of what it was
+        // written as: its start corners, its start border and the way its shadow falls.
+        let rtl = context.text_style_state.direction.is_rtl();
+        let mut corner_radius = *style.corner_radius.with_scale(context.scale_factor as f32);
+        if rtl {
+            corner_radius = corner_radius.mirrored();
+        }
 
         let mut path = PathBuilder::new();
         let mut paint = Paint::default();
         paint.set_anti_alias(true);
         paint.set_style(PaintStyle::Fill);
         if style.background.render_callback().is_none() {
-            style.background.apply_to_paint(&mut paint, area);
+            style.background.apply_to_paint_directed(&mut paint, area, rtl);
         }
 
         // Container
-        let rounded_rect = self.render_rect(&area, context.scale_factor as f32);
+        let rounded_rect = self.render_rect(&area, context.scale_factor as f32, context.text_style_state.direction);
         if corner_radius.smoothing() > 0.0 {
             path.add_path(&corner_radius.smoothed_path(rounded_rect), None);
         } else {
@@ -530,6 +536,7 @@ impl ElementExt for RectElement {
         for shadow in style.shadows.iter() {
             if shadow.color != Color::TRANSPARENT {
                 let shadow = shadow.with_scale(context.scale_factor as f32);
+                let shadow = if rtl { std::borrow::Cow::Owned(shadow.mirrored()) } else { shadow };
 
                 Self::render_shadow(
                     context.canvas,
@@ -546,6 +553,7 @@ impl ElementExt for RectElement {
         for border in style.borders.iter() {
             if border.is_visible() {
                 let border = border.with_scale(context.scale_factor as f32);
+                let border = if rtl { std::borrow::Cow::Owned(border.mirrored()) } else { border };
                 let rect = *rounded_rect.rect();
                 Self::render_border(context.canvas, rect, &border, &corner_radius);
             }

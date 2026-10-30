@@ -25,6 +25,7 @@ FIXTURE_FILES = (
     "cargo/release/bingux-settings",
     "cargo/release/bingux-files",
     "cargo/release/bingux-taxonomy",
+    "cargo/release/bingux-preview-host",
     "cargo/release/bingux-effects",
     "cargo/release/libbingux_dsp.so",
 )
@@ -178,6 +179,7 @@ class InstallTest(unittest.TestCase):
                 "usr/bin/bingux-settings",
                 "usr/bin/bingux-files",
                 "usr/bin/bingux-taxonomy",
+                "usr/bin/bingux-preview-host",
                 "usr/bin/bingux-effects",
                 "usr/bin/bingux-config",
                 "usr/lib/ladspa/libbingux_dsp.so",
@@ -454,7 +456,7 @@ class InstallTest(unittest.TestCase):
             ]
             for _ in range(2):  # the second run is an upgrade and must not displace its own files
                 subprocess.run(command, env=environment, check=True, capture_output=True)
-            for program in ("bingux-config", "bingux-settings", "bingux-files", "bingux-taxonomy", "bingux-effects"):
+            for program in ("bingux-config", "bingux-settings", "bingux-files", "bingux-preview-host", "bingux-taxonomy", "bingux-effects"):
                 self.assertTrue(os.access(prefix / "bin" / program, os.X_OK), program)
             self.assertTrue((prefix / "lib/ladspa/libbingux_dsp.so").is_file())
             for app, mime in (

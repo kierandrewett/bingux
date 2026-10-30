@@ -541,7 +541,7 @@ impl Component for PasswordBody {
                 S6,
                 busy.then(|| {
                     Element::from(status(Status::Loading(
-                        "Changing your password...".to_string(),
+                        "Changing your password…".to_string(),
                     )))
                 }),
             ))

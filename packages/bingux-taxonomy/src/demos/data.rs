@@ -157,6 +157,26 @@ pub const BAR_CHART: &[Spec] = &[
     .wide(),
 ];
 
+/// A card `width` px wide, as a phone column is, holding `chart`.
+fn column(width: f32, chart: impl IntoElement) -> Element {
+    rect()
+        .width(Size::px(width))
+        .child(card(chart))
+        .into_element()
+}
+
+/// Storage by category, with names long enough to wrap on a phone.
+fn long_storage() -> bingux_ui::charts::Donut {
+    donut([
+        Segment::new("Applications and games", gib(812.0)),
+        Segment::new("Documents, downloads and desktop", gib(1204.0)),
+        Segment::new("Operating system", gib(95.0)),
+    ])
+    .unit(Unit::Bytes)
+    .caption("Used of 2 TB")
+    .label("Storage used by category")
+}
+
 pub const DONUT: &[Spec] = &[
     Spec::live("Donut", || {
         card(
@@ -170,10 +190,35 @@ pub const DONUT: &[Spec] = &[
             .label("Storage used by category"),
         )
     }),
+    // The ring is a square as wide as the card up to 200 px, centred, with
+    // the legend under it; hover or tap a segment or a row to read it.
+    Spec::live("Donut in a 360 px column", || column(360.0, long_storage())).wide(),
+    Spec::live("Donut in a 320 px column", || {
+        column(
+            320.0,
+            donut(
+                ["Apps", "System", "Cache", "Photos", "Music", "Video", "Other"]
+                    .into_iter()
+                    .zip([210.0, 90.0, 45.0, 30.0, 22.0, 18.0, 5.0])
+                    .map(|(name, value)| Segment::new(name, gib(value))),
+            )
+            .unit(Unit::Bytes)
+            .caption("Used")
+            .label("Storage used by category"),
+        )
+    })
+    .wide(),
+    Spec::forced("Donut with no data", || {
+        column(
+            320.0,
+            donut(Vec::<Segment>::new()).label("Storage used by category"),
+        )
+    })
+    .wide(),
     Spec::forced("Ring", || {
         card(
             ring(0.62)
-                .caption("62%")
+                .caption("Charged")
                 .colour(SeriesColour::Success)
                 .label("Battery"),
         )
@@ -228,6 +273,15 @@ pub const TIMELINE: &[Spec] = &[
     .wide(),
 ];
 
+/// The height of a tree's frame: eleven rows at the phone's 52 px and the
+/// frame's padding (596 px), so no row is cut by the frame. The tree fills it.
+const TREE_HEIGHT: f32 = 600.0;
+
+/// The frame of a tree that is all closed: its one root row and some air.
+const TREE_COLLAPSED_HEIGHT: f32 = 120.0;
+
+/// Five levels, a branch that is closed and a leaf under it, and a root with
+/// an icon, a detail and a badge.
 fn tree_nodes() -> Vec<TreeNode> {
     vec![
         TreeNode::new(1, "Window")
@@ -241,22 +295,50 @@ fn tree_nodes() -> Vec<TreeNode> {
                 ]),
                 TreeNode::new(5, "ScrollView")
                     .detail("720 x 700")
-                    .children(vec![TreeNode::new(6, "Group")]),
+                    .children(vec![TreeNode::new(6, "Group").children(vec![
+                        TreeNode::new(7, "Row").children(vec![
+                            TreeNode::new(8, "Label").detail("Network"),
+                            TreeNode::new(9, "Label").detail("Details"),
+                        ]),
+                        TreeNode::new(10, "Row")
+                            .children(vec![TreeNode::new(11, "Label").detail("Hidden")]),
+                    ])]),
+                TreeNode::new(12, "Footer").children(vec![TreeNode::new(13, "Label")]),
             ]),
     ]
 }
 
+/// A chain `levels` deep, one leaf at the end, for the least room a label gets.
+fn deep_nodes(levels: u64) -> Vec<TreeNode> {
+    let mut node = TreeNode::new(levels, "Label").detail("name");
+    for id in (0..levels).rev() {
+        node = TreeNode::new(id, "Box").detail(format!("level {id}")).children(vec![node]);
+    }
+    vec![node]
+}
+
 pub const TREE: &[Spec] = &[
     Spec::live("Expand, select, hover", || {
-        let expanded = use_state(|| HashSet::from([1_u64, 2]));
-        let selected = use_state(|| Some(3_u64));
+        // Branches 10 and 12 stay closed; row 8, four levels down, is
+        // selected, and the script hovers the Bluetooth row.
+        let expanded = use_state(|| HashSet::from([1_u64, 2, 5, 6, 7]));
+        let selected = use_state(|| Some(8_u64));
         tree_view(tree_nodes(), expanded, selected).into_element()
-    }),
+    })
+    .page(TREE_HEIGHT)
+    .script("wait 300; hover-text Bluetooth; wait 300; save {out}"),
     Spec::forced("All collapsed", || {
         let expanded = use_state(HashSet::new);
         let selected = use_state(|| None);
         tree_view(tree_nodes(), expanded, selected).into_element()
-    }),
+    })
+    .page(TREE_COLLAPSED_HEIGHT),
+    Spec::forced("Ten levels deep", || {
+        let expanded = use_state(|| (0_u64..10).collect::<HashSet<_>>());
+        let selected = use_state(|| Some(10_u64));
+        tree_view(deep_nodes(10), expanded, selected).into_element()
+    })
+    .page(TREE_HEIGHT),
 ];
 
 pub const METER: &[Spec] = &[

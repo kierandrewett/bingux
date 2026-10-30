@@ -126,3 +126,10 @@ impl Scaled for Shadow {
         self.blur *= scale_factor;
     }
 }
+
+impl Shadow {
+    /// The shadow reflected left to right: it is cast the other way.
+    pub fn mirrored(&self) -> Self {
+        Self { x: -self.x, ..self.clone() }
+    }
+}

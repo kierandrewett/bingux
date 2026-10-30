@@ -14,6 +14,7 @@ use std::rc::Rc;
 
 use freya::prelude::*;
 
+use super::direction::use_direction;
 use crate::component::ComponentName;
 use crate::motion::Focusable;
 use crate::style::*;
@@ -191,6 +192,7 @@ fn reveal(widths: &[f32], index: usize, step: f32, region: f32, current: f32) ->
 impl Component for SegmentRail {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let direction = use_direction();
         let fitted = crate::rows::use_row_fitted();
         let enabled = use_enabled(true);
         let options = self.options.clone();
@@ -236,7 +238,8 @@ impl Component for SegmentRail {
                         return;
                     };
                     let last = options.len().saturating_sub(1);
-                    let next = match &event.key {
+                    let key = direction.reading_key(&event.key);
+                    let next = match &key {
                         Key::Named(NamedKey::ArrowLeft) => index.saturating_sub(1),
                         Key::Named(NamedKey::ArrowRight) => (index + 1).min(last),
                         Key::Named(NamedKey::Home) => 0,

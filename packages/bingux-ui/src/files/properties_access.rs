@@ -213,7 +213,7 @@ fn enclosed(page: &Page, access: &Access) -> Group {
     };
     Group::titled("Enclosed items").row(
         row(title)
-            .subtitle("Files keep an execute bit only where they had one.")
+            .subtitle("Files keep an execute bit only where they had one")
             .trailing(trailing)
             .trailing_control(),
     )

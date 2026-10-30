@@ -101,6 +101,8 @@ pub enum Icon {
     ObjectRotateRight,
     /// Play.
     MediaPlaybackStart,
+    /// Stop: the Files toolbar's Reload button while a folder loads.
+    MediaPlaybackStop,
     /// Full screen.
     ViewFullscreen,
     /// Leave full screen.
@@ -188,7 +190,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 152] = [
+    pub const ALL: [Icon; 153] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -276,6 +278,7 @@ impl Icon {
         Self::NonStarred,
         Self::ObjectRotateRight,
         Self::MediaPlaybackStart,
+        Self::MediaPlaybackStop,
         Self::ViewFullscreen,
         Self::ViewRestore,
         Self::ZoomIn,
@@ -462,6 +465,7 @@ impl Icon {
             Self::NonStarred => include_bytes!("../icons/non-starred-symbolic.svg"),
             Self::ObjectRotateRight => include_bytes!("../icons/object-rotate-right-symbolic.svg"),
             Self::MediaPlaybackStart => include_bytes!("../icons/media-playback-start-symbolic.svg"),
+            Self::MediaPlaybackStop => include_bytes!("../icons/media-playback-stop-symbolic.svg"),
             Self::ViewFullscreen => include_bytes!("../icons/view-fullscreen-symbolic.svg"),
             Self::ViewRestore => include_bytes!("../icons/view-restore-symbolic.svg"),
             Self::ZoomIn => include_bytes!("../icons/zoom-in-symbolic.svg"),
@@ -562,13 +566,18 @@ fn source(icon: Icon) -> ImageSource {
 /// not change when the viewer learns its inherited text colour after the first
 /// draw, which would rasterise every icon twice.
 pub(crate) fn glyph(icon: Icon, edge: f32, color: Color) -> SvgViewer {
-    off_thread(
+    let viewer = off_thread(
         SvgViewer::new(source(icon))
             .width(Size::px(edge))
             .height(Size::px(edge))
             .fill(color),
         color,
-    )
+    );
+    if icon.mirrors_in_rtl() && crate::controls::direction::use_direction().is_rtl() {
+        viewer.scale((-1.0, 1.0))
+    } else {
+        viewer
+    }
 }
 
 /// Makes `viewer` rasterise on a worker, as an empty box of its size until it
@@ -600,4 +609,73 @@ pub fn icon_scaled(icon: Icon, size: crate::style::IconSize, scale: f32, color: 
 /// that is already cached or on its way costs nothing.
 pub fn warm(icon: Icon, size: crate::style::IconSize, color: Color) {
     warm_svg(source(icon), size.px(), color);
+}
+
+impl Icon {
+    /// Whether the icon is drawn flipped left to right when the interface reads
+    /// right to left: what it draws has a direction in the reading order (a
+    /// chevron or arrow, the side a sidebar toggle's panel is on, a list's
+    /// bullets, a paper plane being sent). The set is `#mirror_rtl` in
+    /// `scripts/icons/labels.tsv`, with the reasons in `design/rtl.md`, and a
+    /// test keeps the two equal. [`icon`] and [`icon_scaled`] apply it.
+    pub const fn mirrors_in_rtl(self) -> bool {
+        matches!(
+            self,
+            Self::GoPrevious
+                | Self::GoNext
+                | Self::PanEnd
+                | Self::SidebarShow
+                | Self::SendTo
+                | Self::ViewList
+                | Self::HelpBrowser
+                | Self::EmblemSymbolicLink
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The files `#mirror_rtl` names in `scripts/icons/labels.tsv`.
+    fn labelled() -> Vec<&'static str> {
+        include_str!("../../../scripts/icons/labels.tsv")
+            .lines()
+            .find_map(|line| line.strip_prefix("#mirror_rtl:"))
+            .expect("labels.tsv has a #mirror_rtl directive")
+            .split_whitespace()
+            .collect()
+    }
+
+    #[test]
+    fn mirrored_icons_are_the_ones_labels_tsv_names() {
+        let labelled = labelled();
+        // Some files are one drawing under two names (pan-end is go-next), so an
+        // icon is every file whose bytes it is.
+        let files_of = |icon: Icon| -> Vec<String> {
+            let bytes = icon.bytes();
+            std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/icons"))
+                .expect("icons/ is readable")
+                .filter_map(Result::ok)
+                .filter(|entry| std::fs::read(entry.path()).is_ok_and(|file| file == bytes))
+                .filter_map(|entry| entry.file_name().into_string().ok())
+                .filter_map(|name| name.strip_suffix("-symbolic.svg").map(str::to_string))
+                .collect()
+        };
+        for icon in Icon::ALL {
+            let files = files_of(icon);
+            assert!(!files.is_empty(), "{icon:?} is a file in icons/");
+            assert_eq!(
+                icon.mirrors_in_rtl(),
+                files.iter().any(|file| labelled.contains(&file.as_str())),
+                "{icon:?} ({files:?}): Icon::mirrors_in_rtl and `#mirror_rtl` in labels.tsv disagree"
+            );
+        }
+        for file in labelled {
+            assert!(
+                Icon::ALL.iter().any(|icon| files_of(*icon).iter().any(|name| name == file)),
+                "`#mirror_rtl` names {file}, which no Icon draws"
+            );
+        }
+    }
 }

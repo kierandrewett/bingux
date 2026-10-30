@@ -855,6 +855,13 @@ where
         self
     }
 
+    /// Set the direction the element and everything inside it reads in.
+    /// Inherited. See [`TextDirection`].
+    fn text_direction(mut self, direction: TextDirection) -> Self {
+        self.get_text_style_data().direction = Some(direction);
+        self
+    }
+
     /// Set the text size in pixels. See [`FontSize`].
     fn font_size(mut self, font_size: impl Into<FontSize>) -> Self {
         self.get_text_style_data().font_size = Some(font_size.into());

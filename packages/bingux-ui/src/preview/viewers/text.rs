@@ -25,7 +25,7 @@ use freya::prelude::*;
 
 use super::super::subject::Resolved;
 use crate::component::ComponentName;
-use crate::controls::{action_button, checkbox};
+use crate::controls::action_button;
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::task::spawn_named;
@@ -184,7 +184,8 @@ impl Component for TextView {
         let mut reading = use_state(|| false);
         let mut width = use_state(|| 0.0f32);
 
-        let language = Language::of(&self.resolved.facts.name, self.resolved.facts.mime);
+        // Plain monospace: a preview is for reading what a file is, not for highlighting it.
+        let language = Language::Plain;
         let char_width = (crate::controls::path_label::measure_text("0000000000", CODE) / 10.0).max(1.0);
         let extra: Vec<Arc<TextWindow>> = more.read().clone();
         let all: Vec<&TextWindow> = std::iter::once(first).chain(extra.iter().map(|window| &**window)).collect();
@@ -273,24 +274,15 @@ impl Component for TextView {
         .item_size(row_height)
         .on_sized(move |event: Event<SizedEventData>| width.set_if_modified(event.area.width()));
 
+        // The text is the whole viewer: no language bar, no wrap switch (W wraps
+        // or unwraps). A line only appears below it when the preview stopped
+        // early, or the file is not UTF-8.
         let notice = total_note.is_some() || encoding_note.is_some() || has_more;
+        let note = total_note.or(encoding_note).unwrap_or_default();
         rect()
             .component("PreviewText")
             .tw(&tokens, &[w_full(), h_full(), flex_col(), grow_children()])
             .on_global_key_down(on_key)
-            .child(
-                rect()
-                    .tw(&tokens, &[w_full(), h(Dim::Control), px(S4), flex_row(), items(Align::Center), gap(S3), bg(Paint::Surface)])
-                    .child(rect().tw(&tokens, &[w_flex()]).child(
-                        CAPTION
-                            .in_ink(Ink::Muted)
-                            .label(&tokens, encoding_note.unwrap_or_else(|| language_name(language).to_owned()))
-                            .max_lines(1)
-                            .text_overflow(TextOverflow::Ellipsis),
-                    ))
-                    .child(checkbox(*wrap.read(), move |on| wrap.set(on)).text("Wrap lines")),
-            )
-            .child(rect().tw(&tokens, &[w_full(), h(Dim::Hairline), bg(Paint::Separator)]))
             .child(
                 rect()
                     .width(Size::fill())
@@ -305,7 +297,7 @@ impl Component for TextView {
                         .child(rect().tw(&tokens, &[w_flex()]).child(
                             CAPTION
                                 .in_ink(Ink::Muted)
-                                .label(&tokens, total_note.unwrap_or_default())
+                                .label(&tokens, note)
                                 .max_lines(1)
                                 .text_overflow(TextOverflow::Ellipsis),
                         ))
@@ -315,23 +307,6 @@ impl Component for TextView {
                 )
             }))
             .into_element()
-    }
-}
-
-fn language_name(language: Language) -> &'static str {
-    match language {
-        Language::Plain => "Plain text",
-        Language::Rust => "Rust",
-        Language::C => "C-style code",
-        Language::Python => "Python",
-        Language::JavaScript => "JavaScript or TypeScript",
-        Language::Shell => "Shell",
-        Language::Json => "JSON",
-        Language::Toml => "Configuration",
-        Language::Yaml => "YAML",
-        Language::Markdown => "Markdown",
-        Language::Css => "CSS",
-        Language::Markup => "HTML or XML",
     }
 }
 

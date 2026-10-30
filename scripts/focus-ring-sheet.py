@@ -30,6 +30,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from app_env import isolated  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = Path(os.environ.get("CARGO_TARGET_DIR", "/var/tmp/bingux-settings-target"))
 SCHEME = "BINGUX_SETTINGS_SNAPSHOT_SCHEME"
@@ -73,7 +76,7 @@ def render(name: str, env: dict[str, str], width: str, scale: str, workdir: Path
         sys.exit(f"{binary} is missing: build with --build")
     out = workdir / name.replace(" ", "-")
     out.mkdir(parents=True)
-    run_env = dict(os.environ, BINGUX_SNAPSHOT_SCALE=scale, **env)
+    run_env = isolated(dict(os.environ, BINGUX_SNAPSHOT_SCALE=scale, **env))
     subprocess.run([str(binary), str(out), width], check=True, env=run_env)
     pad = MARGIN * float(scale)
     cells = []

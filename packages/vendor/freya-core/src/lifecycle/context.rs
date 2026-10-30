@@ -9,6 +9,68 @@ use crate::{
     scope_id::ScopeId,
 };
 
+/// Every context a scope can see, copied out so another window can be given them.
+///
+/// Bingux patch. A popup is a window of its own, with a runner of its own, yet its content
+/// reads the tokens, direction, router, overlays and the rest of the window it opened from.
+/// [`snapshot_contexts`] collects them where the popup is opened;
+/// [`provide_context_snapshot`] gives them to the popup's root.
+#[derive(Clone, Default)]
+pub struct ContextSnapshot(Vec<(TypeId, Rc<dyn std::any::Any>)>);
+
+impl ContextSnapshot {
+    /// Drops the context of type `T`: the popup brings its own.
+    pub fn without<T: 'static>(mut self) -> Self {
+        let type_id = TypeId::of::<T>();
+        self.0.retain(|(kind, _)| *kind != type_id);
+        self
+    }
+}
+
+/// Copies every context visible from the current scope, nearest provider winning,
+/// root contexts included.
+pub fn snapshot_contexts() -> ContextSnapshot {
+    CurrentContext::with(|context| {
+        let scopes_storages = context.scopes_storages.borrow();
+        let mut seen = rustc_hash::FxHashSet::default();
+        let mut found = Vec::new();
+        let mut next = Some(context.scope_id);
+        while let Some(scope_id) = next {
+            let Some(storage) = scopes_storages.get(&scope_id) else {
+                break;
+            };
+            for (type_id, value) in &storage.contexts {
+                if seen.insert(*type_id) {
+                    found.push((*type_id, value.clone()));
+                }
+            }
+            next = storage.parent_id;
+        }
+        ContextSnapshot(found)
+    })
+}
+
+/// Provides the contexts of `snapshot` to the current scope, except the types this window's
+/// root already has: those belong to the window (its ticker, platform, font collection) and
+/// the snapshot's copy came from another window.
+pub fn provide_context_snapshot(snapshot: &ContextSnapshot) {
+    CurrentContext::with(|context| {
+        let mut scopes_storages = context.scopes_storages.borrow_mut();
+        let own: rustc_hash::FxHashSet<TypeId> = scopes_storages
+            .get(&ScopeId::ROOT)
+            .map(|root| root.contexts.keys().copied().collect())
+            .unwrap_or_default();
+        let Some(target) = scopes_storages.get_mut(&context.scope_id) else {
+            return;
+        };
+        for (type_id, value) in &snapshot.0 {
+            if !own.contains(type_id) {
+                target.contexts.insert(*type_id, value.clone());
+            }
+        }
+    })
+}
+
 pub fn provide_context<T: Clone + 'static>(value: T) {
     provide_context_for_scope_id(value, None)
 }

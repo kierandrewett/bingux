@@ -136,7 +136,7 @@ const fn pair(what: &'static str, fg: Fg, bg: Bg, need: Requirement) -> Pair {
 const LAYERS: [Paint; 7] = [
     Paint::Bg,
     Paint::Sidebar,
-    Paint::TabStrip,
+    Paint::Recess,
     Paint::Card,
     Paint::Control,
     Paint::Raised,
@@ -164,7 +164,7 @@ pub fn pairs() -> Vec<Pair> {
     }
     // Interaction layers: hover, press and the selected row or sidebar item.
     for ink in [Ink::Text, Ink::Muted] {
-        for layer in [Paint::Bg, Paint::Sidebar, Paint::TabStrip, Paint::Card, Paint::Control, Paint::Popover] {
+        for layer in [Paint::Bg, Paint::Sidebar, Paint::Recess, Paint::Card, Paint::Control, Paint::Popover] {
             for state in [State::Hover, State::Pressed, State::Selected] {
                 out.push(pair(
                     "text ink on an interaction layer",
@@ -240,15 +240,19 @@ pub fn pairs() -> Vec<Pair> {
                 text,
             ));
         }
+        out.push(pair(
+            "banner or toast kind icon",
+            Fg::Paint(Paint::NoticeGlyph(kind)),
+            fill,
+            ui,
+        ));
         let mut edge = pair(
             "banner or toast edge",
             Fg::Paint(Paint::NoticeEdge(kind)),
             fill,
             ui,
         );
-        if kind == BannerKind::Neutral {
-            edge.exempt = Some("decorative: the dark pill is set off by its shadow and its fill, not its edge");
-        }
+        edge.exempt = Some("decorative: a faint hairline; the soft fill and the shadow set the notice off, not its edge");
         out.push(edge);
     }
     out.push(pair(

@@ -7,6 +7,7 @@
 //! without touching the machine's clock. `fail` answers the same reads but
 //! refuses every write, to check that a failed change reverts. The zone the
 //! fake starts in is `BINGUX_SETTINGS_FAKE_ZONE` (default `Europe/London`).
+//! `BINGUX_SETTINGS_FAKE_NOW=<Unix seconds>` freezes the fake clock at that time.
 
 use std::process::Command;
 use std::time::Duration;
@@ -122,6 +123,11 @@ mod fake {
     }
 
     fn real_now() -> i64 {
+        // `BINGUX_SETTINGS_FAKE_NOW=<Unix seconds>` stops the clock there, so two captures show
+        // the same time.
+        if let Some(fixed) = std::env::var("BINGUX_SETTINGS_FAKE_NOW").ok().and_then(|text| text.parse().ok()) {
+            return fixed;
+        }
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |since| since.as_secs() as i64)

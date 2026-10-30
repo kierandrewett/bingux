@@ -13,6 +13,26 @@
 
 use std::time::Duration;
 
+/// How long a page takes to slide, in and out: a subpage opening, a subpage
+/// closing (a press of Back, Alt+Left, the sidebar, a swipe released past its
+/// threshold) and a sheet rising or leaving. One number, so they never drift
+/// apart. A spring back is [`GestureConfig::cancel_ms`] and a cross-fade is
+/// shorter.
+pub const SLIDE_MS: u64 = 320;
+
+/// How hard the slide's ease bends: the exponent of [`slide`]. 1 is a straight
+/// line. 2 (the default) is a gentle ease-in-out: it peaks at twice the
+/// average speed, has covered 5 % of the way after 60 ms and 90 % after
+/// 240 ms. 3 is brisker through the middle and slower at both ends (5 % at
+/// 87 ms, a peak of 3 times the average); 1.5 is almost linear. The one number
+/// to turn to make every slide, in and out, snappier or softer; the curve
+/// stays symmetric whatever it is.
+pub const SLIDE_SHARPNESS: f32 = 2.0;
+
+/// How long a spring back takes: a swipe let go short of its threshold and a
+/// sheet let go short of its dismiss distance both settle over it.
+pub const SPRING_MS: u64 = 240;
+
 /// The tunable numbers, in logical pixels and seconds. See
 /// `design/navigation.md`, section 4.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -29,7 +49,8 @@ pub struct GestureConfig {
     pub cancel_velocity: f32,
     /// Moving this far back past where the touch began cancels.
     pub cancel_back: f32,
-    pub commit_ms: u64,
+    /// A cancelled swipe springs back over this long. A swipe that commits
+    /// settles over [`SLIDE_MS`], like every other slide.
     pub cancel_ms: u64,
     /// How far back the velocity is measured.
     pub velocity_window: Duration,
@@ -44,8 +65,7 @@ impl Default for GestureConfig {
             commit_velocity: 700.0,
             cancel_velocity: 500.0,
             cancel_back: 4.0,
-            commit_ms: 260,
-            cancel_ms: 240,
+            cancel_ms: SPRING_MS,
             velocity_window: Duration::from_millis(100),
         }
     }
@@ -59,10 +79,13 @@ pub enum Phase {
     Tracking,
     /// Decided: the drag drives the screen.
     Dragging,
-    /// Released. `commit` says which way it settles.
+    /// Released. `commit` says which way it settles; `speed` is how fast the
+    /// finger was going at the lift, in progress per second, which a commit
+    /// carries on from.
     Settling {
         commit: bool,
         from: f32,
+        speed: f32,
         started: Duration,
     },
     /// Handed to a scroll view; ignored until the touch ends.
@@ -86,8 +109,9 @@ pub enum Update {
 /// What a release did.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Release {
-    /// Pop, settling out from `from`.
-    Commit { from: f32 },
+    /// Pop, settling out from `from`, the finger going `speed` (progress per
+    /// second, never below 0) as it lets go.
+    Commit { from: f32, speed: f32 },
     /// Spring back from `from`.
     Cancel { from: f32 },
     /// The touch never became a drag: it is an ordinary press.
@@ -198,6 +222,7 @@ impl BackGesture {
                     self.phase = Phase::Settling {
                         commit: false,
                         from: self.progress,
+                        speed: 0.0,
                         started: now,
                     };
                     return Update::Cancelled;
@@ -251,13 +276,18 @@ impl BackGesture {
                 let commit = velocity > -cfg.cancel_velocity
                     && (progress >= cfg.commit_progress
                         || (velocity >= cfg.commit_velocity && progress > 0.03));
+                let speed = velocity.max(0.0) / self.width;
                 self.phase = Phase::Settling {
                     commit,
                     from: progress,
+                    speed,
                     started: now,
                 };
                 if commit {
-                    Release::Commit { from: progress }
+                    Release::Commit {
+                        from: progress,
+                        speed,
+                    }
                 } else {
                     Release::Cancel { from: progress }
                 }
@@ -279,12 +309,14 @@ impl BackGesture {
             Phase::Settling {
                 commit,
                 from,
+                speed,
                 started,
             } => {
                 let t = now.saturating_sub(started).as_secs_f32();
                 if commit {
-                    let total = self.config.commit_ms as f32 / 1000.0;
-                    from + (1.0 - from) * expo_out(t / total)
+                    let total = SLIDE_MS as f32 / 1000.0;
+                    let remaining = 1.0 - from;
+                    from + remaining * release_curve(t / total, release_slope(speed, remaining))
                 } else {
                     let total = self.config.cancel_ms as f32 / 1000.0;
                     (from * (1.0 - spring(t / total))).max(0.0)
@@ -305,7 +337,7 @@ impl BackGesture {
             return None;
         };
         let total = if commit {
-            self.config.commit_ms
+            SLIDE_MS
         } else {
             self.config.cancel_ms
         };
@@ -323,17 +355,52 @@ impl BackGesture {
     }
 }
 
-/// `1 - 2^(-10 t)`, reaching 1 at `t == 1`.
-pub fn expo_out(t: f32) -> f32 {
+/// How far along a slide is, 0 to 1, a share `t` (0 to 1) of [`SLIDE_MS`] in:
+/// the one curve of every subpage push and pop, predictive back that is not
+/// a swipe, and sheet open and close. It is the symmetric ease
+/// `t^k / (t^k + (1 - t)^k)` with `k` = [`SLIDE_SHARPNESS`], which is
+/// point-symmetric about the middle: `slide(1 - t) = 1 - slide(t)`. That makes
+/// a close the open played backwards *and* the open mirrored in space at the
+/// same time, so in and out are the same motion by either reading, and
+/// neither starts by standing still for long (the first 2 % of the way takes
+/// 40 ms) nor ends with a long tail.
+pub fn slide(t: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);
-    if t >= 1.0 {
-        1.0
-    } else {
-        // Scaled so the curve meets 1 exactly at t = 1.
-        let raw = 1.0 - 2f32.powf(-10.0 * t);
-        raw / (1.0 - 2f32.powf(-10.0))
-    }
+    let (here, rest) = (t.powf(SLIDE_SHARPNESS), (1.0 - t).powf(SLIDE_SHARPNESS));
+    here / (here + rest)
 }
+
+/// The steepest start a released slide's curve takes, as a multiple of its
+/// average speed. At this the curve is the cubic ease-out; any steeper start
+/// would overshoot its stop.
+pub const MAX_RELEASE_SLOPE: f32 = 3.0;
+
+/// The share of the way a released slide has gone at `u` (0 to 1) of its
+/// time, leaving at `slope` times its average speed and stopping dead at the
+/// end. A cubic Hermite curve: at a slope of 0 it is the smooth step, at 3
+/// the cubic ease-out, and between them it is monotonic.
+pub fn release_curve(u: f32, slope: f32) -> f32 {
+    let u = u.clamp(0.0, 1.0);
+    slope * (u * u * u - 2.0 * u * u + u) + 3.0 * u * u - 2.0 * u * u * u
+}
+
+/// The start of a release's curve for something let go at `speed` (units per
+/// second, the way it is going positive) with `remaining` of the same unit to
+/// go: the speed it has, as a multiple of the average speed over
+/// [`SLIDE_MS`]. So a release carries on at the speed of the finger instead
+/// of standing still for the start of [`slide`].
+pub fn release_slope(speed: f32, remaining: f32) -> f32 {
+    if remaining <= 0.0 {
+        return 0.0;
+    }
+    (speed.max(0.0) * (SLIDE_MS as f32 / 1000.0) / remaining).clamp(0.0, MAX_RELEASE_SLOPE)
+}
+
+/// The spring's damping ratio, and its stiffness per unit of the settle time
+/// (`e^(-0.8 * 8)` leaves under 0.2 % at the end). A spring back, in a page
+/// or a sheet, uses these two numbers and [`SPRING_MS`].
+pub const SPRING_ZETA: f32 = 0.8;
+pub const SPRING_OMEGA: f32 = 8.0;
 
 /// A slightly underdamped spring step response from 0 to 1 over `t` in 0..1
 /// of the settle time. It overshoots a little and ends at 1.
@@ -342,8 +409,7 @@ pub fn spring(t: f32) -> f32 {
     if t >= 1.0 {
         return 1.0;
     }
-    let zeta = 0.8_f32;
-    let omega = 8.0_f32; // per unit of t: e^(-0.8 * 8) leaves under 0.2 % at the end
+    let (zeta, omega) = (SPRING_ZETA, SPRING_OMEGA);
     let damped = omega * (1.0 - zeta * zeta).sqrt();
     let decay = (-zeta * omega * t).exp();
     1.0 - decay * ((damped * t).cos() + zeta / (1.0 - zeta * zeta).sqrt() * (damped * t).sin())
@@ -379,6 +445,9 @@ pub const MIN_SCALE: f32 = 0.90;
 pub const PREVIOUS_SCALE: f32 = 0.95;
 /// The shift toward the finger at full drag, as a share of the width.
 pub const SHIFT: f32 = 0.08;
+/// The share of a committed pop's time over which the drag pose finishes
+/// (the screen reaches its smallest) while the commit progress carries it off.
+pub const DRAG_SHARE: f32 = 0.4;
 
 impl Pose {
     /// The pose at drag progress `d` and commit progress `k`, both 0 to 1.
@@ -398,10 +467,10 @@ impl Pose {
     }
 
     /// The pose while committing from drag progress `d0` at commit progress
-    /// `k`: the drag finishes over the first 40 % of the settle, as a fast
-    /// fling would.
+    /// `k`: the drag finishes over the first [`DRAG_SHARE`] of the settle, as
+    /// a fast fling would.
     pub fn committing(d0: f32, k: f32) -> Self {
-        let d = d0 + (1.0 - d0) * (k / 0.4).clamp(0.0, 1.0);
+        let d = d0 + (1.0 - d0) * (k / DRAG_SHARE).clamp(0.0, 1.0);
         Self::at(d, k)
     }
 
@@ -512,10 +581,12 @@ mod tests {
         // 150 px of 400 = 37.5 %, then rest for a while: no fling.
         let now = drag(&mut gesture, 0, &[20.0, 60.0, 110.0, 152.0]);
         let release = gesture.up(at(now + 400));
-        let Release::Commit { from } = release else {
+        let Release::Commit { from, speed } = release else {
             panic!("{release:?}");
         };
         assert!((from - 0.375).abs() < 1e-6);
+        // Rested before the lift: it carries on from rest.
+        assert_eq!(speed, 0.0);
     }
 
     #[test]
@@ -533,7 +604,17 @@ mod tests {
         // 60 px in 48 ms is over 1000 px/s.
         let now = drag(&mut gesture, 0, &[20.0, 40.0, 62.0]);
         assert!(gesture.velocity() > 700.0, "{}", gesture.velocity());
-        assert!(matches!(gesture.up(at(now + 1)), Release::Commit { .. }));
+        let release = gesture.up(at(now + 1));
+        let Release::Commit { from, speed } = release else {
+            panic!("{release:?}");
+        };
+        // It lets go going about 2.5 widths a second, and carries on at that
+        // speed: it does not stand still for the soft start of `slide`.
+        assert!(speed > 2.0, "{speed}");
+        let moved = gesture.value(at(now + 1 + 8)) - from;
+        assert!((moved / 0.008 - speed).abs() < speed * 0.2, "{moved} at {speed}");
+        // And it is a stop, not a drift: it ends at 1 in SLIDE_MS.
+        assert!((gesture.value(at(now + 1 + SLIDE_MS)) - 1.0).abs() < 1e-6);
     }
 
     #[test]
@@ -578,7 +659,7 @@ mod tests {
         let mut gesture = BackGesture::default();
         gesture.down(at(0), (2.0, 300.0), W, true);
         let now = drag(&mut gesture, 0, &[100.0, 200.0]);
-        let Release::Commit { from } = gesture.up(at(now + 300)) else {
+        let Release::Commit { from, .. } = gesture.up(at(now + 300)) else {
             panic!()
         };
         let start = now + 300;
@@ -589,7 +670,8 @@ mod tests {
             last = value;
         }
         assert_eq!(gesture.tick(at(start + 100)), None);
-        assert_eq!(gesture.tick(at(start + 260)), Some(true));
+        assert_eq!(gesture.tick(at(start + SLIDE_MS - 1)), None);
+        assert_eq!(gesture.tick(at(start + SLIDE_MS)), Some(true));
         assert_eq!(gesture.phase(), Phase::Idle);
 
         gesture.down(at(1000), (2.0, 300.0), W, true);
@@ -709,12 +791,77 @@ mod tests {
 
     #[test]
     fn the_curves_meet_their_ends() {
-        assert_eq!(expo_out(0.0), 0.0);
-        assert_eq!(expo_out(1.0), 1.0);
-        assert!(expo_out(0.5) > 0.9);
+        assert_eq!(slide(0.0), 0.0);
+        assert_eq!(slide(1.0), 1.0);
         assert_eq!(spring(0.0), 0.0);
         assert_eq!(spring(1.0), 1.0);
         let peak = (0..=100).map(|i| spring(i as f32 / 100.0)).fold(0.0, f32::max);
         assert!(peak > 1.0 && peak < 1.05, "a slight overshoot: {peak}");
+    }
+
+    #[test]
+    fn a_slide_is_the_same_motion_in_and_out() {
+        // Point-symmetric about the middle: a page that leaves is where the
+        // page that arrived was the same time before the end (the open played
+        // backwards), and also as far from rest as the arriving page is from
+        // its place at the same time (the open mirrored in space). One curve
+        // is both, so a close can never feel faster or slower than the open.
+        for i in 0..=200 {
+            let t = i as f32 / 200.0;
+            assert!((slide(t) - (1.0 - slide(1.0 - t))).abs() < 1e-6, "t {t}");
+        }
+        assert!((slide(0.5) - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_slide_neither_stalls_nor_drags_at_any_sharpness_worth_choosing() {
+        // Monotonic, and measured in milliseconds of SLIDE_MS: moving
+        // visibly within four frames of the start, and 90 % of the way
+        // before a quarter of the time is left. These hold for the
+        // exponents 2 to 3 someone might turn SLIDE_SHARPNESS to.
+        let ms = |at_ms: f32| slide(at_ms / SLIDE_MS as f32);
+        let mut last = 0.0;
+        for i in 1..=400 {
+            let value = slide(i as f32 / 400.0);
+            assert!(value >= last, "monotonic at {i}");
+            last = value;
+        }
+        assert!(ms(64.0) > 0.01, "starts within 4 frames: {}", ms(64.0));
+        assert!(ms(120.0) > 0.1, "{}", ms(120.0));
+        assert!(ms(250.0) > 0.9, "{}", ms(250.0));
+        assert!(ms(200.0) < 0.9, "it is a slide and not a jump: {}", ms(200.0));
+        // At no time is it moving more than three times as fast as a
+        // constant-speed slide would.
+        let peak = (0..400)
+            .map(|i| (slide((i + 1) as f32 / 400.0) - slide(i as f32 / 400.0)) * 400.0)
+            .fold(0.0, f32::max);
+        assert!(peak <= 3.0 + 1e-3, "{peak}");
+    }
+
+    #[test]
+    fn a_release_carries_on_at_the_speed_it_had() {
+        // The curve of a release starts at `slope` times the average speed,
+        // stops dead at the end and never overshoots.
+        for slope in [0.0, 0.5, 1.0, 2.0, MAX_RELEASE_SLOPE] {
+            assert_eq!(release_curve(0.0, slope), 0.0);
+            assert!((release_curve(1.0, slope) - 1.0).abs() < 1e-6);
+            let start = (release_curve(0.001, slope) - release_curve(0.0, slope)) / 0.001;
+            assert!((start - slope).abs() < 0.01, "{slope}: {start}");
+            let end = (release_curve(1.0, slope) - release_curve(0.999, slope)) / 0.001;
+            assert!(end.abs() < 0.01, "{slope}: stops dead, {end}");
+            let mut last = 0.0;
+            for i in 1..=200 {
+                let value = release_curve(i as f32 / 200.0, slope);
+                assert!(value >= last - 1e-6 && value <= 1.0 + 1e-6, "{slope} at {i}");
+                last = value;
+            }
+        }
+        // A finger at rest starts it from rest, a flick as fast as the finger,
+        // and nothing is faster than 3 times the average.
+        assert_eq!(release_slope(0.0, 0.5), 0.0);
+        assert_eq!(release_slope(-4.0, 0.5), 0.0);
+        assert!((release_slope(1.0, 0.64) - 0.5).abs() < 1e-6);
+        assert_eq!(release_slope(100.0, 0.5), MAX_RELEASE_SLOPE);
+        assert_eq!(release_slope(1.0, 0.0), 0.0);
     }
 }

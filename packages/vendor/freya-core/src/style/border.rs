@@ -131,3 +131,13 @@ impl Scaled for Border {
         self.width.scale(scale_factor);
     }
 }
+
+impl Border {
+    /// The border reflected left to right: its left side is drawn on the right.
+    pub fn mirrored(&self) -> Self {
+        Self {
+            width: BorderWidth { left: self.width.right, right: self.width.left, ..self.width },
+            ..self.clone()
+        }
+    }
+}

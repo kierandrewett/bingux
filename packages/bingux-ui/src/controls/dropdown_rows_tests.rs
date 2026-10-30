@@ -342,6 +342,30 @@ fn check_rows(shot: &mut Snapshot, window: Area, expect: &Expect) -> (Vec<String
     (problems, seen)
 }
 
+/// How long a test waits for the list to open or close before it says it did not. The wait ends
+/// the moment the list is there, so the cap costs nothing when the machine keeps up.
+const WAIT: Duration = Duration::from_secs(30);
+
+/// How many options the list shows now.
+fn rows_on_screen(shot: &mut Snapshot) -> usize {
+    Frame2::of(shot)
+        .tree
+        .nodes
+        .iter()
+        .filter(|node| node.a11y.component.as_deref() == Some("DropdownItem"))
+        .count()
+}
+
+/// Whether every row of the list is drawn at full strength: it has finished fading in.
+fn rows_whole(shot: &mut Snapshot) -> bool {
+    let tree = Frame2::of(shot);
+    tree.tree
+        .nodes
+        .iter()
+        .filter(|node| node.a11y.component.as_deref() == Some("DropdownItem"))
+        .all(|node| tree.text_under(node.id).is_none_or(|text| tree.opacity(text.id) >= 0.99))
+}
+
 struct Rig {
     shot: Snapshot,
     window: Area,
@@ -384,7 +408,10 @@ impl Rig {
             let (x, y) = self.button();
             self.shot.click(x, y);
         }
-        self.shot.settle(Duration::from_millis(500));
+        self.shot.settle(self.motion_wait());
+        // The animation moves at most one tick cap a frame when the machine is busy, so a list
+        // can take more frames to open than the clock says: wait until its rows are drawn whole.
+        self.shot.settle_until(WAIT, rows_whole);
         let tree = Frame2::of(&mut self.shot);
         let named = |name: &str| {
             tree.tree.nodes.iter().filter(|node| node.a11y.component.as_deref() == Some(name)).count()
@@ -398,16 +425,19 @@ impl Rig {
         );
     }
 
+    /// Long enough for the list to open or close: a phone's sheet takes
+    /// `SLIDE_MS`, a desktop's popover far less, and the animation moves at
+    /// most one tick cap a frame when the machine is busy.
+    fn motion_wait(&self) -> Duration {
+        Duration::from_millis(if self.phone { 1200 } else { 500 })
+    }
+
     /// Escape: closes the list (or takes back its query) and lets it go.
     fn close(&mut self) {
         self.shot.key(Key::Named(NamedKey::Escape));
-        self.shot.settle(Duration::from_millis(500));
-        let rows = Frame2::of(&mut self.shot)
-            .tree
-            .nodes
-            .iter()
-            .filter(|node| node.a11y.component.as_deref() == Some("DropdownItem"))
-            .count();
+        self.shot.settle(self.motion_wait());
+        self.shot.settle_until(WAIT, |shot| rows_on_screen(shot) == 0);
+        let rows = rows_on_screen(&mut self.shot);
         assert_eq!(rows, 0, "{:?}: the list closed", self.case);
     }
 

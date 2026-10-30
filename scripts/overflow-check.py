@@ -45,8 +45,8 @@ shared component that causes a finding. Where text is meant to behave so, add
 an entry to ALLOWED with the reason: a rule, a regex for the capture name, a
 regex for the component path or node, and why.
 
-It needs the binaries of layout-lint.py (use --build) and nothing beyond the
-standard library.
+It needs the binaries of layout-lint.py (use --build); the 200% text scenario also reads
+the taxonomy's page list through scripts/probe_lib.py (numpy and PIL).
 """
 
 from __future__ import annotations
@@ -128,6 +128,31 @@ SCENARIOS: dict[str, dict] = {
 # path or the node's description, and why the text is meant to behave so. An
 # entry that matches nothing is reported, so the list cannot rot.
 ALLOWED: list[dict] = []
+#
+# The rules of design/rules.json each kind of finding holds, by the layout rule that finds it (read by
+# scripts/rules-check.py), so a report shows what was found, not one rule for everything. The scenario
+# (baseline, pseudo, scale200, longdata, worst) is the first part of each finding's capture name, and the
+# report counts findings by it. The only rule of the book for text under stress is TX-02 ("nothing is
+# unreadable or covers other text, with long data, 40% longer strings, 200% text and narrow windows"):
+#   wrapped, overflow, truncated  the text breaks badly, does not end in an ellipsis, or is cut with room to spare
+#   text-collision, overlap       texts or controls lie on each other: "covers other text"
+#   clipped, hidden-label         ink cut off by a clipping box, a control whose label is out of sight: "unreadable"
+#   horizontal-scroll             content wider than the window or its view: "narrow windows"
+# `outside-parent` is the same kind of finding as layout-lint's and is unmapped in the same way (below).
+# These entries are the same as layout-lint.py's RULE_IDS for the same keys (tests/rules-check.test.py).
+RULE_IDS = {
+    "wrapped": ["TX-02"],
+    "overflow": ["TX-02"],
+    "truncated": ["TX-02"],
+    "text-collision": ["TX-02"],
+    "overlap": ["TX-02"],
+    "clipped": ["TX-02"],
+    "hidden-label": ["TX-02"],
+    "horizontal-scroll": ["TX-02"],
+}
+RULE_UNMAPPED = {
+    "outside-parent": "a box reaching outside the box that holds it: the book has no rule for boxes staying inside their parent (only for text, TX-02, and for padding, SP-01), so this is a layout-integrity check of the inspector without a rule ID",
+}
 
 
 def allowed(finding: dict) -> dict | None:
@@ -141,6 +166,10 @@ def allowed(finding: dict) -> dict | None:
     return None
 
 
+# Taxonomy pages a scenario could not capture: scenario -> pages (printed as `partly run:`).
+SKIPPED: dict[str, list[str]] = {}
+
+
 def scenario_jobs(name: str, spec: dict, only: str | None, pages: list[str]) -> list[dict]:
     jobs: list[dict] = []
     if only in (None, "settings"):
@@ -150,7 +179,23 @@ def scenario_jobs(name: str, spec: dict, only: str | None, pages: list[str]) -> 
                 continue
             jobs.append(job)
     if only in (None, "taxonomy") and not pages and spec["taxonomy"]:
-        jobs += lint.taxonomy_jobs()
+        if "BINGUX_TEXT_SCALE" in spec["env"]:
+            # One run a page, and not the pages the harness cannot capture at a text scale: the Files address-bar and
+            # file-manager pages panic inside freya-testing (an `unwrap` on `None`, freya-testing-0.5.0-rc.10
+            # src/lib.rs:663) after the page is drawn, which stopped the single run there and took every page after
+            # them with it. They are named in the output as not run (`partly run:`), not hidden.
+            import probe_lib  # numpy and PIL, like the checks that read captures
+
+            skipped = sorted(probe_lib.TAXONOMY_SKIP_AT_SCALE)
+            SKIPPED[name] = skipped
+            binary = str(lint.TARGET / "debug" / "bingux-taxonomy")
+            jobs += [
+                {"name": f"taxonomy-{page.replace('/', '_')}", "argv": [binary, "--snapshot"], "pages": [page], "taxonomy": True}
+                for page in probe_lib.taxonomy_pages()
+                if page not in skipped
+            ]
+        else:
+            jobs += [dict(job, taxonomy=True) for job in lint.taxonomy_jobs()]
     for job in jobs:
         job["name"] = f"{name}-{job['name']}"
         job["env"] = {**spec["env"], **job.get("env", {})}
@@ -195,19 +240,23 @@ def main() -> int:
     for name in chosen:
         jobs += scenario_jobs(name, SCENARIOS[name], args.only, pages)
 
-    print("RTL: not run. The layout engine has no text direction to mirror, so there is no right-to-left rendering to check.")
+    print("RTL: not run here; layout-lint.py --rtl and BINGUX_DIRECTION=rtl (design/rtl.md) check the mirror.")
     workdir = Path(args.keep) if args.keep else Path(tempfile.mkdtemp(prefix="overflow-check-"))
     workdir.mkdir(parents=True, exist_ok=True)
     results = []
+    # A page run as its own job takes five times a capture's time; the whole-taxonomy run, thirty.
+    def timeout_of(job: dict) -> int:
+        return args.timeout * (30 if job["name"].endswith("taxonomy") else 5 if job.get("taxonomy") else 1)
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
-        futures = [
-            pool.submit(lint.run_job, job, workdir, args.timeout * (30 if job["name"].endswith("taxonomy") else 1))
-            for job in jobs
-        ]
+        futures = [pool.submit(lint.run_job, job, workdir, timeout_of(job)) for job in jobs]
         for future in concurrent.futures.as_completed(futures):
             result = future.result()
             results.append(result)
             print(f"{result['status']:>10}  {result['name']}  ({len(result['shots'])} captures)", flush=True)
+    for scenario, pages_skipped in SKIPPED.items():
+        print(f"partly run: {scenario} did not capture the taxonomy page(s) {', '.join(pages_skipped)} "
+              "(freya-testing 0.5.0-rc.10 panics on them with a text scale: `unwrap()` on `None` at src/lib.rs:663); every other page ran")
 
     findings = []
     broken = []

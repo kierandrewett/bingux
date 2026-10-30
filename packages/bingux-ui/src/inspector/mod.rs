@@ -37,7 +37,11 @@ mod watchdog;
 mod props;
 mod route;
 mod shot;
+#[cfg(feature = "testing")]
+mod probe_checks;
 pub(crate) mod snapshot;
+#[cfg(feature = "testing")]
+pub(crate) mod state_checks;
 mod target;
 mod toolbar;
 mod window;
@@ -227,18 +231,6 @@ fn key_log() -> bool {
     *ON
 }
 
-/// The inspector window's own entry point for "inspect this inspector": the
-/// header button calls it, for a desktop where the shortcut does not arrive.
-pub(crate) fn inspect_self() {
-    let window = Platform::window_id();
-    let title = Platform::get()
-        .try_window(u64::from(window))
-        .and_then(|_| me())
-        .and_then(|id| with(id, |instance| instance.title.clone()))
-        .unwrap_or_else(|| "Inspector".to_string());
-    toggle_in(window, &title);
-}
-
 /// `BINGUX_INSPECT_OPEN=1` opens an inspector over the first window.
 fn open_at_start() -> bool {
     std::env::var_os("BINGUX_INSPECT_OPEN").is_some_and(|value| value == "1")
@@ -406,6 +398,7 @@ fn bind_window(id: InstanceId, window: WindowId) {
     if let Some(title) = with(id, |instance| instance.title.clone()) {
         Platform::get().set_window_title(window, title);
     }
+    register_in_stack(id, window);
     // A new window may not get keyboard focus from the compositor; ask, so the
     // shortcut works in it without a click first.
     Platform::get().focus_window(window);
@@ -425,7 +418,18 @@ fn bind_current(id: InstanceId) {
     }
 }
 
-/// Opens an inspector over `target`, whose title is `target_title`.
+/// An inspector is a tool window of its target: above it in the window stack
+/// (`layers::WindowStack`), whatever else the application opens over the target.
+fn register_in_stack(id: InstanceId, window: WindowId) {
+    let Some(target) = STORE.with(|store| store.borrow().registry.target_of(id)) else {
+        return;
+    };
+    crate::layers::with_stack(|stack| stack.open_tool(u64::from(window), u64::from(target), "inspector"));
+}
+
+/// Opens an inspector over `target`, whose title is `target_title`. The window is a child of
+/// its target (`xdg_toplevel.set_parent`): the compositor keeps it above the target, so it is
+/// never lost behind the window it inspects, and it goes with it.
 fn open_inspector(target: WindowId, target_title: &str) -> Result<InstanceId, target::OpenError> {
     let id = STORE.with(|store| store.borrow_mut().registry.open(target))?;
     // Launching is only a request to the event loop, and `spawn` needs a
@@ -441,8 +445,11 @@ fn open_inspector(target: WindowId, target_title: &str) -> Result<InstanceId, ta
                     move || crate::resilience::window_boundary("The inspector", root.clone())
                 })
                     .with_title("Inspector")
+                    .with_parent(target)
                     .with_size(1000.0, 680.0)
-                    .with_min_size(640.0, 420.0),
+                    .with_min_size(640.0, 420.0)
+                    // Its own header bar draws the window controls.
+                    .with_decorations(false),
             )
             .await
     });
@@ -576,6 +583,8 @@ fn window_closed(window: WindowId) {
     for own in closed.close {
         Platform::get().close_window(own);
     }
+    // Out of the stack with whatever grew from it (an inspector goes with its target).
+    crate::layers::with_stack(|stack| stack.close(u64::from(window)));
 }
 
 /// Copies the target's tree for the inspector watching it, at most once per
