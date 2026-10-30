@@ -296,6 +296,7 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
                 "bingux-emoji-ui",
                 "bingux-popouts",
                 "bingux-wallpaper",
+                "binguxctl",
             ):
                 # Match the formatter's spacing: `{"name"` and `{ "name"` both occur.
                 generated = re.sub(

@@ -34,6 +34,19 @@ local defaults = {
     window_management = {
         -- Drag a window to a screen edge to tile it, as in GNOME.
         edge_tiling = true,
+        -- wl-copy from wl-clipboard 2.2.1 opens a small window and waits for
+        -- keyboard focus before it sets the clipboard. With "prevent" that
+        -- window never gets focus, so wl-copy does not exit. Gnoblin has no
+        -- per-window focus grant, so this is the supported setting.
+        focus_new_windows = "allow",
+    },
+    -- The media keys control the player the shell shows in the Control Centre:
+    -- the one that is playing, else the first. `playerctl` picks the first
+    -- player on the bus, which is often a browser tab that is not playing.
+    shortcuts = {
+        ["media-play-pause"] = { command = { "binguxctl", "media", "toggle" } },
+        ["media-next"] = { command = { "binguxctl", "media", "next" } },
+        ["media-previous"] = { command = { "binguxctl", "media", "previous" } },
     },
     autostart = {
         -- Gnoblin launches this ordered list in order. Keep wallpaper first so
