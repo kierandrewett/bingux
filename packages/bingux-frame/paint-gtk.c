@@ -52,6 +52,21 @@ static void frame_view_build(View* v) {
 }
 
 void frame_paint_init(int* argc, char*** argv) {
+    /* This helper only reads rendered strips back into shared memory, so it
+     * has no use for dma-buf textures. With them enabled under Gnoblin's
+     * library path, GTK 4.20.4 picks its Vulkan renderer, and every
+     * gsk_renderer_render_texture() call then leaks an exported dma-buf
+     * download image. Measured with a solid-colour render and download: about
+     * 390 MB of VRAM per 600 calls, against no growth with dma-buf disabled.
+     * The live helper reached 10 GB in under two hours. */
+    const char* disabled = g_getenv("GDK_DISABLE");
+    if (!disabled || !*disabled) {
+        g_setenv("GDK_DISABLE", "dmabuf", TRUE);
+    } else if (!strstr(disabled, "dmabuf")) {
+        char* merged = g_strconcat(disabled, ",dmabuf", NULL);
+        g_setenv("GDK_DISABLE", merged, TRUE);
+        g_free(merged);
+    }
     adw_init();
     for (int i = 1; i < *argc; i++) {
         if (g_str_has_prefix((*argv)[i], "--button-layout="))
