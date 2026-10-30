@@ -140,7 +140,7 @@ Scope {
     }
     Process {
         running: !preferences.imported
-        command: [Python.python, Qt.resolvedUrl("import-snap-layouts.py").toString().replace("file://", "")]
+        command: [Python.python, Python.helper("import-snap-layouts.py")]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {

@@ -1,24 +1,72 @@
 .import "ControlLayout.js" as ControlLayout
 
+// `contexts` lists the session contexts a widget may appear in. "desktop" is
+// the running shell; "locked" is the lock screen; "greeter" is the login
+// screen; "kiosk" is a pre-login host such as the OS installer. Widgets
+// without the field are desktop-only. Pre-login contexts show only what makes
+// sense before a user session exists; SessionServices gates the actions those
+// widgets would take, and StatusBar keeps the slots of desktop-only widgets
+// that the default layout places beside shared ones, shown disabled.
+const sessionContexts = ["desktop", "locked", "greeter", "kiosk"];
 const widgets = [
-    { id: "search", label: "Search", icon: "system-search-symbolic" },
-    { id: "workspaces", label: "Workspaces", icon: "view-grid-symbolic" },
-    { id: "clock", label: "Date and time", icon: "x-office-calendar-symbolic" },
-    { id: "controls", label: "Control centre", icon: "preferences-system-symbolic" },
-    { id: "notifications", label: "Notifications", icon: "preferences-system-notifications-symbolic" },
-    { id: "metrics", label: "System monitors", icon: "computer-symbolic" },
-    { id: "keyboard", label: "Keyboard layout", icon: "input-keyboard-symbolic" },
-    { id: "tray", label: "System tray", icon: "view-more-symbolic" },
-    { id: "overflow", label: "More status controls", icon: "view-more-symbolic" },
-    { id: "privacy", label: "Privacy", icon: "microphone-sensitivity-high-symbolic" },
-    { id: "capture", label: "Recording", icon: "media-record-symbolic" },
-    { id: "terminal", label: "Terminal", icon: "utilities-terminal-symbolic", panel: true },
-    { id: "notes", label: "Notes", icon: "accessories-text-editor-symbolic", panel: true },
-    { id: "monitor", label: "System", icon: "computer-symbolic", panel: true },
-    { id: "calendar", label: "Calendar", icon: "x-office-calendar-symbolic", panel: true },
-    { id: "media", label: "Media", icon: "applications-multimedia-symbolic", panel: true },
-    { id: "tasks", label: "Tasks", icon: "view-list-symbolic", panel: true },
+    { id: "search", label: "Search", icon: "system-search-symbolic", contexts: ["desktop"] },
+    { id: "workspaces", label: "Workspaces", icon: "view-grid-symbolic", contexts: ["desktop"] },
+    {
+        id: "clock",
+        label: "Date and time",
+        icon: "x-office-calendar-symbolic",
+        contexts: ["desktop", "locked", "greeter", "kiosk"],
+    },
+    {
+        id: "controls",
+        label: "Control centre",
+        icon: "preferences-system-symbolic",
+        contexts: ["desktop", "locked", "greeter", "kiosk"],
+    },
+    {
+        id: "notifications",
+        label: "Notifications",
+        icon: "preferences-system-notifications-symbolic",
+        contexts: ["desktop", "locked"],
+    },
+    {
+        id: "metrics",
+        label: "System monitors",
+        icon: "computer-symbolic",
+        contexts: ["desktop", "locked", "greeter", "kiosk"],
+    },
+    {
+        id: "keyboard",
+        label: "Keyboard layout",
+        icon: "input-keyboard-symbolic",
+        contexts: ["desktop", "locked", "greeter", "kiosk"],
+    },
+    { id: "tray", label: "System tray", icon: "view-more-symbolic", contexts: ["desktop"] },
+    { id: "overflow", label: "More status controls", icon: "view-more-symbolic", contexts: ["desktop"] },
+    {
+        id: "privacy",
+        label: "Privacy",
+        icon: "microphone-sensitivity-high-symbolic",
+        contexts: ["desktop", "locked"],
+    },
+    { id: "capture", label: "Recording", icon: "media-record-symbolic", contexts: ["desktop"] },
+    { id: "terminal", label: "Terminal", icon: "utilities-terminal-symbolic", panel: true, contexts: ["desktop"] },
+    { id: "notes", label: "Notes", icon: "accessories-text-editor-symbolic", panel: true, contexts: ["desktop"] },
+    { id: "monitor", label: "System", icon: "computer-symbolic", panel: true, contexts: ["desktop"] },
+    { id: "calendar", label: "Calendar", icon: "x-office-calendar-symbolic", panel: true, contexts: ["desktop"] },
+    { id: "media", label: "Media", icon: "applications-multimedia-symbolic", panel: true, contexts: ["desktop"] },
+    { id: "tasks", label: "Tasks", icon: "view-list-symbolic", panel: true, contexts: ["desktop"] },
 ];
+// True when widget `id` may be shown in session context `mode`. Spacing and
+// decoration items follow the bar they sit in; control-centre tiles,
+// portable widgets and extensions are desktop-only.
+function allowed(id, mode) {
+    if (mode === "desktop") return true;
+    if (!sessionContexts.includes(mode)) return false;
+    if (isSpacing(id) || isDecoration(id)) return true;
+    const item = widgets.find((w) => w.id === id);
+    return !!item && (item.contexts || ["desktop"]).includes(mode);
+}
 const layoutWidgets = [
     { id: "spacer", label: "Space", layoutItem: true },
     { id: "spring", label: "Flexible space", layoutItem: true, flexible: true },

@@ -1,0 +1,28 @@
+[Unit]
+Description=Publish this account's appearance for the bsm login screen
+# The bsm counterpart of bingux-greeter-export.service. It runs only while bsm
+# runs; without bsm the old export applies. bsm cannot read this account's
+# home, so `bingux-session publish` hands it the wallpaper and avatar as open
+# files together with the colour scheme, accent, clock format, reduced motion
+# and the personal-images choice (privacy.show_personal_images).
+PartOf=bingux.target
+ConditionUser=!greeter
+ConditionUser=!greetd
+ConditionUser=!bingux-greeter
+ConditionPathExists=/run/bsm/greeter-control.sock
+After=graphical-session.target
+StartLimitIntervalSec=300
+StartLimitBurst=4
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bingux-session publish
+# The wallpaper is decoded by bsm, and this runs while the compositor starts:
+# idle time only, so the first frame comes first.
+Nice=19
+CPUSchedulingPolicy=idle
+IOSchedulingClass=idle
+LimitCORE=0
+# bsm may still be starting; a later change republishes through the path unit.
+Restart=on-failure
+RestartSec=15

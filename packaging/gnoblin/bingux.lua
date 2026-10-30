@@ -55,10 +55,35 @@ local defaults = {
             switch_windows_backward = {},
         },
     },
+    shortcuts = {
+        -- Super+L locks the session. Gnoblin's Lua has no os or io library, so
+        -- the choice is made when the key is pressed, from the environment
+        -- Gnoblin runs in: a session hosted by bsm (BSM_SESSION_ID set by
+        -- bsm-helper) asks bsm, which protects the session and runs the
+        -- transition; otherwise this starts the standalone lock client, as the
+        -- Control Centre Lock button does.
+        ["bingux-lock"] = {
+            binding = "<Super>l",
+            command = {
+                "sh",
+                "-c",
+                'if [ -n "$BSM_SESSION_ID" ]; then exec bsmctl lock; fi; exec bingux-lock',
+            },
+        },
+    },
     ["frame-renderers"] = {
         -- The installer rewrites this packaged path for its selected prefix.
         -- GDM does not promise the user's command-link directory on PATH.
         bingux = { "/usr/local/libexec/bingux/bingux-frame", "--compact" },
+    },
+    -- Bingux serves Screenshot. It is tried first; Gnoblin's own backend
+    -- and then any installed backend follow when Bingux is not installed.
+    -- Other interfaces use Gnoblin's backend, then the first installed one.
+    portals = {
+        default = { "gnoblin", "*" },
+        interfaces = {
+            ["org.freedesktop.impl.portal.Screenshot"] = { "bingux", "gnoblin", "*" },
+        },
     },
     protocols = {
         -- These protocols are used by Bingux panels and capture/search surfaces.

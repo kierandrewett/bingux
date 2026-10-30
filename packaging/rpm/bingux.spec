@@ -58,6 +58,22 @@ BuildRequires:  qt6-qtbase-private-devel
 BuildRequires:  qt6-qttools
 BuildRequires:  rust
 BuildRequires:  systemd-rpm-macros
+# bingux-shell: Quickshell (vendored in packages/bingux-shell) built into the
+# Bingux binary with CMake and Ninja.
+BuildRequires:  cmake
+BuildRequires:  ninja-build
+BuildRequires:  cli11-devel
+BuildRequires:  jemalloc-devel
+BuildRequires:  pkgconfig(libarchive)
+BuildRequires:  pkgconfig(libpipewire-0.3)
+BuildRequires:  pkgconfig(libdrm)
+BuildRequires:  pkgconfig(polkit-agent-1)
+BuildRequires:  pkgconfig(xcb)
+BuildRequires:  pkgconfig(wayland-protocols)
+BuildRequires:  pam-devel
+BuildRequires:  qt6-qtshadertools-devel
+BuildRequires:  qt6-qtsvg-devel
+BuildRequires:  spirv-tools
 
 Requires:       bingux-config = %{version}-%{release}
 Requires:       gtk3
@@ -70,12 +86,14 @@ Requires:       python3-cairo
 Requires:       python3-gobject
 Requires:       python3-pillow
 Requires:       /usr/bin/ffmpeg
-# Fedora's Quickshell package is named differently across repositories.  The
-# shell requires the stable executable interface, while the provider supplies
-# the matching Qt/QML runtime and modules.
-Requires:       /usr/bin/qs
+# The Qt QML runtime bingux-shell links against; Quickshell itself is inside
+# the binary.
+Requires:       qt6-qtdeclarative
+Requires:       qt6-qtwayland
+Requires:       qt6-qtsvg
 Requires:       systemd
 Requires:       wl-clipboard
+Requires:       xdg-desktop-portal
 Requires:       xdg-utils
 # Desktop-wide settings (accent, colour scheme, background, idle delay) live
 # in GSettings; dconf keeps them across logins. glib2 provides gsettings.
@@ -256,15 +274,19 @@ Bingux applications; ordinary desktops do not need it.
 
 %build
 export RUSTFLAGS="%{bingux_rustflags}"
-%make_build BUILD_DIR=build JOBS=%{?_smp_build_ncpus}%{!?_smp_build_ncpus:2}
+%make_build BUILD_DIR=build JOBS=%{?_smp_build_ncpus}%{!?_smp_build_ncpus:2} LIBDIR_NAME=%{_lib}
 %make_build licenses BUILD_DIR=build
 
 %install
 %make_install PREFIX=%{_prefix} DESTDIR=%{buildroot} BUILD_DIR=build QMLDIR=%{_libdir}/bingux/qml LADSPADIR=%{_libdir}/ladspa
 # The scripts name /usr/bin/env; Fedora wants the interpreter itself.
-%py3_shebang_fix %{buildroot}%{_datadir}/bingux/shell %{buildroot}%{_libexecdir}/bingux/binguxctl.py
+%py3_shebang_fix %{buildroot}%{_libexecdir}/bingux/shell %{buildroot}%{_libexecdir}/bingux/binguxctl.py
 # The bundled Adwaita set holds many identical icons; store each once.
 hardlink -c %{buildroot}%{_datadir}/bingux/icons
+
+for unit in bingux.target bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service bingux-lock.service bingux-greeter-export.service bingux-greeter-export.path bingux-bsm-publish.service bingux-bsm-publish.path xdg-desktop-portal-bingux.service bingux-global-shortcuts.service; do
+    sed -e 's|/usr/lib64|%{_libdir}|g' packaging/systemd/$unit > %{buildroot}%{_userunitdir}/$unit
+done
 install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bingux-lock
 
 %check
@@ -302,13 +324,19 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/dev.drewett.bingux.Ta
 %license %{_datadir}/licenses/bingux/adwaita-icon-theme/COPYING
 %license %{_datadir}/licenses/bingux/adwaita-icon-theme/COPYING_CCBYSA3
 %license %{_datadir}/licenses/bingux/adwaita-icon-theme/COPYING_LGPL
+%license packages/bingux-shell/quickshell/LICENSE
 %license build/licenses/bingux-searchd.LICENSE.dependencies
 %license build/licenses/bingux-statusd.LICENSE.dependencies
-%doc README.md docs/extensions.md docs/locking.md
+%doc README.md docs/extensions.md docs/locking.md docs/login-screen.md
+%{_bindir}/bingux-shell
 %{_bindir}/bingux
 %{_bindir}/bingux-capture-ui
 %{_bindir}/bingux-lock
 %{_bindir}/bingux-emoji-ui
+%{_bindir}/bingux-greeter
+%{_bindir}/bingux-greeter-session
+%{_bindir}/bingux-bsm-greeter
+%{_bindir}/bingux-session
 %{_bindir}/bingux-wallpaper
 %{_bindir}/bingux-popouts
 %{_bindir}/bingux-search-ui
@@ -320,14 +348,18 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/dev.drewett.bingux.Ta
 %{_bindir}/bingux-searchd
 %{_bindir}/bingux-search-service
 %{_bindir}/bingux-statusd
+%{_bindir}/bingux-helper
 %{_libdir}/bingux/
 %{_libexecdir}/bingux/
 %dir %{_datadir}/bingux
 %dir %{_datadir}/bingux/search-apps
 %{_datadir}/bingux/gnoblin/
+%{_datadir}/bingux/greeter/
 %{_datadir}/bingux/icons/
-%{_datadir}/bingux/shell/
 %{_datadir}/bingux/search.json
+%{_datadir}/xdg-desktop-portal/portals/bingux.portal
+%{_datadir}/dbus-1/services/org.freedesktop.impl.portal.desktop.bingux.service
+%{_datadir}/dbus-1/services/org.gnoblin.Shell.GlobalShortcutsProvider.service
 %dir %{_datadir}/gnoblin
 %dir %{_datadir}/gnoblin/conf.d
 %dir %{_datadir}/gnoblin/scripts
@@ -342,7 +374,15 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/dev.drewett.bingux.Ta
 %{_userunitdir}/bingux-searchd.service
 %{_userunitdir}/bingux-statusd.service
 %{_userunitdir}/bingux-switcher-ui.service
+%{_userunitdir}/bingux-greeter-export.service
+%{_userunitdir}/bingux-greeter-export.path
+%{_userunitdir}/bingux-bsm-publish.service
+%{_userunitdir}/bingux-bsm-publish.path
+%{_userunitdir}/bingux-global-shortcuts.service
+%{_userunitdir}/xdg-desktop-portal-bingux.service
 %{_userpresetdir}/90-bingux.preset
+%{_datadir}/polkit-1/rules.d/50-bingux-greeter.rules
+%{_tmpfilesdir}/bingux-greeter.conf
 %config(noreplace) %{_sysconfdir}/pam.d/bingux-lock
 
 %files config

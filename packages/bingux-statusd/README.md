@@ -10,6 +10,11 @@ and bounded JSON snapshots to identify applications and input devices.
 Sink monitors, peak meters and corked streams do not count as microphone
 captures. Muted capture streams remain listed with `muted: true`.
 
+It also follows the default output and input for the shell's volume and
+microphone OSD. A record goes to `osd-v2.sock` when the level or mute state of
+the same default device changes. The protocol is in
+[docs/desktop-shell.md](../../docs/desktop-shell.md#osd-socket-protocol-v2).
+
 The capture fields supplement the compositor's privacy booleans:
 
 | Field                         | Type                     | Meaning                                                                                |

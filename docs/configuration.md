@@ -87,7 +87,7 @@ else changes; the keys below are the same settings with snake_case names.
 | `sidebar`               | bool   | `true`      | Show the edge sidebar.                                         |
 | `metrics`               | bool   | `true`      | Show system monitors in the top bar.                           |
 | `clock_seconds`         | bool   | `false`     | Show seconds in the clock.                                     |
-| `wallpaper`             | string | `""`        | Absolute image path, or empty for none.                        |
+| `wallpaper`             | string | `""`        | Absolute image path, or empty to use the GNOME background.     |
 | `sidebar_edge`          | string | not set     | `"left"`, `"right"` or `"top"`. Not set lets the shell choose. |
 | `dock_size`             | int    | `56`        | Icon size in pixels, 32 to 80.                                 |
 | `dock_alignment`        | string | `"center"`  | `"left"`, `"center"` or `"right"`.                             |
@@ -155,6 +155,7 @@ missing program when you ask the assistant a question.
 | Key                | Type | Default | Accepted values                                                             |
 | ------------------ | ---- | ------- | --------------------------------------------------------------------------- |
 | `public_ip_lookup` | bool | `false` | Let the Control Centre ask ipapi.co for the public address. Off by default. |
+| `show_personal_images` | bool | `true` | Show your avatar and wallpaper on the login screen before you sign in. Every local account can read the published copies, so turn this off for a private picture. With bsm the copies are removed at the next publish. |
 
 ### `[appearance]`
 

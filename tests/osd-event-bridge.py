@@ -13,6 +13,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EVENT_NAME = "gnoblin.osd.requested"
+LOCK_EVENT = "gnoblin.session.lock-requested"
+PRIVACY_EVENT = "gnoblin.privacy.changed"
+METHODS = ["input.sources", "input.current_source", "privacy.state"]
 OUTPUT_NAMES = ["DP-1", "DP-2"]
 
 
@@ -40,10 +43,11 @@ def compositor_peer(listener, stop, peer_state, errors):
                     "event": "hello",
                     "api_major": 1,
                     "api_minor": 73,
-                    "events": [EVENT_NAME],
+                    "events": [EVENT_NAME, LOCK_EVENT, PRIVACY_EVENT],
+                    "methods": METHODS,
                 },
             )
-            requests = [json.loads(reader.readline()), json.loads(reader.readline())]
+            requests = [json.loads(reader.readline()) for _ in range(5)]
             peer_state["requests"] = requests
             send_record(
                 connection,
@@ -52,7 +56,7 @@ def compositor_peer(listener, stop, peer_state, errors):
                     "monitors": [{"id": "DP-1", "index": 2, "output_names": OUTPUT_NAMES}],
                 },
             )
-            send_record(connection, {"event": "subscribed", "events": [EVENT_NAME]})
+            send_record(connection, {"event": "subscribed", "events": [PRIVACY_EVENT, EVENT_NAME, LOCK_EVENT]})
 
             event = {
                 "event": EVENT_NAME,
@@ -136,15 +140,20 @@ def main():
             if peer_errors:
                 raise AssertionError(f"fake compositor failed: {peer_errors[0]}")
             requests = peer_state.get("requests")
-            if not requests or [request.get("op") for request in requests] != ["events", "monitors"]:
+            operations = [request.get("op") for request in requests]
+            if not requests or operations != ["events", "monitors", "api", "api", "api"]:
                 raise AssertionError(f"unexpected compositor requests: {requests!r}")
             subscription = requests[0]
-            if subscription.get("api_version") != {"major": 1, "minor": 27}:
-                raise AssertionError(f"unexpected event API version: {subscription!r}")
-            if subscription.get("events") != [EVENT_NAME]:
+            if set(subscription.get("events", [])) != {EVENT_NAME, LOCK_EVENT, PRIVACY_EVENT}:
                 raise AssertionError(f"unexpected event subscription: {subscription!r}")
-            if requests[1].get("api_version") != {"major": 1, "minor": 1}:
-                raise AssertionError(f"unexpected monitor snapshot version: {requests[1]!r}")
+            # Gnoblin keeps one API version per connection, the latest request's,
+            # and counts a lock subscriber only while it is 1.21 or more (OSD
+            # events: 1.27, pad help: 1.73). A later request at a lower version
+            # silently ends both subscriptions, so every request must carry the
+            # same one: the wire minor is the hello minor capped at 1.73.
+            versions = {json.dumps(request.get("api_version"), sort_keys=True) for request in requests}
+            if versions != {json.dumps({"major": 1, "minor": 73})}:
+                raise AssertionError(f"requests use different API versions: {requests!r}")
 
             expected = {
                 "protocolVersion": 2,

@@ -1,0 +1,112 @@
+# bsm: the Bingux Session Manager. One persistent process that is the system
+# Wayland compositor and the session manager (see docs/bsm/architecture.md).
+#
+# Installing the package does not enable this unit. The distro image enables it
+# when the kernel command line has `bingux.bsm` (see
+# /usr/lib/systemd/system/bsm.service.d/ in the image), and an administrator
+# switches a machine over with `bsm-set-display-manager enable`; see
+# docs/bsm/packaging.md. There is deliberately no `Alias=display-manager.service`
+# here: an alias in [Install] would make `systemctl enable` fail or replace the
+# alias of the display manager that is already in use.
+[Unit]
+Description=Bingux Session Manager (system compositor and session manager)
+Documentation=file:///usr/share/doc/bsm/packaging.md
+# The seat and the logind view of it must be there before bsm opens the display.
+Requires=bsm-helper.socket bsm-seatd.service
+Wants=systemd-logind.service dbus.socket
+After=systemd-user-sessions.service systemd-logind.service dbus.socket bsm-helper.socket bsm-seatd.service
+# bsm starts while the boot splash still has the display and does not wait for
+# plymouth-quit*.service: it takes the display over from the splash and withdraws
+# the splash itself once the greeter is on screen (bsm-plymouth-handover, see
+# docs/bsm/boot.md). plymouth-quit.service is ordered after bsm instead
+# (plymouth-quit.service.d/10-bsm.conf). plymouth-start must be done: the
+# handover talks to plymouthd.
+After=plymouth-start.service
+# bsm owns the first VT for the display-manager role, as greetd and GDM do.
+Conflicts=getty@tty1.service
+After=getty@tty1.service
+# Only the display-manager role is taken over, never graphical.target.
+Before=graphical.target
+# If bsm cannot be kept running, bring a login screen up anyway.
+OnFailure=bsm-fallback.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+# `bsm` is exec'd directly: /proc/PID/comm is "bsm".
+Type=notify
+NotifyAccess=main
+# bsm sends WATCHDOG=1 at half of WATCHDOG_USEC.
+WatchdogSec=30
+# --hold-first-scene: a display that is already lit (the boot splash) keeps its picture
+# until the greeter is on screen, at most 60 s; then the flat cover is shown (docs/bsm/boot.md).
+# 30 s was too short in QEMU on a host at load average 50: the greeter needed 57 s from the
+# compositor's start to its first frame there.
+ExecStart=/usr/bin/bsm --backend drm --hold-first-scene 60000
+Restart=on-failure
+RestartSec=1
+# READY=1 waits for the greeter (hold + 10 s at most) after the compositor started.
+TimeoutStartSec=150
+User=bsm
+Group=bsm
+# seatd hands out the DRM and input devices; render is for the GPU render node
+# that buffer import and the greeter's dmabuf allocation use.
+SupplementaryGroups=video render
+Environment=LIBSEAT_BACKEND=seatd
+Environment=RUST_BACKTRACE=1
+# /run/bsm, /run/bsm/sessions and /var/lib/bsm come from tmpfiles.d/bsm.conf (not
+# RuntimeDirectory=, which would remove the session sockets on every restart). The
+# greeter cache directory is tightened to bsm's ownership only while bsm runs
+# (tmpfiles.d/bsm-active.conf; the standard 1777 mode comes back on the next
+# boot without bsm).
+ExecStartPre=+/usr/bin/systemd-tmpfiles --create /usr/share/bsm/tmpfiles-active.conf
+# Plymouth releases DRM master and keeps its picture on the display; bsm then takes
+# the master through seatd without a mode set. Nothing happens without a splash.
+ExecStartPre=+/usr/libexec/bsm/bsm-plymouth-handover deactivate
+# READY=1 means the greeter is on the screen: only then is the splash withdrawn,
+# leaving its last picture up until bsm's first frame replaced it.
+ExecStartPost=+/usr/libexec/bsm/bsm-plymouth-handover retain
+# A splash must not outlive a failed start.
+ExecStopPost=+/usr/libexec/bsm/bsm-plymouth-handover failed
+StateDirectory=bsm
+StateDirectoryMode=0750
+LimitCORE=0
+
+# Hardening that leaves DRM, libinput and seatd alone. Not set, on purpose:
+# PrivateDevices (the render node), MemoryDenyWriteExecute (GPU drivers JIT
+# shaders), SystemCallFilter (the GPU stack has not been profiled) and
+# ProtectProc (bsm reads /proc/PID/cgroup of D-Bus callers); see
+# docs/bsm/packaging.md.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/run/bsm /var/lib/bsm /var/lib/bingux/greeter
+# bsm never opens a path in a home directory: publishers pass image file
+# descriptors over D-Bus, and avatars of signed-out accounts come from
+# /var/lib/AccountsService/icons (readable with ProtectSystem=strict).
+ProtectHome=yes
+ProtectHostname=yes
+ProtectClock=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+# The image converter unshares a network namespace (user, net); nothing else needs one.
+RestrictNamespaces=user net
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+UMask=0077
+# seatd opens the seat's devices and passes the descriptors; bsm itself opens the
+# render node for buffer import. Other GPU stacks bring their own nodes.
+DevicePolicy=closed
+DeviceAllow=char-drm rw
+DeviceAllow=char-nvidia* rw
+
+
+[Install]
+WantedBy=graphical.target

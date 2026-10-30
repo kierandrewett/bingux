@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="bsm_session_host_v1">
+  <copyright>
+    Copyright 2026 Kieran Drewett. GPL-3.0-or-later.
+  </copyright>
+
+  <description summary="hosted session compositor channel">
+    Private protocol between bsm (the Bingux Session Manager, acting as the
+    system compositor) and the bridge of one hosted Gnoblin user session
+    (`bsm-host`). It is advertised only on connections that bsm itself
+    brokered for a session generation and verified (uid, systemd scope,
+    executable path, pid). Greeter and unprivileged clients never see this
+    global, and the session bridge never sees any other privileged global.
+
+    A hosted session presents one surface per bsm output. Surfaces are not
+    xdg toplevels: bsm decides where they appear, whether they are visible and
+    whether they receive input. Pixels travel as ordinary wl_buffers (wl_shm,
+    later linux-dmabuf) attached to the wl_surface. Keyboard, pointer and
+    touch events arrive through the ordinary wl_seat objects of the same
+    connection while bsm routes input to this session; the bridge forwards
+    them into the session's Gnoblin.
+  </description>
+
+  <interface name="bsm_session_host_v1" version="1">
+    <description summary="session host root object"/>
+
+    <enum name="report_kind">
+      <entry name="gnoblin_ready" value="1" summary="Gnoblin runtime handshake complete; session-local clients are served"/>
+      <entry name="output_configured" value="2" summary="virtual output for the named bsm output is configured"/>
+      <entry name="bingux_launched" value="3" summary="Bingux wallpaper and shell processes were launched"/>
+      <entry name="surfaces_mapped" value="4" summary="required Bingux surfaces mapped on an output (a mapped of b required)"/>
+      <entry name="desktop_ready" value="5" summary="Bingux declared its initial desktop ready"/>
+    </enum>
+
+    <enum name="error">
+      <entry name="invalid_output" value="0" summary="unknown output name"/>
+      <entry name="already_constructed" value="1" summary="output already has a session surface"/>
+      <entry name="stale_generation" value="2" summary="generation does not match the current session"/>
+      <entry name="invalid_report" value="3" summary="report values are inconsistent"/>
+    </enum>
+
+    <request name="destroy" type="destructor"/>
+
+    <request name="get_session_surface">
+      <description summary="bind a wl_surface to an output of the session">
+        Gives wl_surface the bsm_session_surface role for the named output.
+        Only one surface per output and generation is allowed.
+      </description>
+      <arg name="id" type="new_id" interface="bsm_session_surface_v1"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="output_name" type="string"/>
+    </request>
+
+    <request name="report">
+      <description summary="report a startup milestone with evidence counts">
+        The generation must match the one sent in the identity event; a stale
+        report raises stale_generation. bsm validates reports against frames it
+        actually received before it advances progress or reveals the session.
+      </description>
+      <arg name="kind" type="uint" enum="report_kind"/>
+      <arg name="output_name" type="string" allow-null="true"/>
+      <arg name="a" type="uint" summary="done or mapped count"/>
+      <arg name="b" type="uint" summary="total or required count"/>
+      <arg name="generation" type="string" summary="decimal u64 generation"/>
+    </request>
+
+    <event name="identity">
+      <description summary="session identity assigned by bsm">
+        Sent once after bind. The client cannot choose or change these values.
+      </description>
+      <arg name="session_id" type="string"/>
+      <arg name="generation" type="string" summary="decimal u64"/>
+      <arg name="uid" type="uint"/>
+    </event>
+
+    <event name="output_added">
+      <description summary="a physical output the session may present on">
+        Geometry is in bsm's global compositor space. scale_120 is the
+        fractional scale times 120 (120 = 1.0). The bridge creates a virtual
+        monitor of this size and scale in Gnoblin and answers with
+        report(output_configured).
+      </description>
+      <arg name="name" type="string"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="uint"/>
+      <arg name="height" type="uint"/>
+      <arg name="scale_120" type="uint"/>
+      <arg name="refresh_mhz" type="uint"/>
+      <arg name="transform" type="uint" summary="wl_output transform"/>
+    </event>
+
+    <event name="output_changed">
+      <arg name="name" type="string"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="uint"/>
+      <arg name="height" type="uint"/>
+      <arg name="scale_120" type="uint"/>
+      <arg name="refresh_mhz" type="uint"/>
+      <arg name="transform" type="uint"/>
+    </event>
+
+    <event name="output_removed">
+      <arg name="name" type="string"/>
+    </event>
+
+    <event name="input_state">
+      <description summary="whether bsm routes physical input to this session">
+        Sent whenever the answer changes. While inactive the session receives no
+        keyboard, pointer or touch events and its surfaces are not shown to any
+        principal other than through bsm's own compositing rules. A background
+        session keeps running; it may throttle rendering but must keep serving
+        its applications.
+      </description>
+      <arg name="active" type="uint"/>
+    </event>
+
+    <event name="closed">
+      <description summary="bsm ends this connection (session unregistered)"/>
+    </event>
+  </interface>
+
+  <interface name="bsm_session_surface_v1" version="1">
+    <description summary="surface of a hosted session on one output"/>
+
+    <request name="destroy" type="destructor"/>
+
+    <request name="ack_configure">
+      <description summary="acknowledge a configure">
+        Buffers committed before the ack of the latest configure do not count
+        as presented evidence for the reveal gate.
+      </description>
+      <arg name="serial" type="uint"/>
+    </request>
+
+    <event name="configure">
+      <description summary="geometry the surface buffer must match">
+        The attached buffer must be width x height in buffer pixels at the given
+        scale (logical size = pixels * 120 / scale_120).
+      </description>
+      <arg name="serial" type="uint"/>
+      <arg name="width" type="uint"/>
+      <arg name="height" type="uint"/>
+      <arg name="scale_120" type="uint"/>
+      <arg name="transform" type="uint"/>
+    </event>
+
+    <event name="presented">
+      <description summary="a buffer was shown to the output">
+        Only buffers bsm composed for this output. Sent for every commit that reaches
+        the output while the session is visible, and for the first commit after
+        an ack while it is not (as a ready-frame proof, without being shown).
+      </description>
+      <arg name="seq" type="uint"/>
+      <arg name="tv_sec_hi" type="uint"/>
+      <arg name="tv_sec_lo" type="uint"/>
+      <arg name="tv_nsec" type="uint"/>
+    </event>
+  </interface>
+</protocol>

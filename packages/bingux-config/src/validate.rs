@@ -865,6 +865,12 @@ fn validate_privacy(privacy: &Value) -> Result<(), Error> {
     if !privacy["public_ip_lookup"].is_boolean() {
         return Err(invalid("privacy.public_ip_lookup", "Invalid toggle value."));
     }
+    if !privacy["show_personal_images"].is_boolean() {
+        return Err(invalid(
+            "privacy.show_personal_images",
+            "Invalid toggle value.",
+        ));
+    }
     Ok(())
 }
 

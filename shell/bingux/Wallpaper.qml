@@ -25,6 +25,20 @@ Variants {
             right: true
         }
 
+        // Integrated mode only (BSM_SESSION_ID set): report real first-frame
+        // evidence for this wallpaper to bsm. Inactive in a standalone session.
+        Loader {
+            active: BsmMode.integrated
+            source: "BsmSurfaceProbe.qml"
+            onLoaded: {
+                item.window = window;
+                item.role = "wallpaper";
+                item.component = "wallpaper";
+                item.contentReady = Qt.binding(() => stage.contentReady);
+                item.attach();
+            }
+        }
+
         // Two layers: the wallpaper on show and the one fading in. The first
         // wallpaper eases in with a slight zoom-out, and later changes crossfade.
         Item {
@@ -42,8 +56,24 @@ Variants {
             // Keep this size fixed throughout the animation.
             readonly property size decodeSize: Qt.size(Math.ceil(width * window.devicePixelRatio), Math.ceil(height * window.devicePixelRatio))
 
+            // True once the wallpaper has nothing more to wait for before its
+            // first frame counts as drawn: no picture is configured, the
+            // picture has faded in, or it cannot be loaded. Used only by the
+            // bsm readiness probe.
+            readonly property bool contentReady: {
+                if (!BinguxPreferences.loaded)
+                    return false;
+                if (wanted.toString() === "")
+                    return true;
+                if (front.source === wanted && front.status === Image.Ready && front.opacity >= 0.99)
+                    return true;
+                return back.source === wanted && back.status === Image.Error;
+            }
+
             function show(image) {
-                const first = firstShow;
+                // A continued session already shows the greeter's blurred copy
+                // of this picture: the sharp one crossfades over it, no zoom.
+                const first = firstShow && !SessionContext.continuing;
                 firstShow = false;
                 front.z = 0;
                 image.z = 1;

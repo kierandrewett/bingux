@@ -86,6 +86,7 @@ pub enum ResultKind {
     Weather,
     Chat,
     Action,
+    Command,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

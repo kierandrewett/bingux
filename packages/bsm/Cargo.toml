@@ -1,0 +1,54 @@
+[package]
+name = "bsm"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "bsm, the Bingux Session Manager: the persistent system compositor and session manager, and bsmctl"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "bsm"
+path = "src/main.rs"
+
+[[bin]]
+name = "bsmctl"
+path = "src/bin/bsmctl.rs"
+
+[features]
+# The installed system needs the DRM backend; development under a desktop needs winit.
+# Headless is always built. Packaging builds with the defaults.
+default = ["backend-winit", "backend-drm"]
+backend-winit = ["bsm-compositor/backend-winit"]
+backend-drm = ["bsm-compositor/backend-drm"]
+
+[dependencies]
+bsm-proto = { path = "../bsm-proto" }
+bsm-manager = { path = "../bsm-manager" }
+bsm-compositor = { path = "../bsm-compositor", default-features = false }
+bsm-appearance = { path = "../bsm-appearance" }
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "json"] }
+async-channel = "2"
+
+[dev-dependencies]
+serde_json = "1"
+parking_lot = "0.12"
+socket2 = { version = "0.6", features = ["all"] }
+anyhow = "1"
+async-channel = "2"
+libc = "0.2"
+tempfile = "3"
+wayland-client = "0.31"
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+wayland-protocols = { version = "0.32", features = ["client"] }
+wayland-scanner = "0.31"
+rustix = { version = "1", features = ["process", "fs"] }
+
+[workspace]

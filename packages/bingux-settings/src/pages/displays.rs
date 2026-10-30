@@ -2156,21 +2156,34 @@ fn monitor_list_group(ctx: Ctx, monitors: &[Monitor], router: Router) -> Group {
 }
 
 /// Numbers each display on its screen. The numbers follow the order of the
-/// list, so the user can match a row to a panel.
+/// list, so the user can match a row to a panel. Disabled displays keep their
+/// place: the shell gives an unknown connector its number without drawing a
+/// label, so the numbers still match.
 fn identify_button(overlays: Overlays, monitors: &[Monitor]) -> impl Into<Element> {
-    let names = monitors
+    let connectors = monitors
         .iter()
-        .map(|monitor| monitor.connector.as_str())
-        .collect::<Vec<_>>()
-        .join(",");
-    row_button("Identify", move |_| identify(overlays, names.clone()))
+        .map(|monitor| monitor.connector.clone())
+        .collect::<Vec<_>>();
+    row_button("Identify", move |_| identify(overlays, connectors.clone()))
+}
+
+/// The `binguxctl` arguments that label every display, in the order the page
+/// lists them.
+fn identify_arguments(connectors: &[String]) -> Vec<String> {
+    let mut arguments = vec!["identify".to_string(), "show".to_string()];
+    arguments.extend(connectors.iter().cloned());
+    arguments
 }
 
 /// Asks the desktop shell to number each display. The shell may be busy, so
 /// the call runs in the background and a failure appears as a toast.
-fn identify(overlays: Overlays, names: String) {
+fn identify(overlays: Overlays, connectors: Vec<String>) {
     background_then(
-        move || system::run("binguxctl", &["ipc", "shell", "identify", &names], TIMEOUT),
+        move || {
+            let arguments = identify_arguments(&connectors);
+            let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
+            system::run("binguxctl", &arguments, TIMEOUT)
+        },
         move |result| {
             if let Err(failure) = result {
                 overlays.toast(failure.0);

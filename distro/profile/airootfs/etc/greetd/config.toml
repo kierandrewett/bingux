@@ -1,0 +1,17 @@
+# greetd configuration for the Bingux live image only. The installed system
+# gets /usr/share/bingux/greeter/greetd.toml from bingux-os instead.
+#
+# initial_session logs the live account straight into the live session loop,
+# which opens the installer. "Try Bingux" switches it to the live desktop, and
+# logging out of the live desktop returns to the greeter (default_session).
+
+[terminal]
+vt = 1
+
+[initial_session]
+command = "bingux-live-session installer"
+user = "live"
+
+[default_session]
+command = "bingux-greeter-session"
+user = "greeter"

@@ -1,0 +1,145 @@
+// Polkit policy for bsm (Bingux Session Manager). Installed as
+// /usr/share/polkit-1/rules.d/50-bsm.rules. Read docs/bsm/packaging.md,
+// "Polkit and logind", for the reasoning.
+//
+// Two groups of subjects (the greeter has none, see 2.). Nothing here weakens a
+// default for any other subject: every branch ends in NOT_HANDLED unless it
+// names a subject and an action explicitly.
+
+// Power actions of org.freedesktop.login1, without the `ignore-inhibit`
+// variants (nobody gets those from this file) and without `halt` and
+// `hibernate`.
+var POWER_SINGLE = [
+    "org.freedesktop.login1.power-off",
+    "org.freedesktop.login1.reboot",
+    "org.freedesktop.login1.suspend"
+];
+var POWER_MULTIPLE = [
+    "org.freedesktop.login1.power-off-multiple-sessions",
+    "org.freedesktop.login1.reboot-multiple-sessions",
+    "org.freedesktop.login1.suspend-multiple-sessions"
+];
+
+// 1. The compositor account. bsm authorises a power request itself (a hosted
+//    caller through polkit CheckAuthorization, the inhibitors, the sessions) and
+//    only then calls logind as the `bsm` account, behind its cover. The account has no session, so
+//    without this rule logind would ask for an administrator password that
+//    nobody can type. Power off, reboot and suspend are the only things it may do.
+var BSM_ACCOUNT = "bsm";
+
+// 2. The greeter account needs nothing. It talks to bsm on the private control
+//    socket; bsm applies [greeter_power] of /etc/bsm/bsm.toml and calls logind
+//    as the `bsm` account. The greeter has no polkit rights of its own, and a
+//    compromised greeter cannot reach logind.
+
+// 3. Hosted sessions. A session that bsm hosts has no seat (architecture D4),
+//    so polkit treats it as "not local" and applies the `allow_any` default
+//    to it. Whole classes of desktop actions then ask for a password that a
+//    normal user is never asked for on a seat. Only the actions below, whose
+//    own `allow_active` default is `yes`, are granted, and only to a session
+//    that logind reports as created by the PAM service "bsm-login" (that service
+//    name cannot be claimed by an unprivileged process: logind accepts
+//    CreateSession only from root). Every other action keeps its default.
+var HOSTED_SERVICE = "bsm-login";
+var HOSTED_ACTIONS = [
+    // reboot, power off and suspend while this is the only session. The
+    // `-multiple-sessions` variants are deliberately NOT here: they keep the stock
+    // administrator authentication, so a standard user cannot take the machine down
+    // while others are signed in. bsm asks polkit for the `-multiple-sessions`
+    // action when another account has a running session and treats an answer
+    // that needs authentication as a refusal.
+    "org.freedesktop.login1.power-off",
+    "org.freedesktop.login1.reboot",
+    "org.freedesktop.login1.suspend",
+    // the user's own devices: mounting removable media, unlocking own volumes
+    "org.freedesktop.udisks2.filesystem-mount",
+    "org.freedesktop.udisks2.encrypted-unlock",
+    "org.freedesktop.udisks2.eject-media",
+    "org.freedesktop.udisks2.power-off-drive",
+    "org.freedesktop.udisks2.loop-setup",
+    "org.freedesktop.udisks2.rescan",
+    // network control from the desktop
+    "org.freedesktop.NetworkManager.network-control",
+    "org.freedesktop.NetworkManager.wifi.scan",
+    "org.freedesktop.NetworkManager.enable-disable-network",
+    "org.freedesktop.NetworkManager.enable-disable-wifi",
+    "org.freedesktop.NetworkManager.enable-disable-wwan",
+    "org.freedesktop.NetworkManager.settings.modify.own",
+    "org.freedesktop.NetworkManager.settings.modify.system",
+    // power profiles
+    "net.hadess.PowerProfiles.switch-profile",
+    "net.hadess.PowerProfiles.hold-profile",
+    "net.hadess.PowerProfiles.release-profile"
+];
+// Families of colord actions whose `allow_active` is `yes`.
+var HOSTED_PREFIXES = ["org.freedesktop.color-manager."];
+var HOSTED_EXCLUDED = ["org.freedesktop.color-manager.install-system-wide"];
+
+function contains(list, value) {
+    return list.indexOf(value) >= 0;
+}
+
+function hostedAction(id) {
+    if (contains(HOSTED_ACTIONS, id)) {
+        return true;
+    }
+    if (contains(HOSTED_EXCLUDED, id)) {
+        return false;
+    }
+    for (var i = 0; i < HOSTED_PREFIXES.length; i++) {
+        if (id.indexOf(HOSTED_PREFIXES[i]) === 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Answers per logind session id. A session's Service, Remote and Class cannot
+// change for its lifetime and ids are not reused within a boot, so one `loginctl`
+// fork per session is enough; polkit evaluates rules on one thread and a fork per
+// authorisation check would serialise every desktop component behind logind.
+// The cache is dropped when it grows past 256 entries, and with the rules cache
+// when polkitd reloads its rules.
+var hostedCache = {};
+var hostedCacheSize = 0;
+
+// True when logind says the subject's session was opened through the "bsm-login"
+// PAM service and belongs to no remote login. Any failure counts as "no" and is not cached.
+function hostedSession(subject) {
+    if (!subject.session || !subject.active) {
+        return false;
+    }
+    var id = String(subject.session);
+    if (hostedCache.hasOwnProperty(id)) {
+        return hostedCache[id];
+    }
+    try {
+        var out = polkit.spawn(["/usr/bin/loginctl", "show-session", id,
+                                "--property=Service", "--property=Remote", "--property=Class"]);
+        var hosted = out.indexOf("Service=" + HOSTED_SERVICE + "\n") >= 0 &&
+                     out.indexOf("Remote=no\n") >= 0 &&
+                     out.indexOf("Class=user\n") >= 0;
+        if (hostedCacheSize >= 256) {
+            hostedCache = {};
+            hostedCacheSize = 0;
+        }
+        hostedCache[id] = hosted;
+        hostedCacheSize++;
+        return hosted;
+    } catch (e) {
+        return false;
+    }
+}
+
+polkit.addRule(function (action, subject) {
+    if (subject.user === BSM_ACCOUNT) {
+        if (contains(POWER_SINGLE, action.id) || contains(POWER_MULTIPLE, action.id)) {
+            return polkit.Result.YES;
+        }
+        return polkit.Result.NOT_HANDLED;
+    }
+    if (hostedAction(action.id) && hostedSession(subject)) {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

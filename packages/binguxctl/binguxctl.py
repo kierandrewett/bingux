@@ -51,8 +51,21 @@ def parser():
         "action",
         nargs="?",
         default="open",
-        choices=["open", "toggle", "take", "stop", "cancel", "status", "configure", "options"],
+        choices=[
+            "open",
+            "toggle",
+            "take",
+            "stop",
+            "cancel",
+            "status",
+            "configure",
+            "options",
+            "request",
+            "result",
+            "cancel-request",
+        ],
     )
+    capture.add_argument("request_id", nargs="?", metavar="ID", help="Request ID for request, result or cancel-request")
     capture.add_argument("--mode", choices=["screenshot", "recording"], default="")
     capture.add_argument("--target", choices=["region", "screen", "window"], default="")
     capture.add_argument("--fps", type=int, choices=[15, 30, 60])
@@ -67,6 +80,9 @@ def parser():
     capture.add_argument("--cursor", action=argparse.BooleanOptionalAction, default=None)
     capture.add_argument("--copy", action=argparse.BooleanOptionalAction, default=None)
     capture.add_argument("--region", nargs=4, type=int, metavar=("X", "Y", "WIDTH", "HEIGHT"))
+    request_mode = capture.add_mutually_exclusive_group()
+    request_mode.add_argument("--interactive", action="store_true", help="Request: choose a region on screen")
+    request_mode.add_argument("--desktop", action="store_true", help="Request: capture the whole desktop")
     audio = commands.add_parser("audio", help="Control default output volume or microphone gain")
     audio.add_argument(
         "action",
@@ -154,11 +170,50 @@ def parser():
         metavar="ADDRESS",
         help="Panel or address to open, for example sound, wifi/saved or bingux-settings://display/0",
     )
+    identify = commands.add_parser("identify", help="Label each display with its number for a few seconds")
+    identify_actions = identify.add_subparsers(dest="action", required=True)
+    identify_show = identify_actions.add_parser("show", help="Label the named displays in the order given")
+    identify_show.add_argument("connectors", nargs="+", metavar="CONNECTOR", help="Connector names, for example DP-1")
+    identify_actions.add_parser("hide", help="Remove display labels now")
     ipc = commands.add_parser("ipc", help="Call any public IPC method directly")
     ipc.add_argument("target")
     ipc.add_argument("method")
     ipc.add_argument("arguments", nargs=argparse.REMAINDER)
     return result
+
+
+CAPTURE_REQUEST_ACTIONS = ("request", "result", "cancel-request")
+CAPTURE_REQUEST_ID = re.compile(r"[A-Za-z0-9._-]{1,64}")
+CAPTURE_OPTION_KEYS = ("fps", "delay", "quality", "audio", "format", "encoder", "backend", "cursor", "copy")
+
+
+def capture_options_given(args):
+    return bool(
+        args.target
+        or args.max_height is not None
+        or args.output is not None
+        or args.region is not None
+        or any(getattr(args, key) is not None for key in CAPTURE_OPTION_KEYS)
+    )
+
+
+def capture_request_call(args, cli):
+    request_id = args.request_id or ""
+    if not CAPTURE_REQUEST_ID.fullmatch(request_id):
+        cli.error("capture request IDs are 1 to 64 letters, digits, dots, underscores or dashes")
+    if args.action == "request":
+        if args.interactive == args.desktop:
+            cli.error("capture request needs exactly one of --interactive or --desktop")
+        if args.mode not in ("", "screenshot"):
+            cli.error("capture request takes screenshots only")
+        if capture_options_given(args):
+            cli.error("capture request takes no capture options")
+        if args.desktop:
+            return ["capture", "requestDesktop", request_id]
+        return ["capture", "requestInteractive", request_id, "screenshot"]
+    if args.interactive or args.desktop or args.mode or capture_options_given(args):
+        cli.error("capture " + args.action + " takes only an ID")
+    return ["capture", "requestResult" if args.action == "result" else "cancelRequest", request_id]
 
 
 def invocation(args, cli):
@@ -167,7 +222,11 @@ def invocation(args, cli):
         return ["show"]
     if command in ("status", "reload"):
         call = ["shell", command]
+    elif command == "capture" and action in CAPTURE_REQUEST_ACTIONS:
+        call = capture_request_call(args, cli)
     elif command == "capture":
+        if args.request_id is not None or args.interactive or args.desktop:
+            cli.error("capture ID and request flags are only used with request, result or cancel-request")
         options = {
             key: getattr(args, key)
             for key in ("fps", "delay", "quality", "audio", "format", "encoder", "backend", "cursor", "copy")
@@ -335,6 +394,18 @@ def invocation(args, cli):
         elif args.value is not None:
             cli.error(f"sidebar {action} takes no argument")
         call = ["sidebar", "hide" if action == "close" else action] + ([args.value] if args.value else [])
+    elif command == "identify":
+        if action == "hide":
+            call = ["identify", "hide"]
+        else:
+            connectors = args.connectors
+            if len(connectors) > 16:
+                cli.error("identify takes at most 16 connectors")
+            if len(set(connectors)) != len(connectors):
+                cli.error("identify connectors must be unique")
+            if not all(re.fullmatch(r"[A-Za-z0-9._-]{1,128}", connector) for connector in connectors):
+                cli.error("identify connectors use letters, digits, dot, underscore and dash")
+            call = ["identify", "show", json.dumps(connectors)]
     elif command == "ipc":
         call = [args.target, args.method, *args.arguments]
     else:
@@ -475,6 +546,7 @@ def main(argv=None):
         "switcher": "PopoutsShell.qml",
         "capture": "PopoutsShell.qml",
         "emoji": "PopoutsShell.qml",
+        "shortcuts": "PopoutsShell.qml",
     }
     if target in companions:
         # Invoke the companion directly, even when the desktop is frozen.

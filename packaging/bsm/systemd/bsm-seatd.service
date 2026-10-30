@@ -1,0 +1,41 @@
+# seatd for bsm: hands the seat's DRM and input devices to the bsm account.
+# Own unit so that bsm never depends on the distribution's seatd.service, whose
+# socket group differs between distributions. seatd 0.9 has no option for the
+# socket path: it listens on /run/seatd.sock, so this unit conflicts with
+# seatd.service. `bsm.service` Requires= this unit.
+[Unit]
+Description=seatd for the Bingux Session Manager
+Documentation=man:seatd(1)
+# seatd binds the VT and the seat's devices; do not run it next to a login
+# manager that holds them.
+After=systemd-logind.service systemd-udevd.service
+Conflicts=seatd.service
+
+[Service]
+Type=simple
+# -g bsm: members of group bsm (the bsm account) may open the seat.
+Environment=SEATD_LOGLEVEL=error
+ExecStart=/usr/bin/seatd -g bsm
+Restart=on-failure
+RestartSec=1
+# seatd must run as root for device ownership and VT handling, with nothing else.
+NoNewPrivileges=yes
+# Device handling and the socket's owner and group: opening and handing out device
+# nodes, DRM master and VT switching, chown of the socket. Nothing else.
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_SYS_TTY_CONFIG CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH
+ProtectHome=yes
+ProtectSystem=strict
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native

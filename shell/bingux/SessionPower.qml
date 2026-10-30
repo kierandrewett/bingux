@@ -10,8 +10,18 @@ ColumnLayout {
     property string error: ""
     property bool transitioning: false
     property real blackout: 0
-    readonly property bool busy: transitioning || request.running
-    readonly property var actions: [
+    // Integrated mode (BSM_SESSION_ID set): bsm owns the action, its
+    // authorisation and every transition. This view then only asks, shows the
+    // confirmation and any error, and follows bsm's reported outcome.
+    readonly property bool integrated: BsmMode.integrated
+    readonly property bool busy: integrated ? BsmSession.busy : (transitioning || request.running)
+    readonly property var actions: integrated ? baseActions.concat([switchUserAction]) : baseActions
+    readonly property var switchUserAction: ({
+            id: "switch-user",
+            title: "Switch User",
+            icon: "system-switch-user-symbolic"
+        })
+    readonly property var baseActions: [
         {
             id: "suspend",
             title: "Suspend",
@@ -40,9 +50,16 @@ ColumnLayout {
         error = "";
     }
     function execute() {
-        if (!selected || busy)
+        if (!selected || busy || !SessionServices.allows("power"))
             return;
         error = "";
+        if (integrated) {
+            // No gnoblinctl and no local fade: bsm runs the transition. The
+            // request is only followed here; success is whatever bsm reports.
+            if (!BsmSession.request(pending))
+                error = "The session manager is not available.";
+            return;
+        }
         request.command = ["gnoblinctl", "session", pending];
         recovery.interval = 10000;
         transitioning = true;
@@ -92,7 +109,9 @@ ColumnLayout {
         onTriggered: root.restore()
     }
     Variants {
-        model: Quickshell.screens
+        // The black overlay belongs to the standalone path only: in integrated
+        // mode bsm composes every full-screen fade.
+        model: root.integrated ? [] : Quickshell.screens
         PanelWindow {
             required property var modelData
             screen: modelData
@@ -137,6 +156,19 @@ ColumnLayout {
                 root.pending = "";
         }
     }
+    // Integrated mode: the end of the operation this view asked for. Only
+    // bsm's own report counts; a request that was merely accepted does not.
+    Connections {
+        target: BsmSession
+        enabled: root.integrated
+        function onFinished(operation) {
+            if (operation.action !== root.pending)
+                return;
+            root.error = operation.status === "completed" ? "" : BsmSession.failureText;
+            root.pending = "";
+            BsmSession.dismiss();
+        }
+    }
     Repeater {
         model: root.pending ? [] : root.actions
         ControlRow {
@@ -163,8 +195,16 @@ ColumnLayout {
     Text {
         Layout.fillWidth: true
         visible: root.pending !== ""
-        text: root.pending === "suspend" ? "Your session will remain open." : "Save your work before continuing."
+        text: root.pending === "suspend" || root.pending === "switch-user" ? "Your session will remain open." : "Save your work before continuing."
         wrapMode: Text.Wrap
+        color: Theme.muted
+        font.family: Theme.fontFamily
+        font.pixelSize: Theme.fontSmall
+    }
+    Text {
+        Layout.fillWidth: true
+        visible: root.integrated && root.busy
+        text: BsmSession.phaseLabel + "..."
         color: Theme.muted
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSmall

@@ -195,6 +195,8 @@ Scope {
     }
 
     function activate(entry) {
+        if (!SessionServices.allows("notificationContent"))
+            return false;
         const action = entry.actions.find(action => action.defaultAction && action.action && typeof action.action.invoke === "function");
         const target = activationTarget(entry);
         if (action) {
@@ -211,7 +213,7 @@ Scope {
             if (root.dockView && typeof root.dockView.beginExternalLaunch === "function")
                 root.dockView.beginExternalLaunch(target.application.id, target.application.name || "");
             const helper = Quickshell.env("BINGUX_APP_LAUNCHER_HELPER");
-            const command = helper ? [helper] : [Python.python, decodeURIComponent(Qt.resolvedUrl("launch-application.py").toString().replace(/^file:\/\//, ""))];
+            const command = helper ? [helper] : [Python.python, Python.helper("launch-application.py")];
             Quickshell.execDetached(command.concat(["--notify-errors", "--", target.application.id]));
         } else {
             return false;

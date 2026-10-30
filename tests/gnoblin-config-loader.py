@@ -5,45 +5,12 @@ import argparse
 import json
 import os
 from pathlib import Path
-import shlex
 import subprocess
+import sys
 import tempfile
 
-PROBE = r"""
-#include "gnoblin-config.h"
-#include <json-glib/json-glib.h>
-#include <stdio.h>
-
-int main(int argc, char **argv) {
-    if (argc != 2) return 2;
-    for (int i = 0; i < 3; i++) {
-        GError *error = NULL;
-        GVariant *document = gnoblin_config_load_runtime(argv[1], NULL, NULL, &error);
-        if (!document) {
-            fprintf(stderr, "%s\n", error->message);
-            return 1;
-        }
-        gnoblin_config_finish_load(TRUE);
-        GVariant *payload = g_variant_ref_sink(g_variant_new_array(G_VARIANT_TYPE("{sv}"), NULL, 0));
-        GVariant *result = gnoblin_config_dispatch_event("test.settings", payload, &error);
-        g_variant_unref(payload);
-        char *failure = gnoblin_config_take_runtime_callback_error();
-        if (error || failure) {
-            fprintf(stderr, "%s\n", error ? error->message : failure);
-            return 1;
-        }
-        if (result) g_variant_unref(result);
-        gnoblin_config_finish_event(TRUE);
-        JsonNode *node = json_gvariant_serialize(document);
-        char *json = json_to_string(node, FALSE);
-        puts(json);
-        g_free(json);
-        json_node_free(node);
-        g_variant_unref(document);
-    }
-    return 0;
-}
-"""
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+import gnoblin_loader  # noqa: E402
 
 SETUP = r"""
 local g = require("gnoblin")
@@ -94,6 +61,10 @@ def check(document, loads, disable):
         assert "border_width" not in corners
     assert document["protocols"]["wlr-layer-shell"] is True
     assert document["frame-renderers"]["bingux"][1] == "--compact"
+    lock = [entry for entry in document["shortcuts"] if entry["name"] == "bingux-lock"]
+    assert len(lock) == 1, "Super+L lock shortcut missing or duplicated"
+    assert lock[0]["binding"] == "<Super>l"
+    assert lock[0]["command"][:2] == ["sh", "-c"] and "bsmctl lock" in lock[0]["command"][2]
     for name in ("switch_applications", "switch_applications_backward", "switch_windows", "switch_windows_backward"):
         assert document["keybindings"]["wm"][name] == [], name
     if disable:
@@ -106,41 +77,15 @@ def check(document, loads, disable):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--gnoblin-source", type=Path, required=True)
-    parser.add_argument("--gnoblin-build", type=Path, required=True)
-    parser.add_argument(
-        "--gnoblin-prefix",
-        type=Path,
-        required=True,
-        help="Native install or stage containing share/gnoblin/native-keybindings.json",
-    )
+    gnoblin_loader.add_arguments(parser)
     parser.add_argument(
         "--module", type=Path, default=Path(__file__).resolve().parents[1] / "packaging/gnoblin/bingux.lua"
     )
     parser.add_argument("--require-callback-disable", action="store_true")
     args = parser.parse_args()
-    flags = shlex.split(
-        subprocess.check_output(
-            ["pkg-config", "--cflags", "--libs", "gio-2.0", "gio-unix-2.0", "json-glib-1.0", "lua", "xkbcommon"],
-            text=True,
-        )
-    )
     with tempfile.TemporaryDirectory(prefix="bingux-config-loader-") as directory:
         root = Path(directory)
-        (root / "probe.c").write_text(PROBE)
-        subprocess.run(
-            [
-                *shlex.split(os.environ.get("CC", "cc")),
-                str(root / "probe.c"),
-                "-I" + str(args.gnoblin_source / "src/config"),
-                str(args.gnoblin_build / "libgnoblin-config-core.a"),
-                *flags,
-                "-lm",
-                "-o",
-                str(root / "probe"),
-            ],
-            check=True,
-        )
+        probe = gnoblin_loader.build_probe(args, root)
         conf = root / "conf.d"
         conf.mkdir()
         (conf / "10-bingux.lua").write_text(args.module.read_text())
@@ -151,7 +96,7 @@ def main():
             end)\n"""
             (root / "init.lua").write_text(source)
             result = subprocess.run(
-                [str(root / "probe"), str(root / "init.lua")],
+                [str(probe), str(root / "init.lua")],
                 env={**os.environ, "XDG_STATE_HOME": str(root / "state"), "GNOBLIN_PREFIX": str(args.gnoblin_prefix)},
                 text=True,
                 capture_output=True,

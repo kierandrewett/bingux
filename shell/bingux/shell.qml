@@ -352,6 +352,8 @@ ShellRoot {
 
     NotRespondingDialog {}
 
+    FirstLoginIntro {}
+
     OsdSurface {
         state: osdState
         dockSafeInset: dock.dockTopFromBottom + Theme.dockPadding
@@ -360,21 +362,30 @@ ShellRoot {
         rightInset: terminalSidebar.rightInset
     }
 
-    // Display Settings asks for numbered overlays so a list row can be matched to a panel.
-    property var identifyNumbers: ({})
-    Timer {
-        id: identifyTimer
-        interval: 3000
-        onTriggered: root.identifyNumbers = ({})
+    WorkspaceChangeState {
+        id: workspaceChange
+        source: WorkspaceState
     }
-    Variants {
-        model: Quickshell.screens
 
-        IdentifyOverlay {
-            required property var modelData
-            screen: modelData
-            number: root.identifyNumbers[modelData.name] ?? 0
-        }
+    WorkspaceChangeSurface {
+        state: workspaceChange
+        dockSafeInset: dock.dockTopFromBottom + Theme.dockPadding
+    }
+
+    IdentifyState {
+        id: identify
+    }
+
+    IdentifySurface {
+        state: identify
+    }
+
+    PadHelpState {
+        id: padHelp
+    }
+
+    PadHelpSurface {
+        state: padHelp
     }
 
     // Without seconds the clock wakes once a minute. Redrawing the bar every
@@ -411,15 +422,6 @@ ShellRoot {
 
     IpcHandler {
         target: "shell"
-        function identify(names: string): void {
-            const numbers = {};
-            names.split(",").forEach((name, index) => {
-                if (name)
-                    numbers[name] = index + 1;
-            });
-            root.identifyNumbers = numbers;
-            identifyTimer.restart();
-        }
         function windowMenu(payload: string): void {
             root.closePanelsExcept(windowMenuPopup);
             windowMenuPopup.showRequest(payload);
@@ -429,9 +431,7 @@ ShellRoot {
             if (!target || !Number.isFinite(x) || !Number.isFinite(y))
                 return;
             root.closePanelsExcept(desktopMenuPopup);
-            desktopMenuPopup.screen = target;
-            desktopMenuPopup.requestedPosition = Qt.point(x, y);
-            desktopMenuPopup.visible = true;
+            desktopMenuPopup.openAt(target, x, y);
         }
         function status(): string {
             return JSON.stringify({
@@ -846,6 +846,8 @@ ShellRoot {
         }
         function chosen(item) {
             const name = item.widgetId || controlNames[defaultControls.indexOf(item)];
+            if (!DesktopLayout.allowed(name, SessionContext.mode))
+                return false;
             return customLayout ? DesktopLayout.placement(DesktopEditing.desktop, name) !== "" : name !== "workspaces" && !DesktopLayout.widget(name)?.panel && !name.startsWith("control-") && !name.startsWith("controls-");
         }
         function zoneFor(item) {
@@ -1067,7 +1069,8 @@ ShellRoot {
         margins.left: terminalSidebar.leftInset
         margins.right: terminalSidebar.rightInset
         // The bar slides down from above the screen edge once, when the dock first maps.
-        property real enterOffset: dock.startupReady ? 0 : Theme.barHeight
+        // A continued session already shows the bar where the greeter left it.
+        property real enterOffset: dock.startupReady || SessionContext.continuing ? 0 : Theme.barHeight
         Behavior on enterOffset {
             NumberAnimation {
                 duration: Theme.reducedMotion ? 0 : 360
@@ -1367,5 +1370,19 @@ ShellRoot {
         margins.right: terminalSidebar.rightInset
         settings: profileSettings
         visible: dock.startupReady && (profileSettings.dockEnabled)
+    }
+
+    // Integrated mode only (BSM_SESSION_ID set): report the bar and dock to bsm
+    // once they have really been drawn, and follow bsm's session actions.
+    // Inactive in a standalone session. Independent of Startup.settled.
+    Loader {
+        active: BsmMode.integrated
+        source: "BsmDesktop.qml"
+        onLoaded: {
+            item.topBar = topBar;
+            item.dock = dock;
+            item.settings = profileSettings;
+            item.start();
+        }
     }
 }

@@ -25,6 +25,7 @@ pub mod loading;
 pub mod mouse;
 pub mod network;
 pub mod power;
+pub mod privacy;
 pub mod search;
 pub mod sound;
 pub mod users;
@@ -44,6 +45,7 @@ pub enum PageId {
     Mouse,
     DateTime,
     Users,
+    Privacy,
     Applications,
     About,
 }
@@ -72,7 +74,7 @@ pub fn prefetch_all() {
 
 impl PageId {
     /// Sidebar order.
-    pub const ALL: [PageId; 14] = [
+    pub const ALL: [PageId; 15] = [
         PageId::Network,
         PageId::Bluetooth,
         PageId::Displays,
@@ -85,6 +87,7 @@ impl PageId {
         PageId::Search,
         PageId::Applications,
         PageId::Accessibility,
+        PageId::Privacy,
         PageId::DateTime,
         PageId::About,
     ];
@@ -94,6 +97,7 @@ impl PageId {
             Self::Network => "Network",
             Self::Bluetooth => "Bluetooth",
             Self::Appearance => "Appearance",
+            Self::Privacy => "Privacy",
             Self::Accessibility => "Accessibility",
             Self::Desktop => "Desktop and dock",
             Self::Search => "Search",
@@ -124,6 +128,7 @@ impl PageId {
             Self::Desktop => &[PageId::Appearance, PageId::Search],
             Self::Search => &[PageId::Applications, PageId::Desktop],
             Self::Applications => &[PageId::Search, PageId::Keyboard],
+            Self::Privacy => &[PageId::Applications, PageId::Accessibility],
             Self::DateTime => &[PageId::Power, PageId::About],
             Self::Users => &[PageId::About, PageId::DateTime],
             Self::About => &[PageId::Displays, PageId::Users],
@@ -138,7 +143,9 @@ impl PageId {
             Self::Network | Self::Bluetooth => "connections",
             Self::Displays | Self::Sound | Self::Power | Self::Keyboard | Self::Mouse => "devices",
             Self::Appearance | Self::Desktop | Self::Search | Self::Applications => "desktop",
-            Self::Accessibility | Self::DateTime | Self::Users | Self::About => "system",
+            Self::Accessibility | Self::Privacy | Self::DateTime | Self::Users | Self::About => {
+                "system"
+            }
         }
     }
 
@@ -153,6 +160,7 @@ impl PageId {
             Self::Accessibility => {
                 "accessibility screen reader keyboard sticky slow bounce mouse keys pointer contrast large text cursor animations scrollbars"
             }
+            Self::Privacy => "portal permissions screenshot screen capture sharing input access",
             Self::Desktop => "dock sidebar bar clock control centre layout",
             Self::Search => "providers engines files previews assistant",
             Self::Displays => "monitor screen resolution scale night light",
@@ -174,6 +182,7 @@ impl PageId {
             Self::Appearance => Icon::Appearance,
             Self::Accessibility => Icon::Accessibility,
             Self::Desktop => Icon::Desktop,
+            Self::Privacy => Icon::PreferencesSystem,
             Self::Search => Icon::Search,
             Self::Displays => Icon::Display,
             Self::Sound => Icon::Sound,
@@ -194,6 +203,7 @@ impl PageId {
             Self::Bluetooth => "bluetooth",
             Self::Appearance => "background",
             Self::Accessibility => "accessibility",
+            Self::Privacy => "privacy",
             Self::Desktop => "desktop",
             Self::Search => "search",
             Self::Displays => "display",
@@ -220,6 +230,7 @@ impl PageId {
             "background" | "appearance" => Self::Appearance,
             "accessibility" | "a11y" => Self::Accessibility,
             "desktop" => Self::Desktop,
+            "privacy" => Self::Privacy,
             "search" => Self::Search,
             "display" | "displays" => Self::Displays,
             "sound" => Self::Sound,
@@ -242,6 +253,7 @@ impl PageId {
             Self::Bluetooth => bluetooth::BluetoothPage.into(),
             Self::Appearance => appearance::AppearancePage.into(),
             Self::Accessibility => accessibility::AccessibilityPage.into(),
+            Self::Privacy => privacy::PrivacyPage.into(),
             Self::Desktop => desktop::DesktopPage.into(),
             Self::Search => search::SearchPage.into(),
             Self::Displays => displays::DisplaysPage.into(),

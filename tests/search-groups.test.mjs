@@ -41,6 +41,19 @@ test("suggestions share the Web group with the original search action", () => {
     assert.equal(context.key({ providerId: "web-suggestions", kind: "action" }), "web");
 });
 
+test("command candidates form their own group ahead of applications", () => {
+    const rows = [
+        { resultId: "app", providerId: "applications", kind: "application" },
+        { resultId: "command", providerId: "command", kind: "command" },
+    ];
+    assert.equal(context.key(rows[1]), "commands");
+    assert.equal(context.label("commands"), "Commands");
+    assert.deepEqual(
+        Array.from(context.ordered(rows), (row) => row.resultId),
+        ["command", "app"],
+    );
+});
+
 test("grouping preserves relevance even with an unstable runtime sort", () => {
     const unstable = vm.createContext({});
     vm.runInContext(

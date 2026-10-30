@@ -1,0 +1,19 @@
+# Socket of bsm-helper, the root helper for PAM and user transitions. Only the
+# `bsm` account may connect (mode 0600, owner bsm; the helper also checks the peer
+# uid). Socket activation starts the helper on bsm's first request.
+# Not enabled by the package: bsm-set-display-manager enables it with bsm.service.
+[Unit]
+Description=bsm privileged helper socket
+Documentation=file:///usr/share/doc/bsm/packaging.md
+
+[Socket]
+ListenSequentialPacket=/run/bsm-helper/helper.sock
+SocketMode=0600
+SocketUser=bsm
+SocketGroup=bsm
+DirectoryMode=0711
+# Remove the socket file when this unit stops.
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

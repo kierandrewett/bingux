@@ -1,0 +1,20 @@
+#!/bin/sh
+# One-time live-session setup: create the live account the greeter signs in
+# and give the greeter its first wallpaper. The installed system does the same
+# through the installer's user creation and Bingux's own export service.
+set -eu
+if ! id live >/dev/null 2>&1; then
+    useradd -m -G wheel,video,audio,input -s /bin/bash -c "Live Session" live
+    echo "live:live" | chpasswd
+fi
+if getent group bingux-install >/dev/null; then
+    usermod -aG bingux-install live
+fi
+install -d -m 1777 /var/lib/bingux/greeter
+if [ -f /usr/share/backgrounds/bingux-os/default.jpg ]; then
+    install -d -o live -g live -m 0755 /var/lib/bingux/greeter/live
+    install -o live -g live -m 0644 /usr/share/backgrounds/bingux-os/default.jpg /var/lib/bingux/greeter/live/wallpaper
+    install -o live -g live -m 0644 /usr/share/backgrounds/bingux-os/default-blur.jpg /var/lib/bingux/greeter/live/wallpaper-blur
+    printf '{\n  "wallpaper": "/var/lib/bingux/greeter/live/wallpaper"\n}\n' > /var/lib/bingux/greeter/live/session.json
+    chown live:live /var/lib/bingux/greeter/live/session.json
+fi

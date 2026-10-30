@@ -15,7 +15,12 @@ import sys
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--quickshell", default=os.environ.get("QUICKSHELL_BIN", "qs"))
+    built = Path(__file__).resolve().parents[1] / "build/bingux-shell/quickshell/src/bingux-shell"
+    parser.add_argument(
+        "--quickshell",
+        default=os.environ.get("QUICKSHELL_BIN") or (str(built) if built.is_file() else "bingux-shell"),
+        help="bingux-shell binary (default: the build tree's, then PATH)",
+    )
     parser.add_argument("--shell", help="shell directory to run (default: checkout shell)")
     parser.add_argument("--size", default="1280x800", help="nested output size (default: 1280x800)")
     parser.add_argument("--check", action="store_true", help="check dependencies without opening a desktop")

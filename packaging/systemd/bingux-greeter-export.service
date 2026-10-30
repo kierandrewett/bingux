@@ -1,0 +1,27 @@
+[Unit]
+Description=Publish this account's wallpaper for the Bingux login screen
+# The greeter runs as the greetd account and cannot read home directories.
+# This copies the resolved wallpaper into /var/lib/bingux/greeter/<user>/,
+# a directory only this account can write.
+PartOf=bingux.target
+ConditionUser=!greeter
+ConditionUser=!greetd
+# bsm replaces the greetd login screen and owns the cache this writes to
+# (docs/bsm/shell-integration.md): under bsm the export would fail with
+# Permission denied and restart forever. bingux-bsm-publish.service does the
+# job there. bsm's control socket exists exactly while bsm runs, and /run is
+# the same for every user manager (the manager does not see BSM_SESSION_ID).
+ConditionPathExists=!/run/bsm/greeter-control.sock
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bingux-session export
+# The export decodes and blurs a full-size wallpaper. It runs while the
+# compositor starts and takes only idle time, so the first frame comes first.
+Nice=19
+CPUSchedulingPolicy=idle
+IOSchedulingClass=idle
+LimitCORE=0
+Restart=on-failure
+RestartSec=3

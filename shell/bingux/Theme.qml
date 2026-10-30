@@ -201,6 +201,7 @@ QtObject {
     readonly property int fontHeading: 16
     // `appearance.font_family` in bingux.toml; empty keeps Adwaita Sans.
     readonly property string fontFamily: (BinguxPreferences.data.appearance && BinguxPreferences.data.appearance.fontFamily) || "Adwaita Sans"
+    readonly property int fontDisplay: 96
     readonly property int dockHeight: 88
     readonly property int dockPadding: Math.max(0, padding - spaceSmall)
     readonly property int dockExclusiveHeight: dockHeight + dockPadding * 2
@@ -230,6 +231,10 @@ QtObject {
     readonly property real popupInitialScale: 0.9
     readonly property int motion: reducedMotion ? 0 : 120
     readonly property int statusIndicatorMotion: reducedMotion ? 0 : 180
+    // Lock screen and greeter: the entrance slides the clock and the account
+    // into place; the exit fades them away before the desktop takes over.
+    readonly property int sessionEnterMotion: reducedMotion ? 0 : 420
+    readonly property int sessionExitMotion: reducedMotion ? 0 : 360
     readonly property int osdWidth: 360
     readonly property int osdPadding: 16
     readonly property int osdIconSize: 24
@@ -290,7 +295,7 @@ QtObject {
     property Process accentReader: Process {
         id: accentReader
         command: ["gsettings", "get", "org.gnome.desktop.interface", "accent-color"]
-        running: true
+        running: !SessionContext.greeter && !SessionContext.kiosk
         stdout: StdioCollector {
             onStreamFinished: root.updateGnomeAccent(text)
         }
@@ -299,7 +304,7 @@ QtObject {
     property Process colorSchemeReader: Process {
         id: colorSchemeReader
         command: ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"]
-        running: true
+        running: !SessionContext.greeter && !SessionContext.kiosk
         stdout: StdioCollector {
             onStreamFinished: root.updateGnomeColorScheme(text)
         }
@@ -332,7 +337,7 @@ QtObject {
     // One long-lived monitor replaces re-reading both keys every second.
     property Process appearanceMonitor: Process {
         command: ["gsettings", "monitor", "org.gnome.desktop.interface"]
-        running: true
+        running: !SessionContext.greeter && !SessionContext.kiosk
         stdout: SplitParser {
             onRead: line => {
                 if (line.startsWith("accent-color:"))

@@ -22,9 +22,13 @@ session. The top bar includes a clock, tray, metrics, privacy, input, network,
 audio, and power indicators. Run `bingux-config set desktop.clock_seconds true`
 to show seconds; the clock then redraws
 every second. Bingux is not a compositor and does not modify GNOME Shell UI.
-Right-click empty wallpaper for Change Background… or Display Settings, which
-open the matching pages of [Bingux Settings](settings.md). Windows, panels and
-the dock keep their own pointer menus.
+Right-click empty wallpaper for a menu at the pointer with Open Terminal
+(`xdg-terminal-exec`), Bingux Settings, Display Settings, and Change Background….
+Settings items open the matching pages of [Bingux Settings](settings.md).
+Each item checks its program first. If it is missing, the shell shows a notification
+such as "Could not open Terminal" and leaves no menu open. Escape and an outside click
+dismiss the menu, and it opens on the monitor that was clicked.
+Windows, panels and the dock keep their own pointer menus.
 
 The tray uses `QsMenuAnchor` for left and right menu actions. Pixmap-only tray items, including the disconnected Tailscale item in the validation VM, use a visible local glyph fallback when the layer-shell icon provider cannot render the image URL.
 The reference implementation uses Quickshell 0.2.1 for layer-shell surfaces. Quickshell supplies `zwlr_layer_shell_v1`, `zwlr_foreign_toplevel_manager_v1`, StatusNotifierItem menus, desktop-entry actions, and the desktop-notification service used by this shell. Bingux pins the exact Quickshell package through its flake lock.
@@ -106,6 +110,25 @@ JSON record to `$XDG_RUNTIME_DIR/bingux/osd-v2.sock`. Gnoblin does not draw an
 OSD surface, so Bingux needs no OSD-disable setting. The compositor event
 contains no level value, so statusd sends `-1` for the level and maximum; the
 shell displays a status-only OSD without a level bar.
+
+Gnoblin raises no OSD event for volume or microphone changes. Its default key
+bindings run `wpctl` and nothing else. `bingux-statusd` therefore follows the
+default output and input itself with `pactl subscribe`, and sends a record when
+the level or mute state of the same default device changes. It does this for any
+source of the change: a key binding, the Sound settings page or an application.
+It sends nothing when the default device changes, because a different device has
+a different level. These records carry the level as a fraction of `maxLevel`
+(`1.0`, so `1.2` is 120 percent), a level of `0` while muted, and the device
+description as `label`. Nothing targets them, so statusd sends one record for
+each logical monitor from the compositor's monitor list and sends none while the
+compositor is unavailable. There is no producer for display or keyboard
+brightness: Gnoblin binds no brightness keys and reads no backlight.
+
+The OSD card is one component, `OsdCard.qml`. The desktop surface places it on
+each output above the dock. The lock screen places its own copy in the middle of
+each lock surface and handles the volume keys itself, because the desktop
+surface is hidden behind the lock and Gnoblin's key bindings do not run while
+locked. See [Volume keys and feedback](locking.md#volume-keys-and-feedback).
 
 `osd-bridge.js` is a separate GNOME Shell compatibility adapter. It remains
 for GNOME Shell sessions, including older Gnoblin builds that do not publish
@@ -245,6 +268,7 @@ mode. `BINGUX_REDUCED_MOTION=1` continues to disable motion independently.
 - Notifications and on-screen displays are overlay surfaces with no keyboard focus.
 - All icon controls have at least a 24 by 24 pixel pointer target.
 - Search supports typing, Up and Down, Enter, and Escape. Escape closes the surface and clears transient selection.
+- Search command mode: a query whose first non-space character is `>` runs a program with arguments. The text after `>` is split into argv with shell-style quoting (single quotes, double quotes, and backslash escapes); no shell is started, so pipes, redirections, globs, and variable expansion are not interpreted. The result is labelled `Commands` with the subtitle `Run command` and is never mixed with applications or web results. Enter runs it. Escape clears the command text, and a second Escape closes the surface. If the program cannot be started, the surface shows `Could not run <command>.` and the launch feedback is cleared.
 - The tray uses StatusNotifierItem and DBusMenu support. Right-click menus must come from the item when it exposes one.
 - A profile with `bingux.networking.tailscale.enable` starts the official
   `tailscale systray` client as the profile user. It publishes a
@@ -587,6 +611,27 @@ window recovers or goes away. If the kill command fails, the dialog stays open a
 exit code. The dialog needs Gnoblin with `window.kill`; the ping timeout is
 `window_management.check_alive_timeout`.
 
+## First-login introduction
+
+`FirstLoginIntro.qml` shows a card of the shortcuts this desktop configures:
+Super for search, Super+period for emoji, Alt+S for capture, Alt+Tab and Super+Tab
+for windows, Super+Space for input sources, Super+Z for snap layouts, and the
+wallpaper, clock and indicator menus. **Open Settings** opens Bingux Settings and
+**Got it** closes it; Escape is the same as Got it. The card is an overlay that
+takes keyboard focus only while open and never delays startup or shortcuts.
+
+Completion is stored as `first-login/intro.json` in the shell's Quickshell state
+directory (`Quickshell.statePath`), containing `{"version":1,"completed":true}`.
+Only a dismissal records completion, so closing the shell without dismissing shows
+the card again on the next login. On the first run with no state file, the shell
+checks for the files only user action writes (`bingux.toml`, `switcher.json`,
+`extensions.json`, Control Centre controls, emoji recents). If any exist, the
+card is recorded as complete without being shown. Reduced motion
+(`BINGUX_REDUCED_MOTION=1`) removes the fade.
+
+Reopen it with `binguxctl ipc introduction show`, or from Settings, Desktop,
+Introduction. `binguxctl ipc introduction dismiss` closes it and records completion.
+
 ## Keyboard layout switcher
 
 The right-hand top-bar layout label opens the shared keyboard-layout popup.
@@ -609,3 +654,60 @@ The overflow menu supports the same gesture within its list. Search and the cent
 remain fixed. The order is saved in `$XDG_CONFIG_HOME/bingux/top-bar.ini` (by default
 `~/.config/bingux/top-bar.ini`) and restored after reloads and restarts. Hidden controls
 keep their saved position.
+
+## Workspace change feedback
+
+After a completed workspace change, Bingux shows a short label naming the new workspace
+(`Workspace 2` and its name) centred above the dock on the output that has focus. The label appears
+whether the change came from a keyboard shortcut or from the compositor bridge. It hides
+itself 1.2 seconds after the last change. Repeated changes replace the label and restart that
+hold, so only one label is ever shown. The label never takes keyboard focus, does not
+intercept pointer input, and does not change the workspace selection. With reduced motion
+enabled (`BINGUX_REDUCED_MOTION=1`) it appears and hides without fading.
+
+The label is driven by the `gnoblin.workspace.activated` event from Gnoblin's windows
+subscription. Only real changes of the active workspace produce it; creation, removal and
+rename events do not. The feature needs Gnoblin with the windows subscription (API 1.1 or
+later). Older compositors send no activation event, so no label is shown.
+
+The regression test `tests/workspace-change.py` runs only inside Gnoblin's private test session, because it
+asserts `WAYLAND_DISPLAY` starts with `gnoblin-gs-`. It is not part of `make check-session`. Run it from
+that session with `QS_TEST_BIN=build/bingux-shell/quickshell/src/bingux-shell QML_IMPORT_PATH=build/qml python3 tests/workspace-change.py`.
+
+## Display identification
+
+`binguxctl identify show CONNECTOR...`, and the Identify action on Settings' Displays page, ask the shell to label each output with its number and connector name. The number is large and centred on its output, with the connector name beneath it. Labels show for five seconds. A repeated request replaces them and restarts that hold, so they never stack. `binguxctl identify hide` clears them at once. Labels are click-through and never take keyboard focus. They fade in and out using the shell's motion tokens; with reduced motion enabled (`BINGUX_REDUCED_MOTION=1`) they appear and hide without fading.
+
+Numbers follow the request order, and each connector is matched to an output by name. A connector with no output still takes its number but draws no label, so the numbers still match the Displays page. Any change to the output list, such as a hotplug or layout change, clears every label. A number therefore never stays on a connector that was unplugged or reassigned.
+
+Settings sends every display in its page order, including disabled displays. Each display group shows the same number in its Number row. The shell accepts 1 to 16 unique connector names made of letters, digits, dots, underscores and dashes.
+
+`tests/identify.qml` covers replacement, ordering, rejected payloads, hide, expiry, click-through and hotplug. `tests/identify.py` runs it in headless Sway as part of `make check-session`.
+
+## Tablet-pad help
+
+When a tablet pad's configured `help` button is pressed, Gnoblin (native-control API 1.73 or later) sends
+`gnoblin.input.pad-help-requested`. Gnoblin shows nothing itself, so Bingux draws the card. `bingux-statusd`
+subscribes only when the compositor reports API 1.73, maps `monitor_id` to the current monitor index, and
+forwards one newline-delimited JSON record on `$XDG_RUNTIME_DIR/bingux/pad-help-v1.sock`. A request with no
+`monitor_id` targets the first monitor. A request naming an unknown monitor is dropped.
+
+The record is `protocolVersion` 1, `type` `pad-help`, `monitorIndex`, `outputNames`, `editionMode`, `device`
+(`id`, `name`, `deviceType`), `buttons` (`button`, optional `label`, optional `modeGroup`), `modeGroups`
+(`group`, `modeCount`, `switchButtons`) and `features` (`type` of `ring`, `strip` or `dial`, `index`, optional
+`positiveLabel` and `negativeLabel`). The daemon rejects control characters and caps the record at 64 buttons,
+8 mode groups, 32 features and 8 KiB of label text. It forwards no other field and the shell sends nothing
+back to Gnoblin. `{"protocolVersion":1,"type":"pad-help-clear"}` is sent to every client when the Gnoblin
+connection drops.
+
+The card names the device and lists its buttons, mode groups, rings, strips and dials. A control with no
+label from the input stack shows as unlabelled instead of blank. Only one card exists: a new request replaces
+the old one, on whichever output it names. The card closes after 10 seconds, on Escape, on a clear record, or
+when the shell's socket to `bingux-statusd` drops. While it is open it holds exclusive keyboard focus so Escape
+reaches it, and pointer input outside the card passes through. With reduced motion enabled
+(`BINGUX_REDUCED_MOTION=1`) it appears and hides without fading.
+
+`tests/pad-help-event-bridge.py` sends a fixture event through the real daemon and checks the record and the
+clear record. `tests/pad-help.qml` and `tests/pad-help.py` check the surface in headless Sway: replacement,
+missing labels, Escape, expiry and clearing on disconnect. The bridge test runs in `make check`. The surface
+test runs in `make check-session`, which `make check` also runs.

@@ -12,7 +12,7 @@ Item {
     property var nativeWindows: []
     property var pendingCommand: []
     property int attempts: 0
-    readonly property var spawnCommand: [Python.python, decodeURIComponent(Qt.resolvedUrl("application_spawn.py").toString().replace(/^file:\/\//, "")), "--"]
+    readonly property var spawnCommand: [Python.python, Python.helper("application_spawn.py"), "--"]
     signal launchStarted(string desktopId)
     signal failed(string message)
     ShortcutSession {
@@ -21,6 +21,8 @@ Item {
         onWindowSnapshot: windows => root.nativeWindows = windows
     }
     function launch(command, prepareCommand) {
+        if (!SessionServices.allows("launch"))
+            return;
         focusRetry.stop();
         attempts = 0;
         pendingCommand = prepareCommand && prepareCommand.length ? command : [];

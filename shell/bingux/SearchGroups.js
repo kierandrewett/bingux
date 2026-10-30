@@ -8,6 +8,7 @@ function key(result) {
     if (result.kind === "calculation") return "calculation";
     if (result.kind === "weather") return "weather";
     if (result.kind === "chat") return "ai";
+    if (result.kind === "command") return "commands";
     return result.providerId;
 }
 
@@ -19,6 +20,7 @@ function label(group) {
         calculation: "Calculator",
         weather: "Weather",
         ai: "Assistant",
+        commands: "Commands",
     };
     return (
         labels[group] ||
@@ -30,7 +32,7 @@ function label(group) {
 }
 
 function ordered(results) {
-    const order = ["calculation", "weather", "ai", "applications", "files"];
+    const order = ["commands", "calculation", "weather", "ai", "applications", "files"];
     return results
         .map((result, index) => ({ result: result, index: index }))
         .sort((left, right) => {

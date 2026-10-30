@@ -1,0 +1,18 @@
+[Unit]
+Description=Refresh the login-screen wallpaper when the Bingux configuration changes
+PartOf=bingux.target
+ConditionUser=!greeter
+ConditionUser=!greetd
+# bsm replaces the greetd login screen and owns the cache this writes to
+# (docs/bsm/shell-integration.md): under bsm the export would fail with
+# Permission denied and restart forever. bingux-bsm-publish.service does the
+# job there. bsm's control socket exists exactly while bsm runs, and /run is
+# the same for every user manager (the manager does not see BSM_SESSION_ID).
+ConditionPathExists=!/run/bsm/greeter-control.sock
+
+[Path]
+PathChanged=%E/bingux/bingux.toml
+Unit=bingux-greeter-export.service
+
+[Install]
+WantedBy=bingux.target

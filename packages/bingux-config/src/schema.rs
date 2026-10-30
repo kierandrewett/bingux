@@ -250,13 +250,26 @@ pub struct Appearance {
     pub font_family: String,
 }
 
-/// Privacy choices that gate outbound network requests.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+/// Privacy choices: outbound network requests and what the login screen shows.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Privacy {
     /// Allow the Control Centre to look up the public address through a
     /// third-party web service. Off by default.
     pub public_ip_lookup: bool,
+    /// Show this account's avatar and wallpaper on the login screen before
+    /// anyone has signed in. The login screen is readable by every local
+    /// account. On by default.
+    pub show_personal_images: bool,
+}
+
+impl Default for Privacy {
+    fn default() -> Self {
+        Self {
+            public_ip_lookup: false,
+            show_personal_images: true,
+        }
+    }
 }
 
 /// Documentation for one key, used by `bingux-config defaults` and the docs.
@@ -379,5 +392,10 @@ pub const KEY_DOCS: &[KeyDoc] = &[
         section: "privacy",
         key: "public_ip_lookup",
         accepted: "true or false. Ask ipapi.co for the public address in the Control Centre.",
+    },
+    KeyDoc {
+        section: "privacy",
+        key: "show_personal_images",
+        accepted: "true or false. Show your avatar and wallpaper on the login screen. Turn off to show a neutral screen instead.",
     },
 ];

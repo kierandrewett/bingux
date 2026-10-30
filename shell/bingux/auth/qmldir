@@ -1,0 +1,9 @@
+AuthTheme 1.0 AuthTheme.qml
+AuthScreen 1.0 AuthScreen.qml
+AuthCard 1.0 AuthCard.qml
+AuthClock 1.0 AuthClock.qml
+AuthProgress 1.0 AuthProgress.qml
+AccountPicker 1.0 AccountPicker.qml
+UserAvatar 1.0 UserAvatar.qml
+BackgroundView 1.0 BackgroundView.qml
+AuthButton 1.0 AuthButton.qml

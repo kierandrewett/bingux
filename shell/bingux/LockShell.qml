@@ -15,7 +15,22 @@ ShellRoot {
     // intentionally retained if the client dies.
     Component.onCompleted: {
         Quickshell.watchFiles = false;
+        SessionContext.enter("locked");
         lock.locked = true;
+    }
+
+    // Keyboard layouts for the session bar, from the user's bingux-statusd.
+    // Named apart from SessionScreen.metrics: the lock surface is its own
+    // component, where that property would shadow an id of the same name.
+    Metrics {
+        id: sessionMetrics
+    }
+
+    // Volume and microphone feedback from bingux-statusd. Gnoblin's key
+    // bindings do not run while locked, so the lock screen handles those keys
+    // and draws the card itself.
+    OsdState {
+        id: lockOsd
     }
 
     LockAuthentication {
@@ -61,10 +76,20 @@ ShellRoot {
             Qt.quit()
 
         WlSessionLockSurface {
-            color: "#111318"
-            LockScreen {
+            id: lockSurface
+            color: Theme.background
+            SessionScreen {
                 anchors.fill: parent
                 authentication: lockAuthentication
+                metrics: sessionMetrics
+                hostWindow: lockSurface
+                osdState: lockOsd
+                outputName: lockSurface.screen ? lockSurface.screen.name : ""
+                ready: lock.secure
+                accountName: lockAuthentication.userName
+                accountDisplayName: lockAuthentication.userDisplayName
+                accountImage: lockAuthentication.userImage
+                wallpaper: lockAuthentication.wallpaper
             }
         }
     }

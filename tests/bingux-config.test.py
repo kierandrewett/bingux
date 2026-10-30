@@ -577,6 +577,16 @@ class BinguxConfigTests(unittest.TestCase):
         self.assertIn("desktop.dock_size", checked.stderr)
         self.assertEqual(cli("bogus").returncode, 2)
 
+    def test_show_personal_images_defaults_on_and_is_a_validated_toggle(self):
+        self.assertEqual(cli("get", "privacy.show_personal_images").stdout.strip(), "true")
+        self.assertIs(read()["privacy"]["showPersonalImages"], True)
+        self.assertEqual(cli("set", "privacy.show_personal_images", "false").returncode, 0)
+        self.assertEqual(cli("get", "privacy.show_personal_images").stdout.strip(), "false")
+        self.assertIs(read()["privacy"]["showPersonalImages"], False)
+        bad = cli("set", "privacy.show_personal_images", "maybe")
+        self.assertNotEqual(bad.returncode, 0)
+        self.assertEqual(cli("get", "privacy.show_personal_images").stdout.strip(), "false")
+
 
 if __name__ == "__main__":
     unittest.main()

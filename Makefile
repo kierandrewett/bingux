@@ -8,7 +8,7 @@ PKG_CONFIG ?= pkg-config
 QMLDIR ?= $(PREFIX)/lib/bingux/qml
 LADSPADIR ?= $(PREFIX)/lib/ladspa
 # Where Cargo puts its output; package builders can point this at a shared target.
-CARGO_TARGET ?= $(abspath $(BUILD_DIR))/cargo
+CARGO_TARGET ?= $(CARGO_TARGET)
 # bingux-dsp is built with panic=abort (a plugin must not unwind into its host)
 # while the programs unwind. Cargo does not keep the two builds of a shared
 # dependency such as libc apart in one target directory ("the crate `libc`
@@ -16,6 +16,9 @@ CARGO_TARGET ?= $(abspath $(BUILD_DIR))/cargo
 DSP_TARGET ?= $(CARGO_TARGET)-dsp
 # Work and results of `make rpm-package` and `make arch-package`.
 PACKAGE_DIR ?= /var/tmp/BinguxPkg
+# lib or lib64: where the shell archive and QML plugins live under PREFIX.
+LIBDIR_NAME ?= lib
+CMAKE ?= cmake
 USER_PREFIX ?= $(if $(XDG_DATA_HOME),$(XDG_DATA_HOME),$(HOME)/.local/share)/bingux
 JOBS ?= 2
 # Captures `layout-check` and `overflow-check` render at once.
@@ -25,8 +28,8 @@ OUTPUT ?= dist/bingux-$(VERSION).tar.xz
 SHELL := /bin/bash
 ROOT := $(abspath .)
 
-.PHONY: all native daemons apps icons icons-check doctor doctor-build check layout-check overflow-check copy-check pixel-check stability-check motion-check state-check rules-check install install-user uninstall-user install-apps uninstall-apps rpm-package rpm-check arch-package licenses source-archive
-all: native daemons
+.PHONY: all native shell shell-archive daemons apps icons icons-check doctor doctor-build check check-session layout-check overflow-check copy-check pixel-check stability-check motion-check state-check rules-check install install-user uninstall-user install-apps uninstall-apps rpm-package rpm-check arch-package licenses source-archive
+all: native shell daemons
 
 native: $(BUILD_DIR)/bingux-image-clipboard $(BUILD_DIR)/bingux-frame
 	mkdir -p $(BUILD_DIR)/text $(BUILD_DIR)/effects $(BUILD_DIR)/wayland-sync
@@ -34,6 +37,15 @@ native: $(BUILD_DIR)/bingux-image-clipboard $(BUILD_DIR)/bingux-frame
 	cd $(BUILD_DIR)/effects && $(QMAKE) $(ROOT)/packages/bingux-effects/effects.pro && $(MAKE)
 	cd $(BUILD_DIR)/wayland-sync && $(QMAKE) $(ROOT)/packages/bingux-wayland-sync/sync.pro && $(MAKE)
 	$(CC) -std=c11 -D_POSIX_C_SOURCE=200809L -O2 -Wall -Wextra -Werror packages/bingux-audio-meter/main.c $(CFLAGS) $(LDFLAGS) -o $(BUILD_DIR)/bingux-audio-meter $$($(PKG_CONFIG) --cflags --libs libpulse)
+
+# bingux-shell: Quickshell (pinned submodule, Bingux patches applied) built
+# into one binary, plus the packed QML archive it runs.
+shell: shell-archive
+	$(CMAKE) -G Ninja -S packages/bingux-shell -B $(BUILD_DIR)/bingux-shell -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBINGUX_LIBDIR=$(LIBDIR_NAME) -DBINGUX_SHELL_VERSION=$(VERSION)
+	$(CMAKE) --build $(BUILD_DIR)/bingux-shell --parallel $(JOBS)
+
+shell-archive:
+	python3 scripts/pack-shell.py --version $(VERSION) $(BUILD_DIR)/bingux-shell.sxa
 
 $(BUILD_DIR)/bingux-image-clipboard: packages/bingux-image-clipboard/main.c packages/bingux-image-clipboard/ext-data-control-v1.xml
 	mkdir -p $(BUILD_DIR)
@@ -50,7 +62,8 @@ $(BUILD_DIR)/bingux-frame: packages/bingux-frame/paint-gtk.c packages/bingux-fra
 # render PDFs (GStreamer and poppler stay out of the application);
 # bingux-effects and libbingux_dsp.so are the sound-effects engine and its LADSPA plugins.
 # `apps` builds the applications and what Settings runs (bingux-config, the effects
-# engine); `daemons` adds the search and status daemons.
+# engine); `daemons` adds the search and status daemons, the privileged helper, the
+# session manager and the portal backend.
 apps:
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-config/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-audio-effects/Cargo.toml --target-dir $(CARGO_TARGET)
@@ -62,8 +75,11 @@ apps:
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-taxonomy/Cargo.toml --target-dir $(CARGO_TARGET)
 
 daemons: apps
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-helper/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-searchd/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-statusd/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-session/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-portal/Cargo.toml --target-dir $(CARGO_TARGET)
 
 # Compile the icon sources (scripts/icons/src) into the bingux-ui icons and the
 # shell's copy. Needs uv: the script declares its own packages. map-fork.py first
@@ -83,10 +99,10 @@ icons-check:
 	scripts/icons/golden.py
 
 doctor-build:
-	python3 scripts/check-dependencies.py --qmake '$(QMAKE)' --cargo '$(CARGO)' --cc '$(CC)' --pkg-config '$(PKG_CONFIG)'
+	python3 scripts/check-dependencies.py --qmake '$(QMAKE)' --cargo '$(CARGO)' --cc '$(CC)' --cmake '$(CMAKE)' --pkg-config '$(PKG_CONFIG)'
 
 doctor:
-	python3 scripts/check-dependencies.py --install-user --qmake '$(QMAKE)' --cargo '$(CARGO)' --cc '$(CC)' --pkg-config '$(PKG_CONFIG)'
+	python3 scripts/check-dependencies.py --install-user --qmake '$(QMAKE)' --cargo '$(CARGO)' --cc '$(CC)' --cmake '$(CMAKE)' --pkg-config '$(PKG_CONFIG)'
 
 # Builds every RPM from a source archive with rpmbuild into $(PACKAGE_DIR). It needs
 # the build dependencies of packaging/rpm/bingux.spec unless BINGUX_RPM_NODEPS=1
@@ -178,6 +194,7 @@ check: doctor-build native daemons
 	QT_QPA_PLATFORM=offscreen $(BUILD_DIR)/text/spacing-test
 	$(CARGO) test --locked --manifest-path packages/bingux-config/Cargo.toml --target-dir $(CARGO_TARGET)
 	BINGUX_CONFIG_BIN=$(CARGO_TARGET)/release/bingux-config python3 tests/bingux-config.test.py
+	$(CARGO) test --locked --manifest-path packages/bingux-helper/Cargo.toml --target-dir $(CARGO_TARGET)
 	python3 tests/app-env.test.py
 	python3 tests/rules-check.test.py
 	$(CARGO) test --locked --manifest-path packages/bingux-searchd/Cargo.toml --lib
@@ -191,12 +208,42 @@ check: doctor-build native daemons
 	$(MAKE) copy-check pixel-check stability-check motion-check
 	$(CARGO) test --locked --manifest-path packages/bingux-ui/Cargo.toml --features testing --target-dir $(CARGO_TARGET) --lib slide_users_tests
 	$(CARGO) test --locked --manifest-path packages/bingux-statusd/Cargo.toml
+	$(CARGO) test --locked --manifest-path packages/bingux-session/Cargo.toml
+	$(CARGO) test --locked --manifest-path packages/bingux-portal/Cargo.toml --target-dir $(CARGO_TARGET)
 	python3 tests/shortcut-reload.py
 	python3 tests/gnoblin-menu-focus.py
 	BINGUX_STATUSD_BIN=$(CARGO_TARGET)/release/bingux-statusd python3 tests/osd-event-bridge.py
+	BINGUX_STATUSD_BIN=$(CARGO_TARGET)/release/bingux-statusd python3 tests/audio-osd-feedback.py
+	BINGUX_STATUSD_BIN=$(CARGO_TARGET)/release/bingux-statusd python3 tests/pad-help-event-bridge.py
+	python3 tests/lock-contract.test.py
+	python3 tests/bsm-greeter-progress.test.py
+	node --test tests/bsm-session.test.mjs tests/bsm-readiness.test.mjs
+	python3 tests/bsm-lock-binding.py
+	python3 tests/qmldir-complete.py --self-test
+	python3 tests/qmldir-complete.py
+	$(MAKE) check-session
 	python3 tests/install-dependencies.py
 	$(MAKE) rpm-check
 	python3 tests/standalone-install.py
+
+# The lock screen, the login greeter and the bsm greeter (against the fake bsm
+# control server), driven in headless Sway with the
+# built bingux-shell. Needs sway and grim; the lock client imports the
+# Bingux.Wayland plugin from the build. shell-archive.py installs the build
+# into a scratch prefix and runs the production shells from the packed archive.
+SHELL_BIN = $(abspath $(BUILD_DIR))/bingux-shell/quickshell/src/bingux-shell
+check-session: native daemons shell
+	mkdir -p $(BUILD_DIR)/qml/Bingux/Wayland
+	cp $(BUILD_DIR)/wayland-sync/libbinguxwaylandsync.so packages/bingux-wayland-sync/qmldir $(BUILD_DIR)/qml/Bingux/Wayland/
+	QS_TEST_BIN=$(SHELL_BIN) BINGUX_SESSION_BIN=$(CARGO_TARGET)/release/bingux-session python3 tests/greeter-ui.py
+	QS_TEST_BIN=$(SHELL_BIN) QML_IMPORT_PATH=$(abspath $(BUILD_DIR))/qml python3 tests/lock-ui.py
+	QS_TEST_BIN=$(SHELL_BIN) python3 tests/bsm-greeter-client.test.py
+	QS_TEST_BIN=$(SHELL_BIN) QML_IMPORT_PATH=$(abspath $(BUILD_DIR))/qml python3 tests/bsm-greeter-ui.py
+	QS_TEST_BIN=$(SHELL_BIN) python3 tests/identify.py
+	QS_TEST_BIN=$(SHELL_BIN) python3 tests/pad-help.py
+	QS_TEST_BIN=$(SHELL_BIN) python3 tests/bsm-shell-integration.py
+	QUICKSHELL_BIN=$(SHELL_BIN) bash tests/search-command.sh
+	python3 tests/shell-archive.py --build-dir $(BUILD_DIR)
 
 install:
 	python3 scripts/install-shell.py --prefix '$(PREFIX)' --destdir '$(DESTDIR)' --build-dir '$(BUILD_DIR)' --qml-dir '$(QMLDIR)' --cargo-dir '$(CARGO_TARGET)' --ladspa-dir '$(LADSPADIR)'

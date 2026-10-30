@@ -1,0 +1,40 @@
+#%PAM-1.0
+#
+# Login through bsm-helper (root), for Login and Switch authentications.
+#
+# bsm-helper runs pam_authenticate and pam_acct_mgmt for the conversation, keeps
+# that PAM handle in the authenticated child and, when the ticket is redeemed,
+# runs pam_setcred and pam_open_session on the SAME handle. So the session phase
+# below sees what the auth phase learnt (pam_gnome_keyring keeps the password
+# for auto_start, Kerberos and sssd credentials follow the authentication).
+# The session stays open for the whole life of the hosted desktop and is closed
+# only when the desktop ends.
+#
+# pam_systemd registers a logind session WITHOUT a seat: the helper puts
+# XDG_SESSION_TYPE=wayland and XDG_SESSION_CLASS=user in the PAM environment and
+# never sets XDG_SEAT or XDG_VTNR, because bsm owns seat0 (docs/bsm/architecture.md,
+# D4). Fedora's system-auth already carries an optional pam_systemd; a second
+# pam_systemd.so in the same PAM handle returns early without creating another
+# session. The helper checks that the session scope exists and fails the login
+# otherwise.
+#
+# `substack`, not `include` (review F8): a `sufficient` module in system-auth (pam_unix,
+# pam_fprintd) ends only the substack, so the lines after it still run. With
+# `include` a successful `sufficient` pam_unix ended the whole auth stack and
+# pam_gnome_keyring never saw the password.
+#
+# Lockout (pam_faillock), password policy and fingerprint (pam_fprintd) come
+# from system-auth, so they are exactly the machine's own policy and bsm adds
+# none. A fingerprint prompt reaches the greeter as an info message; the
+# fingerprint module and the password prompt are answered through the same
+# conversation.
+auth      substack  system-auth
+auth      optional  pam_gnome_keyring.so
+account   required  pam_nologin.so
+account   substack  system-auth
+password  include   system-auth
+session   optional  pam_keyinit.so force revoke
+session   required  pam_loginuid.so
+session   substack  system-auth
+session   required  pam_systemd.so
+session   optional  pam_gnome_keyring.so auto_start

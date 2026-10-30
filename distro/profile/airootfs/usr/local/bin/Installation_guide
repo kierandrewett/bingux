@@ -1,0 +1,21 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+cat <<'EOF'
+Installing Bingux OS
+====================
+
+1. Connect to the network. Ethernet and known Wi-Fi networks connect on their
+   own; for Wi-Fi run nmtui.
+2. Find the disk to install onto:
+       bingux-installer probe
+   This prints the disks as JSON.
+3. Write a plan file, plan.json, with the disk, the user accounts, hostname,
+   timezone, locale and keymap. See `bingux-installer --help` for the format.
+4. Install. This ERASES the disk, so check the name twice:
+       sudo bingux-installer install --plan plan.json
+5. Reboot, remove the USB stick, and sign in at the Bingux login screen.
+
+Project and documentation: https://github.com/kierandrewett/bingux
+EOF

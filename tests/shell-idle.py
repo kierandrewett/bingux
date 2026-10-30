@@ -3,6 +3,7 @@
 
 import argparse
 import os
+import sys
 from pathlib import Path
 import re
 import resource
@@ -13,6 +14,8 @@ import tempfile
 import time
 
 REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "tests/lib"))
+import shell_source  # noqa: E402
 
 
 def replace_once(text, old, new):
@@ -79,23 +82,25 @@ QtObject { property bool settled: false; function dockMapped() {} }
     # Steam discovery is an external input, unrelated to animation cadence.
     (fixture / "steam-games.py").write_text('print("[]")\n')
     path = fixture / "shell.qml"
-    text = path.read_text().replace("import QtQuick.Window", "import QtQuick.Window\nimport QtTest")
-    for name in ("topBar", "dock"):
-        extra = "\n        testManager: idleManager" if name == "dock" else ""
-        text = replace_once(
+    text = shell_source.replace_once(
+        path.read_text(), "import QtQuick.Window", "import QtQuick.Window\nimport QtTest", "test import seam"
+    )
+    for name in (shell_source.TOP_BAR, shell_source.DOCK):
+        extra = "\n        testManager: idleManager" if name == shell_source.DOCK else ""
+        seam = shell_source.id_line(text, name)
+        text = shell_source.replace_once(
             text,
-            f"        id: {name}\n",
-            f"""        id: {name}
-        implicitWidth: 1280{extra}
+            seam,
+            f"""{seam}        implicitWidth: 1280{extra}
         property int idleFrames: 0
         Connections {{
             target: {name}.contentItem.Window.window
             function onFrameSwapped() {{ {name}.idleFrames++; }}
         }}
 """,
+            f"object {name} id line",
         )
-    end = text.rfind("}")
-    text = text[:end] + (REPO / "tests/shell-idle.inc.qml").read_text() + text[end:]
+    text = shell_source.insert_before_root_end(text, (REPO / "tests/shell-idle.inc.qml").read_text())
     path.write_text(text)
 
 
@@ -155,7 +160,7 @@ def main():
             "BINGUX_LAYOUT_IMPORT": "0",
             "BINGUX_CONFIG_BIN": "/usr/bin/false",
             "BINGUX_ICON_HELPER": "/usr/bin/false",
-            "BINGUX_ADWAITA_ICON_DIR": os.environ.get("BINGUX_ADWAITA_ICON_DIR", "/usr/share/icons/Adwaita"),
+            "BINGUX_ADWAITA_ICON_DIR": os.environ.get("BINGUX_ADWAITA_ICON_DIR", "/usr/share/bingux/icons/Adwaita"),
             "BINGUX_IDLE_REPORT": str(fixture / "report"),
         }
         for key in ("WAYLAND_DISPLAY", "DISPLAY", "SESSION_MANAGER"):

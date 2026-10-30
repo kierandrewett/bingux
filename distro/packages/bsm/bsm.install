@@ -1,0 +1,33 @@
+# Accounts and directories exist after install, and nothing else changes: bsm is
+# not enabled. The message says how to opt in and how to come back.
+
+post_install() {
+    systemd-sysusers bsm.conf >/dev/null 2>&1 || true
+    systemd-tmpfiles --create bsm.conf >/dev/null 2>&1 || true
+    # D-Bus and polkit read their policy at start-up.
+    systemctl reload dbus-broker.service >/dev/null 2>&1 || systemctl reload dbus.service >/dev/null 2>&1 || true
+    systemctl reload polkit.service >/dev/null 2>&1 || true
+    cat <<'MSG'
+bsm is installed but not enabled; your login manager is unchanged.
+  Try it:    bsm-set-display-manager enable     (takes effect at the next boot)
+  Go back:   bsm-set-display-manager disable
+  Guide:     /usr/share/doc/bsm/packaging.md
+MSG
+}
+
+post_upgrade() {
+    post_install >/dev/null
+    # A running bsm keeps its sessions: restarting the service would end the
+    # compositor, so the new binary is used from the next boot.
+    echo "bsm: the running instance is not restarted; reboot to use the new version."
+}
+
+pre_remove() {
+    # Leave the machine with a login manager if bsm was the display manager.
+    if [ "$(readlink /etc/systemd/system/display-manager.service 2>/dev/null)" = /usr/lib/systemd/system/bsm.service ]; then
+        rm -f /etc/systemd/system/display-manager.service
+        systemctl enable greetd.service >/dev/null 2>&1 || true
+        echo "bsm: removed the display-manager alias; greetd is enabled again."
+    fi
+    systemctl disable bsm.service bsm-helper.socket >/dev/null 2>&1 || true
+}

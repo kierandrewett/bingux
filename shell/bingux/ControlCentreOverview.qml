@@ -102,7 +102,7 @@ GridLayout {
         readonly property string container: DesktopLayout.zone(root.desktop.layout || {}, widgetId)
         readonly property bool barLayout: root.widgetLayout !== null && (placed ? container !== "sidebar" : headerControls.barLayout)
         parent: placed ? root.widgetLayout.hostFor(action) : headerControls
-        visible: placed || root.groupPosition("controls-header", widgetId) >= 0
+        visible: root.permitted(widgetId.slice("control-".length)) && (placed || root.groupPosition("controls-header", widgetId) >= 0)
         Layout.column: placed ? root.widgetLayout.controlColumn(action) : headerControls.memberColumn(widgetId)
         Layout.row: placed ? root.widgetLayout.controlRow(action) : headerControls.memberRow(widgetId)
         barStyle: barLayout
@@ -139,7 +139,7 @@ GridLayout {
         readonly property string container: DesktopLayout.zone(root.desktop.layout || {}, widgetId)
         barLayout: root.widgetLayout !== null && (placed ? container !== "sidebar" : quickRows.barLayout)
         parent: placed ? root.widgetLayout.hostFor(quick) : quickRows
-        visible: placed || root.controlVisible(controlName)
+        visible: root.permitted(controlName) && (placed || root.controlVisible(controlName))
         Layout.fillWidth: !barLayout
         Layout.row: placed ? root.widgetLayout.controlRow(quick) : (barLayout ? 0 : root.controlCell(controlName).row)
         Layout.column: placed ? root.widgetLayout.controlColumn(quick) : (barLayout ? root.widgetOrder.indexOf(controlName) : root.controlCell(controlName).column)
@@ -153,7 +153,21 @@ GridLayout {
         }
     }
     readonly property var widgetOrder: root.desktop.controlOrder || DesktopLayout.controlOrder()
+    // Controls a restricted context (lock, greeter, kiosk) may show; see SessionServices.
+    readonly property var capabilities: ({
+            microphone: "volume",
+            volume: "volume",
+            dnd: "doNotDisturb",
+            battery: "power",
+            power: "power",
+            session: "power"
+        })
+    function permitted(name) {
+        return SessionServices.permits(capabilities[name] || name);
+    }
     function controlVisible(name) {
+        if (!permitted(name))
+            return false;
         if (DesktopLayout.zone(root.desktop.layout || {}, "control-" + name))
             return false;
         if (name === "awake" && services.keepAwake)
@@ -469,7 +483,7 @@ GridLayout {
         parent: placed ? root.widgetLayout.hostFor(mediaControl) : root
         Layout.row: placed ? root.widgetLayout.controlRow(mediaControl) : root.sectionRow(widgetId)
         Layout.column: placed ? root.widgetLayout.controlColumn(mediaControl) : 0
-        visible: placed || root.sectionRow(widgetId) >= 0
+        visible: root.permitted("media") && (placed || root.sectionRow(widgetId) >= 0)
         Layout.fillWidth: !barLayout
         presentation: DesktopLayout.presentation(root.desktop, widgetId, container || "control-centre", player ? player.trackTitle || player.identity : "Media playback", "applications-multimedia-symbolic", true, true)
         player: root.mediaPlayer

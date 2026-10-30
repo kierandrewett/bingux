@@ -28,8 +28,6 @@ clean package and install check passes.
 After a build is published, install it with:
 
 ```sh
-# Install a Quickshell 0.2.1 package that provides /usr/bin/qs first.
-# It must be built against the same Qt 6 ABI as the host.
 sudo dnf copr enable kierandrewett/bingux
 sudo dnf install bingux
 ```

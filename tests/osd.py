@@ -12,13 +12,13 @@ if not os.environ.get("WAYLAND_DISPLAY", "").startswith("gnoblin-gs-"):
     raise SystemExit("Run through Gnoblin's private test session")
 with tempfile.TemporaryDirectory(prefix="bingux-osd-") as directory:
     fixture = Path(directory)
-    for name in ("Theme", "SymbolicIcon", "AnimatedCount", "OsdState", "OsdSurface", "PanelOutline"):
+    for name in ("Theme", "SymbolicIcon", "AnimatedCount", "OsdState", "OsdCard", "OsdSurface", "PanelOutline"):
         shutil.copy2(repo / f"shell/bingux/{name}.qml", fixture)
     (fixture / "qmldir").write_text(
         "singleton Theme 1.0 Theme.qml\n"
         + "".join(
             f"{name} 1.0 {name}.qml\n"
-            for name in ("SymbolicIcon", "AnimatedCount", "OsdState", "OsdSurface", "PanelOutline")
+            for name in ("SymbolicIcon", "AnimatedCount", "OsdState", "OsdCard", "OsdSurface", "PanelOutline")
         )
     )
     surface = fixture / "OsdSurface.qml"

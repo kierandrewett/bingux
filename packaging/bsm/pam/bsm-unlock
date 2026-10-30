@@ -1,0 +1,14 @@
+#%PAM-1.0
+#
+# Unlock through bsm-helper, for Unlock authentications only. Authentication and
+# account checks: no session phase, so unlocking never creates a second logind
+# session. The helper's child exits after the verdict; nothing is kept.
+#
+# Switch authentications (picking another account on the greeter) use bsm-login,
+# because they may end in a new login on the same PAM handle.
+#
+# system-auth carries the distribution's lockout (pam_faillock) and fprintd
+# settings; bsm adds no bypass of its own.
+auth      substack  system-auth
+account   required  pam_nologin.so
+account   substack  system-auth

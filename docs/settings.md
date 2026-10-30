@@ -23,7 +23,7 @@ with a page name starts on that page.
 
 Panels: `network`, `bluetooth`, `background` (Appearance), `desktop`,
 `search`, `display`, `sound`, `power`, `keyboard`, `mouse`, `datetime`,
-`users`, `applications`, `accessibility`, `about`. An unknown or omitted panel opens the
+`users`, `applications`, `accessibility`, `privacy`, `about`. An unknown or omitted panel opens the
 first page. An address names a page or a subpage. The old Network addresses
 still work: `wifi`, `wifi/saved`, `wifi/network/<ssid>`, `wired`, `wired/<device>`
 and `wired/vpn/<name>` open the matching page below `network/`, and the shell's
@@ -227,6 +227,7 @@ way round.
 | Date and Time   | `timedatectl`, GSettings clock format, `bingux-config desktop.clock_seconds`                                                                                                              | Time zone and manual time may ask for authorisation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Users           | AccountsService over D-Bus                                                                                                                                                                | Full name changes may ask for authorisation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Applications    | Desktop entries in `XDG_DATA_DIRS`, `gio mime`, `wpctl`                                                                                                                                   | Installed applications with their icons, a page for each, and the default application for each kind of file.                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Privacy         | `~/.config/bingux/portal-permissions.toml` (`bingux-portal` store) | Rules that allow, ask or deny portal requests. Read and written atomically. See [Privacy](#privacy). |
 | About           | `/etc/os-release`, DMI (`/sys/devices/virtual/dmi/id`), `/proc/cpuinfo`, `/proc/meminfo`, `lspci`, `/sys/class/drm`, `/proc/uptime`, `df`, `uname`, `gnoblinctl --version`, `hostnamectl` | Facts load in the background. The device card holds the name, system and model; System details lists the operating system, version, kernel, processor, memory, graphics, display, uptime, desktop and settings version as one-line rows, and Storage shows the space used on the root file system with its capacity. The rows keep their height and show blank values until each one arrives. The device card renames the device through `hostnamectl`, which may ask for authorisation, and copies a summary of every fact. Values copy on right-click. |
 
 On Search, the Search subfolders row under File search is Nautilus's GSettings key `org.gnome.nautilus.preferences recursive-search` (Always, Local folders only, Never). It is hidden when that key cannot be read. Each change applies at once and returns to the old value with a toast if the write fails.
@@ -654,6 +655,37 @@ setting that GNOME does not define goes in `bingux.toml`, written through
 `bingux-config`: the wallpaper, dock, sidebar, search and the font. A new
 setting follows the same rule. Without gsettings the pages that need it say so
 and the rest keep working.
+
+Desktop has an Introduction group with a **Show introduction** action. It asks the
+running shell to reopen the first-login guide (`binguxctl ipc introduction show`),
+so it needs a running Bingux shell and reports an error otherwise.
+
+The Displays page has an Identify group with an **Identify** action. It asks the running shell to label each display with its number and connector, using `binguxctl identify show`. Each display group shows the same number in its Number row. Like Show introduction, it needs a running Bingux shell and reports an error otherwise.
+
+## Privacy
+
+The Privacy page edits the portal permission rules in
+`$XDG_CONFIG_HOME/bingux/portal-permissions.toml` (default
+`~/.config/bingux/portal-permissions.toml`). The `bingux-portal` crate reads
+and writes the file, so the page and the portal backend share one schema.
+
+- **Default** sets the level for requests that no rule decides: Ask or Deny.
+  Allow is not offered as a default.
+- **Rules** lists each rule with its selectors, capabilities and level. Add,
+  edit, delete, and move rules up or down. Order matters.
+- A matching deny always wins. Otherwise the last matching rule wins.
+- Capabilities are Screen cast, Remote desktop, Input capture, Screenshot and
+  Access. Monitors apply only to Screen cast and Remote desktop. Devices and
+  Clipboard apply only to Remote desktop.
+- Each rule needs a name, at least one capability, and an app ID, a program
+  path (absolute) or a pattern. Errors show inline and nothing is saved.
+- A missing file means the default applies. Saving the first rule creates it.
+- A file that cannot be read is shown as an error with a Try again action. The
+  page does not overwrite it, and portal requests stay denied until it is
+  fixed.
+
+Saves write a temporary file and rename it over the old one, so a crash does
+not leave a half-written file. The file is private to the user.
 
 ## Gnoblin and GSettings
 

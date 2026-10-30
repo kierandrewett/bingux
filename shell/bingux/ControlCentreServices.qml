@@ -125,7 +125,7 @@ Singleton {
     }
     Process {
         id: worker
-        command: Quickshell.env("BINGUX_CONTROLS_HELPER") ? [Quickshell.env("BINGUX_CONTROLS_HELPER")] : [Python.python, "-u", decodeURIComponent(Qt.resolvedUrl("control-centre-services.py").toString().replace(/^file:\/\//, ""))]
+        command: Quickshell.env("BINGUX_CONTROLS_HELPER") ? [Quickshell.env("BINGUX_CONTROLS_HELPER")] : [Python.python, "-u", Python.helper("control-centre-services.py")]
         running: true
         stdinEnabled: true
         stdout: SplitParser {

@@ -1,0 +1,6 @@
+BsmGreeterModel 1.0 BsmGreeterModel.qml
+BsmAuthClient 1.0 BsmAuthClient.qml
+BsmGreeterScreen 1.0 BsmGreeterScreen.qml
+BsmPowerMenu 1.0 BsmPowerMenu.qml
+BsmNetworkIndicator 1.0 BsmNetworkIndicator.qml
+BsmStateFile 1.0 BsmStateFile.qml

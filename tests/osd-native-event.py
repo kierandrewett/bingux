@@ -119,14 +119,14 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix="bingux-osd-native-", dir=RUNTIME) as temp:
         fixture = Path(temp)
-        for name in ("Theme", "SymbolicIcon", "AnimatedCount", "OsdState", "OsdSurface", "PanelOutline"):
+        for name in ("Theme", "SymbolicIcon", "AnimatedCount", "OsdState", "OsdCard", "OsdSurface", "PanelOutline"):
             shutil.copy2(ROOT / f"shell/bingux/{name}.qml", fixture / f"{name}.qml")
 
         (fixture / "qmldir").write_text(
             "singleton Theme 1.0 Theme.qml\n"
             + "".join(
                 f"{name} 1.0 {name}.qml\n"
-                for name in ("SymbolicIcon", "AnimatedCount", "OsdState", "OsdSurface", "PanelOutline")
+                for name in ("SymbolicIcon", "AnimatedCount", "OsdState", "OsdCard", "OsdSurface", "PanelOutline")
             )
         )
 
@@ -164,10 +164,10 @@ ShellRoot {
             waitForRendering(window.testCard);
             verify(window.visible, "OSD surface is visible in the nested compositor");
             verify(!window.focusable, "OSD does not take keyboard focus");
-            verify(!window.hasLevel, "Mutter event without numeric level stays status-only");
-            verify(window.presentedRequest.level === -1 && window.presentedRequest.maxLevel === -1,
+            verify(!window.testCard.hasLevel, "Mutter event without numeric level stays status-only");
+            verify(window.testCard.presentedRequest.level === -1 && window.testCard.presentedRequest.maxLevel === -1,
                    "missing numeric level remains unavailable");
-            verify(window.presentedRequest.label === "Touchpad disabled",
+            verify(window.testCard.presentedRequest.label === "Touchpad disabled",
                    "native event label reaches the OSD");
             verify(!findChild(window.testCard, "osdTrack").visible,
                    "status-only request has no level bar");

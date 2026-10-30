@@ -1,0 +1,658 @@
+//! Connection security: roles, registries, rejection of unauthorised peers,
+//! single use sockets, protocol errors. Every client here is a real Wayland client on
+//! a real socket against the real compositor thread.
+
+mod common;
+
+use std::io::{Read, Write};
+use std::os::unix::net::UnixStream;
+use std::time::Duration;
+
+use bsm_compositor::{Harness, HarnessConfig};
+use bsm_proto::scene::{SceneCommand, SceneEvent};
+use common::*;
+
+fn harness(outputs: usize) -> Harness {
+    Harness::start(HarnessConfig::with_outputs(outputs, 64, 48)).expect("harness")
+}
+
+fn iface_names(c: &Client) -> Vec<String> {
+    c.interfaces().into_iter().map(|(n, _)| n).collect()
+}
+
+#[test]
+fn greeter_registry_is_exactly_the_documented_set() {
+    let mut h = harness(2);
+    let c = connect_greeter(&mut h, 1, solid([10, 20, 30, 255]));
+    assert_eq!(
+        c.interfaces(),
+        vec![
+            ("wl_compositor".to_string(), 1),
+            ("wl_output".to_string(), 2),
+            ("wl_seat".to_string(), 1),
+            ("wl_shm".to_string(), 1),
+            ("wl_subcompositor".to_string(), 1),
+            ("wp_fractional_scale_manager_v1".to_string(), 1),
+            ("wp_presentation".to_string(), 1),
+            ("wp_viewporter".to_string(), 1),
+            ("xdg_wm_base".to_string(), 1),
+            ("zwlr_layer_shell_v1".to_string(), 1),
+            ("zwp_linux_dmabuf_v1".to_string(), 1),
+            ("zxdg_output_manager_v1".to_string(), 1),
+        ]
+    );
+    assert!(!iface_names(&c).iter().any(|n| n == "bsm_session_host_v1"));
+}
+
+#[test]
+fn greeter_xdg_toplevels_are_accepted_but_never_composed() {
+    let mut h = harness(1);
+    let mut c = connect_greeter(&mut h, 1, solid([10, 20, 30, 255]));
+    c.xdg_toplevel_paint(&solid([250, 0, 250, 255]));
+    assert!(c.app.xdg_configures >= 1, "the toplevel got its configure");
+    h.send(SceneCommand::ShowGreeterOnly);
+    let f = h.step(Duration::from_millis(16));
+    for y in 0..f[0].height {
+        for x in 0..f[0].width {
+            assert_eq!(f[0].pixel(x, y), [10, 20, 30, 255], "only the layer surface is composed");
+        }
+    }
+}
+
+#[test]
+fn hosted_registry_is_exactly_the_documented_set() {
+    let mut h = harness(2);
+    let path = register_session(&mut h, "s0000000a", 7);
+    bind_host(&h, "s0000000a", 7);
+    let c = Client::connect(&path).expect("bound host connects");
+    assert_eq!(
+        c.interfaces(),
+        vec![
+            ("bsm_session_host_v1".to_string(), 1),
+            ("wl_compositor".to_string(), 1),
+            ("wl_output".to_string(), 2),
+            ("wl_seat".to_string(), 1),
+            ("wl_shm".to_string(), 1),
+            ("zwp_linux_dmabuf_v1".to_string(), 1),
+        ]
+    );
+    for forbidden in [
+        "zwlr_layer_shell_v1",
+        "ext_session_lock_manager_v1",
+        "zwlr_screencopy_manager_v1",
+        "zwlr_output_manager_v1",
+        "zwlr_data_control_manager_v1",
+        "zwp_virtual_keyboard_manager_v1",
+        "wl_data_device_manager",
+        "ext_foreign_toplevel_list_v1",
+        "xdg_wm_base",
+    ] {
+        assert!(!iface_names(&c).iter().any(|n| n == forbidden), "{forbidden} must not be offered");
+    }
+}
+
+#[test]
+fn connect_before_bind_is_held_and_gets_no_protocol_until_bound() {
+    let mut h = harness(1);
+    let path = register_session(&mut h, "s00000001", 1);
+    let mut raw = UnixStream::connect(&path).expect("socket accepts the connection");
+    // wl_display.get_registry(new_id=2): object 1, opcode 1, size 12.
+    raw.write_all(&[1, 0, 0, 0, 1, 0, 12, 0, 2, 0, 0, 0]).unwrap();
+    raw.set_read_timeout(Some(Duration::from_millis(300))).unwrap();
+    let mut buf = [0u8; 64];
+    let r = raw.read(&mut buf);
+    assert!(
+        matches!(&r, Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut)),
+        "a connection that was not bound must receive nothing, got {r:?}"
+    );
+    assert!(
+        !h.events().iter().any(|e| matches!(e, SceneEvent::SessionConnected { .. })),
+        "no SessionConnected before BindHost"
+    );
+    bind_host(&h, "s00000001", 1);
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnected { .. })).expect("promoted after BindHost");
+    raw.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+    let n = raw.read(&mut buf).expect("registry events after promotion");
+    assert!(n > 0);
+}
+
+#[test]
+fn sockets_are_single_use() {
+    let mut h = harness(1);
+    let path = register_session(&mut h, "s00000002", 1);
+    bind_host(&h, "s00000002", 1);
+    let _first = Client::connect(&path).expect("first connection");
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnected { .. })).expect("connected");
+    // The socket file is gone and nothing listens any more.
+    assert!(!path.exists(), "the session socket must be removed after the host connected");
+    assert!(UnixStream::connect(&path).is_err(), "no second connection to a single-use socket");
+    let n = h.events().iter().filter(|e| matches!(e, SceneEvent::SessionConnected { .. })).count();
+    assert_eq!(n, 1);
+}
+
+#[test]
+fn wrong_pid_is_rejected_and_closed() {
+    let mut h = harness(1);
+    let path = register_session(&mut h, "s00000003", 1);
+    // A different live process stands in for "the bridge the helper started".
+    let mut other = std::process::Command::new("sleep").arg("30").spawn().expect("spawn sleep");
+    h.send(SceneCommand::BindHost {
+        session: "s00000003".into(),
+        generation: 1,
+        scope: my_scope(),
+        host_pid: other.id(),
+    });
+    h.sync();
+    let mut raw = UnixStream::connect(&path).expect("connects");
+    raw.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+    let mut buf = [0u8; 16];
+    let n = raw.read(&mut buf).unwrap_or(0);
+    assert_eq!(n, 0, "the rejected connection is closed without a byte of protocol");
+    let ev = h
+        .wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnectionRejected { .. }))
+        .expect("SessionConnectionRejected");
+    let SceneEvent::SessionConnectionRejected { session, reason, .. } = ev else { unreachable!() };
+    assert_eq!(session, "s00000003");
+    assert!(reason.contains("pid"), "{reason}");
+    assert!(!h.events().iter().any(|e| matches!(e, SceneEvent::SessionConnected { .. })));
+    let _ = other.kill();
+    let _ = other.wait();
+}
+
+#[test]
+fn wrong_uid_scope_and_exe_are_rejected() {
+    let mut h = harness(1);
+    // uid
+    h.send(SceneCommand::RegisterSession {
+        session: "s00000004".into(),
+        generation: 1,
+        uid: my_uid() + 1,
+        scope: String::new(),
+        host_pid: 0,
+        host_exe: my_exe(),
+    });
+    let ev = h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionSocketReady { session, .. } if session == "s00000004")).unwrap();
+    let SceneEvent::SessionSocketReady { path, .. } = ev else { unreachable!() };
+    let mut raw = UnixStream::connect(&path).unwrap();
+    raw.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+    assert_eq!(raw.read(&mut [0u8; 8]).unwrap_or(0), 0);
+    let rej = h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnectionRejected { session, .. } if session == "s00000004")).unwrap();
+    assert!(matches!(rej, SceneEvent::SessionConnectionRejected { reason, .. } if reason.contains("uid")));
+
+    // scope
+    let path = register_session(&mut h, "s00000005", 1);
+    h.send(SceneCommand::BindHost {
+        session: "s00000005".into(),
+        generation: 1,
+        scope: "bsm-host-not-my-scope.scope".into(),
+        host_pid: std::process::id(),
+    });
+    h.sync();
+    let mut raw = UnixStream::connect(&path).unwrap();
+    raw.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+    assert_eq!(raw.read(&mut [0u8; 8]).unwrap_or(0), 0);
+    let rej = h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnectionRejected { session, .. } if session == "s00000005")).unwrap();
+    assert!(matches!(rej, SceneEvent::SessionConnectionRejected { reason, .. } if reason.contains("scope")));
+
+    // exe (readable for our own process, so a mismatch must reject)
+    h.send(SceneCommand::RegisterSession {
+        session: "s00000006".into(),
+        generation: 1,
+        uid: my_uid(),
+        scope: String::new(),
+        host_pid: 0,
+        host_exe: "/usr/bin/not-the-bridge".into(),
+    });
+    let ev = h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionSocketReady { session, .. } if session == "s00000006")).unwrap();
+    let SceneEvent::SessionSocketReady { path, .. } = ev else { unreachable!() };
+    bind_host(&h, "s00000006", 1);
+    h.sync();
+    let mut raw = UnixStream::connect(&path).unwrap();
+    raw.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+    assert_eq!(raw.read(&mut [0u8; 8]).unwrap_or(0), 0);
+    let rej = h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnectionRejected { session, .. } if session == "s00000006")).unwrap();
+    assert!(matches!(rej, SceneEvent::SessionConnectionRejected { reason, .. } if reason.contains("exe")));
+}
+
+#[test]
+fn a_session_socket_cannot_be_used_to_impersonate_another_session() {
+    let mut h = harness(1);
+    // Session B expects another process; session A expects us. We connect to B's socket.
+    let _a = register_session(&mut h, "s0000000a", 1);
+    let path_b = register_session(&mut h, "s0000000b", 1);
+    let mut other = std::process::Command::new("sleep").arg("30").spawn().unwrap();
+    h.send(SceneCommand::BindHost { session: "s0000000b".into(), generation: 1, scope: my_scope(), host_pid: other.id() });
+    h.sync();
+    let mut raw = UnixStream::connect(&path_b).unwrap();
+    raw.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+    assert_eq!(raw.read(&mut [0u8; 8]).unwrap_or(0), 0);
+    assert!(h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnectionRejected { session, .. } if session == "s0000000b")).is_some());
+    assert!(!h.events().iter().any(|e| matches!(e, SceneEvent::SessionConnected { .. })));
+    let _ = other.kill();
+    let _ = other.wait();
+}
+
+#[test]
+fn greeter_connection_needs_the_registered_uid_and_pid() {
+    let mut h = harness(1);
+    // Connected before registration: held, silent.
+    let mut raw = UnixStream::connect(&h.greeter_socket).unwrap();
+    raw.write_all(&[1, 0, 0, 0, 1, 0, 12, 0, 2, 0, 0, 0]).unwrap();
+    raw.set_read_timeout(Some(Duration::from_millis(300))).unwrap();
+    assert!(raw.read(&mut [0u8; 8]).is_err(), "no protocol before registration");
+    // Registered for someone else's pid: the held connection is dropped.
+    h.send(SceneCommand::RegisterGreeter { generation: 1, uid: my_uid(), pid: std::process::id() + 1 });
+    raw.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+    assert_eq!(raw.read(&mut [0u8; 8]).unwrap_or(0), 0, "wrong pid is closed");
+    assert!(!h.events().iter().any(|e| matches!(e, SceneEvent::GreeterConnected { .. })));
+    // Wrong uid.
+    h.send(SceneCommand::RegisterGreeter { generation: 2, uid: my_uid() + 1, pid: std::process::id() });
+    h.sync();
+    let mut raw = UnixStream::connect(&h.greeter_socket).unwrap();
+    raw.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+    assert_eq!(raw.read(&mut [0u8; 8]).unwrap_or(0), 0, "wrong uid is closed");
+    assert!(!h.events().iter().any(|e| matches!(e, SceneEvent::GreeterConnected { .. })));
+    // Right credentials: accepted, exactly once.
+    h.send(SceneCommand::RegisterGreeter { generation: 3, uid: my_uid(), pid: std::process::id() });
+    h.sync(); // the manager registers before the greeter is spawned
+    let mut good = Client::connect(&h.greeter_socket).expect("registered greeter connects");
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::GreeterConnected { generation: 3, .. })).unwrap();
+    assert!(good.roundtrip().is_ok());
+    let _second = UnixStream::connect(&h.greeter_socket).unwrap();
+    std::thread::sleep(Duration::from_millis(200));
+    h.sync();
+    let n = h.events().iter().filter(|e| matches!(e, SceneEvent::GreeterConnected { .. })).count();
+    assert_eq!(n, 1, "a second connection for the same generation is not promoted");
+}
+
+#[test]
+fn greeter_cannot_bind_the_session_host_and_hosts_cannot_bind_layer_shell() {
+    let mut h = harness(1);
+    let greeter = connect_greeter(&mut h, 1, solid([1, 2, 3, 255]));
+    let path = register_session(&mut h, "s00000010", 1);
+    bind_host(&h, "s00000010", 1);
+    let mut host = Client::connect(&path).unwrap();
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnected { .. })).unwrap();
+    host.roundtrip().unwrap();
+
+    let name_of = |c: &Client, iface: &str| -> u32 {
+        c.globals
+            .contents()
+            .with_list(|l| l.iter().find(|g| g.interface == iface).map(|g| g.name))
+            .unwrap_or_else(|| panic!("{iface} not advertised"))
+    };
+    let host_name = name_of(&host, "bsm_session_host_v1");
+    let layer_name = name_of(&greeter, "zwlr_layer_shell_v1");
+
+    // The greeter forges a bind to the host global's name: protocol error, connection gone.
+    let mut g = greeter;
+    let qh = g.qh.clone();
+    let _forged = g.globals.registry().bind::<common::bsm::bsm_session_host_v1::BsmSessionHostV1, _, _>(host_name, 1, &qh, ());
+    assert!(g.roundtrip().is_err(), "binding a hidden global must kill the connection");
+
+    // And the host forges a layer-shell bind.
+    let qh = host.qh.clone();
+    let _forged = host
+        .globals
+        .registry()
+        .bind::<wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::ZwlrLayerShellV1, _, _>(layer_name, 1, &qh, ());
+    assert!(host.roundtrip().is_err(), "binding a hidden global must kill the connection");
+}
+
+#[test]
+fn host_protocol_errors() {
+    let mut h = harness(2);
+    let mut c = bring_up_session(&mut h, "s00000020", 9, solid([0, 200, 0, 255]));
+    assert_eq!(c.app.identity.as_ref().map(|i| (i.0.as_str(), i.1.as_str(), i.2)), Some(("s00000020", "9", my_uid())));
+    assert_eq!(c.app.host_outputs.len(), 2);
+
+    // A report with another generation: stale_generation.
+    let host = c.host.clone().unwrap();
+    host.report(common::bsm::bsm_session_host_v1::ReportKind::GnoblinReady, None, 0, 0, "10".into());
+    assert!(c.roundtrip().is_err());
+
+    // A fresh session: duplicate surface for an output is already_constructed.
+    let mut h2 = harness(1);
+    let mut c2 = bring_up_session(&mut h2, "s00000021", 1, solid([0, 1, 0, 255]));
+    let host2 = c2.host.clone().unwrap();
+    let comp = c2.compositor.clone().unwrap();
+    let qh = c2.qh.clone();
+    let s = comp.create_surface(&qh, ());
+    let _dup = host2.get_session_surface(&s, "Virtual-1".into(), &qh, 99);
+    assert!(c2.roundtrip().is_err());
+
+    // Unknown output.
+    let mut h3 = harness(1);
+    let mut c3 = bring_up_session(&mut h3, "s00000022", 1, solid([0, 1, 0, 255]));
+    let host3 = c3.host.clone().unwrap();
+    let comp = c3.compositor.clone().unwrap();
+    let qh = c3.qh.clone();
+    let s = comp.create_surface(&qh, ());
+    let _bad = host3.get_session_surface(&s, "HDMI-9".into(), &qh, 98);
+    assert!(c3.roundtrip().is_err());
+
+    // Inconsistent counts.
+    let mut h4 = harness(1);
+    let mut c4 = bring_up_session(&mut h4, "s00000023", 4, solid([0, 1, 0, 255]));
+    let host4 = c4.host.clone().unwrap();
+    host4.report(common::bsm::bsm_session_host_v1::ReportKind::SurfacesMapped, Some("Virtual-1".into()), 3, 2, "4".into());
+    assert!(c4.roundtrip().is_err());
+
+    // A valid report reaches the manager, tagged with the session and generation.
+    let mut h5 = harness(1);
+    let mut c5 = bring_up_session(&mut h5, "s00000024", 5, solid([0, 1, 0, 255]));
+    c5.host.clone().unwrap().report(common::bsm::bsm_session_host_v1::ReportKind::SurfacesMapped, Some("Virtual-1".into()), 2, 2, "5".into());
+    c5.roundtrip().unwrap();
+    let ev = h5.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionReport { .. })).expect("report forwarded");
+    assert_eq!(
+        ev,
+        SceneEvent::SessionReport {
+            session: "s00000024".into(),
+            generation: 5,
+            report: bsm_proto::scene::HostReport::SurfacesMapped { output: "Virtual-1".into(), mapped: 2, required: 2 },
+        }
+    );
+    let _ = c.surfaces.len();
+}
+
+#[test]
+fn host_evidence_counts_only_frames_after_the_ack_and_resets_on_output_change() {
+    let mut h = harness(1);
+    let path = register_session(&mut h, "s00000030", 1);
+    bind_host(&h, "s00000030", 1);
+    let mut c = Client::connect(&path).unwrap();
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnected { .. })).unwrap();
+    c.host_bind();
+    c.host_create_surfaces();
+    let evidence = |h: &mut Harness| -> Vec<bsm_proto::scene::SurfaceEvidence> {
+        h.sync();
+        h.events()
+            .iter()
+            .rev()
+            .find_map(|e| match e {
+                SceneEvent::SessionSurfaces { surfaces, .. } => Some(surfaces.clone()),
+                _ => None,
+            })
+            .expect("evidence event")
+    };
+    // Commit a right-sized buffer without acknowledging the configure: no evidence.
+    c.host_commit_without_ack(0, &solid([5, 5, 5, 255]));
+    let e = evidence(&mut h);
+    assert_eq!(e.len(), 1);
+    assert!(!e[0].acked);
+    assert_eq!(e[0].presented_frames, 0);
+    // Ack alone is not a frame either.
+    c.host_ack_only(0);
+    let e = evidence(&mut h);
+    assert!(e[0].acked);
+    assert_eq!(e[0].presented_frames, 0);
+    // A frame after the ack counts, and is reported as presented (ready-frame proof).
+    c.host_paint(&solid([5, 5, 5, 255]));
+    let e = evidence(&mut h);
+    assert_eq!(e[0].presented_frames, 1);
+    c.pump();
+    assert!(!c.app.presented.is_empty(), "the first frame after the ack gets a presented event");
+
+    // The output changes: new configure, evidence void until a new ack and frame.
+    let mut o = h.outputs.clone();
+    o[0].width = 80;
+    o[0].height = 60;
+    h.set_outputs(o);
+    c.roundtrip().unwrap();
+    let e = evidence(&mut h);
+    assert!(!e[0].acked);
+    assert_eq!(e[0].presented_frames, 0);
+    // An old-sized buffer committed against the new configure counts for nothing.
+    c.host_ack_only(0);
+    let qh = c.qh.clone();
+    let _ = qh;
+    let e = evidence(&mut h);
+    assert!(e[0].acked);
+    assert_eq!(e[0].presented_frames, 0);
+}
+
+#[test]
+fn a_report_makes_each_surface_publish_one_post_report_evidence_event() {
+    let mut h = harness(2);
+    let mut c = bring_up_session(&mut h, "s00000040", 3, solid([9, 9, 9, 255]));
+    h.sync();
+    h.take_events();
+    let count = |h: &mut Harness| {
+        h.sync();
+        h.events().iter().filter_map(|e| match e {
+            SceneEvent::SessionSurfaces { surfaces, .. } => Some(surfaces.clone()),
+            _ => None,
+        }).collect::<Vec<_>>()
+    };
+    // Without a report, further frames are silent (no flooding).
+    c.host_paint(&solid([9, 9, 9, 255]));
+    assert!(count(&mut h).is_empty(), "frames alone do not emit evidence");
+    // A report arms every surface of the session.
+    c.host.clone().unwrap().report(
+        common::bsm::bsm_session_host_v1::ReportKind::DesktopReady, None, 0, 0, "3".into());
+    c.roundtrip().unwrap();
+    assert!(count(&mut h).is_empty(), "arming alone emits nothing");
+    c.host_paint(&solid([9, 9, 9, 255]));
+    let evs = count(&mut h);
+    assert_eq!(evs.len(), 2, "one event per output frame, not per report: {evs:?}");
+    let last = evs.last().unwrap();
+    assert!(last.iter().all(|s| s.acked && s.presented_frames == 3), "post-report frame counted: {last:?}");
+    // Once only: a further frame emits nothing.
+    h.take_events();
+    c.host_paint(&solid([9, 9, 9, 255]));
+    assert!(count(&mut h).is_empty());
+}
+
+// ---- review F3, F4, F10, F11 ----
+
+fn gone_or_rejected(h: &mut Harness) -> bool {
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionGone { .. })).is_some()
+        && h.events().iter().any(|e| matches!(e, SceneEvent::SessionConnectionRejected { .. }))
+}
+
+#[test]
+fn f4_identical_reports_are_dropped_and_a_report_flood_disconnects_the_bridge() {
+    let mut h = harness(1);
+    let mut c = bring_up_session(&mut h, "s00000050", 2, solid([9, 9, 9, 255]));
+    h.take_events();
+    let host = c.host.clone().unwrap();
+    for _ in 0..3 {
+        host.report(common::bsm::bsm_session_host_v1::ReportKind::GnoblinReady, None, 0, 0, "2".into());
+    }
+    host.report(common::bsm::bsm_session_host_v1::ReportKind::BinguxLaunched, None, 0, 0, "2".into());
+    c.roundtrip().unwrap();
+    h.sync();
+    let n = h.events().iter().filter(|e| matches!(e, SceneEvent::SessionReport { .. })).count();
+    assert_eq!(n, 2, "repeats of an accepted report are not forwarded");
+
+    for i in 0..400u32 {
+        host.report(common::bsm::bsm_session_host_v1::ReportKind::SurfacesMapped, Some("Virtual-1".into()), i % 3, 5, "2".into());
+        if i % 50 == 0 {
+            let _ = c.conn.flush();
+        }
+    }
+    let _ = c.conn.flush();
+    assert!(c.roundtrip().is_err(), "a bridge that floods reports is disconnected");
+    assert!(gone_or_rejected(&mut h), "the manager hears SessionGone and the reason");
+    let reports = h.events().iter().filter(|e| matches!(e, SceneEvent::SessionReport { .. })).count();
+    assert!(reports < 100, "the flood was cut off early: {reports} reports reached the manager");
+}
+
+#[test]
+fn f3_a_request_flood_is_cut_off_and_the_loop_keeps_serving_others() {
+    // A pass limit far below the default makes "faster than the compositor parses"
+    // reproducible: 2000 requests arrive in one flush.
+    let mut cfg = HarnessConfig::with_outputs(1, 64, 48);
+    cfg.request_pass_limit = 500;
+    let mut h = Harness::start(cfg).expect("harness");
+    let mut greeter = connect_greeter(&mut h, 1, solid([1, 2, 3, 255]));
+    let host = bring_up_session(&mut h, "s00000051", 1, solid([9, 9, 9, 255]));
+    let surface = host.surfaces[0].1.clone();
+    let started = std::time::Instant::now();
+    for i in 0..6_000u32 {
+        surface.damage_buffer(0, 0, 1, 1);
+        if i % 2000 == 1999 && host.conn.flush().is_err() {
+            break;
+        }
+    }
+    let _ = host.conn.flush();
+    h.sync();
+    assert!(gone_or_rejected(&mut h), "the flooding bridge was disconnected");
+    assert!(started.elapsed() < Duration::from_secs(20));
+    // Everyone else is unaffected.
+    assert!(greeter.roundtrip().is_ok());
+    h.send(SceneCommand::ShowGreeterOnly);
+    let f = h.step(Duration::from_millis(16));
+    assert_eq!(f[0].pixel(1, 1), [1, 2, 3, 255]);
+}
+
+#[test]
+fn f11_a_client_cannot_create_unbounded_surfaces() {
+    let mut h = harness(1);
+    let mut c = connect_greeter(&mut h, 1, solid([1, 2, 3, 255]));
+    let comp = c.compositor.clone().unwrap();
+    let qh = c.qh.clone();
+    let mut keep = Vec::new();
+    for i in 0..700 {
+        keep.push(comp.create_surface(&qh, ()));
+        if i % 100 == 0 {
+            let _ = c.conn.flush();
+        }
+    }
+    let _ = c.conn.flush();
+    assert!(c.roundtrip().is_err(), "past the surface cap the connection is closed");
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::GreeterGone { .. })).expect("GreeterGone");
+}
+
+#[test]
+fn f10_a_destroyed_hosted_surface_makes_the_session_unpresentable() {
+    let mut h = harness(1);
+    let mut c = bring_up_session(&mut h, "s00000052", 1, solid([9, 9, 9, 255]));
+    h.sync();
+    let before = {
+        let evs = h.events();
+        evs.iter().rev().find_map(|e| match e {
+            SceneEvent::SessionSurfaces { surfaces, .. } => Some(surfaces.len()),
+            _ => None,
+        })
+    };
+    assert_eq!(before, Some(1));
+    c.surfaces[0].1.destroy();
+    c.roundtrip().unwrap();
+    h.sync();
+    let after = h.events().iter().rev().find_map(|e| match e {
+        SceneEvent::SessionSurfaces { surfaces, .. } => Some(surfaces.len()),
+        _ => None,
+    });
+    assert_eq!(after, Some(0), "no surface evidence is left for the destroyed wl_surface");
+}
+
+#[test]
+fn request_evidence_arms_every_surface_like_a_report() {
+    let mut h = harness(2);
+    let mut c = bring_up_session(&mut h, "s00000053", 1, solid([9, 9, 9, 255]));
+    h.take_events();
+    h.send(SceneCommand::RequestEvidence { session: "s00000053".into(), generation: 1 });
+    h.sync();
+    assert!(!h.events().iter().any(|e| matches!(e, SceneEvent::SessionSurfaces { .. })));
+    c.host_paint(&solid([9, 9, 9, 255]));
+    h.sync();
+    let n = h.events().iter().filter(|e| matches!(e, SceneEvent::SessionSurfaces { .. })).count();
+    assert_eq!(n, 2, "one event per output frame");
+    // A stale generation arms nothing.
+    h.take_events();
+    h.send(SceneCommand::RequestEvidence { session: "s00000053".into(), generation: 99 });
+    c.host_paint(&solid([9, 9, 9, 255]));
+    h.sync();
+    assert!(!h.events().iter().any(|e| matches!(e, SceneEvent::SessionSurfaces { .. })));
+}
+
+// ---- review F9 and restart recovery ----
+
+#[test]
+fn a_bridge_may_reconnect_to_the_same_registration_one_connection_at_a_time() {
+    let mut h = harness(1);
+    let path = register_session(&mut h, "s00000060", 4);
+    bind_host(&h, "s00000060", 4);
+    let first = Client::connect(&path).expect("first connection");
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnected { .. })).unwrap();
+    // While connected the socket is gone: a second concurrent connection is impossible.
+    assert!(UnixStream::connect(&path).is_err());
+    drop(first);
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionGone { .. })).expect("SessionGone");
+    h.take_events();
+    // The registration survives; the same path accepts the bridge again, same checks.
+    let mut second = Client::connect(&path).expect("reconnect after the connection closed");
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnected { .. })).expect("connected again");
+    second.host_bind();
+    assert_eq!(second.app.identity.as_ref().map(|i| i.1.as_str()), Some("4"));
+    assert!(UnixStream::connect(&path).is_err(), "single concurrent connection again");
+}
+
+#[test]
+fn a_reconnect_still_needs_the_checks() {
+    let mut h = harness(1);
+    let path = register_session(&mut h, "s00000061", 1);
+    let mut other = std::process::Command::new("sleep").arg("30").spawn().unwrap();
+    // Bound to a process that is not us (the bridge of an earlier run).
+    h.send(SceneCommand::BindHost { session: "s00000061".into(), generation: 1, scope: my_scope(), host_pid: other.id() });
+    h.sync();
+    let mut raw = UnixStream::connect(&path).unwrap();
+    raw.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+    assert_eq!(raw.read(&mut [0u8; 8]).unwrap_or(0), 0, "wrong pid: closed");
+    // The manager binds the restarted bridge (our pid): the next connection is accepted.
+    bind_host(&h, "s00000061", 1);
+    h.sync();
+    let _c = Client::connect(&path).expect("rebound registration accepts the right peer");
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnected { .. })).unwrap();
+    let _ = other.kill();
+    let _ = other.wait();
+}
+
+#[test]
+fn a_registration_replaces_a_socket_left_behind_by_a_dead_process() {
+    let mut h = harness(1);
+    let stale = h.session_dir.join("s00000062-3.sock");
+    std::fs::create_dir_all(&h.session_dir).unwrap();
+    {
+        // A socket file nobody listens on, as a crashed bsm leaves it.
+        let l = std::os::unix::net::UnixListener::bind(&stale).unwrap();
+        drop(l);
+    }
+    assert!(stale.exists());
+    let path = register_session(&mut h, "s00000062", 3);
+    assert_eq!(path, stale, "the path is a pure function of id and generation");
+    bind_host(&h, "s00000062", 3);
+    let _c = Client::connect(&path).expect("the new registration listens on it");
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnected { .. })).unwrap();
+}
+
+#[test]
+fn f9_a_flood_of_pending_connections_cannot_push_out_the_expected_peer() {
+    let mut h = harness(1);
+    let path = register_session(&mut h, "s00000063", 1);
+    // 40 other processes of the same uid connect first and hold their connections.
+    let script = r#"
+import os, socket, sys, time
+p = sys.argv[1]
+for _ in range(40):
+    if os.fork() == 0:
+        s = socket.socket(socket.AF_UNIX)
+        s.connect(p)
+        time.sleep(10)
+        os._exit(0)
+"#;
+    let mut flood = std::process::Command::new("python3").arg("-c").arg(script).arg(&path).spawn().unwrap();
+    std::thread::sleep(Duration::from_millis(1500));
+    // The real bridge connects last and is held like the rest.
+    let mut real = UnixStream::connect(&path).unwrap();
+    real.write_all(&[1, 0, 0, 0, 1, 0, 12, 0, 2, 0, 0, 0]).unwrap();
+    std::thread::sleep(Duration::from_millis(200));
+    bind_host(&h, "s00000063", 1);
+    h.wait_event(WAIT, |e| matches!(e, SceneEvent::SessionConnected { .. })).expect("the expected peer was not evicted");
+    // The strangers were refused (wrong pid), not promoted.
+    let rejected = h.events().iter().filter(|e| matches!(e, SceneEvent::SessionConnectionRejected { .. })).count();
+    assert!(rejected >= 1);
+    let _ = flood.kill();
+    let _ = flood.wait();
+}

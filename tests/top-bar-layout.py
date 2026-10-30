@@ -4,6 +4,10 @@ import shutil
 import tempfile
 import subprocess
 import os
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+import shell_source  # noqa: E402
 
 temporary = tempfile.TemporaryDirectory(prefix="bingux-bar-layout-")
 root = Path(temporary.name)
@@ -14,23 +18,8 @@ for p in source.iterdir():
 s = (source / "shell.qml").read_text()
 
 
-def block_at(text, start):
-    left = text.index("{", start)
-    depth = 1
-    i = left + 1
-    while depth:
-        depth += (text[i] == "{") - (text[i] == "}")
-        i += 1
-    return text[start:i], i
-
-
-def named(text, name):
-    m = re.search(r"\b\w+\s*\{\s*id:\s*" + name + r"\b", text)
-    return block_at(text, m.start())[0]
-
-
-bar = named(s, "topBar")
-popup = named(s, "barOverflow")
+bar = shell_source.object_block(s, shell_source.TOP_BAR)
+popup = shell_source.object_block(s, shell_source.BAR_OVERFLOW)
 popup = popup.replace("id: barOverflow", "id: barOverflow; parent: window.contentItem; y: 40; z: 10", 1)
 bar = bar.replace("PanelWindow {", "Item {", 1)
 bar = bar.replace(
@@ -51,16 +40,18 @@ bar = "\n".join(
     )
     and line != '        color: "transparent"'
 )
+# PanelWindow anchors block has no meaning on the Item stand-in.
+bar = re.sub(r"\n[ \t]*anchors \{\n(?:[ \t]*(?:top|left|right|bottom): true\n)+[ \t]*\}", "", bar, count=1)
 replacements = {
     "tray": "Item { id: tray; implicitWidth: 130; implicitHeight: 32 }",
-    "privacy": "Item { id: privacy; implicitWidth: 32; implicitHeight: 32 }",
+    "privacyContainer": "Item { id: privacyContainer; implicitWidth: 32; implicitHeight: 32 }",
     "metricsPill": 'Pill { id: metricsPill; parent: topBar.overflows(metricsPill) ? overflowColumn : rightControls; Layout.column: topBar.controlColumn(metricsPill); Layout.row: topBar.controlRow(metricsPill); implicitWidth: 240; visible: profileSettings.metricsEnabled; Text { text: "Metrics" } }',
     "inputSourceSelector": 'Pill { id: inputSourceSelector; parent: topBar.overflows(inputSourceSelector) ? overflowColumn : rightControls; Layout.column: topBar.controlColumn(inputSourceSelector); Layout.row: topBar.controlRow(inputSourceSelector); visible: metrics.desktopStateAvailable; implicitWidth: 50; property bool menuOpen: false; Text { text: "EN" } }',
     "systemIndicators": 'Item { id: systemIndicators; implicitWidth: 100; implicitHeight: 32; property string extraStatusDescription: "" }',
-    "notificationCount": "Item { id: notificationCount; implicitWidth: 24; implicitHeight: 24 }",
+    "notificationButton": "Item { id: notificationButton; implicitWidth: 24; implicitHeight: 24 }",
 }
 for name, value in replacements.items():
-    bar = bar.replace(named(bar, name), value)
+    bar = shell_source.replace_object(bar, name, value)
 # Expose real production geometry to the test, without production services.
 bar = bar.replace("id: clockPill", 'id: clockPill\n                objectName: "clock"', 1).replace(
     "id: rightControls", 'id: rightControls\n                    objectName: "rightControls"', 1
@@ -74,19 +65,25 @@ import QtTest
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import "DesktopLayout.js" as DesktopLayout
 ShellRoot {
  id: root
  property var currentTime: new Date()
  function closePanelsExcept(panel) {}
  function openSearch() {}
  function toggleSearch() {}
- QtObject { id: terminalSidebar; property int leftInset: 0; property int rightInset: 0; property int topInset: 0; property int desktopCornerSize: 0 }
+ QtObject { id: terminalSidebar; property int leftInset: 0; property int rightInset: 0; property int topInset: 0; property int desktopCornerSize: 0; property var panelWidgets: [] }
  QtObject { id: profileSettings; property bool metricsEnabled: true }
  QtObject { id: metrics; property bool desktopStateAvailable: true }
  QtObject { id: captureTool; property bool busy: true; property bool recording: true; property string elapsedText: "00:14"; property string state: ""; property int countdown: 0; function stop(){} }
  QtObject { id: calendarPopup; property bool visible: false }
- QtObject { id: controlCentre; property bool visible: false }
+ QtObject { id: controlCentre; property bool visible: false; property var movableWidgets: [] }
  QtObject { id: notificationCentre; property bool visible: false }
+
+
+ QtObject { id: dock; function beginExternalLaunch(desktopId, name) {} }
+ QtObject { id: calendarLoader; property var item: null }
+ QtObject { id: privacySession; property bool active: false }
  QtObject { id: notificationState; property var allEntries: [1,2,3] }
  FileView { id: results; path: Quickshell.env("BINGUX_BAR_LAYOUT_RESULT") }
  POPUP
@@ -109,7 +106,8 @@ ShellRoot {
       terminalSidebar.leftInset = edge === "left" ? inset : 0;
       terminalSidebar.rightInset = edge === "right" ? inset : 0;
       wait(100);
-      compare(clockPill.mapToItem(topBar, clockPill.width/2,0).x, topBar.width/2);
+      // Half-pixel tolerance: odd clock widths centre on a sub-pixel boundary.
+      verify(Math.abs(clockPill.mapToItem(topBar, clockPill.width/2,0).x - topBar.width/2) <= 0.5, "Clock centred");
       verify(topBar.overflowItems.length > 0);
       verify(rightControls.width <= topBar.controlsBudget + 1, "Controls fit reserved half");
       mouseClick(overflowButton);
@@ -196,10 +194,10 @@ ShellRoot {
 
 # Replace only platform surfaces; layout and overflow code above comes from shell.qml.
 (root / "ShellPopup.qml").write_text(
-    "import QtQuick\nItem {\n id: root\n default property alias contents: body.data\n property var screen\n property int popupWidth: 200\n property int popupHeight: 100\n property int contentPadding: 8\n property real preferredX: 0\n property real preferredY: 0\n property alias contentItem: body\n visible: false\n width: popupWidth\n height: popupHeight\n Item { id: body; x: root.contentPadding; y: root.contentPadding; width: root.width-root.contentPadding*2 }\n}\n"
+    "import QtQuick\nItem {\n id: root\n default property alias contents: body.data\n property var screen\n property bool keyboardInteractive: true\n property bool pointerInteractive: true\n property bool dismissOnOutsideClick: true\n property bool keepWindowAlive: false\n property bool keepContentAlive: false\n property var anchorWindow: null\n property var anchorItem: null\n property var motionSource: null\n property bool retained: false\n property int popupWidth: 200\n property int popupHeight: 100\n property int contentPadding: 8\n property real preferredX: 0\n property real preferredY: 0\n property alias contentItem: body\n visible: false\n width: popupWidth\n height: popupHeight\n Item { id: body; x: root.contentPadding; y: root.contentPadding; width: root.width-root.contentPadding*2 }\n}\n"
 )
 (root / "BarTooltip.qml").write_text(
-    "import QtQuick\nQtObject {\n property var anchorItem\n property var barWindow\n property bool requested: false\n property string text\n property bool reorderable: false\n}\n"
+    "import QtQuick\nQtObject {\n property var anchorItem\n property var barWindow\n property bool requested: false\n property string text\n property string supportingText\n property var details: []\n property bool reorderable: false\n property bool detectedReorderable: false\n property bool shown: false\n property point anchorPosition: Qt.point(0, 0)\n}\n"
 )
 (root / "config" / "bingux").mkdir(parents=True)
 result = root / "result"

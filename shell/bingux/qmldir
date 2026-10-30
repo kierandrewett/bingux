@@ -1,9 +1,15 @@
 singleton ApplicationCatalog 1.0 ApplicationCatalog.qml
 singleton Theme 1.0 Theme.qml
 singleton Startup 1.0 Startup.qml
+singleton BsmMode 1.0 BsmMode.qml
+singleton BsmSession 1.0 BsmSession.qml
+singleton BsmReadiness 1.0 BsmReadiness.qml
+BsmSurfaceProbe 1.0 BsmSurfaceProbe.qml
+BsmDesktop 1.0 BsmDesktop.qml
 singleton AdwaitaIcons 1.0 AdwaitaIcons.qml
 singleton LaunchFeedback 1.0 LaunchFeedback.qml
 singleton Python 1.0 Python.qml
+singleton Helper 1.0 Helper.qml
 ActionButton 1.0 ActionButton.qml
 WidgetFace 1.0 WidgetFace.qml
 AppIcon 1.0 AppIcon.qml
@@ -25,9 +31,15 @@ NotificationState 1.0 NotificationState.qml
 SessionActivity 1.0 SessionActivity.qml
 NotificationSurface 1.0 NotificationSurface.qml
 OsdState 1.0 OsdState.qml
+OsdCard 1.0 OsdCard.qml
 NotRespondingDialog 1.0 NotRespondingDialog.qml
 OsdSurface 1.0 OsdSurface.qml
-IdentifyOverlay 1.0 IdentifyOverlay.qml
+WorkspaceChangeState 1.0 WorkspaceChangeState.qml
+WorkspaceChangeSurface 1.0 WorkspaceChangeSurface.qml
+IdentifyState 1.0 IdentifyState.qml
+IdentifySurface 1.0 IdentifySurface.qml
+PadHelpState 1.0 PadHelpState.qml
+PadHelpSurface 1.0 PadHelpSurface.qml
 Pill 1.0 Pill.qml
 ShortcutSession 1.0 ShortcutSession.qml
 WindowSwitcher 1.0 WindowSwitcher.qml
@@ -52,6 +64,7 @@ StatusIndicator 1.0 StatusIndicator.qml
 Tray 1.0 Tray.qml
 TrayMenu 1.0 TrayMenu.qml
 WindowMenu 1.0 WindowMenu.qml
+DesktopMenu 1.0 DesktopMenu.qml
 TerminalSidebar 1.0 TerminalSidebar.qml
 BarControlSurface 1.0 BarControlSurface.qml
 DockMediaControls 1.0 DockMediaControls.qml
@@ -73,6 +86,8 @@ PreviewSpinner 1.0 PreviewSpinner.qml
 PreviewDatabase 1.0 PreviewDatabase.qml
 DocumentPreviewRequest 1.0 DocumentPreviewRequest.qml
 DockWindowIndicators 1.0 DockWindowIndicators.qml
+DockWindowActions 1.0 DockWindowActions.qml
+DockWindowMenu 1.0 DockWindowMenu.qml
 
 DockNotifications 1.0 DockNotifications.qml
 
@@ -140,9 +155,24 @@ ShellCommands 1.0 ShellCommands.qml
 singleton BinguxPreferences 1.0 BinguxPreferences.qml
 
 singleton CompositorEnvironment 1.0 CompositorEnvironment.qml
-singleton LockTheme 1.0 LockTheme.qml
+singleton SessionContext 1.0 SessionContext.qml
+singleton SessionServices 1.0 SessionServices.qml
+SessionScreen 1.0 SessionScreen.qml
+KioskScreen 1.0 KioskScreen.qml
+KioskCard 1.0 KioskCard.qml
+KioskPage 1.0 KioskPage.qml
+KioskPageStack 1.0 KioskPageStack.qml
+SessionOsd 1.0 SessionOsd.qml
+SessionLink 1.0 SessionLink.qml
+SessionGlass 1.0 SessionGlass.qml
+SessionRow 1.0 SessionRow.qml
+SessionShadow 1.0 SessionShadow.qml
+StatusBar 1.0 StatusBar.qml
+SessionSlider 1.0 SessionSlider.qml
 LockAuthentication 1.0 LockAuthentication.qml
-LockScreen 1.0 LockScreen.qml
+GreeterAuthentication 1.0 GreeterAuthentication.qml
+GreeterCatalog 1.0 GreeterCatalog.qml
+GreeterScreen 1.0 GreeterScreen.qml
 NotesSlashMenu 1.0 NotesSlashMenu.qml
 
 
@@ -187,3 +217,4 @@ ExtensionServices 1.0 ExtensionServices.qml
 
 singleton BackgroundEffects 1.0 BackgroundEffects.qml
 BackgroundEffect 1.0 BackgroundEffect.qml
+FirstLoginIntro 1.0 FirstLoginIntro.qml

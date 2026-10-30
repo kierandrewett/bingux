@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.freedesktop.impl.portal.desktop.bingux
+Exec=/usr/libexec/bingux/xdg-desktop-portal-bingux
+SystemdService=xdg-desktop-portal-bingux.service

@@ -1,0 +1,60 @@
+#!/bin/sh
+# Started by bsm-fallback.service when bsm.service has failed.
+# Brings the standalone login screen (greetd) up. On the distro image greetd is
+# switched off by `ConditionKernelCommandLine=!bingux.bsm`; a runtime drop-in
+# with an empty condition list lifts that for this boot only. Nothing here
+# touches the enabled units, so the next boot tries bsm again.
+set -eu
+
+# systemd runs OnFailure= units for every failed start, including the ones that
+# Restart= retries (measured: three runs for three attempts, the first one second
+# into a crash loop). Starting greetd then would put it next to a bsm that may be
+# back a second later, and two display managers cannot share the seat. So wait for
+# the outcome: bsm running again (nothing to do), stopped on purpose (nothing to
+# do) or given up (state failed: the start limit was hit).
+MAX_WAIT="${BSM_FALLBACK_MAX_WAIT:-300}"
+
+log() { echo "bsm-fallback: $*"; }
+
+waited=0
+while :; do
+    state="$(systemctl show -p ActiveState --value bsm.service 2>/dev/null || echo unknown)"
+    case "$state" in
+        active)
+            log "bsm is running again after $waited s; no fallback needed"
+            exit 0
+            ;;
+        inactive)
+            log "bsm was stopped; no fallback"
+            exit 0
+            ;;
+        failed) break ;;
+    esac
+    if [ "$waited" -ge "$MAX_WAIT" ]; then
+        log "bsm is still $state after $MAX_WAIT s; falling back"
+        break
+    fi
+    sleep 1
+    waited=$((waited + 1))
+done
+
+if ! systemctl cat greetd.service >/dev/null 2>&1; then
+    log "greetd.service is not installed; no fallback login screen is available."
+    log "Switch to a text console (Ctrl+Alt+F3) and read: journalctl -u bsm -u bsm-helper"
+    exit 1
+fi
+
+# greetd waits for plymouth-quit-wait, which waits for the splash. bsm-plymouth-handover
+# already withdraws it when bsm fails; this covers a bsm that never got as far as
+# running (start limit hit before a process started).
+if command -v plymouth >/dev/null 2>&1 && plymouth --ping >/dev/null 2>&1; then
+    plymouth quit || log "plymouth quit failed; greetd may wait for the splash"
+fi
+
+dropin=/run/systemd/system/greetd.service.d
+mkdir -p "$dropin"
+# An empty assignment resets the condition list set by the image's drop-in.
+printf '[Unit]\nConditionKernelCommandLine=\n' >"$dropin/90-bsm-fallback.conf"
+systemctl daemon-reload
+log "bsm failed; starting greetd. Logs: journalctl -u bsm -u bsm-helper"
+exec systemctl start --no-block greetd.service

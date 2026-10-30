@@ -1,0 +1,104 @@
+# bsm: the Bingux Session Manager. One persistent system compositor and session
+# manager, its root helper for PAM, the hosted-session bridge and the greeter
+# image converter. Built by distro/container-build.sh from the same source
+# archive as the `bingux` package (scripts/make-source-archive.sh).
+#
+# Installing this package enables nothing: bsm becomes the display manager only
+# when an administrator runs `bsm-set-display-manager enable` or the image boots
+# with `bingux.bsm` on the kernel command line (docs/bsm/packaging.md).
+# shellcheck shell=bash disable=SC2034,SC2154
+pkgname=bsm
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Bingux Session Manager: system compositor, greeter host and fast user switching'
+arch=('x86_64')
+url='https://github.com/kierandrewett/bingux'
+license=('GPL-3.0-or-later')
+# Smithay's DRM backend links libseat, libudev, libinput, libgbm, EGL and
+# libxkbcommon; bsm-host links libpipewire (ScreenCast frames; input goes through a pure Rust EIS client) (
+# RemoteDesktop frames and input from the hosted Gnoblin); bsm-helper links PAM.
+makedepends=('cargo' 'clang' 'pkgconf' 'seatd' 'libinput' 'libdrm' 'mesa' 'libxkbcommon'
+    'systemd-libs' 'wayland' 'pam' 'libpipewire' 'dbus')
+depends=('bingux' 'gnoblin' 'seatd' 'polkit' 'dbus' 'pam' 'systemd' 'libinput' 'libdrm' 'mesa'
+    'libxkbcommon' 'libpipewire' 'pipewire' 'wireplumber' 'wayland' 'plymouth')
+# bsm.service does not start without a greeter, so greetd stays recommended:
+# bsm-fallback.service starts it when bsm cannot be kept running.
+optdepends=('greetd: login screen that bsm-fallback.service starts when bsm fails')
+options=('!debug' '!lto')
+backup=('etc/bsm/bsm.toml')
+install=bsm.install
+source=("bingux-$pkgver.tar.xz" 'bsm.install')
+sha256sums=('SKIP' 'SKIP')
+
+# Crates built here. Each is standalone (own Cargo.lock), like the other Rust
+# packages of this repository; the shared contract crate bsm-proto is a path
+# dependency of all of them.
+_crates=(bsm bsm-helper bsm-host bsm-appearance)
+
+prepare() {
+    cd "$srcdir/bingux-$pkgver" || return
+    local crate
+    for crate in "${_crates[@]}"; do
+        cargo fetch --locked --manifest-path "packages/$crate/Cargo.toml" --target x86_64-unknown-linux-gnu
+    done
+}
+
+build() {
+    cd "$srcdir/bingux-$pkgver" || return
+    export CARGO_TARGET_DIR="$srcdir/target"
+    local crate
+    for crate in "${_crates[@]}"; do
+        # --locked: the committed Cargo.lock decides the dependency versions.
+        # No `test-auth` or `test-pattern` feature: production builds contain no
+        # mock login and no generated frames.
+        cargo build --locked --release --manifest-path "packages/$crate/Cargo.toml"
+    done
+}
+
+# No check(): the crates' tests need a GPU, a session bus and PAM test stacks that the
+# build container lacks. They run on the host (cargo test per crate, tests/bsm-*.py).
+
+package() {
+    cd "$srcdir/bingux-$pkgver" || return
+    local bin="$srcdir/target/release"
+    install -Dm755 "$bin/bsm" "$pkgdir/usr/bin/bsm"
+    install -Dm755 "$bin/bsmctl" "$pkgdir/usr/bin/bsmctl"
+    # Not user commands: the helper and bsm exec these by path.
+    install -Dm755 "$bin/bsm-helper" "$pkgdir/usr/libexec/bsm/bsm-helper"
+    install -Dm755 "$bin/bsm-host" "$pkgdir/usr/libexec/bsm/bsm-host"
+    install -Dm755 "$bin/bsm-imgconv" "$pkgdir/usr/libexec/bsm/bsm-imgconv"
+    install -Dm755 packaging/bsm/bin/bsm-fallback "$pkgdir/usr/libexec/bsm/fallback"
+    install -Dm755 packaging/bsm/bin/bsm-set-display-manager "$pkgdir/usr/bin/bsm-set-display-manager"
+    # bsm.service's hooks around the boot splash (docs/bsm/boot.md).
+    install -Dm755 packaging/bsm/bin/bsm-plymouth-handover "$pkgdir/usr/libexec/bsm/bsm-plymouth-handover"
+
+    # Units. None is enabled by the package.
+    local unit
+    for unit in packaging/bsm/systemd/*; do
+        install -Dm644 "$unit" "$pkgdir/usr/lib/systemd/system/$(basename "$unit")"
+    done
+    # The stock plymouth-quit.service runs after bsm, which withdraws the splash itself.
+    install -Dm644 packaging/bsm/plymouth/10-bsm-order.conf \
+        "$pkgdir/usr/lib/systemd/system/plymouth-quit.service.d/10-bsm.conf"
+    install -Dm644 packaging/bsm/sysusers/bsm.conf "$pkgdir/usr/lib/sysusers.d/bsm.conf"
+    install -Dm644 packaging/bsm/tmpfiles/bsm.conf "$pkgdir/usr/lib/tmpfiles.d/bsm.conf"
+    # Applied by bsm.service itself, not at boot (see the file).
+    install -Dm644 packaging/bsm/share/tmpfiles-active.conf "$pkgdir/usr/share/bsm/tmpfiles-active.conf"
+
+    install -Dm644 packaging/bsm/dbus/org.bingux.Session1.conf \
+        "$pkgdir/usr/share/dbus-1/system.d/org.bingux.Session1.conf"
+    install -Dm644 packaging/bsm/polkit/50-bsm.rules "$pkgdir/usr/share/polkit-1/rules.d/50-bsm.rules"
+    # PAM services of the helper (bsm-login, bsm-unlock).
+    for unit in packaging/bsm/pam/*; do
+        install -Dm644 "$unit" "$pkgdir/etc/pam.d/$(basename "$unit")"
+    done
+
+    install -Dm644 packaging/bsm/config/bsm.toml "$pkgdir/etc/bsm/bsm.toml"
+    install -Dm644 docs/bsm/packaging.md "$pkgdir/usr/share/doc/bsm/packaging.md"
+    install -Dm644 docs/bsm/boot.md "$pkgdir/usr/share/doc/bsm/boot.md"
+    install -Dm644 docs/bsm/manager.md "$pkgdir/usr/share/doc/bsm/manager.md"
+    install -Dm644 docs/bsm/architecture.md "$pkgdir/usr/share/doc/bsm/architecture.md"
+    install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
+    install -Dm644 packages/bsm/protocol/bsm-session-host-v1.xml \
+        "$pkgdir/usr/share/bsm/protocol/bsm-session-host-v1.xml"
+}

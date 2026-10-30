@@ -154,6 +154,8 @@ ShellPopup {
     keyboardInteractive: true
 
     function settings(panel) {
+        if (!SessionServices.allows("settings"))
+            return;
         Quickshell.execDetached([Python.python, Python.applicationSpawn, "--", Python.settings].concat(panel ? [panel] : []));
         visible = false;
     }
@@ -209,7 +211,15 @@ ShellPopup {
                 onSettingsRequested: panel => root.settings(panel)
                 onDetailRequested: (page, trigger, audioTab) => root.openDetail(page, trigger, audioTab)
                 onLockRequested: {
-                    Quickshell.execDetached(["bingux-lock"]);
+                    if (!SessionServices.allows("lock"))
+                        return;
+                    if (BsmMode.integrated)
+                        // bsm locks and animates; a refusal is shown as a notification.
+                        BsmSession.request("lock", {
+                            notify: true
+                        });
+                    else
+                        Quickshell.execDetached(["bingux-lock"]);
                     root.visible = false;
                 }
                 onCustomiseRequested: root.openDetail("customise", null, "")

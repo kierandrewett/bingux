@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use crate::ui::{
     Group, Icon, Overlays, PageHead, Row, Status, dropdown, level_row, page_column, row, segmented,
-    status, switch_row, use_overlays, use_tokens,
+    row_button, status, switch_row, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
 use freya::prelude::*;
@@ -54,6 +54,9 @@ pub(crate) struct Model {
     dock_scroll_direction: String,
     tiles: [bool; 5],
     public_ip_lookup: bool,
+    /// Show this account's avatar and wallpaper on the login screen. On when the
+    /// dump comes from a bingux-config that does not know the key.
+    show_personal_images: bool,
     /// GNOME's removable-media and recent-file keys; `None` when they cannot be read.
     gnome: Option<Gnome>,
 }
@@ -96,6 +99,10 @@ impl Model {
             dock_scroll_direction: text(desktop, "dockScrollDirection")?,
             tiles,
             public_ip_lookup: flag(privacy, "publicIpLookup")?,
+            show_personal_images: privacy
+                .get("showPersonalImages")
+                .and_then(Json::as_bool)
+                .unwrap_or(true),
             gnome: None,
         })
     }
@@ -177,6 +184,7 @@ impl Model {
                 "desktop.dock_scroll_direction" => self.dock_scroll_direction = value.clone(),
                 "desktop.sidebar_edge" => self.sidebar_edge = Some(value.clone()),
                 "privacy.public_ip_lookup" => self.public_ip_lookup = value == "true",
+                "privacy.show_personal_images" => self.show_personal_images = value == "true",
                 _ => {}
             },
             Change::Unset("desktop.sidebar_edge") => self.sidebar_edge = None,
@@ -278,14 +286,23 @@ fn media_group(ctx: Ctx, gnome: &Gnome) -> Group {
         ))
 }
 
-/// "Privacy": the public IP lookup, then the recent-file keys when they can be read.
-fn privacy_group(ctx: Ctx, public_ip: bool, gnome: Option<&Gnome>) -> Group {
-    let mut group = Group::titled("Privacy").row(
-        switch_row("Show my public IP address", public_ip, move |on: bool| {
-            write(ctx, Change::Set("privacy.public_ip_lookup", on.to_string()))
-        })
-        .leading(Icon::ViewConceal),
-    );
+/// "Privacy": the public IP lookup, the login-screen images, then the recent-file
+/// keys when they can be read.
+fn privacy_group(ctx: Ctx, public_ip: bool, personal_images: bool, gnome: Option<&Gnome>) -> Group {
+    let mut group = Group::titled("Privacy")
+        .row(
+            switch_row("Show my public IP address", public_ip, move |on: bool| {
+                write(ctx, Change::Set("privacy.public_ip_lookup", on.to_string()))
+            })
+            .leading(Icon::ViewConceal),
+        )
+        .row(
+            switch_row("Personal images on the login screen", personal_images, move |on: bool| {
+                write(ctx, Change::Set("privacy.show_personal_images", on.to_string()))
+            })
+            .subtitle("Show your avatar and wallpaper before you sign in. Every local account can see them.")
+            .leading(Icon::AvatarDefault),
+        );
     if let Some(gnome) = gnome {
         let days = gnome.recent_max_age;
         group = group
@@ -306,6 +323,29 @@ fn privacy_group(ctx: Ctx, public_ip: bool, gnome: Option<&Gnome>) -> Group {
             ));
     }
     group
+}
+
+/// "Introduction": reopen the first-login guide in the running shell.
+fn introduction_group(error: State<Option<String>>) -> Group {
+    Group::titled("Introduction").row(
+        row("Shortcuts and shell tour")
+            .subtitle("Show the first-login guide to this desktop's shortcuts again.")
+            .trailing(row_button("Show introduction", move |_| show_introduction(error))),
+    )
+}
+
+/// Reopen the first-login introduction in the running shell.
+fn show_introduction(mut error: State<Option<String>>) {
+    background_then(
+        || {
+            let program = system::locate("binguxctl");
+            system::run(&program, &["ipc", "introduction", "show"], Duration::from_secs(5))
+        },
+        move |result| match result {
+            Ok(_) => error.set(None),
+            Err(failure) => error.set(Some(failure.0)),
+        },
+    );
 }
 
 /// Options for "Forget recent files after", in days. The current value is kept
@@ -439,6 +479,8 @@ impl Component for DesktopPage {
         let model = system::use_cached_persistent("desktop", load);
         let overlays = use_overlays();
         let pending = use_state::<Option<f64>>(|| None);
+        // The failure of "Show introduction"; every other write reports through the reload.
+        let introduction_error = use_state::<Option<String>>(|| None);
         let ctx = Ctx {
             model,
             overlays,
@@ -578,7 +620,9 @@ impl Component for DesktopPage {
                     })),
             )
             .maybe_child(m.gnome.as_ref().map(|gnome| media_group(ctx, gnome)))
-            .child(privacy_group(ctx, m.public_ip_lookup, m.gnome.as_ref()));
+            .child(privacy_group(ctx, m.public_ip_lookup, m.show_personal_images, m.gnome.as_ref()))
+            .child(introduction_group(introduction_error))
+            .maybe_child(introduction_error.read().clone().map(|message| status(Status::Error(message))));
         veiled(page, loading)
     }
 }
@@ -601,6 +645,7 @@ fn placeholder() -> Model {
         dock_scroll_direction: "default".to_string(),
         tiles: TILE_DEFAULTS,
         public_ip_lookup: false,
+        show_personal_images: true,
         gnome: Some(Gnome {
             automount: true,
             automount_open: false,
