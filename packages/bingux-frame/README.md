@@ -57,3 +57,17 @@ pixels, semantic click regions, redraw requests, and the explicit
 `--button-layout=:close` override. It needs GTK4, libadwaita, Weston, a C
 compiler, and D-Bus. It does not change desktop settings or use the active
 session. Native compositor input and configuration reload still need a VM check.
+
+## GPU memory
+
+The helper sets `GDK_DISABLE=dmabuf` before GTK starts (`frame_paint_init` in
+`paint-gtk.c`). It only reads strips back into shared memory, so it needs no
+dma-buf textures. With them enabled, a helper started by Gnoblin gets GTK's
+Vulkan renderer, and each `gsk_renderer_render_texture()` call leaks an exported
+dma-buf download image. GTK 4.20.4 with Mesa RADV showed 390 MB of VRAM per 600
+calls, and a running helper held 10 GB after under two hours. With the setting,
+60 resizes of a test window left the helper at 47 GPU objects and 38 MB.
+Check this after a GTK upgrade: remove the setting, run a loop of
+`gsk_renderer_render_texture()` plus `gdk_texture_download()` under Gnoblin's
+library path, and watch `drm-total-vram` in `/proc/PID/fdinfo`. The GTK bug
+itself is not reported upstream.
