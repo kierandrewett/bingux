@@ -130,12 +130,13 @@ impl PreviewNav {
 }
 
 /// The icon of a source: its type's, by the one file icon API.
-pub(super) fn icon_of(source: &PreviewSource) -> FileIcon {
+///
+/// `folder` is what the caller already knows. This never asks the disk: it runs
+/// while a frame is drawn, and on a network mount that is a wait the whole window
+/// shares.
+pub(super) fn icon_of(source: &PreviewSource, folder: bool) -> FileIcon {
     match source {
-        PreviewSource::Path(path) => {
-            let kind = if path.is_dir() { Kind::Directory } else { Kind::File };
-            FileIcon::for_path(path, kind)
-        }
+        PreviewSource::Path(path) => FileIcon::for_path(path, if folder { Kind::Directory } else { Kind::File }),
         PreviewSource::Bytes { name, .. } => FileIcon::for_name(name),
     }
 }
@@ -146,10 +147,12 @@ pub(super) fn position_text(position: (usize, usize)) -> String {
 }
 
 /// The header: icon, name and position share the room the buttons leave, then
-/// the buttons. `compact` (a phone) keeps Open, Info and Close.
+/// the buttons. `compact` (a phone) keeps Open, Info and Close. `folder` is
+/// whether the source is a folder, as the owner knows it.
 pub(super) fn header(
     tokens: &Tokens,
     source: Option<&PreviewSource>,
+    folder: bool,
     mode: Mode,
     nav: &PreviewNav,
     info: State<bool>,
@@ -160,7 +163,7 @@ pub(super) fn header(
     // out from under its room, over the buttons.
     let title: Element = rect()
         .tw(tokens, &[flex_row(), grow_children(), items(Align::Center), gap(S3), w_full()])
-        .maybe_child(source.map(|source| file_icon_view(tokens, &icon_of(source), IconSize::Row, false)))
+        .maybe_child(source.map(|source| file_icon_view(tokens, &icon_of(source, folder), IconSize::Row, false)))
         .child(
             rect().tw(tokens, &[w_flex()]).child(
                 path_label(source.map_or_else(|| "Nothing to preview".to_owned(), PreviewSource::name))
