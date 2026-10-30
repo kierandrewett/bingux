@@ -729,6 +729,7 @@ PanelWindow {
         }
         ids.splice(source, 1);
         ids.splice(destination, 0, id);
+        root.openOrder = ids.slice();
         const order = ids.concat(appOrder.filter(old => ids.indexOf(old) < 0));
         if (preferences.dockApps)
             BinguxPreferences.saveDesktop({
@@ -1142,6 +1143,36 @@ PanelWindow {
         refreshDebounce.start();
     }
 
+    property var openOrder: []
+    property var groupNewestSerial: ({})
+    // Each window gets a serial the first time the dock sees it. Serials only
+    // grow, so they give a stable identity to windows that carry no app ID
+    // (a list index is reused as windows close) and a creation order for the
+    // dock: a group sits where its newest window opened.
+    property var windowSerials: new Map()
+    property int nextWindowSerial: 1
+    function windowSerial(toplevel) {
+        let serial = windowSerials.get(toplevel);
+        if (serial === undefined) {
+            serial = nextWindowSerial++;
+            windowSerials.set(toplevel, serial);
+        }
+        return serial;
+    }
+    function forgetClosedWindows(toplevels) {
+        const live = new Set(toplevels);
+        for (const known of Array.from(windowSerials.keys())) {
+            if (!live.has(known))
+                windowSerials.delete(known);
+        }
+    }
+    function newestWindowSerial(group) {
+        let newest = 0;
+        for (const window of group.windows)
+            newest = Math.max(newest, window ? windowSerial(window) : 0);
+        return newest;
+    }
+
     function refreshAppGroupsNow() {
         const previousGroups = root.appGroups;
         const previousIds = {};
@@ -1170,9 +1201,12 @@ PanelWindow {
                 return groupIndexes[groupId];
             }
 
+            // A window with no desktop entry has no catalogue name. Say what
+            // the window is: its app ID, or its title when it has none.
             const group = {
                 "id": groupId,
                 "desktopEntry": desktopEntry,
+                "displayName": normalisedAppId.length > 0 ? normalisedAppId : title && title.length > 0 ? title : "Window",
                 "windows": [],
                 "entering": false,
                 "exiting": false
@@ -1206,11 +1240,12 @@ PanelWindow {
             if (toplevel.parent || (!hasAppId && title.length === 0 && associatedGroupId.length === 0))
                 continue;
 
-            const fallbackId = !hasAppId && associatedGroupId.length > 0 ? associatedGroupId : "toplevel-" + index;
+            const fallbackId = !hasAppId && associatedGroupId.length > 0 ? associatedGroupId : "window-" + root.windowSerial(toplevel);
             const groupIndex = addGroup(toplevel.appId, fallbackId, title);
             if (groupIndex >= 0)
                 groups[groupIndex].windows.push(toplevel);
         }
+        root.forgetClosedWindows(toplevels);
         const memberGroups = {};
         const memberIds = new Set();
         for (const folder of root.folders) {
@@ -1255,6 +1290,14 @@ PanelWindow {
             const sectionDifference = Number(bRank.pinned) - Number(aRank.pinned);
             if (sectionDifference !== 0)
                 return sectionDifference;
+            // Running apps keep the order their windows opened in. A drag
+            // (moveGroup) and a new window both rewrite openOrder.
+            if (!aRank.pinned) {
+                const aOpen = root.openOrder.indexOf(a.id), bOpen = root.openOrder.indexOf(b.id);
+                const openDifference = (aOpen < 0 ? root.openOrder.length : aOpen) - (bOpen < 0 ? root.openOrder.length : bOpen);
+                if (openDifference !== 0)
+                    return openDifference;
+            }
             const configuredDifference = aRank.order - bRank.order;
             if (configuredDifference !== 0)
                 return configuredDifference;
@@ -1263,6 +1306,28 @@ PanelWindow {
             const observedDifference = (observedAi < 0 ? observedOrder.length : observedAi) - (observedBi < 0 ? observedOrder.length : observedBi);
             return observedDifference !== 0 ? observedDifference : discoveryIndexes[a.id] - discoveryIndexes[b.id];
         });
+        // A group that gained a window since the last pass moves behind every
+        // other unpinned group, in the order its newest windows opened. Until
+        // start-up has settled the serials are only recorded, so the saved
+        // order survives a restart.
+        const bumped = [];
+        for (const group of visibleGroups) {
+            if (group.folder || ranks.get(group).pinned || group.exiting)
+                continue;
+            const newest = root.newestWindowSerial(group);
+            if (root.startupReady && newest > (root.groupNewestSerial[group.id] || 0))
+                bumped.push({newest, group});
+            root.groupNewestSerial[group.id] = newest;
+        }
+        if (bumped.length > 0) {
+            bumped.sort((a, b) => a.newest - b.newest);
+            for (const entry of bumped)
+                visibleGroups.splice(visibleGroups.indexOf(entry.group), 1);
+            for (const entry of bumped)
+                visibleGroups.push(entry.group);
+        }
+        if (root.startupReady)
+            root.openOrder = visibleGroups.filter(group => !group.folder && !ranks.get(group).pinned).map(group => group.id);
 
         for (const group of visibleGroups) {
             const previousGroup = previousGroupsById[group.id];
@@ -1289,11 +1354,16 @@ PanelWindow {
             if (!root.startupReady)
                 break;
             const previous = previousGroups[index];
-            if (groupIndexes[previous.id] !== undefined)
+            if (groupIndexes[previous.id] !== undefined) {
+                delete root.exitStartedAt[previous.id];
                 continue;
+            }
+            if (root.exitStartedAt[previous.id] === undefined)
+                root.exitStartedAt[previous.id] = Date.now();
             visibleGroups.splice(Math.min(index, visibleGroups.length), 0, {
                 id: previous.id,
                 desktopEntry: previous.desktopEntry,
+                displayName: previous.displayName,
                 windows: [],
                 entering: false,
                 exiting: true
@@ -1315,13 +1385,32 @@ PanelWindow {
             orderCache.restart();
     }
 
+    // When each departing slot started to leave. A slot normally ends with its
+    // own animation. The sweep below bounds that: an animation that never
+    // finishes must not leave an empty slot, and its gap, in the dock.
+    property var exitStartedAt: ({})
     function finishGroupExit(id) {
         // A reopened app can reverse its departure before this callback.
         if (!root.appGroups.some(group => group.id === id && group.exiting))
             return;
         if (root.draggedId.length > 0)
             root.cancelDrag();
+        delete root.exitStartedAt[id];
         root.appGroups = root.appGroups.filter(group => group.id !== id || !group.exiting);
+    }
+
+    Timer {
+        id: exitSweep
+        interval: 500
+        repeat: true
+        running: root.appGroups.some(group => group.exiting)
+        onTriggered: {
+            const limit = Theme.reducedMotion ? 0 : Theme.motion * 3 + 400;
+            for (const group of root.appGroups) {
+                if (group.exiting && Date.now() - (root.exitStartedAt[group.id] || 0) > limit)
+                    root.finishGroupExit(group.id);
+            }
+        }
     }
 
     Component {
@@ -1946,7 +2035,7 @@ PanelWindow {
                         }
                         activeFocusOnTab: true
                         Accessible.role: Accessible.Button
-                        Accessible.name: currentGroup.folder ? (root.folderById(currentGroup.id)?.name || "Folder") : currentGroup.desktopEntry ? currentGroup.desktopEntry.name : currentGroup.id
+                        Accessible.name: currentGroup.folder ? (root.folderById(currentGroup.id)?.name || "Folder") : currentGroup.desktopEntry ? currentGroup.desktopEntry.name : currentGroup.displayName || currentGroup.id
                         Accessible.description: (playingAudio ? "Playing audio. " : "") + (notificationCount > 0 ? notificationCount + " notifications" : "")
                         Keys.onReturnPressed: currentGroup.folder ? root.openFolder(currentGroup.id) : root.toggleGroup(currentGroup, dockButton)
                         Keys.onSpacePressed: currentGroup.folder ? root.openFolder(currentGroup.id) : root.toggleGroup(currentGroup, dockButton)
@@ -1981,6 +2070,13 @@ PanelWindow {
                                 slideDirection = root.appGroups.length < 2 ? 0 : index < (root.appGroups.length - 1) / 2 ? 1 : -1;
                                 transitionProgress = 0;
                                 animatePresence(1);
+                            }
+                            // A delegate can be created for a slot that is already
+                            // leaving. onExitingChanged never fires for that first
+                            // value, so start the exit here or the slot stays.
+                            if (exiting) {
+                                menuOpen = false;
+                                animatePresence(0);
                             }
                         }
                         Timer {

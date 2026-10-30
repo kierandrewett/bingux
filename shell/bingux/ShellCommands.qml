@@ -411,7 +411,7 @@ Scope {
             return ok({
                 apps: groups.map((group, index) => ({
                             id: group.id,
-                            name: group.folder ? (dockView.folderById(group.id)?.name || "Folder") : group.desktopEntry ? group.desktopEntry.name : group.id,
+                            name: group.folder ? (dockView.folderById(group.id)?.name || "Folder") : group.desktopEntry ? group.desktopEntry.name : group.displayName || group.id,
                             index,
                             pinned: dockView.isPinned(group),
                             windows: group.windows.length

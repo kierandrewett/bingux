@@ -251,6 +251,9 @@ mode. `BINGUX_REDUCED_MOTION=1` continues to disable motion independently.
   StatusNotifierItem, so the tray displays its state and delegates left-click
   and right-click menus without a Bingux-specific Tailscale implementation.
 - Dock actions use `.desktop` entry actions. Gnoblin does not currently export a dynamic application-menu protocol for foreign toplevels. Do not claim that arbitrary in-window menus are available until a separate, versioned Gnoblin interface exists.
+- Running apps that are not pinned sit after the pinned apps, in the order their windows opened. A new window in an app that is already in the dock moves that app to the end of the running section. Closing a window never reorders the others. Dragging an app sets its place until it opens another window. After a restart the dock keeps its saved order.
+- A window with no matching `.desktop` entry gets its own dock item, named by its app ID, or its title when it has no app ID. The item has a stable `window-N` identity, where N counts windows in the order the dock first saw them. The dock does not show the process name, because the foreign-toplevel window list it reads carries no process ID.
+- When the last window of an app closes, its dock slot closes with the exit animation. The dock removes a slot that is still present about 400 ms after the animation should have ended, so a stuck animation cannot leave a gap.
 
 ## Search socket protocol v1
 
