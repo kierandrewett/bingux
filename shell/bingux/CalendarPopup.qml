@@ -3,6 +3,7 @@ import QtQuick.Window
 import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
+import Quickshell.Io
 
 ShellPopup {
     id: root
@@ -255,13 +256,32 @@ ShellPopup {
     signal applicationLaunchStarted(string desktopId)
     ApplicationLauncher {
         id: calendarLauncher
-        desktopId: "org.gnome.Calendar"
+        desktopId: root.calendarDesktopId
         onLaunchStarted: desktopId => root.applicationLaunchStarted(desktopId)
         onFailed: message => {
             ShellNotifications.send("Could not open Calendar", message, {
                 retryDesktopId: calendarLauncher.desktopId
             });
         }
+    }
+    // The calendar app is the user's default for text/calendar (Settings > Applications).
+    // GNOME Calendar is used only until that lookup answers or when no default is set.
+    property string calendarDesktopId: "org.gnome.Calendar"
+    function refreshDefaultCalendar() {
+        defaultCalendarLookup.running = true;
+    }
+    onVisibleChanged: if (visible)
+        refreshDefaultCalendar()
+    Component.onCompleted: refreshDefaultCalendar()
+    Process {
+        id: defaultCalendarLookup
+        command: ["/usr/bin/xdg-mime", "query", "default", "text/calendar"]
+        stdout: StdioCollector {
+            onStreamFinished: root.calendarDesktopId = text.trim().replace(/\.desktop$/, "") || "org.gnome.Calendar"
+        }
+    }
+    function openCommand() {
+        return [Python.python, decodeURIComponent(Qt.resolvedUrl("calendar-launch.py").toString().replace(/^file:\/\//, "")), "--open"];
     }
     function eventCommand(event) {
         const command = [Python.python, decodeURIComponent(Qt.resolvedUrl("calendar-launch.py").toString().replace(/^file:\/\//, "")), "--date", new Date(event.start * 1000).toLocaleDateString(Qt.locale(), "yyyy-MM-dd")];
@@ -363,7 +383,7 @@ ShellPopup {
                     onClicked: {
                         if (!root.inlineMode)
                             root.visible = false;
-                        root.launchCalendar(["gnome-calendar"], []);
+                        root.launchCalendar(root.openCommand(), []);
                     }
                 }
             }
