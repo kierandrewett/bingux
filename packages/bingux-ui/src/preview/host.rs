@@ -33,13 +33,24 @@ use crate::task::{Resource, use_resource};
 #[derive(Clone, PartialEq)]
 pub struct PreviewHost {
     source: Option<PreviewSource>,
+    /// Whether the source is a folder, when the owner knows it. When it does
+    /// not, a worker asks the disk: the host never does while it draws, and a
+    /// network mount makes that a wait the whole window shares.
+    folder: Option<bool>,
     mode: Mode,
     nav: PreviewNav,
 }
 
 impl PreviewHost {
     pub fn new(source: Option<PreviewSource>, mode: Mode, nav: PreviewNav) -> Self {
-        PreviewHost { source, mode, nav }
+        PreviewHost { source, folder: None, mode, nav }
+    }
+
+    /// Whether the source is a folder, as the owner knows it. A file list knows
+    /// this from its listing, so the host does not look.
+    pub fn folder(mut self, folder: bool) -> Self {
+        self.folder = Some(folder);
+        self
     }
 }
 
@@ -48,7 +59,17 @@ impl Component for PreviewHost {
         let tokens = use_tokens();
         let info = use_state(|| false);
         let compact = crate::style::is_compact();
-        let header = header(&tokens, self.source.as_ref(), self.mode, &self.nav, info, compact);
+        // What the viewer's own load found out, for an owner that did not say.
+        // It is kept with its source, so a step never shows the last file's kind.
+        let learned = use_state(|| None::<(PreviewSource, bool)>);
+        let folder = self.folder.unwrap_or_else(|| {
+            learned
+                .read()
+                .as_ref()
+                .filter(|(source, _)| self.source.as_ref() == Some(source))
+                .is_some_and(|(_, folder)| *folder)
+        });
+        let header = header(&tokens, self.source.as_ref(), folder, self.mode, &self.nav, info, compact);
         // The keyboard belongs to the content, not to the first button of the
         // header: a popup takes it when it opens, so Space, the arrows and the
         // viewer's own keys work at once and no button shows a ring nobody
@@ -70,6 +91,8 @@ impl Component for PreviewHost {
             .child(match &self.source {
                 Some(source) => Element::from(Subject {
                     source: source.clone(),
+                    folder,
+                    learned,
                     mode: self.mode,
                     nav: self.nav.clone(),
                     info,
@@ -84,6 +107,9 @@ impl Component for PreviewHost {
 #[derive(PartialEq)]
 struct Subject {
     source: PreviewSource,
+    folder: bool,
+    /// Where the load reports whether the source is a folder, for the header.
+    learned: State<Option<(PreviewSource, bool)>>,
     mode: Mode,
     nav: PreviewNav,
     /// Whether the Info panel is open; the host owns it, so it survives a step.
@@ -117,6 +143,20 @@ impl Component for Subject {
             Resource::Error(message) => Some(Err(message.clone())),
             Resource::Loading => None,
         });
+        // Tell the header what the load found. The header sits above this
+        // component, so it learns through the host's state, not by looking at
+        // the disk itself.
+        let found_folder = match &state {
+            Some(Ok(resolved)) => Some(resolved.viewer == bingux_preview_core::ViewerId::Folder),
+            _ => None,
+        };
+        let mut learned = self.learned;
+        let learned_source = self.source.clone();
+        use_side_effect_with_deps(&found_folder, move |found: &Option<bool>| {
+            if let Some(folder) = *found {
+                learned.set(Some((learned_source.clone(), folder)));
+            }
+        });
         let rows = facts_of(&state);
 
         // A pane has no room for the Info panel beside the viewer: it takes
@@ -124,8 +164,8 @@ impl Component for Subject {
         let info_instead = self.mode == Mode::Pane && *self.info.read();
         let stage = match &state {
             Some(Ok(resolved)) => viewers::viewer(resolved.clone(), &self.nav, self.mode),
-            Some(Err(message)) => Element::from(Placeholder::new(icon_of(&self.source), self.source.name(), Some(message.clone()))),
-            None => Element::from(Placeholder::new(icon_of(&self.source), self.source.name(), None)),
+            Some(Err(message)) => Element::from(Placeholder::new(icon_of(&self.source, self.folder), self.source.name(), Some(message.clone()))),
+            None => Element::from(Placeholder::new(icon_of(&self.source, self.folder), self.source.name(), None)),
         };
 
         // The Info panel slides in from the right edge of the content. Its

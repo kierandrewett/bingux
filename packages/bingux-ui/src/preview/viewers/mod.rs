@@ -46,5 +46,5 @@ pub(super) fn viewer(resolved: Arc<Resolved>, nav: &PreviewNav, mode: Mode) -> E
 
 /// The icon of the file a viewer shows.
 fn icon(resolved: &Resolved) -> crate::files::FileIcon {
-    icon_of(&resolved.source)
+    icon_of(&resolved.source, resolved.viewer == ViewerId::Folder)
 }

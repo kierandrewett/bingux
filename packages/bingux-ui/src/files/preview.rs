@@ -289,11 +289,12 @@ impl Component for QuickLook {
         let _ = ctx.env.selection.read();
         let row = subject_row(&ctx);
         let source = row.map(|row| PreviewSource::path(ctx.rows.entry(row).path.clone()));
+        let folder = row.is_some_and(|row| ctx.rows.entry(row).is_dir());
         let mut nav = nav(&self.shared, self.mode);
         if let Some(row) = row {
             nav = nav.position(row + 1, ctx.rows.len());
         }
-        PreviewHost::new(source, self.mode, nav)
+        PreviewHost::new(source, self.mode, nav).folder(folder)
     }
 }
 
@@ -304,8 +305,13 @@ pub(super) fn dock(shared: &Shared, row: Area) -> Element {
     // Reading the selection here is what makes the pane follow it.
     let _ = ctx.env.selection.read();
     let open = *ctx.pane.read();
-    let source = subject_row(&ctx).map(|row| PreviewSource::path(ctx.rows.entry(row).path.clone()));
-    PreviewDock::new(open, row, source, nav(shared, Mode::Pane)).into()
+    let row_of_subject = subject_row(&ctx);
+    let source = row_of_subject.map(|row| PreviewSource::path(ctx.rows.entry(row).path.clone()));
+    let dock = PreviewDock::new(open, row, source, nav(shared, Mode::Pane));
+    match row_of_subject {
+        Some(subject) => dock.folder(ctx.rows.entry(subject).is_dir()).into(),
+        None => dock.into(),
+    }
 }
 
 #[cfg(test)]

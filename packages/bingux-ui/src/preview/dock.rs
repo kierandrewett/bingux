@@ -40,12 +40,20 @@ pub struct PreviewDock {
     open: bool,
     row: Area,
     source: Option<PreviewSource>,
+    /// Whether the source is a folder, when the owner knows it.
+    folder: Option<bool>,
     nav: PreviewNav,
 }
 
 impl PreviewDock {
     pub fn new(open: bool, row: Area, source: Option<PreviewSource>, nav: PreviewNav) -> Self {
-        PreviewDock { open, row, source, nav }
+        PreviewDock { open, row, source, folder: None, nav }
+    }
+
+    /// The source is a folder; see [`PreviewHost::folder`].
+    pub fn folder(mut self, folder: bool) -> Self {
+        self.folder = Some(folder);
+        self
     }
 }
 
@@ -120,7 +128,10 @@ impl Component for PreviewDock {
                 rect()
                     .width(Size::px((content_width - GRIP).max(0.0)))
                     .height(Size::fill())
-                    .child(PreviewHost::new(self.source.clone(), Mode::Pane, nav)),
+                    .child(match self.folder {
+                        Some(folder) => PreviewHost::new(self.source.clone(), Mode::Pane, nav).folder(folder),
+                        None => PreviewHost::new(self.source.clone(), Mode::Pane, nav),
+                    }),
             )
         });
 
