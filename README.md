@@ -78,16 +78,20 @@ and the same file view as the file chooser.
 
 ## Source layout
 
-- `shell/bingux/`: desktop UI and Python helpers.
-- `packages/bingux-config/`: configuration schema, `bingux.toml` store and CLI.
-- `packages/bingux-settings/`: the Settings application.
-- `packages/bingux-files-app/`: the Files application (program `bingux-files`).
-- `packages/bingux-files/`: the filesystem model the file chooser and Files share.
-- `packages/bingux-ui/`: the design system crate for Bingux's Freya applications.
-- `packages/`: search and metrics daemons, native plugins and helper programs.
-- `tests/`: component, input and integration checks.
-- `scripts/test-desktop`: starts an isolated nested desktop for testing.
-- `packaging/`: native RPM and user-systemd packaging files.
+| Directory | What lives there |
+| --------- | ---------------- |
+| `apps/` | Programs you launch: Settings (`apps/settings`), Files (`apps/files`) and the component catalogue (`apps/taxonomy`). |
+| `crates/` | Rust libraries the apps and services share: the design system (`crates/ui`), the configuration store (`crates/config`), the file model, search, previews, data usage and the DSP plugins. |
+| `services/` | Background programs and helpers: search and status daemons, the portal backend, the session and shell helpers, the preview host and the sound effects engine. |
+| `bsm/` | The Bingux Session Manager: one directory per crate (`core`, `manager`, `compositor`, `host`, `helper`, `appearance`, `proto`). |
+| `shell/` | The desktop shell: the QML (`shell/bingux`), the Quickshell-based runtime (`shell/runtime`), its patches and the terminal widget. |
+| `gnoblin/` | What Bingux installs into the Gnoblin compositor: the Lua modules and the input scripts. |
+| `native/` | C and C++ components: QML plugins, Wayland helpers and the GTK frame helper. |
+| `tools/` | Command-line tools: `binguxctl` and the inventory script. |
+| `vendor/` | Forked third-party Rust crates (Freya and winit). |
+| `packaging/`, `distro/` | RPM, Arch and systemd packaging; the Bingux OS image and installer. |
+| `docs/`, `design/` | User and developer documentation; design rationale and rules. |
+| `scripts/`, `tests/` | Build, install and lint scripts; component, input and integration checks. `scripts/test-desktop` starts an isolated nested desktop. |
 
 A complete install includes the native text plugin and QML files. Quickshell and every Qt plugin must use a compatible Qt build.
 

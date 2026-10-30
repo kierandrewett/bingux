@@ -19,7 +19,7 @@ every package: `bingux`, `bingux-config`, `bingux-settings`, `bingux-files`,
    | `Makefile` | `VERSION ?=` |
    | `packaging/rpm/bingux.spec` | `Version:`, and a new `%changelog` entry |
    | `packaging/arch/PKGBUILD` | `pkgver=`, and `pkgrel=1` |
-   | `packages/*/Cargo.toml` | `version =` of every crate, then `cargo update -w --offline` in each |
+   | `{apps,crates,services,bsm}/*/Cargo.toml` | `version =` of every crate, then `cargo update -w --offline` in each |
    | `packaging/metainfo/*.metainfo.xml` | a new `<release version= date=>` first in `<releases>` |
    | `packaging/man/*.1` | the version and date in the `.TH` line |
 

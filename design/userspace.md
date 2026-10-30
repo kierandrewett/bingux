@@ -88,7 +88,7 @@ the changes the image needs after it.
 
 ### 2.1 Packages
 
-`bingux-ui` and the other crates under `packages/` that are not listed below are
+`bingux-ui` and the other crates (under `apps/`, `crates/`, `services/`, `bsm/` and `native/`) that are not listed below are
 **libraries**: they are linked into the programs and are never installed.
 Confirmed from the manifests: `bingux-ui`, `bingux-files` (the filesystem model
 shared by the file chooser and Files), `bingux-search`, `bingux-data-usage`
@@ -253,7 +253,7 @@ the install exactly.
 
 ## 3. What is in the worktree
 
-`packages/` holds every crate and native helper. This table names each one,
+The `apps/`, `crates/`, `services/`, `bsm/`, `native/` and `tools/` directories hold every crate and native helper. This table names each one,
 what it installs and whether it runs without being opened.
 
 | Crate or file | Program | Package | Desktop id | Installs | Runtime dependencies | Runs by itself |
@@ -277,7 +277,7 @@ what it installs and whether it runs without being opened.
 | `bingux-quickshell`, `bingux-qmltermwidget` | patched Quickshell and terminal widget sources | not packaged here | none | the packages require `/usr/bin/qs` instead | Qt 6 | No |
 | `bingux-ui`, `bingux-files`, `bingux-preview-core`, `bingux-search`, `bingux-data-usage` | libraries | linked in, not installed | none | none | none | No |
 | `vendor/` | patched `freya-*` crates (scroll feel) | linked in, not installed | none | none | none | No |
-| `shell/bingux`, `shell/gnoblin` | QML shell, Python helpers, Gnoblin scripts | `bingux` | none | `/usr/share/bingux/shell`, `/usr/share/bingux/gnoblin` | Quickshell, Python 3, PyGObject, Pillow, ffmpeg | The shell runs from Gnoblin's autostart |
+| `shell/bingux`, `gnoblin/scripts` | QML shell, Python helpers, Gnoblin scripts | `bingux` | none | `/usr/share/bingux/shell`, `/usr/share/bingux/gnoblin` | Quickshell, Python 3, PyGObject, Pillow, ffmpeg | The shell runs from Gnoblin's autostart |
 
 ## 4. Open questions
 
@@ -415,7 +415,7 @@ The Bingux repository has no GitHub workflows. Gnoblin has fifteen
 
 ### 11. What about `bingux-inventory` and other unpackaged files?
 
-`packages/bingux-inventory/bingux-inventory.py` is not installed by any target.
+`tools/inventory/bingux-inventory.py` is not installed by any target.
 
 - **Leave it out (default).** `[INFERENCE: it is a development helper.]`
 - **Install it under `/usr/libexec/bingux`** if the shell calls it. Not checked.
@@ -423,9 +423,9 @@ The Bingux repository has no GitHub workflows. Gnoblin has fifteen
 ## 5. Image changes (`~/dev/bingux-os`)
 
 Not applied. The image branch cannot build the new packages until the apps
-are merged into it: its tree has no `packages/bingux-files-app`,
-`packages/bingux-audio-effects`, `packages/bingux-dsp` or
-`packages/bingux-taxonomy`, no split PKGBUILD and a different shell build
+are merged into it: its tree has no `apps/files`,
+`services/audio-effects`, `crates/dsp` or
+`apps/taxonomy`, no split PKGBUILD and a different shell build
 (`bingux-shell`, no `qs`). Adding the package names to `packages.x86_64` today
 would make `pacman` fail with "target not found".
 

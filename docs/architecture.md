@@ -6,7 +6,7 @@ machine hardware configuration.
 
 The shell is a Quickshell configuration run by `bingux-shell`, a build of
 Quickshell with the Bingux runtime patches and a Bingux entry point
-(`packages/bingux-shell`). The QML ships as one packed archive that the binary
+(`shell/runtime`). The QML ships as one packed archive that the binary
 unpacks per user. Native helpers and daemons are small packages with typed
 sockets or QML interfaces. Extensions add trusted QML without changing the
 shell's built-in layout model.
@@ -16,9 +16,9 @@ shell's built-in layout model.
 | Layer              | Location                     | Responsibility                                                           |
 | ------------------ | ---------------------------- | ------------------------------------------------------------------------ |
 | Shell              | `shell/bingux/`              | Draws the top bar, dock, sidebar, popouts and control centre.            |
-| Shell runtime      | `packages/bingux-shell/`     | Quickshell built into `bingux-shell`; runs the packed shell archive.     |
+| Shell runtime      | `shell/runtime/`     | Quickshell built into `bingux-shell`; runs the packed shell archive.     |
 | Python helpers     | `shell/bingux/*.py`          | Desktop glue the shell spawns; installed under `libexec/bingux/shell`.   |
-| Native helpers     | `packages/`                  | Builds the search, status, audio and QML plugin helpers.                 |
+| Native helpers     | `native/`, `services/`       | Builds the audio, clipboard and QML plugin helpers and the daemons.      |
 | User state         | `$XDG_CONFIG_HOME/bingux/`   | Stores layout, settings, search, notes and extension enable state.       |
 | Extension registry | `shell/bingux/extensions.py` | Discovers trusted extension manifests and preserves disabled placements. |
 | Packaging          | `packaging/`                 | Builds Fedora packages and user-systemd units.                           |
