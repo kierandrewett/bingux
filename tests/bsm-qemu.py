@@ -893,7 +893,7 @@ def main():
             if not args.default_timings:
                 # The VNC capture delivers about 3 frames a second, so a 420 ms fade yields one
                 # frame. The test slows every transition to seconds; the default durations are
-                # asserted by the compositor's own trajectory tests (packages/bsm-compositor).
+                # asserted by the compositor's own trajectory tests (bsm/compositor).
                 vm.run(f"mkdir -p /etc/bsm && printf '%s\\n' '[transitions]' {SLOW_TOML} > /etc/bsm/bsm.toml", 20)
                 run.dump("bsm-toml", vm.run("cat /etc/bsm/bsm.toml; systemctl is-active bsm", 20))
                 if (vm.run("systemctl is-active bsm", 30).strip().splitlines() or [""])[-1] == "active":

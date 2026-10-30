@@ -29,7 +29,7 @@
   desktop and phone layouts all live in bingux-ui. They work with no setup
   and behave the same in every app, on desktop and phone.
 - Before building any widget in a Bingux app (Settings, the inspector, any
-  new app), check what bingux-ui already has: `packages/bingux-ui/src/controls/`,
+  new app), check what bingux-ui already has: `crates/ui/src/controls/`,
   `rows.rs`, `group.rs`, `layout.rs`, `shell/`, `window/`, `motion.rs`, the
   tokens in `style/`, and the component list in `docs/bingux-ui.md`. Use the
   existing primitive, or extend it, before writing a new one.
@@ -47,7 +47,7 @@
 
 - `bingux-taxonomy` shows every component, icon, token and state of bingux-ui
   live. Any change to bingux-ui (a new or changed component, icon, token or
-  behaviour) adds or updates its entry in `packages/bingux-taxonomy/src/registry.rs`
+  behaviour) adds or updates its entry in `apps/taxonomy/src/registry.rs`
   in the same change. `scripts/taxonomy-check.py`, run by `make check`, fails
   on an exported item with no entry.
 - Look at the change in the running app, not in a build. Take its page at

@@ -3,7 +3,7 @@
 Contributor notes for `bingux_ui::controls::tab_strip`: what the tabs look
 like and why, the numbers, and the behaviour that does not depend on the look.
 The component's own behaviour (keys, menus, overflow) is in the module comment of
-`packages/bingux-ui/src/controls/tabs.rs` and in `docs/bingux-ui.md`.
+`crates/ui/src/controls/tabs.rs` and in `docs/bingux-ui.md`.
 
 ## Design thesis
 

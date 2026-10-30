@@ -2,7 +2,7 @@
 """Fail when a Bingux window has a visual layout defect.
 
 This is the headless run of the inspector's Layout tab. The tab and this
-script share one set of rules (packages/bingux-ui/src/inspector/layout_checks.rs):
+script share one set of rules (crates/ui/src/inspector/layout_checks.rs):
 uneven padding, an item off its row's centre line, siblings of one kind at
 different heights, a box with dead space under its content, clipped content,
 overlapping controls, text cut off while there is room, misaligned
@@ -63,11 +63,11 @@ capture and a regex for the component path or the node.
 Build first, with the usual shared target:
 
     CARGO_TARGET_DIR=/var/tmp/bingux-settings-target cargo build --features snapshot \
-        --manifest-path packages/bingux-settings/Cargo.toml
+        --manifest-path apps/settings/Cargo.toml
     CARGO_TARGET_DIR=/var/tmp/bingux-settings-target cargo build \
-        --manifest-path packages/bingux-taxonomy/Cargo.toml
+        --manifest-path apps/taxonomy/Cargo.toml
     CARGO_TARGET_DIR=/var/tmp/bingux-settings-target cargo build \
-        --manifest-path packages/bingux-files-app/Cargo.toml
+        --manifest-path apps/files/Cargo.toml
 
 (`--build` does this.) Settings run against fakes (BINGUX_SETTINGS_FAKE_*), so
 a result is the same on every machine. Needs nothing beyond the standard
@@ -89,9 +89,9 @@ from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SETTINGS = ROOT / "packages" / "bingux-settings"
-TAXONOMY = ROOT / "packages" / "bingux-taxonomy"
-FILES = ROOT / "packages" / "bingux-files-app"
+SETTINGS = ROOT / "apps" / "settings"
+TAXONOMY = ROOT / "apps" / "taxonomy"
+FILES = ROOT / "apps" / "files"
 TARGET = Path(os.environ.get("CARGO_TARGET_DIR", "/var/tmp/bingux-settings-target"))
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -147,7 +147,7 @@ FAKES = {
     "BINGUX_SETTINGS_FAKE_NOW": "1793284320",
 }
 
-# The drives of every capture (`BINGUX_FILES_FIXTURE_MOUNTS`, packages/bingux-ui/src/files/
+# The drives of every capture (`BINGUX_FILES_FIXTURE_MOUNTS`, crates/ui/src/files/
 # places_fixture.rs): the machine's own drives and how full they are change between two runs,
 # and a "10 GB free" that becomes "9.9 GB free" is a different width.
 MOUNTS = """\
@@ -682,7 +682,7 @@ def main() -> int:
     if args.rtl:
         # Each capture is made twice: left to right, which keeps the shape of its
         # frame in a directory of its own, and right to left, which compares its
-        # frame with that (BINGUX_UI_LAYOUT_MIRROR, packages/bingux-ui/src/snapshot.rs).
+        # frame with that (BINGUX_UI_LAYOUT_MIRROR, crates/ui/src/snapshot.rs).
         mirrored = []
         for job in jobs:
             kept = workdir / "mirror" / job["name"]

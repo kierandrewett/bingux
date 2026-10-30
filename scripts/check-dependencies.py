@@ -16,7 +16,7 @@ def available(command):
 def check_qt_modules(qmake, source):
     with tempfile.TemporaryDirectory(prefix="bingux-qmake-check-") as directory:
         root = Path(directory)
-        project = source / "packages/bingux-text-layout/text-layout.pro"
+        project = source / "native/text-layout/text-layout.pro"
         result = subprocess.run(
             [qmake, str(project), "-o", str(root / "Makefile")],
             capture_output=True,
@@ -90,7 +90,7 @@ def main():
     if available(args.pkg_config):
         # The first group builds the QML plugins, daemons, helpers and the
         # applications (GStreamer and poppler are the preview host's); the second
-        # builds bingux-shell (Quickshell) from packages/bingux-shell.
+        # builds bingux-shell (Quickshell) from shell/runtime.
         packages = ("gio-2.0", "libpulse", "wayland-client", "Qt6WaylandClient", "gtk4", "libadwaita-1")
         packages += ("gstreamer-1.0", "gstreamer-app-1.0", "gstreamer-video-1.0", "poppler-glib")
         packages += ("libarchive", "CLI11", "jemalloc", "libpipewire-0.3", "libdrm", "xcb", "polkit-agent-1")
@@ -105,7 +105,7 @@ def main():
         if qt_failure:
             failures.append(qt_failure)
 
-    for submodule in ("packages/bingux-shell/quickshell", "subprojects/adwaita-icon-theme"):
+    for submodule in ("shell/runtime/quickshell", "subprojects/adwaita-icon-theme"):
         if not (source / submodule / "CMakeLists.txt").is_file() and not (source / submodule / "index.theme").is_file():
             failures.append(f"submodule missing: {submodule}; run git submodule update --init")
 

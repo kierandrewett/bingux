@@ -16,7 +16,7 @@ scripts/test-desktop --smoke
 ```
 
 Install Sway, dbus-run-session, and Quickshell. Quickshell needs its matching Qt
-runtime and the `Bingux.Text` QML plugin (`packages/bingux-text-layout`). Set
+runtime and the `Bingux.Text` QML plugin (`native/text-layout`). Set
 `QML_IMPORT_PATH` to the directory containing the `Bingux` module, or pass a
 packaged runtime wrapper with `--quickshell /path/to/wrapper`. Optional sidebar
 terminal and helper features need their corresponding Bingux packages too.

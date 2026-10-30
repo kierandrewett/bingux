@@ -16,7 +16,7 @@ import time
 
 
 # Command names that start a Bingux shell surface. Each is a symlink to
-# bingux-shell, which maps the name to a mode (see packages/bingux-shell).
+# bingux-shell, which maps the name to a mode (see shell/runtime).
 SHELL_COMMANDS = (
     "bingux",
     "bingux-lock",
@@ -160,11 +160,11 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
     ladspa = ladspa or prefix / "lib/ladspa"
     payload = {
         build / "effects/libbinguxeffects.so": qml / "Bingux/Effects/libbinguxeffects.so",
-        source / "packages/bingux-effects/qmldir": qml / "Bingux/Effects/qmldir",
+        source / "native/effects/qmldir": qml / "Bingux/Effects/qmldir",
         build / "wayland-sync/libbinguxwaylandsync.so": qml / "Bingux/Wayland/libbinguxwaylandsync.so",
-        source / "packages/bingux-wayland-sync/qmldir": qml / "Bingux/Wayland/qmldir",
+        source / "native/wayland-sync/qmldir": qml / "Bingux/Wayland/qmldir",
         build / "text/libbinguxtext.so": qml / "Bingux/Text/libbinguxtext.so",
-        source / "packages/bingux-text-layout/qmldir": qml / "Bingux/Text/qmldir",
+        source / "native/text-layout/qmldir": qml / "Bingux/Text/qmldir",
         build / "bingux-shell/quickshell/src/bingux-shell": prefix / "bin/bingux-shell",
         build / "bingux-shell.sxa": qml.parent / "bingux-shell.sxa",
         build / "bingux-audio-meter": prefix / "bin/bingux-audio-meter",
@@ -182,21 +182,21 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
         # (bingux_dsp) with the compressor, limiter, reverb and the rest.
         cargo / "release/bingux-effects": prefix / "bin/bingux-effects",
         cargo / "release/libbingux_dsp.so": ladspa / "libbingux_dsp.so",
-        source / "packages/bingux-settings/bingux-settings.desktop": prefix
+        source / "apps/settings/bingux-settings.desktop": prefix
         / "share/applications/bingux-settings.desktop",
-        source / "packages/bingux-settings/bingux-settings.svg": prefix
+        source / "apps/settings/bingux-settings.svg": prefix
         / "share/icons/hicolor/scalable/apps/bingux-settings.svg",
         cargo / "release/bingux-files": prefix / "bin/bingux-files",
-        source / "packages/bingux-files-app/bingux-files.desktop": prefix
+        source / "apps/files/bingux-files.desktop": prefix
         / "share/applications/bingux-files.desktop",
-        source / "packages/bingux-files-app/bingux-files.svg": prefix
+        source / "apps/files/bingux-files.svg": prefix
         / "share/icons/hicolor/scalable/apps/bingux-files.svg",
         cargo / "release/bingux-taxonomy": prefix / "bin/bingux-taxonomy",
         # The helper Files runs for films, songs and PDFs; found beside bingux-files.
         cargo / "release/bingux-preview-host": prefix / "bin/bingux-preview-host",
-        source / "packages/bingux-taxonomy/bingux-taxonomy.desktop": prefix
+        source / "apps/taxonomy/bingux-taxonomy.desktop": prefix
         / "share/applications/bingux-taxonomy.desktop",
-        source / "packages/bingux-taxonomy/bingux-taxonomy.svg": prefix
+        source / "apps/taxonomy/bingux-taxonomy.svg": prefix
         / "share/icons/hicolor/scalable/apps/bingux-taxonomy.svg",
         source / "scripts/bingux-clipboard-paste": prefix / "bin/bingux-clipboard-paste",
         # Tells bingux-searchd that Settings exposes search: its program (opens a
@@ -205,8 +205,8 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
         / "share/bingux/search-apps/bingux-settings.json",
         source / "scripts/bingux-greeter-session": prefix / "bin/bingux-greeter-session",
         source / "scripts/bingux-bsm-greeter": prefix / "bin/bingux-bsm-greeter",
-        source / "packaging/gnoblin/bingux.lua": prefix / "share/gnoblin/conf.d/bingux.lua",
-        source / "packaging/gnoblin/greeter.lua": prefix / "share/bingux/greeter/gnoblin.lua",
+        source / "gnoblin/bingux.lua": prefix / "share/gnoblin/conf.d/bingux.lua",
+        source / "gnoblin/greeter.lua": prefix / "share/bingux/greeter/gnoblin.lua",
         source / "packaging/greetd/config.toml": prefix / "share/bingux/greeter/greetd.toml",
         source / "packaging/polkit/50-bingux-greeter.rules": prefix / "share/polkit-1/rules.d/50-bingux-greeter.rules",
         source / "packaging/tmpfiles/bingux-greeter.conf": prefix / "lib/tmpfiles.d/bingux-greeter.conf",
@@ -277,10 +277,10 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
     for path in sorted((source / "shell/bingux").glob("*.py")):
         copy(path, helpers / path.name)
     gnoblin_integration = prefix / "share/bingux/gnoblin"
-    for path in (source / "shell/gnoblin").rglob("*"):
+    for path in (source / "gnoblin/scripts").rglob("*"):
         if not path.is_file() or "__pycache__" in path.parts or path.suffix == ".pyc":
             continue
-        copy(path, gnoblin_integration / path.relative_to(source / "shell/gnoblin"))
+        copy(path, gnoblin_integration / path.relative_to(source / "gnoblin/scripts"))
     for path, destination in payload.items():
         executable = (
             destination.parent == prefix / "bin"
@@ -298,7 +298,7 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
             destination_path.parent.mkdir(parents=True, exist_ok=True)
             destination_path.write_text(path.read_text().replace("@BINDIR@", str(prefix / "bin")))
             installed.append(destination.relative_to(prefix))
-        elif path == source / "packaging/gnoblin/bingux.lua":
+        elif path == source / "gnoblin/bingux.lua":
             # GDM does not necessarily include the user's command-link folder
             # in PATH. Use this install's wrappers and frame command directly.
             generated = path.read_text()
@@ -325,7 +325,7 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
                 json.dumps(str(prefix / "libexec/bingux/bingux-frame")),
             )
             write_generated(destination, generated)
-        elif path == source / "packaging/gnoblin/greeter.lua":
+        elif path == source / "gnoblin/greeter.lua":
             # The greeter account has no shell profile; the autostart path must
             # point at this install's wrapper.
             generated = path.read_text()
@@ -380,7 +380,7 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
         + "}\n"
     )
     installed.append(entry_path.relative_to(prefix))
-    copy(source / "packages/binguxctl/binguxctl.py", prefix / "libexec/bingux/binguxctl.py")
+    copy(source / "tools/binguxctl/binguxctl.py", prefix / "libexec/bingux/binguxctl.py")
     if managed:
         copy(source / "scripts/install-shell.py", prefix / "libexec/bingux/install-shell.py", True)
 
@@ -773,11 +773,11 @@ def apps_payload(source, cargo, prefix):
         entries.append((prefix / "bin" / name, cargo / "release" / name, 0o755, True))
     entries.append((prefix / "lib/ladspa/libbingux_dsp.so", cargo / "release/libbingux_dsp.so", 0o755, True))
     for package, name in (
-        ("bingux-settings", "bingux-settings"),
-        ("bingux-files-app", "bingux-files"),
-        ("bingux-taxonomy", "bingux-taxonomy"),
+        ("apps/settings", "bingux-settings"),
+        ("apps/files", "bingux-files"),
+        ("apps/taxonomy", "bingux-taxonomy"),
     ):
-        directory = source / "packages" / package
+        directory = source / package
         # Exec names the program by its bare name; point it at this install, so
         # the entry works when the launcher's PATH lacks the prefix.
         desktop = re.sub(

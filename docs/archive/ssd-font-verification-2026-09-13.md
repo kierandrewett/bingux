@@ -22,7 +22,7 @@ so the implementation respects GTK's software-renderer fallback.
 Run from the Gnoblin checkout while the private session is active:
 
 ```sh
-python3 tests/nested-desktop-check.py /tmp/gnoblin-user-config.NZ64us --run bash /home/kieran/dev/bingux/packages/bingux-frame/test-title-rendering.sh /tmp/gnoblin-user-config.NZ64us/font-tests
+python3 tests/nested-desktop-check.py /tmp/gnoblin-user-config.NZ64us --run bash /home/kieran/dev/bingux/native/frame/test-title-rendering.sh /tmp/gnoblin-user-config.NZ64us/font-tests
 python3 tests/nested-ssd-check.py /tmp/gnoblin-user-config.NZ64us
 python3 tests/nested-desktop-check.py /tmp/gnoblin-user-config.NZ64us
 ```

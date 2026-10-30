@@ -89,7 +89,7 @@ repos:
         entry: python3 scripts/taxonomy-check.py
         language: system
         pass_filenames: false
-        files: '^(packages/bingux-ui/(src|icons)/|packages/bingux-taxonomy/(src|coverage-allowlist\.txt)|docs/bingux-ui\.md|AGENTS\.md|CONTRIBUTING\.md)'
+        files: '^(crates/ui/(src|icons)/|apps/taxonomy/(src|coverage-allowlist\.txt)|docs/bingux-ui\.md|AGENTS\.md|CONTRIBUTING\.md)'
       - id: nixfmt-check
         name: nixfmt-check
         entry: env -u LD_LIBRARY_PATH nix shell github:NixOS/nixpkgs/b6018f87da91d19d0ab4cf979885689b469cdd41#nixfmt --command nixfmt --check

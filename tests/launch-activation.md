@@ -31,10 +31,10 @@ and the existing Bingux native build dependencies must be available.
 activation_dir=/var/tmp/bingux-activation-proof
 python3 tests/launch-activation.py --prepare-native "$activation_dir"
 mkdir -p "$activation_dir/native" "$activation_dir/qml/Bingux/Wayland"
-qmake6 "$PWD/packages/bingux-wayland-sync/sync.pro" -o "$activation_dir/native/Makefile"
+qmake6 "$PWD/native/wayland-sync/sync.pro" -o "$activation_dir/native/Makefile"
 make -C "$activation_dir/native" -j2
 cp "$activation_dir/native/libbinguxwaylandsync.so" "$activation_dir/qml/Bingux/Wayland/"
-cp packages/bingux-wayland-sync/qmldir "$activation_dir/qml/Bingux/Wayland/"
+cp native/wayland-sync/qmldir "$activation_dir/qml/Bingux/Wayland/"
 ```
 
 Preparation requires a new directory. It compiles an unclassified GTK 4 binary,
@@ -169,7 +169,7 @@ procedures for main, not claims that the offscreen check proves policy behavior.
 ## Actual dock integration
 
 Main applies the scoped delta to its clean delivery checkout, then builds only
-`packages/bingux-wayland-sync/sync.pro` as above. Do not run a broad install from
+`native/wayland-sync/sync.pro` as above. Do not run a broad install from
 the dirty shared checkout. This candidate's runtime payload is exactly:
 
 - `shell/bingux/Dock.qml`

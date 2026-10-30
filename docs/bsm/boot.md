@@ -64,7 +64,7 @@ plymouth-quit.service  ... After=bsm.service   (drop-in, ordering only)
    `plymouth-quit.service` and `plymouth-quit-wait.service`, so bsm starts as soon as logind,
    D-Bus, seatd and the helper socket are up.
 2. `ExecStartPre=` runs `plymouth deactivate`: master dropped, picture kept.
-3. bsm (compositor, `packages/bsm-compositor/src/gfx_drm.rs`):
+3. bsm (compositor, `bsm/compositor/src/gfx_drm.rs`):
    * `DrmDevice::new(fd, false)`: no connector or CRTC is disabled at start. CRTCs that bsm does
      not drive are switched off after its outputs are known.
    * An output that is already lit keeps its current mode (`get_crtc().mode()`) when the

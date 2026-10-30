@@ -33,7 +33,7 @@ frame is a cut.
     python3 scripts/nav-slide.py
     python3 scripts/nav-slide.py --subpages "Wi-Fi hotspot,Proxy"
 
-Build first: `cargo build --features snapshot` in packages/bingux-settings.
+Build first: `cargo build --features snapshot` in apps/settings.
 Needs PIL and numpy.
 """
 
@@ -268,7 +268,7 @@ def main() -> int:
     if args.fixtures or problems:
         return 1 if problems else 0
     if not args.binary.exists():
-        sys.exit(f"no binary at {args.binary}; run `cargo build --features snapshot` in packages/bingux-settings")
+        sys.exit(f"no binary at {args.binary}; run `cargo build --features snapshot` in apps/settings")
     failed = 0
     print(f"{'subpage':16} " + " ".join(f"{name:>8}" for name in SEGMENTS))
     for label in [name for name in args.subpages.split(",") if name]:

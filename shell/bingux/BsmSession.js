@@ -2,7 +2,7 @@
 // request, the monitor event stream and the tracking of one operation. No QML
 // object is used here, so tests/bsm-session.test.mjs runs it under Node.
 //
-// Contract with bsmctl (packages/bsm, docs/bsm/shell-integration.md):
+// Contract with bsmctl (bsm/core, docs/bsm/shell-integration.md):
 //   bsmctl ACTION --json   stdout: one JSON line {"operation_id": N} and exit 0
 //                          when bsm accepted the request; on refusal exit != 0
 //                          and one JSON line {"error": CODE, "message": TEXT}

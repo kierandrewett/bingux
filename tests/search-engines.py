@@ -10,7 +10,7 @@ import tempfile
 import time
 
 repo = Path(__file__).resolve().parents[1]
-binary = Path(os.environ.get("BINGUX_SEARCHD_BIN", str(repo / "packages/bingux-searchd/target/debug/bingux-searchd")))
+binary = Path(os.environ.get("BINGUX_SEARCHD_BIN", str(repo / "services/searchd/target/debug/bingux-searchd")))
 with tempfile.TemporaryDirectory() as directory:
     base = Path(directory)
     (base / "config/bingux").mkdir(parents=True)

@@ -58,7 +58,7 @@ BuildRequires:  qt6-qtbase-private-devel
 BuildRequires:  qt6-qttools
 BuildRequires:  rust
 BuildRequires:  systemd-rpm-macros
-# bingux-shell: Quickshell (vendored in packages/bingux-shell) built into the
+# bingux-shell: Quickshell (vendored in shell/runtime) built into the
 # Bingux binary with CMake and Ninja.
 BuildRequires:  cmake
 BuildRequires:  ninja-build
@@ -324,7 +324,7 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/dev.drewett.bingux.Ta
 %license %{_datadir}/licenses/bingux/adwaita-icon-theme/COPYING
 %license %{_datadir}/licenses/bingux/adwaita-icon-theme/COPYING_CCBYSA3
 %license %{_datadir}/licenses/bingux/adwaita-icon-theme/COPYING_LGPL
-%license packages/bingux-shell/quickshell/LICENSE
+%license shell/runtime/quickshell/LICENSE
 %license build/licenses/bingux-searchd.LICENSE.dependencies
 %license build/licenses/bingux-statusd.LICENSE.dependencies
 %doc README.md docs/extensions.md docs/locking.md docs/login-screen.md

@@ -12,7 +12,7 @@ How to read it
 - **Enforced by** says what the repository has today. "none found" means no check in the scripts, the 17 layout rules, the a11y checks or the unit tests I read covers it. Nothing was run to confirm.
 - **Proposed check** names the type: layout-lint rule over the captured tree, pixel test, token unit test, ui-lint source rule, a11y check, snapshot diff, scripted walk, or manual review with the reason.
 
-Capture available to a check: `bingux_ui::snapshot` renders a window with no compositor and the inspector `Snapshot` gives per node `area`, `used.border`, `used.padding`, `used.content`, `margin`, `gap`, `corner_radii`, `font_size`, `opacity`, `fill`, `text`, `a11y.role`, `a11y.name`, `a11y.focusable` and `a11y.component` (packages/bingux-ui/src/inspector/snapshot.rs). PNGs and every 16 ms frame can be kept (`--keep`, `BINGUX_SETTINGS_SNAPSHOT_FRAMES`). Scripted input exists (`BINGUX_SETTINGS_SNAPSHOT_SCRIPT`: `down`, `move`, `up`, `touch_*`).
+Capture available to a check: `bingux_ui::snapshot` renders a window with no compositor and the inspector `Snapshot` gives per node `area`, `used.border`, `used.padding`, `used.content`, `margin`, `gap`, `corner_radii`, `font_size`, `opacity`, `fill`, `text`, `a11y.role`, `a11y.name`, `a11y.focusable` and `a11y.component` (crates/ui/src/inspector/snapshot.rs). PNGs and every 16 ms frame can be kept (`--keep`, `BINGUX_SETTINGS_SNAPSHOT_FRAMES`). Scripted input exists (`BINGUX_SETTINGS_SNAPSHOT_SCRIPT`: `down`, `move`, `up`, `touch_*`).
 
 ## Checks that exist today
 

@@ -8,7 +8,7 @@ Back, and when the data it was waiting for lands.
 
 Each scenario is a scripted walk of one capture run (`Snapshot::run_script`): scroll the
 page, `save` its frame, do the thing, `save` again. Every capture also writes its probe
-(BINGUX_UI_PROBE, packages/bingux-ui/src/inspector/probe_checks): the scroll containers
+(BINGUX_UI_PROBE, crates/ui/src/inspector/probe_checks): the scroll containers
 of the frame, with their offset. The check reads the page's own scroll container (the
 largest one) at each save and requires the offset to be what it was before, within a pixel
 (`--tolerance`), and, so that a walk that never scrolled cannot pass on zero, the first

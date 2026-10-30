@@ -4,7 +4,7 @@
 Sources in scripts/icons/src/ pull fork icons with `<fork name="Power" weight="fill"/>`.
 This script reads every `src/generated/<Name>.ts` of the chat icon package (`@chat/icons`,
 a rounded fork of Phosphor with continuous corners; its custom icons such as ChatCompose
-live in the same folder) and writes packages/bingux-ui/icons/chat/geometry.json: the 256 unit outlines of the
+live in the same folder) and writes crates/ui/icons/chat/geometry.json: the 256 unit outlines of the
 regular, fill and bold weights of ALL of them, not only the ones in use, so that any fork
 icon can be chosen in labels.tsv, shown in the catalogue (`ChatIcon`), and built by
 build.py without a checkout of ~/dev/chat. Output is deterministic. It fails when an
@@ -25,8 +25,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SRC = HERE / "src"
 REPO = HERE.parents[1]
-OUT = REPO / "packages/bingux-ui/icons/chat/geometry.json"
-CATALOGUE_RS = REPO / "packages/bingux-ui/src/chat_icon_list.rs"
+OUT = REPO / "crates/ui/icons/chat/geometry.json"
+CATALOGUE_RS = REPO / "crates/ui/src/chat_icon_list.rs"
 FORK = re.compile(r"""<fork\b[^>]*\bname\s*=\s*["']([A-Za-z0-9]+)["']""")
 WEIGHTS = ("regular", "fill", "bold")
 

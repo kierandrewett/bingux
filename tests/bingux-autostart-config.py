@@ -19,7 +19,7 @@ def lua_package():
 
 def main():
     assert (GNOBLIN_SOURCE / "CMakeLists.txt").is_file(), GNOBLIN_SOURCE
-    integration = ROOT / "packaging/gnoblin/bingux.lua"
+    integration = ROOT / "gnoblin/bingux.lua"
     fixture = ROOT / "tests/bingux-autostart-config.c"
     with tempfile.TemporaryDirectory(prefix="bingux-autostart-config-") as temporary:
         temporary = Path(temporary)

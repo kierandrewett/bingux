@@ -393,7 +393,7 @@ same pass by pass in the headless runner.
 
 On Gnoblin the marker used to be set but not seen, because the faded carried window was not
 translucent. Freya cleared a transparent window's canvas to opaque white before drawing, so the
-window's 0.4 opacity mixed with white and not with what lies under it. `bingux-ui/src/app.rs`
+window's 0.4 opacity mixed with white and not with what lies under it. `crates/ui/src/app.rs`
 now clears a transparent window to transparent too. This has not been run on Gnoblin yet.
 
 Gnoblin's control socket is asked for the window list (`windows.list`, API
@@ -623,7 +623,7 @@ icon next to Settings. The RPM package lists them. To run a build from the
 repository:
 
 ```sh
-cargo run --manifest-path packages/bingux-files-app/Cargo.toml -- ~/Documents
+cargo run --manifest-path apps/files/Cargo.toml -- ~/Documents
 ```
 
 ## Not done

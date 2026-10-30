@@ -5,7 +5,7 @@ search as it was at commit `2b4710c`, with the code it rests on. Part 2 is the
 search that replaces it: what it is built from, what it does, how it is tested
 and what is not done. User-facing text is in `docs/files.md` and
 `docs/bingux-ui.md` ("Search in the file views"); the query language is
-documented in `packages/bingux-files/src/find/query.rs`.
+documented in `crates/files/src/find/query.rs`.
 
 > "the search system in files could do with some work to be honest. does it
 > use the searchables system under the hood? and also the search box
@@ -20,9 +20,9 @@ Paths below are at `2b4710c`; the files named here were replaced in Part 2.
 
 | Step | Where | What happened |
 | ---- | ----- | ------------- |
-| Field | `bingux-ui/src/files/address_edit.rs` | The **address bar** was the search box. One text field took a path or a search. Ctrl+F or a letter typed on the list set `Find.scoped` and turned the bar's field into a search field with a chip `in <Folder>` inside it. |
-| Path or search | `bingux-files/src/search.rs` `classify` | Without touching the disk: text starting `/`, `~`, `./`, `../` or a scheme, or naming an entry of the folder, was a path; anything else a query. |
-| Model | `bingux-files/src/search.rs` `Query` | A `Query` was the trimmed text plus its whitespace-split words. No operators, no filters, no quotes. `Query::matches(name)` gave a `Tier`: exact, prefix, word start, substring, all words in any order, fuzzy (3+ letters in order, within a window of `2n + 4`). Case-insensitive, file **name** only. |
+| Field | `crates/ui/src/files/address_edit.rs` | The **address bar** was the search box. One text field took a path or a search. Ctrl+F or a letter typed on the list set `Find.scoped` and turned the bar's field into a search field with a chip `in <Folder>` inside it. |
+| Path or search | `crates/files/src/search.rs` `classify` | Without touching the disk: text starting `/`, `~`, `./`, `../` or a scheme, or naming an entry of the folder, was a path; anything else a query. |
+| Model | `crates/files/src/search.rs` `Query` | A `Query` was the trimmed text plus its whitespace-split words. No operators, no filters, no quotes. `Query::matches(name)` gave a `Tier`: exact, prefix, word start, substring, all words in any order, fuzzy (3+ letters in order, within a window of `2n + 4`). Case-insensitive, file **name** only. |
 | Stage 1 | `chooser.rs` `select_shown` | The loaded folder listing was filtered in memory on every keystroke (`rank`), sorted by tier; ties kept the person's sort. No disk read. |
 | Stage 2 | `files/search.rs` `use_subfolder_search`, `follow_walk` | Only on request (the row "Search subfolders for …", Ctrl+Enter or Shift+Enter, or Enter with no match) a thread ran `bingux_files::search::walk`. |
 | Results | `follow_walk` → `chooser.rs` | The thread sent batches over an `mpsc` channel; a task polled every 60 ms, rebuilt a whole `Listing` of the matches (cloning every entry: about 1 ms per publish at 10,000 results, measured) and put it in a `State`. The file view showed it as a folder with a Location column. |
@@ -65,19 +65,19 @@ Details the question asked about:
 
 **No. None of the three.** What each is:
 
-- **`Searchable`** (`packages/bingux-search/src/service.rs`, re-exported as
+- **`Searchable`** (`crates/search/src/service.rs`, re-exported as
   `bingux_ui::search::Searchable`) is the trait an app implements to register
   *app-owned structured records* (a name, a `Schema`, a `documents()`
   iterator) with the process-wide `SearchService`. Settings uses it for its
-  pages and rows (`bingux-settings/src/settings_index.rs`,
+  pages and rows (`apps/settings/src/settings_index.rs`,
   `pages/search.rs`). `design/search.md` section 2 lists "full-text search
   over file contents; the Files app and searchd keep their own walkers" as a
   **non-goal**, and section 12 says "The file view's address-bar search is
   not migrated".
-- **`bingux-search`** (`packages/bingux-search`, commit `7d877b0`) is the
+- **`bingux-search`** (`crates/search`, commit `7d877b0`) is the
   UI-free engine under it: documents, an in-memory inverted index with prefix
   and typo tolerance, BM25F ranking, filters, OpenSearch-shaped responses.
-- **`bingux-searchd`** (`packages/bingux-searchd`, commit `4e5e397` and
+- **`bingux-searchd`** (`services/searchd`, commit `4e5e397` and
   earlier) is the Spotlight daemon. The shell talks to it over
   `$XDG_RUNTIME_DIR/bingux/search-v1.sock`. Its file provider
   (`providers.rs`) reads a *fixed list of roots* (`config.rs` `file_roots`),
@@ -132,13 +132,13 @@ no menu, no hint. Ctrl+F or typing was the only way in.
 
 | Layer | Where | What |
 | ----- | ----- | ---- |
-| Query model | `bingux-files/src/find/query.rs` | Typed `Query { terms, filters }`; `parse`, `parse_checked`, `Display`; `split_pending` (a `key:value` still being typed). Round trip tested on 20,000 random queries and 30,000 random strings. |
+| Query model | `crates/files/src/find/query.rs` | Typed `Query { terms, filters }`; `parse`, `parse_checked`, `Display`; `split_pending` (a `key:value` still being typed). Round trip tested on 20,000 random queries and 30,000 random strings. |
 | Matcher | `find/matcher.rs` | `Matcher::new(&Query)`; name tiers (exact, prefix, word, substring, words, fuzzy), `match:starts|exact|regex`, `-word`, `name:` globs, `ext:`, `type:`, `size:`, `modified:` (the person's local day, via `localtime_r`), `hidden:`, `case:`; `Rank` = tier, penalty, depth. |
 | Index | `find/index.rs` | `NameIndex`: the names under home in a `bingux_search::Index` (searchable `name`; filterable `ext`, `kind`, `under`). Crawled on a nice'd thread, built aside and swapped, at most 500,000 names, stale after 5 minutes. No sizes or dates: a hit is read from disk when returned. |
 | Walk | `find/walk.rs` | The old walker, over several roots, with the matcher and a `known` set. |
 | Engine | `find/engine.rs` | `run(plan, cancel, emit)`: index answer first (verified on disk, ranked, one batch), then the walk skipping what was sent. Cancel stops between index hits and within 32 entries of the walk. |
 | Scope, history | `find/scope.rs`, `find/history.rs` | Scope roots; eight recent searches in `$XDG_STATE_HOME/bingux/files/recent-searches`. |
-| UI | `bingux-ui/src/files/search.rs`, `search_bar.rs`, `search_filters.rs`, `states.rs`, `chooser.rs` | `Find` state, `use_search_run`, the bar, the Filters panel, the no-results state, `select_shown`. The address bar is path-only again. |
+| UI | `crates/ui/src/files/search.rs`, `search_bar.rs`, `search_filters.rs`, `states.rs`, `chooser.rs` | `Find` state, `use_search_run`, the bar, the Filters panel, the no-results state, `select_shown`. The address bar is path-only again. |
 
 ## 2.2 Streaming and stability
 
@@ -177,7 +177,7 @@ modest; it matters on a cold disk or a large home, which was not measured.
   `bingux-searchd` nor publishes its index to it, and registers no `Searchable`.
   Evidence, both directions:
   - *Files asking searchd*: the shell protocol's request is `query` with a
-    `limit: u8` and no scope (`bingux-searchd/src/protocol.rs`); its file
+    `limit: u8` and no scope (`services/searchd/src/protocol.rs`); its file
     provider reads `file_roots` from config (at most 32), takes up to 256 paths
     per `plocate` seed and drops every path with a hidden component
     (`providers.rs` `query_os_index`). It cannot answer "below this folder,

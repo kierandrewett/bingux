@@ -18,7 +18,7 @@ It covers the interaction-state cluster of design/rules.md:
 
 The apps render through `bingux_ui::snapshot` without a compositor. With
 BINGUX_UI_STATE_CHECK=FILE set, every capture the run saves also runs the checks
-(packages/bingux-ui/src/inspector/state_checks) and appends its report to FILE.
+(crates/ui/src/inspector/state_checks) and appends its report to FILE.
 This script reads them. It runs
 
   * every Bingux Settings page, subpage and click-opened popup, at the desktop
@@ -67,7 +67,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from app_env import isolated  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = ROOT / "packages" / "bingux-files-app"
+FILES = ROOT / "apps" / "files"
 
 # The layout lint owns the list of pages, popups and the way a capture is run.
 _spec = importlib.util.spec_from_file_location("layout_lint", ROOT / "scripts" / "layout-lint.py")
@@ -302,7 +302,7 @@ def main() -> int:
     if args.fixtures:
         return subprocess.run(
             [
-                "cargo", "test", "--features", "testing", "--manifest-path", str(ROOT / "packages" / "bingux-ui" / "Cargo.toml"),
+                "cargo", "test", "--features", "testing", "--manifest-path", str(ROOT / "crates" / "ui" / "Cargo.toml"),
                 "--lib", "state_checks",
             ],
             env=dict(os.environ, CARGO_TARGET_DIR=str(lint.TARGET)),

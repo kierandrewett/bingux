@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A fake bsm greeter control server that speaks the real protocol.
 
-It implements the server side of packages/bsm-proto/src/control.rs closely
+It implements the server side of bsm/proto/src/control.rs closely
 enough to run and screenshot the bsm greeter (shell/bingux/greeter) with no
 bsm, no PAM and no compositor: a hello handshake, revisioned snapshots,
 account selection, PAM-like conversations (a password, a password followed by

@@ -11,7 +11,7 @@ cannot say that a change to the pipeline made every icon a little rounder, as ha
 ("why do all the icons look like this now.. they are all super rounded"), because each icon
 still met every rule. This holds the icons to what they looked like when they were approved.
 
-The whole compiled set (packages/bingux-ui/icons/*-symbolic.svg, and the colour icons in
+The whole compiled set (crates/ui/icons/*-symbolic.svg, and the colour icons in
 icons/colour) is drawn with the exact-area rasteriser of raster.py (no Skia, no cargo, the same
 result on every machine) at 16, 18, 20, 24 and 32 px, each at 1x and at 2x, and measured:
 
@@ -63,7 +63,7 @@ import raster  # noqa: E402
 from labels import load as load_labels  # noqa: E402
 
 REPO = HERE.parents[1]
-ICONS = REPO / "packages/bingux-ui/icons"
+ICONS = REPO / "crates/ui/icons"
 COLOUR = ICONS / "colour"
 GOLDEN = HERE / "golden.json"
 

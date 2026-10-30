@@ -171,12 +171,12 @@ def main():
     binary = Path(
         os.environ.get(
             "BINGUX_STATUSD_BIN",
-            ROOT / "packages/bingux-statusd/target/debug/bingux-statusd",
+            ROOT / "services/statusd/target/debug/bingux-statusd",
         )
     )
     if not binary.is_file():
         raise SystemExit(
-            "build with cargo +1.95.0 build --locked --offline --manifest-path packages/bingux-statusd/Cargo.toml"
+            "build with cargo +1.95.0 build --locked --offline --manifest-path services/statusd/Cargo.toml"
         )
     run_case(binary, "initial", True, kill_parent=True)
     run_case(binary, "reconnect", True)

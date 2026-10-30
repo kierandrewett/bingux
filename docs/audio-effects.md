@@ -172,7 +172,7 @@ Every change is also saved to the preset file 0.25 seconds after the last.
 Gain reduction of the Bingux dynamics plugins is shown live. PipeWire does not
 expose a plugin's output ports, so these plugins publish their readings in a
 small shared file (`$XDG_RUNTIME_DIR/bingux/effects/<direction>.meters`, layout
-in `packages/bingux-dsp/src/meters.rs`). The meter reads it once a frame while
+in `crates/dsp/src/meters.rs`). The meter reads it once a frame while
 the row is on screen in a focused window, and not at all otherwise.
 
 ## Import

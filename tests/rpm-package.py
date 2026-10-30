@@ -38,9 +38,9 @@ PACKAGES = (
 )
 # Application packages: binary, desktop entry, metainfo id and man page.
 APPLICATIONS = {
-    "bingux-settings": ("packages/bingux-settings", "dev.drewett.bingux.Settings"),
-    "bingux-files": ("packages/bingux-files-app", "dev.drewett.bingux.Files"),
-    "bingux-taxonomy": ("packages/bingux-taxonomy", "dev.drewett.bingux.Taxonomy"),
+    "bingux-settings": ("apps/settings", "dev.drewett.bingux.Settings"),
+    "bingux-files": ("apps/files", "dev.drewett.bingux.Files"),
+    "bingux-taxonomy": ("apps/taxonomy", "dev.drewett.bingux.Taxonomy"),
 }
 MAN_PAGES = ("bingux-settings", "bingux-files", "bingux-taxonomy", "bingux-config", "bingux-effects")
 
@@ -91,7 +91,7 @@ class DesktopFilesTest(unittest.TestCase):
             self.assertIn(f"StartupWMClass={package}\n", entry)
             self.assertIn(f"x-scheme-handler/{package}", entry)
             self.assertTrue((ROOT / directory / f"{package}.svg").is_file())
-        files = (ROOT / "packages/bingux-files-app/bingux-files.desktop").read_text()
+        files = (ROOT / "apps/files/bingux-files.desktop").read_text()
         self.assertIn("inode/directory", files)
 
 
@@ -187,7 +187,7 @@ class RpmPackageTest(unittest.TestCase):
             self.assertIn(f"BuildRequires:  {build_requirement}", self.spec)
 
     def test_gnoblin_fragment_is_in_the_payload(self):
-        self.assertTrue((ROOT / "packaging/gnoblin/bingux.lua").is_file())
+        self.assertTrue((ROOT / "gnoblin/bingux.lua").is_file())
         self.assertIn("/usr/share/gnoblin/conf.d/bingux.lua", self.spec)
 
     def test_portal_backend_is_packaged_and_requires_the_portal(self):

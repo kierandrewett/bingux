@@ -7,7 +7,7 @@
 
   sheets.py [--out DIR] [--icons DIR] [--adwaita DIR] [--zoom N] [--group NAME]
 
-Renders every icon in --icons (default packages/bingux-ui/icons) at 12, 14, 16, 18, 20 and
+Renders every icon in --icons (default crates/ui/icons) at 12, 14, 16, 18, 20 and
 48 px, white on black and dark on light, with the Adwaita original beneath each one, plus a
 top-bar mock (topbar.txt) into `OUT/all/`, then the sets in groups.txt (top bar, battery,
 sidebar, controls, buttons, status, devices, applications), one folder each, so icons are
@@ -69,7 +69,7 @@ def groups() -> dict[str, list[str]]:
 
 def run_example(out: Path, ours: Path, reference: Path | None, topbar: Path | None) -> None:
     command = [
-        "cargo", "run", "-q", "--manifest-path", str(REPO / "packages/bingux-ui/Cargo.toml"),
+        "cargo", "run", "-q", "--manifest-path", str(REPO / "crates/ui/Cargo.toml"),
         "--features", "testing", "--example", "icon_sheet", "--", str(out), str(ours),
     ]
     env = dict(os.environ)
@@ -91,7 +91,7 @@ def zoom_all(out: Path, zoom: int) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", type=Path, default=Path("/tmp/bingux-icon-sheets"))
-    parser.add_argument("--icons", type=Path, default=REPO / "packages/bingux-ui/icons")
+    parser.add_argument("--icons", type=Path, default=REPO / "crates/ui/icons")
     parser.add_argument("--adwaita", type=Path, default=Path("/usr/share/icons/Adwaita/symbolic"))
     parser.add_argument("--zoom", type=int, default=4)
     parser.add_argument("--group", help="only this group from groups.txt (default: all and every group)")

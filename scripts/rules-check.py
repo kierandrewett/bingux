@@ -64,6 +64,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from crate_dirs import crate_dir  # noqa: E402
 from app_env import isolated  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -143,12 +144,12 @@ CHECKS: list[Check] = [
           offline_args=["--no-captures"], offline_scope="source strings only, no captures"),
     Check("layout-lint", "17 layout rules and the padding model over every page, popup and window, parity and RTL",
           "scripts/layout-lint.py", ["--parity", "--rtl"], parser="json", json_flag=True, jobs_flag=True, build_flag=True,
-          sources=["scripts/layout-lint.py"], rust_meta=["packages/bingux-ui/src/inspector/checks/mod.rs"]),
+          sources=["scripts/layout-lint.py"], rust_meta=["crates/ui/src/inspector/checks/mod.rs"]),
     Check("overflow-check", "text rules under pseudo-locale, 200% text, long data, narrow windows",
           "scripts/overflow-check.py", parser="json", json_flag=True, jobs_flag=True, build_flag=True),
     Check("state-check", "hover, press, focus, selection, touch targets, Tab walk, menus, cursors",
           "scripts/state-check.py", parser="json", json_flag=True, jobs_flag=True, build_flag=True,
-          rust_meta=["packages/bingux-ui/src/inspector/state_checks/mod.rs"]),
+          rust_meta=["crates/ui/src/inspector/state_checks/mod.rs"]),
     Check("focus-ring-check", "each focus ring is its face's box plus the outset",
           "scripts/focus-ring-check.py", parser="json", json_flag=True, jobs_flag=True, build_flag=True),
     Check("tooltip-check", "tooltip bubble width, placement and inside the window",
@@ -412,7 +413,7 @@ def test_files_for(entry: dict, root: Path | None = None) -> list[Path]:
     path (a file, `mod.rs`, or a `#[path]` file), a directory of them, or the file that declares the modules
     of the rest of the path on the way. A path that only a file's location suggests, when the file is mounted
     elsewhere or declares no such module, holds nothing: cargo would run no test of it."""
-    src = (root or ROOT) / "packages" / entry["package"] / "src"
+    src = crate_dir(root or ROOT, entry["package"]) / "src"
     parts = entry["module"].split("::")
     full = src.joinpath(*parts)
     if full.is_dir():
@@ -504,7 +505,7 @@ def layout_keys_without_ids(registry: Registry) -> list[str]:
     """Rule keys layout-lint can report that cite no rule ID and are not declared in its RULE_UNMAPPED."""
     if "layout-lint" not in registry.derived:
         return []
-    path = ROOT / "packages/bingux-ui/src/inspector/layout_checks.rs"
+    path = ROOT / "crates/ui/src/inspector/layout_checks.rs"
     keys = set(re.findall(r'Rule::\w+\s*=>\s*"([a-z][a-z0-9-]*)"', path.read_text()))
     derived = registry.derived["layout-lint"]
     return sorted(key for key in keys if not derived.keys.get(key) and key not in derived.unmapped)
@@ -521,7 +522,7 @@ def stray_citations(book: RuleBook) -> list[str]:
     # The book, the generated report, and the tests of this script (which cite made-up IDs on purpose).
     skip = {"design/rules.json", "design/rules.md", "design/rules-report.md", "design/rules-report.json", "tests/rules-check.test.py"}
     found: list[str] = []
-    for base in ("scripts", "packages/bingux-ui/src", "packages/bingux-settings/src", "docs", "design", "tests"):
+    for base in ("scripts", "crates/ui/src", "apps/settings/src", "docs", "design", "tests"):
         for path in sorted((ROOT / base).rglob("*")):
             if not path.is_file() or path.suffix not in (".py", ".rs", ".md", ".json", ".qml") or "target" in path.parts:
                 continue
@@ -760,7 +761,7 @@ def dep_sources(dep_file: Path) -> list[str]:
 def package_sources(root: Path, packages: tuple[str, ...]) -> list[str]:
     found: list[str] = []
     for package in packages:
-        for base, dirs, files in os.walk(root / "packages" / package):
+        for base, dirs, files in os.walk(crate_dir(root, package)):
             dirs[:] = [d for d in dirs if d != "target"]
             found += [os.path.join(base, name) for name in files if name.endswith((".rs", ".toml"))]
     return found
@@ -774,7 +775,7 @@ def binary_freshness(target: Path | None = None, root: Path | None = None) -> di
     for name, package in APP_BINARIES.items():
         path = target / "debug" / name
         sources = dep_sources(target / "debug" / f"{name}.d") or package_sources(root, (package, "bingux-ui"))  # no dep-info: the packages
-        sources += [str(root / "packages" / pkg / "Cargo.toml") for pkg in (package, "bingux-ui")]
+        sources += [str(crate_dir(root, pkg) / "Cargo.toml") for pkg in (package, "bingux-ui")]
         newest, newest_path = 0.0, ""
         for source in sources:
             try:
@@ -829,7 +830,7 @@ def execute(check: Check, ctx: Context) -> dict:
         argv_all: list[list[str]] = []
         exit_code, output = 0, ""
         for package, features, filters in unit_test_groups(check):
-            argv = ["cargo", "test", "--manifest-path", str(ROOT / "packages" / package / "Cargo.toml"), "--lib", "--features", features,
+            argv = ["cargo", "test", "--manifest-path", str(crate_dir(ROOT, package) / "Cargo.toml"), "--lib", "--features", features,
                     "--", *filters, "--test-threads", str(ctx.jobs)] + ctx.extra.get(check.id, [])
             argv_all.append(argv)
             code, text = run_command(argv, env, timeout)

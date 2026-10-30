@@ -47,8 +47,8 @@ not a safe way to resolve a failed doctor check.
 The build produces:
 
 - `bingux-shell`: Quickshell 0.2.1, with the runtime patches from
-  `packages/bingux-quickshell` applied, compiled into one binary whose entry
-  point knows the Bingux shells (`packages/bingux-shell`). No separate
+  `shell/quickshell-patches` applied, compiled into one binary whose entry
+  point knows the Bingux shells (`shell/runtime`). No separate
   Quickshell install is used; the Qt build is always the one the shell was
   compiled against.
 - `bingux-shell.sxa`: the shell archive. `scripts/pack-shell.py` packs the QML,

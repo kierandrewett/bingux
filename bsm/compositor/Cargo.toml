@@ -1,0 +1,56 @@
+[package]
+name = "bsm-compositor"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "Compositor core of the Bingux Session Manager (bsm): roles, scene, input, transitions"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = ["backend-winit", "backend-drm"]
+# A window inside an existing Wayland desktop, for development.
+backend-winit = ["smithay/backend_winit"]
+# libseat + udev + DRM/KMS + GBM + GLES + libinput, for the installed system.
+backend-drm = [
+    "smithay/backend_drm",
+    "smithay/backend_gbm",
+    "smithay/backend_egl",
+    "smithay/renderer_gl",
+    "smithay/renderer_multi",
+    "smithay/backend_libinput",
+    "smithay/backend_udev",
+    "smithay/backend_session_libseat",
+]
+
+[dependencies]
+bsm-proto = { path = "../proto" }
+anyhow = "1"
+tracing = "0.1"
+parking_lot = "0.12"
+libc = "0.2"
+rustix = { version = "1", features = ["net", "fs", "process"] }
+png = "0.17"
+tempfile = "3"
+pixman = "0.2"
+wayland-scanner = "0.31"
+wayland-backend = "0.3"
+wayland-server = "0.31"
+
+[dependencies.smithay]
+version = "0.7.0"
+default-features = false
+features = ["wayland_frontend", "desktop", "renderer_pixman"]
+
+[dev-dependencies]
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client"] }
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter"] }
+
+[[example]]
+name = "dev_compositor"
+path = "examples/dev_compositor.rs"
+required-features = ["backend-winit"]

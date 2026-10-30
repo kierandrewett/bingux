@@ -172,7 +172,7 @@ test("remembered operations are bounded", () => {
 });
 
 test("every proto error code has a sentence and the sentence is not the code", () => {
-    const codes = [...readFileSync(new URL("../packages/bsm-proto/src/error.rs", import.meta.url), "utf8").matchAll(/Self::\w+ => "([a-z_]+)"/g)].map((m) => m[1]);
+    const codes = [...readFileSync(new URL("../bsm/proto/src/error.rs", import.meta.url), "utf8").matchAll(/Self::\w+ => "([a-z_]+)"/g)].map((m) => m[1]);
     assert.ok(codes.length >= 18, "parsed the proto error codes");
     for (const code of codes) assert.notEqual(S.messageFor(code), S.messageFor("not-a-code"), code);
     for (const extra of ["unavailable", "monitor_lost", "no_operation"]) assert.ok(S.messageFor(extra));

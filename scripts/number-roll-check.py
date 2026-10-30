@@ -2,7 +2,7 @@
 """Fail when an animated number does not roll the way the stopwatch does.
 
 CK-19 of design/rules.md, MO-11: "the animated number component is genuinely ugly. it
-needs to slide like a stopwatch." The component (`animated_number`, packages/bingux-ui/src/motion/animated_number.rs) has unit tests
+needs to slide like a stopwatch." The component (`animated_number`, crates/ui/src/motion/animated_number.rs) has unit tests
 on its layout tree (animated_number_tests.rs); this reads what a person sees: every 16 ms frame
 of the taxonomy's Animated number specimens as pixels, around a press on the button that changes
 the value.
@@ -29,7 +29,7 @@ BINGUX_SNAPSHOT_FRAMES of `bingux-taxonomy --snapshot`) and reads:
     python3 scripts/number-roll-check.py --only counting
     python3 scripts/number-roll-check.py --fixtures      # the analysis on drawn frames only (a roll, a cut, a jitter)
 
-Needs `bingux-taxonomy` built (`cargo build` in packages/bingux-taxonomy) and PIL and numpy. Exit
+Needs `bingux-taxonomy` built (`cargo build` in apps/taxonomy) and PIL and numpy. Exit
 status is 1 on a finding, on a specimen whose walk did not change anything (the press missed its
 button), and on a fixture that is not judged as it should be.
 """
@@ -288,7 +288,7 @@ def main() -> int:
     if args.fixtures or problems:
         return 1 if problems else 0
     if not args.binary.exists():
-        print(f"number-roll-check: {args.binary} is not built (cargo build in packages/bingux-taxonomy)", file=sys.stderr)
+        print(f"number-roll-check: {args.binary} is not built (cargo build in apps/taxonomy)", file=sys.stderr)
         return 2
     wanted = {name for name in args.only.split(",") if name}
     scratch = args.keep or Path(tempfile.mkdtemp(prefix="number-roll-"))

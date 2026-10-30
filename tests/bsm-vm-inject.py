@@ -43,6 +43,8 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+from crate_dirs import CRATE_DIRS, crate_dir  # noqa: E402
 DEFAULT_OUT = Path(os.environ.get("BSM_INJECT_DIR", "/tmp/bsm-vm/inject"))
 TARGET_DIR = Path(os.environ.get("BSM_PACKAGING_TARGET", "/tmp/bsm-target/packaging"))
 CONTAINER_IMAGE = "localhost/bsm-arch-build"
@@ -120,7 +122,7 @@ def run(command, **kwargs):
 
 
 def present_crates():
-    return [name for name in CRATES if (ROOT / "packages" / name / "Cargo.toml").is_file()]
+    return [name for name in CRATES if (crate_dir(ROOT, name) / "Cargo.toml").is_file()]
 
 
 def host_env():
@@ -144,7 +146,7 @@ def build_host(crates):
     env = host_env()
     failed = []
     for name in crates:
-        command = [CARGO, "build", "--release", "-j4", "--manifest-path", str(ROOT / "packages" / name / "Cargo.toml")]
+        command = [CARGO, "build", "--release", "-j4", "--manifest-path", str(crate_dir(ROOT, name) / "Cargo.toml")]
         print("+ " + " ".join(command), flush=True)
         if subprocess.run(command, env=env).returncode != 0:
             failed.append(name)
@@ -161,7 +163,7 @@ def build_container(crates):
     cargo_home.mkdir(parents=True, exist_ok=True)
     TARGET_DIR.mkdir(parents=True, exist_ok=True)
     script = " && ".join(
-        f"cargo build --release --manifest-path /src/packages/{name}/Cargo.toml" for name in crates
+        f"cargo build --release --manifest-path /src/{CRATE_DIRS[name]}/Cargo.toml" for name in crates
     )
     run(
         [
@@ -234,7 +236,7 @@ def stage(arguments):
     shutil.copytree(ROOT / "packaging/bsm/image", image, symlinks=True)
     if arguments.probe:
         # The root checks of tests/bsm-helper-root.sh drive this example binary in the guest.
-        command = [CARGO, "build", "--release", "-j4", "--examples", "--manifest-path", str(ROOT / "packages/bsm-helper/Cargo.toml")]
+        command = [CARGO, "build", "--release", "-j4", "--examples", "--manifest-path", str(ROOT / "bsm/helper/Cargo.toml")]
         run(command, env=host_env())
         probe = TARGET_DIR / "release/examples/bsm-helper-probe"
         if probe.is_file():

@@ -10,7 +10,7 @@ ring's outset (gap, width and, while it animates, travel), and each of its four
 corner radii must be the face's plus that outset, or 0 where the face corner is
 square. The rule is
 `bingux_ui::focus::ring_check::check`, the same one the inspector's Layout tab
-reports as "Focus ring off its face" (packages/bingux-ui/src/focus/ring_check.rs).
+reports as "Focus ring off its face" (crates/ui/src/focus/ring_check.rs).
 
 The apps render through `bingux_ui::snapshot` without a compositor. With
 BINGUX_UI_RING_CHECK=FILE set, every capture the run saves also appends one JSON
@@ -44,9 +44,9 @@ when anything failed.
 Build first (`--build` does this):
 
     CARGO_TARGET_DIR=/var/tmp/bingux-settings-target cargo build --features snapshot \
-        --manifest-path packages/bingux-settings/Cargo.toml
+        --manifest-path apps/settings/Cargo.toml
     CARGO_TARGET_DIR=/var/tmp/bingux-settings-target cargo build \
-        --manifest-path packages/bingux-taxonomy/Cargo.toml
+        --manifest-path apps/taxonomy/Cargo.toml
 
 Needs nothing beyond the standard library.
 """

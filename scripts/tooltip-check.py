@@ -13,7 +13,7 @@ BINGUX_UI_TOOLTIP_CHECK=FILE set, every capture the run saves also hovers each
 named icon button of its frame (an icon button is named by its tooltip, so these
 are the controls that say what they do only in a tooltip), waits for the bubble
 and appends what it measured to FILE (`Snapshot::tooltip_findings`,
-packages/bingux-ui/src/controls/tooltip_check.rs). This script reads them. It
+crates/ui/src/controls/tooltip_check.rs). This script reads them. It
 runs
 
   * every Bingux Settings page, subpage and click-opened popup, at the desktop
@@ -42,11 +42,11 @@ check; where a narrow bubble is meant, add an entry to ALLOWED with the reason.
 Build first (`--build` does this):
 
     CARGO_TARGET_DIR=/var/tmp/bingux-settings-target cargo build --features snapshot \
-        --manifest-path packages/bingux-settings/Cargo.toml
+        --manifest-path apps/settings/Cargo.toml
     CARGO_TARGET_DIR=/var/tmp/bingux-settings-target cargo build \
-        --manifest-path packages/bingux-taxonomy/Cargo.toml
+        --manifest-path apps/taxonomy/Cargo.toml
     CARGO_TARGET_DIR=/var/tmp/bingux-settings-target cargo build --features snapshot \
-        --manifest-path packages/bingux-files-app/Cargo.toml
+        --manifest-path apps/files/Cargo.toml
 
 Needs nothing beyond the standard library.
 """
@@ -67,7 +67,7 @@ from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = ROOT / "packages" / "bingux-files-app"
+FILES = ROOT / "apps" / "files"
 
 # The layout lint owns the list of pages, popups and the way a capture is run.
 _spec = importlib.util.spec_from_file_location("layout_lint", ROOT / "scripts" / "layout-lint.py")

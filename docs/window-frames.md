@@ -116,4 +116,4 @@ Gnoblin's rounded mask, and filtering margins include adjacent body pixels.
 Translucent snapshots, clamped extents, and extreme unequal side extents use
 full readback to preserve their pixels. The guard size covers Gnoblin's maximum
 corner radius. For renderer development and coverage checks, see the
-[frame helper guide](https://github.com/kierandrewett/bingux/blob/main/packages/bingux-frame/README.md).
+[frame helper guide](https://github.com/kierandrewett/bingux/blob/main/native/frame/README.md).

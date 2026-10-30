@@ -284,7 +284,7 @@ Results: `tests/distro-install.py` uefi-luks 24/24, uefi 23/23, bios 24/24; `tes
 - [x] Build Quickshell into `bingux-shell` and run the shells from the packed
       archive; the installed command names are symlinks to the binary.
 - [ ] Port the Python helpers (`shell/bingux/*.py`) to the Rust multicall
-      binary `bingux-helper` (`packages/bingux-helper`), one helper at a time.
+      binary `bingux-helper` (`services/helper`), one helper at a time.
       QML runs them as `Helper.command("name", [args])`. Ported: `process-action`.
       Next: GIO and JSON helpers (launch-application, extensions, steam-games,
       session-activity, calendar-events, calendar-launch), then fold microphone,

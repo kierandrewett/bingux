@@ -24,6 +24,8 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from crate_dirs import crate_dir  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -68,14 +70,14 @@ def normalise(expression):
     return expression
 
 
-def crates(crate_dir):
+def crates(crate_name):
     """(name, version, licence) of every crate in the normal dependency graph."""
     result = subprocess.run(
         [
             "cargo",
             "tree",
             "--manifest-path",
-            str(ROOT / "packages" / crate_dir / "Cargo.toml"),
+            str(crate_dir(ROOT, crate_name) / "Cargo.toml"),
             "--locked",
             "-e",
             "normal",
@@ -90,7 +92,7 @@ def crates(crate_dir):
         env={**__import__("os").environ, "CARGO_NET_OFFLINE": "true"},
     )
     if result.returncode != 0:
-        raise SystemExit(f"cargo tree failed for {crate_dir}:\n{result.stderr}")
+        raise SystemExit(f"cargo tree failed for {crate_name}:\n{result.stderr}")
     found, paths = {}, {}
     for line in result.stdout.splitlines():
         package, _, licence = line.partition("|")
@@ -199,8 +201,8 @@ def main():
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     summaries = {}
-    for program, crate_dir in PROGRAMS.items():
-        found, paths = crates(crate_dir)
+    for program, crate_name in PROGRAMS.items():
+        found, paths = crates(crate_name)
         licences = [licence for name, _, licence in found if not name.startswith("bingux-")]
         summary = expression(licences)
         summaries[program] = summary

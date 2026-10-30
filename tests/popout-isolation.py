@@ -24,7 +24,7 @@ scripts.mkdir(parents=True, exist_ok=True)
 qs = os.environ.get("QUICKSHELL_BIN", "qs")
 qml = config / "quickshell/bingux"
 shutil.copytree(repo / "shell/bingux", qml, dirs_exist_ok=True)
-ctl = [str(repo / "packages/binguxctl/binguxctl.py"), "--quickshell", qs, "--path", str(qml)]
+ctl = [str(repo / "tools/binguxctl/binguxctl.py"), "--quickshell", qs, "--path", str(qml)]
 # Some development sessions predate the native command-shortcut registrar.
 compat = os.environ.get("GNOBLIN_SHORTCUT_COMPAT")
 if compat:

@@ -3,7 +3,7 @@
 
 The monochrome set (build.py) is one fill path tinted at draw time. The file and folder
 icons of the Files app are a second, separate set, drawn in the language of the Bingux Files
-app icon (packages/bingux-files-app/bingux-files.svg): rounded shapes with one radius ratio,
+app icon (apps/files/bingux-files.svg): rounded shapes with one radius ratio,
 a folder with a tab and a lighter front panel, a page with a rounded folded corner, light
 falling from above (a pale sheen at the top, a soft shade at the bottom), a darker back layer,
 a thin highlight on the top edge. Their colours bingux-ui takes from the theme at draw time
@@ -49,7 +49,7 @@ centre (odd widths) or the line between pixels (even widths), polygon and path p
 pixels; the corner radii of the chrome are tables per grid (RADIUS), the straight edges stay on
 the lattice. Nothing is ever warped or thickened.
 
-Output: packages/bingux-ui/icons/colour/<name>-<grid>.svg.
+Output: crates/ui/icons/colour/<name>-<grid>.svg.
 
 Usage:
   colour.py            compile
@@ -58,7 +58,7 @@ Usage:
   colour.py --sheet DIR   contact sheets (PNG, via rsvg-convert) with the palette of both schemes
   colour.py --sheet DIR --tones FILE
                        the same in the tones the app derives: `BINGUX_COLOUR_TONES=FILE cargo test
-                       --features testing --lib the_tones_can_be_written` in packages/bingux-ui writes FILE
+                       --features testing --lib the_tones_can_be_written` in crates/ui writes FILE
 """
 
 from __future__ import annotations
@@ -75,8 +75,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 SRC = HERE / "colour"
-OUT = REPO / "packages/bingux-ui/icons/colour"
-LIST_RS = REPO / "packages/bingux-ui/src/files/colour.rs"
+OUT = REPO / "crates/ui/icons/colour"
+LIST_RS = REPO / "crates/ui/src/files/colour.rs"
 
 # The rules of design/rules.json this check holds (read by scripts/rules-check.py).
 RULE_IDS = {"*": ["IC-11"]}

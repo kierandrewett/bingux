@@ -881,7 +881,7 @@
    "components": [
     "Dropdown"
    ],
-   "enforced_by": "layout-lint:overlap / text-collision (only when both are measured nodes); layout-lint:overlap / text-collision; scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) text-under-glyph: a dropdown, menu button or field label never overlaps a glyph beside it",
+   "enforced_by": "layout-lint:overlap / text-collision (only when both are measured nodes); layout-lint:overlap / text-collision; scripts/state-check.py (crates/ui/src/inspector/state_checks/) text-under-glyph: a dropdown, menu button or field label never overlaps a glyph beside it",
    "status": "enforced",
    "proposed_check": "layout-lint \"text-under-glyph\": a text node whose right edge exceeds the left edge of a sibling glyph in the same row."
   },
@@ -964,7 +964,7 @@
     "colour picker",
     "every focusable"
    ],
-   "enforced_by": "unit: tokens every_touch_target_token_reaches_the_touch_minimum_at_compact_density; a11y:TargetSize (24 px minimum, desktop); unit: tokens every_touch_target_token_reaches_the_touch_minimum_at_compact_density; a11y:TargetSize (24 px, desktop); scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) touch-target: every control's measured hit area (face plus hit_area) is 44 px at 390x800",
+   "enforced_by": "unit: tokens every_touch_target_token_reaches_the_touch_minimum_at_compact_density; a11y:TargetSize (24 px minimum, desktop); unit: tokens every_touch_target_token_reaches_the_touch_minimum_at_compact_density; a11y:TargetSize (24 px, desktop); scripts/state-check.py (crates/ui/src/inspector/state_checks/) touch-target: every control's measured hit area (face plus hit_area) is 44 px at 390x800",
    "status": "enforced",
    "proposed_check": "layout-lint at 390x800: every node with a11y.focusable and a pressable role has area >= 44 x 44 (measured, not by token). This is the missing half: tokens pass while a hand-built box fails."
   },
@@ -1028,7 +1028,7 @@
     "Dropdown",
     "split button chevron"
    ],
-   "enforced_by": "none found; IconSize::Mark (12 px) exists. Audit B: dropdown chevron drawn at Row size.; scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) chevron-size: the trailing chevron of a dropdown, split button and the Files places menu is IconSize::Mark at the control's size class",
+   "enforced_by": "none found; IconSize::Mark (12 px) exists. Audit B: dropdown chevron drawn at Row size.; scripts/state-check.py (crates/ui/src/inspector/state_checks/) chevron-size: the trailing chevron of a dropdown, split button and the Files places menu is IconSize::Mark at the control's size class",
    "status": "enforced",
    "proposed_check": "ui-lint source rule: chevron glyphs use IconSize::Mark; snapshot assertion on the chevron node size (12 / 14)."
   },
@@ -1069,7 +1069,7 @@
    "components": [
     "Popup resize edges and corners"
    ],
-   "enforced_by": "scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) resize-clearance: no control box reaches into a popup resize handle; unit: state_checks the_resize_handles_are_a_band_and_a_corner_a_hand_can_grab (band 4-8 px, corner 12-16 px)",
+   "enforced_by": "scripts/state-check.py (crates/ui/src/inspector/state_checks/) resize-clearance: no control box reaches into a popup resize handle; unit: state_checks the_resize_handles_are_a_band_and_a_corner_a_hand_can_grab (band 4-8 px, corner 12-16 px)",
    "status": "enforced",
    "proposed_check": "Unit test on handle geometry tokens: edge band 4-8 px, corner square 12-16 px, no overlap with the scrollbar track; hit-test at the corner."
   },
@@ -1168,7 +1168,7 @@
    "components": [
     "ColourPicker"
    ],
-   "enforced_by": "scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) touch-target (the colour picker is held to the same measured 44 px)",
+   "enforced_by": "scripts/state-check.py (crates/ui/src/inspector/state_checks/) touch-target (the colour picker is held to the same measured 44 px)",
    "status": "enforced",
    "proposed_check": "Covered by SZ-01 measured touch-target check."
   },
@@ -1211,7 +1211,7 @@
     "Row",
     "SidebarRow"
    ],
-   "enforced_by": "Code only: rows.rs activatable gate; docs \"Row hover\". No automatic test of the rendered hover.; scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) row-hover: hovers every row that is not activatable and fails on a hover fill",
+   "enforced_by": "Code only: rows.rs activatable gate; docs \"Row hover\". No automatic test of the rendered hover.; scripts/state-check.py (crates/ui/src/inspector/state_checks/) row-hover: hovers every row that is not activatable and fails on a hover fill",
    "status": "enforced",
    "proposed_check": "Snapshot hover test: hover every row kind in the taxonomy Row page; the row fill must change if and only if the row is pressable (a11y role / focusable). Capture a frame at rest and a frame hovered, diff the row box."
   },
@@ -1255,7 +1255,7 @@
     "password reveal",
     "SearchField"
    ],
-   "enforced_by": "scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) cursor-map: the cursor with the pointer on the middle of every control is the arrow, the I-beam only over text, never a hand or a resize cursor",
+   "enforced_by": "scripts/state-check.py (crates/ui/src/inspector/state_checks/) cursor-map: the cursor with the pointer on the middle of every control is the arrow, the I-beam only over text, never a hand or a resize cursor",
    "status": "enforced",
    "proposed_check": "Hit-test cursor map: record the cursor icon over the centre of every focusable in each taxonomy page; assert arrow for buttons and rows, I-beam only over editable or selectable text."
   },
@@ -1276,7 +1276,7 @@
     "buttons",
     "rows"
    ],
-   "enforced_by": "Token DISABLED_OPACITY; contrast matrix measures the pair but exempts it.; scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) state-disabled: a control with a11y_enabled(false) is dimmed to DISABLED_OPACITY and its fill does not react (the ink distance from the enabled one is not measured)",
+   "enforced_by": "Token DISABLED_OPACITY; contrast matrix measures the pair but exempts it.; scripts/state-check.py (crates/ui/src/inspector/state_checks/) state-disabled: a control with a11y_enabled(false) is dimmed to DISABLED_OPACITY and its fill does not react (the ink distance from the enabled one is not measured)",
    "status": "partial",
    "proposed_check": "Pixel test: disabled vs enabled ink luminance differ by a minimum (propose >= 1.8:1 between the two inks) on every control kind; pick the number with Kieran (see C-08)."
   },
@@ -1296,7 +1296,7 @@
     "Menu",
     "context menu"
    ],
-   "enforced_by": "scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) hover-collateral: hovering another item leaves the selected sibling pixel for pixel the same",
+   "enforced_by": "scripts/state-check.py (crates/ui/src/inspector/state_checks/) hover-collateral: hovering another item leaves the selected sibling pixel for pixel the same",
    "status": "enforced",
    "proposed_check": "Snapshot diff: selected item fill identical before and after hovering a neighbour."
   },
@@ -1318,7 +1318,7 @@
     "menu_button",
     "split button"
    ],
-   "enforced_by": "scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) state-hover, state-press, state-open: rest, hover, pressed differ in the control box; an open dropdown or menu button keeps its hover fill",
+   "enforced_by": "scripts/state-check.py (crates/ui/src/inspector/state_checks/) state-hover, state-press, state-open: rest, hover, pressed differ in the control box; an open dropdown or menu button keeps its hover fill",
    "status": "enforced",
    "proposed_check": "State matrix on the taxonomy: rest, hover, pressed, focus, open, disabled for every control; assert rest != hover != pressed fills and open == hover."
   },
@@ -1376,7 +1376,7 @@
    "components": [
     "SidebarRow (compact)"
    ],
-   "enforced_by": "Audit E: undecided. SidebarRow has selected/hover/pressed surfaces.; scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) state-selected: a selected sibling differs from an unselected one at rest (the pressed frame before a phone slide is not measured)",
+   "enforced_by": "Audit E: undecided. SidebarRow has selected/hover/pressed surfaces.; scripts/state-check.py (crates/ui/src/inspector/state_checks/) state-selected: a selected sibling differs from an unselected one at rest (the pressed frame before a phone slide is not measured)",
    "status": "partial",
    "proposed_check": "mobile-walk frame: pressed state visible for one frame before the slide starts."
   },
@@ -1465,7 +1465,7 @@
    "components": [
     "Every focusable (focusable(..) face)"
    ],
-   "enforced_by": "scripts/focus-ring-check.py; layout-lint:focus-ring; unit: focus/ring_check.rs; scripts/focus-ring-check.py; layout-lint:focus-ring; unit: focus/ring_check.rs; scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) ring-clipped: the ring is drawn on all four sides in the rendered pixels, a missing side names the clipping ancestor or the window edge",
+   "enforced_by": "scripts/focus-ring-check.py; layout-lint:focus-ring; unit: focus/ring_check.rs; scripts/focus-ring-check.py; layout-lint:focus-ring; unit: focus/ring_check.rs; scripts/state-check.py (crates/ui/src/inspector/state_checks/) ring-clipped: the ring is drawn on all four sides in the rendered pixels, a missing side names the clipping ancestor or the window edge",
    "status": "enforced",
    "proposed_check": "Keep. Add a clipped-ring pixel check for rings inside scroll views and on the window edge (focusable_inside)."
   },
@@ -1527,7 +1527,7 @@
    "components": [
     "All interactive controls"
    ],
-   "enforced_by": "Docs \"Keyboard focus\"; ui-lint raw-press rule (pressable things are components); scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) state-focus and tab-ring: every focusable node shows a ring at keyboard focus; tab-reach: every focusable node is a Tab stop. A pointer handler on a node that is not focusable is not found",
+   "enforced_by": "Docs \"Keyboard focus\"; ui-lint raw-press rule (pressable things are components); scripts/state-check.py (crates/ui/src/inspector/state_checks/) state-focus and tab-ring: every focusable node shows a ring at keyboard focus; tab-reach: every focusable node is a Tab stop. A pointer handler on a node that is not focusable is not found",
    "status": "partial",
    "proposed_check": "a11y-style check: every node with a pointer handler has a11y.focusable == true; list offenders per page."
   },
@@ -1548,7 +1548,7 @@
     "switch",
     "every control"
    ],
-   "enforced_by": "Code: one stop per control; tests of focus core not read.; scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) tab-reach, tab-order, tab-trap: Tab through the page and back, one stop per control, reading order, the lap comes round, Shift+Tab retraces it",
+   "enforced_by": "Code: one stop per control; tests of focus core not read.; scripts/state-check.py (crates/ui/src/inspector/state_checks/) tab-reach, tab-order, tab-trap: Tab through the page and back, one stop per control, reading order, the lap comes round, Shift+Tab retraces it",
    "status": "enforced",
    "proposed_check": "Keyboard walk on every taxonomy page: send N Tabs, assert N distinct focused nodes, then N Shift+Tabs returns to the start."
   },
@@ -1589,7 +1589,7 @@
     "popup",
     "trap()"
    ],
-   "enforced_by": "Docs \"modal scope\" (trap_inline); inspector marks the page inert.; scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) tab-trap and popup-escape: in a window with a modal scope no Tab stop is outside it, Escape closes it",
+   "enforced_by": "Docs \"modal scope\" (trap_inline); inspector marks the page inert.; scripts/state-check.py (crates/ui/src/inspector/state_checks/) tab-trap and popup-escape: in a window with a modal scope no Tab stop is outside it, Escape closes it",
    "status": "enforced",
    "proposed_check": "Keyboard walk inside every dialog and popup: 2 x N Tabs never lands on a node outside the dialog subtree."
   },
@@ -1672,7 +1672,7 @@
     "Menu",
     "submenu"
    ],
-   "enforced_by": "Panel roving keys (docs); menu_nav.rs tests not read; scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) menu-keys: Home, End, Down, Up, type-ahead, Enter and Escape in every menu and dropdown; unit: shell/menu_nav. The mouse cone is not driven",
+   "enforced_by": "Panel roving keys (docs); menu_nav.rs tests not read; scripts/state-check.py (crates/ui/src/inspector/state_checks/) menu-keys: Home, End, Down, Up, type-ahead, Enter and Escape in every menu and dropdown; unit: shell/menu_nav. The mouse cone is not driven",
    "status": "partial",
    "proposed_check": "Keyboard test per menu: Down/Up/Left/Right/Home/End/Enter/Escape; pointer test: diagonal move to a submenu does not close it."
   },
@@ -3076,7 +3076,7 @@
     "IconButton",
     "anything with a Dim"
    ],
-   "enforced_by": "ui-lint: .width/.height need a Dim; touch test; scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) touch-target at 390x800 (the rest of the phone/desktop rule is not measured)",
+   "enforced_by": "ui-lint: .width/.height need a Dim; touch test; scripts/state-check.py (crates/ui/src/inspector/state_checks/) touch-target at 390x800 (the rest of the phone/desktop rule is not measured)",
    "status": "partial",
    "proposed_check": "See SZ-01 (measured 44 px)."
   },
@@ -3138,7 +3138,7 @@
    "components": [
     "Dropdown (compact)"
    ],
-   "enforced_by": "mobile-walk.py dropdown scenarios; AL-12; mobile-walk.py dropdown scenarios; scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) text-under-glyph at 390x800",
+   "enforced_by": "mobile-walk.py dropdown scenarios; AL-12; mobile-walk.py dropdown scenarios; scripts/state-check.py (crates/ui/src/inspector/state_checks/) text-under-glyph at 390x800",
    "status": "partial",
    "proposed_check": "Keep plus AL-12."
   },
@@ -3715,7 +3715,7 @@
    "components": [
     "Menu type-ahead (shell/type_ahead.rs)"
    ],
-   "enforced_by": "unit: type_ahead, menu_query; scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) menu-keys: typing the first two letters of a row highlights a row that contains them; unit: type_ahead, menu_query",
+   "enforced_by": "unit: type_ahead, menu_query; scripts/state-check.py (crates/ui/src/inspector/state_checks/) menu-keys: typing the first two letters of a row highlights a row that contains them; unit: type_ahead, menu_query",
    "status": "enforced",
    "proposed_check": "Keep."
   },
@@ -3734,7 +3734,7 @@
    "components": [
     "type_ahead"
    ],
-   "enforced_by": "scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) menu-keys: the query is still there after 2.5 s (a unit test with an injected clock for 30 s is not written)",
+   "enforced_by": "scripts/state-check.py (crates/ui/src/inspector/state_checks/) menu-keys: the query is still there after 2.5 s (a unit test with an injected clock for 30 s is not written)",
    "status": "partial",
    "proposed_check": "Unit test with an injected clock: the query survives 30 s without input and is cleared only by Escape, Backspace to empty or a selection."
   },
@@ -4267,7 +4267,7 @@
    "components": [
     "ScrollView in the page column"
    ],
-   "enforced_by": "scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) scrollbar-clearance: the scrollbar is clear of the header bar (the thumb rect against the content area in the pixels is not measured)",
+   "enforced_by": "scripts/state-check.py (crates/ui/src/inspector/state_checks/) scrollbar-clearance: the scrollbar is clear of the header bar (the thumb rect against the content area in the pixels is not measured)",
    "status": "partial",
    "proposed_check": "Pixel test: the scrollbar thumb rect lies inside the content area (below the header) for every scrolled page."
   },
@@ -4286,7 +4286,7 @@
    "components": [
     "Popup"
    ],
-   "enforced_by": "scripts/state-check.py (packages/bingux-ui/src/inspector/state_checks/) resize-clearance and scrollbar-clearance: no scrollbar gutter or control overlaps a resize handle",
+   "enforced_by": "scripts/state-check.py (crates/ui/src/inspector/state_checks/) resize-clearance and scrollbar-clearance: no scrollbar gutter or control overlaps a resize handle",
    "status": "enforced",
    "proposed_check": "SZ-06 geometry test."
   },
@@ -5614,7 +5614,7 @@
    "kind": "new snapshot diff",
    "screenshots": "split-hover.png, split-rest.png (M0165), bg-menu.png (M0035), M0295 (dropdown no hover), M0271 (hamburger)",
    "capture": "For every control and row kind on the taxonomy: PNG at rest, hovered, pressed, focused, open, disabled. Assert pressable <=> hover fill differs; rest frame has no stray fill; selected neighbour unchanged; disabled ink distance from enabled.",
-   "built_by": "scripts/state-check.py, packages/bingux-ui/src/inspector/state_checks: state-hover, state-press, state-selected, hover-collateral, row-hover, state-open, state-disabled"
+   "built_by": "scripts/state-check.py, crates/ui/src/inspector/state_checks: state-hover, state-press, state-selected, hover-collateral, row-hover, state-open, state-disabled"
   },
   {
    "id": "CK-04",
@@ -5752,7 +5752,7 @@
    "kind": "new layout-lint rule",
    "screenshots": "mobile-list.png, header-buttons.png (M0195), toast-close.png (M0204), colour picker (M0312)",
    "capture": "Snapshot Node: area and a11y.focusable. Every focusable pressable has width and height >= 44 at compact density (24 on desktop already in a11y:TargetSize).",
-   "built_by": "scripts/state-check.py, packages/bingux-ui/src/inspector/state_checks: touch-target"
+   "built_by": "scripts/state-check.py, crates/ui/src/inspector/state_checks: touch-target"
   },
   {
    "id": "CK-13",
@@ -5767,7 +5767,7 @@
    "kind": "new unit test + pixel test",
    "screenshots": "M0058, M0067 (resize area too big), M0245 (resize icons massive), M0076 and M0026 (scrollbar under the top bar)",
    "capture": "Popup handle tokens (edge band 4-8 px, corner 12-16 px) and their hit rects; PNG of a scrolled page: scrollbar thumb rect inside the content area and clear of the handles.",
-   "built_by": "scripts/state-check.py, packages/bingux-ui/src/inspector/state_checks: resize-clearance, scrollbar-clearance, and the handle geometry unit test"
+   "built_by": "scripts/state-check.py, crates/ui/src/inspector/state_checks: resize-clearance, scrollbar-clearance, and the handle geometry unit test"
   },
   {
    "id": "CK-14",
@@ -5782,7 +5782,7 @@
    "kind": "existing scripts/focus-ring-check.py, add a pixel clip test",
    "screenshots": "focus-ring-visible.png (M0233), focus-ring-list.png (M0273), focus-contextmenu.png (M0226), M0063, M0144",
    "capture": "Ring rect vs face border box and per-corner radii (exists); add: ring pixels all present (no clip) for rings in scroll views and on the window edge.",
-   "built_by": "scripts/state-check.py, packages/bingux-ui/src/inspector/state_checks: state-focus, ring-clipped (pixel test), tab-ring"
+   "built_by": "scripts/state-check.py, crates/ui/src/inspector/state_checks: state-focus, ring-clipped (pixel test), tab-ring"
   },
   {
    "id": "CK-15",
@@ -5798,7 +5798,7 @@
    "kind": "new layout-lint rule + token test",
    "screenshots": "dropdown-chevron.png (M0240), phone-dropdown.png (M0239), M0305 (chevron too big), overflow-popup.png (M0249)",
    "capture": "Snapshot Node: a text node whose right edge passes the left edge of a glyph sibling in the same row; chevron node size == IconSize::Mark at the capture size class; at 390x800 and 320x600 with pseudo-locale and long data.",
-   "built_by": "scripts/state-check.py, packages/bingux-ui/src/inspector/state_checks: text-under-glyph, chevron-size"
+   "built_by": "scripts/state-check.py, crates/ui/src/inspector/state_checks: text-under-glyph, chevron-size"
   },
   {
    "id": "CK-16",
@@ -5815,7 +5815,7 @@
    "kind": "new layout-lint rule + scripted walk",
    "screenshots": "typeahead-menu.png (M0176), typeahead-timeout.png (M0238), menu-back-1.png (M0234), M0191, M0174",
    "capture": "Node tree of every taxonomy menu: no first/last/double separator; every item hoverable; scripted Down/Up/Left/Right/Enter/Escape; type-ahead survives 30 s.",
-   "built_by": "scripts/state-check.py, packages/bingux-ui/src/inspector/state_checks: menu-keys, state-open, popup-escape"
+   "built_by": "scripts/state-check.py, crates/ui/src/inspector/state_checks: menu-keys, state-open, popup-escape"
   },
   {
    "id": "CK-17",
@@ -5845,7 +5845,7 @@
    "kind": "new scripted walk",
    "screenshots": "focus-trap.png (M0248), M0077 (two-step Tab)",
    "capture": "Scripted input: N x Tab then N x Shift+Tab on every taxonomy page and dialog; read the focused node id after each key (inspector a11y.focused). N distinct stops; dialogs: no stop outside the dialog subtree.",
-   "built_by": "scripts/state-check.py, packages/bingux-ui/src/inspector/state_checks: tab-reach, tab-order, tab-ring, tab-trap, popup-escape"
+   "built_by": "scripts/state-check.py, crates/ui/src/inspector/state_checks: tab-reach, tab-order, tab-ring, tab-trap, popup-escape"
   },
   {
    "id": "CK-19",
@@ -5941,7 +5941,7 @@
    "kind": "new harness probe",
    "screenshots": "M0009, M0135 (text cursor over show password), O0048",
    "capture": "Move the pointer to the centre of each focusable and read the cursor icon the window requested (add it to Snapshot). Arrow for buttons and rows, I-beam only for editable or selectable text.",
-   "built_by": "scripts/state-check.py, packages/bingux-ui/src/inspector/state_checks: cursor-map"
+   "built_by": "scripts/state-check.py, crates/ui/src/inspector/state_checks: cursor-map"
   }
  ],
  "unread": [

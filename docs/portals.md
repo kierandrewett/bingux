@@ -3,7 +3,7 @@
 Bingux runs its own XDG desktop portal backend, `xdg-desktop-portal-bingux`.
 It owns the permission rules for the portal interfaces that Bingux serves.
 Gnoblin does not check permissions. Read the
-[backend README](../packages/bingux-portal/README.md) for the identity rules and the
+[backend README](../services/portal/README.md) for the identity rules and the
 Screenshot decision table.
 
 ## What the backend serves

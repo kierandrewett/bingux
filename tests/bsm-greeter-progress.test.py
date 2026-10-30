@@ -2,7 +2,7 @@
 """Keep the greeter's progress arithmetic equal to bsm-proto's.
 
 shell/bingux/auth/ProgressModel.js repeats the stage order, work units,
-counted stages and labels of packages/bsm-proto/src/progress.rs, because the
+counted stages and labels of bsm/proto/src/progress.rs, because the
 control socket sends the model, not the fraction. This test parses the Rust
 source and runs the JavaScript with node, so a change on one side fails here.
 It also checks the fraction against the cases the Rust unit tests state.
@@ -16,10 +16,10 @@ import sys
 import unittest
 
 ROOT = Path(__file__).resolve().parent.parent
-RUST = (ROOT / "packages/bsm-proto/src/progress.rs").read_text()
+RUST = (ROOT / "bsm/proto/src/progress.rs").read_text()
 JS = ROOT / "shell/bingux/auth/ProgressModel.js"
 AVAILABILITY_JS = ROOT / "shell/bingux/auth/Availability.js"
-STATE = (ROOT / "packages/bsm-proto/src/state.rs").read_text()
+STATE = (ROOT / "bsm/proto/src/state.rs").read_text()
 
 
 def snake(name):
@@ -64,7 +64,7 @@ const all = model(['auth_accepted', 'pam_session', 'host_connected', 'gnoblin_re
 console.log(JSON.stringify({early: m.fraction(early), counted: m.fraction(counted), idle: m.fraction(idle), idleIndeterminate: m.indeterminate(idle), countedIndeterminate: m.indeterminate(counted), all: m.fraction(all), complete: m.complete(all), label: m.label(all)}));
 """
         )
-        # packages/bsm-proto/src/progress.rs tests: 5 + 10 = 15; 40 + 10 * 1 / 2 = 45.
+        # bsm/proto/src/progress.rs tests: 5 + 10 = 15; 40 + 10 * 1 / 2 = 45.
         self.assertEqual(out["early"], 15)
         self.assertEqual(out["counted"], 45)
         self.assertEqual(out["idle"], 40)

@@ -1,7 +1,7 @@
 # Path elision
 
 How Bingux shows a path or a file name in less room than it needs. Contributor
-doc: read it before touching `packages/bingux-ui/src/elide.rs`, `PathLabel`
+doc: read it before touching `crates/ui/src/elide.rs`, `PathLabel`
 or anything that cuts text in the middle.
 
 Code: `bingux_ui::elide` (pure functions, tests beside it in

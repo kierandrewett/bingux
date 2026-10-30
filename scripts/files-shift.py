@@ -31,7 +31,7 @@ lists the frames in which the list has no header or only some of its rows.
 Output: OUT/report.md (default /tmp/FilesShift), OUT/<scenario>.png (a strip of
 the frames after the action, shifted elements boxed in red) and OUT/shifts.json.
 Exit status 1 when any persistent element shifted. Build first:
-`cargo build` in packages/bingux-files-app with CARGO_TARGET_DIR set as usual.
+`cargo build` in apps/files with CARGO_TARGET_DIR set as usual.
 Needs sway, grim-free tools (wf-recorder, ffmpeg, wtype), PIL and numpy; one
 session runs, and it is stopped at the end.
 """

@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 spec = importlib.util.spec_from_file_location(
-    "binguxctl", Path(__file__).resolve().parents[1] / "packages/binguxctl/binguxctl.py"
+    "binguxctl", Path(__file__).resolve().parents[1] / "tools/binguxctl/binguxctl.py"
 )
 ctl = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ctl)

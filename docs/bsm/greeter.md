@@ -13,7 +13,7 @@ bsm slides the whole greeter up and off the screen. The greeter itself never
 animates those hand-overs: after a correct password it shows a quiet
 "Signing in" state and keeps its last frame until bsm covers or moves it. See
 [the architecture record](architecture.md) for the transitions and the
-control protocol (`packages/bsm-proto/src/control.rs`).
+control protocol (`bsm/proto/src/control.rs`).
 
 The greeter is opt-in with bsm. The standalone lock screen (`ext-session-lock`,
 PAM) and the greetd login screen are unchanged; see [locking](../locking.md)
@@ -76,7 +76,7 @@ owner.
 After a correct password for an account with no session, the greeter stays on
 screen and shows the startup progress that bsm reports. The bar shows the
 weighted fraction of the stages that have actually been reached
-(`packages/bsm-proto/src/progress.rs`); a stage that counts outputs or
+(`bsm/proto/src/progress.rs`); a stage that counts outputs or
 surfaces shows `n of m`. The fill eases between those confirmed values and
 never moves on its own.
 

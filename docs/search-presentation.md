@@ -186,7 +186,7 @@ daemon's own configuration file, not from `bingux.toml`:
 
 ## Optional Web suggestions
 
-`packages/bingux-searchd/web-suggestions.py` implements the external-provider
+`services/searchd/web-suggestions.py` implements the external-provider
 protocol for DuckDuckGo autocomplete. Register a manifest with ID `web-suggestions`,
 lazy startup, priority 0, timeout 2000ms, and a command consisting of Python 3,
 the script path, and the desired URL-opener executable. Add its manifest path to
@@ -233,7 +233,7 @@ rely on the in-memory cache.
 
 Under a hardened service with `NoNewPrivileges`, the OS database may be
 unreadable because `plocate` normally gains a dedicated database group. Keep
-that protection: run `bash packages/bingux-searchd/refresh-os-index.sh` in the
+that protection: run `bash services/searchd/refresh-os-index.sh` in the
 ordinary desktop session to build a private snapshot from user-visible OS-index
 entries. Bingux automatically prefers `$XDG_CACHE_HOME/bingux/locate.db` (default
 `~/.cache/bingux/locate.db`). Refresh it after the host index updates to pick up
@@ -245,7 +245,7 @@ penalty for hash-like components. Simpler paths win among similar matches, but
 an exact match still outranks a weaker match in a short path. This is a heuristic,
 not a claim that a path was generated or written by a person.
 
-`packages/bingux-searchd/search-excluded-directories.txt` is the shared exclusion
+`services/searchd/search-excluded-directories.txt` is the shared exclusion
 list for both indexing paths and the snapshot refresh script. It skips dependency,
 build-output and cache directories such as `node_modules`, `target`, `build`,
 `dist`, `out`, `CMakeFiles`, virtual environments and framework caches, plus object

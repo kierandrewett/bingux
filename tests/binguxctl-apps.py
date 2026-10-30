@@ -46,7 +46,7 @@ Name=New window
 Exec=/usr/bin/python3 {launcher} new-window
 """)
 qs = os.environ.get("QS_TEST_BIN", "qs")
-command = [sys.executable, str(repo / "packages/binguxctl/binguxctl.py"), "--quickshell", qs, "--path", str(fixture)]
+command = [sys.executable, str(repo / "tools/binguxctl/binguxctl.py"), "--quickshell", qs, "--path", str(fixture)]
 env = os.environ | {"GNOBLIN_COMPOSITOR_SOCKET": str(config / "private-compositor.sock")}
 log_path = config / "quickshell.log"
 log = log_path.open("w")

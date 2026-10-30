@@ -73,7 +73,7 @@ bsm cleans up.
 
 * Binds `wl_compositor`, `wl_shm`, `wl_seat`, every `wl_output` and
   `bsm_session_host_v1`. The protocol bindings are generated at build time from
-  `packages/bsm/protocol/bsm-session-host-v1.xml` (the single source of truth).
+  `bsm/core/protocol/bsm-session-host-v1.xml` (the single source of truth).
 * For each `output_added` it creates a `wl_surface`, calls `get_session_surface`
   and creates a matching Gnoblin virtual monitor (below). It acknowledges every
   `configure` as soon as it arrives, then commits a state-only commit
@@ -336,7 +336,7 @@ exercise the protocol without Gnoblin.
 ## Tests and evidence
 
 ```
-cd packages/bsm-host
+cd bsm/host
 export CARGO_TARGET_DIR=/tmp/bsm-target/bsm-host LIBCLANG_PATH=/usr/lib64
 cargo test --features test-pattern
 ```
@@ -410,7 +410,7 @@ DMA-BUF path would remove both copies and is the first optimisation to make if
 
 ## Building
 
-`cargo build --release` in `packages/bsm-host` (edition 2024, standalone
+`cargo build --release` in `bsm/host` (edition 2024, standalone
 `Cargo.lock`). The `pipewire` crate generates bindings with `bindgen`, so it
 needs `libclang` and the PipeWire and SPA headers (`pipewire-devel`,
 `clang`). On a machine where `LIBCLANG_PATH` points at an embedded toolchain,

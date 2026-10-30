@@ -33,7 +33,7 @@ import numpy as np
 
 # Plymouth's theme (distro/packages/bingux-os/bingux.script): 0.043, 0.043, 0.051 over 255.
 SPLASH_BG = (10.0, 10.0, 13.0)
-# bsm's built-in cover colour (packages/bsm/src/config.rs): #0d0f17.
+# bsm's built-in cover colour (bsm/core/src/config.rs): #0d0f17.
 COVER_BG = (13.0, 15.0, 23.0)
 SESSION_SIZE = (1280, 800)
 PLACEHOLDER_SIZE = (640, 480)

@@ -33,28 +33,28 @@ all: native shell daemons
 
 native: $(BUILD_DIR)/bingux-image-clipboard $(BUILD_DIR)/bingux-frame
 	mkdir -p $(BUILD_DIR)/text $(BUILD_DIR)/effects $(BUILD_DIR)/wayland-sync
-	cd $(BUILD_DIR)/text && $(QMAKE) $(ROOT)/packages/bingux-text-layout/text-layout.pro && $(MAKE)
-	cd $(BUILD_DIR)/effects && $(QMAKE) $(ROOT)/packages/bingux-effects/effects.pro && $(MAKE)
-	cd $(BUILD_DIR)/wayland-sync && $(QMAKE) $(ROOT)/packages/bingux-wayland-sync/sync.pro && $(MAKE)
-	$(CC) -std=c11 -D_POSIX_C_SOURCE=200809L -O2 -Wall -Wextra -Werror packages/bingux-audio-meter/main.c $(CFLAGS) $(LDFLAGS) -o $(BUILD_DIR)/bingux-audio-meter $$($(PKG_CONFIG) --cflags --libs libpulse)
+	cd $(BUILD_DIR)/text && $(QMAKE) $(ROOT)/native/text-layout/text-layout.pro && $(MAKE)
+	cd $(BUILD_DIR)/effects && $(QMAKE) $(ROOT)/native/effects/effects.pro && $(MAKE)
+	cd $(BUILD_DIR)/wayland-sync && $(QMAKE) $(ROOT)/native/wayland-sync/sync.pro && $(MAKE)
+	$(CC) -std=c11 -D_POSIX_C_SOURCE=200809L -O2 -Wall -Wextra -Werror native/audio-meter/main.c $(CFLAGS) $(LDFLAGS) -o $(BUILD_DIR)/bingux-audio-meter $$($(PKG_CONFIG) --cflags --libs libpulse)
 
 # bingux-shell: Quickshell (pinned submodule, Bingux patches applied) built
 # into one binary, plus the packed QML archive it runs.
 shell: shell-archive
-	$(CMAKE) -G Ninja -S packages/bingux-shell -B $(BUILD_DIR)/bingux-shell -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBINGUX_LIBDIR=$(LIBDIR_NAME) -DBINGUX_SHELL_VERSION=$(VERSION)
+	$(CMAKE) -G Ninja -S shell/runtime -B $(BUILD_DIR)/bingux-shell -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBINGUX_LIBDIR=$(LIBDIR_NAME) -DBINGUX_SHELL_VERSION=$(VERSION)
 	$(CMAKE) --build $(BUILD_DIR)/bingux-shell --parallel $(JOBS)
 
 shell-archive:
 	python3 scripts/pack-shell.py --version $(VERSION) $(BUILD_DIR)/bingux-shell.sxa
 
-$(BUILD_DIR)/bingux-image-clipboard: packages/bingux-image-clipboard/main.c packages/bingux-image-clipboard/ext-data-control-v1.xml
+$(BUILD_DIR)/bingux-image-clipboard: native/image-clipboard/main.c native/image-clipboard/ext-data-control-v1.xml
 	mkdir -p $(BUILD_DIR)
-	wayland-scanner client-header packages/bingux-image-clipboard/ext-data-control-v1.xml $(BUILD_DIR)/ext-data-control-v1-client-protocol.h
-	wayland-scanner private-code packages/bingux-image-clipboard/ext-data-control-v1.xml $(BUILD_DIR)/ext-data-control-v1-protocol.c
-	$(CC) -std=c11 -D_POSIX_C_SOURCE=200809L -O2 -Wall -Wextra -Werror packages/bingux-image-clipboard/main.c $(BUILD_DIR)/ext-data-control-v1-protocol.c -I$(BUILD_DIR) $(CFLAGS) $(LDFLAGS) -o $@ $$($(PKG_CONFIG) --cflags --libs wayland-client)
+	wayland-scanner client-header native/image-clipboard/ext-data-control-v1.xml $(BUILD_DIR)/ext-data-control-v1-client-protocol.h
+	wayland-scanner private-code native/image-clipboard/ext-data-control-v1.xml $(BUILD_DIR)/ext-data-control-v1-protocol.c
+	$(CC) -std=c11 -D_POSIX_C_SOURCE=200809L -O2 -Wall -Wextra -Werror native/image-clipboard/main.c $(BUILD_DIR)/ext-data-control-v1-protocol.c -I$(BUILD_DIR) $(CFLAGS) $(LDFLAGS) -o $@ $$($(PKG_CONFIG) --cflags --libs wayland-client)
 
-$(BUILD_DIR)/bingux-frame: packages/bingux-frame/paint-gtk.c packages/bingux-frame/build.sh packages/bingux-frame/vendor/client.c packages/bingux-frame/vendor/paint.h packages/bingux-frame/vendor/gnoblin-window-frame-v1.xml
-	bash packages/bingux-frame/build.sh $(BUILD_DIR)
+$(BUILD_DIR)/bingux-frame: native/frame/paint-gtk.c native/frame/build.sh native/frame/vendor/client.c native/frame/vendor/paint.h native/frame/vendor/gnoblin-window-frame-v1.xml
+	bash native/frame/build.sh $(BUILD_DIR)
 
 # The Rust programs. Each crate has its own Cargo.lock, so each is built on its own.
 # bingux-settings, bingux-files and bingux-taxonomy are the Freya applications;
@@ -65,26 +65,26 @@ $(BUILD_DIR)/bingux-frame: packages/bingux-frame/paint-gtk.c packages/bingux-fra
 # engine); `daemons` adds the search and status daemons, the privileged helper, the
 # session manager and the portal backend.
 apps:
-	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-config/Cargo.toml --target-dir $(CARGO_TARGET)
-	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-audio-effects/Cargo.toml --target-dir $(CARGO_TARGET)
-	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-dsp/Cargo.toml --target-dir $(DSP_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path crates/config/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path services/audio-effects/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path crates/dsp/Cargo.toml --target-dir $(DSP_TARGET)
 	install -Dm755 $(DSP_TARGET)/release/libbingux_dsp.so $(CARGO_TARGET)/release/libbingux_dsp.so
-	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-settings/Cargo.toml --target-dir $(CARGO_TARGET)
-	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-files-app/Cargo.toml --target-dir $(CARGO_TARGET)
-	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-preview-host/Cargo.toml --target-dir $(CARGO_TARGET)
-	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-taxonomy/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/settings/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/files/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path services/preview-host/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/taxonomy/Cargo.toml --target-dir $(CARGO_TARGET)
 
 daemons: apps
-	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-helper/Cargo.toml --target-dir $(CARGO_TARGET)
-	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-searchd/Cargo.toml --target-dir $(CARGO_TARGET)
-	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-statusd/Cargo.toml --target-dir $(CARGO_TARGET)
-	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-session/Cargo.toml --target-dir $(CARGO_TARGET)
-	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-portal/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path services/helper/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path services/searchd/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path services/statusd/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path services/session/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path services/portal/Cargo.toml --target-dir $(CARGO_TARGET)
 
 # Compile the icon sources (scripts/icons/src) into the bingux-ui icons and the
 # shell's copy. Needs uv: the script declares its own packages. map-fork.py first
 # writes the one-line sources from scripts/icons/labels.tsv. colour.py compiles the
-# colour file and folder icons (scripts/icons/colour) into packages/bingux-ui/icons/colour.
+# colour file and folder icons (scripts/icons/colour) into crates/ui/icons/colour.
 icons:
 	scripts/icons/map-fork.py
 	scripts/icons/build.py
@@ -190,26 +190,26 @@ check: doctor-build native daemons
 	python3 scripts/generate-adwaita-icon-index.py --check
 	python3 scripts/ui-lint.py
 	python3 scripts/taxonomy-check.py
-	cd $(BUILD_DIR)/text && $(QMAKE) $(ROOT)/packages/bingux-text-layout/spacing-test.pro -o Makefile.tests && $(MAKE) -f Makefile.tests
+	cd $(BUILD_DIR)/text && $(QMAKE) $(ROOT)/native/text-layout/spacing-test.pro -o Makefile.tests && $(MAKE) -f Makefile.tests
 	QT_QPA_PLATFORM=offscreen $(BUILD_DIR)/text/spacing-test
-	$(CARGO) test --locked --manifest-path packages/bingux-config/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) test --locked --manifest-path crates/config/Cargo.toml --target-dir $(CARGO_TARGET)
 	BINGUX_CONFIG_BIN=$(CARGO_TARGET)/release/bingux-config python3 tests/bingux-config.test.py
-	$(CARGO) test --locked --manifest-path packages/bingux-helper/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) test --locked --manifest-path services/helper/Cargo.toml --target-dir $(CARGO_TARGET)
 	python3 tests/app-env.test.py
 	python3 tests/rules-check.test.py
-	$(CARGO) test --locked --manifest-path packages/bingux-searchd/Cargo.toml --lib
-	$(CARGO) test --locked --manifest-path packages/bingux-files/Cargo.toml
-	$(CARGO) test --locked --manifest-path packages/bingux-preview-core/Cargo.toml --target-dir $(CARGO_TARGET)
-	$(CARGO) test --locked --manifest-path packages/bingux-preview-host/Cargo.toml --target-dir $(CARGO_TARGET)
-	$(CARGO) test --locked --manifest-path packages/bingux-search/Cargo.toml
-	$(CARGO) test --locked --manifest-path packages/bingux-data-usage/Cargo.toml
-	$(CARGO) test --locked --manifest-path packages/bingux-taxonomy/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) test --locked --manifest-path services/searchd/Cargo.toml --lib
+	$(CARGO) test --locked --manifest-path crates/files/Cargo.toml
+	$(CARGO) test --locked --manifest-path crates/preview-core/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) test --locked --manifest-path services/preview-host/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) test --locked --manifest-path crates/search/Cargo.toml
+	$(CARGO) test --locked --manifest-path crates/data-usage/Cargo.toml
+	$(CARGO) test --locked --manifest-path apps/taxonomy/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(MAKE) layout-check overflow-check state-check
 	$(MAKE) copy-check pixel-check stability-check motion-check
-	$(CARGO) test --locked --manifest-path packages/bingux-ui/Cargo.toml --features testing --target-dir $(CARGO_TARGET) --lib slide_users_tests
-	$(CARGO) test --locked --manifest-path packages/bingux-statusd/Cargo.toml
-	$(CARGO) test --locked --manifest-path packages/bingux-session/Cargo.toml
-	$(CARGO) test --locked --manifest-path packages/bingux-portal/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) test --locked --manifest-path crates/ui/Cargo.toml --features testing --target-dir $(CARGO_TARGET) --lib slide_users_tests
+	$(CARGO) test --locked --manifest-path services/statusd/Cargo.toml
+	$(CARGO) test --locked --manifest-path services/session/Cargo.toml
+	$(CARGO) test --locked --manifest-path services/portal/Cargo.toml --target-dir $(CARGO_TARGET)
 	python3 tests/shortcut-reload.py
 	python3 tests/gnoblin-menu-focus.py
 	BINGUX_STATUSD_BIN=$(CARGO_TARGET)/release/bingux-statusd python3 tests/osd-event-bridge.py
@@ -234,7 +234,7 @@ check: doctor-build native daemons
 SHELL_BIN = $(abspath $(BUILD_DIR))/bingux-shell/quickshell/src/bingux-shell
 check-session: native daemons shell
 	mkdir -p $(BUILD_DIR)/qml/Bingux/Wayland
-	cp $(BUILD_DIR)/wayland-sync/libbinguxwaylandsync.so packages/bingux-wayland-sync/qmldir $(BUILD_DIR)/qml/Bingux/Wayland/
+	cp $(BUILD_DIR)/wayland-sync/libbinguxwaylandsync.so native/wayland-sync/qmldir $(BUILD_DIR)/qml/Bingux/Wayland/
 	QS_TEST_BIN=$(SHELL_BIN) BINGUX_SESSION_BIN=$(CARGO_TARGET)/release/bingux-session python3 tests/greeter-ui.py
 	QS_TEST_BIN=$(SHELL_BIN) QML_IMPORT_PATH=$(abspath $(BUILD_DIR))/qml python3 tests/lock-ui.py
 	QS_TEST_BIN=$(SHELL_BIN) python3 tests/bsm-greeter-client.test.py

@@ -68,7 +68,7 @@ For the packaged Gnoblin autostart integration, see
 [`tests/bingux-autostart-config.md`](tests/bingux-autostart-config.md).
 
 A change to a Bingux Settings page must keep its layout still while its data
-loads. Build `packages/bingux-settings` with `--features snapshot`, then run
+loads. Build `apps/settings` with `--features snapshot`, then run
 `python3 scripts/layout-stability.py`: it fails when a row separator or card
 border moves between the loading and the loaded frames, at desktop and phone
 size. `bingux-config` must be built beside the binary (or named by
@@ -96,14 +96,14 @@ transition, scroll, drag or typing drops frames with every command slowed;
 
 ## Changing bingux-ui
 
-Every change to `packages/bingux-ui` (a new or changed component, control
+Every change to `crates/ui` (a new or changed component, control
 builder, icon, style token or behaviour) must land with its entry in the
 `bingux-taxonomy` app, in the same commit:
 
-1. Add or update the entry in `packages/bingux-taxonomy/src/registry.rs` and
-   the states it shows in `packages/bingux-taxonomy/src/demos/`. Every public
+1. Add or update the entry in `apps/taxonomy/src/registry.rs` and
+   the states it shows in `apps/taxonomy/src/demos/`. Every public
    item you add is named in some entry's `covers` list, or, for an internal
-   that has nothing to look at, in `packages/bingux-taxonomy/coverage-allowlist.txt`
+   that has nothing to look at, in `apps/taxonomy/coverage-allowlist.txt`
    with its reason. A new icon needs nothing more: the Icons page lists the
    `icons/` directory.
 2. Run `python3 scripts/taxonomy-check.py`. It fails on an exported item no
@@ -168,7 +168,7 @@ builder, icon, style token or behaviour) must land with its entry in the
    column of letters, leaves the window or covers its control. A bubble is as
    wide as its text, never as wide as the control or cell it hangs from; see
    "Tooltips" in `docs/bingux-ui.md`. `cargo test --lib --features testing
-   tooltip` in `packages/bingux-ui` holds the same rule for the cases a page
+   tooltip` in `crates/ui` holds the same rule for the cases a page
    cannot reach (a clipped box, a scrolled one, a narrow window).
 
 Visual integrity (`design/rules.md` CK-01, 02, 03, 06, 07, 08, 09, 12, 13, 14, 15, 16, 18, 19, 20, 22, 25). Each of
@@ -202,7 +202,7 @@ which needs no binary), most take `--build` and `--show-allowed`, and a finding 
   scrollbar, reads the cursor over each control (the arrow, the I-beam only over text), and
   holds a dropdown's label clear of its chevron. Fix the component. A control that is
   stateless, small or quiet on purpose is an entry in `ALLOW` in
-  `packages/bingux-ui/src/inspector/state_checks/mod.rs` (a component's doing) or in the
+  `crates/ui/src/inspector/state_checks/mod.rs` (a component's doing) or in the
   script's `ALLOWED` (one capture's), each with its reason. See "State checks" in
   `docs/bingux-ui.md`.
 - an animation: `python3 scripts/loop-check.py --all`, `python3 scripts/number-roll-check.py`,

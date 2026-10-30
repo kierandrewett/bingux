@@ -40,7 +40,7 @@ from svgelements import Path as SvgPath
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-ICONS_RS = REPO / "packages/bingux-ui/src/icons.rs"
+ICONS_RS = REPO / "crates/ui/src/icons.rs"
 
 DARK = ((18, 18, 20), (240, 240, 240))
 LIGHT = ((250, 250, 250), (34, 34, 34))

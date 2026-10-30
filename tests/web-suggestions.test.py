@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location(
-    "web_suggestions", Path(__file__).resolve().parents[1] / "packages/bingux-searchd/web-suggestions.py"
+    "web_suggestions", Path(__file__).resolve().parents[1] / "services/searchd/web-suggestions.py"
 )
 web = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(web)

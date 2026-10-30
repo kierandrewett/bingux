@@ -56,10 +56,10 @@ from probe_lib import Allow, Finding  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = [
-    "packages/bingux-settings/src",
-    "packages/bingux-files-app/src",
-    "packages/bingux-ui/src",
-    "packages/bingux-taxonomy/src",
+    "apps/settings/src",
+    "apps/files/src",
+    "crates/ui/src",
+    "apps/taxonomy/src",
 ]
 
 # ---- the rules ------------------------------------------------------------------
@@ -119,7 +119,7 @@ ALLOWED: list[dict] = [
     {"rule": "show-more", "capture": r"preview/viewers/text\.rs", "where": r"Show more", "why": "The text preview reads a big file in chunks and the button asks for the next one: a file's bytes, not a list (TX-10 is about lists, which lazy-load). A scroll-triggered read would be the better design: open."},
     {"rule": "show-more", "capture": r"foundations\.rs|foundations_motion", "where": r"Show more", "why": "The label of a switch in the Reveal specimen, which shows a block that opens and closes; it loads nothing."},
     {"rule": "title-case", "capture": r"vpn/plugins\.rs", "where": r"Juniper Network Connect|Pulse Connect Secure", "why": "Product names of two VPN clients."},
-    {"rule": "three-dots", "capture": r"bingux-taxonomy/src/main\.rs", "where": r"Usage: bingux-taxonomy", "why": "Command-line usage text: `[PAGE,PAGE...]` is syntax, not an ellipsis in copy."},
+    {"rule": "three-dots", "capture": r"apps/taxonomy/src/main\.rs", "where": r"Usage: bingux-taxonomy", "why": "Command-line usage text: `[PAGE,PAGE...]` is syntax, not an ellipsis in copy."},
     {"on": "captures", "rule": "value-ellipsis", "capture": r"settings-background-desktop", "where": r"Add picture", "why": "A button label: the ellipsis says it opens a file chooser."},
     {"on": "captures", "rule": "(instruction|subtitle)-.*|subtitle-period", "capture": r"controls_text-input", "where": r".*", "why": "The validators' messages, shown under the field that failed: an error says what to enter and ends as a sentence (they are error text, not row subtitles)."},
     {"on": "captures", "rule": "subtitle-restates", "capture": r"containers_rows|containers_groups-and-cards", "where": r"ネットワーク|A name far too long", "why": "Stress specimens: one long or CJK string is the title and the subtitle on purpose, to show wrapping."},

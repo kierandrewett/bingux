@@ -1,11 +1,11 @@
 # bsm compositor: connection and role model, security review
 
-Scope: `packages/bsm-compositor` (broker sockets, `SO_PEERCRED` / `SO_PEERPIDFD`
+Scope: `bsm/compositor` (broker sockets, `SO_PEERCRED` / `SO_PEERPIDFD`
 checks, role-filtered globals, `bsm_session_host_v1`, input routing, protect and
 presentability, transition validation, greeter crash cover), read against spec
 section 3 and the invariants in `docs/bsm/architecture.md`. Adjacent code was read
-where it decides an outcome: `packages/bsm/src/run.rs` (watchdog, event channel),
-`packages/bsm-manager/src/runtime/driver.rs` (event forwarder),
+where it decides an outcome: `bsm/core/src/run.rs` (watchdog, event channel),
+`bsm/manager/src/runtime/driver.rs` (event forwarder),
 `packaging/bsm/*`, and the vendored dependencies `smithay 0.7.0`,
 `wayland-backend 0.3.17`, `rustix 1.1.5` from `~/.cargo/registry`.
 
@@ -192,7 +192,7 @@ user.
 
 Watchdog. `bsm.service` has `WatchdogSec=30` (`packaging/bsm/systemd/bsm.service:37`)
 and the docs imply a hung compositor is restarted. But `WATCHDOG=1` is sent by the
-`bsm-notify` thread (`packages/bsm/src/run.rs:311-333`) whose loop condition is
+`bsm-notify` thread (`bsm/core/src/run.rs:311-333`) whose loop condition is
 `alive && !handle.is_finished()`. Both refer to the manager driver, not to the
 compositor thread. A wedged compositor loop is therefore never detected; systemd
 keeps `bsm` running with a frozen display. [CONFIRMED BY READING for the watchdog;
@@ -219,10 +219,10 @@ followed by `destroy` on the same `wl_surface` (a repeated role is allowed becau
 `give_role` only fails on a different role, `host.rs:200`) emits a
 `SessionSurfaces` each cycle (`host.rs:235`, `349`). Each armed surface emits one
 more per report (`host.rs:287-291`, `380-390`). The channel is
-`std::sync::mpsc::channel()` (unbounded, `packages/bsm/src/run.rs:285`).
+`std::sync::mpsc::channel()` (unbounded, `bsm/core/src/run.rs:285`).
 
 The consumer is the `bsm-scene-events` thread, which does a blocking `send` into
-the driver's `sync_channel(QUEUE = 1024)` (`bsm-manager/src/runtime/driver.rs:33`,
+the driver's `sync_channel(QUEUE = 1024)` (`bsm/manager/src/runtime/driver.rs:33`,
 `53`, `143-148`). The greeter server and the helper client send into the same
 `tx` (`driver.rs:141-142`). When the bridge outpaces the driver:
 
@@ -233,7 +233,7 @@ the driver's `sync_channel(QUEUE = 1024)` (`bsm-manager/src/runtime/driver.rs:33
    fail or time out.
 
 The manager treats stale or repeated reports as no-ops
-(`bsm-manager/src/core/session.rs:326-360`), so the events carry no value past the
+(`bsm/manager/src/core/session.rs:326-360`), so the events carry no value past the
 first few.
 
 Minimal fix. Per session, allow at most (for example) 64 `report` requests in
@@ -293,7 +293,7 @@ What actually gates `HOSTED_USER`:
 - pid equality against the pid the helper reports: effective. The pid is read from
   `SO_PEERPIDFD` when available (`peer.rs:22-33`), which names the process that
   called `connect`, not the fd's later holder.
-- cgroup scope: the helper reports a **bare unit name** (`bsm-helper/src/session.rs:317-320`,
+- cgroup scope: the helper reports a **bare unit name** (`bsm/helper/src/session.rs:317-320`,
   `384`), so `cgroup_matches` takes the "path component" branch
   (`peer.rs:76-88`, `path.split('/').any(|c| c == scope)`). Any process of the same
   uid can `mkdir` a cgroup with that name inside its delegated `user@UID.service`
@@ -367,7 +367,7 @@ slot has no uid check at accept (`broker.rs:120-137`), so any member of the
 `bingux-greeter` group can do the same. Impact is limited to a self-inflicted login
 failure for a same-uid attacker and to the greeter group; no confidentiality effect.
 The manager correctly ignores `SessionConnectionRejected`
-(`bsm-manager/src/core/tests/security.rs:408-411`), so another uid cannot fail a
+(`bsm/manager/src/core/tests/security.rs:408-411`), so another uid cannot fail a
 login by connecting to its socket.
 
 Minimal fix. Evict the oldest pending connection instead of dropping the newest, run
@@ -439,12 +439,12 @@ Keycodes only, no text. Fix by tracking and releasing held keys on owner change
 
 ## F13 (Info): doc and code differences
 
-- `architecture.md:72` and `bsm-proto/src/paths.rs:17-21` say the session socket has
+- `architecture.md:72` and `bsm/proto/src/paths.rs:17-21` say the session socket has
   a "random name". The name is `<session>-<generation>.sock` (`broker.rs:230-233`),
-  where the id is `s%08x` from the manager rng (`bsm-manager/src/core/mod.rs:276-278`,
+  where the id is `s%08x` from the manager rng (`bsm/manager/src/core/mod.rs:276-278`,
   32 bits) and the generation is a counter. It is hard to guess, but only the uid
   and pid checks are authoritative.
-- `bsm/tests/support/mod.rs:667` and the harness use socket mode `0o666` for the
+- `bsm/core/tests/support/mod.rs:667` and the harness use socket mode `0o666` for the
   greeter socket. Test code only; production default is `0660` plus a chown to the
   greeter group (`config.rs:136-144` accepts any mode up to `0777`; a root-owned
   config could weaken it. Consider refusing `o+rw`).
@@ -504,7 +504,7 @@ listed. The stale-socket removal (`broker.rs:60-66`) runs inside a directory onl
 Rust-created (`CLOEXEC`), the pidfd comes from `SO_PEERPIDFD` (the kernel returns it
 close-on-exec [INFERENCE: kernel source not read]), DRM fds are opened with `CLOEXEC` (`gfx_drm.rs:361`). The one child bsm
 starts, `bsm-imgconv`, closes everything outside an allow list in `pre_exec`
-(`bsm-appearance/src/sandbox.rs:90-102`, `convert.rs:294-297`). Keymap fds are sealed
+(`bsm/appearance/src/sandbox.rs:90-102`, `convert.rs:294-297`). Keymap fds are sealed
 memfds (`smithay .../utils/sealed_file.rs`). Not verified: whether libseat's
 seatd backend sets `CLOEXEC` on the device fds it receives.
 

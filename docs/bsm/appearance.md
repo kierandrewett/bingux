@@ -1,6 +1,6 @@
 # bsm appearance: accounts, published images, and the converter
 
-Crate: `packages/bsm-appearance` (library `bsm_appearance`, binary `bsm-imgconv`). It is
+Crate: `bsm/appearance` (library `bsm_appearance`, binary `bsm-imgconv`). It is
 the implementation of "Accurate accounts and appearance" in
 [architecture.md](architecture.md#appearance-publishing). It has no D-Bus service, no
 compositor code and no QML; `bsm` (the manager) calls it from a worker thread.
@@ -75,7 +75,7 @@ name, with control characters removed and at most 128 characters (tested with a 
 AccountsService `IconFile`, else the state file `Icon=`, else a plain file named after the
 account in the icons directory. It is **unvalidated**; the publisher validates it.
 
-Reused from `bingux-session/src/accounts.rs` (copied, the crates are separate): the
+Reused from `services/session/src/accounts.rs` (copied, the crates are separate): the
 `UID_MIN`/`UID_MAX` parsing, the nologin shell idea and the GECOS rule.
 
 ## The record
@@ -333,7 +333,7 @@ threads publishing the same wallpaper (one revision).
 
 ## Verification status
 
-Run (`cargo test` in `packages/bsm-appearance`, 29 unit + 11 + 14 + 19 integration tests,
+Run (`cargo test` in `bsm/appearance`, 29 unit + 11 + 14 + 19 integration tests,
 all passing at the time of writing):
 
 * account filtering on a fixture root (reserved, system, nologin, hidden by name and by uid,

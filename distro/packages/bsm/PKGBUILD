@@ -99,6 +99,6 @@ package() {
     install -Dm644 docs/bsm/manager.md "$pkgdir/usr/share/doc/bsm/manager.md"
     install -Dm644 docs/bsm/architecture.md "$pkgdir/usr/share/doc/bsm/architecture.md"
     install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
-    install -Dm644 packages/bsm/protocol/bsm-session-host-v1.xml \
+    install -Dm644 bsm/core/protocol/bsm-session-host-v1.xml \
         "$pkgdir/usr/share/bsm/protocol/bsm-session-host-v1.xml"
 }

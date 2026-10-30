@@ -89,7 +89,7 @@ dock shows an application's actions only while it has a window.
 Where Settings is, is a URI (`bingux-settings://network/wifi/network/Home`), and
 the window's Back list is a list of those. The header's Back button, the page
 title, the window title and the history menu all read that one list. The route
-table is `packages/bingux-settings/src/routes.rs`; a page does not write its own
+table is `apps/settings/src/routes.rs`; a page does not write its own
 Back. See [Navigation](bingux-ui.md#navigation) for the system.
 
 - **Back** goes to the page you came from, which is not always the page's parent:
@@ -124,7 +124,7 @@ The dock, the window switcher, search results and notifications find the
 application icon from the desktop entry. `bingux-settings.desktop` sets
 `Icon=bingux-settings` and `StartupWMClass=bingux-settings`, and the window's
 app id is `bingux-settings`, so a running window groups under its dock icon.
-The icon is `packages/bingux-settings/bingux-settings.svg`, a full-colour
+The icon is `apps/settings/bingux-settings.svg`, a full-colour
 128 x 128 icon in the Adwaita app-icon style the dock shows for other
 applications. `scripts/install-shell.py` and the RPM install it as
 `share/icons/hicolor/scalable/apps/bingux-settings.svg`; GTK finds it through
@@ -462,7 +462,7 @@ data, Settings reads that instead. The recorder's database is
 `$XDG_DATA_HOME/bingux/data-usage.sqlite3` (`~/.local/share/bingux/` by default), SQLite in WAL
 mode with a versioned schema; minute samples are kept 7 days, hourly totals 90 days
 and daily totals forever. The totals for All leave out VPN interfaces, so tunnelled
-traffic is not counted twice. See `packages/bingux-data-usage/README.md` for the
+traffic is not counted twice. See `crates/data-usage/README.md` for the
 schema and the reader API. If no sample is recent, the page says "The data usage
 recorder is not running."
 
@@ -607,7 +607,7 @@ does not scroll it. To tune the feel without a rebuild, set `BINGUX_WHEEL_STEP`
 (pixels per notch), `BINGUX_TOUCHPAD_FACTOR` (touchpad speed, 1 is direct) or
 `BINGUX_SCROLL_SPEED` (1 is the default, 2 is twice as quick, 0.5 twice as
 soft; 0.25 to 8) before starting Settings.
-These come from a small patch to Freya kept in `packages/vendor`.
+These come from a small patch to Freya kept in `vendor`.
 
 ## Desktop and dock
 
@@ -790,7 +790,7 @@ no inspector window, so they suit a headless session.
 ## Development
 
 ```sh
-cargo build --manifest-path packages/bingux-settings/Cargo.toml
+cargo build --manifest-path apps/settings/Cargo.toml
 BINGUX_SETTINGS_BIN=target/debug/bingux-settings binguxctl settings sound
 ```
 
@@ -809,9 +809,9 @@ and render the pages to PNG files. Each page reads the real system, so the
 images show what the machine running the command reports:
 
 ```sh
-cargo run --manifest-path packages/bingux-settings/Cargo.toml --features snapshot -- \
+cargo run --manifest-path apps/settings/Cargo.toml --features snapshot -- \
     --snapshot /tmp/bingux-settings-snapshots            # every page
-cargo run --manifest-path packages/bingux-settings/Cargo.toml --features snapshot -- \
+cargo run --manifest-path apps/settings/Cargo.toml --features snapshot -- \
     --snapshot /tmp/bingux-settings-snapshots sound,about # some pages
 ```
 

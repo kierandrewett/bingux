@@ -6,7 +6,7 @@ const model = vm.createContext({});
 vm.runInContext(readFileSync(new URL("../shell/bingux/ControlLayout.js", import.meta.url), "utf8"), model);
 const plain = (value) => JSON.parse(JSON.stringify(value));
 test("frontend and backend import exactly the same native groups", () => {
-    // Mirrors CONTROL_GROUPS in packages/bingux-config/src/validate.rs; bingux-config
+    // Mirrors CONTROL_GROUPS in crates/config/src/validate.rs; bingux-config
     // does not expose the native groups in `dump` (controlLayout is null there).
     const native = {
         version: 1,

@@ -3,7 +3,7 @@
 Run these checks after changing the external provider worker loop:
 
 ```sh
-cargo test --locked --manifest-path packages/bingux-searchd/Cargo.toml external::tests::
+cargo test --locked --manifest-path services/searchd/Cargo.toml external::tests::
 python3 tests/external-provider-lifecycle.py --binary ~/.local/share/bingux/bin/bingux-searchd
 ```
 

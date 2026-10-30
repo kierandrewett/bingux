@@ -1,6 +1,6 @@
 # Bingux autostart configuration fixture
 
-Run this check after changing `packaging/gnoblin/bingux.lua`:
+Run this check after changing `gnoblin/bingux.lua`:
 
 ```sh
 GNOBLIN_SOURCE=/path/to/gnoblin python3 tests/bingux-autostart-config.py

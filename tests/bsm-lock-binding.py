@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the Super+L command from packaging/gnoblin/bingux.lua with and without bsm.
+"""Run the Super+L command from gnoblin/bingux.lua with and without bsm.
 
 Gnoblin's Lua has no os or io library, so the choice between `bsmctl lock` and
 the standalone `bingux-lock` is made by the shell command the shortcut runs.
@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def packaged_command():
-    text = (ROOT / "packaging/gnoblin/bingux.lua").read_text()
+    text = (ROOT / "gnoblin/bingux.lua").read_text()
     match = re.search(
         r'\["bingux-lock"\] = \{\s*binding = "<Super>l",\s*command = \{\s*"sh",\s*"-c",\s*\'([^\']+)\',', text
     )

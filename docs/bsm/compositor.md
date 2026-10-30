@@ -1,9 +1,9 @@
 # bsm compositor core
 
-`packages/bsm-compositor` is the compositor half of `bsm`: the Wayland server, the
+`bsm/compositor` is the compositor half of `bsm`: the Wayland server, the
 brokered connections, the scene, input routing and every full-screen transition. It
 decides no policy. The manager drives it with `SceneCommand`s and reads `SceneEvent`s
-(`packages/bsm-proto/src/scene.rs`); the architecture and the invariants it serves are
+(`bsm/proto/src/scene.rs`); the architecture and the invariants it serves are
 in [architecture.md](architecture.md).
 
 ```rust
@@ -24,7 +24,7 @@ hardware or a real peer; **blocked** = needs something that does not exist yet.
 | `engine`      | Pure scene and transition engine. No Wayland, no GPU, no clock. Unit tested.                                |
 | `roles`       | Roles and the global visibility table.                                                                       |
 | `peer`        | `SO_PEERCRED`/`SO_PEERPIDFD`, cgroup scope and exe checks. Pure or `/proc` only.                            |
-| `protocol`    | Server code for `bsm_session_host_v1`, generated from `packages/bsm/protocol/bsm-session-host-v1.xml`.       |
+| `protocol`    | Server code for `bsm_session_host_v1`, generated from `bsm/core/protocol/bsm-session-host-v1.xml`.       |
 | `state`       | Wayland globals, outputs, the loop. Hand-written `can_view` for every global.                                |
 | `broker`      | Greeter and session sockets, held connections, promotion, rejection, disconnect handling.                    |
 | `host`        | The hosted session registry, the protocol implementation and the per-output frame evidence.                  |
@@ -45,7 +45,7 @@ and EGL, which is enough for the engine and the harness.
 
 * `Heartbeat` is beaten once per pass of the compositor loop (at least every 250 ms while idle).
   `bsm-notify` should send `WATCHDOG=1` only while `Heartbeat::age()` is small, so a wedged
-  compositor loop is restarted by systemd (review F3). Wiring it in `packages/bsm` is the
+  compositor loop is restarted by systemd (review F3). Wiring it in `bsm/core` is the
   manager side.
 * `FirstScene` is set once; `wait(timeout)` returns `Presented`, `TimedOut`, `NotHeld` or `None`.
 
@@ -349,7 +349,7 @@ is measured by the bridge side (shm copy today).
 
 ## Tests
 
-Run in `packages/bsm-compositor` (`CARGO_TARGET_DIR=/tmp/bsm-target/bsm-compositor`):
+Run in `bsm/compositor` (`CARGO_TARGET_DIR=/tmp/bsm-target/bsm-compositor`):
 
 ```text
 cargo test        # 82 tests: 32 unit, 6 extras, 22 frames, 22 security (plus doc tests)

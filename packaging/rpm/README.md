@@ -39,7 +39,7 @@ the local RPM build and the clean-install check pass. The repository does not
 claim a ready package while those checks are pending.
 
 The package builds `bingux-shell`, which is Quickshell 0.2.1 with the Bingux
-runtime patches compiled into one binary (see `packages/bingux-shell`). No
+runtime patches compiled into one binary (see `shell/runtime`). No
 separate Quickshell package is needed; the RPM depends on the Qt 6 QML runtime
 it links against. The source archive carries the pinned Quickshell submodule,
 so the build runs offline.

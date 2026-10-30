@@ -1,0 +1,66 @@
+[package]
+name = "bingux-settings"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "Settings application for the Bingux desktop shell"
+authors = ["Kieran Drewett"]
+homepage = "https://github.com/kierandrewett/bingux"
+repository = "https://github.com/kierandrewett/bingux"
+
+[[bin]]
+name = "bingux-settings"
+path = "src/main.rs"
+
+[features]
+default = []
+# `bingux-settings --snapshot DIR` renders every page headlessly to PNG.
+snapshot = ["bingux-ui/testing"]
+
+[dependencies]
+freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar"] }
+bingux-ui = { path = "../../crates/ui" }
+bingux-portal = { path = "../../services/portal" }
+bingux-data-usage = { path = "../../crates/data-usage" }
+bingux-audio-effects = { path = "../../services/audio-effects" }
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+bytes = "1"
+libc = "0.2"
+
+# Desktop scroll feel; see ../../vendor/README.md.
+[patch.crates-io]
+freya-winit = { path = "../../vendor/freya-winit" }
+freya-core = { path = "../../vendor/freya-core" }
+freya-animation = { path = "../../vendor/freya-animation" }
+freya-components = { path = "../../vendor/freya-components" }
+torin = { path = "../../vendor/torin" }
+winit = { path = "../../vendor/winit" }
+
+# A debug build runs Freya's layout, Skia glue and the UI controls unoptimised,
+# which makes scrolling and page changes visibly slow. Optimise every
+# dependency and bingux-ui; bingux-settings itself stays at opt-level 0 so a
+# rebuild after an edit stays quick. Debug assertions are off for them too:
+# freya-core's `debug-integrity` walk of the whole scope and node trees runs
+# after every update when they are on, about a tenth of the UI thread's time.
+[profile.dev.package."*"]
+opt-level = 2
+debug-assertions = false
+overflow-checks = false
+
+[profile.dev.package.bingux-ui]
+opt-level = 2
+debug-assertions = false
+overflow-checks = false
+
+# Panics unwind, in dev and in release. The error boundaries and guards in the
+# vendored freya-core catch a panic with `catch_unwind`, which does nothing under
+# `panic = "abort"`: one failed component would end the process again. Both are
+# Cargo's defaults, spelled out so nobody changes one for size.
+# `scripts/ui-lint.py` fails when a Bingux app sets "abort".
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+panic = "unwind"

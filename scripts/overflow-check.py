@@ -5,7 +5,7 @@
 specimen once, with the strings a developer wrote. This script renders them
 again under the conditions that break layouts, and fails on any finding of the
 overflow rules of the inspector's Layout tab
-(packages/bingux-ui/src/inspector/layout_checks.rs):
+(crates/ui/src/inspector/layout_checks.rs):
 
   wrapped            a letter to a line, a word split in the middle, more lines
                      than allowed, a box narrower than two glyphs

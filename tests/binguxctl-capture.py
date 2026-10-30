@@ -39,7 +39,7 @@ environment = os.environ | {
     "PATH": str(probe) + ":" + os.environ["PATH"],
 }
 qs = os.environ.get("QS_TEST_BIN", "qs")
-command = [sys.executable, str(repo / "packages/binguxctl/binguxctl.py"), "--quickshell", qs, "--path", str(fixture)]
+command = [sys.executable, str(repo / "tools/binguxctl/binguxctl.py"), "--quickshell", qs, "--path", str(fixture)]
 log = (config / "quickshell.log").open("w")
 process = subprocess.Popen([qs, "-p", str(fixture)], env=environment, stdout=log, stderr=subprocess.STDOUT)
 

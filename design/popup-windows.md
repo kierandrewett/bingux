@@ -24,7 +24,7 @@ winit 0.30.13 (crates.io) has no `xdg_popup`. It exposes the `xdg_toplevel` poin
 gives `wl_surface` and `wl_display`). Reaching it from outside would need a second Wayland
 connection layered over winit's and a hand-written input path. Patching winit is smaller and keeps
 winit's seat, scale, IME and frame-callback machinery, so winit is vendored
-(`packages/vendor/winit`, listed in `packages/vendor/README.md`) and gains a popup role.
+(`vendor/winit`, listed in `vendor/README.md`) and gains a popup role.
 
 ### Proof of feasibility (run on sway 1.11, headless, `grim` screenshots)
 
@@ -56,7 +56,7 @@ Gnoblin before shipping.
 
 ## What was built
 
-### winit (vendored, `packages/vendor/winit`, 0.30.13 + Bingux patch)
+### winit (vendored, `vendor/winit`, 0.30.13 + Bingux patch)
 
 - `platform::wayland::WindowAttributesExtWayland::with_popup(PopupAttributes)`:
   parent window, anchor rect, anchor, gravity, offset, constraint adjustment, card size, `margin`,

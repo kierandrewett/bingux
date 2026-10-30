@@ -278,7 +278,7 @@ def native_check(binary, plugin_directory):
         module = root / "qml/Bingux/Wayland"
         module.mkdir(parents=True)
         shutil.copy2(Path(plugin_directory) / "libbinguxwaylandsync.so", module)
-        shutil.copy2(ROOT / "packages/bingux-wayland-sync/qmldir", module)
+        shutil.copy2(ROOT / "native/wayland-sync/qmldir", module)
         config = root / "config"
         config.mkdir()
         qml = (ROOT / "tests/launch-activation.qml").read_text()

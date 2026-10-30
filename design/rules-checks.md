@@ -117,6 +117,6 @@ Each check keeps its own list; every entry has a rule key, where it applies and 
 - `scripts/layout-lint.py`, `scripts/state-check.py`, `scripts/pixel-check.py` and the others: `ALLOWED` (`rule`, `capture` regex, `where` regex, `why`). `state-check.py` also has `KNOWN` for a defect that is open and not fixed, each with what is wrong.
 - Rust rules: `ALLOW` in `inspector/state_checks/mod.rs`, `EXEMPT` and `NOT_BUTTONS` in `inspector/checks/mod.rs`, each with `reason`.
 - `scripts/ui-lint.py`: `BLOCKING_ALLOWED`, `RAW_PRESS_ALLOWED`, `LAUNCH_ALLOWED` (file -> reason), or `ui-lint: allow(...)` on the line.
-- `scripts/copy-lint.py`, `scripts/taxonomy-check.py`: their `ALLOWED` list and `packages/bingux-taxonomy/coverage-allowlist.txt`.
+- `scripts/copy-lint.py`, `scripts/taxonomy-check.py`: their `ALLOWED` list and `apps/taxonomy/coverage-allowlist.txt`.
 
 The report lists every entry with its reason and how many findings of the run it covered (`matched`; blank for entries applied inside the app).

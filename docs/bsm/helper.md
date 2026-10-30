@@ -8,7 +8,7 @@ policy decision for themselves: the helper keeps no session registry, decides
 nothing about who may see what, and refuses only requests that could never be
 legitimate (see [Refusals](#refusals)).
 
-Code: `packages/bsm-helper`. Wire types: `packages/bsm-proto/src/helper.rs`.
+Code: `bsm/helper`. Wire types: `bsm/proto/src/helper.rs`.
 Architecture decisions D3 and D4: [architecture.md](architecture.md).
 
 ## Status
@@ -503,7 +503,7 @@ with the connection, because their requests are gone with it.
 ## Review fixes
 
 Findings of `docs/bsm/review-helper.md` fixed in the helper (regression tests in
-`packages/bsm-helper/tests` and `tests/bsm-helper-root.sh`; the root script passed 120
+`bsm/helper/tests` and `tests/bsm-helper-root.sh`; the root script passed 120
 checks on the 2026-10-26 ISO after them):
 
 * **F1 greeter directories.** `<gen>` is created root-owned 0700, `rt` and `home` are made inside

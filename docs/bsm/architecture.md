@@ -8,8 +8,8 @@ compositor inside each user's session. bsm decides which session is visible,
 which one gets input, and runs every full-screen transition.
 
 This page is the architecture decision record and the contract between the
-parts. The wire types live in `packages/bsm-proto`; the private Wayland
-protocol is `packages/bsm/protocol/bsm-session-host-v1.xml`. Status of each
+parts. The wire types live in `bsm/proto`; the private Wayland
+protocol is `bsm/core/protocol/bsm-session-host-v1.xml`. Status of each
 part is in [Implementation status](#implementation-status).
 
 ## Decisions
@@ -285,12 +285,12 @@ compiled only with the `test-auth` cargo feature and the packages never enable i
 | `SessionPower.qml`                                          | Refactored    | In integrated mode: no `gnoblinctl`, no `bingux-session-fade` overlay; calls `bsmctl`. Standalone path unchanged.                    |
 | `Startup.qml` `settled`                                     | Retained, not reused | Keeps scheduling background helpers. Never used as readiness evidence.                                                        |
 | `bingux-session` (accounts, wallpaper export)               | Reused        | Account listing and wallpaper snapshot code are shared with bsm's appearance publisher.                                              |
-| `packaging/gnoblin/bingux.lua`                              | Extended      | Emits the Bingux readiness events; `Super+L` runs `bsmctl lock` when `BSM_SESSION_ID` is set.                                        |
+| `gnoblin/bingux.lua`                              | Extended      | Emits the Bingux readiness events; `Super+L` runs `bsmctl lock` when `BSM_SESSION_ID` is set.                                        |
 | Gnoblin `--devkit` viewer path                              | Retained      | Unchanged. Hosted mode is `gnoblin --hosted`, a separate flag.                                                                       |
 | Gnoblin guardian `READY`                                    | Extended      | Reported to the bridge; means "serves session-local clients", not "Bingux painted".                                                  |
 | Gnoblin `ext-session-lock-v1`                               | Retained      | Standalone lock path. In hosted mode the in-session lock request is forwarded to bsm instead.                                        |
 | greetd                                                      | Retained      | Remains the default display manager. bsm replaces it only when enabled.                                                              |
-| (none)                                                      | New           | `packages/bsm` (`bsm`, `bsmctl`), `packages/bsm-helper`, `packages/bsm-host`, `packages/bsm-proto`.                                  |
+| (none)                                                      | New           | `bsm/core` (`bsm`, `bsmctl`), `bsm/helper`, `bsm/host`, `bsm/proto`.                                  |
 
 ## Rollback and recovery
 
@@ -309,6 +309,6 @@ implemented but unverified, blocked, not yet implemented.
 
 | Milestone                           | Status                  | Evidence |
 | ----------------------------------- | ----------------------- | -------- |
-| Contract crate `bsm-proto`          | implemented and tested  | `cargo test` in `packages/bsm-proto` |
+| Contract crate `bsm-proto`          | implemented and tested  | `cargo test` in `bsm/proto` |
 | Private protocol XML                | implemented but unverified | parses with `xmllint`; server and client code pending |
 | Everything else                     | not yet implemented     |          |

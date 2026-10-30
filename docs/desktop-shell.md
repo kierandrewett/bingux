@@ -539,7 +539,7 @@ do not execute QML functions. These checks do not establish runtime or VM behavi
 Run the local socket regression benchmark from the repository root:
 
 ```sh
-cargo test --release --manifest-path packages/bingux-searchd/Cargo.toml \
+cargo test --release --manifest-path services/searchd/Cargo.toml \
   measures_warm_socket_query_latency -- --ignored --nocapture
 # [benchmark] warm socket query: p95=<nanoseconds> max=<nanoseconds> samples=200
 ```

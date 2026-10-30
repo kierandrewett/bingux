@@ -40,7 +40,7 @@ with --gate-wall also an interval p99 above --gate-wall milliseconds.
     python3 scripts/frame-time.py --slow-sources 500
     python3 scripts/frame-time.py --scenarios subpages --json out.json
 
-Build first (`cargo build` in packages/bingux-settings, with the shared
+Build first (`cargo build` in apps/settings, with the shared
 CARGO_TARGET_DIR) and `bingux-config` beside it. The dev profile builds
 bingux-settings itself at opt-level 0, which makes page-building code several
 times slower than a release build and reads as UI-thread work that is not

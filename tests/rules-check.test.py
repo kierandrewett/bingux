@@ -700,12 +700,12 @@ class StaleBinaries(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        self.source = self.root / "packages" / "bingux-settings" / "src" / "main.rs"
+        self.source = self.root / "apps" / "settings" / "src" / "main.rs"
         self.source.parent.mkdir(parents=True)
         self.source.write_text("fn main() {}")
-        (self.root / "packages" / "bingux-settings" / "Cargo.toml").write_text("")
-        (self.root / "packages" / "bingux-ui").mkdir(parents=True)
-        (self.root / "packages" / "bingux-ui" / "Cargo.toml").write_text("")
+        (self.root / "apps" / "settings" / "Cargo.toml").write_text("")
+        (self.root / "crates" / "ui").mkdir(parents=True)
+        (self.root / "crates" / "ui" / "Cargo.toml").write_text("")
         self.target = self.root / "target"
         (self.target / "debug").mkdir(parents=True)
         self.binary = self.target / "debug" / "bingux-settings"
@@ -719,14 +719,14 @@ class StaleBinaries(unittest.TestCase):
         import os
         os.utime(self.binary, (built, built))
         os.utime(self.source, (source, source))
-        for manifest in self.root.glob("packages/*/Cargo.toml"):
+        for manifest in self.root.glob("*/*/Cargo.toml"):
             os.utime(manifest, (1, 1))
 
     def test_a_binary_older_than_a_source_in_its_dep_info_is_stale_and_names_the_file(self):
         self.set_times(built=1000, source=2000)
         info = rc.binary_freshness(self.target, self.root)["bingux-settings"]
         self.assertTrue(info["stale"])
-        self.assertEqual(info["newest_source"], "packages/bingux-settings/src/main.rs")
+        self.assertEqual(info["newest_source"], "apps/settings/src/main.rs")
         self.assertEqual((info["built_epoch"], info["newest_source_epoch"]), (1000, 2000))
 
     def test_a_binary_newer_than_every_source_is_fresh(self):
@@ -796,7 +796,7 @@ class UnitTestsAsARegistrySource(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        src = self.root / "packages" / "bingux-ui" / "src" / "controls"
+        src = self.root / "crates" / "ui" / "src" / "controls"
         src.mkdir(parents=True)
         (src / "alpha.rs").write_text("#[test]\nfn one() {}\n")
         (src / "beta.rs").write_text("#[test]\nfn sinks() {}\n")
@@ -840,7 +840,7 @@ class UnitTestsAsARegistrySource(unittest.TestCase):
     def test_a_test_file_is_found_at_the_path_it_is_mounted_at_not_where_it_sits(self):
         # `controls/delta_tests.rs` sits beside `delta.rs` but is declared inside it, so cargo calls
         # its tests `controls::delta::tests`: a map entry that names the file's place runs no test.
-        src = self.root / "packages" / "bingux-ui" / "src" / "controls"
+        src = self.root / "crates" / "ui" / "src" / "controls"
         (src / "delta.rs").write_text('#[cfg(test)]\n#[path = "delta_tests.rs"]\nmod tests;\n')
         (src / "delta_tests.rs").write_text("#[test]\nfn one() {}\n")
         (src / "epsilon.rs").write_text("pub fn f() {}\n#[cfg(test)]\nmod edge_tests {\n    #[test]\n    fn one() {}\n}\n")
@@ -906,7 +906,7 @@ class SplitFindings(unittest.TestCase):
         self.assertEqual(rc.layout_keys_without_ids(self.registry), [])
 
     def test_no_layout_rule_of_the_inspector_is_left_without_a_rule_or_a_reason(self):
-        path = ROOT / "packages/bingux-ui/src/inspector/layout_checks.rs"
+        path = ROOT / "crates/ui/src/inspector/layout_checks.rs"
         import re
         keys = set(re.findall(r'Rule::\w+\s*=>\s*"([a-z][a-z0-9-]*)"', path.read_text()))
         derived = self.registry.derived["layout-lint"]

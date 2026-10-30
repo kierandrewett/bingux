@@ -1,7 +1,7 @@
 # Security review: bsm-helper, packaging/bsm, bsm-appearance
 
-Scope: `packages/bsm-helper` (root helper), `packaging/bsm` (units, sysusers, tmpfiles,
-PAM, polkit, D-Bus policy) and `packages/bsm-appearance` (imgconv sandbox, publisher,
+Scope: `bsm/helper` (root helper), `packaging/bsm` (units, sysusers, tmpfiles,
+PAM, polkit, D-Bus policy) and `bsm/appearance` (imgconv sandbox, publisher,
 accounts). Read-only review: no source was edited, no payload was run, no network call
 was made. Status words: CONFIRMED means the code path was read end to end and the
 weakness is visible in the source; UNCONFIRMED means the exploit needs a condition that
@@ -12,8 +12,8 @@ Reviewed on branch feat/bsm. Files read in full: helper `server.rs`, `auth.rs`,
 `ipc.rs`, `cgroup.rs`, `logind.rs`, `pam.rs` (FFI and conversation), all of
 `packaging/bsm`, appearance `publish.rs`, `sys.rs`, `sandbox.rs`, `imgconv.rs`,
 `convert.rs` (spawn side), `record.rs`, `accounts.rs` (file readers), plus the fd
-validation in `bsm-manager/src/runtime/dbus.rs` and the ACL table in
-`bsm-manager/src/core/dbus.rs` because they feed the publisher.
+validation in `bsm/manager/src/runtime/dbus.rs` and the ACL table in
+`bsm/manager/src/core/dbus.rs` because they feed the publisher.
 
 ## Summary table
 
@@ -37,8 +37,8 @@ Controls that were checked and held are listed at the end ("Checked, no finding"
 
 ## F1 Medium: greeter runtime directory is chowned before its children are created (TOCTOU, root, follows symlinks)
 
-Location: `packages/bsm-helper/src/greeter.rs:33-37` (`private_dir`), `41-56`
-(`prepare_dirs`), caller `packages/bsm-helper/src/server.rs:805-814`.
+Location: `bsm/helper/src/greeter.rs:33-37` (`private_dir`), `41-56`
+(`prepare_dirs`), caller `bsm/helper/src/server.rs:805-814`.
 
 Evidence. `private_dir` does `create_dir(path)`, then `chown(path, uid, gid)`, then
 `set_permissions(path, 0o700)`. `std::os::unix::fs::chown` is `chown(2)`, which follows a
@@ -83,9 +83,9 @@ Minimal fix (no new dependencies):
 
 ## F2 Medium: the image converter runs as `bsm`, the one uid the helper, D-Bus name and polkit trust
 
-Locations: `packages/bsm-appearance/src/convert.rs:267-302` (spawn as the caller's uid,
-inside `bsm.service`'s cgroup), `packages/bsm-appearance/src/sandbox.rs:62-73,141-160`,
-`packages/bsm-helper/src/server.rs:307-326`, `packaging/bsm/polkit/50-bsm.rules:112-118`.
+Locations: `bsm/appearance/src/convert.rs:267-302` (spawn as the caller's uid,
+inside `bsm.service`'s cgroup), `bsm/appearance/src/sandbox.rs:62-73,141-160`,
+`bsm/helper/src/server.rs:307-326`, `packaging/bsm/polkit/50-bsm.rules:112-118`.
 
 Evidence and exploit sketch. The decoder is the largest untrusted-input parser in the
 privileged side. Its sandbox is good (rlimits, empty netns, no_new_privs, seccomp
@@ -133,8 +133,8 @@ Minimal fixes, in order of effort:
 
 ## F3 Low-Medium: PAM_USER is not re-checked after authentication
 
-Location: `packages/bsm-helper/src/auth.rs:103-111` (`run_conversation`),
-`packages/bsm-helper/src/server.rs:476-480,682-688`.
+Location: `bsm/helper/src/auth.rs:103-111` (`run_conversation`),
+`bsm/helper/src/server.rs:476-480,682-688`.
 
 Evidence. The helper resolves the account itself (`getpwnam(user)`, uid must equal the
 requested uid, `account_allowed`), calls `pam_start(service, pw.name)`, runs
@@ -160,8 +160,8 @@ session if it changed.
 
 ## F4 Low-Medium: adoption trusts any listening socket in `<state_dir>/sessions`
 
-Locations: `packages/bsm-helper/src/server.rs:201-244` (`adopt_running_sessions`),
-`packages/bsm-helper/src/session.rs:366-376` (`create_dir_all` of the sessions
+Locations: `bsm/helper/src/server.rs:201-244` (`adopt_running_sessions`),
+`bsm/helper/src/session.rs:366-376` (`create_dir_all` of the sessions
 directory), `session.rs:513-519` (`connect_adopt`), `session.rs:447-457`
 (`accept_adopter`), `packaging/bsm/systemd/bsm-helper.socket:14`.
 
@@ -198,7 +198,7 @@ Fix:
 
 ## F5 Low: users inherit the helper's stdout/stderr and any non-CLOEXEC descriptor
 
-Location: `packages/bsm-helper/src/session.rs:156-179` (`spawn_as_user`, used for the
+Location: `bsm/helper/src/session.rs:156-179` (`spawn_as_user`, used for the
 leader, bridge and greeter).
 
 Evidence. The child resets signals, `setsid`, drops identity, sets umask and PDEATHSIG,
@@ -225,7 +225,7 @@ Fix: in the child, after `assume_identity`, `dup2` /dev/null (or a per-session
 
 ## F6 Low: session teardown is a racy pid sweep and can be outrun
 
-Location: `packages/bsm-helper/src/session.rs:461-509` (`terminate`).
+Location: `bsm/helper/src/session.rs:461-509` (`terminate`).
 
 Evidence. `terminate` lists `cgroup.procs` of the scope, `kill`s each pid with SIGTERM,
 waits the grace, then loops `list; SIGKILL each; sleep 50 ms` for at most three
@@ -255,7 +255,7 @@ Keep the sweep only as a fallback. Guard the `kill_group` calls with
 
 ## F7 Low: helper-side authentication has no throttle and a supersede that skips PAM's failure delay
 
-Location: `packages/bsm-helper/src/server.rs:485-487` (supersede loop), `555-567`
+Location: `bsm/helper/src/server.rs:485-487` (supersede loop), `555-567`
 (`abort_auth`), `559` (`Dying`), `packaging/bsm/pam/bsm-login`, `bsm-unlock`.
 
 Evidence. A new `AuthStart` aborts the live conversation, but the old child is only
@@ -363,8 +363,8 @@ Residual issues:
 
 ## F10 Low: appearance cache
 
-Locations: `packages/bsm-appearance/src/publish.rs:251-268`, `318-342`,
-`packages/bsm-appearance/src/sys.rs:68-85`, `packaging/bsm/share/tmpfiles-active.conf:9`.
+Locations: `bsm/appearance/src/publish.rs:251-268`, `318-342`,
+`bsm/appearance/src/sys.rs:68-85`, `packaging/bsm/share/tmpfiles-active.conf:9`.
 
 * Converter output is trusted after a size and a magic check. `read_back` accepts up
   to `MAX_READBACK_BYTES` = 64 MiB (publish.rs:48) whatever the per-kind limit in
@@ -389,7 +389,7 @@ Locations: `packages/bsm-appearance/src/publish.rs:251-268`, `318-342`,
   to a quarantine name (or `unlinkat` with `AT_REMOVEDIR` after `O_NOFOLLOW` checks)
   and recreate it.
 * Passed-in source fds: the D-Bus layer rejects non-regular, non-read-only and
-  over-16-MiB descriptors (`bsm-manager/src/runtime/dbus.rs:403-427`) and the converter
+  over-16-MiB descriptors (`bsm/manager/src/runtime/dbus.rs:403-427`) and the converter
   repeats `fstat` and the size check (imgconv.rs:118-128,188-195). A regular file on a
   user-mounted FUSE filesystem that never answers blocks the converter until the 30 s
   wall-clock limit (convert.rs:255), repeated for avatar and wallpaper under the

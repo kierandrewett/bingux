@@ -3,7 +3,7 @@ import Quickshell
 import Quickshell.Io
 
 // The greeter's side of the bsm control socket: newline-delimited JSON as
-// defined in packages/bsm-proto/src/control.rs.
+// defined in bsm/proto/src/control.rs.
 //
 // On connect it sends `hello`; bsm answers with a full snapshot and then
 // events (prompts, results, progress, operations, errors). Every message

@@ -38,7 +38,7 @@ import gnoblin_loader  # noqa: E402
 
 REPO = HERE.parent
 INSTALLER_LUA = REPO / "distro/installer/gnoblin/installer.lua"
-GREETER_LUA = REPO / "packaging/gnoblin/greeter.lua"
+GREETER_LUA = REPO / "gnoblin/greeter.lua"
 BACKGROUND_DROPIN = REPO / "distro/packages/bingux-os/bingux-background.lua"
 GREETER_PATH = "/usr/share/bingux/greeter/gnoblin.lua"
 

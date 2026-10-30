@@ -7,7 +7,7 @@ Not a script. `scripts/pixel-check.py`, `scripts/structure-stability.py` and
   * runs the three apps' `--snapshot` captures the way `scripts/layout-lint.py`
     does (it takes that script's list of pages, popups and Files states, so a new
     page is covered by every check at once) with `BINGUX_UI_PROBE=FILE` set, so
-    each capture also writes the probe of packages/bingux-ui/src/inspector/probe_checks:
+    each capture also writes the probe of crates/ui/src/inspector/probe_checks:
     the node tree, the text nodes, the modal scopes and the scroll containers;
   * reads that probe back (`Probe`) and the capture's PNG (`pixels`);
   * measures colour the way WCAG does (`luminance`, `contrast`);

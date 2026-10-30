@@ -8,7 +8,7 @@ test helper stands in for bsm-helper so no PAM or uid change is needed. The help
 stand-in is the one BsmManager's integration harness exposes; it exists only in
 builds with the `test-auth` cargo feature, which no package enables.
 
-The binary is found through --bsm, $BSM_BIN, or by building packages/bsm with
+The binary is found through --bsm, $BSM_BIN, or by building bsm/core with
 `--features test-auth` into /tmp/bsm-target/e2e. The script reads `bsm --help` and
 runs only when the binary offers everything this test drives (`--backend headless`,
 a runtime directory, a frame dump directory and a test helper). Otherwise it
@@ -57,7 +57,7 @@ def find_binary(argument):
         return Path(argument)
     if os.environ.get("BSM_BIN"):
         return Path(os.environ["BSM_BIN"])
-    manifest = ROOT / "packages/bsm/Cargo.toml"
+    manifest = ROOT / "bsm/core/Cargo.toml"
     if not manifest.is_file():
         return None
     env = dict(os.environ, CARGO_TARGET_DIR=str(TARGET))
@@ -120,7 +120,7 @@ def main():
 
     binary = find_binary(args.bsm)
     if binary is None or not binary.is_file():
-        print("SKIP: no bsm binary (packages/bsm has no Cargo.toml yet, and neither --bsm nor $BSM_BIN is set)")
+        print("SKIP: no bsm binary (bsm/core has no Cargo.toml yet, and neither --bsm nor $BSM_BIN is set)")
         return SKIP
     offered = discover(binary)
     missing = [name for name, option in offered.items() if option is None]

@@ -18,7 +18,7 @@ OUT/shifts/*.png (before/after crops with moved edges boxed in red), and
 OUT/logs/<page>.log (the binary's stderr, including click-text misses).
 
 Needs PIL and numpy. Build first: `cargo build --features snapshot` in
-packages/bingux-settings, with CARGO_TARGET_DIR set as usual.
+apps/settings, with CARGO_TARGET_DIR set as usual.
 
 Known limits: text bands are matched by top edge and x extent, so a font size
 change that only alters height is not seen. Edges that appear and never move
@@ -46,7 +46,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from app_env import isolated  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
-SETTINGS = REPO / "packages" / "bingux-settings"
+SETTINGS = REPO / "apps" / "settings"
 DEFAULT_BINARY = (
     Path(os.environ.get("CARGO_TARGET_DIR", "/var/tmp/bingux-settings-target"))
     / "debug"
@@ -493,7 +493,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if not args.skip_run and not args.binary.exists():
-        sys.exit(f"no binary at {args.binary}; run `cargo build --features snapshot` in packages/bingux-settings first")
+        sys.exit(f"no binary at {args.binary}; run `cargo build --features snapshot` in apps/settings first")
     pages = [name for name in args.pages.split(",") if name] or panels()
     out = args.out
     shifts = out / "shifts"

@@ -35,11 +35,11 @@ restricted, most exposed process, so its compromise is in scope).
 
 No method exists on D-Bus or the control socket that unlocks a session, reveals a desktop or
 accepts an authentication result. That holds: the method list in
-`packages/bsm-manager/src/runtime/dbus.rs:577-746` and `ClientMessage` in
-`packages/bsm-proto/src/control.rs:125-154` contain none, and the reveal is only reachable
+`bsm/manager/src/runtime/dbus.rs:577-746` and `ClientMessage` in
+`bsm/proto/src/control.rs:125-154` contain none, and the reveal is only reachable
 through `try_reveal` (`core/ops.rs:572-607`) after `on_auth_done` (`core/auth.rs:298-349`).
 
-Paths below are relative to `packages/bsm-manager/src/` unless a package is named.
+Paths below are relative to `bsm/manager/src/` unless a package is named.
 
 ---
 
@@ -136,7 +136,7 @@ conversations that never received an answer.
 
 **Where.** `packaging/bsm/polkit/50-bsm.rules:44-51` and `119-121`,
 `core/power.rs:39-53` (`action_id`), `core/auth.rs:115-123`,
-`packages/bsm/src/config.rs:74-78` (`greeter_power` defaults all true).
+`bsm/core/src/config.rs:74-78` (`greeter_power` defaults all true).
 
 **What.** `power.rs` correctly asks for `*-multiple-sessions` when another account has a
 running session, because stock polkit requires an administrator for it.
@@ -183,9 +183,9 @@ branch of `50-bsm.rules`, or perform the check through a root helper request.
 
 ## F6 Medium: unbounded scene event channel fed by hosted-client requests
 
-**Where.** `packages/bsm/src/run.rs:285` (`std::sync::mpsc::channel()`),
-`packages/bsm-compositor/src/state.rs:508-512` (`emit` ignores back pressure),
-`packages/bsm-compositor/src/host.rs:237-292` (every valid `report` emits a
+**Where.** `bsm/core/src/run.rs:285` (`std::sync::mpsc::channel()`),
+`bsm/compositor/src/state.rs:508-512` (`emit` ignores back pressure),
+`bsm/compositor/src/host.rs:237-292` (every valid `report` emits a
 `SessionReport`; no deduplication or rate limit), `runtime/driver.rs:144-152` (forwarder
 blocks on the bounded 1024 queue), `core/mod.rs:662-750` (`settle` rebuilds and compares
 the whole snapshot after every input).
@@ -226,7 +226,7 @@ channel read first. Cap in-flight D-Bus calls per uid (for example 8) in
 
 ## F8 Low (unconfirmed): display names in the greeter are rendered with auto-detected rich text
 
-**Where.** `packages/bsm-appearance/src/accounts.rs:319-324` (control characters removed,
+**Where.** `bsm/appearance/src/accounts.rs:319-324` (control characters removed,
 `<`, `>` and `&` kept), `shell/bingux/auth/AuthCard.qml:98`,
 `shell/bingux/auth/AccountPicker.qml:193` (`Text { text: ... displayName }`), and no
 `textFormat` anywhere under `shell/bingux/auth` or `shell/bingux/greeter` (grep).
@@ -243,8 +243,8 @@ account-, hostname- or PAM-supplied strings (`displayName`, `statusText`, `hostn
 ## F9 Medium: bsm restart recovery cannot reattach the bridge (spec 9, invariant 9)
 
 **Where.** `core/session.rs:183-196` (recovered branch of `on_socket_ready`),
-`packages/bsm-host/src/bridge.rs:1169-1172` and `257-263` (the bridge exits when the
-connection goes), `packages/bsm-proto/src/helper.rs:38-95` (no request tells a running
+`bsm/host/src/bridge.rs:1169-1172` and `257-263` (the bridge exits when the
+connection goes), `bsm/proto/src/helper.rs:38-95` (no request tells a running
 bridge a new socket path), `runtime/recovery.rs:18-20`, `core/mod.rs:325-336`.
 
 **What.** The recovered path asks the compositor to bind and protect (`BindHost`,
@@ -290,10 +290,10 @@ uid; address signals per recipient or drop failure text from broadcast signals.
 **Where.** `core/auth.rs:262-278` (`response: String` moves through `ClientMessage` to
 `HelperRequest`), `runtime/helper_client.rs:115` (serialised buffer not zeroised),
 `runtime/greeter_server.rs:208-215` (the line buffer and `Vec` copies are not zeroised),
-`packages/bsm-proto/src/control.rs:123` and `packages/bsm-proto/src/helper.rs:36` (both
+`bsm/proto/src/control.rs:123` and `bsm/proto/src/helper.rs:36` (both
 derive `Debug`).
 
-**What.** The helper zeroises (`packages/bsm-helper/src/ipc.rs:77-108`); the manager does
+**What.** The helper zeroises (`bsm/helper/src/ipc.rs:77-108`); the manager does
 not. The password lives in freed heap of a process that also owns the display. Redaction
 exists only in the hand-written `Debug` of `Input` and `Effect` (`core/types.rs:467-528`).
 A future `{:?}` of a bare `ClientMessage` or `HelperRequest` logs it. I found no such call
@@ -324,9 +324,9 @@ than 5 s) is not reachable today; it is a latent desync.
 
 ## F13 Low: reveal-gate required surfaces are declared by the reporter
 
-**Where.** `packages/bsm-host/src/readiness.rs:213-221` (`launched` takes `required` from
+**Where.** `bsm/host/src/readiness.rs:213-221` (`launched` takes `required` from
 the line), `:254-271` (`required_components`/`required_roles`), `:203-211`,
-`packages/bsm-host/src/ready_sock.rs:21` and `bridge.rs:377-419` (16 connections, no idle
+`bsm/host/src/ready_sock.rs:21` and `bridge.rs:377-419` (16 connections, no idle
 limit).
 
 **What.** `architecture.md` says a required surface is the wallpaper, bar and dock named in
@@ -390,7 +390,7 @@ failure close and reconnect before reporting a loss.
 ## F17 Low (unconfirmed): unlock reveal gate is not fresh
 
 **Where.** `core/session.rs:670-674` (`surfaces_ready`), `core/ops.rs:572-607`,
-`packages/bsm-compositor/src/host.rs:377-378,449`.
+`bsm/compositor/src/host.rs:377-378,449`.
 
 The doc comment on `try_reveal` says "fresh presented frames"; the check is `acked &&
 presented_frames >= 1`, a count that resets only on an output reconfigure. For an
@@ -405,7 +405,7 @@ can reach the slide-up. Minimal fix: record the count at `Protect` and require m
 
 * **Authorisation table** in `core/dbus.rs` matches `docs/bsm/manager.md:272-279`
   except that `SelectGreeterUser` also admits the greeter (the `bsmctl` header comment,
-  `packages/bsm/src/ctl.rs:7-8`, says root only; the code and `manager.md` say root or
+  `bsm/core/src/ctl.rs:7-8`, says root only; the code and `manager.md` say root or
   greeter). Acting on another uid is refused: `own_session_action`
   (`core/dbus.rs:133-157`) requires the target to equal the caller's own session; root is
   the only exception.

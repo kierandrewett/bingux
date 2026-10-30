@@ -1,8 +1,8 @@
 # bsm manager: the session manager core, the runtime, `bsm` and `bsmctl`
 
-This page documents `packages/bsm-manager` (library), `packages/bsm` (binaries `bsm`
+This page documents `bsm/manager` (library), `bsm/core` (binaries `bsm`
 and `bsmctl`) and how they are tested. The design record is
-[architecture.md](architecture.md); the wire types are in `packages/bsm-proto`.
+[architecture.md](architecture.md); the wire types are in `bsm/proto`.
 
 Status words used below: **tested** means a test in this repository ran and passed on the
 development host; **unverified** means it was not run (and why).
@@ -11,11 +11,11 @@ development host; **unverified** means it was not run (and why).
 
 | Part                                  | What it is                                                                                                              |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `bsm-manager/src/core`                | The pure state machine `Manager::handle(now, Input) -> Vec<Effect>`. No I/O, no clock reads, injected randomness (`Rng`). |
-| `bsm-manager/src/runtime`             | The threads and sockets around it: driver, helper client, greeter control server, D-Bus service and client, logind.     |
-| `bsm/src/main.rs`, `run.rs`           | `bsm`: settings, logging, readiness, signals; the compositor runs on the main thread, the runtime on its own threads.   |
-| `bsm/src/bin/bsmctl.rs`, `ctl.rs`     | `bsmctl`: the command line client of `org.bingux.Session1`.                                                             |
-| `bsm/tests`                           | Process tests and the multi user flows against the real compositor.                                                     |
+| `bsm/manager/src/core`                | The pure state machine `Manager::handle(now, Input) -> Vec<Effect>`. No I/O, no clock reads, injected randomness (`Rng`). |
+| `bsm/manager/src/runtime`             | The threads and sockets around it: driver, helper client, greeter control server, D-Bus service and client, logind.     |
+| `bsm/core/src/main.rs`, `run.rs`           | `bsm`: settings, logging, readiness, signals; the compositor runs on the main thread, the runtime on its own threads.   |
+| `bsm/core/src/bin/bsmctl.rs`, `ctl.rs`     | `bsmctl`: the command line client of `org.bingux.Session1`.                                                             |
+| `bsm/core/tests`                         | Process tests and the multi user flows against the real compositor.                                                     |
 
 The core is one process-wide value owned by one thread (the driver). Everything else talks to
 it through a bounded channel. The compositor thread never waits on PAM, D-Bus or the helper.
@@ -440,9 +440,9 @@ All commands run from the package directory with a private target directory, for
 
 | What                                   | Command                                                                       | Result on the development host        |
 | -------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------- |
-| Core, tables, runtime, D-Bus, logind   | `cd packages/bsm-manager && cargo test`                                       | 134 passed                            |
+| Core, tables, runtime, D-Bus, logind   | `cd bsm/manager && cargo test`                                       | 134 passed                            |
 | Longer randomised invariant run        | `BSM_FUZZ_SEEDS=300000 cargo test --release randomised`                        | passed (300000 seeds, 250 steps each) |
-| CLI, config, bsmctl                    | `cd packages/bsm && cargo test --no-default-features --lib`                    | 14 passed                             |
+| CLI, config, bsmctl                    | `cd bsm/core && cargo test --no-default-features --lib`                    | 14 passed                             |
 | Real `bsm` and `bsmctl` processes      | `cargo test --no-default-features --test binary`                               | 3 passed                              |
 | Multi user flows, real compositor      | `cargo test --no-default-features --test headless_flows`                       | 10 passed (repeated)                  |
 
@@ -464,7 +464,7 @@ secrets never appear in `Debug`. A randomised run feeds arbitrary event orders a
 `Manager::check_invariants()` after every input (it found two real bugs: a conversation outliving its
 operation, and a compositor event committing an operation that had not begun).
 
-### The multi user flows (`bsm/tests/headless_flows.rs`)
+### The multi user flows (`bsm/core/tests/headless_flows.rs`)
 
 The rig starts the real manager runtime and the real headless compositor (stepped clock), a fake helper
 over a real `SOCK_SEQPACKET` socketpair, a greeter (Wayland layer surfaces plus the JSON control socket) and

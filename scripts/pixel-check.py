@@ -17,7 +17,7 @@ a surface that is not the one the token table assumes is caught as it looks:
 
 The apps render through `bingux_ui::snapshot` without a compositor. With
 BINGUX_UI_PROBE=FILE set every capture also writes where its text nodes, modal
-scopes and clipping boxes are (packages/bingux-ui/src/inspector/probe_checks) and
+scopes and clipping boxes are (crates/ui/src/inspector/probe_checks) and
 this script reads PNG and probe together. It runs every Settings page, subpage and
 popup at desktop and 390x800, every taxonomy page (which holds a menu, dialog or
 banner of every component) and the Files window and its dialogs, in the dark and

@@ -20,11 +20,11 @@ captures kept in `/var/tmp/PreviewKit/cap0`).
 
 | Piece | Where | What it does |
 | ----- | ----- | ------------ |
-| Kind and text head | `bingux-files/src/preview.rs` | `kind_of(Kind, mime) -> PreviewKind` (image, text, poster, folder, sniff, icon), `read_text` (first 64 KiB, NUL means binary), `neighbour` (arrow-key arithmetic). Takes `Cancel` from `bingux_files::listing`. |
-| Header facts | `bingux-files/src/media/*` | `image_info` (PNG/GIF/BMP/WebP/JPEG size, JPEG EXIF), `av_info` (WAV, FLAC, Ogg, MP4, Matroska length and codecs), `clock`. Header parsers, no decoding. Also used by Properties. |
-| The card | `bingux-ui/src/files/preview.rs` | `show(shared)` opens a `framed_dialog` 1040x760 around `QuickLook`; keys (`route`), `step` moves the file view's selection; the header is `HeaderBar` with name, "n of N" and Close. |
-| The stage | `bingux-ui/src/files/preview_stage.rs` | `Subject` per kind: `PictureStage` (`ImageViewer`, decode at most 2048 px), `TextStage` (64 KiB, 1500 lines, monospace), `PosterStage` (largest thumbnail in `~/.cache/thumbnails`, else the icon), `FolderStage` (live count), `IconStage`. A one-line footer. |
-| Properties | `bingux-ui/src/files/properties*.rs` | A separate dialog (Alt+Enter, Ctrl+I, menu). Preview closes first, then it opens. |
+| Kind and text head | `crates/files/src/preview.rs` | `kind_of(Kind, mime) -> PreviewKind` (image, text, poster, folder, sniff, icon), `read_text` (first 64 KiB, NUL means binary), `neighbour` (arrow-key arithmetic). Takes `Cancel` from `bingux_files::listing`. |
+| Header facts | `crates/files/src/media/*` | `image_info` (PNG/GIF/BMP/WebP/JPEG size, JPEG EXIF), `av_info` (WAV, FLAC, Ogg, MP4, Matroska length and codecs), `clock`. Header parsers, no decoding. Also used by Properties. |
+| The card | `crates/ui/src/files/preview.rs` | `show(shared)` opens a `framed_dialog` 1040x760 around `QuickLook`; keys (`route`), `step` moves the file view's selection; the header is `HeaderBar` with name, "n of N" and Close. |
+| The stage | `crates/ui/src/files/preview_stage.rs` | `Subject` per kind: `PictureStage` (`ImageViewer`, decode at most 2048 px), `TextStage` (64 KiB, 1500 lines, monospace), `PosterStage` (largest thumbnail in `~/.cache/thumbnails`, else the icon), `FolderStage` (live count), `IconStage`. A one-line footer. |
+| Properties | `crates/ui/src/files/properties*.rs` | A separate dialog (Alt+Enter, Ctrl+I, menu). Preview closes first, then it opens. |
 | Entry points | `files/view.rs` (Space, `Env::preview`), the context menu | Only the file view. Nothing outside `files::` can preview anything. |
 
 What is wrong with it, as a person using it:

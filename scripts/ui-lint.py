@@ -2,8 +2,8 @@
 """Fail when Bingux UI code styles a box outside the token system.
 
 Every spacing, radius, size, colour, line, shadow and text style comes from
-packages/bingux-ui/src/style/ (tokens.rs and recipes.rs) and
-packages/bingux-ui/src/typography.rs. Boxes are styled with `.tw(&tokens,
+crates/ui/src/style/ (tokens.rs and recipes.rs) and
+crates/ui/src/typography.rs. Boxes are styled with `.tw(&tokens,
 RECIPE)` or `.tw(&tokens, &[px(S4), ...])`. Calling Freya's styling methods
 directly is how a UI drifts, so this script fails on them.
 
@@ -32,6 +32,8 @@ or an import of Freya's `launch` anywhere else fails here.
 import re
 import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from crate_dirs import crate_dir  # noqa: E402
 
 # The rules of design/rules.json each kind of finding holds, and the words that tell the kinds
 # apart in this script's output (read by scripts/rules-check.py; a kind with no ID holds no rule yet).
@@ -66,43 +68,59 @@ RULE_MESSAGES = {
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = [
-    ROOT / "packages/bingux-ui/src",
-    ROOT / "packages/bingux-ui/examples",
-    ROOT / "packages/bingux-settings/src",
-    ROOT / "packages/bingux-files-app/src",
-    ROOT / "packages/bingux-taxonomy/src",
+    ROOT / "crates/ui/src",
+    ROOT / "crates/ui/examples",
+    ROOT / "apps/settings/src",
+    ROOT / "apps/files/src",
+    ROOT / "apps/taxonomy/src",
 ]
+
+# Every directory that holds the repository's own Rust crates. vendor/ (the Freya
+# forks) is left out on purpose.
+RUST_DOMAINS = ("apps", "crates", "services", "bsm", "tools")
+
+
+def own_rust_files(pattern: str) -> list[Path]:
+    """Rust files of the repository's own crates matching `pattern`, build output excepted."""
+    found = []
+    for domain in RUST_DOMAINS:
+        for path in (ROOT / domain).glob(pattern):
+            if "target" not in path.relative_to(ROOT).parts:
+                found.append(path)
+    return sorted(found)
+
+
 # The style system defines the values; the palette and icon table hold raw
 # colours and SVG; the snapshot runner and the icon contact-sheet example are
 # test tooling (they need exact pixel sizes and plain black and white).
-SKIP_DIRS = {ROOT / "packages/bingux-ui/src/style"}
+SKIP_DIRS = {ROOT / "crates/ui/src/style"}
 SKIP_FILES = {
-    ROOT / "packages/bingux-ui/src/theme.rs",
-    ROOT / "packages/bingux-ui/src/typography.rs",
-    ROOT / "packages/bingux-ui/src/icons.rs",
-    ROOT / "packages/bingux-ui/src/snapshot.rs",
+    ROOT / "crates/ui/src/theme.rs",
+    ROOT / "crates/ui/src/typography.rs",
+    ROOT / "crates/ui/src/icons.rs",
+    ROOT / "crates/ui/src/snapshot.rs",
     # The tooltip size tests hang a bubble from boxes of exact, arbitrary
     # pixel widths narrower than its text: that is what they test.
-    ROOT / "packages/bingux-ui/src/controls/tooltip_layout_tests.rs",
-    ROOT / "packages/bingux-ui/examples/icon_sheet.rs",
-    ROOT / "packages/bingux-ui/src/surface.rs",
+    ROOT / "crates/ui/src/controls/tooltip_layout_tests.rs",
+    ROOT / "crates/ui/examples/icon_sheet.rs",
+    ROOT / "crates/ui/src/surface.rs",
     # Contrast measurement: colour maths and the matrix that reads raw tokens.
-    ROOT / "packages/bingux-ui/src/contrast.rs",
-    ROOT / "packages/bingux-ui/src/contrast_matrix.rs",
-    ROOT / "packages/bingux-ui/src/charts/palette.rs",
+    ROOT / "crates/ui/src/contrast.rs",
+    ROOT / "crates/ui/src/contrast_matrix.rs",
+    ROOT / "crates/ui/src/charts/palette.rs",
     # The tones of the colour file icons are derived from, and checked against,
     # the raw token colours of every ground a row is drawn on.
-    ROOT / "packages/bingux-ui/src/files/colour.rs",
-    ROOT / "packages/bingux-ui/src/files/colour_tests.rs",
+    ROOT / "crates/ui/src/files/colour.rs",
+    ROOT / "crates/ui/src/files/colour_tests.rs",
     # Test fixtures that measure exact geometry or paint raw probe colours:
     # RTL mirror probes, a bright-red dialog under a menu, a blue test PNG.
-    ROOT / "packages/bingux-ui/src/controls/hit_area_tests.rs",
-    ROOT / "packages/bingux-ui/src/files/preview_step_tests.rs",
-    ROOT / "packages/bingux-ui/src/controls/direction_tests.rs",
-    ROOT / "packages/bingux-ui/src/shell/menu_over_dialog_tests.rs",
-    ROOT / "packages/bingux-ui/src/preview/behaviour_tests.rs",
-    ROOT / "packages/bingux-ui/src/inspector/state_checks/tests.rs",
-    ROOT / "packages/bingux-ui/src/charts/svg.rs",
+    ROOT / "crates/ui/src/controls/hit_area_tests.rs",
+    ROOT / "crates/ui/src/files/preview_step_tests.rs",
+    ROOT / "crates/ui/src/controls/direction_tests.rs",
+    ROOT / "crates/ui/src/shell/menu_over_dialog_tests.rs",
+    ROOT / "crates/ui/src/preview/behaviour_tests.rs",
+    ROOT / "crates/ui/src/inspector/state_checks/tests.rs",
+    ROOT / "crates/ui/src/charts/svg.rs",
 }
 
 STYLING = re.compile(
@@ -161,9 +179,14 @@ def check(path: Path) -> list[str]:
         # Component methods that share a name (a dialog's `.content(..)`).
         if match.group(1) == "content" and not args.startswith("Content::"):
             continue
-        report(match.start(), f"{match.group(0).rstrip('(')}(..) styles a box directly; use .tw(&tokens, ..)")
+        report(
+            match.start(),
+            f"{match.group(0).rstrip('(')}(..) styles a box directly; use .tw(&tokens, ..)",
+        )
     for match in COLOUR_FIELD.finditer(text):
-        report(match.start(), f"{match.group(0)} is a raw colour; use Paint::.. or Ink::..")
+        report(
+            match.start(), f"{match.group(0)} is a raw colour; use Paint::.. or Ink::.."
+        )
     for match in RAW_VALUE.finditer(text):
         if match.group(0) in ("Color::TRANSPARENT",):
             report(match.start(), "Color::TRANSPARENT; use Paint::Transparent")
@@ -184,19 +207,27 @@ def check(path: Path) -> list[str]:
         args = args_of(text, match.end() - 1)
         if args.strip().startswith(("Size::percent(", "Size::flex(")):
             continue
-        numbers = [m.group(1) for m in LITERAL.finditer(args) if m.group(1) not in ("0", "0.0")]
+        numbers = [
+            m.group(1) for m in LITERAL.finditer(args) if m.group(1) not in ("0", "0.0")
+        ]
         if numbers or ".px()" in args:
             report(
-                match.start(), f".{match.group(1)}({args.strip()[:40]}) uses a fixed size; use w(Dim::..)/h(Dim::..)"
+                match.start(),
+                f".{match.group(1)}({args.strip()[:40]}) uses a fixed size; use w(Dim::..)/h(Dim::..)",
             )
     # A header's icon buttons take their size from HEADER_BUTTON (the control
     # height) inside HeaderBar; sizing one in a header drifts the bar.
     for match in re.finditer(r"\.(leading|trailing)\(", text):
         if re.search(r"\.size\(", args_of(text, match.end() - 1)):
-            report(match.start(), f".{match.group(1)}(..) sizes a header element; header buttons use HEADER_BUTTON")
+            report(
+                match.start(),
+                f".{match.group(1)}(..) sizes a header element; header buttons use HEADER_BUTTON",
+            )
     for match in ICON.finditer(text):
         parts = [part.strip() for part in args_of(text, match.end() - 1).split(",")]
-        if len(parts) > 1 and not parts[1].startswith(("IconSize::", "size", "self.size")):
+        if len(parts) > 1 and not parts[1].startswith(
+            ("IconSize::", "size", "self.size")
+        ):
             if LITERAL.search(parts[1]):
                 report(match.start(), f"icon size {parts[1]} is not an IconSize")
     # `// ui-lint: allow(reason)` on a line, or the line above it, exempts that
@@ -214,8 +245,8 @@ def check(path: Path) -> list[str]:
 # The only files that may touch Freya's launch API: the app loop that builds the
 # one launch configuration, and the font helper it calls.
 LAUNCH_ALLOWED = {
-    ROOT / "packages/bingux-ui/src/app.rs",
-    ROOT / "packages/bingux-ui/src/theme.rs",
+    ROOT / "crates/ui/src/app.rs",
+    ROOT / "crates/ui/src/theme.rs",
 }
 LAUNCH = re.compile(
     r"\bLaunchConfig\b|\bfreya(?:_winit)?::(?:\w+::)*launch\b|\blaunch_with_params\b|"
@@ -238,8 +269,8 @@ def check_launch(path: Path) -> list[str]:
 # A frame is 16 ms. A process, a file read, a sleep or a lock held across work
 # on the UI thread is a dropped frame, or a slide that glitches. Blocking work
 # runs on the worker pool (bingux_ui::task, bingux_ui::runtime) and comes back
-# through State. Two rules, for packages/bingux-settings/src and
-# packages/bingux-ui/src (not the inspector, which is developer tooling):
+# through State. Two rules, for apps/settings/src and
+# crates/ui/src (not the inspector, which is developer tooling):
 #
 #   1. The raw primitives below may appear only in the files of BLOCKING_ALLOWED,
 #      each with the reason it is safe. Everything else goes through the
@@ -263,53 +294,53 @@ RENDER_BLOCKING = re.compile(
     r"read_dir|metadata|load_persistent|load_saved)\(|\.recv\(\)|\.join\(\)|\.output\(\)|\.wait\(\)"
 )
 BLOCKING_ALLOWED: dict[str, str] = {
-    "packages/bingux-ui/src/runtime.rs": "the guarded wrappers themselves",
-    "packages/bingux-ui/src/resilience/relaunch.rs": "`exec` of a fresh copy after an unrecoverable failure: the process is being replaced",
-    "packages/bingux-ui/src/files/compress.rs": "load_names reads the destination folder inside a use_resource loader, on a worker, never in render",
-    "packages/bingux-ui/src/task.rs": "the worker pool: its threads sleep and spawn by design",
-    "packages/bingux-ui/src/theme.rs": "reads fonts and the font family before the window exists (Application::run), never in render",
-    "packages/bingux-ui/src/typography.rs": "the monospace family is asked once, at start-up, before the window exists",
-    "packages/bingux-ui/src/app.rs": "the single-instance socket and its listener thread",
-    "packages/bingux-ui/src/snapshot.rs": "the headless test runner, no window",
-    "packages/bingux-ui/src/files/tab_tests.rs": "test fixtures: a few temporary folders written before the headless window mounts, no window thread",
-    "packages/bingux-ui/src/files/place_tests.rs": "test fixtures: two temporary folders written before the headless window mounts, no window thread",
-    "packages/bingux-ui/src/files/search_tests.rs": "test fixtures: a folder tree written before the headless window mounts, no window thread",
-    "packages/bingux-ui/src/files/preview_step_tests.rs": "test fixtures: a folder of small files written before the headless window mounts, no window thread",
-    "packages/bingux-ui/src/files/colour_tests.rs": "test: writes the tones JSON to a path the test run names (BINGUX_COLOUR_TONES), no window thread",
-    "packages/bingux-ui/src/files/file_icon_surfaces.rs": "test (cfg(all(test, feature = \"testing\"))): deletes the probe PNG it wrote to a path of its own, headless runner, no window thread",
-    "packages/bingux-ui/src/about/details.rs": "reads os-release, the kernel release and sysfs once, in Application::run before the window exists; never in render",
-    "packages/bingux-ui/src/about/link.rs": "the xdg-open child, started from a press handler and reaped on a thread of its own, and the licence-file read, run by use_resource on a worker",
-    "packages/bingux-settings/src/apps.rs": "the application scanner and its loader thread; nothing in it is called from render",
-    "packages/bingux-settings/src/passwd.rs": "runs `passwd` on its own thread and polls it there",
-    "packages/bingux-settings/src/pages/applications.rs": "autostart file write, run inside the worker closure of the switch row",
-    "packages/bingux-settings/src/pages/bluetooth.rs": "the scan runner thread (bluetoothctl, 200 ms pacing) and the rfkill/adapter reads of `load`",
-    "packages/bingux-settings/src/pages/datetime/backend.rs": "the backend of `load` and the setters, called only from workers",
-    "packages/bingux-settings/src/pages/keyboard/sources.rs": "the backend of the input-source loader and writer, called only from workers",
-    "packages/bingux-settings/src/pages/keyboard.rs": "xdg-open child, reaped on a thread of its own",
-    "packages/bingux-settings/src/pages/network/mobile.rs": "pause between the steps of a modem action, inside its worker closure",
-    "packages/bingux-settings/src/pages/network/mobile_modem.rs": "pause inside the modem unlock worker closure",
-    "packages/bingux-settings/src/pages/network/vpn/bus.rs": "busctl backend of the VPN loader, called only from workers",
-    "packages/bingux-settings/src/pages/network/vpn/nm.rs": "nmcli backend of the VPN loader, called only from workers",
-    "packages/bingux-settings/src/pages/network/vpn/wireguard.rs": "wg backend (key generation, import), called only from workers",
-    "packages/bingux-settings/src/pages/network/wifi/hotspot.rs": "defaults and password generation, built inside the page's worker",
-    "packages/bingux-settings/src/pages/sound.rs": "pw-dump thread and the test-tone file, both inside worker closures",
-    "packages/bingux-settings/src/pages/sound/meter.rs": "the level meter's pw-record process and its reader thread",
-    "packages/bingux-settings/src/pages/sound/effects/mod.rs": "the live-parameter writer's pacing sleep, on a thread of its own",
-    "packages/bingux-ui/src/app_icon.rs": "the icon-theme name, asked from the icon lookup worker (guarded)",
-    "packages/bingux-ui/src/files/actions/open_with.rs": "desktop-entry scan and launch, run by the file actions' workers (FilesSearch to review)",
-    "packages/bingux-ui/src/files/actions/transfer.rs": "file operations of the transfer worker",
-    "packages/bingux-ui/src/files/actions.rs": "file operations of the transfer worker",
-    "packages/bingux-ui/src/files/address_target.rs": "metadata on a thread of its own, with a deadline",
-    "packages/bingux-ui/src/files/context_menu.rs": "template listing for the New file menu: reads a folder, to move to a worker (FilesSearch)",
-    "packages/bingux-ui/src/files/drives.rs": "fake unmount pause in a worker",
-    "packages/bingux-ui/src/files/view_state.rs": "per-folder view state: first read and delayed write; the read is on first use, to move to a worker (FilesSearch)",
-    "packages/bingux-ui/src/files/places_fixture.rs": "test fixture file, read once when a fake is requested",
-    "packages/bingux-ui/src/files/reload_stop_tests.rs": "test fixtures: a folder and the pipe that stalls its read, made before the headless window mounts and removed after it",
-    "packages/bingux-ui/src/files/history_ui_tests.rs": "test fixtures: a few files written before the headless window mounts, no window thread",
-    "packages/bingux-ui/src/preview/behaviour_tests.rs": "test fixtures: a folder of files written before the headless window mounts, no window thread",
-    "packages/bingux-ui/src/preview/render_tests.rs": "test fixtures: generated media files and the ffmpeg that makes them, written before the headless window mounts",
-    "packages/bingux-ui/src/nav/slide_users_tests.rs": "test: reads the source tree to list the slide users, no window",
-    "packages/bingux-ui/src/preview/host_link.rs": "the supervisor thread spawns and reaps the helper process and polls it there; the UI reads a Feed, never these calls",
+    "crates/ui/src/runtime.rs": "the guarded wrappers themselves",
+    "crates/ui/src/resilience/relaunch.rs": "`exec` of a fresh copy after an unrecoverable failure: the process is being replaced",
+    "crates/ui/src/files/compress.rs": "load_names reads the destination folder inside a use_resource loader, on a worker, never in render",
+    "crates/ui/src/task.rs": "the worker pool: its threads sleep and spawn by design",
+    "crates/ui/src/theme.rs": "reads fonts and the font family before the window exists (Application::run), never in render",
+    "crates/ui/src/typography.rs": "the monospace family is asked once, at start-up, before the window exists",
+    "crates/ui/src/app.rs": "the single-instance socket and its listener thread",
+    "crates/ui/src/snapshot.rs": "the headless test runner, no window",
+    "crates/ui/src/files/tab_tests.rs": "test fixtures: a few temporary folders written before the headless window mounts, no window thread",
+    "crates/ui/src/files/place_tests.rs": "test fixtures: two temporary folders written before the headless window mounts, no window thread",
+    "crates/ui/src/files/search_tests.rs": "test fixtures: a folder tree written before the headless window mounts, no window thread",
+    "crates/ui/src/files/preview_step_tests.rs": "test fixtures: a folder of small files written before the headless window mounts, no window thread",
+    "crates/ui/src/files/colour_tests.rs": "test: writes the tones JSON to a path the test run names (BINGUX_COLOUR_TONES), no window thread",
+    "crates/ui/src/files/file_icon_surfaces.rs": 'test (cfg(all(test, feature = "testing"))): deletes the probe PNG it wrote to a path of its own, headless runner, no window thread',
+    "crates/ui/src/about/details.rs": "reads os-release, the kernel release and sysfs once, in Application::run before the window exists; never in render",
+    "crates/ui/src/about/link.rs": "the xdg-open child, started from a press handler and reaped on a thread of its own, and the licence-file read, run by use_resource on a worker",
+    "apps/settings/src/apps.rs": "the application scanner and its loader thread; nothing in it is called from render",
+    "apps/settings/src/passwd.rs": "runs `passwd` on its own thread and polls it there",
+    "apps/settings/src/pages/applications.rs": "autostart file write, run inside the worker closure of the switch row",
+    "apps/settings/src/pages/bluetooth.rs": "the scan runner thread (bluetoothctl, 200 ms pacing) and the rfkill/adapter reads of `load`",
+    "apps/settings/src/pages/datetime/backend.rs": "the backend of `load` and the setters, called only from workers",
+    "apps/settings/src/pages/keyboard/sources.rs": "the backend of the input-source loader and writer, called only from workers",
+    "apps/settings/src/pages/keyboard.rs": "xdg-open child, reaped on a thread of its own",
+    "apps/settings/src/pages/network/mobile.rs": "pause between the steps of a modem action, inside its worker closure",
+    "apps/settings/src/pages/network/mobile_modem.rs": "pause inside the modem unlock worker closure",
+    "apps/settings/src/pages/network/vpn/bus.rs": "busctl backend of the VPN loader, called only from workers",
+    "apps/settings/src/pages/network/vpn/nm.rs": "nmcli backend of the VPN loader, called only from workers",
+    "apps/settings/src/pages/network/vpn/wireguard.rs": "wg backend (key generation, import), called only from workers",
+    "apps/settings/src/pages/network/wifi/hotspot.rs": "defaults and password generation, built inside the page's worker",
+    "apps/settings/src/pages/sound.rs": "pw-dump thread and the test-tone file, both inside worker closures",
+    "apps/settings/src/pages/sound/meter.rs": "the level meter's pw-record process and its reader thread",
+    "apps/settings/src/pages/sound/effects/mod.rs": "the live-parameter writer's pacing sleep, on a thread of its own",
+    "crates/ui/src/app_icon.rs": "the icon-theme name, asked from the icon lookup worker (guarded)",
+    "crates/ui/src/files/actions/open_with.rs": "desktop-entry scan and launch, run by the file actions' workers (FilesSearch to review)",
+    "crates/ui/src/files/actions/transfer.rs": "file operations of the transfer worker",
+    "crates/ui/src/files/actions.rs": "file operations of the transfer worker",
+    "crates/ui/src/files/address_target.rs": "metadata on a thread of its own, with a deadline",
+    "crates/ui/src/files/context_menu.rs": "template listing for the New file menu: reads a folder, to move to a worker (FilesSearch)",
+    "crates/ui/src/files/drives.rs": "fake unmount pause in a worker",
+    "crates/ui/src/files/view_state.rs": "per-folder view state: first read and delayed write; the read is on first use, to move to a worker (FilesSearch)",
+    "crates/ui/src/files/places_fixture.rs": "test fixture file, read once when a fake is requested",
+    "crates/ui/src/files/reload_stop_tests.rs": "test fixtures: a folder and the pipe that stalls its read, made before the headless window mounts and removed after it",
+    "crates/ui/src/files/history_ui_tests.rs": "test fixtures: a few files written before the headless window mounts, no window thread",
+    "crates/ui/src/preview/behaviour_tests.rs": "test fixtures: a folder of files written before the headless window mounts, no window thread",
+    "crates/ui/src/preview/render_tests.rs": "test fixtures: generated media files and the ffmpeg that makes them, written before the headless window mounts",
+    "crates/ui/src/nav/slide_users_tests.rs": "test: reads the source tree to list the slide users, no window",
+    "crates/ui/src/preview/host_link.rs": "the supervisor thread spawns and reaps the helper process and polls it there; the UI reads a Feed, never these calls",
 }
 
 
@@ -364,7 +395,14 @@ def check_blocking(path: Path) -> list[str]:
     rel = str(path.relative_to(ROOT))
     text = strip_comments(path.read_text())
     # Unit tests may touch the disk.
-    cut = min((i for i in (text.find("#[cfg(test)]"), text.find("#[cfg(all(test")) if i != -1), default=-1)
+    cut = min(
+        (
+            i
+            for i in (text.find("#[cfg(test)]"), text.find("#[cfg(all(test"))
+            if i != -1
+        ),
+        default=-1,
+    )
     if cut != -1:
         text = text[:cut]
     problems = []
@@ -408,7 +446,7 @@ def check_blocking(path: Path) -> list[str]:
 
 def blocking_problems() -> list[str]:
     found = []
-    for source in (ROOT / "packages/bingux-settings/src", ROOT / "packages/bingux-ui/src"):
+    for source in (ROOT / "apps/settings/src", ROOT / "crates/ui/src"):
         for path in sorted(source.rglob("*.rs")):
             if "inspector" in path.parts or "target" in path.parts:
                 continue
@@ -426,17 +464,27 @@ def panic_problems() -> list[str]:
     freya-core patch out, takes the error boundaries with it."""
     found = []
     for name in RESILIENT_APPS:
-        manifest = ROOT / "packages" / name / "Cargo.toml"
+        manifest = crate_dir(ROOT, name) / "Cargo.toml"
         text = manifest.read_text()
         rel = manifest.relative_to(ROOT)
         if re.search(r'^\s*panic\s*=\s*"abort"', text, re.MULTILINE):
-            found.append(f'{rel}: panic = "abort" makes every panic fatal; the error boundaries need unwinding')
+            found.append(
+                f'{rel}: panic = "abort" makes every panic fatal; the error boundaries need unwinding'
+            )
         for table in ("profile.dev", "profile.release"):
-            section = re.search(rf"^\[{re.escape(table)}\]\n((?:(?!\[).*\n?)*)", text, re.MULTILINE)
-            if not section or not re.search(r'^\s*panic\s*=\s*"unwind"', section.group(1), re.MULTILINE):
-                found.append(f'{rel}: [{table}] must say panic = "unwind" (the error boundaries catch panics)')
-        if 'freya-core = { path = "../vendor/freya-core" }' not in text:
-            found.append(f"{rel}: [patch.crates-io] must patch freya-core with ../vendor/freya-core (see packages/vendor/README.md)")
+            section = re.search(
+                rf"^\[{re.escape(table)}\]\n((?:(?!\[).*\n?)*)", text, re.MULTILINE
+            )
+            if not section or not re.search(
+                r'^\s*panic\s*=\s*"unwind"', section.group(1), re.MULTILINE
+            ):
+                found.append(
+                    f'{rel}: [{table}] must say panic = "unwind" (the error boundaries catch panics)'
+                )
+        if 'freya-core = { path = "../../vendor/freya-core" }' not in text:
+            found.append(
+                f"{rel}: [patch.crates-io] must patch freya-core with ../../vendor/freya-core (see vendor/README.md)"
+            )
     return found
 
 
@@ -455,34 +503,34 @@ RAW_PRESS = re.compile(
     r"\.on_press\(\s*(?:move\s*)?\|\s*\w+\s*:\s*Event<PressEventData>\s*\||\.on_pointer_press\(|\.on_click\("
 )
 RAW_PRESS_ALLOWED = {
-    "packages/bingux-ui/src/popup_windows/route_tests.rs": "test fixture: a bare box whose press opens a sub-window",
-    "packages/bingux-ui/src/controls/button.rs": "the button components",
-    "packages/bingux-ui/src/controls/colour_picker/button.rs": "the colour button: a swatch with hover, pressed and open fills, which no library button draws",
-    "packages/bingux-ui/src/controls/split_button.rs": "the split button's two parts",
-    "packages/bingux-ui/src/controls/dropdown.rs": "the dropdown's trigger",
-    "packages/bingux-ui/src/controls/segmented.rs": "the segmented control's segments",
-    "packages/bingux-ui/src/controls/checkbox.rs": "the checkbox",
-    "packages/bingux-ui/src/controls/stepper.rs": "the stepper's halves",
-    "packages/bingux-ui/src/controls/action_strip.rs": "the action strip's cells",
-    "packages/bingux-ui/src/controls/focus_stop.rs": "makes a keyboard stop out of any content",
-    "packages/bingux-ui/src/controls/press.rs": "hit_area: a transparent touch target whose listeners do nothing and let the press bubble to the control that holds it",
-    "packages/bingux-ui/src/controls/tabs.rs": "the tab itself, a selectable item, not an icon",
-    "packages/bingux-ui/src/controls/tree_view.rs": "tree rows, and the expand chevron: part of the row's own keyboard model (Left and Right), not a stop of its own",
-    "packages/bingux-ui/src/rows.rs": "the row",
-    "packages/bingux-ui/src/shell/panel.rs": "scrims and panels that swallow presses",
-    "packages/bingux-ui/src/shell/navigation.rs": "the sidebar's page rows",
-    "packages/bingux-ui/src/shell/window.rs": "window buttons, excluded by design",
-    "packages/bingux-ui/src/shell/overlays.rs": "the dialog and toast layers' scrims",
-    "packages/bingux-ui/src/shell/banner.rs": "the notice's action button, filled in the kind's colour: the toast's action, now shared with the inline banner",
-    "packages/bingux-ui/src/shell/menu.rs": "menu items",
-    "packages/bingux-ui/src/window/popup.rs": "the popup's panel and scrim swallow presses",
-    "packages/bingux-ui/src/motion.rs": "the focus ring's press tracking",
-    "packages/bingux-ui/src/resilience/boundary.rs": "the error card must not depend on the components that failed",
-    "packages/bingux-ui/src/files/search.rs": "a whole row is the button: start or stop the deep search",
-    "packages/bingux-ui/src/files/address_list.rs": "the address bar's completion list rows",
-    "packages/bingux-ui/src/files/address_crumbs.rs": "path crumbs, which are navigation, not icon buttons",
-    "packages/bingux-ui/src/charts/flame.rs": "chart hit areas",
-    "packages/bingux-ui/src/charts/view.rs": "chart hit areas: a tap on a donut's ring or legend row selects its segment (a hover does for a mouse); the segments are not controls and have no keyboard action",
+    "crates/ui/src/popup_windows/route_tests.rs": "test fixture: a bare box whose press opens a sub-window",
+    "crates/ui/src/controls/button.rs": "the button components",
+    "crates/ui/src/controls/colour_picker/button.rs": "the colour button: a swatch with hover, pressed and open fills, which no library button draws",
+    "crates/ui/src/controls/split_button.rs": "the split button's two parts",
+    "crates/ui/src/controls/dropdown.rs": "the dropdown's trigger",
+    "crates/ui/src/controls/segmented.rs": "the segmented control's segments",
+    "crates/ui/src/controls/checkbox.rs": "the checkbox",
+    "crates/ui/src/controls/stepper.rs": "the stepper's halves",
+    "crates/ui/src/controls/action_strip.rs": "the action strip's cells",
+    "crates/ui/src/controls/focus_stop.rs": "makes a keyboard stop out of any content",
+    "crates/ui/src/controls/press.rs": "hit_area: a transparent touch target whose listeners do nothing and let the press bubble to the control that holds it",
+    "crates/ui/src/controls/tabs.rs": "the tab itself, a selectable item, not an icon",
+    "crates/ui/src/controls/tree_view.rs": "tree rows, and the expand chevron: part of the row's own keyboard model (Left and Right), not a stop of its own",
+    "crates/ui/src/rows.rs": "the row",
+    "crates/ui/src/shell/panel.rs": "scrims and panels that swallow presses",
+    "crates/ui/src/shell/navigation.rs": "the sidebar's page rows",
+    "crates/ui/src/shell/window.rs": "window buttons, excluded by design",
+    "crates/ui/src/shell/overlays.rs": "the dialog and toast layers' scrims",
+    "crates/ui/src/shell/banner.rs": "the notice's action button, filled in the kind's colour: the toast's action, now shared with the inline banner",
+    "crates/ui/src/shell/menu.rs": "menu items",
+    "crates/ui/src/window/popup.rs": "the popup's panel and scrim swallow presses",
+    "crates/ui/src/motion.rs": "the focus ring's press tracking",
+    "crates/ui/src/resilience/boundary.rs": "the error card must not depend on the components that failed",
+    "crates/ui/src/files/search.rs": "a whole row is the button: start or stop the deep search",
+    "crates/ui/src/files/address_list.rs": "the address bar's completion list rows",
+    "crates/ui/src/files/address_crumbs.rs": "path crumbs, which are navigation, not icon buttons",
+    "crates/ui/src/charts/flame.rs": "chart hit areas",
+    "crates/ui/src/charts/view.rs": "chart hit areas: a tap on a donut's ring or legend row selects its segment (a hover does for a mouse); the segments are not controls and have no keyboard action",
 }
 
 
@@ -513,17 +561,14 @@ def skipped(path: Path) -> bool:
 
 def about_problems() -> list[str]:
     found = []
-    for main in sorted((ROOT / "packages").glob("*/src/main.rs")):
-        relative = main.relative_to(ROOT / "packages").parts
-        if relative[0] == "vendor":
-            continue
+    for main in own_rust_files("*/src/main.rs"):
         text = strip_comments(main.read_text())
         if "Application::new(" not in text:
             continue
         if not re.search(r"\.about\(\s*(?:bingux_ui::)?app_info!\s*\(", text):
             found.append(
                 f"{main.relative_to(ROOT)}: starts an Application without `.about(bingux_ui::app_info!(..))`; "
-                "every Bingux app tells its About window who it is (docs/bingux-ui.md, \"About window\")"
+                'every Bingux app tells its About window who it is (docs/bingux-ui.md, "About window")'
             )
     return found
 
@@ -536,7 +581,7 @@ def about_problems() -> list[str]:
 # draws it, so a new indicator cannot be built a different way by accident.
 
 LOOP = re.compile(r"\bOnFinish::(?:[Rr]estart|[Rr]everse)")
-LOOP_HOME = ROOT / "packages/bingux-ui/src/motion.rs"
+LOOP_HOME = ROOT / "crates/ui/src/motion.rs"
 
 
 def loop_problems() -> list[str]:
@@ -549,7 +594,7 @@ def loop_problems() -> list[str]:
             for match in LOOP.finditer(text):
                 found.append(
                     f"{path.relative_to(ROOT)}:{text.count(chr(10), 0, match.start()) + 1}: a looping animation "
-                    "of its own; loop on motion::use_cycle(ms) (docs/bingux-ui.md, \"Progress bars and spinners\")"
+                    'of its own; loop on motion::use_cycle(ms) (docs/bingux-ui.md, "Progress bars and spinners")'
                 )
     return found
 
@@ -563,14 +608,18 @@ def main() -> int:
             problems.extend(check(path))
             problems.extend(check_raw_press(path))
     # The controls that stand beside header buttons share their height token.
-    for name, required in (("controls/segmented.rs", "Dim::Control"), ("controls/split_button.rs", "HEADER_BUTTON")):
-        text = (ROOT / "packages/bingux-ui/src" / name).read_text()
+    for name, required in (
+        ("controls/segmented.rs", "Dim::Control"),
+        ("controls/split_button.rs", "HEADER_BUTTON"),
+    ):
+        text = (ROOT / "crates/ui/src" / name).read_text()
         if required not in text or "Dim::Button" in strip_comments(text):
-            problems.append(f"{name}: height must come from {required} (the header button height), not Dim::Button")
+            problems.append(
+                f"{name}: height must come from {required} (the header button height), not Dim::Button"
+            )
     launches = []
-    for path in sorted((ROOT / "packages").rglob("*.rs")):
-        relative = path.relative_to(ROOT / "packages").parts
-        if relative[0] == "vendor" or "target" in relative or path in LAUNCH_ALLOWED:
+    for path in own_rust_files("**/*.rs"):
+        if path in LAUNCH_ALLOWED:
             continue
         launches.extend(check_launch(path))
     blocking = blocking_problems()
@@ -583,7 +632,7 @@ def main() -> int:
     if everything:
         print(
             f"\nui-lint: {len(everything)} problem(s). Style boxes with tokens from "
-            "packages/bingux-ui/src/style/; start windows with Application::run."
+            "crates/ui/src/style/; start windows with Application::run."
         )
         return 1
     print(

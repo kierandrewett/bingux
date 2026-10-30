@@ -48,7 +48,7 @@ class LockContractTest(unittest.TestCase):
         self.assertFalse((ROOT / "tests/lock-start-gate.test.py").exists())
 
     def test_unlock_completion_syncs_the_qt_wayland_connection(self):
-        plugin = (ROOT / "packages/bingux-wayland-sync/plugin.cpp").read_text()
+        plugin = (ROOT / "native/wayland-sync/plugin.cpp").read_text()
         self.assertIn("wl_display_sync(display)", plugin)
         self.assertIn("wl_display_flush(display)", plugin)
         self.assertIn("including unlock_and_destroy", plugin)

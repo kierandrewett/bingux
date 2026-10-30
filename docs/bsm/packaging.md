@@ -19,10 +19,10 @@ Both leave greetd installed, so going back is one command or one reboot.
 
 | File in the repository                          | Installed as                                  | Purpose                                                                   |
 | ----------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------- |
-| `packages/bsm` (`bsm`, `bsmctl`)                | `/usr/bin/bsm`, `/usr/bin/bsmctl`             | The compositor and session manager, and its CLI.                          |
-| `packages/bsm-helper`                           | `/usr/libexec/bsm/bsm-helper`                 | Root helper for PAM and uid changes.                                      |
-| `packages/bsm-host`                             | `/usr/libexec/bsm/bsm-host`                   | Bridge between bsm and one hosted Gnoblin.                                |
-| `packages/bsm-appearance` (`bsm-imgconv`)       | `/usr/libexec/bsm/bsm-imgconv`                | Sandboxed avatar and wallpaper converter.                                 |
+| `bsm/core` (`bsm`, `bsmctl`)                | `/usr/bin/bsm`, `/usr/bin/bsmctl`             | The compositor and session manager, and its CLI.                          |
+| `bsm/helper`                           | `/usr/libexec/bsm/bsm-helper`                 | Root helper for PAM and uid changes.                                      |
+| `bsm/host`                             | `/usr/libexec/bsm/bsm-host`                   | Bridge between bsm and one hosted Gnoblin.                                |
+| `bsm/appearance` (`bsm-imgconv`)       | `/usr/libexec/bsm/bsm-imgconv`                | Sandboxed avatar and wallpaper converter.                                 |
 | `packaging/bsm/bin/bsm-fallback`                | `/usr/libexec/bsm/fallback`                   | Starts greetd when bsm failed for good.                                   |
 | `packaging/bsm/bin/bsm-set-display-manager`     | `/usr/bin/bsm-set-display-manager`            | Switch the display-manager role (never run by the package).               |
 | `packaging/bsm/systemd/*`                       | `/usr/lib/systemd/system/`                    | `bsm.service`, `bsm-seatd.service`, `bsm-helper.socket`, `bsm-helper.service`, `bsm-fallback.service`. |
@@ -367,7 +367,7 @@ Values as in architecture.md.
 | Two-display QEMU harness                                | implemented and tested  | Two connected connectors and two frame streams (`boot` step). |
 | Acceptance walkthrough                                  | implemented and tested  | `python3 tests/bsm-qemu.py` on the rebuilt 2026.10.27 image, no injection: 10 of 10 steps, 135 checks pass, two displays, two real accounts, real PAM, real hosted Gnoblin and Bingux (`distro/out/bsm-test/`, about 6 minutes). Transitions run at 3 to 4 s in this test, see below. |
 | Frame measurements                                      | implemented and tested  | `tests/bsm-frames.test.py`, 10 tests. |
-| Hot injection                                           | implemented and tested (mechanics) | Against the 2026.10.24 image: 9p mount, tree copied, accounts created, units loaded, `ldd` clean for the helper. bsm itself could not run: `packages/bsm` is not built yet and the image has no seatd. |
+| Hot injection                                           | implemented and tested (mechanics) | Against the 2026.10.24 image: 9p mount, tree copied, accounts created, units loaded, `ldd` clean for the helper. bsm itself could not run: `bsm/core` is not built yet and the image has no seatd. |
 | `OnFailure=` fallback                                   | implemented and tested  | Injected units with a bsm that exits 127: three starts, start limit hit, `bsm-fallback.service` ran and greetd with its greeter was running again. |
 | Plymouth handover without a blank frame                 | implemented and tested (QEMU, staged boot) | 0 frames between splash and greeter, no CRTC disabled, no modeset after the splash, no fbcon restore (`distro/out/bsm-test/boot/`, boot.md). Hard colour cut, real hardware untested. Needs an image rebuild to ship. |
 | VT switching away from bsm (`Ctrl+Alt+F3`)              | implemented and tested (QEMU) | `chvt` and Ctrl+Alt+F3 round trips, greeter intact, input back (boot.md). |
@@ -393,7 +393,7 @@ Slowed transitions. The VNC capture of the guest delivers a new picture about ev
 0.3 s, so a default 420 ms fade would give one sample. `tests/bsm-qemu.py` writes
 `/etc/bsm/bsm.toml` with 3 to 4 s transitions (`--default-timings` keeps the defaults)
 and measures those. The default durations and the exact curves are asserted by the
-compositor's own trajectory tests (`packages/bsm-compositor`), not by the VM.
+compositor's own trajectory tests (`bsm/compositor`), not by the VM.
 
 Measured at 4 s: opacity of the new desktop over the greeter rises monotonically from
 0 to at least 0.8, the greeter stays visible under it (blend residual under 6 luma

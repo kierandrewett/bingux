@@ -28,7 +28,7 @@ Desktop, Search and Users; Gnoblin for Displays) loads into its error state,
 and the error replaces the skeleton: that is reported as a shift. Run it where
 those backends exist for a verdict on those pages.
 
-Build first: `cargo build --features snapshot` in packages/bingux-settings,
+Build first: `cargo build --features snapshot` in apps/settings,
 with CARGO_TARGET_DIR set as usual. Output: OUT/report.md (default
 /tmp/LayoutStability), with before/after crops of each shift in OUT/shifts.
 Needs PIL and numpy.
@@ -158,7 +158,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if not args.skip_run and not args.binary.exists():
-        sys.exit(f"no binary at {args.binary}; run `cargo build --features snapshot` in packages/bingux-settings first")
+        sys.exit(f"no binary at {args.binary}; run `cargo build --features snapshot` in apps/settings first")
     pages = targets([name for name in args.pages.split(",") if name])
     sizes = [size for size in args.sizes.split(",") if size]
     out = args.out

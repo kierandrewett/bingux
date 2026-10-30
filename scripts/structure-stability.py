@@ -10,7 +10,7 @@ dragged do not move the rest of the window, not even for one frame.
 records every 16 ms frame and matches the edges between frames. This holds it for
 everything else too, by the layout tree, which every capture can give: each scenario
 captures one frame as early as the harness allows and one after the window has
-settled (BINGUX_UI_PROBE, packages/bingux-ui/src/inspector/probe_checks), and the
+settled (BINGUX_UI_PROBE, crates/ui/src/inspector/probe_checks), and the
 two trees are compared node by node. There is no list of pages that are exempt.
 
 Scenarios:

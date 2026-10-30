@@ -76,7 +76,7 @@ finds (`libEGL`, `libGL`, `libfontconfig`, `libfreetype`).
 **rpmlint 2.8.0** (Fedora 43 container): 0 errors, 32 warnings. They are: 15
 `no-manual-page-for-binary` (the shell's wrappers and daemons have no man page),
 about 15 `files-duplicate` (identical SVG icons in the shell's own icon folder), `position-independent-executable-suggested` for `bingux-frame` (its
-`packages/bingux-frame/build.sh` ignores `CFLAGS`), `invalid-url Source0` (the
+`native/frame/build.sh` ignores `CFLAGS`), `invalid-url Source0` (the
 source archive is made locally) and the `setlocale` noise of the bare container.
 
 **desktop-file-validate**: exit 0; one hint: `bingux-taxonomy.desktop` has two main

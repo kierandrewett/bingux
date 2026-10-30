@@ -3,7 +3,7 @@
 How the Bingux desktop shell behaves when bsm (the Bingux Session Manager,
 see [architecture](architecture.md)) hosts its session, and what stays the same
 when it does not. Source: `shell/bingux/Bsm*.qml`, `Bsm*.js`,
-`SessionPower.qml`, `packaging/gnoblin/bingux.lua`.
+`SessionPower.qml`, `gnoblin/bingux.lua`.
 
 ## Modes
 

@@ -2,7 +2,7 @@
 # Root-only checks of bsm-helper against the real system PAM stack, logind and
 # systemd, with real accounts. Run as root inside the Bingux OS image (the QEMU
 # live ISO); it refuses to run as anyone else. The unprivileged tests in
-# packages/bsm-helper/tests cannot cover setuid, pam_systemd, scopes or
+# bsm/helper/tests cannot cover setuid, pam_systemd, scopes or
 # pam_faillock, which is what this script is for.
 #
 # usage (in the guest, as root):

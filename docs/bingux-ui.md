@@ -1,6 +1,6 @@
 # bingux-ui
 
-`packages/bingux-ui` is the design system for Bingux's native applications.
+`crates/ui` is the design system for Bingux's native applications.
 It is a Rust library on [Freya](https://freyaui.dev) with the shell's visual
 system: the same surfaces, radii, rows, switches and sliders as the Control
 Centre. Bingux Settings is built on it.
@@ -304,7 +304,7 @@ task unwind through its runner into winit, which aborts the process. One
 conditional hook (`Hook functions must follow these rules`) closed the whole
 window. In a Bingux app that never happens: the vendored `freya-core` and
 `freya-winit` catch the panic at the place that ran the code (see
-`packages/vendor/README.md`), `bingux_ui::resilience` decides what the user
+`vendor/README.md`), `bingux_ui::resilience` decides what the user
 sees, and the rest of the window keeps running. **A panic is never a reason for
 the process to end**, and nothing in an app may make it one: no
 `panic = "abort"` (`scripts/ui-lint.py` rejects it), no `process::abort`, no
@@ -411,7 +411,7 @@ fn main() {
   with no code of its own, in the main window and in any other window the
   process opens. Do not call `freya::launch` or build a `LaunchConfig`: the
   inspector would be missing, and `scripts/ui-lint.py` fails on both anywhere
-  outside `bingux-ui/src/app.rs`. (Dialogs, popups and sheets are layers of
+  outside `crates/ui/src/app.rs`. (Dialogs, popups and sheets are layers of
   the window, not windows, so they are covered too.) An example that wants a
   window does the same as an app: `Application::new("id").title("…").run(|| Root)`.
 
@@ -661,7 +661,7 @@ Settings (`Mode::Hierarchical`), the file views and the chooser
 (`Mode::Linear`) differ only in the table's mode; nothing keeps a second
 history. The rules, tested in `nav/model.rs` and, for the file views, by a
 seeded random walk of 12,000 histories against a browser's (`files/history_fuzz.rs`)
-and 10,000 windows of tabs (`bingux-files-app/src/fuzz.rs`):
+and 10,000 windows of tabs (`apps/files/src/fuzz.rs`):
 
 | Rule | Hierarchical (Settings) | Linear (Files, the chooser) |
 | ---- | ----------------------- | --------------------------- |
@@ -1591,7 +1591,7 @@ families below; `FileKind::colour()` is the colour icon of each, one to one.
 
 **Which colour.** Files and folders are **colour icons** (`files/colour.rs`), a
 second set beside the symbolic one, drawn in the language of the Bingux Files
-app icon (`packages/bingux-files-app/bingux-files.svg`) and following the theme.
+app icon (`apps/files/bingux-files.svg`) and following the theme.
 
 *The design language.* Every shape is rounded by one radius ratio (about one
 eighth of the width: 2 px at 16, 2.5 at 20, 3 at 24, 4 at 32, 14 at the 128
@@ -1661,7 +1661,7 @@ clearly a folder or a page; from 40 px up the vector draws every curve.
 22 file families, 10 folders, the Trash empty and full): the pixel art on a 16
 grid, plus a `<g data-grid="128">` with the same glyph drawn smoothly on a 128
 grid for large sizes. `scripts/icons/colour.py` compiles each for five grids,
-16, 20, 24, 32 and 128, into `packages/bingux-ui/icons/colour/<name>-<grid>.svg`.
+16, 20, 24, 32 and 128, into `crates/ui/icons/colour/<name>-<grid>.svg`.
 The chrome (the page, the folder, its paper and lip) is drawn by the compiler
 from per-grid tables (`PAGE`, `FOLDER`, `RADIUS`); on the pixel grids
 rectangles are on whole pixels, strokes on the pixel centre (odd widths) or the
@@ -1705,10 +1705,10 @@ and drives, the colour set by name, and the emblem (at 64 and 128 px).
 
 | Layer | Where | Depends on |
 | ----- | ----- | ---------- |
-| Filesystem model: listing, MIME, places, bookmarks, recent files, filters, the file search (query language, matcher, names index, walker), sort, inotify watching, selection, request and answer types, what accepting does | `packages/bingux-files` (crate `bingux-files`, `libc`, `regex` and `bingux-search`, unit tests) | nothing |
+| Filesystem model: listing, MIME, places, bookmarks, recent files, filters, the file search (query language, matcher, names index, walker), sort, inotify watching, selection, request and answer types, what accepting does | `crates/files` (crate `bingux-files`, `libc`, `regex` and `bingux-search`, unit tests) | nothing |
 | Views: `PlacesSidebar`, `PlacesMenu`, `AddressBar`, `FileView`, `use_directory`, `use_places`, `empty_state`, `error_state` | `bingux_ui::files` | the model, bingux-ui controls |
 | The dialog: `choose` | `bingux_ui::files` (also in the prelude as `files`, `ChooserRequest`, `Chosen`) | the views |
-| The Files window: `browse` | `bingux_ui::files`, hosted by `packages/bingux-files-app` | the dialog's body |
+| The Files window: `browse` | `bingux_ui::files`, hosted by `apps/files` | the dialog's body |
 
 The model has no UI and no async runtime, so the future Files app, a command
 line tool and a portal backend use it as it is. Listing blocks on the disk
@@ -1723,7 +1723,7 @@ thumbnail only when its row scrolls in. The views are ordinary components:
 `PlacesSidebar::new(places, current, on_open)`,
 `AddressBar::new(location, home, editing, draft, on_open, on_file)` and
 `FileView::new(listing, order, selection).icon_px(level).sort(..).multiple(..)
-.on_pick(..).on_activate(..)`. The Files app (`packages/bingux-files-app`) uses them as they are, through `browse`.
+.on_pick(..).on_activate(..)`. The Files app (`apps/files`) uses them as they are, through `browse`.
 
 ### The file view in a window
 
@@ -1775,7 +1775,7 @@ Which folders get the Documents, Downloads, ... icon is decided from the path
 text only (`places::special_folder`): no `stat`, no `readlink`, so it costs
 nothing on a network mount, and `~/Downloads` keeps its icon when it is a link
 while the target folder, reached by its real path, shows a plain folder.
-Timings: `packages/bingux-files/examples/bench.rs`.
+Timings: `crates/files/examples/bench.rs`.
 
 ### Portal mapping
 
@@ -1856,7 +1856,7 @@ must not key the body by tab. The contract:
 what can be found, registers it once, and asks for hits as the user types.
 It writes no matcher: typo tolerance, ranking, highlights, filters, facets and
 Spotlight come with the SDK. The engine is the UI-free crate
-`packages/bingux-search`, re-exported as `bingux_ui::search`; the design and
+`crates/search`, re-exported as `bingux_ui::search`; the design and
 the numbers behind it are in `design/search.md`.
 
 ### Register what is searchable
@@ -2610,7 +2610,7 @@ load)` loads a `Resource<T>` in the background: it is `Loading`, then
   starts from where the page is, with no snap. A sidebar switch cross-fades
   over 120 ms. Motion is off under reduced motion (`tokens.motion(ms)`
   returns 0).
-- Icons are the Bingux set under `packages/bingux-ui/icons/`; see
+- Icons are the Bingux set under `crates/ui/icons/`; see
   [Icons](#icons) for how to use one and how to add another.
 - A dropdown draws a symbolic icon before each option with `.icons(Vec<Icon>)`,
   in the same order as the options. Sound uses it for each device's kind.
@@ -2631,7 +2631,7 @@ vocabulary, which the QML shell also uses.
 (34: the 22 file families, ten folders, the Trash empty and full) are lit,
 rounded pictures in the style of the Files app icon, not tinted glyphs, so they do not go through `build.py`: their
 sources are `scripts/icons/colour/*.svg`, their compiler and check is
-`scripts/icons/colour.py` and their output is `packages/bingux-ui/icons/colour/`
+`scripts/icons/colour.py` and their output is `crates/ui/icons/colour/`
 (see [File icons](#file-icons)). The taxonomy's Icons page lists them with the
 symbolic set (`ColourIcon::ALL`, `name()`, `family()`, drawn by
 `colour_icon_view(&tokens, icon, px)`).
@@ -2662,7 +2662,7 @@ three weights, are also available as `Icon::Chat(ChatIcon::House, ChatWeight::Fi
 behind the `chat-icons` feature (off by default: 3 MB of outlines no application
 should carry). `ChatIcon::ALL` lists them; `ChatIcon::weights()` says which weights an
 icon has (a missing weight draws as regular). The data is
-`packages/bingux-ui/icons/chat/geometry.json` and `src/chat_icon_list.rs`, both written
+`crates/ui/icons/chat/geometry.json` and `src/chat_icon_list.rs`, both written
 by `scripts/icons/import-chat.py` from `~/dev/chat`; they hold every fork icon, not
 only those in use. A catalogue icon is the fork's outline scaled by 1/16, not fitted,
 so it can look softer than a named icon. `scripts/icons/review.py catalogue` renders
@@ -2760,7 +2760,7 @@ A failing check names the icon, the number and the fix: `probe-small: ink is 4.0
 soft edge pixels at 16 px, 20 at its best placement (allowed 33)`, `avatar-default: not
 left-right symmetric`.
 After editing `scale`, `dx` or `dy` in `labels.tsv`, run `map-fork.py`, `build.py` and
-`build.py --check`; never edit `packages/bingux-ui/icons/*.svg` (they are written).
+`build.py --check`; never edit `crates/ui/icons/*.svg` (they are written).
 
 Icons that show a state (Wi-Fi signal, battery level, volume) are one drawing per
 state with the same footprint, so the glyph does not jump when the state changes:
@@ -2809,10 +2809,10 @@ weak, and what was decided:
 4. `scripts/icons/build.py --suggest <file>` prints the `scale` that brings the glyph
    into the size rule (nothing prints when 1 fits; there is nothing else to fit).
    `scripts/icons/map-fork.py` writes the source, `scripts/icons/build.py`
-   compiles it into `packages/bingux-ui/icons/` and the shell's copy,
+   compiles it into `crates/ui/icons/` and the shell's copy,
    `scripts/icons/build.py --check` judges it.
 5. Add the variant to `Icon`, to `Icon::ALL` and to `Icon::bytes()` in
-   `packages/bingux-ui/src/icons.rs`.
+   `crates/ui/src/icons.rs`.
 6. Look at it. `scripts/icons/review.py sheets --out /tmp/icons` writes one labelled PNG
    per group (Icon variant, file, category, glyph and fit, where it is used, metaphor;
    16 px dark and light, 18 px, 48 px) and `icons.txt`, the same table as plain text.
@@ -2824,7 +2824,7 @@ weak, and what was decided:
    filter, the name in a tooltip, a press copies it. It carries no per-icon detail; that
    is `review.py`'s job.
 
-The fork's geometry is MIT-licensed Phosphor work; `packages/bingux-ui/icons/COPYING`
+The fork's geometry is MIT-licensed Phosphor work; `crates/ui/icons/COPYING`
 carries the licence and attribution.
 
 ### In the QML shell
@@ -2927,7 +2927,7 @@ Set `exempt` only when WCAG itself exempts it (inactive controls, decoration),
 with the reason. Run the test:
 
 ```sh
-cargo test --lib --features testing contrast   # in packages/bingux-ui
+cargo test --lib --features testing contrast   # in crates/ui
 cargo test --lib --features testing every_token_pair -- --nocapture   # prints the totals
 ```
 
@@ -3254,13 +3254,13 @@ rows (the inspector's Accessibility list does).
 
 ## Taxonomy app
 
-`bingux-taxonomy` (`packages/bingux-taxonomy`) shows every component, element,
+`bingux-taxonomy` (`apps/taxonomy`) shows every component, element,
 widget, icon and token of bingux-ui running, in a real Bingux window. Open it
 with `bingux-taxonomy`, or at a page with `bingux-taxonomy controls/buttons`:
 
 ```sh
 CARGO_TARGET_DIR=/var/tmp/bingux-settings-target \
-    cargo run --manifest-path packages/bingux-taxonomy/Cargo.toml
+    cargo run --manifest-path apps/taxonomy/Cargo.toml
 ```
 
 - The sidebar is the taxonomy: Foundations (colour, type, space, radii,
@@ -3296,7 +3296,7 @@ Settings exposes the same renderer as `bingux-settings --snapshot DIR` (see
 Every change to bingux-ui lands with its entry. In five steps:
 
 1. Write the states as a `const` list of `Spec`s in
-   `packages/bingux-taxonomy/src/demos/<area>.rs`: `Spec::live(label, || ..)`
+   `apps/taxonomy/src/demos/<area>.rs`: `Spec::live(label, || ..)`
    for the real component, `Spec::forced(label, || ..)` for a state its props
    hold. The closure builds an `Element` and may use hooks. `.wide()` or
    `.page(height)` give it room, and `.script("click-text Open; wait 300; save
@@ -3309,7 +3309,7 @@ Every change to bingux-ui lands with its entry. In five steps:
    nothing to look at goes in `coverage-allowlist.txt` with its reason. A new
    icon needs nothing: the Icons page lists the `icons/` directory.
 4. Run `python3 scripts/taxonomy-check.py` and `cargo test --manifest-path
-   packages/bingux-taxonomy/Cargo.toml`. They fail on an exported item with no
+   apps/taxonomy/Cargo.toml`. They fail on an exported item with no
    entry, a `covers` name bingux-ui no longer exports, an `Icon` variant not in
    `Icon::ALL`, and a doc anchor that is not a heading. `make check` runs both.
 5. Look at it: `bingux-taxonomy --snapshot /tmp/taxonomy <category>/<page>`, or
@@ -3345,7 +3345,7 @@ Fix the component or token. Where a finding is right by design, add an entry to 
 
 ### State checks
 
-The layout rules read one captured tree. `python3 scripts/state-check.py` (`make state-check`, called by `make check`) reads what a window *does*: it drives every Settings page, popup, taxonomy page and the Files window headlessly, moves the pointer onto each interactive node, presses it, focuses it, tabs through the page, opens every menu and renders what a person would see. The code is `packages/bingux-ui/src/inspector/state_checks/` (`Snapshot::state_report`), the same `bingux_ui::snapshot` machinery the other checks use; with `BINGUX_UI_STATE_CHECK=FILE` every capture an app saves appends its report to FILE. The animation clock is switched off while it runs, so each state is finished one frame after it starts; what is measured is what is on screen after the transition, and the transitions themselves are the motion checks' work. An interactive node is a node with `a11y_focusable(true)` and an id; a *control* (a role a person presses, toggles, picks or types into) is held to every rule, a focusable region (a page of selectable text, a window) only to the Tab and ring rules. Each finding names its rule IDs from `design/rules.json` (`[ST-06]`).
+The layout rules read one captured tree. `python3 scripts/state-check.py` (`make state-check`, called by `make check`) reads what a window *does*: it drives every Settings page, popup, taxonomy page and the Files window headlessly, moves the pointer onto each interactive node, presses it, focuses it, tabs through the page, opens every menu and renders what a person would see. The code is `crates/ui/src/inspector/state_checks/` (`Snapshot::state_report`), the same `bingux_ui::snapshot` machinery the other checks use; with `BINGUX_UI_STATE_CHECK=FILE` every capture an app saves appends its report to FILE. The animation clock is switched off while it runs, so each state is finished one frame after it starts; what is measured is what is on screen after the transition, and the transitions themselves are the motion checks' work. An interactive node is a node with `a11y_focusable(true)` and an id; a *control* (a role a person presses, toggles, picks or types into) is held to every rule, a focusable region (a page of selectable text, a window) only to the Tab and ring rules. Each finding names its rule IDs from `design/rules.json` (`[ST-06]`).
 
 | Rule key | IDs | What it holds |
 |---|---|---|

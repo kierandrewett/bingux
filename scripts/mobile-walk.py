@@ -41,7 +41,7 @@ scenario's frames), frames/ (every frame) and logs/. The exit status is 1 when a
 check fails.
 
 Needs PIL and numpy. Build first: `cargo build --features snapshot` in
-packages/bingux-settings, with CARGO_TARGET_DIR set as usual. The walk pins the
+apps/settings, with CARGO_TARGET_DIR set as usual. The walk pins the
 colour scheme and runs gsettings on a throw-away in-memory backend, so it
 changes nothing on the desktop. The list scenarios need a Displays page with
 at least one display; without one they are skipped and the report says so.

@@ -44,7 +44,7 @@ edges (against the icon's own best placement), left-right symmetry of the icons 
 lists, no hole closed by mirroring, and the fill/outline weight of each icon's category.
 
 Usage:
-  build.py                    compile sources into packages/bingux-ui/icons
+  build.py                    compile sources into crates/ui/icons
   build.py --output DIR       compile into DIR instead (for comparison copies)
   build.py --check            validate sources, determinism, icons.rs references, that the
                               output directory matches the sources, and every pixel rule
@@ -78,12 +78,12 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 SRC = HERE / "src"
 COPYING_SRC = HERE / "LICENSE"
-DEFAULT_OUT = REPO / "packages/bingux-ui/icons"
+DEFAULT_OUT = REPO / "crates/ui/icons"
 SHELL_OUT = REPO / "shell/bingux/icons"
 SHELL_INDEX = REPO / "shell/bingux/BinguxIconIndex.js"
 SHELL_FILL = "#2e3436"
-FORK_GEOMETRY = REPO / "packages/bingux-ui/icons/chat/geometry.json"
-ICONS_RS = REPO / "packages/bingux-ui/src/icons.rs"
+FORK_GEOMETRY = REPO / "crates/ui/icons/chat/geometry.json"
+ICONS_RS = REPO / "crates/ui/src/icons.rs"
 
 GRID = 16.0
 SVG_NS = "{http://www.w3.org/2000/svg}"
@@ -430,7 +430,7 @@ def path_d(path: pathops.Path) -> str:
 # ------------------------------------------------------- the chat fork's geometry
 #
 # `<fork name="Power" weight="bold"/>` pulls the rounded Phosphor geometry that
-# ~/dev/chat/packages/icons generated (vendored in packages/bingux-ui/icons/chat/geometry.json by
+# ~/dev/chat/packages/icons generated (vendored in crates/ui/icons/chat/geometry.json by
 # import-chat.py) onto the 16 grid. The outline is the fork's own, and it is only ever
 # moved or uniformly scaled, never warped, thickened or redrawn. Three per-icon attributes
 # (written by map-fork.py from labels.tsv) say how:

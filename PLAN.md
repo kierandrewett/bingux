@@ -15,7 +15,7 @@ phase keeps the tree working and lands as its own set of commits.
 - Remove shipped test scaffolding, GNOME-only paths and silent failures
   that block calling the shell production ready.
 
-## Phase 1: configuration system (`packages/bingux-config`)
+## Phase 1: configuration system (`crates/config`)
 
 - Rust library plus `bingux-config` binary. The library declares the schema
   with serde types, defaults and validation. The validation rules are a
@@ -35,7 +35,7 @@ VALUE`, `save` (stdin JSON patch), `check`, `path`, `defaults` (annotated
 - Documentation: `docs/configuration.md` lists every key, type, default and
   accepted values.
 
-## Phase 2: Settings application (`packages/bingux-settings`)
+## Phase 2: Settings application (`apps/settings`)
 
 - Freya 0.5.0-rc.10. Borderless window with a 47 px header bar, 260 px
   sidebar, overlay sidebar below 740 px, 640 px page column, boxed groups,
@@ -69,7 +69,7 @@ VALUE`, `save` (stdin JSON patch), `check`, `path`, `defaults` (annotated
 - Shell integration: the five launch sites call `bingux-settings PANEL`
   without `XDG_CURRENT_DESKTOP=GNOME`. The desktop entry, `binguxctl
 settings`, the Makefile, `install-shell.py` and the RPM install the binary.
-- The window is built from `packages/bingux-ui`, the design system crate
+- The window is built from `crates/ui`, the design system crate
   (tokens, icons, controls, rows, groups, split view, dialogs, toasts) so
   later Bingux applications share the shell's look. The `bingux-taxonomy` app
   shows every component live; `docs/bingux-ui.md` is the guide.

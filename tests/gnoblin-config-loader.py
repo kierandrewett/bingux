@@ -79,7 +79,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     gnoblin_loader.add_arguments(parser)
     parser.add_argument(
-        "--module", type=Path, default=Path(__file__).resolve().parents[1] / "packaging/gnoblin/bingux.lua"
+        "--module", type=Path, default=Path(__file__).resolve().parents[1] / "gnoblin/bingux.lua"
     )
     parser.add_argument("--require-callback-disable", action="store_true")
     args = parser.parse_args()

@@ -178,7 +178,7 @@ def main() -> int:
     if args.fixtures or problems:
         return 1 if problems else 0
     if not args.binary.exists():
-        sys.exit(f"{args.binary} is missing: cargo build --features snapshot in packages/bingux-settings")
+        sys.exit(f"{args.binary} is missing: cargo build --features snapshot in apps/settings")
     budget = json.loads(args.budget.read_text())
     pages = [page for page in args.pages.split(",") if page] or panels()
     sizes = [size for size in args.sizes.split(",") if size]

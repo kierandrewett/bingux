@@ -2,7 +2,7 @@
 
 // The startup progress model as bsm sends it (bsm-proto `ProgressModel`), and
 // the same arithmetic as the Rust side: the weights, the labels and the
-// fraction are the documented work units of packages/bsm-proto/src/progress.rs.
+// fraction are the documented work units of bsm/proto/src/progress.rs.
 // tests/bsm-greeter-progress.test.py keeps this table equal to the Rust one.
 //
 // Nothing here reads a clock. The fraction moves only when the model does.

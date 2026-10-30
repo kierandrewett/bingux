@@ -339,7 +339,7 @@ class InstallTest(unittest.TestCase):
             )
             self.assertFalse((stage / "usr/share/licenses/adwaita-icon-theme").exists())
             # The shell binary derives the bundled icon folder from its own prefix
-            # (packages/bingux-shell/src/main.cpp), so no launcher script names it.
+            # (shell/runtime/src/main.cpp), so no launcher script names it.
             manifest = json.loads(
                 (
                     stage / "usr/share/bingux/search-apps/bingux-settings.json"

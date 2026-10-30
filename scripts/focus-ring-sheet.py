@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render a contact sheet of the keyboard focus ring on every control.
 
-Runs packages/bingux-ui/examples/focus_ring_sheet.rs once per column. The
+Runs crates/ui/examples/focus_ring_sheet.rs once per column. The
 example presses Tab through a page that holds a specimen of each control (switch,
 button, suggested and destructive buttons, text field, invalid text field,
 dropdown, segmented, settings row, slider, checkbox, radio, file list row,
@@ -62,7 +62,7 @@ def build() -> None:
             "--features",
             "testing",
             "--manifest-path",
-            str(ROOT / "packages/bingux-ui/Cargo.toml"),
+            str(ROOT / "crates/ui/Cargo.toml"),
         ],
         check=True,
         env=dict(os.environ, CARGO_TARGET_DIR=str(TARGET)),

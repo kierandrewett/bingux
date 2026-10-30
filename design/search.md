@@ -9,10 +9,10 @@ changes.
 
 | Piece | Where | What it does | Why it is not the answer |
 | ----- | ----- | ------------ | ------------------------ |
-| Settings index | `packages/bingux-settings/src/settings_index.rs` | A `&[(PageId, title, keywords)]` table, ~330 rows. `matching(query)` lower-cases `title + keywords` once (`LazyLock`) and keeps rows that contain every whitespace-separated query word as a **substring**. `matching_pages` does the same for page titles. | Linear scan, substring only (no word boundaries, no typo tolerance, no ranking: index order), runs on the UI thread, private to Settings. The table has no breadcrumb, anchor or icon, so a hit can only open a page. |
-| In-place filtering | `bingux-ui/src/search_highlight.rs`, `shell/sections.rs`, `shell/navigation.rs`, `settings/src/search_results.rs` | Pages not marked `index_only` render their real controls while the search has text; every `Row`/`Group` calls `use_match` and hides itself unless its text contains every query word; the sidebar lists the blocks that stayed visible (`sections::hits`, registered through `on_sized`). | It needs the whole page tree mounted, so it cannot work for anything outside the app (Spotlight) or for data that is not a row. Choosing a result only opens the page; no row is singled out. |
-| Files name matcher | `packages/bingux-files/src/search.rs` | `Query::matches` gives a `Tier` (exact, prefix, word-start, substring, all words, fuzzy subsequence) over file names; `walk` is a cancellable BFS. | Replaced by `bingux_files::find` (see `design/files-search.md`): a typed query language, a names index built on this engine for the home folder, and the live walk. Files still registers no `Searchable`. |
-| bingux-searchd | `packages/bingux-searchd` | The Spotlight daemon. The shell speaks protocol v1 over `$XDG_RUNTIME_DIR/bingux/search-v1.sock` (newline JSON, `query` / `activate` / `cancel`, records ≤ 64 KiB, socket 0600 in a 0700 directory). Built-in providers: applications (desktop files), files (bounded walker + optional plocate), calculation, weather, web, SQLite, AI chat. External providers are **subprocesses** declared by manifests (`bingux.search-provider`) speaking `hello` / `query` / `activate` on stdio, with `timeoutMs` ≤ 10 s, `priority` ≤ 1000, lazy/eager start and bounded backoff restarts. Results are `ProviderResult { resultId, kind, title, subtitle, icon, score }`; the daemon turns result ids into short-lived opaque activation ids. Ranking is `score` desc, then `0.001 × priority`, then stable fields; each local source contributes at most 5 results. | It already has the aggregator machinery (deadlines, cancellation, activation registry, limits). It has no notion of a running app's live data, of typed documents, facets or highlights, or of "the app is closed". It is extended, not replaced (section 8.6). |
+| Settings index | `apps/settings/src/settings_index.rs` | A `&[(PageId, title, keywords)]` table, ~330 rows. `matching(query)` lower-cases `title + keywords` once (`LazyLock`) and keeps rows that contain every whitespace-separated query word as a **substring**. `matching_pages` does the same for page titles. | Linear scan, substring only (no word boundaries, no typo tolerance, no ranking: index order), runs on the UI thread, private to Settings. The table has no breadcrumb, anchor or icon, so a hit can only open a page. |
+| In-place filtering | `crates/ui/src/search_highlight.rs`, `shell/sections.rs`, `shell/navigation.rs`, `settings/src/search_results.rs` | Pages not marked `index_only` render their real controls while the search has text; every `Row`/`Group` calls `use_match` and hides itself unless its text contains every query word; the sidebar lists the blocks that stayed visible (`sections::hits`, registered through `on_sized`). | It needs the whole page tree mounted, so it cannot work for anything outside the app (Spotlight) or for data that is not a row. Choosing a result only opens the page; no row is singled out. |
+| Files name matcher | `crates/files/src/search.rs` | `Query::matches` gives a `Tier` (exact, prefix, word-start, substring, all words, fuzzy subsequence) over file names; `walk` is a cancellable BFS. | Replaced by `bingux_files::find` (see `design/files-search.md`): a typed query language, a names index built on this engine for the home folder, and the live walk. Files still registers no `Searchable`. |
+| bingux-searchd | `services/searchd` | The Spotlight daemon. The shell speaks protocol v1 over `$XDG_RUNTIME_DIR/bingux/search-v1.sock` (newline JSON, `query` / `activate` / `cancel`, records ≤ 64 KiB, socket 0600 in a 0700 directory). Built-in providers: applications (desktop files), files (bounded walker + optional plocate), calculation, weather, web, SQLite, AI chat. External providers are **subprocesses** declared by manifests (`bingux.search-provider`) speaking `hello` / `query` / `activate` on stdio, with `timeoutMs` ≤ 10 s, `priority` ≤ 1000, lazy/eager start and bounded backoff restarts. Results are `ProviderResult { resultId, kind, title, subtitle, icon, score }`; the daemon turns result ids into short-lived opaque activation ids. Ranking is `score` desc, then `0.001 × priority`, then stable fields; each local source contributes at most 5 results. | It already has the aggregator machinery (deadlines, cancellation, activation registry, limits). It has no notion of a running app's live data, of typed documents, facets or highlights, or of "the app is closed". It is extended, not replaced (section 8.6). |
 
 The old Settings matcher is not slow (330 rows, tens of microseconds); the
 problem is that it cannot express anything richer than "page + title" and cannot
@@ -252,7 +252,7 @@ section 4.4.
 ## 7. Threading and lifecycle in bingux-ui
 
 - `bingux_ui::search` re-exports the UI-free crate `bingux-search`
-  (`packages/bingux-search`; deps `serde`, `serde_json`, `unicode-segmentation`,
+  (`crates/search`; deps `serde`, `serde_json`, `unicode-segmentation`,
   `unicode-normalization`). Spotlight and searchd depend on
   the crate directly.
 - A process-wide `SearchService` holds indexes by name. An app registers a
@@ -286,11 +286,11 @@ D. Spotlight sees only what the app marked `external`; no other process can
 
 | Job | Mechanism | Where |
 | --- | --------- | ----- |
-| Shell ↔ search daemon | Unix socket `$XDG_RUNTIME_DIR/bingux/search-v1.sock`, newline-delimited UTF-8 JSON, versioned records (`"v":1`), 64 KiB record cap, directory 0700, socket 0600, stale socket replaced; QML client `shell/bingux/SearchSocket.qml` | `bingux-searchd/src/server.rs`, `protocol.rs`; `docs/desktop-shell.md` ("The shell and daemon run as the profile user... does not listen on TCP") |
-| Shell ↔ status daemon | Unix socket `$XDG_RUNTIME_DIR/bingux/metrics-v1.sock`, same framing | `bingux-statusd/README.md` |
-| Daemon ↔ external search providers | Subprocess on stdio, same newline JSON, manifests of kind `bingux.search-provider` listed in `providerManifestPaths` | `bingux-searchd/src/external.rs`, `docs/search-presentation.md` |
-| App single instance and URI hand-off | Unix socket `$XDG_RUNTIME_DIR/<app-id>.sock`; a second launch writes its address as one line and exits; the running copy opens it and raises its window | `bingux-ui/src/app.rs` (`socket_path`, `listen`, `start_forwarding`) |
-| Launching an app with a URI | Desktop entries (`Exec=bingux-settings %u`, `MimeType=x-scheme-handler/bingux-settings`) launched through GIO (`shell/bingux/launch-application.py`); searchd already spawns programs for results (`Activation::Spawn`) | `packages/bingux-settings/bingux-settings.desktop`, `bingux-searchd/src/providers.rs` |
+| Shell ↔ search daemon | Unix socket `$XDG_RUNTIME_DIR/bingux/search-v1.sock`, newline-delimited UTF-8 JSON, versioned records (`"v":1`), 64 KiB record cap, directory 0700, socket 0600, stale socket replaced; QML client `shell/bingux/SearchSocket.qml` | `services/searchd/src/server.rs`, `protocol.rs`; `docs/desktop-shell.md` ("The shell and daemon run as the profile user... does not listen on TCP") |
+| Shell ↔ status daemon | Unix socket `$XDG_RUNTIME_DIR/bingux/metrics-v1.sock`, same framing | `services/statusd/README.md` |
+| Daemon ↔ external search providers | Subprocess on stdio, same newline JSON, manifests of kind `bingux.search-provider` listed in `providerManifestPaths` | `services/searchd/src/external.rs`, `docs/search-presentation.md` |
+| App single instance and URI hand-off | Unix socket `$XDG_RUNTIME_DIR/<app-id>.sock`; a second launch writes its address as one line and exits; the running copy opens it and raises its window | `crates/ui/src/app.rs` (`socket_path`, `listen`, `start_forwarding`) |
+| Launching an app with a URI | Desktop entries (`Exec=bingux-settings %u`, `MimeType=x-scheme-handler/bingux-settings`) launched through GIO (`shell/bingux/launch-application.py`); searchd already spawns programs for results (`Activation::Spawn`) | `apps/settings/bingux-settings.desktop`, `services/searchd/src/providers.rs` |
 | Compositor test channel, notifications | D-Bus (Gnoblin test client, `org.freedesktop.Notifications`, GIO launch notifications) | `shell/bingux/shell_notify.py`, `docs/portable-testing.md` |
 | systemd | user *services* only (`bingux-searchd.service`, `bingux-statusd.service`); no `.socket` units | `packaging/systemd/` |
 
@@ -334,7 +334,7 @@ app only to answer a read-only query that a snapshot answers in microseconds,
 and Bingux has no `.socket` units to follow.
 
 The framing code is shared: the bind / permission / record-reading helpers of
-`bingux-searchd/src/server.rs` move into `bingux_search::ipc` and searchd
+`services/searchd/src/server.rs` move into `bingux_search::ipc` and searchd
 calls them, so there is one implementation.
 
 ### 8.5 Wire protocol (version 1)
@@ -447,7 +447,7 @@ that are not apps (web suggestions).
 
 ## 11. Measured
 
-`cargo run --release --example bench` in `packages/bingux-search`. Documents are
+`cargo run --release --example bench` in `crates/search`. Documents are
 2-4 word titles and 2 keywords drawn from a Zipf-distributed vocabulary
 (`n/2` pseudo words), plus a category; two searchable fields, one filterable.
 Queries are built from words of real documents. **Latency is thread CPU time**

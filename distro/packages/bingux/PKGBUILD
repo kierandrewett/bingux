@@ -43,7 +43,7 @@ package() {
     for unit in packaging/systemd/bingux*.service packaging/systemd/xdg-desktop-portal-bingux.service packaging/systemd/bingux*.path packaging/systemd/bingux.target; do
         sed -e 's|/usr/lib64|/usr/lib|g' "$unit" >"$pkgdir/usr/lib/systemd/user/$(basename "$unit")"
     done
-    install -Dm644 packages/bingux-shell/quickshell/LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE.quickshell"
+    install -Dm644 shell/runtime/quickshell/LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE.quickshell"
     install -Dpm 0644 packaging/pam/bingux-lock "$pkgdir/etc/pam.d/bingux-lock"
     install -Dpm 0644 packaging/pam/bingux-lock-fingerprint "$pkgdir/etc/pam.d/bingux-lock-fingerprint"
     install -Dpm 0644 packaging/greetd/config.toml "$pkgdir/usr/share/bingux/greeter/greetd.toml"

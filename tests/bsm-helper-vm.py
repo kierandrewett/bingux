@@ -70,7 +70,7 @@ def build():
         cargo = "cargo"
     subprocess.run(
         [cargo, "build", "--release", "--bins", "--examples"],
-        cwd=ROOT / "packages/bsm-helper",
+        cwd=ROOT / "bsm/helper",
         env=env,
         check=True,
     )

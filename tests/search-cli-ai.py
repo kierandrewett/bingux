@@ -9,7 +9,7 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-BINARY = ROOT / "packages/bingux-searchd/target/debug/bingux-searchd"
+BINARY = ROOT / "services/searchd/target/debug/bingux-searchd"
 with tempfile.TemporaryDirectory() as directory:
     base = Path(directory)
     (base / "config").mkdir()

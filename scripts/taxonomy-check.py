@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail when bingux-ui exports something the taxonomy app does not show.
 
-bingux-taxonomy (packages/bingux-taxonomy) is the one place every component,
+bingux-taxonomy (apps/taxonomy) is the one place every component,
 icon and token of bingux-ui is seen running. Its registry
 (src/registry.rs) names, per entry, the Rust items it shows in `covers`. This
 check enumerates what bingux-ui exports and fails on:
@@ -11,7 +11,7 @@ check enumerates what bingux-ui exports and fails on:
   unknown cover    a name in `covers` that bingux-ui no longer exports.
   icon variant     an `Icon` variant missing from `Icon::ALL`, from
                    `Icon::bytes()`, or no entry that shows the whole set.
-  icon file        a file in packages/bingux-ui/icons that no variant names and
+  icon file        a file in crates/ui/icons that no variant names and
                    no label row describes is still drawn (the page lists the
                    directory); this only checks the directory is non-empty.
   bad allowlist    an allowlist line with no reason, one naming nothing, or one
@@ -24,7 +24,7 @@ const`, `pub struct`, `pub enum`, `pub trait`, `pub type` or `pub static` in a
 module that is public from `lib.rs` down, plus any item of a private module
 that a `pub use` re-exports. Methods are covered by their type's entry.
 
-The allowlist is packages/bingux-taxonomy/coverage-allowlist.txt: one `name`
+The allowlist is apps/taxonomy/coverage-allowlist.txt: one `name`
 or `file:path/under/bingux-ui/src` per line, then `#` and the reason.
 
 Run it from anywhere: `python3 scripts/taxonomy-check.py`. `--list` prints
@@ -40,9 +40,9 @@ RULE_IDS = {"*": ["PR-02"]}
 RULE_MESSAGES = {"taxonomy": r"^  \S"}
 
 ROOT = Path(__file__).resolve().parents[1]
-UI = ROOT / "packages/bingux-ui"
+UI = ROOT / "crates/ui"
 SRC = UI / "src"
-TAXONOMY = ROOT / "packages/bingux-taxonomy"
+TAXONOMY = ROOT / "apps/taxonomy"
 REGISTRY = TAXONOMY / "src/registry.rs"
 ALLOWLIST = TAXONOMY / "coverage-allowlist.txt"
 DOCS = ROOT / "docs/bingux-ui.md"
@@ -190,9 +190,9 @@ def main():
             continue
         kind, file, line = remaining[0]
         failures.append(
-            f"uncovered: {kind} {name} (packages/bingux-ui/src/{file}:{line}) "
+            f"uncovered: {kind} {name} (crates/ui/src/{file}:{line}) "
             "has no taxonomy entry; add it to `covers` in "
-            "packages/bingux-taxonomy/src/registry.rs or allowlist it with a reason"
+            "apps/taxonomy/src/registry.rs or allowlist it with a reason"
         )
 
     # Covered but not exported.
@@ -231,7 +231,7 @@ def main():
             "the page that draws every icon file"
         )
     if not list((UI / "icons").glob("*-symbolic.svg")):
-        failures.append("icon file: packages/bingux-ui/icons holds no icons")
+        failures.append("icon file: crates/ui/icons holds no icons")
 
     # Doc anchors.
     anchors = doc_anchors()

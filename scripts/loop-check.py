@@ -35,7 +35,7 @@ one. The real-window check is the same idea with grim: record the bar's region
 of a running window for a few seconds and require frames that differ
 (docs/bingux-ui.md, "Progress bars and spinners").
 
-Build first: `cargo build` in packages/bingux-taxonomy, with CARGO_TARGET_DIR set
+Build first: `cargo build` in apps/taxonomy, with CARGO_TARGET_DIR set
 as usual. Needs PIL and numpy.
 """
 
@@ -290,7 +290,7 @@ def main() -> int:
     if args.fixtures or problems:
         return 1 if problems else 0
     if not args.binary.exists():
-        print(f"loop-check: {args.binary} is not built (cargo build in packages/bingux-taxonomy)", file=sys.stderr)
+        print(f"loop-check: {args.binary} is not built (cargo build in apps/taxonomy)", file=sys.stderr)
         return 2
     first_ms, second_ms = (int(part) for part in args.settle.split(","))
     scratch = None

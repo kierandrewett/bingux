@@ -16,7 +16,7 @@ ShellRoot {
     }
 
     // Keyboard layouts for the session bar; the greeter session runs its own
-    // bingux-statusd (see packaging/gnoblin/greeter.lua).
+    // bingux-statusd (see gnoblin/greeter.lua).
     Metrics {
         id: sessionMetrics
     }

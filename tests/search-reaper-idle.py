@@ -58,7 +58,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    source = (ROOT / "packages/bingux-searchd/src/main.rs").read_text()
+    source = (ROOT / "services/searchd/src/main.rs").read_text()
     start = source.index("struct ReapedChild {")
     structs = source[start : source.index("impl ProgramReaper {", start)]
     start = source.index("fn reap_launched_programs(")

@@ -111,7 +111,7 @@ Alongside the snapshot wallpaper, `bingux-session export` writes a blurred,
 dimmed copy named `wallpaper-blur` (`/var/lib/bingux/greeter/<user>/wallpaper-blur`).
 It is the path to use for the blurred backdrop. The blur is a Gaussian with a
 sigma of 32 px and the brightness is 0.65; both values are the constants
-`WALLPAPER_BLUR_RADIUS` and `WALLPAPER_DIM` in `packages/bingux-session/src/snapshot.rs`.
+`WALLPAPER_BLUR_RADIUS` and `WALLPAPER_DIM` in `services/session/src/snapshot.rs`.
 If blurring fails, the plain wallpaper is kept and any stale `wallpaper-blur`
 is removed. The packaged default wallpaper gets the same treatment at build
 time: `bingux-session blur-wallpaper` writes `default-blur.jpg` beside
