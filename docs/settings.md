@@ -152,6 +152,24 @@ If the write fails, the previous default comes back and a message says why.
 Each kind's list shows each application once, even when the system lists it under several desktop files.
 Default applications also has an Other file types section for the content types that no kind covers. They are grouped under Images, Audio, Video, Documents, Archives, Fonts, Code and Other. A row has the type's icon, its name from the shared-mime-info database (such as Bzip2 archive), its extensions (or the MIME type, when two types share a name, or when it has no extension) and a dropdown of the applications that can open it. Every dropdown is the same width and shows each application's icon. The section header has the search toggle and a Filter and sort menu, as the Installed list does: filter by category and by whether a default is set; sort by name or by application. The names are read in the background when the page loads. Rows load as the list is scrolled; there is no Show more button. The Installed list loads the same way.
 
+### Where the shell follows your defaults
+
+Choosing a default writes it with `gio mime`. This list says which parts of the
+shell read the choice. It comes from a search of the shell's QML for hardcoded
+launches on 2026-10-30, so a kind marked "none found" is not proof that no part
+of the shell starts it. Other applications reach every kind through `xdg-open`
+or `gio open`, which read the same store.
+
+| Kind | Content types | Shell behaviour |
+| ---- | ------------- | --------------- |
+| Web | `x-scheme-handler/http`, `x-scheme-handler/https`, `text/html` | `BrowserFocus.qml` reads the default with `xdg-mime` to find the browser window to raise. It does not start a browser. |
+| Calendar | `text/calendar` | The calendar popup's Open Calendar button and agenda rows start the default. Only GNOME Calendar opens a date or event; other apps start without one. GNOME Calendar is used when no default is set. |
+| Files | `inode/directory` | The Super+E shortcut runs `gio open $HOME`, so it follows this default. |
+| Mail, Text, Documents, Photos, Music, Video | `x-scheme-handler/mailto`, `text/plain`, `application/pdf`, image, audio and video types | No launcher found in the shell's QML. Not audited beyond that search. |
+
+Settings is not a kind. The shell starts `bingux-settings` directly
+(`BINGUX_SETTINGS_BIN` overrides the program).
+
 ### Start at login
 
 An application's page has a Startup group with one switch, Start at login. It
