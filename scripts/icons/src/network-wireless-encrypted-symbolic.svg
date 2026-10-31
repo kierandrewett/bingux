@@ -1,3 +1,6 @@
 <svg viewBox="0 0 16 16">
-  <fork name="LockKey" weight="fill" mode="exact"/>
+  <path d="M5 8V5A3 3 0 0 1 11 5V8" stroke="black" stroke-width="2"/>
+  <rect x="2" y="7" width="12" height="8" rx="2" fill="black"/>
+  <circle cx="8" cy="10.5" r="1.5" fill="black" data-op="cut"/>
+  <rect x="7" y="11" width="2" height="2" fill="black" data-op="cut"/>
 </svg>

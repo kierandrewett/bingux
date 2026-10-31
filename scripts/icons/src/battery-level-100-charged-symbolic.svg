@@ -1,3 +1,5 @@
 <svg viewBox="0 0 16 16">
-  <fork name="BatteryFull" weight="bold" mode="exact"/>
+  <rect x="0" y="4" width="14" height="8" rx="2" fill="black"/>
+  <rect x="13" y="6" width="3" height="4" rx="1" fill="black"/>
+  <polyline points="4.75,8 6.5,9.75 9.75,6.25" stroke="black" stroke-width="2" data-op="cut"/>
 </svg>
