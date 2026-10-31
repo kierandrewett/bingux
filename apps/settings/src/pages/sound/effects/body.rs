@@ -42,8 +42,8 @@ impl Component for EffectsBody {
         )
         .tabs();
 
-        let bar = hstack(S3)
-            .tw_layout(&[w_full(), flex_row(), items(Align::Center), px(S4), py(S3)])
+        let bar = rect()
+            .tw(&tokens, &[w_full(), flex_row(), items(Align::Center), gap(S3), px(S4), py(S3)])
             .child(
                 hstack(S2)
                     .tw_layout(&[items(Align::Center)])

@@ -16,7 +16,7 @@ use crate::style::*;
 use crate::surface::use_tokens;
 
 /// The width of the master list on a wide window.
-pub const MASTER_WIDTH: f32 = 300.0;
+pub const MASTER_WIDTH: f32 = 380.0;
 
 #[derive(PartialEq)]
 pub struct MasterDetail {

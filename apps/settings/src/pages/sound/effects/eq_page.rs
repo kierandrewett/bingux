@@ -8,7 +8,7 @@
 use bingux_audio_effects::catalog::{Control, PluginInfo};
 use bingux_audio_effects::eq::{self, BANDS, BandKind, Side, Symbols};
 use bingux_audio_effects::{PluginSlot, Unit};
-use bingux_ui::prelude::{dropdown, fader, scroll_x, segmented};
+use bingux_ui::prelude::{dropdown, fader, segmented};
 use bingux_ui::style::*;
 use freya::prelude::*;
 
@@ -58,7 +58,7 @@ impl Component for EqPage {
         let selected = (*chosen.read()).min(bands - 1);
         let id = slot.id.clone();
 
-        let mut mode_row = Group::titled("Equalizer");
+        let mut mode_row = Group::titled("Mode");
         if let Some(control) = info.control("mode") {
             mode_row = mode_row.row(control_row(fx, &slot.id, control, value("mode")));
         }
@@ -74,7 +74,7 @@ impl Component for EqPage {
             mode_row = mode_row.row(row("Channel").trailing(tabs));
         }
 
-        let mut strips = rect().tw(&tokens, &[flex_row(), gap(S2), py(S2)]);
+        let mut strips = rect().tw(&tokens, &[flex_row(), w_full(), gap(S1), py(S2)]);
         for index in 0..bands {
             let symbols = Symbols::of(index, lead, mid_side);
             let active = value(&symbols.kind) != 0.0;
@@ -199,7 +199,7 @@ impl Component for EqPage {
                             &tokens,
                             &[flex_col(), w_full(), gap(S3), px(GUTTER), py(S3)],
                         )
-                        .child(scroll_x().child(strips))
+                        .child(strips)
                         .child(actions),
                 ),
             )
