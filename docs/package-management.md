@@ -19,6 +19,118 @@ All six have the same version. Settings, Files and Taxonomy each have a desktop
 entry, an icon in the `hicolor` theme and AppStream metadata, so they show up in
 the application list, in search and in software centres.
 
+## Package repositories
+
+Signed repositories for Fedora 43, Debian 13 and Arch Linux carry every Bingux
+package. Add one and your package manager installs and updates Bingux. Each
+repository has two channels. Add the one you want:
+
+| Channel   | What it carries                                 | Repository name   |
+| --------- | ----------------------------------------------- | ----------------- |
+| `stable`  | Released versions, such as 0.2.0                | `bingux-stable`   |
+| `nightly` | The newest build of the main branch, once a day | `bingux-nightly`  |
+
+A nightly build is numbered between two releases:
+`0.1.1~nightly.20261031.5.gabc1234` is newer than release 0.1.0 and older than
+release 0.1.1. Installing a release replaces the nightly build of the same
+version.
+
+The packages and the repository metadata are signed with one key, published at
+`https://repo.gnoblin.org/gpg.key`. Its fingerprint is:
+
+```text
+REPLACE-WITH-KEY-FINGERPRINT
+```
+
+Compare the fingerprint your package manager shows with this one before you
+accept the key.
+
+### Fedora
+
+```sh
+sudo curl -fsSL -o /etc/yum.repos.d/bingux-stable.repo \
+  https://repo.gnoblin.org/bingux/stable/fedora/bingux-stable.repo
+sudo dnf install bingux
+```
+
+For the nightly channel, use `nightly` in both places of the first command.
+`dnf` shows the key and asks you to accept it the first time it reads the
+repository. The repository file turns on `gpgcheck` (package signatures) and
+`repo_gpgcheck` (metadata signatures). The packages are built for Fedora 43.
+
+### Debian 13
+
+```sh
+sudo install -d -m 0755 /etc/apt/keyrings
+sudo curl -fsSL -o /etc/apt/keyrings/bingux.asc https://repo.gnoblin.org/gpg.key
+sudo curl -fsSL -o /etc/apt/sources.list.d/bingux.sources \
+  https://repo.gnoblin.org/bingux/stable/deb/bingux-stable-trixie.sources
+sudo apt update
+sudo apt install bingux
+```
+
+For the nightly channel, use `nightly` in both URLs. The sources file restricts
+the repository to the key you downloaded. Ubuntu has no packages: the Rust
+toolchain of Ubuntu 24.04 is older than the 1.88 that the apps need.
+
+### Arch Linux
+
+```sh
+curl -fsSL -o bingux.key https://repo.gnoblin.org/gpg.key
+sudo pacman-key --add bingux.key
+sudo pacman-key --lsign-key REPLACE-WITH-KEY-FINGERPRINT
+printf '\n' | sudo tee -a /etc/pacman.conf > /dev/null
+curl -fsSL https://repo.gnoblin.org/bingux/stable/arch/bingux.conf | sudo tee -a /etc/pacman.conf
+sudo pacman -Syu bingux
+```
+
+The `bingux.conf` file holds this section, which requires a valid signature on
+every package and on the database:
+
+```ini
+[bingux]
+SigLevel = Required DatabaseRequired
+Server = https://repo.gnoblin.org/bingux/stable/arch/$arch
+```
+
+For the nightly channel, download `arch/bingux-nightly.conf` from the nightly
+directory. Its section is named `[bingux-nightly]` because pacman names the
+database file after the section. This repository is separate from the
+`[bingux-os]` repository below, which belongs to the Bingux OS image.
+
+### Both channels
+
+- `dnf` and `apt` use the newest version of any enabled repository, so with both
+  channels enabled you follow the nightly build.
+- `pacman` uses the first repository in `/etc/pacman.conf` that has the package,
+  not the newest. List `[bingux-nightly]` above `[bingux]` to follow the nightly
+  build, or below it to stay on releases.
+
+To go back to the release, remove the nightly repository and downgrade:
+
+```sh
+sudo rm /etc/yum.repos.d/bingux-nightly.repo
+sudo dnf --refresh distro-sync bingux
+```
+
+On Debian, delete the nightly sources file, run `sudo apt update`, then
+`sudo apt install --allow-downgrades bingux=VERSION` with the release version.
+On Arch, delete the `[bingux-nightly]` section, run `sudo pacman -Sy`, then
+`sudo pacman -S bingux`.
+
+### Remove a repository
+
+Remove the repository, then the key. Removing a repository does not remove
+Bingux; see [Remove the packages](#remove-the-packages).
+
+- Fedora: delete `/etc/yum.repos.d/bingux-*.repo`. List the imported keys with
+  `rpm -qa 'gpg-pubkey*' --queryformat '%{NAME}  %{SUMMARY}\n'` and remove the
+  one whose fingerprint matches with `sudo rpm -e NAME`.
+- Debian: delete `/etc/apt/sources.list.d/bingux.sources` and
+  `/etc/apt/keyrings/bingux.asc`, then run `sudo apt update`.
+- Arch: delete the `[bingux]` and `[bingux-nightly]` sections, then run
+  `sudo pacman-key --delete REPLACE-WITH-KEY-FINGERPRINT`.
+
 ## Fedora
 
 The supported repository target is the [Bingux COPR](https://copr.fedorainfracloud.org/coprs/kierandrewett/bingux/).

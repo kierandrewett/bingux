@@ -48,7 +48,12 @@ g.load("~/.config/gnoblin/conf.d/*.lua")
 The managed installer prints its exact package drop-in directory. Bingux user
 settings remain under `$XDG_CONFIG_HOME/bingux`.
 
-A Fedora package is being prepared in the [Bingux COPR](https://copr.fedorainfracloud.org/coprs/kierandrewett/bingux/).
+Signed package repositories for Fedora, Debian 13 and Arch, each with a `stable`
+and a `nightly` channel, are described in
+[package management](docs/package-management.md#package-repositories).
+
+A Fedora package is being prepared in the
+[Bingux COPR](https://copr.fedorainfracloud.org/coprs/kierandrewett/bingux/).
 The repository does not publish a ready package until a clean Fedora build and
 a fresh install test pass. The shell, Settings, Files, the sound effects engine
 and the configuration command are separate packages for Fedora
