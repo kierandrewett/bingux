@@ -1286,14 +1286,18 @@ pub fn slider_row(
     level_row(title, value, on_moved)
 }
 
-/// The share of a level row's width the title takes on a desktop. Sliders in
-/// one box then start at the same x, when they share the same control slot.
-const TITLE_SHARE: f32 = 34.0;
+/// The share of a level row's width the track and its readout take on a desktop; the title has the
+/// rest. The track's share is fixed, not the title's, so the sliders of one box start at one x
+/// whatever their titles and values are, and a title is cut only when the rest of the row is too
+/// narrow for it (it had 34 % of the row before, and "Delay before repeat" was cut in a column that
+/// held it twice over).
+const TRACK_SHARE: f32 = 55.0;
 
 /// A level row: a title, an optional control such as a mute button, and a
 /// slider that fills the rest of the line. A value, if set, sits at the far
-/// right. On a phone the title takes the first line and the slider the
-/// second, under it.
+/// right of the slider's line, in a slot `Dim::SliderValue` wide that
+/// holds its width whatever digits it shows. On a phone the title takes the
+/// first line and the slider the second, under it.
 #[derive(PartialEq)]
 pub struct LevelRow {
     title: String,
@@ -1453,9 +1457,11 @@ impl Component for LevelRow {
             .tw(&tokens, &[flex_col(), gap(S0_5), w_flex()])
             .child(title)
             .maybe_child(subtitle);
+        // The readout is beside the track, never under it. Its slot is `Dim::SliderValue` wide
+        // whatever it shows, so a value that gains a digit changes no other box of the row.
         let readout: Option<Element> = self.value_text.as_ref().map(|text| -> Element {
             rect()
-                .tw(&tokens, &[flex_row(), justify(Align::End), w_full()])
+                .tw(&tokens, &[flex_row(), justify(Align::End), w(Dim::SliderValue)])
                 // Tabular figures: a level that changes keeps its width.
                 .child(
                     crate::typography::TextStyle {
@@ -1505,18 +1511,24 @@ impl Component for LevelRow {
             }
             _ => None,
         };
-        let track_block = rect()
-            .tw(&tokens, &[flex_col(), w_flex(), gap(S1)])
+        let track_line = rect()
+            .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2), w_full()])
             .child(
                 rect()
-                    .width(Size::fill())
+                    .tw(&tokens, &[w_flex()])
                     .on_sized(move |event: Event<SizedEventData>| {
                         track_width.set_if_modified(event.area.width());
                     })
                     .child(track),
             )
+            .maybe_child(readout);
+        let track_block = rect()
+            .tw(&tokens, &[flex_col(), gap(S1)])
+            // A phone's track fills its line; a desktop's takes its share of the row.
+            .maybe(compact, |block| block.tw(&tokens, &[w_flex()]))
+            .maybe(!compact, |block| block.width(Size::percent(TRACK_SHARE)))
+            .child(track_line)
             .maybe_child(boost_label)
-            .maybe_child(readout)
             .maybe_child(self.footer.clone());
 
         let outer = rect()
@@ -1553,7 +1565,7 @@ impl Component for LevelRow {
                     &tokens,
                     &[flex_row(), items(Align::Center), gap(S4), h(Dim::Control)],
                 )
-                .width(Size::percent(TITLE_SHARE))
+                .tw(&tokens, &[w_flex()])
                 .maybe_child(self.leading.clone())
                 .child(title_block);
             let control: Option<Element> = self.control.clone().map(|control| -> Element {

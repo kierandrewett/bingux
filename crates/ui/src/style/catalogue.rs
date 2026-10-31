@@ -69,6 +69,7 @@ const DIMS: &[(&str, Dim)] = &[
     ("PickerWidth", Dim::PickerWidth),
     ("SliderTrackLarge", Dim::SliderTrackLarge),
     ("SliderThumbLarge", Dim::SliderThumbLarge),
+    ("SliderValue", Dim::SliderValue),
     ("SwitchThumb", Dim::SwitchThumb),
     ("SwitchThumbPressed", Dim::SwitchThumbPressed),
     ("SliderThumb", Dim::SliderThumb),
