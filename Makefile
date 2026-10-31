@@ -28,7 +28,7 @@ OUTPUT ?= dist/bingux-$(VERSION).tar.xz
 SHELL := /bin/bash
 ROOT := $(abspath .)
 
-.PHONY: all native shell shell-archive daemons apps icons icons-check doctor doctor-build check check-session layout-check overflow-check copy-check pixel-check stability-check motion-check state-check rules-check install install-user uninstall-user install-apps uninstall-apps rpm-package rpm-check arch-package licenses source-archive
+.PHONY: test-desktop test-desktop-fast all native shell shell-archive daemons apps icons icons-check doctor doctor-build check check-session layout-check overflow-check copy-check pixel-check stability-check motion-check state-check rules-check install install-user uninstall-user install-apps uninstall-apps rpm-package rpm-check arch-package licenses source-archive
 all: native shell daemons
 
 native: $(BUILD_DIR)/bingux-image-clipboard $(BUILD_DIR)/bingux-frame
@@ -265,6 +265,16 @@ uninstall-apps:
 
 source-archive:
 	bash scripts/make-source-archive.sh '$(VERSION)' '$(OUTPUT)'
+
+# The desktop tests (docs/desktop-testing.md): the isolated Gnoblin + Bingux desktop,
+# the headless app probes and the harness's own tests. ARGS are pytest arguments, for
+# example ARGS='-m fast' or ARGS='session/test_dock.py -k close'.
+test-desktop:
+	cd tests/desktop && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest $(ARGS)
+
+# The part that needs no compositor and no built program.
+test-desktop-fast:
+	cd tests/desktop && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -m fast $(ARGS)
 
 .PHONY: lint format
 # ARGS="--files path ..." limits the check or format operation.
