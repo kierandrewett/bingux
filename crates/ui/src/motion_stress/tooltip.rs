@@ -33,7 +33,7 @@ impl Component for Scene {
                 .expanded()
                 .tw(&tokens, &[bg(Paint::Bg), p(S8), flex_row(), gap(S8)])
                 .child(icon_button(Icon::Refresh, |_| {}).tooltip(TIPS[0]))
-                .child(icon_button(Icon::GoUp, |_| {}).tooltip(TIPS[1]))
+                .child(icon_button(Icon::PanUp, |_| {}).tooltip(TIPS[1]))
                 .child(icon_button(Icon::FolderNew, |_| {}).tooltip(TIPS[2])),
         )
     }
