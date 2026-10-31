@@ -54,6 +54,7 @@ impl Component for Tall {
             rect()
                 .component(self.class)
                 .width(Size::fill())
+                // ui-lint: allow(an 8 px marker the test looks up by class name, not styling)
                 .height(Size::px(8.0)),
         );
         for group in 0..12 {
