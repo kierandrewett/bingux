@@ -196,6 +196,7 @@ check: doctor-build native daemons
 	BINGUX_CONFIG_BIN=$(CARGO_TARGET)/release/bingux-config python3 tests/bingux-config.test.py
 	$(CARGO) test --locked --manifest-path services/helper/Cargo.toml --target-dir $(CARGO_TARGET)
 	python3 tests/app-env.test.py
+	python3 tests/frame-walk.test.py
 	python3 tests/rules-check.test.py
 	$(CARGO) test --locked --manifest-path services/searchd/Cargo.toml --lib
 	$(CARGO) test --locked --manifest-path crates/files/Cargo.toml

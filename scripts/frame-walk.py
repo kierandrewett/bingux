@@ -55,6 +55,8 @@ IDLE_MS = 300  # a frame is idle this long after the last input or navigation
 EDGE_DELTA = 25  # luminance step between neighbours that makes an edge pixel
 INK_DELTA = 40  # luminance distance from the page background that makes ink
 MIN_RUN = 30  # shortest horizontal or vertical rule, in px
+SCROLLBAR_WIDTH = 8  # px; a text band at least this tall and no wider is a scrollbar thumb (4 to 5 px wide)
+SCROLLBAR_HEIGHT = 24  # px
 MAX_MOVE = 160  # largest displacement matched between two frames, in px
 PAD = 24  # padding around a crop, in px
 MAX_GROUPS_IN_REPORT = 25  # per page; the rest are counted in shifts.json
@@ -178,6 +180,27 @@ def axes(feats: np.ndarray):
     return kind, coord, lo, hi
 
 
+TRACK_EDGES = (4, 8)  # px between the two edges of a slider track
+
+
+def track_edge(rule: tuple, rules: list[tuple]) -> bool:
+    """Whether a horizontal rule is an edge of a slider's track: another rule runs under or over it, a few px away.
+
+    A track is a bar 4 to 8 px high, drawn as two long rules. It is a control, not a row separator or a
+    card border, and when a page fades in its edges cross the detector's threshold as the separators do:
+    a track edge of one frame was paired with a separator of the next and reported as a 57 px move on
+    Mouse and Desktop at 390x800, where the crops show nothing moving.
+    """
+    if rule[0] != H:
+        return False
+    return any(
+        other[0] == H
+        and TRACK_EDGES[0] <= abs(other[1] - rule[1]) <= TRACK_EDGES[1]
+        and min(other[4], rule[4]) - max(other[2], rule[2]) > 0.5 * (rule[4] - rule[2])
+        for other in rules
+    )
+
+
 def diff_features(before: np.ndarray, after: np.ndarray) -> list[dict]:
     """Edges that moved or changed extent between two frames.
 
@@ -188,8 +211,8 @@ def diff_features(before: np.ndarray, after: np.ndarray) -> list[dict]:
     before_list = [tuple(row) for row in before.tolist()]
     after_list = [tuple(row) for row in after.tolist()]
     after_set, before_set = set(after_list), set(before_list)
-    a_rest = [row for row in before_list if row not in after_set]
-    b_rest = [row for row in after_list if row not in before_set]
+    a_rest = [row for row in before_list if row not in after_set and not track_edge(row, before_list)]
+    b_rest = [row for row in after_list if row not in before_set and not track_edge(row, after_list)]
     if not a_rest or not b_rest:
         return []
     a = np.array(a_rest, dtype=np.int64)
@@ -256,18 +279,17 @@ def relocated(before: np.ndarray, after: np.ndarray) -> list[dict]:
             for row in feats.tolist()
             if row[0] == H and row[4] - row[2] >= MIN_RELOCATED_RULE
         ]
-        # A slider track is two edges a few px apart; it is not a row separator or a card border, and its
-        # edges cross the detector's threshold as a page fades in.
-        return [
-            rule
-            for rule in rules
+        # A slider track is not a row separator or a card border (see `track_edge`).
+        rules = [rule for rule in rules if not track_edge(rule, rules)]
+        # A one pixel line is two edges to the detector, one on each side of it: one line.
+        lines: list[tuple[int, ...]] = []
+        for rule in sorted(rules, key=lambda rule: (rule[2], rule[1])):
             if not any(
-                other is not rule
-                and 0 < abs(other[1] - rule[1]) <= 8
-                and min(other[4], rule[4]) - max(other[2], rule[2]) > 0
-                for other in rules
-            )
-        ]
+                abs(kept[1] - rule[1]) <= 2 and abs(kept[2] - rule[2]) <= 2 and abs(kept[4] - rule[4]) <= 2
+                for kept in lines
+            ):
+                lines.append(rule)
+        return lines
 
     old, new = long_rules(before), long_rules(after)
     old_set, new_set = set(old), set(new)
@@ -323,19 +345,42 @@ def relocated(before: np.ndarray, after: np.ndarray) -> list[dict]:
     return pairs
 
 
+PLACEHOLDER_SHARE = 0.2  # of the pixels under a band that are not the page's background
+
+
+def placeholder_under(gray: np.ndarray, band: tuple[int, int, int, int, int], background: int) -> bool:
+    """Whether a band landed on a placeholder: its place was a card or a skeleton bar, not bare page.
+
+    A row that is drawn from the first frame as a card with grey bars, and gets its text when its data
+    lands, changes a value: no row appeared. Text that lands on the bare page background, where nothing
+    was drawn, is a row that arrived. The place counts as drawn when at least PLACEHOLDER_SHARE of the
+    pixels under the band differ from the page background by 2 or more levels (a card is a shade off
+    the page, a bar a few more).
+    """
+    _, y0, x0, y1, x1 = band
+    region = gray[max(y0 - 2, 0) : y1 + 2, x0:x1].astype(np.int16)
+    if region.size == 0:
+        return False
+    return float((np.abs(region - background) >= 2).mean()) >= PLACEHOLDER_SHARE
+
+
 def appeared(before: np.ndarray, after: np.ndarray) -> list[tuple[int, int, int, int, int]]:
     """Text bands of `after` with no text band of `before` at the same place: content that was not there.
 
     `diff_features` pairs edges that moved or resized and drops the rest, so a group of rows that is added
     below the ones already drawn (a list whose data landed after its first frame) moves nothing and is
     never reported. This is that gap: a band counts as new when no band of `before` starts within
-    MAX_MOVE px of it vertically and overlaps it horizontally.
+    MAX_MOVE px of it vertically and overlaps it horizontally. A scrollbar thumb (a band no wider than
+    SCROLLBAR_WIDTH and at least SCROLLBAR_HEIGHT tall) is not content: it is ink only once the page's
+    extent is known, and it grows and shrinks as the page does.
     """
     new_bands = [tuple(int(v) for v in row) for row in after.tolist() if row[0] == T]
     old_bands = [tuple(int(v) for v in row) for row in before.tolist() if row[0] == T]
     found = []
     for band in new_bands:
-        _, y0, x0, _, x1 = band
+        _, y0, x0, y1, x1 = band
+        if x1 - x0 <= SCROLLBAR_WIDTH and y1 - y0 >= SCROLLBAR_HEIGHT:
+            continue  # a scrollbar thumb: ink only once it is drawn, not content
         if not any(abs(y0 - o[1]) <= MAX_MOVE and min(x1, o[4]) - max(x0, o[2]) > 0 for o in old_bands):
             found.append(band)
     return found
@@ -458,7 +503,13 @@ def analyse(panel: str, frames: Path, shifts: Path) -> dict:
             "rgb": rgb,
             "gray": gray,
             "feats": features(gray, background),
+            "background": background,
         }
+        # The widest horizontal rule of the frame: the page's column, which a card border spans.
+        current["column"] = max(
+            (int(row[4] - row[2]) for row in current["feats"].tolist() if row[0] == H),
+            default=0,
+        )
         # Compare only when the pair is idle: the newest input or navigation
         # is at or before the previous frame (nothing happened between them),
         # and the current frame is IDLE_MS past it.
@@ -468,7 +519,11 @@ def analyse(panel: str, frames: Path, shifts: Path) -> dict:
             pairs = diff_features(prev["feats"], current["feats"])
             if phase == "load":
                 pairs += relocated(prev["feats"], current["feats"])
-                new_bands = appeared(prev["feats"], current["feats"])
+                new_bands = [
+                    band
+                    for band in appeared(prev["feats"], current["feats"])
+                    if not placeholder_under(prev["gray"], band, prev["background"])
+                ]
                 if new_bands:
                     popins.append(
                         {
@@ -516,6 +571,7 @@ def record(groups, panel, frames, shifts, before, after, pairs) -> None:
         )
         last["pairs"] = last["pairs"] + pairs
         last["max_dc"] = max(last["max_dc"], biggest)
+        last["column"] = max(last["column"], before["column"], after["column"])
         return
     first_full = f"{panel}-f{before['index']:06d}-before.png"
     last_full = f"{panel}-f{after['index']:06d}-after.png"
@@ -533,6 +589,7 @@ def record(groups, panel, frames, shifts, before, after, pairs) -> None:
             "since_to": after["since"],
             "count": 1,
             "max_dc": biggest,
+            "column": max(before["column"], after["column"]),
             "crop_first": crop_name,
             "crop_last": crop_name,
             "crop_worst": crop_name,
