@@ -16,6 +16,10 @@
       Every icon of the chat fork (regular, bold and fill), fitted by build.py's rules, named.
   review.py candidates NAME:weight ... [--out FILE]
       Fork glyphs side by side, for choosing one.
+  review.py page [--out FILE] [--icons DIR]
+      One self-contained HTML page with every icon: its pixels at 16 px (dark and light, at real size
+      and magnified), 18 px and 48 px, where it is used and its metaphor, and a verdict and note field
+      per icon. Feedback is kept in the browser and exported as text or JSON.
 
 Pixels come from raster.py, the exact-area rasteriser `build.py --check` uses (no
 gamma, no hinting), magnified with nearest-neighbour so each square is one device pixel.
@@ -51,7 +55,9 @@ PAGE = (255, 255, 255)
 
 def font(size: int, mono: bool = False) -> ImageFont.ImageFont:
     for candidate in (
-        "/usr/share/fonts/google-noto-vf/NotoSansMono[wght].ttf" if mono else "/usr/share/fonts/google-noto-vf/NotoSans[wght].ttf",
+        "/usr/share/fonts/google-noto-vf/NotoSansMono[wght].ttf"
+        if mono
+        else "/usr/share/fonts/google-noto-vf/NotoSans[wght].ttf",
         "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf",
     ):
         if Path(candidate).exists():
@@ -156,14 +162,41 @@ def sheets(out: Path, icons: Path) -> None:
         for stem in files:
             seen.add(stem)
             rows.append(stem)
-        render_group(out / f"group-{group}.png", group, rows, labels, names, icons, name_font, small_font, mono_font)
+        render_group(
+            out / f"group-{group}.png",
+            group,
+            rows,
+            labels,
+            names,
+            icons,
+            name_font,
+            small_font,
+            mono_font,
+        )
     rest = sorted(set(labels.rows) - seen)
     if rest:
-        render_group(out / "group-other.png", "other", rest, labels, names, icons, name_font, small_font, mono_font)
+        render_group(
+            out / "group-other.png",
+            "other",
+            rest,
+            labels,
+            names,
+            icons,
+            name_font,
+            small_font,
+            mono_font,
+        )
     for stem, row in sorted(labels.rows.items()):
         plain.append(
             " | ".join(
-                [stem, f"Icon::{names[stem]}" if stem in names else "(shell/QML only)", labels.policy.get(stem, "?"), glyph_text(row), row.where, row.metaphor]
+                [
+                    stem,
+                    f"Icon::{names[stem]}" if stem in names else "(shell/QML only)",
+                    labels.policy.get(stem, "?"),
+                    glyph_text(row),
+                    row.where,
+                    row.metaphor,
+                ]
             )
         )
     (out / "icons.txt").write_text("\n".join(plain) + "\n")
@@ -197,16 +230,30 @@ def render_group(path, group, stems, labels, names, icons, name_font, small_font
             continue
         polys = polys_of_file(file)
         x = col_name + 6
-        for size, zoom, scheme in ((16, zoom16, DARK), (16, zoom16, LIGHT), (18, zoom18, LIGHT)):
+        for size, zoom, scheme in (
+            (16, zoom16, DARK),
+            (16, zoom16, LIGHT),
+            (18, zoom18, LIGHT),
+        ):
             tile = cell(polys, size, zoom, scheme)
             image.paste(tile, (x, top + (row_h - tile.height) // 2))
             x += tile.width + 12
         tile = cell(polys, 48, zoom48, LIGHT)
         image.paste(tile, (x, top + (row_h - tile.height) // 2))
         variant = names.get(stem)
-        draw.text((12, top + 8), f"Icon::{variant}" if variant else "(shell / QML only)", fill=TEXT if variant else MUTED, font=name_font)
+        draw.text(
+            (12, top + 8),
+            f"Icon::{variant}" if variant else "(shell / QML only)",
+            fill=TEXT if variant else MUTED,
+            font=name_font,
+        )
         draw.text((12, top + 30), stem, fill=MUTED, font=mono_font)
-        draw.text((12, top + 52), f"category {labels.policy.get(stem, '?')}", fill=MUTED, font=small_font)
+        draw.text(
+            (12, top + 52),
+            f"category {labels.policy.get(stem, '?')}",
+            fill=MUTED,
+            font=small_font,
+        )
         if row is not None:
             draw.text((12, top + 72), glyph_text(row)[:48], fill=TEXT, font=small_font)
             tx = col_name + col_img + 12
@@ -233,7 +280,12 @@ def compare(before: Path, after: Path, group: str, out: Path) -> None:
     image = Image.new("RGB", (width, 30 + len(blocks) * (2 * row_h + 18 * 6 // 2 + 8)), PAGE)
     draw = ImageDraw.Draw(image)
     small = font(12)
-    draw.text((8, 6), f"{group}: before / after at 16 px (x{zoom}), dark then light; below each 18 px light", fill=TEXT, font=font(16))
+    draw.text(
+        (8, 6),
+        f"{group}: before / after at 16 px (x{zoom}), dark then light; below each 18 px light",
+        fill=TEXT,
+        font=font(16),
+    )
     y = 30
     for label, directory in blocks:
         draw.text((8, y + 40), label, fill=TEXT, font=font(18))
@@ -247,7 +299,12 @@ def compare(before: Path, after: Path, group: str, out: Path) -> None:
             image.paste(cell(polys, 16, zoom, LIGHT), (x, y + 16 * zoom + 4))
             image.paste(cell(polys, 18, 3, LIGHT), (x, y + 2 * (16 * zoom + 4)))
             if label == "after":
-                draw.text((x, y + 2 * (16 * zoom + 4) + 56), stem.split("-")[-1][:12], fill=MUTED, font=small)
+                draw.text(
+                    (x, y + 2 * (16 * zoom + 4) + 56),
+                    stem.split("-")[-1][:12],
+                    fill=MUTED,
+                    font=small,
+                )
         y += 2 * row_h + 18 * 6 // 2 + 8
     image.save(out)
     print(f"review: wrote {out}")
@@ -257,7 +314,11 @@ def fitted_polys(name: str, weight: str):
     """The glyph as build.py places it: the scale that satisfies the size rule (one factor on both axes) and the half pixel shift."""
     base = {"name": name, "weight": weight}
     try:
-        fit = build.suggest_fit(f"zz-{name}", SimpleNamespace(fork=name, weight=weight, attrs={}), labelsmod.Labels())
+        fit = build.suggest_fit(
+            f"zz-{name}",
+            SimpleNamespace(fork=name, weight=weight, attrs={}),
+            labelsmod.Labels(),
+        )
     except build.BuildError:
         fit = {}
     return build.polygons(build.fork_outline({**base, **fit}, name).path)
@@ -299,7 +360,12 @@ def catalogue(out: Path) -> None:
         rows = (len(chunk) + cols - 1) // cols
         image = Image.new("RGB", (cols * cell_w + 12, rows * cell_h + 28), PAGE)
         draw = ImageDraw.Draw(image)
-        draw.text((8, 6), f"chat fork icons {chunk[0]} to {chunk[-1]} (regular, bold, fill; 16 px x{zoom}, fitted by build.py)", fill=TEXT, font=font(13))
+        draw.text(
+            (8, 6),
+            f"chat fork icons {chunk[0]} to {chunk[-1]} (regular, bold, fill; 16 px x{zoom}, fitted by build.py)",
+            fill=TEXT,
+            font=font(13),
+        )
         for index, name in enumerate(chunk):
             x, y = 8 + (index % cols) * cell_w, 28 + (index // cols) * cell_h
             for k, weight in enumerate(("regular", "bold", "fill")):
@@ -309,8 +375,192 @@ def catalogue(out: Path) -> None:
                 image.paste(cell(polys, 16, zoom, LIGHT), (x + k * (16 * zoom + 4), y))
             draw.text((x, y + 16 * zoom + 4), name, fill=TEXT, font=fnt)
         image.save(out / f"catalogue-{page + 1:02d}.png")
-    (out / "catalogue.txt").write_text("\n".join(f"{name}\t{' '.join(w for w in ('regular', 'bold', 'fill') if w in geometry[name])}" for name in names) + "\n")
+    (out / "catalogue.txt").write_text(
+        "\n".join(
+            f"{name}\t{' '.join(w for w in ('regular', 'bold', 'fill') if w in geometry[name])}" for name in names
+        )
+        + "\n"
+    )
     print(f"review: wrote {len(names)} icons on {page + 1} pages to {out}")
+
+
+PAGE_TEMPLATE = r"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Bingux icon review</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--ink:#1d1d1f;--muted:#6b6b72;--line:#dcdde1;--accent:#2f6fed}
+*{box-sizing:border-box}body{margin:0;font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--line);padding:10px 20px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+header h1{font-size:16px;margin:0}header .count{color:var(--muted)}
+header button,header select{font:inherit;padding:5px 10px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer}
+header button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+nav{padding:8px 20px;display:flex;gap:8px;flex-wrap:wrap;background:#fff;border-bottom:1px solid var(--line)}
+nav a{color:var(--accent);text-decoration:none;padding:2px 8px;border:1px solid var(--line);border-radius:12px;font-size:13px}
+main{max-width:1180px;margin:0 auto;padding:16px 20px 80px}
+h2{margin:28px 0 8px;font-size:18px}
+.card{display:grid;grid-template-columns:360px minmax(0,1fr);gap:16px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:8px 0}
+.card.focus{outline:2px solid var(--accent)}
+.card.done{border-left:5px solid #2e9e5b}.card.flag{border-left:5px solid #d9822b}
+.tiles{display:flex;gap:10px;align-items:flex-end;flex-wrap:nowrap}
+.tile{text-align:center;font-size:11px;color:var(--muted);flex:none}
+.tile img{display:block;image-rendering:pixelated;margin:0 auto 3px;border:1px solid var(--line)}
+.real{display:flex;gap:6px;margin-top:8px;align-items:center;font-size:11px;color:var(--muted)}
+.real span{display:inline-flex;padding:8px;border-radius:6px}
+.real .d{background:#121214}.real .l{background:#fafafa;border:1px solid var(--line)}
+.real img{image-rendering:pixelated}
+.meta h3{margin:0;font-size:15px}.meta code{color:var(--muted);font-size:12px}
+.meta p{margin:4px 0}.k{color:var(--muted)}
+.verdicts{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.verdicts label{border:1px solid var(--line);border-radius:14px;padding:3px 10px;cursor:pointer;user-select:none}
+.verdicts input{display:none}
+.verdicts input:checked+span{font-weight:600}
+.verdicts label:has(input:checked){background:var(--accent);border-color:var(--accent);color:#fff}
+.verdicts label.v-good:has(input:checked){background:#2e9e5b;border-color:#2e9e5b}
+.verdicts label.v-remove:has(input:checked){background:#b3402f;border-color:#b3402f}
+textarea{width:100%;min-height:44px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:6px;resize:vertical}
+.hidden{display:none}.help{color:var(--muted);font-size:12px}
+</style></head><body>
+<header><h1>Bingux icon review</h1><span class="count" id="count"></span>
+<select id="filter"><option value="all">All icons</option><option value="todo">Not reviewed</option><option value="flag">Flagged (not Good)</option></select>
+<button id="copy" class="primary">Copy feedback as text</button><button id="json">Download JSON</button><button id="clear">Clear all</button>
+<span class="help">Keys: J / K move, 1 Good, 2 Tweak, 3 Redraw, 4 Wrong metaphor, 5 Remove, N edit note, Esc leave note</span></header>
+<nav id="nav"></nav><main id="main"></main>
+<script>
+const ITEMS = __ITEMS__;
+const VERDICTS = [["good","Good"],["tweak","Tweak"],["redraw","Redraw"],["metaphor","Wrong metaphor"],["remove","Remove"]];
+const KEY = "bingux-icon-review-v1";
+let store = {};
+try { store = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) {}
+const save = () => { localStorage.setItem(KEY, JSON.stringify(store)); update(); };
+const main = document.getElementById("main"), nav = document.getElementById("nav");
+const cards = [];
+let current = -1, lastGroup = null;
+const png = (s) => "data:image/png;base64," + s;
+for (const it of ITEMS) {
+  if (it.group !== lastGroup) {
+    lastGroup = it.group;
+    const h = document.createElement("h2"); h.id = "g-" + it.group; h.textContent = it.group; main.appendChild(h);
+    const a = document.createElement("a"); a.href = "#g-" + it.group; a.textContent = it.group; nav.appendChild(a);
+  }
+  const el = document.createElement("section"); el.className = "card"; el.dataset.id = it.id;
+  const tile = (k, label, scale) => `<div class="tile"><img src="${png(it.tiles[k])}" width="${it.sizes[k] * scale}" height="${it.sizes[k] * scale}"><div>${label}</div></div>`;
+  el.innerHTML = `<div><div class="tiles">${tile("d16","16 dark",4)}${tile("l16","16 light",4)}${tile("l18","18 light",4)}${tile("l48","48 light",2)}</div>
+    <div class="real"><span class="d"><img src="${png(it.tiles.d16)}" width="16" height="16"></span><span class="l"><img src="${png(it.tiles.l16)}" width="16" height="16"></span><span class="l"><img src="${png(it.tiles.l18)}" width="18" height="18"></span>actual size</div></div>
+    <div class="meta"><h3>${it.variant ? "Icon::" + it.variant : "(shell / QML only)"}</h3><code>${it.id}</code>
+    <p><span class="k">Used:</span> ${it.where}</p><p><span class="k">Metaphor:</span> ${it.metaphor}</p>
+    <p><span class="k">Category:</span> ${it.category} &nbsp; <span class="k">Glyph:</span> ${it.glyph}</p>
+    <div class="verdicts">${VERDICTS.map(([v, l]) => `<label class="v-${v}"><input type="radio" name="v-${it.id}" value="${v}"><span>${l}</span></label>`).join("")}</div>
+    <textarea placeholder="What is wrong, or what it should look like"></textarea></div>`;
+  el.querySelectorAll("input").forEach((r) => r.addEventListener("change", () => { setVerdict(it.id, r.value); }));
+  const ta = el.querySelector("textarea");
+  ta.addEventListener("input", () => { (store[it.id] = store[it.id] || {}).note = ta.value; save(); });
+  el.addEventListener("click", () => { current = cards.findIndex((c) => c.el === el); markFocus(); });
+  main.appendChild(el); cards.push({ it, el, ta });
+}
+function setVerdict(id, v) { (store[id] = store[id] || {}).verdict = v; save(); }
+function update() {
+  let done = 0, flagged = 0;
+  const f = document.getElementById("filter").value;
+  for (const { it, el, ta } of cards) {
+    const s = store[it.id] || {};
+    el.querySelectorAll("input").forEach((r) => (r.checked = r.value === s.verdict));
+    if (document.activeElement !== ta) ta.value = s.note || "";
+    const reviewed = !!s.verdict || !!(s.note && s.note.trim());
+    const flag = !!s.verdict && s.verdict !== "good";
+    if (reviewed) done++; if (flag) flagged++;
+    el.classList.toggle("done", reviewed && !flag); el.classList.toggle("flag", flag);
+    el.classList.toggle("hidden", (f === "todo" && reviewed) || (f === "flag" && !flag));
+  }
+  document.getElementById("count").textContent = `${done} of ${ITEMS.length} reviewed, ${flagged} flagged`;
+}
+function markFocus() { cards.forEach((c, i) => c.el.classList.toggle("focus", i === current)); }
+function move(d) {
+  let i = current;
+  do { i += d; } while (i >= 0 && i < cards.length && cards[i].el.classList.contains("hidden"));
+  if (i < 0 || i >= cards.length) return;
+  current = i; markFocus(); cards[i].el.scrollIntoView({ block: "center" });
+}
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "TEXTAREA") { if (e.key === "Escape") e.target.blur(); return; }
+  if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); move(1); }
+  else if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); move(-1); }
+  else if (current >= 0 && /^[1-5]$/.test(e.key)) { setVerdict(cards[current].it.id, VERDICTS[+e.key - 1][0]); }
+  else if (current >= 0 && e.key === "n") { e.preventDefault(); cards[current].ta.focus(); }
+});
+const label = Object.fromEntries(VERDICTS);
+function lines() {
+  return ITEMS.filter((it) => store[it.id] && (store[it.id].verdict || (store[it.id].note || "").trim()))
+    .map((it) => { const s = store[it.id]; return `${it.id} | ${it.variant || "shell"} | ${label[s.verdict] || "no verdict"}${(s.note || "").trim() ? " | " + s.note.trim().replace(/\s+/g, " ") : ""}`; });
+}
+document.getElementById("copy").onclick = async () => {
+  const text = "# icon | Icon variant | verdict | note\n" + lines().join("\n") + "\n";
+  try { await navigator.clipboard.writeText(text); } catch (e) { prompt("Copy this feedback", text); }
+};
+document.getElementById("json").onclick = () => {
+  const blob = new Blob([JSON.stringify(store, null, 2)], { type: "application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "bingux-icon-feedback.json"; a.click();
+};
+document.getElementById("clear").onclick = () => { if (confirm("Delete all feedback in this browser?")) { store = {}; save(); } };
+document.getElementById("filter").onchange = update;
+update();
+</script></body></html>
+"""
+
+
+def png_base64(image: Image.Image) -> str:
+    import base64
+    import io
+
+    buffer = io.BytesIO()
+    image.save(buffer, "PNG", optimize=True)
+    return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+def page(out: Path, icons: Path) -> None:
+    """The interactive review page. Tiles are the exact rasteriser's pixels, drawn unscaled and magnified by the browser."""
+    import html
+    import json
+
+    labels = labelsmod.load()
+    names = variants()
+    items = []
+    seen: set[str] = set()
+    groups = list(group_order().items())
+    rest = sorted(set(labels.rows) - {stem for _, files in groups for stem in files})
+    if rest:
+        groups.append(("other", rest))
+    for group, files in groups:
+        for stem in files:
+            if stem in seen:
+                continue
+            seen.add(stem)
+            file = icons / f"{stem}-symbolic.svg"
+            if not file.exists():
+                print(f"review: {stem}: file missing in {icons}, skipped", file=sys.stderr)
+                continue
+            polys = polys_of_file(file)
+            row = labels.rows.get(stem)
+            tiles = {
+                "d16": cell(polys, 16, 1, DARK),
+                "l16": cell(polys, 16, 1, LIGHT),
+                "l18": cell(polys, 18, 1, LIGHT),
+                "l48": cell(polys, 48, 1, LIGHT),
+            }
+            items.append(
+                {
+                    "id": stem,
+                    "group": group,
+                    "variant": names.get(stem),
+                    "category": labels.policy.get(stem, "?"),
+                    "glyph": html.escape(glyph_text(row)) if row else "?",
+                    "where": html.escape(row.where) if row else "",
+                    "metaphor": html.escape(row.metaphor) if row else "",
+                    "sizes": {key: tile.width for key, tile in tiles.items()},
+                    "tiles": {key: png_base64(tile) for key, tile in tiles.items()},
+                }
+            )
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(PAGE_TEMPLATE.replace("__ITEMS__", json.dumps(items).replace("</", "<\\/")))
+    print(f"review: wrote {len(items)} icons to {out}")
 
 
 def main() -> int:
@@ -326,6 +576,9 @@ def main() -> int:
     c.add_argument("--out", type=Path, default=Path("/tmp/bingux-icon-compare.png"))
     k = sub.add_parser("catalogue")
     k.add_argument("--out", type=Path, default=Path("/tmp/bingux-icon-catalogue"))
+    p = sub.add_parser("page")
+    p.add_argument("--out", type=Path, default=Path("/tmp/bingux-icon-review.html"))
+    p.add_argument("--icons", type=Path, default=build.DEFAULT_OUT)
     d = sub.add_parser("candidates")
     d.add_argument("specs", nargs="+")
     d.add_argument("--out", type=Path, default=Path("/tmp/bingux-icon-candidates.png"))
@@ -334,6 +587,8 @@ def main() -> int:
         sheets(args.out, args.icons)
     elif args.mode == "compare":
         compare(args.before, args.after, args.group, args.out)
+    elif args.mode == "page":
+        page(args.out, args.icons)
     elif args.mode == "catalogue":
         catalogue(args.out)
     else:
