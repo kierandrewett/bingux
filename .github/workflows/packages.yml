@@ -1,0 +1,246 @@
+name: Packages
+
+# Builds the Bingux RPMs (Fedora 43), the Arch packages and the Debian packages (Debian 13), checks that the RPMs and
+# the Debian packages install on a clean system, and hands them to the repository stage (package-repository.yml), which
+# signs and publishes them. docs/release.md describes the release steps this automates.
+#
+#   a tag v*          builds the release and publishes the stable channel
+#   nightly.yml       builds a nightly version of main and publishes the nightly channel
+#   a pull request    builds and verifies everything with a throw-away key and publishes nothing, when packaging changed
+#   a manual run      the same dry run, on the branch chosen
+#
+# The Rust and Skia build takes tens of minutes per package format and needs about 5 GB. None of these jobs has run on
+# a GitHub runner yet; docs/release.md says what was run locally.
+
+on:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+    paths:
+      - "packaging/**"
+      - "scripts/build-rpms.sh"
+      - "scripts/build-arch.sh"
+      - "scripts/build-debs.sh"
+      - "scripts/make-source-archive.sh"
+      - ".github/workflows/packages.yml"
+      - ".github/workflows/package-repository.yml"
+      - ".github/workflows/nightly.yml"
+  workflow_call:
+    inputs:
+      nightly:
+        description: Build the nightly channel. The version becomes a pre-release of the next release.
+        type: boolean
+        default: false
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: packages-${{ github.workflow }}-${{ github.ref }}-${{ inputs.nightly }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.name.outputs.channel }}
+      publish: ${{ steps.name.outputs.publish }}
+      label: ${{ steps.name.outputs.label }}
+      rpm: ${{ steps.name.outputs.rpm }}
+      deb: ${{ steps.name.outputs.deb }}
+      arch: ${{ steps.name.outputs.arch }}
+      commit: ${{ steps.name.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Name the repository tool commit
+        id: tool
+        run: |
+          read -r repository commit < <(grep -v '^#' packaging/pkgrepo.ref)
+          echo "repository=$repository" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+      - name: Fetch the repository tool
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.tool.outputs.repository }}
+          ref: ${{ steps.tool.outputs.commit }}
+          path: pkgrepo-source
+          sparse-checkout: scripts/pkgrepo
+      - name: Name the versions
+        id: name
+        env:
+          NIGHTLY: ${{ inputs.nightly }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          tree_version="$(sed -n 's/^VERSION ?= //p' Makefile)"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if [ "$NIGHTLY" = true ]; then
+            PYTHONPATH=pkgrepo-source/scripts python3 -m pkgrepo version --git . --tag-prefix v \
+              --tree-version "$tree_version" --format lines > versions.txt
+            cat versions.txt
+            field() { sed -n "s/^$1=//p" versions.txt; }
+            printf 'channel=nightly\npublish=true\nlabel=%s\nrpm=%s\ndeb=%s\narch=%s\n' \
+              "$(field semver)" "$(field rpm)" "$(field deb)" "$(field arch)" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            if [ "$version" != "$tree_version" ]; then
+              echo "The tag $GITHUB_REF_NAME does not match VERSION ?= $tree_version in the Makefile" >&2
+              exit 1
+            fi
+            printf 'channel=stable\npublish=true\nlabel=%s\nrpm=%s\ndeb=%s\narch=%s\n' \
+              "$version" "$version" "$version" "$version" >> "$GITHUB_OUTPUT"
+          else
+            # A dry run: a version no channel will ever carry, so nothing can be mistaken for a release.
+            label="$tree_version-dryrun.${GITHUB_SHA::7}"
+            printf 'channel=stable\npublish=false\nlabel=%s\nrpm=%s\ndeb=%s\narch=%s\n' \
+              "$label" "$tree_version" "$tree_version" "$tree_version" >> "$GITHUB_OUTPUT"
+          fi
+
+  rpm:
+    needs: version
+    runs-on: ubuntu-latest
+    container: fedora:43
+    timeout-minutes: 180
+    steps:
+      - name: Install the tools the build needs
+        run: dnf -y install dnf-plugins-core git make rpm-build rpmdevtools hardlink tar xz
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install the BuildRequires of the spec
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          dnf -y builddep packaging/rpm/bingux.spec
+      - name: Build the RPMs
+        env:
+          VERSION: ${{ needs.version.outputs.rpm }}
+        run: |
+          # make rpm-package runs make-source-archive.sh, which wants a clean tree and pinned submodules.
+          BINGUX_RPM_CHECK_DEPS=1 JOBS="$(nproc)" make rpm-package VERSION="$VERSION"
+          find /var/tmp/BinguxPkg/rpmbuild/RPMS /var/tmp/BinguxPkg/rpmbuild/SRPMS -name '*.rpm' | sort
+      - name: Keep the packages without debug packages
+        run: |
+          mkdir -p rpms
+          find /var/tmp/BinguxPkg/rpmbuild/RPMS -name '*.rpm' ! -name '*-debuginfo-*' ! -name '*-debugsource-*' \
+            -exec cp -t rpms {} +
+          cp /var/tmp/BinguxPkg/rpmbuild/SRPMS/*.src.rpm rpms/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpms-${{ needs.version.outputs.label }}
+          path: rpms/*.rpm
+          if-no-files-found: error
+          retention-days: 30
+
+  rpm-install:
+    needs: [version, rpm]
+    runs-on: ubuntu-latest
+    container: fedora:43
+    timeout-minutes: 30
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: rpms-${{ needs.version.outputs.label }}
+          path: rpms
+      - name: Install on a clean Fedora, verify, and remove
+        run: |
+          dnf -y install desktop-file-utils
+          mapfile -t packages < <(find rpms -name '*.rpm' ! -name '*.src.rpm')
+          dnf -y install "${packages[@]}"
+          rpm -V bingux bingux-config bingux-settings bingux-files bingux-audio-effects bingux-taxonomy bingux-preview-host
+          desktop-file-validate /usr/share/applications/bingux-*.desktop
+          test -x /usr/bin/bingux-settings
+          dnf -y remove bingux bingux-config bingux-settings bingux-files bingux-audio-effects bingux-taxonomy bingux-preview-host
+          ! rpm -q bingux-settings
+
+  arch:
+    needs: version
+    runs-on: ubuntu-latest
+    container: archlinux:base
+    timeout-minutes: 180
+    steps:
+      - name: Install the tools the build needs
+        run: pacman -Syu --noconfirm --needed base-devel git sudo python
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build the Arch packages as an unprivileged user
+        env:
+          VERSION: ${{ needs.version.outputs.arch }}
+        run: |
+          # makepkg refuses to run as root; the build installs its makedepends with sudo.
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          runuser -u builder -- git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          runuser -u builder -- env JOBS="$(nproc)" make -C "$GITHUB_WORKSPACE" arch-package \
+            VERSION="$VERSION" PACKAGE_DIR=/tmp/BinguxPkg
+      - name: Install on a clean system and remove
+        run: |
+          pacman -U --noconfirm /tmp/BinguxPkg/arch/out/*.pkg.tar.zst
+          pacman -Q bingux bingux-settings bingux-files
+          pacman -R --noconfirm bingux-settings bingux-files bingux-audio-effects bingux-taxonomy bingux-preview-host bingux bingux-config
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch-packages-${{ needs.version.outputs.label }}
+          path: /tmp/BinguxPkg/arch/out/*.pkg.tar.zst
+          if-no-files-found: error
+          retention-days: 30
+
+  deb:
+    needs: version
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    timeout-minutes: 180
+    steps:
+      - name: Install the tools the build needs
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends build-essential fakeroot ca-certificates curl git xz-utils
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install the build dependencies of packaging/debian
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          cp -r packaging/debian debian
+          apt-get build-dep -y ./
+          rm -rf debian
+      - name: Build the Debian packages
+        env:
+          VERSION: ${{ needs.version.outputs.deb }}
+        run: JOBS="$(nproc)" bash scripts/build-debs.sh "$VERSION" /tmp/BinguxPkg
+      - name: Install on a clean Debian and remove
+        run: |
+          apt-get install -y -qq /tmp/BinguxPkg/deb/out/*.deb
+          dpkg -l 'bingux*' | grep '^ii'
+          apt-get remove -y -qq bingux bingux-settings bingux-files bingux-audio-effects bingux-taxonomy bingux-preview-host bingux-config
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debs-${{ needs.version.outputs.label }}
+          path: /tmp/BinguxPkg/deb/out/*.deb
+          if-no-files-found: error
+          retention-days: 30
+
+  repository:
+    # The signed package repository. A tag publishes the stable channel and the nightly run the nightly channel. Any
+    # other run builds and verifies the tree with a throw-away key and publishes nothing.
+    needs: [version, rpm-install, arch, deb]
+    uses: ./.github/workflows/package-repository.yml
+    with:
+      channel: ${{ needs.version.outputs.channel }}
+      version: ${{ needs.version.outputs.label }}
+      source_commit: ${{ needs.version.outputs.commit }}
+      publish: ${{ needs.version.outputs.publish == 'true' }}
+    secrets:
+      REPO_GPG_PRIVATE_KEY: ${{ secrets.REPO_GPG_PRIVATE_KEY }}
+      REPO_GPG_PASSPHRASE: ${{ secrets.REPO_GPG_PASSPHRASE }}
+      REPO_RSYNC_KEY: ${{ secrets.REPO_RSYNC_KEY }}
+      REPO_RSYNC_KNOWN_HOSTS: ${{ secrets.REPO_RSYNC_KNOWN_HOSTS }}
+      REPO_PAGES_TOKEN: ${{ secrets.REPO_PAGES_TOKEN }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

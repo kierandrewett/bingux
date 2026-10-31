@@ -1,0 +1,70 @@
+name: Nightly
+
+# Builds the nightly channel of the package repositories from main, once a day, when main has moved since the channel
+# was last built. packages.yml does the build with `nightly: true`: the version becomes a pre-release of the next
+# release (0.1.1~nightly.<date>.<count>.g<commit>) and the repository stage publishes the nightly channel. A nightly never
+# touches the stable channel. design/package-repositories.md has the version rules.
+
+on:
+  schedule:
+    # 03:43 UTC, off the hour so it does not queue with every other scheduled job on GitHub.
+    - cron: "43 3 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build even when the published nightly was built from this commit.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    # Skips the build when nothing changed. A repository without a published nightly yet builds. Without a publication
+    # destination (REPO_DESTINATION) there is nothing to publish to, so the scheduled run does nothing; a manual run
+    # still builds, to try the pipeline.
+    if: ${{ vars.REPO_DESTINATION != '' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    outputs:
+      needs_build: ${{ steps.check.outputs.needs_build }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Name the commit of the repository tool
+        id: tool
+        run: |
+          read -r repository commit < <(grep -v '^#' packaging/pkgrepo.ref)
+          echo "repository=$repository" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+      - name: Fetch the repository tool
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.tool.outputs.repository }}
+          ref: ${{ steps.tool.outputs.commit }}
+          path: pkgrepo-source
+          sparse-checkout: scripts/pkgrepo
+      - name: Compare with the published nightly
+        id: check
+        env:
+          REPO_URL: ${{ vars.REPO_URL || 'https://repo.gnoblin.org' }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          if [ "$FORCE" = true ]; then
+            echo "needs_build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          PYTHONPATH=pkgrepo-source/scripts python3 -m pkgrepo needs-build --project bingux --channel nightly \
+            --url "$REPO_URL" --commit "$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
+
+  nightly:
+    needs: check
+    if: needs.check.outputs.needs_build == 'true'
+    uses: ./.github/workflows/packages.yml
+    with:
+      nightly: true
+    secrets: inherit
