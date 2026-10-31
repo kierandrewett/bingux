@@ -94,6 +94,17 @@ transition, scroll, drag or typing drops frames with every command slowed;
 `python3 scripts/nav-slide.py` fails when a push or Back does not slide. See
 "Nothing blocks the UI thread" in `docs/bingux-ui.md`.
 
+## Desktop tests
+
+`make test-desktop` is the one entry point for tests that start Bingux. It runs the real shell on Gnoblin in a
+private sandbox that cannot reach your session, and drives it with input, screenshots and the logs. `make
+test-desktop-fast` runs only what needs no compositor and no built program; `make check-static` runs the checks
+that build nothing. A change to the shell, the dock, a panel or a Settings page should come with a scenario in
+`tests/desktop/session/`; do not add another loose script under `tests/` (`fast/test_legacy_map.py` fails on a
+file that has no place in `tests/desktop/legacy.toml`). What the suite proves, what it cannot (audio, network
+daemons, GPU, real input devices, bsm), the coverage table and CI are in
+[docs/desktop-testing.md](docs/desktop-testing.md).
+
 ## Changing bingux-ui
 
 Every change to `crates/ui` (a new or changed component, control
@@ -111,7 +122,7 @@ builder, icon, style token or behaviour) must land with its entry in the
    `Icon::ALL`, and a doc anchor that is not a heading. `make check` runs it
    and `cargo test` in the taxonomy crate.
 3. Look at the change running: `bingux-taxonomy --snapshot /tmp/taxonomy
-   <category>/<page>` writes the page at desktop size and at 390x800, and
+<category>/<page>` writes the page at desktop size and at 390x800, and
    `bingux-taxonomy <category>/<page>` opens it with the theme, density and
    scale switcher in the header. Put the screenshot paths, or what you saw,
    in the change description.
@@ -168,7 +179,7 @@ builder, icon, style token or behaviour) must land with its entry in the
    column of letters, leaves the window or covers its control. A bubble is as
    wide as its text, never as wide as the control or cell it hangs from; see
    "Tooltips" in `docs/bingux-ui.md`. `cargo test --lib --features testing
-   tooltip` in `crates/ui` holds the same rule for the cases a page
+tooltip` in `crates/ui` holds the same rule for the cases a page
    cannot reach (a clipped box, a scrolled one, a narrow window).
 
 Visual integrity (`design/rules.md` CK-01, 02, 03, 06, 07, 08, 09, 12, 13, 14, 15, 16, 18, 19, 20, 22, 25). Each of
@@ -190,7 +201,7 @@ which needs no binary), most take `--build` and `--show-allowed`, and a finding 
   `python3 scripts/scroll-continuity.py` (the scroll offset kept through a push and pop, a
   tab switch and data landing).
 - a control, row, menu, dropdown, header, tab strip, popup or focus ring: `python3
-  scripts/state-check.py` (with `--build`; `make state-check` is the same, and `make check`
+scripts/state-check.py` (with `--build`; `make state-check` is the same, and `make check`
   calls it; `--fixtures` runs it on its own known-bad and clean controls). It drives every
   Settings page, popup, taxonomy page and the Files window: it points at, presses and
   focuses every interactive node and renders each state, so a control with no hover,
@@ -207,7 +218,7 @@ which needs no binary), most take `--build` and `--show-allowed`, and a finding 
   `docs/bingux-ui.md`.
 - an animation: `python3 scripts/loop-check.py --all`, `python3 scripts/number-roll-check.py`,
   `python3 scripts/nav-slide.py` (a close is its open mirrored), `cargo test --lib --features
-  testing slide_users_tests` (a new slide must be in its table) and `python3 scripts/frame-gate.py`
+testing slide_users_tests` (a new slide must be in its table) and `python3 scripts/frame-gate.py`
   (every page mounts inside its frame budget; `BINGUX_FRAME_GATE=report` on a noisy runner).
   See "Visual integrity checks" in `docs/bingux-ui.md`.
 

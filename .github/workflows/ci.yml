@@ -1,0 +1,136 @@
+name: CI
+
+# What runs on every push and pull request. docs/desktop-testing.md says what each job proves and
+# which of them have been run on a GitHub runner (the header of each job says).
+#
+#   lint      the pre-commit hooks (ruff, shellcheck, clang-format, shfmt, prettier, qmlformat, stylua,
+#             rustfmt, taxonomy) on the files the change touches
+#   static    `make check-static` (nothing is built) and `make test-desktop-fast` (the framework's own tests)
+#   snapshot  builds Bingux Settings with --features snapshot and runs the headless app suites
+#   desktop   the isolated Gnoblin + Bingux desktop suite, on a self-hosted runner that has Gnoblin
+#
+# `make check` (the full build and every test) is not run here: it builds every Rust program and the
+# Quickshell runtime, and takes far longer than a pull request should wait.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  lint:
+    # Run locally with the same commands: `make lint ARGS="--from-ref origin/main --to-ref HEAD"`.
+    # The whole tree does not pass the hooks yet (`make lint` with no ARGS fails on files nobody
+    # touched), so this job checks the lines a change touches, not the repository.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+      - name: Tools the system hooks call
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qt6-declarative-dev-tools
+          rustup component add rustfmt
+          echo "QMLFORMAT=/usr/lib/qt6/bin/qmlformat" >> "$GITHUB_ENV"
+      - name: Pre-commit hooks on the changed files
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            from="origin/${{ github.base_ref }}"
+          elif [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            from="${{ github.event.before }}"
+          else
+            from="$(git rev-list --max-parents=0 HEAD | tail -n1)"
+          fi
+          make lint ARGS="--from-ref $from --to-ref HEAD"
+
+  static:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+      - name: Python packages the checks import
+        run: python -m pip install pytest pillow numpy
+      - name: Checks that build nothing
+        run: make check-static
+      - name: The framework's own tests (no compositor, no built program)
+        run: make test-desktop-fast
+
+  snapshot:
+    # Not yet run on a GitHub runner: the Settings build needs system libraries (Wayland, xkbcommon,
+    # fontconfig, EGL) whose Ubuntu package names have not been confirmed. The commands are the ones
+    # that were run locally against a build made the same way.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            apps/settings -> ../../target
+            crates/config -> ../../target
+      - name: Build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang pkg-config libwayland-dev libxkbcommon-dev libfontconfig-dev libfreetype-dev \
+            libegl-dev libgl-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev tesseract-ocr
+          python -m pip install pytest pillow numpy
+      - name: Build Settings (snapshot mode) and its config backend
+        run: |
+          cargo build --locked --features snapshot --manifest-path apps/settings/Cargo.toml --target-dir target
+          cargo build --locked --manifest-path crates/config/Cargo.toml --target-dir target
+      - name: Headless app suites
+        env:
+          BINGUX_TEST_CARGO_TARGET: ${{ github.workspace }}/target
+        run: make test-desktop ARGS="apps"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: snapshot-probe-output
+          path: build/desktop-test
+          if-no-files-found: ignore
+
+  desktop:
+    # The isolated desktop needs a Gnoblin install, Quickshell with the Bingux patches, bubblewrap with
+    # unprivileged user namespaces, and PyGObject. GitHub's hosted runners have none of these (Ubuntu
+    # 24.04 also blocks unprivileged user namespaces for bwrap until an AppArmor profile allows it), so
+    # this job runs on a self-hosted runner labelled `bingux-desktop` and only when the repository
+    # variable BINGUX_DESKTOP_RUNNER is `true`. It has not been run on a runner. --require-desktop makes a
+    # missing piece of the stack a failure, so the job cannot pass by skipping.
+    if: ${{ vars.BINGUX_DESKTOP_RUNNER == 'true' }}
+    runs-on: [self-hosted, linux, bingux-desktop]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Isolated desktop suite
+        run: make test-desktop ARGS="--require-desktop session apps fast"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-test-artifacts
+          path: build/desktop-test
+          if-no-files-found: ignore

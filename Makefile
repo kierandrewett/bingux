@@ -28,7 +28,7 @@ OUTPUT ?= dist/bingux-$(VERSION).tar.xz
 SHELL := /bin/bash
 ROOT := $(abspath .)
 
-.PHONY: all native shell shell-archive daemons apps icons icons-check doctor doctor-build check check-session layout-check overflow-check copy-check pixel-check stability-check motion-check state-check rules-check install install-user uninstall-user install-apps uninstall-apps rpm-package rpm-check arch-package licenses source-archive
+.PHONY: check-static test-desktop test-desktop-fast all native shell shell-archive daemons apps icons icons-check doctor doctor-build check check-session layout-check overflow-check copy-check pixel-check stability-check motion-check state-check rules-check install install-user uninstall-user install-apps uninstall-apps rpm-package rpm-check arch-package licenses source-archive
 all: native shell daemons
 
 native: $(BUILD_DIR)/bingux-image-clipboard $(BUILD_DIR)/bingux-frame
@@ -187,16 +187,12 @@ rules-check:
 	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/rules-check.py --jobs $(JOBS) $(ARGS)
 
 check: doctor-build native daemons
-	python3 scripts/ui-lint.py
-	python3 scripts/ui-lint.py --self-test
-	python3 scripts/taxonomy-check.py
+	$(MAKE) check-static test-desktop-fast
 	cd $(BUILD_DIR)/text && $(QMAKE) $(ROOT)/native/text-layout/spacing-test.pro -o Makefile.tests && $(MAKE) -f Makefile.tests
 	QT_QPA_PLATFORM=offscreen $(BUILD_DIR)/text/spacing-test
 	$(CARGO) test --locked --manifest-path crates/config/Cargo.toml --target-dir $(CARGO_TARGET)
 	BINGUX_CONFIG_BIN=$(CARGO_TARGET)/release/bingux-config python3 tests/bingux-config.test.py
 	$(CARGO) test --locked --manifest-path services/helper/Cargo.toml --target-dir $(CARGO_TARGET)
-	python3 tests/app-env.test.py
-	python3 tests/rules-check.test.py
 	$(CARGO) test --locked --manifest-path services/searchd/Cargo.toml --lib
 	$(CARGO) test --locked --manifest-path crates/files/Cargo.toml
 	$(CARGO) test --locked --manifest-path crates/preview-core/Cargo.toml --target-dir $(CARGO_TARGET)
@@ -215,16 +211,25 @@ check: doctor-build native daemons
 	BINGUX_STATUSD_BIN=$(CARGO_TARGET)/release/bingux-statusd python3 tests/osd-event-bridge.py
 	BINGUX_STATUSD_BIN=$(CARGO_TARGET)/release/bingux-statusd python3 tests/audio-osd-feedback.py
 	BINGUX_STATUSD_BIN=$(CARGO_TARGET)/release/bingux-statusd python3 tests/pad-help-event-bridge.py
-	python3 tests/lock-contract.test.py
 	python3 tests/bsm-greeter-progress.test.py
-	node --test tests/bsm-session.test.mjs tests/bsm-readiness.test.mjs
 	python3 tests/bsm-lock-binding.py
-	python3 tests/qmldir-complete.py --self-test
-	python3 tests/qmldir-complete.py
 	$(MAKE) check-session
 	python3 tests/install-dependencies.py
 	$(MAKE) rpm-check
 	python3 tests/standalone-install.py
+
+# The checks that build nothing and start no program: lints, the taxonomy and layout contracts, the
+# QML module list and the JavaScript unit tests. `make check` runs them first; CI runs them alone.
+check-static:
+	python3 scripts/ui-lint.py
+	python3 scripts/ui-lint.py --self-test
+	python3 scripts/taxonomy-check.py
+	python3 tests/app-env.test.py
+	python3 tests/rules-check.test.py
+	python3 tests/lock-contract.test.py
+	python3 tests/qmldir-complete.py --self-test
+	python3 tests/qmldir-complete.py
+	node --test tests/bsm-session.test.mjs tests/bsm-readiness.test.mjs tests/desktop-layout.test.mjs tests/control-layout.test.mjs
 
 # The lock screen, the login greeter and the bsm greeter (against the fake bsm
 # control server), driven in headless Sway with the
@@ -265,6 +270,16 @@ uninstall-apps:
 
 source-archive:
 	bash scripts/make-source-archive.sh '$(VERSION)' '$(OUTPUT)'
+
+# The desktop tests (docs/desktop-testing.md): the isolated Gnoblin + Bingux desktop,
+# the headless app probes and the harness's own tests. ARGS are pytest arguments, for
+# example ARGS='-m fast' or ARGS='session/test_dock.py -k close'.
+test-desktop:
+	cd tests/desktop && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest $(ARGS)
+
+# The part that needs no compositor and no built program.
+test-desktop-fast:
+	cd tests/desktop && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -m fast $(ARGS)
 
 .PHONY: lint format
 # ARGS="--files path ..." limits the check or format operation.
