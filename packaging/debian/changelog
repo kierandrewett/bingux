@@ -1,0 +1,6 @@
+bingux (0.1.0-1) unstable; urgency=medium
+
+  * Release 0.1.0. scripts/build-debs.sh rewrites this entry to the version it
+    builds, so a nightly build gets 0.1.1~nightly.<date>.<count>.g<commit>-1.
+
+ -- Kieran Drewett <kieran@drewett.dev>  Wed, 28 Oct 2026 12:00:00 +0000

@@ -8,13 +8,13 @@ PKG_CONFIG ?= pkg-config
 QMLDIR ?= $(PREFIX)/lib/bingux/qml
 LADSPADIR ?= $(PREFIX)/lib/ladspa
 # Where Cargo puts its output; package builders can point this at a shared target.
-CARGO_TARGET ?= $(CARGO_TARGET)
+CARGO_TARGET ?= $(abspath $(BUILD_DIR))/cargo
 # bingux-dsp is built with panic=abort (a plugin must not unwind into its host)
 # while the programs unwind. Cargo does not keep the two builds of a shared
 # dependency such as libc apart in one target directory ("the crate `libc`
 # requires panic strategy `abort`"), so the plugin library builds in its own.
 DSP_TARGET ?= $(CARGO_TARGET)-dsp
-# Work and results of `make rpm-package` and `make arch-package`.
+# Work and results of `make rpm-package`, `make arch-package` and `make deb-package`.
 PACKAGE_DIR ?= /var/tmp/BinguxPkg
 # lib or lib64: where the shell archive and QML plugins live under PREFIX.
 LIBDIR_NAME ?= lib
@@ -28,7 +28,7 @@ OUTPUT ?= dist/bingux-$(VERSION).tar.xz
 SHELL := /bin/bash
 ROOT := $(abspath .)
 
-.PHONY: check-static test-desktop test-desktop-fast all native shell shell-archive daemons apps icons icons-check doctor doctor-build check check-session layout-check overflow-check copy-check pixel-check stability-check motion-check ui-motion state-check rules-check install install-user uninstall-user install-apps uninstall-apps rpm-package rpm-check arch-package licenses source-archive
+.PHONY: check-static test-desktop test-desktop-fast all native shell shell-archive daemons apps icons icons-check doctor doctor-build check check-session layout-check overflow-check copy-check pixel-check stability-check motion-check ui-motion state-check rules-check install install-user uninstall-user install-apps uninstall-apps rpm-package rpm-check arch-package deb-package licenses source-archive
 all: native shell daemons
 
 native: $(BUILD_DIR)/bingux-image-clipboard $(BUILD_DIR)/bingux-frame
@@ -118,6 +118,11 @@ rpm-check:
 # an Arch container when makepkg is not installed.
 arch-package:
 	bash scripts/build-arch.sh '$(VERSION)' '$(PACKAGE_DIR)'
+
+# Builds the Debian packages from packaging/debian into $(PACKAGE_DIR)/deb/out, in a
+# debian:trixie container when dpkg-buildpackage is not installed.
+deb-package:
+	bash scripts/build-debs.sh '$(VERSION)' '$(PACKAGE_DIR)'
 
 # The licences of the Rust crates linked into each program, for the packages.
 licenses:

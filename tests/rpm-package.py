@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Check the package definitions without building anything.
 
-Covers the RPM spec, the Arch PKGBUILD, the systemd units and preset, the
-desktop entries, the AppStream files and the man pages. `make rpm-package` and
-`make arch-package` build the packages themselves.
+Covers the RPM spec, the Arch PKGBUILD, the Debian source package, the systemd
+units and preset, the desktop entries, the AppStream files and the man pages.
+`make rpm-package` and `make arch-package` build the packages themselves, and
+`scripts/build-debs.sh` builds the Debian ones.
 """
 
 import re
@@ -280,6 +281,49 @@ class ArchPackageTest(unittest.TestCase):
         version = re.search(r"^VERSION \?= (\S+)", makefile, re.M).group(1)
         self.assertIn(f"pkgver={version}\n", self.text)
         self.assertIn(f"Version:        {version}\n", spec)
+
+
+class DebianPackageTest(unittest.TestCase):
+    """packaging/debian splits the install into the same packages as the spec and the PKGBUILD."""
+
+    def setUp(self):
+        self.control = (ROOT / "packaging/debian/control").read_text()
+
+    def test_builds_the_same_packages_as_the_spec(self):
+        names = re.findall(r"^Package: (\S+)$", self.control, re.M)
+        self.assertEqual(sorted(names), sorted(PACKAGES))
+
+    def test_every_package_has_an_install_list_and_none_claims_a_file_twice(self):
+        claimed = {}
+        for name in PACKAGES:
+            install = ROOT / f"packaging/debian/{name}.install"
+            self.assertTrue(install.exists(), install.name)
+            for line in install.read_text().splitlines():
+                path = line.split()[0] if line.strip() and not line.startswith("#") else None
+                if path and path.startswith("usr/") and not path.endswith("*"):
+                    self.assertNotIn(path, claimed, f"{path} is in {claimed.get(path)} and {name}")
+                    claimed[path] = name
+
+    def test_the_small_packages_list_what_the_pkgbuild_takes(self):
+        pkgbuild = (ROOT / "packaging/arch/PKGBUILD").read_text()
+        for name in PACKAGES[1:]:
+            body = re.search(rf"^package_{name}\(\) \{{(.*?)^\}}", pkgbuild, re.M | re.S).group(1)
+            taken = set(re.findall(r"\b(usr/[\w./@-]+)", body))
+            listed = {
+                line.split()[0]
+                for line in (ROOT / f"packaging/debian/{name}.install").read_text().splitlines()
+                if line.startswith("usr/")
+            }
+            self.assertEqual(listed, taken, name)
+
+    def test_the_shell_installs_last_and_keeps_what_is_left(self):
+        rules = (ROOT / "packaging/debian/rules").read_text()
+        self.assertLess(rules.index("dh_install $(addprefix -p,$(SMALL))"), rules.index("dh_install -pbingux"))
+        self.assertIn("dh_missing --fail-missing", rules)
+
+    def test_the_changelog_names_the_version_in_the_makefile(self):
+        changelog = (ROOT / "packaging/debian/changelog").read_text()
+        self.assertTrue(changelog.startswith(f"bingux ({VERSION}-1) "), changelog.splitlines()[0])
 
 
 if __name__ == "__main__":

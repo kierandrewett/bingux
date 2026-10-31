@@ -1,0 +1,6 @@
+usr/bin/bingux-files
+usr/share/applications/bingux-files.desktop
+usr/share/icons/hicolor/scalable/apps/bingux-files.svg
+usr/share/metainfo/dev.drewett.bingux.Files.metainfo.xml
+usr/share/man/man1/bingux-files.1
+build/licenses/bingux-files.LICENSE.dependencies usr/share/doc/bingux-files

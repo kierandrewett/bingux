@@ -1,0 +1,246 @@
+Source: bingux
+Section: x11
+Priority: optional
+Maintainer: Kieran Drewett <kieran@drewett.dev>
+Build-Depends:
+ appstream,
+ cargo (>= 1.88),
+ cmake,
+ debhelper-compat (= 13),
+ desktop-file-utils,
+ g++,
+ gcc,
+ libadwaita-1-dev,
+ libarchive-dev,
+ libcairo2-dev,
+ libcli11-dev,
+ libdrm-dev,
+ libegl-dev,
+ libfontconfig-dev,
+ libfreetype-dev,
+ libgl-dev,
+ libglib2.0-dev,
+ libgstreamer-plugins-base1.0-dev,
+ libgstreamer1.0-dev,
+ libgtk-4-dev,
+ libjemalloc-dev,
+ libpam0g-dev,
+ libpipewire-0.3-dev,
+ libpoppler-glib-dev,
+ libpolkit-agent-1-dev,
+ libpulse-dev,
+ libwayland-dev,
+ libxcb1-dev,
+ libxkbcommon-dev,
+ make,
+ ninja-build,
+ pkgconf,
+ python3,
+ qmake6,
+ qt6-base-dev,
+ qt6-base-private-dev,
+ qt6-declarative-dev,
+ qt6-declarative-private-dev,
+ qt6-shadertools-dev,
+ qt6-svg-dev,
+ qt6-tools-dev,
+ qt6-tools-dev-tools,
+ qt6-wayland-dev,
+ qt6-wayland-private-dev,
+ rustc (>= 1.88),
+ spirv-tools,
+ util-linux,
+ wayland-protocols,
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://github.com/kierandrewett/bingux
+Vcs-Git: https://github.com/kierandrewett/bingux.git
+
+Package: bingux
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ bingux-config (= ${binary:Version}),
+ dconf-gsettings-backend | gsettings-backend,
+ ffmpeg,
+ fontconfig,
+ gir1.2-gtk-3.0,
+ gir1.2-gtk-4.0,
+ libglib2.0-bin,
+ python3,
+ python3-cairo,
+ python3-gi,
+ python3-gi-cairo,
+ python3-pil,
+ qml6-module-qtcore,
+ qml6-module-qtmultimedia,
+ qml6-module-qtqml-models,
+ qml6-module-qtqml-workerscript,
+ qml6-module-qtquick,
+ qml6-module-qtquick-controls,
+ qml6-module-qtquick-dialogs,
+ qml6-module-qtquick-effects,
+ qml6-module-qtquick-layouts,
+ qml6-module-qtquick-shapes,
+ qml6-module-qtquick-window,
+ qt6-svg-plugins,
+ qt6-wayland,
+ systemd,
+ wl-clipboard,
+ xdg-desktop-portal,
+ xdg-utils,
+Recommends:
+ bingux-files (= ${binary:Version}),
+ bingux-settings (= ${binary:Version}),
+ gnoblin,
+ gnome-settings-daemon,
+ network-manager,
+ pulseaudio-utils,
+ python3-yaml,
+ upower,
+ zenity,
+Description: Wayland desktop shell for Gnoblin and other layer-shell compositors
+ Bingux is a Wayland desktop shell. It provides a top bar, dock, search,
+ notifications, media controls and an optional sidebar. It is a separate
+ process from the Gnoblin compositor and can also run on other compositors
+ that provide the layer-shell protocols.
+ .
+ This package holds the shell, the search and status helper services and the
+ user units that start them. Settings, Files and the sound effects engine are
+ separate packages.
+
+Package: bingux-config
+Architecture: any
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: Configuration command for the Bingux desktop
+ bingux-config reads, changes and checks the Bingux configuration file in the
+ user's configuration folder. The shell, the search daemon and Settings use it,
+ and it can be run by hand. Every way of changing the file goes through the same
+ validation.
+
+Package: bingux-settings
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ bingux-config (= ${binary:Version}),
+ dconf-gsettings-backend | gsettings-backend,
+ fontconfig,
+ gsettings-desktop-schemas,
+ hicolor-icon-theme,
+ libegl1,
+ libgl1-mesa-dri,
+ libglib2.0-bin,
+ libwayland-client0,
+ libwayland-egl1,
+ libxkbcommon0,
+ shared-mime-info,
+ systemd,
+ xdg-utils,
+Recommends:
+ accountsservice,
+ bingux-audio-effects (= ${binary:Version}),
+ bluez,
+ gnome-settings-daemon,
+ imagemagick,
+ modemmanager,
+ network-manager,
+ pipewire-bin,
+ power-profiles-daemon,
+ pulseaudio-utils,
+ udisks2,
+ upower,
+ wireguard-tools,
+ wireplumber,
+Suggests:
+ bingux-files (= ${binary:Version}),
+Description: Settings application for the Bingux desktop
+ Settings is the Bingux desktop's settings application: network, Bluetooth,
+ sound and sound effects, displays, appearance, the dock, top bar and sidebar,
+ power, date and time, keyboard, mouse, accounts and default applications. It
+ opens the page named in a bingux-settings:// address, so links and the shell's
+ shortcuts land on the right page.
+
+Package: bingux-files
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ fontconfig,
+ hicolor-icon-theme,
+ libegl1,
+ libgl1-mesa-dri,
+ libglib2.0-bin,
+ libwayland-client0,
+ libwayland-egl1,
+ libxkbcommon0,
+ shared-mime-info,
+ xdg-utils,
+Recommends:
+ bingux-preview-host (= ${binary:Version}),
+ eject,
+ gvfs,
+ tar,
+ udisks2,
+ unzip,
+ util-linux,
+Suggests:
+ bingux-settings (= ${binary:Version}),
+Description: File manager for the Bingux desktop
+ Files is the Bingux desktop's file manager. It has tabs, a places sidebar,
+ list and grid views, previews, search and file operations with undo. It opens
+ folders and bingux-files:// addresses.
+
+Package: bingux-preview-host
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ gstreamer1.0-plugins-base,
+ gstreamer1.0-plugins-good,
+Recommends:
+ gstreamer1.0-libav,
+ gstreamer1.0-pipewire,
+ gstreamer1.0-plugins-bad,
+Description: Helper process that plays media and renders PDFs for Bingux previews
+ bingux-preview-host plays audio and video (GStreamer) and renders PDF pages
+ (poppler) for the Files preview. It is a separate program so that a damaged
+ file crashes it and not the file manager, and so that Files itself links
+ neither library. Files finds it beside its own program or on the PATH.
+
+Package: bingux-audio-effects
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ pipewire (>= 1.0),
+ systemd,
+Recommends:
+ pipewire-bin,
+ wireplumber,
+Suggests:
+ lsp-plugins-ladspa,
+Description: Sound effects for the Bingux desktop
+ bingux-effects puts a chain of plugins between applications and the speakers,
+ or between a microphone and applications, using PipeWire's filter-chain. The
+ package includes the Bingux DSP plugin library (compressor, limiter, gate,
+ reverb, bass enhancer and more) in LADSPA format, which any LADSPA host can
+ also load. Settings edits the presets and turns the effects on.
+
+Package: bingux-taxonomy
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ fontconfig,
+ hicolor-icon-theme,
+ libegl1,
+ libgl1-mesa-dri,
+ libwayland-client0,
+ libwayland-egl1,
+ libxkbcommon0,
+Description: Reference window for the Bingux UI components
+ Taxonomy shows every component, icon and design token of the Bingux UI
+ library in a running window. It is a development tool for people who build
+ Bingux applications; ordinary desktops do not need it.

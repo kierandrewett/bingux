@@ -1,0 +1,23 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: bingux
+Upstream-Contact: Kieran Drewett <kieran@drewett.dev>
+Source: https://github.com/kierandrewett/bingux
+
+Files: *
+Copyright: 2026 Kieran Drewett
+License: GPL-3.0-or-later
+
+Files: shell/runtime/quickshell/*
+Copyright: Quickshell contributors
+License: LGPL-3.0-only
+
+License: GPL-3.0-or-later
+ On Debian systems the full text of the GNU General Public License version 3
+ is in /usr/share/common-licenses/GPL-3.
+License: LGPL-3.0-only
+ On Debian systems the full text of the GNU Lesser General Public License
+ version 3 is in /usr/share/common-licenses/LGPL-3.
+ .
+ The licences of the Rust crates linked into each program, and of the bundled
+ Adwaita icon theme, are installed beside this file as
+ *.LICENSE.dependencies and in /usr/share/licenses/bingux/.

@@ -1,0 +1,5 @@
+# Everything the other packages left in debian/tmp (debian/rules removes their files after installing them).
+usr/*
+packaging/pam/bingux-lock etc/pam.d
+build/licenses/bingux-searchd.LICENSE.dependencies usr/share/doc/bingux
+build/licenses/bingux-statusd.LICENSE.dependencies usr/share/doc/bingux

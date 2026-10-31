@@ -4,6 +4,8 @@
 | --- | --- |
 | `rpm/bingux.spec` | One source package, six RPMs (`rpm/README.md`) |
 | `arch/PKGBUILD`, `arch/bingux.install` | The same six packages for Arch Linux and Bingux OS (`arch/README.md`) |
+| `debian/` | The same packages as a Debian source package, built by `scripts/build-debs.sh` (`make deb-package`) |
+| `pkgrepo.ref` | The commit of the Gnoblin repository whose `scripts/pkgrepo` builds the signed package repositories |
 | `metainfo/` | AppStream files of Settings, Files and Taxonomy |
 | `man/` | Man pages: `bingux-settings`, `bingux-files`, `bingux-config`, `bingux-effects`, `bingux-taxonomy` |
 | `systemd/` | User units, `bingux.target`, `bingux-effects@.service` and the preset `90-bingux.preset` |
@@ -22,6 +24,7 @@ Checks and builds:
 make rpm-check      # spec, units, desktop entries, AppStream, man pages, licence tags
 make rpm-package    # all RPMs, into /var/tmp/BinguxPkg/rpmbuild
 make arch-package   # all Arch packages, into /var/tmp/BinguxPkg/arch/out
+make deb-package    # all Debian packages, into /var/tmp/BinguxPkg/deb/out
 ```
 
 ## Build notes

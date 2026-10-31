@@ -3,7 +3,8 @@
 #
 # usage: scripts/build-rpms.sh [VERSION [TOPDIR]]
 #
-# VERSION   defaults to 0.1.0 (the Makefile's VERSION)
+# VERSION   defaults to 0.1.0 (the Makefile's VERSION); a nightly build passes its RPM version, such as
+#           0.1.1~nightly.20261031.5.gabc1234 (scripts/pkgrepo version)
 # TOPDIR    defaults to /var/tmp/BinguxPkg; rpmbuild works in TOPDIR/rpmbuild and the
 #           packages land in TOPDIR/rpmbuild/RPMS and TOPDIR/rpmbuild/SRPMS
 #
@@ -37,7 +38,9 @@ rm -rf "$topdir"
 mkdir -p "$topdir"/{SOURCES,SPECS,BUILD,BUILDROOT,RPMS,SRPMS}
 
 bash "$root/scripts/make-source-archive.sh" "$version" "$topdir/SOURCES/bingux-${version}.tar.xz" >/dev/null
-cp "$root/packaging/rpm/bingux.spec" "$topdir/SPECS/"
+# The spec in the tree names the release in the tree. A nightly build gives VERSION (0.1.1~nightly.20261031.5.gabc1234),
+# which sorts below the next release and above the last one; the archive above has the same name as that version.
+sed -e "s/^Version:.*/Version:        ${version}/" "$root/packaging/rpm/bingux.spec" >"$topdir/SPECS/bingux.spec"
 
 options=(-ba --define "_topdir $topdir" --define "_smp_build_ncpus ${JOBS:-4}")
 [[ "${BINGUX_RPM_CHECK_DEPS:-0}" == 1 ]] || options+=(--nodeps)
