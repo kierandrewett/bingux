@@ -11,7 +11,7 @@ pytestmark = pytest.mark.fast
 
 def spec(**changes) -> SandboxSpec:
     values = dict(
-        root=Path("/dev/shm/bingux-desktop-x"),
+        root=Path("/var/tmp/bingux-desktop-x"),
         uid=1000,
         home="/home/someone",
         env={"HOME": "/home/someone", "PATH": "/usr/bin"},
@@ -42,7 +42,7 @@ def test_the_host_is_visible_only_through_usr_etc_and_the_named_read_only_paths(
     assert read_only == {"/usr", "/etc", "/srv/checkout"}
     # The only writable host paths are directories of the run's temporary root.
     writable = {source for source, _ in pairs(argv, "--bind")}
-    assert writable == {f"/dev/shm/bingux-desktop-x/{name}" for name in ("run", "tmp", "logs", "home")}
+    assert writable == {f"/var/tmp/bingux-desktop-x/{name}" for name in ("run", "tmp", "logs", "home")}
 
 
 def test_no_host_autostart_entry_is_visible():
@@ -54,8 +54,8 @@ def test_no_host_autostart_entry_is_visible():
 def test_the_runtime_directory_and_home_are_the_runs_own():
     argv = bwrap_argv(spec(uid=4242))
     mounts = dict(pairs(argv, "--bind"))
-    assert mounts["/dev/shm/bingux-desktop-x/run"] == "/run/user/4242"
-    assert mounts["/dev/shm/bingux-desktop-x/home"] == "/home/someone"
+    assert mounts["/var/tmp/bingux-desktop-x/run"] == "/run/user/4242"
+    assert mounts["/var/tmp/bingux-desktop-x/home"] == "/home/someone"
 
 
 def test_gpu_devices_are_off_unless_asked_for():

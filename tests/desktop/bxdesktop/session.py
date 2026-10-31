@@ -23,7 +23,7 @@ What starts, in order, inside one bubblewrap sandbox (`sandbox.py`):
 
 Commands are run inside the sandbox with `nsenter` (`run`, `spawn`), so a test
 sees what a program in the session sees. Everything the session writes is in
-`root` (a directory under `/dev/shm`, or `BINGUX_TEST_TMP`), which `stop`
+`root` (a directory under `BINGUX_TEST_TMP`, else the system temporary directory), which `stop`
 removes; logs and screenshots go to the artefact directory.
 """
 
@@ -80,9 +80,9 @@ class CommandFailed(SessionError):
 
 
 def scratch_parent() -> Path:
-    """Where a run's temporary root lives: BINGUX_TEST_TMP, else /dev/shm, else the system temp."""
+    """Where a run's temporary root lives: BINGUX_TEST_TMP, else the system temporary directory (TMPDIR)."""
     configured = os.environ.get("BINGUX_TEST_TMP")
-    for candidate in (configured, "/dev/shm", tempfile.gettempdir()):
+    for candidate in (configured, tempfile.gettempdir()):
         if candidate and Path(candidate).is_dir() and os.access(candidate, os.W_OK):
             return Path(candidate)
     raise SessionError("no writable directory for the session root; set BINGUX_TEST_TMP")

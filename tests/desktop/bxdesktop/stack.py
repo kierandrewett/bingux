@@ -151,17 +151,24 @@ class Stack:
 
     # -- lookups -------------------------------------------------------------
 
-    def binary(self, name: str) -> Path | None:
-        """A Bingux program: the Cargo target (release, then debug), then the prefix's bin."""
+    def binaries(self, name: str) -> list[Path]:
+        """Every build of a Bingux program, best first: BINGUX_<NAME>_BIN, the Cargo target (release, then debug), the prefix."""
+        found: list[Path] = []
         override = os.environ.get("BINGUX_" + name.removeprefix("bingux-").replace("-", "_").upper() + "_BIN")
-        if override and Path(override).is_file():
-            return Path(override)
-        candidates = []
+        candidates = [Path(override)] if override else []
         if self.cargo_target:
             candidates += [self.cargo_target / "release" / name, self.cargo_target / "debug" / name]
         if self.bingux_prefix:
             candidates.append(self.bingux_prefix / "bin" / name)
-        return next((c for c in candidates if c.is_file() and os.access(c, os.X_OK)), None)
+        for candidate in candidates:
+            if candidate.is_file() and os.access(candidate, os.X_OK) and candidate not in found:
+                found.append(candidate)
+        return found
+
+    def binary(self, name: str) -> Path | None:
+        """The first build of a Bingux program, or None."""
+        builds = self.binaries(name)
+        return builds[0] if builds else None
 
     def describe(self) -> dict[str, str]:
         """What this run used, for the artefact directory and for a bug report."""
