@@ -34,6 +34,8 @@ pub mod layout;
 mod loading_shape_tests;
 pub mod motion;
 #[cfg(all(test, feature = "testing"))]
+mod motion_stress;
+#[cfg(all(test, feature = "testing"))]
 mod mount_tests;
 pub mod nav;
 pub(crate) mod popup_windows;
@@ -51,12 +53,11 @@ pub mod stage;
 pub mod stress;
 pub mod style;
 pub mod surface;
+pub mod tabs;
 pub mod task;
 pub mod theme;
 pub mod typography;
 mod warm;
-#[cfg(all(test, feature = "testing"))]
-mod motion_stress;
 pub mod window;
 
 /// Everything an application window normally needs.

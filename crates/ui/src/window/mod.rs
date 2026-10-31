@@ -29,14 +29,20 @@
 //!
 //! On a narrow window (a phone) every popup is a sheet from the bottom edge,
 //! see [`PopupFlags`]. [`WindowHost`] makes that choice from the window width.
+//!
+//! [`compositor`] is where the windows of the *desktop* are: the one question
+//! a client cannot answer from what Wayland gives it (where is my window, where
+//! is the other one), asked of sway or Gnoblin so a tab dragged out of a window
+//! can be dropped on another's strip (`crate::tabs`).
 
+pub(crate) mod compositor;
 pub(crate) mod popup;
 
 use freya::prelude::*;
 
-use crate::nav::Location;
 use crate::component::ComponentName;
 use crate::focus::provide_focus_core;
+use crate::nav::Location;
 use crate::shell::with_window;
 use crate::style::{
     INSET_SCALE, Paint, PointerKind, Radius, SizeClass, Tw, WindowDensity, bg, center, clip,
@@ -50,8 +56,8 @@ use crate::shell::sheet_gesture::lift_limit;
 use crate::shell::sheet_motion::{
     Release, SHEET_MS, SHEET_SPRING_MS, openness, use_sheet_clock, use_sheet_spring,
 };
-use popup::{PopupEntry, PopupFrame};
 pub use popup::{Popup, PopupAction, PopupActions, PopupFlags, popup, use_popup_actions};
+use popup::{PopupEntry, PopupFrame};
 
 /// The open popups and the counter that names them. Copy, so a window handle
 /// can carry it into closures.
@@ -122,10 +128,22 @@ impl WindowManager {
         crate::layers::with_stack(|stack| {
             let window = u64::from(Platform::get().current_window().id);
             if !stack.contains(window) {
-                stack.open(window, crate::layers::WindowKind::Toplevel, None, false, "window");
+                stack.open(
+                    window,
+                    crate::layers::WindowKind::Toplevel,
+                    None,
+                    false,
+                    "window",
+                );
             }
             let parent = parent.map_or(window, stack_id);
-            stack.open(stack_id(id), crate::layers::WindowKind::Dialog, Some(parent), true, &title);
+            stack.open(
+                stack_id(id),
+                crate::layers::WindowKind::Dialog,
+                Some(parent),
+                true,
+                &title,
+            );
         });
         let entry = PopupEntry::new(manager.scope, id, parent, popup);
         manager.popups.write().push(entry);

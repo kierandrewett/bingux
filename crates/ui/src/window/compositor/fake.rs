@@ -94,7 +94,10 @@ impl Fake {
             requests: Arc::default(),
             refuse: Arc::default(),
             result: Arc::new(Mutex::new(result)),
-            hello: Arc::new(Mutex::new((86, vec!["ping", "windows.list", "workspaces.list"]))),
+            hello: Arc::new(Mutex::new((
+                86,
+                vec!["ping", "windows.list", "workspaces.list"],
+            ))),
             close_after: Arc::default(),
             chatty: Arc::default(),
             hung_up: Arc::default(),
@@ -146,16 +149,25 @@ fn serve(stream: UnixStream, shared: &Shared) {
     let mut served = 0;
     for line in BufReader::new(stream).lines() {
         let Ok(line) = line else { return };
-        let request: serde_json::Value = serde_json::from_str(&line).expect("a request is one JSON object per line");
+        let request: serde_json::Value =
+            serde_json::from_str(&line).expect("a request is one JSON object per line");
         requests.lock().expect("requests").push(request.clone());
         let id = request["id"].as_str().unwrap_or_default().to_string();
         if *chatty.lock().expect("chatty") {
-            let _ = writeln!(writer, r#"{{"event":"gnoblin.window.changed","revision":4}}"#);
-            let _ = writeln!(writer, r#"{{"event":"reply","id":"someone-else","result":[]}}"#);
+            let _ = writeln!(
+                writer,
+                r#"{{"event":"gnoblin.window.changed","revision":4}}"#
+            );
+            let _ = writeln!(
+                writer,
+                r#"{{"event":"reply","id":"someone-else","result":[]}}"#
+            );
         }
         let reply = match *refuse.lock().expect("refuse") {
             Some(message) => serde_json::json!({"event": "error", "id": id, "message": message}),
-            None => serde_json::json!({"event": "reply", "id": id, "result": result.lock().expect("result").clone()}),
+            None => {
+                serde_json::json!({"event": "reply", "id": id, "result": result.lock().expect("result").clone()})
+            }
         };
         if writeln!(writer, "{reply}").is_err() {
             return;

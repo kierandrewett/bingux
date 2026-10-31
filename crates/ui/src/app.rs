@@ -14,12 +14,12 @@
 //!   `xdg-open bingux-settings://network/proxy` reaches the same path through
 //!   the desktop file's `x-scheme-handler`.
 
-use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Poll, Waker};
 use std::time::Duration;
@@ -28,6 +28,22 @@ use freya::prelude::*;
 
 use crate::nav::{Location, Mode, RouteTable, Router, provide_router};
 use crate::theme;
+
+/// Who the running application is: its id and the name its windows carry.
+static IDENTITY: std::sync::OnceLock<(String, &'static str)> = std::sync::OnceLock::new();
+
+/// The id the running application was started with ([`Application::new`]):
+/// what the compositor reports as the `app_id` of each of its windows. Empty
+/// before [`Application::run`] (in a headless snapshot, say).
+pub fn app_id() -> &'static str {
+    IDENTITY.get().map_or("", |(id, _)| id.as_str())
+}
+
+/// The name of the running application, as [`Application::title`] gave it.
+/// Empty before [`Application::run`].
+pub fn app_title() -> &'static str {
+    IDENTITY.get().map_or("", |(_, title)| title)
+}
 
 /// The settings of one application: its identity, its routes, its window and
 /// the usage text `--help` prints.
@@ -153,6 +169,7 @@ impl Application {
                 .unwrap_or_else(|| RouteTable::new(&self.app_id)),
         );
         let scheme = table.scheme().to_string();
+        let _ = IDENTITY.set((self.app_id.clone(), self.title));
         tune_allocator();
         // Panics are never fatal: the panic hook, the failure log and the
         // relaunch plan exist before the first window and the first thread.
@@ -207,7 +224,12 @@ impl Application {
         } else {
             addresses
                 .iter()
-                .map(|location| location.as_ref().map(ToString::to_string).unwrap_or_default())
+                .map(|location| {
+                    location
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .unwrap_or_default()
+                })
                 .collect()
         };
 
@@ -219,7 +241,8 @@ impl Application {
                 for line in &forwarded {
                     let sent = match running.take() {
                         Some(mut stream) => writeln!(stream, "{line}"),
-                        None => UnixStream::connect(&socket).and_then(|mut stream| writeln!(stream, "{line}")),
+                        None => UnixStream::connect(&socket)
+                            .and_then(|mut stream| writeln!(stream, "{line}")),
                     };
                     if let Err(error) = sent {
                         eprintln!("{}: could not reach the running copy: {error}", self.app_id);
@@ -316,7 +339,8 @@ impl Blueprint {
     /// The window opening on `initial`, `size` big. A window with a `seed`
     /// hands it to its root, which takes it with [`use_window_seed`].
     fn window(&self, initial: Location, size: (f32, f32), seed: Option<SeedCell>) -> WindowConfig {
-        let (table, root, boundary_name) = (self.table.clone(), self.root.clone(), self.boundary_name);
+        let (table, root, boundary_name) =
+            (self.table.clone(), self.root.clone(), self.boundary_name);
         let window = WindowConfig::new(move || {
             // From here on the thread is the UI thread: blocking calls are reported.
             crate::runtime::mark_ui_thread();
@@ -351,7 +375,13 @@ impl Blueprint {
         // (white by default) before it draws, so a root drawn at 0.4 opacity would be mixed with
         // white, not with the windows under it. The clear must be transparent too.
         // ui-lint: allow(the window's own clear colour, not a box)
-        let window = if self.transparent { window.with_transparency(true).with_background(Color::TRANSPARENT) } else { window };
+        let window = if self.transparent {
+            window
+                .with_transparency(true)
+                .with_background(Color::TRANSPARENT)
+        } else {
+            window
+        };
         if self.borderless {
             window.with_decorations(false)
         } else {
@@ -412,11 +442,15 @@ async fn open_window_under<T: 'static>(
         None => blueprint.table.home(),
     };
     let initial = blueprint.table.canonical(&initial);
-    let cell = SeedCell(Rc::new(RefCell::new(Some(Box::new(seed) as Box<dyn std::any::Any>))));
-    let mut window = blueprint.window(initial, size, Some(cell)).with_on_close(|_, id| {
-        crate::layers::with_stack(|stack| stack.close(u64::from(id)));
-        freya_winit::config::CloseDecision::Close
-    });
+    let cell = SeedCell(Rc::new(RefCell::new(Some(
+        Box::new(seed) as Box<dyn std::any::Any>
+    ))));
+    let mut window = blueprint
+        .window(initial, size, Some(cell))
+        .with_on_close(|_, id| {
+            crate::layers::with_stack(|stack| stack.close(u64::from(id)));
+            freya_winit::config::CloseDecision::Close
+        });
     if let Some(parent) = parent {
         window = window.with_parent(parent);
     }
@@ -426,7 +460,13 @@ async fn open_window_under<T: 'static>(
         if let Some(parent) = parent_id
             && !stack.contains(parent)
         {
-            stack.open(parent, crate::layers::WindowKind::Toplevel, None, false, "window");
+            stack.open(
+                parent,
+                crate::layers::WindowKind::Toplevel,
+                None,
+                false,
+                "window",
+            );
         }
         let kind = if parent.is_some() {
             crate::layers::WindowKind::Dialog
@@ -582,7 +622,10 @@ fn start_forwarding(inbox: Arc<Inbox>, router: Router) {
             let text = inbox.next().await;
             if !text.is_empty() {
                 let table = router.table();
-                match (table.stack_mode(), Location::parse_in(table.scheme(), &text)) {
+                match (
+                    table.stack_mode(),
+                    Location::parse_in(table.scheme(), &text),
+                ) {
                     (Mode::Linear, Some(location)) => router.reset(&location),
                     (Mode::Hierarchical, Some(location)) => router.navigate_to(&location),
                     (_, None) => {}
@@ -619,7 +662,10 @@ impl Launch {
     /// options, so a folder called `--odd` is opened as `-- --odd`. A lone `-`
     /// and every argument that does not start with `-` is an address.
     fn parse(arguments: &[std::ffi::OsString]) -> Result<Self, UnknownOption> {
-        let mut launch = Launch { help: false, addresses: Vec::new() };
+        let mut launch = Launch {
+            help: false,
+            addresses: Vec::new(),
+        };
         let mut options_end = false;
         for argument in arguments {
             let bytes = argument.as_encoded_bytes();
@@ -659,7 +705,13 @@ mod launch_tests {
 
     #[test]
     fn no_argument_names_nothing() {
-        assert_eq!(parse(&[]), Ok(Launch { help: false, addresses: vec![] }));
+        assert_eq!(
+            parse(&[]),
+            Ok(Launch {
+                help: false,
+                addresses: vec![]
+            })
+        );
     }
 
     #[test]
@@ -679,7 +731,15 @@ mod launch_tests {
 
     #[test]
     fn an_unknown_option_is_refused_whatever_it_looks_like() {
-        for option in ["--snapshot", "--snapshot=/tmp/x", "-x", "---", "-1", "--HELP", "-hh"] {
+        for option in [
+            "--snapshot",
+            "--snapshot=/tmp/x",
+            "-x",
+            "---",
+            "-1",
+            "--HELP",
+            "-hh",
+        ] {
             let result = parse(&[option]);
             assert!(result.is_err(), "{option}: {result:?}");
         }
@@ -700,7 +760,10 @@ mod launch_tests {
     fn a_name_that_is_not_utf8_is_an_address_or_an_unknown_option_by_its_first_byte() {
         use std::os::unix::ffi::OsStringExt;
         let odd = OsString::from_vec(b"/tmp/caf\xe9".to_vec());
-        assert_eq!(Launch::parse(&[odd.clone()]).expect("an address").addresses, [odd]);
+        assert_eq!(
+            Launch::parse(&[odd.clone()]).expect("an address").addresses,
+            [odd]
+        );
         let option = OsString::from_vec(b"-caf\xe9".to_vec());
         assert!(Launch::parse(&[option]).is_err());
     }

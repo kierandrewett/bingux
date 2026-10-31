@@ -543,11 +543,8 @@ dependencies = [
 name = "bingux-files-app"
 version = "0.1.0"
 dependencies = [
- "bingux-files",
  "bingux-ui",
  "freya",
- "libc",
- "serde_json",
 ]
 
 [[package]]

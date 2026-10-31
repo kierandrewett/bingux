@@ -3,19 +3,20 @@
 //! The window is the file chooser's body (`bingux_ui::files::browse`) with no
 //! question to answer, in tabs. A second launch hands its folders to the
 //! running window, which opens each in a new tab, and exits.
+//!
+//! Everything a file manager shares with other applications lives in
+//! `bingux-ui` (the tabs and their tear-off into windows, `bingux_ui::tabs`;
+//! the compositor questions, `bingux_ui::window`; what a launch argument names,
+//! `bingux_ui::files::launch`) and in `bingux-files` (the file model). This
+//! crate is the Files window: its tabs' titles and menu, and the remembered
+//! window size.
 
 mod app;
-mod compositor;
-#[cfg(test)]
-mod fuzz;
-mod tabset;
-mod target;
-mod tearoff;
 #[cfg(feature = "snapshot")]
 mod snapshot_mode;
 mod window_size;
-mod windows;
 
+use bingux_ui::files::launch;
 use bingux_ui::prelude::Application;
 
 const USAGE: &str = "Usage: bingux-files [--] [FOLDER | FILE | URI]...\n\
@@ -31,7 +32,9 @@ reported on stderr and opens nothing. An option other than --help is an error;\n
 fn main() {
     #[cfg(feature = "snapshot")]
     if std::env::args().nth(1).as_deref() == Some("--snapshot") {
-        let dir = std::env::args().nth(2).unwrap_or_else(|| "/tmp/bingux-files-snapshots".to_string());
+        let dir = std::env::args()
+            .nth(2)
+            .unwrap_or_else(|| "/tmp/bingux-files-snapshots".to_string());
         snapshot_mode::run(&dir, std::env::args().nth(3).as_deref());
         return;
     }
@@ -44,7 +47,7 @@ fn main() {
         // The window being carried by a tab torn off it is drawn faded over
         // the window it may join; see `tearoff`.
         .transparent()
-        .normalise(target::normalise)
+        .normalise(launch::normalise)
         .about(bingux_ui::app_info!(
             description = "Browse and organise files and folders",
             licence_text = include_str!("../../../COPYING"),

@@ -3,10 +3,11 @@
 //! A Wayland client knows nothing about the screen: it cannot read its own
 //! window's place, let alone another's, and while a compositor moves a window
 //! (`xdg_toplevel.move`) it hears nothing from it. A tab dragged out of one
-//! Files window onto another's strip therefore cannot be told where it is from
-//! what the client is given. What can tell it is the compositor itself, when
-//! it offers a way to ask. [`Locator::detect`] finds out which one there is;
-//! [`Locator::frames`] asks it.
+//! window of an application onto another's strip (`crate::tabs::tearoff`)
+//! therefore cannot be told where it is from what the client is given. What
+//! can tell it is the compositor itself, when it offers a way to ask.
+//! [`Locator::detect`] finds out which one there is; [`Locator::frames`] asks
+//! it.
 //!
 //! * **sway** (and anything that speaks its IPC, `SWAYSOCK`): `GET_TREE`
 //!   answers with every window's rectangle, its title and the process that
@@ -15,9 +16,10 @@
 //!   newline-delimited JSON) answers `windows.list` with every window's
 //!   `frame`, `app_id`, `title`, workspace and minimized state. Its frames are
 //!   in the compositor's logical pixels, the same unit the window's own
-//!   pointer events use. The reply carries no process id, so a Files window is
-//!   known by its application id and title. The socket has no call for the
-//!   pointer: its place follows from the dragged window's frame, as on sway.
+//!   pointer events use. The reply carries no process id, so one of the
+//!   application's windows is known by its application id and title. The
+//!   socket has no call for the pointer: its place follows from the dragged
+//!   window's frame, as on sway.
 //! * **GNOME Shell (mutter), KDE Plasma, and the rest**: nothing is offered to
 //!   a client, so [`Locator::detect`] finds none, a tab can be torn off but not
 //!   dropped on another window's strip by moving the window over it (see
@@ -38,10 +40,6 @@ const FRAME_AT_LEAST: f32 = 1.0;
 
 #[cfg(test)]
 pub(crate) mod fake;
-
-/// The application id Files windows carry, as sway reports it and as Gnoblin
-/// reports `app_id`.
-const APP_ID: &str = "bingux-files";
 
 /// How long a compositor may take to answer before it is taken to be gone.
 const ANSWER_WITHIN: Duration = Duration::from_millis(500);
@@ -72,22 +70,25 @@ pub(crate) struct Frame {
 }
 
 impl Frame {
-    /// Whether this window is one of this application's: the one process
-    /// (`pid`) when the compositor names processes, else the application id.
-    pub fn is_ours(&self, pid: u32) -> bool {
+    /// Whether this window is one of the application's: the one process
+    /// (`pid`) when the compositor names processes, else the application id
+    /// it was started with (`bingux_ui::app::app_id`).
+    pub fn is_ours(&self, pid: u32, app_id: &str) -> bool {
         match self.pid {
             Some(owner) => owner == pid,
-            None => same_app(&self.app_id, APP_ID),
+            None => same_app(&self.app_id, app_id),
         }
     }
 
     /// Whether a window dropped on this one could be seen to be: both are on
     /// the screen, and on the same workspace when the compositor tells.
     pub fn shows_with(&self, other: &Frame) -> bool {
-        !self.hidden && !other.hidden && match (&self.workspace, &other.workspace) {
-            (Some(a), Some(b)) => a == b,
-            _ => true,
-        }
+        !self.hidden
+            && !other.hidden
+            && match (&self.workspace, &other.workspace) {
+                (Some(a), Some(b)) => a == b,
+                _ => true,
+            }
     }
 
     /// The window's own content, when the window knows how big that is
@@ -103,12 +104,23 @@ impl Frame {
     pub fn content(&self, size: (f32, f32)) -> Frame {
         let (extra_width, extra_height) = (self.width - size.0, self.height - size.1);
         let grown = |extra: f32| extra >= FRAME_AT_LEAST;
-        if size.0 <= 0.0 || size.1 <= 0.0 || extra_width < 0.0 || extra_height < 0.0 || !(grown(extra_width) || grown(extra_height)) {
+        if size.0 <= 0.0
+            || size.1 <= 0.0
+            || extra_width < 0.0
+            || extra_height < 0.0
+            || !(grown(extra_width) || grown(extra_height))
+        {
             return self.clone();
         }
         let side = extra_width / 2.0;
         let top = (extra_height - side).max(0.0);
-        Frame { x: self.x + side, y: self.y + top, width: size.0, height: size.1, ..self.clone() }
+        Frame {
+            x: self.x + side,
+            y: self.y + top,
+            width: size.0,
+            height: size.1,
+            ..self.clone()
+        }
     }
 }
 
@@ -142,7 +154,10 @@ fn walk(node: &serde_json::Value, frames: &mut Vec<Frame>) {
 }
 
 fn number(value: &serde_json::Value, key: &str) -> f64 {
-    value.get(key).and_then(serde_json::Value::as_f64).unwrap_or(0.0)
+    value
+        .get(key)
+        .and_then(serde_json::Value::as_f64)
+        .unwrap_or(0.0)
 }
 
 fn sway_frame_of(node: &serde_json::Value) -> Option<Frame> {
@@ -150,9 +165,20 @@ fn sway_frame_of(node: &serde_json::Value) -> Option<Frame> {
     let rect = node.get("rect")?;
     let content = node.get("window_rect")?;
     Some(Frame {
-        name: node.get("name").and_then(serde_json::Value::as_str).unwrap_or_default().to_string(),
+        name: node
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
         app_id: app_id.to_string(),
-        pid: Some(u32::try_from(node.get("pid").and_then(serde_json::Value::as_u64).unwrap_or(0)).unwrap_or(0)),
+        pid: Some(
+            u32::try_from(
+                node.get("pid")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0),
+            )
+            .unwrap_or(0),
+        ),
         // `rect` is the container, including its border; `window_rect` is the
         // content's place inside it.
         x: (number(rect, "x") + number(content, "x")) as f32,
@@ -177,8 +203,19 @@ pub(crate) fn parse_gnoblin(result: &serde_json::Value) -> Vec<Frame> {
         .iter()
         .filter_map(|record| {
             let frame = record.get("frame").filter(|frame| frame.is_object())?;
-            let text = |key: &str| record.get(key).and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
-            let flag = |key: &str| record.get(key).and_then(serde_json::Value::as_bool).unwrap_or(false);
+            let text = |key: &str| {
+                record
+                    .get(key)
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string()
+            };
+            let flag = |key: &str| {
+                record
+                    .get(key)
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false)
+            };
             let on_every_workspace = flag("sticky");
             let workspace = text("workspace_id");
             Some(Frame {
@@ -241,12 +278,19 @@ impl Locator {
     /// when `SWAYSOCK` is also set, which a nested session started from a sway
     /// terminal inherits. Otherwise `SWAYSOCK` (or `I3SOCK`) means sway, and a
     /// Gnoblin socket that is there means Gnoblin.
-    fn detect_in(var: impl Fn(&str) -> Option<OsString>, exists: impl Fn(&Path) -> bool) -> Option<Locator> {
+    fn detect_in(
+        var: impl Fn(&str) -> Option<OsString>,
+        exists: impl Fn(&Path) -> bool,
+    ) -> Option<Locator> {
         let set = |name: &str| var(name).filter(|value| !value.is_empty());
         let socket = gnoblin_socket(&var);
         let says_gnoblin = set("GNOBLIN_COMPOSITOR_SOCKET").is_some()
-            || set("XDG_CURRENT_DESKTOP")
-                .is_some_and(|desktop| desktop.to_string_lossy().split(':').any(|name| name.eq_ignore_ascii_case("gnoblin")));
+            || set("XDG_CURRENT_DESKTOP").is_some_and(|desktop| {
+                desktop
+                    .to_string_lossy()
+                    .split(':')
+                    .any(|name| name.eq_ignore_ascii_case("gnoblin"))
+            });
         if says_gnoblin {
             return Some(Locator::Gnoblin(Gnoblin::new(socket)));
         }
@@ -292,13 +336,18 @@ fn gnoblin_socket(var: &impl Fn(&str) -> Option<OsString>) -> PathBuf {
     }
     let runtime = var("XDG_RUNTIME_DIR")
         .filter(|dir| !dir.is_empty())
-        .map_or_else(|| PathBuf::from(format!("/run/user/{}", own_uid())), PathBuf::from);
+        .map_or_else(
+            || PathBuf::from(format!("/run/user/{}", own_uid())),
+            PathBuf::from,
+        );
     runtime.join("gnoblin").join("compositor-v1.sock")
 }
 
 /// The user id of this process, from the owner of `/proc/self`.
 fn own_uid() -> u32 {
-    std::os::unix::fs::MetadataExt::uid(&std::fs::metadata("/proc/self").expect("/proc/self exists on Linux"))
+    std::os::unix::fs::MetadataExt::uid(
+        &std::fs::metadata("/proc/self").expect("/proc/self exists on Linux"),
+    )
 }
 
 fn sway_frames(path: &OsString) -> Option<Vec<Frame>> {
@@ -351,7 +400,11 @@ enum Failure {
 
 impl Gnoblin {
     pub(crate) fn new(path: PathBuf) -> Gnoblin {
-        Gnoblin { path, link: None, asked: 0 }
+        Gnoblin {
+            path,
+            link: None,
+            asked: 0,
+        }
     }
 
     fn frames(&mut self) -> Option<Vec<Frame>> {
@@ -360,7 +413,7 @@ impl Gnoblin {
             None => Link::open(&self.path)?,
         };
         self.asked += 1;
-        match link.ask(&format!("files-{}", self.asked)) {
+        match link.ask(&format!("windows-{}", self.asked)) {
             Ok(frames) => {
                 self.link = Some(link);
                 Some(frames)
@@ -385,11 +438,18 @@ impl Link {
         let hello = read_json_line(&mut reader)?;
         let supported = hello.get("event").and_then(serde_json::Value::as_str) == Some("hello")
             && hello.get("api_major").and_then(serde_json::Value::as_u64) == Some(1)
-            && hello.get("api_minor").and_then(serde_json::Value::as_u64).is_some_and(|minor| minor >= GNOBLIN_API_MINOR)
+            && hello
+                .get("api_minor")
+                .and_then(serde_json::Value::as_u64)
+                .is_some_and(|minor| minor >= GNOBLIN_API_MINOR)
             && hello
                 .get("methods")
                 .and_then(serde_json::Value::as_array)
-                .is_some_and(|methods| methods.iter().any(|method| method.as_str() == Some("windows.list")));
+                .is_some_and(|methods| {
+                    methods
+                        .iter()
+                        .any(|method| method.as_str() == Some("windows.list"))
+                });
         supported.then_some(Link { writer, reader })
     }
 
@@ -405,7 +465,9 @@ impl Link {
         });
         let mut line = request.to_string();
         line.push('\n');
-        self.writer.write_all(line.as_bytes()).map_err(|_| Failure::Broken)?;
+        self.writer
+            .write_all(line.as_bytes())
+            .map_err(|_| Failure::Broken)?;
         // Nothing is subscribed, so lines that are not the reply are rare; a
         // server that sends only them is not answering.
         for _ in 0..64 {
@@ -414,7 +476,10 @@ impl Link {
                 continue;
             }
             return match record.get("event").and_then(serde_json::Value::as_str) {
-                Some("reply") => record.get("result").map(parse_gnoblin).ok_or(Failure::Broken),
+                Some("reply") => record
+                    .get("result")
+                    .map(parse_gnoblin)
+                    .ok_or(Failure::Broken),
                 Some("error") => Err(Failure::Refused),
                 _ => Err(Failure::Broken),
             };
@@ -428,7 +493,11 @@ impl Link {
 /// that is not JSON.
 fn read_json_line(reader: &mut BufReader<UnixStream>) -> Option<serde_json::Value> {
     let mut line = Vec::new();
-    reader.by_ref().take(MAX_LINE).read_until(b'\n', &mut line).ok()?;
+    reader
+        .by_ref()
+        .take(MAX_LINE)
+        .read_until(b'\n', &mut line)
+        .ok()?;
     if line.last() != Some(&b'\n') {
         return None;
     }
@@ -443,6 +512,9 @@ mod tests {
 
     use super::fake::{Fake, windows_list};
     use super::*;
+
+    /// The application id the fixtures' windows carry.
+    const APP: &str = "bingux-files";
 
     /// The shape of sway's reply: an output holding a workspace with a tiled
     /// window, and floating windows beside it.
@@ -471,7 +543,11 @@ mod tests {
     #[test]
     fn every_window_in_the_tree_is_found_with_its_content_rectangle() {
         let frames = parse_sway(TREE);
-        assert_eq!(frames.len(), 2, "only nodes with an app id are windows: {frames:?}");
+        assert_eq!(
+            frames.len(),
+            2,
+            "only nodes with an app id are windows: {frames:?}"
+        );
         assert_eq!(
             frames[0],
             Frame {
@@ -497,13 +573,20 @@ mod tests {
         assert!(parse_sway("").is_empty());
         assert!(parse_sway("not json").is_empty());
         assert!(parse_sway("{}").is_empty());
-        assert!(parse_sway(r#"{"nodes": [{"app_id": "x"}]}"#).is_empty(), "a window with no rectangle is not placed");
+        assert!(
+            parse_sway(r#"{"nodes": [{"app_id": "x"}]}"#).is_empty(),
+            "a window with no rectangle is not placed"
+        );
     }
 
     #[test]
     fn gnoblins_window_list_is_read_into_frames_with_signed_logical_coordinates() {
         let frames = parse_gnoblin(&windows_list());
-        assert_eq!(frames.len(), 4, "a record without a frame is not placed: {frames:?}");
+        assert_eq!(
+            frames.len(),
+            4,
+            "a record without a frame is not placed: {frames:?}"
+        );
         assert_eq!(
             frames[0],
             Frame {
@@ -518,58 +601,121 @@ mod tests {
                 hidden: false,
             }
         );
-        assert_eq!((frames[1].x, frames[1].y), (-1280.0, -120.0), "a monitor left of the first is negative");
+        assert_eq!(
+            (frames[1].x, frames[1].y),
+            (-1280.0, -120.0),
+            "a monitor left of the first is negative"
+        );
         assert!(frames[2].hidden, "minimized");
-        assert_eq!(frames[3].workspace, None, "a sticky window is on every workspace");
+        assert_eq!(
+            frames[3].workspace, None,
+            "a sticky window is on every workspace"
+        );
     }
 
     #[test]
     fn what_gnoblin_does_not_say_is_not_invented() {
-        assert!(parse_gnoblin(&serde_json::json!({})).is_empty(), "not an array");
+        assert!(
+            parse_gnoblin(&serde_json::json!({})).is_empty(),
+            "not an array"
+        );
         assert!(parse_gnoblin(&serde_json::json!([1, "x", null, {"frame": 3}])).is_empty());
         let bare = parse_gnoblin(&serde_json::json!([{"frame": {}}]));
         assert_eq!(bare.len(), 1);
-        assert_eq!((bare[0].name.as_str(), bare[0].app_id.as_str(), bare[0].workspace.clone()), ("", "", None));
+        assert_eq!(
+            (
+                bare[0].name.as_str(),
+                bare[0].app_id.as_str(),
+                bare[0].workspace.clone()
+            ),
+            ("", "", None)
+        );
     }
 
     #[test]
     fn each_compositor_holds_the_pointer_where_it_begins_the_move() {
-        assert_eq!(Locator::Sway("/s/sway.sock".into()).anchor(), Anchor::Pointer);
-        assert_eq!(Locator::Gnoblin(Gnoblin::new("/g.sock".into())).anchor(), Anchor::Press);
+        assert_eq!(
+            Locator::Sway("/s/sway.sock".into()).anchor(),
+            Anchor::Pointer
+        );
+        assert_eq!(
+            Locator::Gnoblin(Gnoblin::new("/g.sock".into())).anchor(),
+            Anchor::Press
+        );
     }
 
     #[test]
     fn a_window_is_ours_by_process_where_the_compositor_names_it_and_by_application_id_where_not() {
         let frames = parse_gnoblin(&windows_list());
-        assert!(frames[0].is_ours(1), "Gnoblin names no process: the application id decides");
-        assert!(!frames[2].is_ours(1), "another application's window");
-        let with_suffix = Frame { app_id: "bingux-files.desktop".into(), ..frames[0].clone() };
-        assert!(with_suffix.is_ours(1), "the .desktop some compositors keep is not part of the id");
+        assert!(
+            frames[0].is_ours(1, APP),
+            "Gnoblin names no process: the application id decides"
+        );
+        assert!(!frames[2].is_ours(1, APP), "another application's window");
+        let with_suffix = Frame {
+            app_id: "bingux-files.desktop".into(),
+            ..frames[0].clone()
+        };
+        assert!(
+            with_suffix.is_ours(1, APP),
+            "the .desktop some compositors keep is not part of the id"
+        );
         let sway = &parse_sway(TREE)[0];
-        assert!(sway.is_ours(4242) && !sway.is_ours(7));
+        assert!(sway.is_ours(4242, APP) && !sway.is_ours(7, APP));
     }
 
     #[test]
     fn windows_are_shown_together_when_both_are_on_the_screen_and_the_same_workspace() {
         let frames = parse_gnoblin(&windows_list());
         assert!(frames[0].shows_with(&frames[1]));
-        assert!(!frames[0].shows_with(&frames[2]), "a minimized window is nowhere");
-        assert!(frames[0].shows_with(&frames[3]) && frames[3].shows_with(&frames[0]), "sticky is on every workspace");
-        let other = Frame { workspace: Some("workspace-2".into()), ..frames[1].clone() };
+        assert!(
+            !frames[0].shows_with(&frames[2]),
+            "a minimized window is nowhere"
+        );
+        assert!(
+            frames[0].shows_with(&frames[3]) && frames[3].shows_with(&frames[0]),
+            "sticky is on every workspace"
+        );
+        let other = Frame {
+            workspace: Some("workspace-2".into()),
+            ..frames[1].clone()
+        };
         assert!(!frames[0].shows_with(&other), "another workspace");
     }
 
     fn framed(x: f32, y: f32, width: f32, height: f32) -> Frame {
-        Frame { x, y, width, height, ..parse_gnoblin(&windows_list())[0].clone() }
+        Frame {
+            x,
+            y,
+            width,
+            height,
+            ..parse_gnoblin(&windows_list())[0].clone()
+        }
     }
 
     #[test]
     fn a_window_with_no_frame_drawn_around_it_is_its_own_content() {
         let frame = framed(100.0, 60.0, 600.0, 400.0);
-        assert_eq!(frame.content((600.0, 400.0)), frame, "the size of the content: sway's, or Gnoblin's with no frame");
-        assert_eq!(frame.content((599.6, 399.7)), frame, "rounding to whole pixels is not a frame");
-        assert_eq!(frame.content((0.0, 0.0)), frame, "a window that does not know its size");
-        assert_eq!(frame.content((640.0, 420.0)), frame, "a frame smaller than the content is a window being resized");
+        assert_eq!(
+            frame.content((600.0, 400.0)),
+            frame,
+            "the size of the content: sway's, or Gnoblin's with no frame"
+        );
+        assert_eq!(
+            frame.content((599.6, 399.7)),
+            frame,
+            "rounding to whole pixels is not a frame"
+        );
+        assert_eq!(
+            frame.content((0.0, 0.0)),
+            frame,
+            "a window that does not know its size"
+        );
+        assert_eq!(
+            frame.content((640.0, 420.0)),
+            frame,
+            "a frame smaller than the content is a window being resized"
+        );
     }
 
     #[test]
@@ -577,10 +723,16 @@ mod tests {
         // The built-in native frame, extents {32, 1, 1, 1}: a window of 600 x
         // 400 is 602 x 433 with it, and its content begins 1 across, 32 down.
         let content = framed(100.0, 60.0, 602.0, 433.0).content((600.0, 400.0));
-        assert_eq!((content.x, content.y, content.width, content.height), (101.0, 92.0, 600.0, 400.0));
+        assert_eq!(
+            (content.x, content.y, content.width, content.height),
+            (101.0, 92.0, 600.0, 400.0)
+        );
         // Bingux's frame, {36, 0, 0, 0}.
         let content = framed(-1280.0, -120.0, 600.0, 436.0).content((600.0, 400.0));
-        assert_eq!((content.x, content.y, content.width, content.height), (-1280.0, -84.0, 600.0, 400.0));
+        assert_eq!(
+            (content.x, content.y, content.width, content.height),
+            (-1280.0, -84.0, 600.0, 400.0)
+        );
         // Everything else about the window is kept.
         assert_eq!(content.name, "Home – Files");
         assert_eq!(content.workspace.as_deref(), Some("workspace-1"));
@@ -603,8 +755,14 @@ mod tests {
     #[test]
     fn the_compositor_is_found_from_the_environment() {
         let run = ("XDG_RUNTIME_DIR", "/run/user/1000");
-        assert_eq!(found(&[("SWAYSOCK", "/s/sway.sock")], false).as_deref(), Some("sway /s/sway.sock"));
-        assert_eq!(found(&[("I3SOCK", "/s/i3.sock")], false).as_deref(), Some("sway /s/i3.sock"));
+        assert_eq!(
+            found(&[("SWAYSOCK", "/s/sway.sock")], false).as_deref(),
+            Some("sway /s/sway.sock")
+        );
+        assert_eq!(
+            found(&[("I3SOCK", "/s/i3.sock")], false).as_deref(),
+            Some("sway /s/i3.sock")
+        );
         assert_eq!(
             found(&[run, ("XDG_CURRENT_DESKTOP", "Gnoblin")], false).as_deref(),
             Some("gnoblin /run/user/1000/gnoblin/compositor-v1.sock"),
@@ -628,20 +786,56 @@ mod tests {
 
     #[test]
     fn a_nested_gnoblin_started_from_a_sway_terminal_is_asked_not_sway() {
-        let nested = [("SWAYSOCK", "/s/sway.sock"), ("XDG_CURRENT_DESKTOP", "Gnoblin"), ("XDG_RUNTIME_DIR", "/r")];
-        assert_eq!(found(&nested, true).as_deref(), Some("gnoblin /r/gnoblin/compositor-v1.sock"));
-        let private = [("SWAYSOCK", "/s/sway.sock"), ("GNOBLIN_COMPOSITOR_SOCKET", "/t/g.sock")];
+        let nested = [
+            ("SWAYSOCK", "/s/sway.sock"),
+            ("XDG_CURRENT_DESKTOP", "Gnoblin"),
+            ("XDG_RUNTIME_DIR", "/r"),
+        ];
+        assert_eq!(
+            found(&nested, true).as_deref(),
+            Some("gnoblin /r/gnoblin/compositor-v1.sock")
+        );
+        let private = [
+            ("SWAYSOCK", "/s/sway.sock"),
+            ("GNOBLIN_COMPOSITOR_SOCKET", "/t/g.sock"),
+        ];
         assert_eq!(found(&private, false).as_deref(), Some("gnoblin /t/g.sock"));
         // Under sway, a Gnoblin socket left by another session is not asked.
-        assert_eq!(found(&[("SWAYSOCK", "/s/sway.sock"), ("XDG_RUNTIME_DIR", "/r")], true).as_deref(), Some("sway /s/sway.sock"));
+        assert_eq!(
+            found(
+                &[("SWAYSOCK", "/s/sway.sock"), ("XDG_RUNTIME_DIR", "/r")],
+                true
+            )
+            .as_deref(),
+            Some("sway /s/sway.sock")
+        );
     }
 
     #[test]
     fn a_compositor_that_offers_nothing_has_no_locator() {
         assert!(found(&[], false).is_none());
-        assert!(found(&[("XDG_CURRENT_DESKTOP", "GNOME"), ("XDG_RUNTIME_DIR", "/r")], false).is_none());
-        assert!(found(&[("XDG_CURRENT_DESKTOP", "KDE"), ("XDG_RUNTIME_DIR", "/r")], false).is_none());
-        assert!(found(&[("SWAYSOCK", ""), ("GNOBLIN_COMPOSITOR_SOCKET", "")], false).is_none(), "empty is unset");
+        assert!(
+            found(
+                &[("XDG_CURRENT_DESKTOP", "GNOME"), ("XDG_RUNTIME_DIR", "/r")],
+                false
+            )
+            .is_none()
+        );
+        assert!(
+            found(
+                &[("XDG_CURRENT_DESKTOP", "KDE"), ("XDG_RUNTIME_DIR", "/r")],
+                false
+            )
+            .is_none()
+        );
+        assert!(
+            found(
+                &[("SWAYSOCK", ""), ("GNOBLIN_COMPOSITOR_SOCKET", "")],
+                false
+            )
+            .is_none(),
+            "empty is unset"
+        );
     }
 
     #[test]
@@ -649,7 +843,9 @@ mod tests {
         let uid = own_uid();
         assert_eq!(
             found(&[("XDG_CURRENT_DESKTOP", "Gnoblin")], false),
-            Some(format!("gnoblin /run/user/{uid}/gnoblin/compositor-v1.sock"))
+            Some(format!(
+                "gnoblin /run/user/{uid}/gnoblin/compositor-v1.sock"
+            ))
         );
     }
 
@@ -663,7 +859,7 @@ mod tests {
         assert_eq!(
             requests[0],
             serde_json::json!({
-                "op": "api", "id": "files-1", "api_version": {"major": 1, "minor": 37},
+                "op": "api", "id": "windows-1", "api_version": {"major": 1, "minor": 37},
                 "method": "windows.list", "arguments": {},
             }),
             "what gnoblin-control-requests.c accepts for a snapshot collection read (API 1.37)"
@@ -677,10 +873,29 @@ mod tests {
         for _ in 0..5 {
             assert_eq!(locator.frames().map(|frames| frames.len()), Some(4));
         }
-        assert_eq!(fake.accepted.load(Ordering::Relaxed), 1, "one greeting, five questions");
-        let ids: Vec<String> =
-            fake.requests.lock().expect("requests").iter().map(|request| request["id"].as_str().unwrap_or_default().to_string()).collect();
-        assert_eq!(ids, ["files-1", "files-2", "files-3", "files-4", "files-5"], "each question has its own id");
+        assert_eq!(
+            fake.accepted.load(Ordering::Relaxed),
+            1,
+            "one greeting, five questions"
+        );
+        let ids: Vec<String> = fake
+            .requests
+            .lock()
+            .expect("requests")
+            .iter()
+            .map(|request| request["id"].as_str().unwrap_or_default().to_string())
+            .collect();
+        assert_eq!(
+            ids,
+            [
+                "windows-1",
+                "windows-2",
+                "windows-3",
+                "windows-4",
+                "windows-5"
+            ],
+            "each question has its own id"
+        );
     }
 
     #[test]
@@ -711,7 +926,10 @@ mod tests {
         let fake = Fake::start(windows_list());
         fake.close_after.store(1, Ordering::Relaxed);
         let mut locator = fake.locator();
-        assert!(locator.frames().is_some(), "the first reply arrives before the close");
+        assert!(
+            locator.frames().is_some(),
+            "the first reply arrives before the close"
+        );
         // The next question finds the link closed: no answer, and a new link.
         assert!(locator.frames().is_none());
         assert!(locator.frames().is_some());
@@ -720,7 +938,9 @@ mod tests {
 
     #[test]
     fn a_socket_nobody_listens_on_has_no_answer() {
-        let mut locator = Locator::Gnoblin(Gnoblin::new(PathBuf::from("/nonexistent/gnoblin/compositor-v1.sock")));
+        let mut locator = Locator::Gnoblin(Gnoblin::new(PathBuf::from(
+            "/nonexistent/gnoblin/compositor-v1.sock",
+        )));
         assert!(locator.frames().is_none());
         assert!(locator.frames().is_none());
     }
@@ -730,7 +950,10 @@ mod tests {
         let old = Fake::start(windows_list());
         old.hello.lock().expect("hello").0 = 36;
         assert!(old.locator().frames().is_none(), "windows.list is API 1.37");
-        assert!(old.requests.lock().expect("requests").is_empty(), "no request was sent");
+        assert!(
+            old.requests.lock().expect("requests").is_empty(),
+            "no request was sent"
+        );
 
         let without = Fake::start(windows_list());
         without.hello.lock().expect("hello").1 = vec!["ping"];
@@ -740,7 +963,10 @@ mod tests {
 
     #[test]
     fn a_server_that_does_not_speak_the_protocol_is_no_answer() {
-        let path = std::env::temp_dir().join(format!("bingux-files-fake-junk-{}.sock", std::process::id()));
+        let path = std::env::temp_dir().join(format!(
+            "bingux-files-fake-junk-{}.sock",
+            std::process::id()
+        ));
         let _ = std::fs::remove_file(&path);
         let listener = UnixListener::bind(&path).expect("bind");
         std::thread::spawn(move || {

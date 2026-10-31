@@ -6,180 +6,39 @@
 //! the places sidebar and the status line stay as they are when a tab is
 //! shown, and only the file view and the states behind it are the tab's. A
 //! tab keeps where it is (folder, Back and Forward), what is selected, its
-//! sort, zoom and the rest in its [`TabMemory`] and in the body's states for
+//! sort, zoom and the rest in its `TabMemory` and in the body's states for
 //! it, and shows them again from there in the first frame.
 //!
-//! The tabs themselves are a [`TabSet`]: plain data with the rules a person
-//! feels (where a new tab opens, who is selected after a close, what
-//! Ctrl+Shift+T brings back). This file puts them on screen. Closing the last
-//! tab closes the window, and asks first only if a file operation is running.
+//! What a tab is, and everything a person does with tabs (the set, the strip,
+//! the keys, tearing a tab off into a window of its own and dropping it on
+//! another), is `bingux_ui::tabs`; a Files tab is `bingux_ui::files::FileTab`.
+//! This file is what Files adds: the folder a tab is titled and iconed by,
+//! the folder a new tab opens in, the question before a window with a copy
+//! running closes, and the menu.
 
-use bingux_ui::files::{self, Browse, Where};
+use bingux_ui::app::use_window_seed;
+use bingux_ui::files::launch::destination;
+use bingux_ui::files::{self, Browse, FileTab, Where};
 use bingux_ui::prelude::*;
-use bingux_ui::shell::{MenuItem, with_window};
+use bingux_ui::shell::MenuItem;
+use bingux_ui::tabs::{Birth, CloseWarning, Tab, TabSet, Tabs, tab_items, use_tab_window};
 use freya::prelude::*;
 
-use crate::tabset::{Closed, Tab, TabSet};
-use crate::target::destination;
-use crate::tearoff;
 use crate::window_size::remember_size;
-use crate::windows::{self, Birth, Entry};
-use bingux_ui::app::use_window_seed;
-use bingux_ui::controls::{Detach, StripProbe};
-
-/// The tabs of the window. Every field is `Copy`, so every handler takes its
-/// own.
-#[derive(Clone, Copy)]
-struct Tabs {
-    set: State<TabSet>,
-    window: Window,
-    overlays: Overlays,
-}
-
-impl Tabs {
-    /// Open `at` in a new tab beside the one on show and go to it.
-    fn open(self, at: Where) {
-        self.open_selecting(at, None);
-    }
-
-    /// [`Tabs::open`], with `file` (named on the command line) selected in
-    /// the folder the tab shows first.
-    fn open_selecting(mut self, at: Where, file: Option<std::path::PathBuf>) {
-        let id = self.set.write().open(at);
-        if let Some(file) = file {
-            let set = self.set.peek();
-            if let Some(tab) = set.tabs().iter().find(|tab| tab.id == id) {
-                tab.memory.select_on_open(file);
-            }
-        }
-    }
-
-    fn select(mut self, id: u64) {
-        let known = {
-            let set = self.set.peek();
-            set.active() != id && set.ids().contains(&id)
-        };
-        if known {
-            self.set.write().select(id);
-        }
-    }
-
-    /// Close a tab. The tab that takes the selection is the neighbour to its
-    /// right, else the one to its left; the last tab closes the window.
-    fn close(mut self, id: u64) {
-        let closed = {
-            let set = self.set.peek();
-            set.ids().contains(&id).then_some(set.len() == 1)
-        };
-        match closed {
-            Some(true) => self.close_window(),
-            Some(false) => {
-                if self.set.write().close(id) == Closed::Window {
-                    self.close_window();
-                }
-            }
-            None => {}
-        }
-    }
-
-    /// Close the window, after asking if a copy, a move or a compression is
-    /// still running: closing would stop it half way.
-    fn close_window(self) {
-        let window = self.window;
-        if files::operations_running() {
-            self.overlays.show_dialog(
-                dialog(
-                    "Close Files?",
-                    "A file operation is still running. Closing the window stops it.",
-                )
-                .cancel("Keep open")
-                .default_action(CANCEL_ID)
-                .icon(DialogIcon::Warning)
-                .response("Close window", ResponseKind::Destructive, move |_: ()| window.close()),
-            );
-        } else {
-            window.close();
-        }
-    }
-
-    /// Close the tabs of a menu's *Close other tabs* or *Close tabs to the
-    /// right*.
-    fn close_many(mut self, ids: &[u64]) {
-        self.set.write().close_many(ids);
-    }
-
-    /// Open a copy of a tab beside it.
-    fn duplicate(mut self, id: u64) {
-        self.set.write().duplicate(id);
-    }
-
-    /// Bring back the tab closed last.
-    fn reopen(mut self) {
-        if self.set.peek().can_reopen() {
-            self.set.write().reopen();
-        }
-    }
-
-    /// Go `by` tabs along, wrapping at either end.
-    fn step(mut self, by: isize) {
-        self.set.write().step(by);
-    }
-
-    /// Go to the tab at `index` from the start, or the last for `usize::MAX`.
-    fn nth(mut self, index: usize) {
-        self.set.write().nth(index);
-    }
-
-    /// A tab was dragged (or moved by its menu) to place `to` in the list.
-    fn reorder(mut self, id: u64, to: usize) {
-        self.set.write().reorder(id, to);
-    }
-
-    /// A tab was torn off the strip (see [`crate::tearoff`]). Let go beyond
-    /// the strip, it opens a window of its own and this window keeps the
-    /// rest. Still held, this window is what follows the pointer, so it keeps
-    /// only that tab and the others go to a window of their own.
-    fn tear(mut self, detach: Detach) {
-        let Some(entry) = windows::find(Platform::window_id()) else {
-            return;
-        };
-        let size = entry.size.get();
-        if detach.released {
-            let moved = self.set.write().detach(detach.id);
-            if let Some(moved) = moved {
-                windows::open(vec![moved], 0, size);
-            }
-            return;
-        }
-        let others = self.set.write().detach_others(detach.id);
-        if let Some((others, on_show)) = others {
-            windows::open(others, on_show, size);
-        }
-        tearoff::begin(&entry, detach.pointer, detach.press);
-    }
-
-    /// A tab went to another folder: its title follows.
-    fn moved(mut self, id: u64, at: Where) {
-        let changed = self.set.peek().differs(id, &at);
-        if changed {
-            self.set.write().moved(id, at);
-        }
-    }
-}
 
 /// The titles of all the tabs: each folder's name, with the nearest parent
 /// folders added to the names that two tabs share (`Documents — kieran`).
-fn tab_titles(tabs: &[Tab]) -> Vec<String> {
+fn tab_titles(tabs: &[Tab<FileTab>]) -> Vec<String> {
     let roots = files::Roots::current();
     let folders: Vec<(usize, String)> = tabs
         .iter()
         .enumerate()
-        .filter_map(|(index, tab)| match &tab.at {
+        .filter_map(|(index, tab)| match &tab.content.at {
             // The roots (Home, the Trash and what is in it) have names of
             // their own and are never told apart by a parent folder.
             Where::Folder(path)
-                if roots.root_of(&tab.at).is_none()
-                    && roots.inside_of(&tab.at).is_none()
+                if roots.root_of(&tab.content.at).is_none()
+                    && roots.inside_of(&tab.content.at).is_none()
                     && path.file_name().is_some() =>
             {
                 Some((index, path.to_string_lossy().into_owned()))
@@ -189,7 +48,7 @@ fn tab_titles(tabs: &[Tab]) -> Vec<String> {
         .collect();
     let paths: Vec<&str> = folders.iter().map(|(_, path)| path.as_str()).collect();
     let labels = bingux_ui::elide::distinguish(&paths);
-    let mut titles: Vec<String> = tabs.iter().map(|tab| title_of(&tab.at)).collect();
+    let mut titles: Vec<String> = tabs.iter().map(|tab| title_of(&tab.content.at)).collect();
     for ((index, _), label) in folders.iter().zip(labels) {
         titles[*index] = label.label();
     }
@@ -208,6 +67,15 @@ fn tab_icon(at: &Where) -> files::FileIcon {
 /// sidebar read.
 fn title_of(at: &Where) -> String {
     files::Roots::current().title(at)
+}
+
+/// Closing the window while a copy, a move or a compression is running would
+/// stop it half way: ask first.
+fn close_guard() -> Option<CloseWarning> {
+    files::operations_running().then(|| CloseWarning {
+        title: "Close Files?".into(),
+        message: "A file operation is still running. Closing the window stops it.".into(),
+    })
 }
 
 /// The window root. The content is below the overlay host, which provides
@@ -238,49 +106,19 @@ impl Component for Content {
         let maximized = freya::borderless::use_maximized();
         let location = use_location();
         // A window opened for tabs torn off another is born with them.
-        let birth = use_window_seed::<Birth>();
+        let birth = use_window_seed::<Birth<FileTab>>();
         let set = use_state({
             let location = location.clone();
             move || {
-                birth
-                    .and_then(|birth| birth.take())
-                    .and_then(|(tabs, on_show)| TabSet::adopt(tabs, on_show))
-                    .unwrap_or_else(|| {
-                        let (at, select) = destination(&location);
-                        let set = TabSet::new(at);
-                        if let (Some(file), Some(tab)) = (select, set.tabs().first()) {
-                            tab.memory.select_on_open(file);
-                        }
-                        set
-                    })
+                birth.and_then(|birth| birth.into_set()).unwrap_or_else(|| {
+                    let (at, select) = destination(&location);
+                    TabSet::new(FileTab::new(at).selecting(select))
+                })
             }
         });
         let drag = files::file_drag();
         let over_tab = use_state(|| None::<u64>);
-        let tabs = Tabs { set, window, overlays };
-
-        // Every window is known to the others, so a tab can be handed over.
-        let window_id = Platform::window_id();
-        let marker = use_state(|| None::<usize>);
-        let ghost = use_state(|| false);
-        let probe = use_hook(StripProbe::new);
-        let title_cell = use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(String::new())));
-        let size_cell = use_hook(|| std::rc::Rc::new(std::cell::Cell::new((0.0_f32, 0.0_f32))));
-        let ordinal = use_hook(windows::free_ordinal);
-        use_hook({
-            let entry = Entry {
-                id: window_id,
-                ordinal,
-                set,
-                marker,
-                ghost,
-                probe: probe.clone(),
-                title: title_cell.clone(),
-                size: size_cell.clone(),
-            };
-            move || windows::register(entry)
-        });
-        use_drop(move || windows::unregister(window_id));
+        let tabs = Tabs::new(set, window, overlays).guard(close_guard);
 
         // A second launch changes the location: its folder opens in a tab.
         let handled = use_hook({
@@ -291,69 +129,60 @@ impl Component for Content {
             *handled.borrow_mut() = location.clone();
             let (at, select) = destination(&location);
             // Not inside render: the tab list is state the render reads.
-            spawn(async move { tabs.open_selecting(at, select) });
+            spawn(async move {
+                tabs.open(FileTab::new(at).selecting(select));
+            });
         }
 
-        let (shown, current, can_reopen, tab) = {
+        let (shown, tab) = {
             let set = set.read();
-            (set.tabs().to_vec(), set.active(), set.can_reopen(), set.current().cloned())
+            (set.tabs().to_vec(), set.current().cloned())
         };
+        let title = tab
+            .as_ref()
+            .map(|tab| title_of(&tab.content.at))
+            .unwrap_or_default();
+        // Every window is known to the others, so a tab can be handed over,
+        // and the compositor's title follows the tab on show.
+        let tab_window = use_tab_window(set, &title);
         let Some(tab) = tab else {
             return rect().into_element();
         };
-        let title = title_of(&tab.at);
-        // The compositor's title (the dock, the switcher) follows the tab. It
-        // also tells this window from another on the same folder.
-        use_side_effect_with_deps(&(title.clone(), ordinal), {
-            let title_cell = title_cell.clone();
-            move |(title, ordinal): &(String, u32)| {
-                let title = windows::title(title, *ordinal);
-                *title_cell.borrow_mut() = title.clone();
-                with_window(move |window| window.set_title(&title));
-            }
-        });
 
         let body: Element = files::browse(
-            Browse::new(tab.memory.clone())
+            Browse::new(tab.content.memory.clone())
                 .on_location({
                     let id = tab.id;
-                    move |at: Where| tabs.moved(id, at)
+                    move |at: Where| {
+                        let now = at.clone();
+                        tabs.update_if(id, move |tab| tab.at != now, move |tab| tab.at = at);
+                    }
                 })
-                .on_new_tab(move |path: std::path::PathBuf| tabs.open(Where::Folder(path))),
+                .on_new_tab(move |path: std::path::PathBuf| {
+                    tabs.open(FileTab::new(Where::Folder(path)));
+                }),
         );
 
         // The tabs are the header bar's title: separate rounded tabs from the
         // left, the window's buttons at the other end. The header bar is the
         // strip's height, so the window has no row above its tabs.
+        let titles = tab_titles(&shown);
         let header = HeaderBar::new(title)
-            .trailing(menu_button("Main menu", main_menu(tabs, overlays, can_reopen)).icon(Icon::OpenMenu))
+            .trailing(menu_button("Main menu", main_menu(tabs, overlays)).icon(Icon::OpenMenu))
             .trailing(WindowControls)
             .tab_slot(
-                tab_strip(
-                    shown
-                        .iter()
-                        .zip(tab_titles(&shown))
-                        .map(|(tab, title)| TabItem::new(tab.id, title).icon(tab_icon(&tab.at).glyph))
-                        .collect(),
-                    current,
+                tabs.strip(
+                    tab_items(&shown, titles, |tab| tab_icon(&tab.at).glyph),
+                    &tab_window,
+                    move |_: ()| {
+                        tabs.open(FileTab::new(home()));
+                    },
                 )
-                .on_select(move |id: u64| tabs.select(id))
-                .on_detach(move |detach: Detach| tabs.tear(detach))
-                .probe(&probe)
-                .insertion(*marker.read())
-                .on_close(move |id: u64| tabs.close(id))
-                .on_close_many(move |ids: Vec<u64>| tabs.close_many(&ids))
-                .on_duplicate(move |id: u64| tabs.duplicate(id))
-                .on_reopen(can_reopen, move |_: ()| tabs.reopen())
-                .on_new(move |_: ()| tabs.open(home()))
-                .on_reorder(move |(id, to): (u64, usize)| tabs.reorder(id, to))
                 .on_hover(move |(id, entered): (u64, bool)| {
                     let mut over_tab = over_tab;
-                    let folder = set.peek().tabs().iter().find(|tab| tab.id == id).and_then(|tab| {
-                        match &tab.at {
-                            Where::Folder(path) => Some(path.clone()),
-                            Where::Recent => None,
-                        }
+                    let folder = set.peek().content(id).and_then(|tab| match &tab.at {
+                        Where::Folder(path) => Some(path.clone()),
+                        Where::Recent => None,
                     });
                     match (drag, folder) {
                         (Some(drag), Some(folder)) if entered => {
@@ -373,58 +202,16 @@ impl Component for Content {
                 }),
             );
 
-        let shortcuts = move |event: Event<KeyboardEventData>| {
-            let ctrl = event.modifiers.contains(Modifiers::CONTROL);
-            let alt = event.modifiers.contains(Modifiers::ALT);
-            let shift = event.modifiers.contains(Modifiers::SHIFT);
-            match &event.key {
-                Key::Character(text) if ctrl && !alt && !shift && text.eq_ignore_ascii_case("t") => {
-                    event.stop_propagation();
-                    tabs.open(here(tabs));
-                }
-                Key::Character(text) if ctrl && !alt && shift && text.eq_ignore_ascii_case("t") => {
-                    event.stop_propagation();
-                    tabs.reopen();
-                }
-                Key::Character(text) if ctrl && !alt && !shift && text.eq_ignore_ascii_case("w") => {
-                    event.stop_propagation();
-                    let active = set.peek().active();
-                    tabs.close(active);
-                }
-                Key::Named(NamedKey::Tab) if ctrl && !alt => {
-                    event.stop_propagation();
-                    tabs.step(if shift { -1 } else { 1 });
-                }
-                Key::Named(NamedKey::PageDown) if ctrl && !alt => {
-                    event.stop_propagation();
-                    tabs.step(1);
-                }
-                Key::Named(NamedKey::PageUp) if ctrl && !alt => {
-                    event.stop_propagation();
-                    tabs.step(-1);
-                }
-                Key::Character(text) if alt && !ctrl && !shift => {
-                    if let Some(digit) = text.chars().next().and_then(|c| c.to_digit(10))
-                        && digit >= 1
-                    {
-                        event.stop_propagation();
-                        tabs.nth(if digit == 9 { usize::MAX } else { digit as usize - 1 });
-                    }
-                }
-                _ => {}
-            }
-        };
+        let shortcuts = tabs.shortcuts(move |_: ()| {
+            tabs.open(FileTab::new(here(tabs)));
+        });
 
-        rect()
+        tab_window
+            .root(rect())
             .tw(&tokens, &[w_full(), h_full(), flex_col(), bg(Paint::Bg)])
-            .maybe(*ghost.read(), |root| root.opacity(GHOST_OPACITY))
             .on_key_down(shortcuts)
-            // While the compositor moves a window for a tab torn off it, no window
-            // gets the pointer; the first event any gets is the pointer coming
-            // back: the button is up.
-            .on_global_pointer_move(move |_: Event<PointerEventData>| tearoff::pointer_arrived())
             .on_sized(move |event: Event<SizedEventData>| {
-                size_cell.set((event.area.width(), event.area.height()));
+                tab_window.sized(event.area.width(), event.area.height());
                 // A phone-sized window is a preview or a phone, not a choice.
                 if !is_compact() && !*maximized.peek() {
                     remember_size(event.area.width(), event.area.height());
@@ -433,21 +220,25 @@ impl Component for Content {
             .child(header)
             // Not keyed by tab: one body, mounted once, shows whichever tab
             // is on show (its memory is in `body`).
-            .child(rect().tw(&tokens, &[w_full(), h_flex(), flex_col()]).child(body))
+            .child(
+                rect()
+                    .tw(&tokens, &[w_full(), h_flex(), flex_col()])
+                    .child(body),
+            )
             .into_element()
     }
 }
-
-/// How faint the window is while it is carried over another window's strip.
-const GHOST_OPACITY: f32 = 0.4;
 
 fn home() -> Where {
     Where::Folder(files::home_folder())
 }
 
 /// The folder a new tab starts in: the one on show, like a new tab beside it.
-fn here(tabs: Tabs) -> Where {
-    tabs.set.peek().current().map_or_else(home, |tab| tab.at.clone())
+fn here(tabs: Tabs<FileTab>) -> Where {
+    tabs.set()
+        .peek()
+        .current()
+        .map_or_else(home, |tab| tab.content.at.clone())
 }
 
 /// What the shortcuts dialog says. The file view's keys are the chooser's.
@@ -471,21 +262,14 @@ Space  Preview\n\
 Alt+Enter  Properties\n\
 Ctrl+Shift+?  About Files";
 
-fn main_menu(tabs: Tabs, overlays: Overlays, can_reopen: bool) -> Vec<MenuItem> {
-    let reopen = menu_item("Reopen closed tab", move |_: ()| tabs.reopen()).shortcut("Ctrl+Shift+T");
-    let mut items = vec![
-        menu_item("New tab", move |_: ()| tabs.open(here(tabs))).shortcut("Ctrl+T"),
-        menu_item("Close tab", move |_: ()| {
-            let active = tabs.set.peek().active();
-            tabs.close(active);
-        })
-        .shortcut("Ctrl+W"),
-        if can_reopen { reopen } else { reopen.disabled() },
-        menu_separator(),
-        menu_item("Keyboard shortcuts", move |_: ()| {
-            overlays.show_dialog(dialog("Keyboard shortcuts", SHORTCUTS).cancel("Close"));
-        }),
-    ];
+fn main_menu(tabs: Tabs<FileTab>, overlays: Overlays) -> Vec<MenuItem> {
+    let mut items = tabs.menu_items(move |_: ()| {
+        tabs.open(FileTab::new(here(tabs)));
+    });
+    items.push(menu_separator());
+    items.push(menu_item("Keyboard shortcuts", move |_: ()| {
+        overlays.show_dialog(dialog("Keyboard shortcuts", SHORTCUTS).cancel("Close"));
+    }));
     // Every application's menu ends with About.
     items.extend(bingux_ui::about::app_menu_items(overlays));
     items
