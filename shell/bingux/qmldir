@@ -67,7 +67,6 @@ WindowMenu 1.0 WindowMenu.qml
 DesktopMenu 1.0 DesktopMenu.qml
 TerminalSidebar 1.0 TerminalSidebar.qml
 BarControlSurface 1.0 BarControlSurface.qml
-DockMediaControls 1.0 DockMediaControls.qml
 DockActivity 1.0 DockActivity.qml
 DockBadge 1.0 DockBadge.qml
 AnimatedCount 1.0 AnimatedCount.qml
@@ -88,6 +87,8 @@ DocumentPreviewRequest 1.0 DocumentPreviewRequest.qml
 DockWindowIndicators 1.0 DockWindowIndicators.qml
 DockWindowActions 1.0 DockWindowActions.qml
 DockWindowMenu 1.0 DockWindowMenu.qml
+DockPointMenu 1.0 DockPointMenu.qml
+DockFolderMenu 1.0 DockFolderMenu.qml
 
 DockNotifications 1.0 DockNotifications.qml
 

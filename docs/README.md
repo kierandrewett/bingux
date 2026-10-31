@@ -22,22 +22,23 @@ product and how to build it.
 
 ## How the shell works
 
-| Page                                                                                                                         | Topic                                        |
-| ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| [architecture.md](architecture.md)                                                                                           | Layers, processes and what owns what         |
-| [desktop-shell.md](desktop-shell.md)                                                                                         | The shell contract                           |
-| [configuration.md](configuration.md)                                                                                         | The configuration store                      |
-| [binguxctl.md](binguxctl.md)                                                                                                 | The `binguxctl` command                      |
-| [portals.md](portals.md)                                                                                                     | Portal backends and permissions              |
-| [window-frames.md](window-frames.md)                                                                                         | Window frames                                |
-| [background-effects.md](background-effects.md)                                                                               | The background blur protocol                 |
-| [panel-blur-fades.md](panel-blur-fades.md)                                                                                   | Panel blur during fades                      |
-| [activity-indicators.md](activity-indicators.md)                                                                             | Recording and privacy indicators             |
-| [control-centre-design.md](control-centre-design.md)                                                                         | The Control Centre                           |
-| [dock-menus.md](dock-menus.md)                                                                                               | Dock application menus                       |
-| [popup-consistency.md](popup-consistency.md), [popup-loading.md](popup-loading.md), [sidebar-loading.md](sidebar-loading.md) | Popup and panel behaviour                    |
-| [search-presentation.md](search-presentation.md)                                                                             | How search results are presented             |
-| [extensions.md](extensions.md), [extensions-plan.md](extensions-plan.md)                                                     | Writing extensions, and the plan behind them |
+| Page                                                                                                                         | Topic                                          |
+| ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| [architecture.md](architecture.md)                                                                                           | Layers, processes and what owns what           |
+| [desktop-shell.md](desktop-shell.md)                                                                                         | The shell contract                             |
+| [configuration.md](configuration.md)                                                                                         | The configuration store                        |
+| [binguxctl.md](binguxctl.md)                                                                                                 | The `binguxctl` command                        |
+| [portals.md](portals.md)                                                                                                     | Portal backends and permissions                |
+| [window-frames.md](window-frames.md)                                                                                         | Window frames                                  |
+| [background-effects.md](background-effects.md)                                                                               | The background blur protocol                   |
+| [panel-blur-fades.md](panel-blur-fades.md)                                                                                   | Panel blur during fades                        |
+| [activity-indicators.md](activity-indicators.md)                                                                             | Recording and privacy indicators               |
+| [control-centre-design.md](control-centre-design.md)                                                                         | The Control Centre                             |
+| [dock-menus.md](dock-menus.md)                                                                                               | Dock application menus                         |
+| [dock-folders.md](dock-folders.md)                                                                                           | Dock folders: make, use, keyboard, saved shape |
+| [popup-consistency.md](popup-consistency.md), [popup-loading.md](popup-loading.md), [sidebar-loading.md](sidebar-loading.md) | Popup and panel behaviour                      |
+| [search-presentation.md](search-presentation.md)                                                                             | How search results are presented               |
+| [extensions.md](extensions.md), [extensions-plan.md](extensions-plan.md)                                                     | Writing extensions, and the plan behind them   |
 
 ## Design system and session manager
 

@@ -100,17 +100,18 @@ else changes; the keys below are the same settings with snake_case names.
 Tables under `[desktop]` are written by the shell when you pin apps, create
 dock folders or arrange widgets. They are validated like everything else,
 but you normally do not edit them: `dock_apps` (`pinned_apps`, `order`),
-`dock_folders` (array of `id`, `name`, `color`, `apps`), `layout`,
+`dock_folders` (array of `id`, `name`, `color`, `apps`; see
+[dock-folders.md](dock-folders.md) for the shape and limits), `layout`,
 `control_centre` (`vpn`, `dnd`, `night_light`, `power`, `awake`),
 `control_order`, `control_layout`, `containers` and `widget_options`.
 
 ### `[search]`
 
-| Key                  | Type   | Default        | Accepted values                                                                                   |
-| -------------------- | ------ | -------------- | ------------------------------------------------------------------------------------------------- |
+| Key                  | Type   | Default        | Accepted values                                                                                                                                                   |
+| -------------------- | ------ | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `disabled_providers` | array  | `[]`           | Any of `applications`, `files`, `calculation`, `conversions`, `web`, `web-shortcuts`, `external`, or the id of an app that shares its search (`bingux-settings`). |
-| `default_engine`     | string | `"duckduckgo"` | Identifier of an enabled engine.                                                                  |
-| `file_roots`         | array  | not set        | Up to 32 absolute directories for file search. Not set uses the built-in home folders.            |
+| `default_engine`     | string | `"duckduckgo"` | Identifier of an enabled engine.                                                                                                                                  |
+| `file_roots`         | array  | not set        | Up to 32 absolute directories for file search. Not set uses the built-in home folders.                                                                            |
 
 Website engines are an array of tables:
 
@@ -152,10 +153,10 @@ missing program when you ask the assistant a question.
 
 ### `[privacy]`
 
-| Key                | Type | Default | Accepted values                                                             |
-| ------------------ | ---- | ------- | --------------------------------------------------------------------------- |
-| `public_ip_lookup` | bool | `false` | Let the Control Centre ask ipapi.co for the public address. Off by default. |
-| `show_personal_images` | bool | `true` | Show your avatar and wallpaper on the login screen before you sign in. Every local account can read the published copies, so turn this off for a private picture. With bsm the copies are removed at the next publish. |
+| Key                    | Type | Default | Accepted values                                                                                                                                                                                                        |
+| ---------------------- | ---- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `public_ip_lookup`     | bool | `false` | Let the Control Centre ask ipapi.co for the public address. Off by default.                                                                                                                                            |
+| `show_personal_images` | bool | `true`  | Show your avatar and wallpaper on the login screen before you sign in. Every local account can read the published copies, so turn this off for a private picture. With bsm the copies are removed at the next publish. |
 
 ### `[appearance]`
 

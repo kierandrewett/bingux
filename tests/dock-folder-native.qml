@@ -102,7 +102,7 @@ ShellRoot {
                 dock.testFolderPopup.visible = false;
         }
         function remove(): void {
-            dock.deleteFolder(dock.openFolderId);
+            dock.ungroupFolder(dock.openFolderId);
         }
         function reload(): void {
             Quickshell.reload(false);

@@ -134,7 +134,7 @@ ShellPopup {
 
                 model: appMenu.mediaPlayers
 
-                delegate: DockMediaControls {
+                delegate: MediaControls {
                     required property var modelData
 
                     Layout.fillWidth: true
