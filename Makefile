@@ -8,7 +8,7 @@ PKG_CONFIG ?= pkg-config
 QMLDIR ?= $(PREFIX)/lib/bingux/qml
 LADSPADIR ?= $(PREFIX)/lib/ladspa
 # Where Cargo puts its output; package builders can point this at a shared target.
-CARGO_TARGET ?= $(CARGO_TARGET)
+CARGO_TARGET ?= $(abspath $(BUILD_DIR))/cargo
 # bingux-dsp is built with panic=abort (a plugin must not unwind into its host)
 # while the programs unwind. Cargo does not keep the two builds of a shared
 # dependency such as libc apart in one target directory ("the crate `libc`
