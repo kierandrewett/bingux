@@ -39,7 +39,7 @@ The packages and the repository metadata are signed with one key, published at
 `https://repo.gnoblin.org/gpg.key`. Its fingerprint is:
 
 ```text
-REPLACE-WITH-KEY-FINGERPRINT
+91BA A379 0941 B9B3 BBA6  3BC4 F1B8 D899 DF3D 786E
 ```
 
 Compare the fingerprint your package manager shows with this one before you
@@ -78,7 +78,7 @@ toolchain of Ubuntu 24.04 is older than the 1.88 that the apps need.
 ```sh
 curl -fsSL -o bingux.key https://repo.gnoblin.org/gpg.key
 sudo pacman-key --add bingux.key
-sudo pacman-key --lsign-key REPLACE-WITH-KEY-FINGERPRINT
+sudo pacman-key --lsign-key 91BAA3790941B9B3BBA63BC4F1B8D899DF3D786E
 printf '\n' | sudo tee -a /etc/pacman.conf > /dev/null
 curl -fsSL https://repo.gnoblin.org/bingux/stable/arch/bingux.conf | sudo tee -a /etc/pacman.conf
 sudo pacman -Syu bingux
@@ -129,7 +129,7 @@ Bingux; see [Remove the packages](#remove-the-packages).
 - Debian: delete `/etc/apt/sources.list.d/bingux.sources` and
   `/etc/apt/keyrings/bingux.asc`, then run `sudo apt update`.
 - Arch: delete the `[bingux]` and `[bingux-nightly]` sections, then run
-  `sudo pacman-key --delete REPLACE-WITH-KEY-FINGERPRINT`.
+  `sudo pacman-key --delete 91BAA3790941B9B3BBA63BC4F1B8D899DF3D786E`.
 
 ## Fedora
 

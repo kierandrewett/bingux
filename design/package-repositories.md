@@ -7,8 +7,13 @@ Gnoblin and are written down once, in
 [Gnoblin's design note](https://github.com/kierandrewett/gnoblin/blob/main/design/package-repositories.md).
 This page records what is specific to Bingux.
 
-Nothing is published yet. The domain, the signing key, the host and the CI
-secrets do not exist.
+Nothing is published yet. Set up so far: the R2 bucket `gnoblin-repo` behind
+`repo.gnoblin.org`, and the signing key (fingerprint in
+[package management](../docs/package-management.md#package-repositories)), whose
+private key and passphrase are the CI secrets `REPO_GPG_PRIVATE_KEY` and
+`REPO_GPG_PASSPHRASE` of this repository. Still missing: the upload credentials
+(`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and the variables `REPO_BACKEND`,
+`REPO_DESTINATION` and `AWS_ENDPOINT_URL`), and a first run of the workflows.
 
 ## What Bingux builds
 
