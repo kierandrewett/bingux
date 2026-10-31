@@ -195,8 +195,11 @@ mod tests {
 
     #[test]
     fn a_colour_that_flashes_a_third_colour_is_caught() {
+        // ui-lint: allow(test input for the colour-path check: arbitrary colours, not styling)
         let a = Color::from_rgb(10, 10, 10);
+        // ui-lint: allow(test input for the colour-path check: arbitrary colours, not styling)
         let b = Color::from_rgb(200, 200, 200);
+        // ui-lint: allow(test input for the colour-path check: arbitrary colours, not styling)
         let flash = Color::from_rgb(255, 0, 0);
         assert!(colour_path("c", &[a, a, b, b], 1.0).is_ok());
         assert!(colour_path("c", &[a, flash, b], 1.0).is_err());
