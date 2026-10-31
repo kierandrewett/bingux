@@ -161,7 +161,7 @@ package_bingux-taxonomy() {
 # The shell takes everything the other packages left in the stage.
 package_bingux() {
     pkgdesc='Wayland desktop shell for Gnoblin and other layer-shell compositors'
-    license=('GPL-3.0-or-later' 'LGPL-3.0-or-later' 'CC-BY-SA-3.0' 'Apache-2.0' 'BSD-3-Clause'
+    license=('GPL-3.0-or-later' 'LGPL-3.0-or-later' 'Apache-2.0' 'BSD-3-Clause'
         'CDLA-Permissive-2.0' 'ISC' 'MIT' 'Unicode-3.0' 'Zlib')
     # quickshell provides /usr/bin/qs, which the shell wrappers start.
     depends=('bingux-config' 'quickshell' 'qt6-declarative' 'qt6-wayland' 'qt6-svg' 'systemd'

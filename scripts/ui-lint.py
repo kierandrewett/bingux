@@ -27,6 +27,11 @@ and build output excepted): a window starts only through
 inspector plugin, so every bingux-ui app has the inspector and its
 Ctrl+Alt+Shift+I shortcut by construction. A bare `LaunchConfig`, `freya::launch`
 or an import of Freya's `launch` anywhere else fails here.
+
+One more covers the QML shell (shell/bingux): every icon name its QML, JavaScript and Python
+asks for, and every one the daemons send it, is a Bingux icon (shell/bingux/icons) or is
+mapped to one in BinguxIconAliases.js; none is left to the Adwaita theme. `--self-test` runs
+that check on a small tree and fails unless a bogus name is reported.
 """
 
 import re
@@ -49,11 +54,13 @@ RULE_IDS = {
     "panic-manifest": ["DG-04"],
     "raw-press": ["PR-01", "FC-04"],
     "app-about": [],
+    "shell-icon": [],
     "own-loop": ["MO-04", "MO-10"],
 }
 RULE_MESSAGES = {
     "direct-styling": r"styles a box directly",
     "raw-colour": r"is a raw colour|Color::TRANSPARENT|is a raw value",
+    "shell-icon": r"asks for the icon|BinguxIconAliases\.js|BinguxIconIndex\.js|SHELL_ICONS_DYNAMIC",
     "ink-near-fill": r"sits near bg\(Paint::",
     "fixed-size": r"uses a fixed size",
     "header-size": r"sizes a header element|height must come from",
@@ -599,7 +606,144 @@ def loop_problems() -> list[str]:
     return found
 
 
+# ---------------------------------------------------------------------------------------------
+# The shell's icon names. The shell draws only Bingux icons: shell/bingux/icons, listed in
+# BinguxIconIndex.js (written by scripts/icons/build.py). Every name its QML, JavaScript and
+# Python asks for, and every name the daemons send it, is a file of that set, or is mapped to one
+# by BinguxIconAliases.js (the names other programs send). Nothing is left for the Adwaita theme.
+
+SHELL_DIR = "shell/bingux"
+SHELL_ICON_FILES = ("BinguxIconIndex.js", "BinguxIconAliases.js")
+SHELL_EMITTERS = ("services/statusd/src", "services/searchd/src")
+SYMBOLIC_NAME = re.compile(r"^[a-z0-9][a-z0-9.+-]*-symbolic$")
+# Strings, or the comments that may hold a name in prose; a comment is dropped, a string is read.
+SOURCE_TOKEN = re.compile(r"\"(?:\\.|[^\"\\\n])*\"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`|//[^\n]*|/\*.*?\*/", re.S)
+
+# Names the shell makes from pieces, which no literal shows: the file, the text that builds
+# them (the check fails when it moves, so the list cannot go stale) and the names it makes.
+_POWER_PROFILES = [f"power-profile-{profile}-symbolic" for profile in ("power-saver", "balanced", "performance")]
+SHELL_ICONS_DYNAMIC = (
+    (
+        "ControlCentreDetails.qml",
+        '"network-wireless-signal-" + (',
+        [f"network-wireless-signal-{level}-symbolic" for level in ("excellent", "good", "ok", "weak")],
+    ),
+    ("ControlCentreExtras.qml", '"power-profile-" + modelData + "-symbolic"', _POWER_PROFILES),
+    ("SystemIndicators.qml", '"power-profile-" + profile + "-symbolic"', _POWER_PROFILES),
+    ("SearchResult.qml", 'return "weather-clear";', ["weather-clear-symbolic"]),
+    ("SearchResult.qml", 'return "accessories-calculator";', ["accessories-calculator-symbolic"]),
+)
+
+
+def source_strings(text: str, single_quotes: bool = True):
+    """(line, string) for each string literal of `text`, comments left out."""
+    for match in SOURCE_TOKEN.finditer(text):
+        token = match.group(0)
+        if token[0] in "\"'`" and (single_quotes or token[0] == '"'):
+            yield text.count("\n", 0, match.start()) + 1, token[1:-1]
+
+
+def shell_icon_problems(root: Path = ROOT, dynamic=SHELL_ICONS_DYNAMIC) -> list[str]:
+    shell = root / SHELL_DIR
+    index = (shell / "BinguxIconIndex.js").read_text()
+    names = set(re.findall(r'^\s*"([^"]+)": true,$', index, re.M))
+    aliases_text = (shell / "BinguxIconAliases.js").read_text()
+    aliases = dict(re.findall(r'^\s*"([^"]+)":\s*"([^"]+)",$', aliases_text, re.M))
+    found = []
+    if not names:
+        found.append(f"{SHELL_DIR}/BinguxIconIndex.js lists no icons; run scripts/icons/build.py")
+    for name in sorted(names):
+        if not (shell / "icons" / f"{name}.svg").is_file():
+            found.append(f"{SHELL_DIR}/BinguxIconIndex.js lists {name}, which has no file in {SHELL_DIR}/icons")
+    for name, target in sorted(aliases.items()):
+        if name in names:
+            found.append(f"{SHELL_DIR}/BinguxIconAliases.js maps {name}, which is a Bingux icon itself")
+        if target not in names:
+            found.append(f"{SHELL_DIR}/BinguxIconAliases.js maps {name} to {target}, which is not a Bingux icon")
+
+    def check_name(where: str, name: str) -> None:
+        if (aliases.get(name) or name) not in names:
+            found.append(
+                f"{where}: asks for the icon {name}, which the Bingux icon set does not have; "
+                "draw it (scripts/icons/labels.tsv) or use one it has"
+            )
+
+    files = [
+        path
+        for path in sorted(shell.rglob("*"))
+        if path.suffix in (".qml", ".js", ".py") and path.name not in SHELL_ICON_FILES and "icons" not in path.relative_to(shell).parts
+    ]
+    for path in files:
+        text = path.read_text(errors="replace")
+        for line, string in source_strings(text, single_quotes=path.suffix != ".rs"):
+            if SYMBOLIC_NAME.match(string):
+                check_name(f"{path.relative_to(root)}:{line}", string)
+    for emitter in SHELL_EMITTERS:
+        for path in sorted((root / emitter).glob("*.rs")):
+            for line, string in source_strings(path.read_text(errors="replace"), single_quotes=False):
+                if SYMBOLIC_NAME.match(string):
+                    check_name(f"{path.relative_to(root)}:{line}", string)
+    for filename, anchor, built in dynamic:
+        matches = [path for path in files if path.name == filename and anchor in path.read_text(errors="replace")]
+        if not matches:
+            found.append(
+                f"{SHELL_DIR}/{filename}: no longer contains {anchor}, which ui-lint's SHELL_ICONS_DYNAMIC "
+                "lists as building icon names; update the list"
+            )
+        for name in built:
+            check_name(f"{SHELL_DIR}/{filename} ({anchor})", name)
+    # Bluetooth devices are named by BlueZ; the shell keeps the names it can draw.
+    model = shell / "ControlCentreModel.js"
+    if model.is_file():
+        body = re.search(r"function bluetoothIcon\(.*?const devices = \[(.*?)\];", model.read_text(), re.S)
+        if body is None:
+            found.append(f"{SHELL_DIR}/ControlCentreModel.js: bluetoothIcon no longer has a `const devices = [..]` list")
+        else:
+            for device in re.findall(r'"([^"]+)"', body.group(1)):
+                check_name(f"{SHELL_DIR}/ControlCentreModel.js (bluetoothIcon)", device + "-symbolic")
+    return found
+
+
+def shell_icon_self_test() -> list[str]:
+    """The check on a small tree: a name the set lacks must fail, a name it has or maps must pass."""
+    import tempfile
+
+    failures = []
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        shell = root / SHELL_DIR
+        (shell / "icons").mkdir(parents=True)
+        (shell / "icons" / "go-next-symbolic.svg").write_text("<svg/>")
+        (shell / "BinguxIconIndex.js").write_text('var names = {\n    "go-next-symbolic": true,\n};\n')
+        (shell / "BinguxIconAliases.js").write_text('var names = {\n    "go-forward-symbolic": "go-next-symbolic",\n};\n')
+        (shell / "Row.qml").write_text(
+            'Item {\n    // "commented-symbolic" is prose\n    source: BinguxIcons.source("go-next-symbolic")\n'
+            '    other: BinguxIcons.source("go-forward-symbolic")\n}\n'
+        )
+        if shell_icon_problems(root, dynamic=()):
+            failures.append("a tree whose names the set has or maps was reported: " + "; ".join(shell_icon_problems(root, dynamic=())))
+        (shell / "Row.qml").write_text('Item { source: BinguxIcons.source("bogus-icon-symbolic") }\n')
+        if not any("bogus-icon-symbolic" in problem for problem in shell_icon_problems(root, dynamic=())):
+            failures.append("a QML file that asks for bogus-icon-symbolic was not reported")
+        (shell / "Row.qml").write_text("Item {}\n")
+        (shell / "Helper.py").write_text('ICON = "bogus-helper-symbolic"\n')
+        if not any("bogus-helper-symbolic" in problem for problem in shell_icon_problems(root, dynamic=())):
+            failures.append("a Python helper that asks for bogus-helper-symbolic was not reported")
+        (shell / "Helper.py").unlink()
+        (shell / "BinguxIconAliases.js").write_text('var names = {\n    "go-forward-symbolic": "go-nowhere-symbolic",\n};\n')
+        if not any("go-nowhere-symbolic" in problem for problem in shell_icon_problems(root, dynamic=())):
+            failures.append("an alias to an icon the set lacks was not reported")
+    return failures
+
+
 def main() -> int:
+    if "--self-test" in sys.argv[1:]:
+        failures = shell_icon_self_test()
+        for failure in failures:
+            print(f"ui-lint --self-test: {failure}")
+        if not failures:
+            print("ui-lint --self-test: the shell icon check fails on a name the Bingux set lacks")
+        return 1 if failures else 0
     problems = []
     for source in SOURCES:
         for path in sorted(source.rglob("*.rs")):
@@ -626,7 +770,8 @@ def main() -> int:
     panics = panic_problems()
     abouts = about_problems()
     loops = loop_problems()
-    everything = problems + launches + blocking + panics + abouts + loops
+    icons = shell_icon_problems()
+    everything = problems + launches + blocking + panics + abouts + loops + icons
     for problem in everything:
         print(problem)
     if everything:
@@ -636,8 +781,8 @@ def main() -> int:
         )
         return 1
     print(
-        "ui-lint: every box is styled with tokens, every window starts through Application::run "
-        "and every app says who it is."
+        "ui-lint: every box is styled with tokens, every window starts through Application::run, "
+        "every app says who it is and the shell asks for no icon the Bingux set lacks."
     )
     return 0
 

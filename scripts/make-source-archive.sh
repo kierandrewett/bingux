@@ -3,8 +3,8 @@
 #
 # usage: scripts/make-source-archive.sh [VERSION [OUTPUT]]
 #
-# The archive holds HEAD plus every pinned submodule (the Adwaita icon theme and
-# Quickshell for bingux-shell; `git archive` does not follow submodules). It is reproducible: files are sorted, owned by
+# The archive holds HEAD plus every pinned submodule (Quickshell for bingux-shell;
+# `git archive` does not follow submodules). It is reproducible: files are sorted, owned by
 # root and stamped with the commit time (or SOURCE_DATE_EPOCH when set), so the
 # same commit gives the same bytes.
 #
@@ -31,7 +31,7 @@ if [[ "$worktree" != 1 && -n "$(git -C "$root" status --porcelain)" ]]; then
     echo "(BINGUX_ARCHIVE_WORKTREE=1 archives the working tree for a local packaging check)" >&2
     exit 1
 fi
-# Every pinned submodule (the Adwaita icon theme, Quickshell for bingux-shell)
+# Every pinned submodule (Quickshell for bingux-shell)
 # ships inside the archive at its pinned revision; package builds run offline.
 mapfile -t submodules < <(git -C "$root" config --file .gitmodules --get-regexp '^submodule\..*\.path$' | awk '{print $2}')
 for path in "${submodules[@]}"; do

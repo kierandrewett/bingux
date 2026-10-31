@@ -233,7 +233,7 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: row.modelData.uid === root.selectedUid
                         implicitSize: 14
-                        source: AdwaitaIcons.source("object-select-symbolic")
+                        source: BinguxIcons.source("object-select-symbolic")
                         color: root.theme.ink
                     }
                 }

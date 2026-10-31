@@ -138,7 +138,7 @@ Popup {
                             anchors.centerIn: parent
                             implicitSize: 20
                             visible: !!entry.modelData.icon
-                            source: !entry.modelData.icon ? "" : entry.modelData.icon.startsWith("icons/") ? Qt.resolvedUrl(entry.modelData.icon) : AdwaitaIcons.source(entry.modelData.icon)
+                            source: !entry.modelData.icon ? "" : BinguxIcons.source(entry.modelData.icon)
                             color: Theme.text
                         }
                         Text {

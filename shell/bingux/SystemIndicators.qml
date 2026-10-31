@@ -27,7 +27,7 @@ Item {
         if (root.microphoneMuted)
             rows.push({
                 key: "microphone",
-                icon: "microphone-sensitivity-muted-symbolic",
+                icon: "audio-input-microphone-muted-symbolic",
                 active: true,
                 label: "Microphone muted"
             });

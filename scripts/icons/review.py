@@ -406,7 +406,7 @@ h2{margin:28px 0 8px;font-size:18px}
 .real{display:flex;gap:6px;margin-top:8px;align-items:center;font-size:11px;color:var(--muted)}
 .real span{display:inline-flex;padding:8px;border-radius:6px}
 .real .d{background:#121214}.real .l{background:#fafafa;border:1px solid var(--line)}
-.real img{image-rendering:pixelated}.inv{filter:invert(1) brightness(1.8)}.miss{color:#b3402f;margin:8px 0}
+.real img{image-rendering:pixelated}.inv{filter:invert(1) brightness(1.8)}
 .meta h3{margin:0;font-size:15px}.meta code{color:var(--muted);font-size:12px}
 .meta p{margin:4px 0}.k{color:var(--muted)}
 .verdicts{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
@@ -445,9 +445,7 @@ for (const it of ITEMS) {
   const tile = (k, label, scale) => `<div class="tile"><img src="${png(it.tiles[k])}" width="${it.sizes[k] * scale}" height="${it.sizes[k] * scale}"><div>${label}</div></div>`;
   const vec = (px, label, dark) => `<div class="tile"><img class="${dark && it.symbolic ? "inv" : ""}" style="background:${dark ? "#121214" : "#fafafa"}" src="data:image/svg+xml;base64,${it.svg}" width="${px}" height="${px}"><div>${label}</div></div>`;
   const vecReal = (px, dark) => `<span class="${dark ? "d" : "l"}"><img class="${dark && it.symbolic ? "inv" : ""}" src="data:image/svg+xml;base64,${it.svg}" width="${px}" height="${px}"></span>`;
-  const shown = it.missing
-    ? `<p class="miss">No icon file. The shell asks for this name, and the theme has nothing to draw.</p>`
-    : it.svg
+  const shown = it.svg
     ? `<div class="tiles">${vec(32, "16 dark", true)}${vec(32, "16 light", false)}${vec(48, "24 light", false)}${vec(96, "48 light", false)}</div>
     <div class="real">${vecReal(16, true)}${vecReal(16, false)}${vecReal(24, false)}${vecReal(48, false)}actual size</div>`
     : `<div class="tiles">${tile("d16","16 dark",4)}${tile("l16","16 light",4)}${tile("l18","18 light",4)}${tile("l48","48 light",2)}</div>
@@ -523,9 +521,9 @@ def png_base64(image: Image.Image) -> str:
     return base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
-def extra_items(ours: set[str]) -> list[dict]:
-    """Icons that are not in the generated symbolic set: the colour file and folder icons, the application icons,
-    and the theme icons the shell asks for by name. They are shown as the browser draws the vector file."""
+def extra_items() -> list[dict]:
+    """Icons that are not in the generated symbolic set: the colour file and folder icons and the application
+    icons. They are shown as the browser draws the vector file."""
     import base64
     import html
 
@@ -571,71 +569,6 @@ def extra_items(ours: set[str]) -> list[dict]:
                     False,
                 )
             )
-    users: dict[str, set[str]] = {}
-    for qml in sorted((REPO / "shell/bingux").rglob("*.qml")):
-        for name in re.findall(r'"([a-z0-9][a-z0-9.-]*)-symbolic"', qml.read_text()):
-            users.setdefault(name, set()).add(qml.name)
-    theme = Path("/usr/share/icons/Adwaita/symbolic")
-    aliases = dict(
-        re.findall(
-            r'"([^"]+)":\s*"([^"]+)"',
-            (REPO / "shell/bingux/AdwaitaIconIndex.js").read_text().split("var paths")[0],
-        )
-    )
-    drawn = {
-        "screencast-stop": (
-            "ActivityIndicator.qml draws it as a 10 px square with a 1.5 px radius in a 16 px box. "
-            "It does not use the theme glyph, so the shell's alias to media-playback-stop is never shown.",
-            '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">'
-            '<rect x="3" y="3" width="10" height="10" rx="1.5" fill="#2e3436"/></svg>',
-        )
-    }
-    for name in sorted(users):
-        if name in ours:
-            continue
-        if name in drawn:
-            note, svg = drawn[name]
-            used = ", ".join(sorted(users[name]))
-            items.append(
-                {
-                    "id": name,
-                    "group": "shell-theme",
-                    "variant": None,
-                    "category": "drawn in QML",
-                    "glyph": "Rectangle in ActivityIndicator.qml",
-                    "where": html.escape(f"Shell: {used}. {note}"),
-                    "metaphor": "",
-                    "symbolic": True,
-                    "svg": base64.b64encode(svg.encode()).decode("ascii"),
-                }
-            )
-            continue
-        target = aliases.get(f"{name}-symbolic", aliases.get(name, f"{name}-symbolic"))
-        found = next(iter(sorted(theme.glob(f"*/{target}.svg"))), None)
-        where = "Shell: " + ", ".join(sorted(users[name])[:4]) + (" and more" if len(users[name]) > 4 else "")
-        if target != f"{name}-symbolic":
-            where += f" (the shell maps it to {target})"
-        if found is None:
-            print(
-                f"review: shell icon {name} has no file in the Adwaita theme; added as a missing card",
-                file=sys.stderr,
-            )
-            items.append(
-                {
-                    "id": name,
-                    "group": "shell-theme",
-                    "variant": None,
-                    "category": "no file",
-                    "glyph": "",
-                    "where": html.escape(where),
-                    "metaphor": "",
-                    "symbolic": True,
-                    "svg": None,
-                    "missing": True,
-                }
-            )
-            continue
-        items.append(entry("shell-theme", name, found, where, "Adwaita theme", True))
     return items
 
 
@@ -682,7 +615,7 @@ def page(out: Path, icons: Path) -> None:
                     "tiles": {key: png_base64(tile) for key, tile in tiles.items()},
                 }
             )
-    items.extend(extra_items({stem for _, files in groups for stem in files} | set(labels.rows)))
+    items.extend(extra_items())
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(PAGE_TEMPLATE.replace("__ITEMS__", json.dumps(items).replace("</", "<\\/")))
     print(f"review: wrote {len(items)} icons to {out}")

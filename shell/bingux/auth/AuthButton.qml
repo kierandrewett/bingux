@@ -35,7 +35,7 @@ AbstractButton {
                 visible: root.iconName !== ""
                 anchors.verticalCenter: parent.verticalCenter
                 implicitSize: Theme.iconSize
-                source: root.iconName !== "" ? AdwaitaIcons.source(root.iconName) : ""
+                source: root.iconName !== "" ? BinguxIcons.source(root.iconName) : ""
                 color: root.theme.ink
             }
             Text {

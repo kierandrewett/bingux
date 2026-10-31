@@ -6,7 +6,7 @@ import Quickshell
 RowLayout {
     id: root
     required property var presentation
-    property url iconSource: presentation?.icon ? AdwaitaIcons.source(presentation.icon) : ""
+    property url iconSource: presentation?.icon ? BinguxIcons.source(presentation.icon) : ""
     property bool colouredIcon: false
     property color iconColor: Theme.text
     property bool shadowed: true

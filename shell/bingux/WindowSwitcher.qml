@@ -236,7 +236,7 @@ Scope {
     }
     function iconFor(window) {
         const app = appFor(window);
-        return AdwaitaIcons.source(app && app.icon ? app.icon : "application-x-executable", "application-x-executable");
+        return BinguxIcons.source(app && app.icon ? app.icon : "application-x-executable", "application-x-executable");
     }
     function previewAspect(window) {
         const geometry = window?.geometry;

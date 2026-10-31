@@ -60,7 +60,7 @@ Item {
         SymbolicIcon {
             visible: root.iconName !== ""
             implicitSize: Theme.iconSize
-            source: root.iconName ? AdwaitaIcons.source(root.iconName) : ""
+            source: root.iconName ? BinguxIcons.source(root.iconName) : ""
             color: root.filled ? Theme.text : root.activityColor
         }
         Text {
@@ -79,20 +79,10 @@ Item {
             visible: root.trailingIcon !== ""
             implicitWidth: Theme.iconSize
             implicitHeight: Theme.iconSize
-            // GNOME's screencast stop glyph is a 10px rounded square in a 16px box.
-            Rectangle {
-                anchors.centerIn: parent
-                width: 10
-                height: 10
-                radius: 1.5
-                visible: root.trailingIcon === "screencast-stop-symbolic"
-                color: root.filled ? Theme.text : root.activityColor
-            }
             SymbolicIcon {
                 anchors.fill: parent
-                visible: root.trailingIcon !== "screencast-stop-symbolic"
                 implicitSize: Theme.iconSize
-                source: visible && root.trailingIcon ? AdwaitaIcons.source(root.trailingIcon) : ""
+                source: root.trailingIcon ? BinguxIcons.source(root.trailingIcon) : ""
                 color: root.filled ? Theme.text : root.activityColor
             }
         }

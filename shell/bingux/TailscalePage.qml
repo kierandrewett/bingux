@@ -290,7 +290,7 @@ Item {
                                 x: 6
                                 anchors.verticalCenter: parent.verticalCenter
                                 implicitSize: 18
-                                source: AdwaitaIcons.source(root.tab === "exit" ? "network-vpn-symbolic" : ["android", "iOS"].includes(nodeRow.modelData.os) ? "phone-symbolic" : "computer-symbolic")
+                                source: BinguxIcons.source(root.tab === "exit" ? "network-vpn-symbolic" : ["android", "iOS"].includes(nodeRow.modelData.os) ? "phone-symbolic" : "computer-symbolic")
                                 color: nodeRow.activeExit ? Theme.accent : Theme.muted
                             }
                             NodeCell {
@@ -349,7 +349,7 @@ Item {
                                 anchors.centerIn: parent
                                 visible: !root.countryFlag(nodeRow.modelData)
                                 implicitSize: 22
-                                source: AdwaitaIcons.source("computer-symbolic")
+                                source: BinguxIcons.source("computer-symbolic")
                                 color: Theme.muted
                             }
                         }

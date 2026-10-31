@@ -243,31 +243,9 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
             destination_path.chmod(0o755)
         installed.append(destination.relative_to(prefix))
 
-    adwaita_source = source / "subprojects/adwaita-icon-theme"
-    adwaita_assets = adwaita_source / "Adwaita"
-    adwaita_index = adwaita_source / "index.theme"
-    if not adwaita_index.is_file() or not (adwaita_assets / "symbolic").is_dir():
-        raise ValueError(
-            "Adwaita icon theme submodule is missing; run git submodule update --init subprojects/adwaita-icon-theme"
-        )
-    # Private to Bingux (AdwaitaIcons.qml reads BINGUX_ADWAITA_ICON_DIR), so it
-    # never collides with the distribution's adwaita-icon-theme under icons/.
-    adwaita_install = prefix / "share/bingux/icons/Adwaita"
-    copy(adwaita_index, adwaita_install / "index.theme")
-    for path in adwaita_assets.rglob("*"):
-        if path.is_file():
-            copy(path, adwaita_install / path.relative_to(adwaita_assets))
-    for license_name in ("COPYING", "COPYING_CCBYSA3", "COPYING_LGPL"):
-        copy(
-            adwaita_source / license_name,
-            prefix / "share/licenses/bingux/adwaita-icon-theme" / license_name,
-        )
-    folder_open = adwaita_install / "scalable/status/folder-open.svg"
-    if not folder_open.is_file():
-        copy(
-            adwaita_assets / "scalable/places/folder.svg",
-            folder_open,
-        )
+    # The shell's icons are the Bingux set (shell/bingux/icons, inside the shell archive);
+    # only their licence is installed beside the others.
+    copy(source / "shell/bingux/icons/COPYING", prefix / "share/licenses/bingux/icons/COPYING")
 
     # The QML, scripts and assets travel in the shell archive next to the QML
     # plugins; bingux-shell unpacks it per user. The Python helpers the shell

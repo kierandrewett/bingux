@@ -142,7 +142,7 @@ ShellRoot {
             } else if (test.phase === 1) {
                 test.check(recording.visible && recording.label === "1:23  Stop", "Own recording displays elapsed time and Stop");
                 test.check(recording.filled && recording.activityColor.toString() === "#c01c28", "Recording uses GNOME red");
-                test.check(recording.trailingIcon === "screencast-stop-symbolic" && recording.interactive, "Recording has an active stop control");
+                test.check(recording.trailingIcon === "media-playback-stop-symbolic" && recording.interactive, "Recording has an active stop control");
                 test.check(recording.height === 32 && indicators.height === 32, "Full-height bar targets");
                 test.check(indicators.visible && indicators.implicitWidth > 100 && indicators.sharingVisible, "Sharing, camera, microphone and location render together");
                 const microphone = findChild(indicators, "microphoneIndicator");

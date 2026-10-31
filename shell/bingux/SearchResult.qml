@@ -46,18 +46,18 @@ Item {
     readonly property bool fileResult: result.providerId === "files" && (result.kind === "file" || result.kind === "folder") && String(result.subtitle || "").startsWith("/")
     readonly property bool symbolic: !fileResult && !webResult && (featured || String(result.icon || "").endsWith("-symbolic"))
     readonly property Item activationIcon: featured ? featuredIconSurface : standardIconSurface
-    readonly property string activationIconSource: fileResult ? "file-preview:" + encodeURIComponent(result.subtitle) : symbolic ? symbolicSource : webResult ? (AdwaitaIcons.source("duckduckgo", true) || Qt.resolvedUrl("icons/duckduckgo.svg")) : AdwaitaIcons.source(result.icon || defaultIcon(), defaultIcon())
+    readonly property string activationIconSource: fileResult ? "file-preview:" + encodeURIComponent(result.subtitle) : symbolic ? symbolicSource : webResult ? (BinguxIcons.source("duckduckgo", true) || Qt.resolvedUrl("icons/duckduckgo.svg")) : BinguxIcons.source(result.icon || defaultIcon(), defaultIcon())
     readonly property int rowHeight: webResult ? 38 : result.kind === "calculation" ? 78 : result.kind === "weather" ? 84 : result.kind === "chat" ? 68 : Theme.searchResultHeight
     readonly property string symbolicSource: {
         if (!symbolic)
             return "";
         const icon = result.icon || defaultIcon();
-        const themed = AdwaitaIcons.source(icon.endsWith("-symbolic") ? icon : icon + "-symbolic", true);
+        const themed = BinguxIcons.source(icon.endsWith("-symbolic") ? icon : icon + "-symbolic", true);
         if (themed)
             return themed;
         if (result.kind === "file")
-            return AdwaitaIcons.source(icon === "application-pdf" ? "x-office-document-symbolic" : "text-x-generic-symbolic");
-        return AdwaitaIcons.source(defaultIcon().replace(/-symbolic$/, "") + "-symbolic", "system-search-symbolic");
+            return BinguxIcons.source(icon === "application-pdf" ? "x-office-document-symbolic" : "text-x-generic-symbolic");
+        return BinguxIcons.source(defaultIcon().replace(/-symbolic$/, "") + "-symbolic", "system-search-symbolic");
     }
     readonly property string providerLabel: {
         const labels = {
@@ -424,7 +424,7 @@ Item {
                 x: -24
             }
             implicitSize: 16
-            source: AdwaitaIcons.source("go-next-symbolic")
+            source: BinguxIcons.source("go-next-symbolic")
             color: Theme.muted
         }
 

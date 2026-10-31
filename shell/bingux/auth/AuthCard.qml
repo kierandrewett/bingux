@@ -284,7 +284,7 @@ ColumnLayout {
             }
             contentItem: SymbolicIcon {
                 implicitSize: 12
-                source: AdwaitaIcons.source("go-next-symbolic")
+                source: BinguxIcons.source("go-next-symbolic")
                 color: root.theme.ink
             }
         }

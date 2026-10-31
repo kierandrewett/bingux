@@ -2829,15 +2829,16 @@ carries the licence and attribution.
 
 ### In the QML shell
 
-`scripts/icons/build.py` also writes `shell/bingux/icons/` (the same icons with
-Adwaita's dark fill, which the shell's `SymbolicIcon` recolours) and
-`shell/bingux/BinguxIconIndex.js` listing their names. The shell still resolves
-icon names through `AdwaitaIcons.qml`, so nothing changes in the shell until it is
-pointed at them: in `AdwaitaIcons.qml`, `import "BinguxIconIndex.js" as BinguxIcons`
-and, after `canonical` is computed, return
-`Qt.resolvedUrl("icons/" + canonical + ".svg")` when `BinguxIcons.names[canonical]`
-is set. Names the shell asks for that are not in the set still fall through to the
-Adwaita theme.
+`scripts/icons/build.py` also writes `shell/bingux/icons/` (the same icons with a dark fill,
+which the shell's `SymbolicIcon` recolours) and `shell/bingux/BinguxIconIndex.js` listing
+their names. That set is the shell's whole symbolic icon vocabulary: `BinguxIcons.qml`
+resolves every name the shell asks for to a file in it, and nothing reads the Adwaita
+theme at runtime. `scripts/ui-lint.py` fails when a QML or JavaScript file of the shell
+names an icon the set does not have, so a new icon starts as a row in `labels.tsv`.
+Names other programs send (gnome-settings-daemon's on-screen display, the icon names
+BlueZ gives a device) are mapped to Bingux icons in `BinguxIconAliases.js`; the shell's
+own code uses the Bingux name. Only what no Bingux file covers (the icons of other
+programs' applications, notifications and tray items) is left to the system icon theme.
 
 ## Accessibility and contrast
 
