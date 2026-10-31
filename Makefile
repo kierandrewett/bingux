@@ -35,7 +35,7 @@ native: $(BUILD_DIR)/bingux-image-clipboard $(BUILD_DIR)/bingux-frame
 # bingux-shell: Quickshell (pinned submodule, Bingux patches applied) built
 # into one binary, plus the packed QML archive it runs.
 shell: shell-archive
-	$(CMAKE) -G Ninja -S shell/runtime -B $(BUILD_DIR)/bingux-shell -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBINGUX_LIBDIR=$(LIBDIR_NAME) -DBINGUX_SHELL_VERSION=$(VERSION)
+	$(CMAKE) -G Ninja -S shell/runtime -B $(BUILD_DIR)/bingux-shell -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_SKIP_RPATH=ON -DBINGUX_LIBDIR=$(LIBDIR_NAME) -DBINGUX_SHELL_VERSION=$(VERSION)
 	$(CMAKE) --build $(BUILD_DIR)/bingux-shell --parallel $(JOBS)
 
 shell-archive:
