@@ -997,7 +997,7 @@ Rows may have their own controls (a `switch`, a delete button): the grip is a se
 
 ### Fader, level meter and master-detail
 
-`fader(percent, on_moved)` is a slider that runs up and down, for a bank of levels side by side (equalizer bands, mixer channels): a thin track filled from the bottom and a knob. `height(px)`, `step(percent)`, `label(text)` and `enabled(bool)`. Up and Down move it, Shift moves ten steps, Page Up and Page Down ten percent, Home and End go to the ends.
+`fader(percent, on_moved)` is a slider that runs up and down, for a bank of levels side by side (equalizer bands, mixer channels): a thin track filled from the bottom and a knob. `step(percent)`, `label(text)` and `enabled(bool)`. Up and Down move it, Shift moves ten steps, Page Up and Page Down ten percent, Home and End go to the ends.
 
 `level_meter(level)` is a bar for a sound level from 0 to 1 that turns to the warning colour above `LEVEL_WARN`. The caller measures the level (Settings reads a peak from `pw-record`); the component only draws it.
 

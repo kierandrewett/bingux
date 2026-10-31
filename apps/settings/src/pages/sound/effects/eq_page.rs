@@ -111,7 +111,6 @@ impl Component for EqPage {
                     }
                 },
             )
-            .height(150.0)
             .step(100.0 / (2.0 * RANGE_DB))
             .enabled(active)
             .label(format!("Band {} gain", index + 1));

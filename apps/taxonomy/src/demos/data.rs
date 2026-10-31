@@ -426,7 +426,6 @@ pub const FADER: &[Spec] = &[Spec::forced("Faders: empty, half, full, disabled",
     let bank = |state: State<f64>, label: &'static str, enabled: bool| {
         let mut state = state;
         fader(*state.read(), move |value: f64| state.set(value))
-            .height(140.0)
             .label(label)
             .enabled(enabled)
     };

@@ -85,21 +85,21 @@ Non-realtime daemon, machine load average about 10, quantum 1024 at 48 kHz.
   Spawning `pw-link` for every change gave 30 to 100 ms gaps; the persistent
   `pw-cli` gave the figures above.
 
-## Not done
+## State
 
-Built and compiling: the Settings popup (stack, curated and generated pages,
-equalizer bands, add-effect list, presets menu, whole-chain meters), the
-shared `fader`, `level_meter` and `master_detail` with taxonomy entries, and the
-audio proof (`tests/desktop/apps/test_effects_audio.py`).
+Built, compiling and checked: the engine; the Settings popup (stack, curated and
+generated pages, equalizer bank and band editor, add-effect list, presets menu,
+whole-chain meters, phone push); the shared `fader`, `level_meter` and
+`master_detail` with taxonomy entries; `master_detail_tests.rs` (frame-by-frame
+toggle, select, delete and drag); the audio proof
+(`tests/desktop/apps/test_effects_audio.py`).
 
-Seen in the screenshots (`/var/tmp/EffectsShots`) and **not fixed**:
+Known problems:
 
-- the top bar of the popup is about 100 px tall and the presets menu does not show;
-- `level_row` sliders in the effect page render with no track or value (the
-  title only), so most controls are not usable yet;
-- the popup is clipped to 80 % of the window height, which hides the band editor.
-
-Not started: in-motion tests, the layout-stability and scroll-continuity runs,
-the phone screenshots past the Sound page (the snapshot script's negative
-scroll numbers did not parse), `docs/settings.md`, `docs/bingux-ui.md` entries,
-and the `cargo test` and package-definition runs.
+- The Q slider of the band editor maps 0 to 100 linearly, so a Q of 1.5 sits at
+  the left end.
+- `level_row` draws no track on a desktop-width window in the taxonomy
+  ("Level rows" page) or in a popup; the effects page therefore draws its own
+  slider rows (`page.rs`, `SliderLine`).
+- Pointer, touch and keyboard paths were exercised only through the frame tests;
+  nobody has used the popup on a live desktop.

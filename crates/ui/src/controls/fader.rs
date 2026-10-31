@@ -14,6 +14,8 @@ use crate::style::*;
 use crate::surface::{use_enabled, use_tokens};
 
 const PAGE_STEP: f64 = 10.0;
+/// The height of every fader, in px: tall enough for a hand to place a knob to a decibel.
+const HEIGHT: f32 = 160.0;
 
 /// A vertical slider. See the module docs.
 #[derive(PartialEq)]
@@ -32,7 +34,7 @@ pub fn fader(value: f64, on_moved: impl Into<EventHandler<f64>>) -> Fader {
     Fader {
         value,
         on_moved: on_moved.into(),
-        height: 160.0,
+        height: HEIGHT,
         step: 1.0,
         enabled: true,
         label: None,
@@ -40,12 +42,6 @@ pub fn fader(value: f64, on_moved: impl Into<EventHandler<f64>>) -> Fader {
 }
 
 impl Fader {
-    /// The height of the whole control in px.
-    pub fn height(mut self, height: f32) -> Self {
-        self.height = height.max(Dim::Control.px() * 2.0);
-        self
-    }
-
     /// The percent one arrow key press moves the knob.
     pub fn step(mut self, step: f64) -> Self {
         self.step = step.max(0.01);
