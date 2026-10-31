@@ -29,7 +29,7 @@ const DENSE_FROM: f32 = 1240.0;
 impl Component for Switcher {
     fn render(&self) -> impl IntoElement {
         let window = use_window();
-        let width = Platform::get().current_window().root_size.read().width;
+        let width = bingux_ui::surface::window_size().width;
         if is_compact() || width < DENSE_FROM {
             icon_button(Icon::Appearance, move |_| {
                 window.open(popup("Display", SwitcherSheet).width(Dim::PopupNarrow));

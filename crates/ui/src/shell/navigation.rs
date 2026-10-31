@@ -951,7 +951,7 @@ impl Component for NavigationSplitView {
         let section_registry = sections::provide();
         let busy = !busy_pages.0.read().is_empty();
         // On a narrow window the index, the list of pages, is the screen.
-        let width = Platform::get().current_window().root_size.read().width;
+        let width = crate::surface::window_size().width;
         let narrow = width < NARROW_BELOW || device_preview();
         use_side_effect_with_deps(&narrow, move |narrow| router.set_wide(!*narrow));
         let mut model = router.read();

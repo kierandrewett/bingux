@@ -146,7 +146,7 @@ impl Component for InspectorBody {
             });
         });
         let tab = *nav.tab.read();
-        let narrow = Platform::get().current_window().root_size.read().width < NARROW_BELOW;
+        let narrow = crate::surface::window_size().width < NARROW_BELOW;
         let header =
             super::toolbar::header(tab, nav.tab, *inspect_on.read(), *paused_on.read(), narrow);
         let body = match tab {

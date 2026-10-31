@@ -610,7 +610,7 @@ impl Component for Row {
         } else {
             0.0
         };
-        let window_width = Platform::get().current_window().root_size.read().width;
+        let window_width = crate::surface::window_size().width;
         let inner_of = |face: f32| (face - 2.0 * GUTTER.px() - leading_width).max(0.0);
         let line_inner = || inner_of(face_size().0);
         let filled = filling.then(|| {

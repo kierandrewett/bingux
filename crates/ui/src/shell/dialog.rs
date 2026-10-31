@@ -371,7 +371,7 @@ const DIALOG_MAX_HEIGHT_PERCENT: f32 = 90.0;
 /// the width it has, such as a tab bar that fills the card or scrolls, asks
 /// here. Read it while rendering, so it follows the window.
 pub(crate) fn frame_width(width: f32) -> f32 {
-    let window = Platform::get().current_window().root_size.read().width;
+    let window = crate::surface::window_size().width;
     width.min(window * DIALOG_MAX_WIDTH_PERCENT / 100.0)
 }
 
@@ -428,7 +428,7 @@ const ALERT_COLUMN: Recipe = &[w_full(), flex_col(), gap(S2)];
 /// or message asks for the maximum and wraps there. A dialog with content
 /// (a field) is the maximum, so the field has room.
 fn card_width(dialog: &Dialog, compact: bool) -> f32 {
-    let window = Platform::get().current_window().root_size.read().width;
+    let window = crate::surface::window_size().width;
     let most = Dim::Dialog.px().min(window * DIALOG_MAX_WIDTH_PERCENT / 100.0);
     let least = Dim::DialogMin.px().min(most);
     if dialog.content.is_some() {

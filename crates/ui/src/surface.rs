@@ -29,6 +29,28 @@ pub fn use_enabled(own: bool) -> bool {
     own && container.is_none_or(|flag| (flag.0)())
 }
 
+/// The window's size in logical pixels, the unit every length of the toolkit is in.
+///
+/// `PlatformWindow::root_size` is what the window system reports: the size in physical pixels.
+/// On a display scaled 2x a 1000 x 700 window reports 2000 x 1400, and a length taken from it as
+/// it is (a slide's travel, how far a menu can reach, the width a layout compares with the narrow
+/// breakpoint) is twice what the window holds. Reading it subscribes the caller to a resize and to
+/// a change of scale.
+pub fn window_size() -> torin::prelude::Size2D {
+    let window = Platform::get().current_window();
+    let size = *window.root_size.read();
+    let scale = (*window.scale_factor.read() as f32).max(f32::EPSILON);
+    torin::prelude::Size2D::new(size.width / scale, size.height / scale)
+}
+
+/// [`window_size`] without subscribing: for a handler, which reads the size at the moment it runs.
+pub fn window_size_peek() -> torin::prelude::Size2D {
+    let window = Platform::get().current_window();
+    let size = *window.root_size.peek();
+    let scale = (*window.scale_factor.peek() as f32).max(f32::EPSILON);
+    torin::prelude::Size2D::new(size.width / scale, size.height / scale)
+}
+
 /// The live palette the window root provided. Reading it subscribes the
 /// component to accent and colour-scheme changes.
 pub fn use_tokens() -> Tokens {

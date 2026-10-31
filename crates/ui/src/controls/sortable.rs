@@ -263,7 +263,7 @@ impl Env {
         }
         let (_, pointer) = self.drag.pointer();
         if let (Some(mut scroll), true) = (self.scroll, dt > 0.0) {
-            let window = Platform::get().current_window().root_size.read().height as f32;
+            let window = crate::surface::window_size().height;
             let speed = reorder::edge_speed(pointer, Dim::Header.px(), window);
             if speed != 0.0 {
                 let want = self.shared.carry.get() + speed * dt;
