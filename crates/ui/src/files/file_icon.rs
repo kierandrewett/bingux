@@ -170,9 +170,9 @@ impl FileKind {
             FileKind::Code => Icon::TextXScript,
             FileKind::Pdf => Icon::ApplicationPdf,
             FileKind::Archive | FileKind::DiskImage => Icon::PackageXGeneric,
-            FileKind::Spreadsheet => Icon::XOfficeSpreadsheet,
-            FileKind::Presentation => Icon::XOfficePresentation,
-            FileKind::Document | FileKind::Page | FileKind::Ebook => Icon::XOfficeDocument,
+            FileKind::Spreadsheet => Icon::Table,
+            FileKind::Presentation => Icon::Presentation,
+            FileKind::Document | FileKind::Page | FileKind::Ebook => Icon::TextXGeneric,
             FileKind::Font => Icon::FontXGeneric,
             FileKind::Executable => Icon::Application,
             FileKind::Model3d | FileKind::Database | FileKind::Certificate | FileKind::Torrent | FileKind::Unknown => {

@@ -1,3 +1,12 @@
-<svg viewBox="0 0 16 16">
-  <fork name="Gear" weight="fill" mode="exact"/>
+<svg viewBox="0 0 16 16" fill="none">
+  <circle cx="8" cy="8" r="5.2" fill="black"/>
+  <path d="M6.45 4 L7 1 L9 1 L9.55 4Z" fill="black"/>
+  <path d="M9.732 4.076 L12.243 2.343 L13.657 3.757 L11.924 6.268Z" fill="black"/>
+  <path d="M12 6.45 L15 7 L15 9 L12 9.55Z" fill="black"/>
+  <path d="M11.924 9.732 L13.657 12.243 L12.243 13.657 L9.732 11.924Z" fill="black"/>
+  <path d="M9.55 12 L9 15 L7 15 L6.45 12Z" fill="black"/>
+  <path d="M6.268 11.924 L3.757 13.657 L2.343 12.243 L4.076 9.732Z" fill="black"/>
+  <path d="M4 9.55 L1 9 L1 7 L4 6.45Z" fill="black"/>
+  <path d="M4.076 6.268 L2.343 3.757 L3.757 2.343 L6.268 4.076Z" fill="black"/>
+  <circle cx="8" cy="8" r="2.2" fill="black" data-op="cut"/>
 </svg>

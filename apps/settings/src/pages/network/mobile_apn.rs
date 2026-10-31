@@ -653,7 +653,7 @@ impl Component for ApnListPage {
                     )
                     .subtitle(profile.summary())
                     .trailing(Element::from(
-                        icon_button(Icon::PreferencesSystem, move |_| {
+                        icon_button(Icon::Pencil, move |_| {
                             ctx.router.open(routes::mobile_apn(Some(&edit.clone())))
                         })
                         .tooltip("Edit access point"),

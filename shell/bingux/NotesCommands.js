@@ -69,7 +69,7 @@ var commands = [
         title: "Table",
         hint: "Two columns with editable cells",
         aliases: "table columns rows grid",
-        icon: "x-office-spreadsheet-symbolic",
+        icon: "table-symbolic",
         block: true,
         markdown: "| Column 1 | Column 2 |\n| --- | --- |\n|  |  |\n|  |  |\n\n\u200b",
         select: "Column 1",

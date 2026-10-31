@@ -80,7 +80,7 @@ function freshInstanceId(layout, kind) {
     return "";
 }
 const decorationWidgets = [
-    { id: "label", label: "Label", icon: "document-edit-symbolic", decoration: true },
+    { id: "label", label: "Label", icon: "font-x-generic-symbolic", decoration: true },
     { id: "icon", label: "Icon", icon: "starred-symbolic", decoration: true },
 ];
 function isDecoration(id) {

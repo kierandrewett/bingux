@@ -19,7 +19,7 @@ battery-level-80-charging battery-level-90-charging battery-level-100-charging b
 
 [sidebar]
 network-wireless network-wired bluetooth-active preferences-desktop-accessibility applications-graphics
-preferences-desktop-wallpaper system-search video-display audio-volume-high battery-level-100
+preferences-desktop system-search video-display audio-volume-high battery-level-100
 input-keyboard input-mouse preferences-system-time system-users view-app-grid help-about
 
 [controls-and-marks]
@@ -28,13 +28,13 @@ view-reveal view-conceal starred non-starred window-close window-minimize window
 
 [buttons-and-menus]
 open-menu view-more view-refresh object-rotate-right sidebar-show focus-top-bar edit-copy edit-delete
-user-trash view-filter find-location document-edit document-open send-to view-list view-grid
+user-trash view-filter find-location document-edit pencil document-open send-to view-list view-grid
 media-playback-pause media-playback-stop preferences-system emblem-system folder folder-download bookmarks
 
 [status]
-dialog-error dialog-information dialog-warning help-browser security-high security-low
-system-lock-screen dialog-password changes-prevent power-profile-power-saver power-profile-balanced
-power-profile-performance display-brightness night-light weather-clear-night
+dialog-error dialog-information dialog-warning help-browser dialog-password changes-prevent
+power-profile-power-saver power-profile-balanced power-profile-performance display-brightness
+night-light weather-clear-night action-unavailable
 
 [devices]
 audio-headphones audio-speakers audio-card audio-input-microphone input-keyboard input-mouse input-tablet
@@ -43,8 +43,8 @@ avatar-default user-info
 
 [applications]
 web-browser x-office-calendar mail-unread image-generic video-generic applications-multimedia
-accessories-calculator addon application-x-executable preferences-other
-preferences-desktop-keyboard-shortcuts
+accessories-calculator addon application-x-executable preferences-other table presentation
+view-pin process-stop system-run utilities-terminal accessories-text-editor document-open-recent document-save
 
 [default-apps]
 web-browser mail-unread x-office-calendar folder default-app-text default-app-documents

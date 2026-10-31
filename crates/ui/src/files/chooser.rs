@@ -1913,7 +1913,7 @@ fn toolbar(
         .enabled(can_go_forward)
         .context_menu(forward_items);
     let has_parent = super::history::parent(&current).is_some();
-    let parent = icon_button(Icon::GoUp, move |_: ()| nav.up())
+    let parent = icon_button(Icon::PanUp, move |_: ()| nav.up())
         .size(Dim::Control)
         .tooltip("Parent folder")
         .enabled(has_parent);

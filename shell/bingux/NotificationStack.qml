@@ -1163,7 +1163,7 @@ Flickable {
                                 anchors.rightMargin: 10
                                 anchors.verticalCenter: parent.verticalCenter
                                 implicitSize: 12
-                                source: BinguxIcons.source("pan-down-symbolic", "go-down-symbolic")
+                                source: BinguxIcons.source("pan-down-symbolic")
                                 color: groupLabel.color
                                 rotation: notificationCard.groupExpanded ? 180 : 0
                                 Behavior on rotation {
@@ -1199,7 +1199,7 @@ Flickable {
                                 horizontalPadding: Theme.gap
                                 iconName: ({
                                         copy: "edit-copy-symbolic",
-                                        save: "document-save-as-symbolic",
+                                        save: "document-save-symbolic",
                                         discard: "user-trash-symbolic"
                                     })[modelData.action.identifier] || ""
                                 visible: !modelData.defaultAction

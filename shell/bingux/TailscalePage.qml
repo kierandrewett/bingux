@@ -130,7 +130,7 @@ Item {
             id: "shields-up",
             name: "Block incoming connections",
             description: "Reject incoming connections over Tailscale",
-            icon: "security-high-symbolic"
+            icon: "network-wireless-encrypted-symbolic"
         }
     ]
     ColumnLayout {
