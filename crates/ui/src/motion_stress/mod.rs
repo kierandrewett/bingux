@@ -26,6 +26,7 @@ mod dialog;
 mod dropdown;
 mod expander;
 mod focus_ring;
+mod omnibox;
 mod page_push;
 mod scroll;
 mod slider;

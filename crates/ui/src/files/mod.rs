@@ -6,9 +6,9 @@
 //! with its free space), an address bar of crumbs that turns into a text field
 //! with completions, a sortable list or a grid of thumbnails, a file type
 //! filter, a name field for saving, and keyboard control throughout. The
-//! search bar under the toolbar (Ctrl+F) filters the folder as you type or
-//! searches subfolders, Home or everywhere, with filters for type, date and
-//! size (see [`Find`] and `design/files-search.md`).
+//! address bar is also the search (Ctrl+F): the card that grows out of the
+//! field searches this folder and below, Home or everywhere, with chips for
+//! type, date and size (see [`Find`] and `design/files-search.md`).
 //!
 //! ```ignore
 //! use bingux_ui::files::{ChooserRequest, choose};
@@ -58,13 +58,16 @@ mod actions;
 mod address_bar;
 mod address_complete;
 mod address_crumbs;
-mod address_edit;
 mod address_list;
 mod address_target;
+#[cfg(all(test, feature = "testing"))]
+mod address_tests;
 mod address_trail;
 mod browser;
 mod chooser;
 mod colour;
+#[cfg(all(test, feature = "testing"))]
+mod colour_tests;
 mod columns;
 mod compress;
 mod compress_media;
@@ -73,23 +76,39 @@ mod compress_run;
 #[cfg(all(test, feature = "testing"))]
 mod compress_tests;
 mod context_menu;
-mod extract_dialog;
 mod directory;
 mod drag;
 mod drives;
+mod extract_dialog;
 mod file_grid;
+mod file_icon;
+#[cfg(all(test, feature = "testing"))]
+mod file_icon_surfaces;
 mod file_list;
 mod folder_table;
-mod named;
 pub mod history;
 #[cfg(test)]
 mod history_fuzz;
 #[cfg(all(test, feature = "testing"))]
 mod history_ui_tests;
-mod file_icon;
 mod hover_card;
+#[cfg(all(test, feature = "testing"))]
+mod hover_tests;
 mod interaction;
+pub mod launch;
+mod named;
+mod omnibox;
+mod omnibox_model;
+#[cfg(all(test, feature = "testing"))]
+mod omnibox_tests;
+mod place_menu;
+#[cfg(all(test, feature = "testing"))]
+mod place_tests;
+mod places_model;
+mod places_view;
 mod preview;
+#[cfg(all(test, feature = "testing"))]
+mod preview_step_tests;
 mod properties;
 mod properties_access;
 mod properties_basic;
@@ -98,73 +117,58 @@ mod properties_details;
 mod properties_permissions;
 mod properties_tabs;
 mod properties_words;
-mod place_menu;
-#[cfg(all(test, feature = "testing"))]
-mod place_tests;
-mod places_model;
-mod places_view;
 mod reload_button;
+#[cfg(all(test, feature = "testing"))]
+mod reload_stop_tests;
 mod rename_field;
 mod scroll_memory;
 #[cfg(all(test, feature = "testing"))]
-mod reload_stop_tests;
-#[cfg(all(test, feature = "testing"))]
-mod colour_tests;
-#[cfg(all(test, feature = "testing"))]
-mod file_icon_surfaces;
-#[cfg(all(test, feature = "testing"))]
 mod scroll_tests;
-#[cfg(all(test, feature = "testing"))]
-mod preview_step_tests;
-#[cfg(all(test, feature = "testing"))]
-mod tab_tests;
-#[cfg(all(test, feature = "testing"))]
-mod hover_tests;
-#[cfg(all(test, feature = "testing"))]
-mod address_tests;
 mod search;
-mod search_bar;
-mod search_filters;
-#[cfg(all(test, feature = "testing"))]
-mod search_tests;
 mod skeleton;
 mod states;
+mod status_line;
+#[cfg(all(test, feature = "testing"))]
+mod tab_tests;
+#[cfg(test)]
+mod tabs_fuzz;
 #[cfg(test)]
 mod test_state;
-mod status_line;
 mod thumbnails;
 mod view;
 mod view_state;
 mod zoom;
 
+pub use actions::Capabilities;
+pub use actions::operations_running;
+pub use address_bar::AddressBar;
 pub use bingux_files as model;
 pub use bingux_files::places::user_dir;
 pub use bingux_files::{
     Accept, Action, Category, Choice, ChooserRequest, Chosen, Entry, Filter, Kind, Listing, Place,
     PlaceKind, Places, Rule, Selection, Sort, SortKey, ViewMode,
 };
-pub use address_bar::AddressBar;
-pub use search::{Deep, DeepResults, DeepStatus, Find, Marks, RunKey, SearchView, use_search_run};
-pub use search_bar::{BarStatus, ScopeChoice, SearchBar, place_phrase, scope_choices, scope_key, status_text, token_label};
-pub use actions::operations_running;
-pub use browser::{Browse, ClosedTab, ClosedTabs, TabMemory, browse};
+pub use browser::{Browse, FileTab, TabMemory, browse};
 pub use chooser::choose;
+pub use colour::{
+    COLOUR_GRIDS, ColourIcon, PIXEL_GRIDS, Tone, VECTOR_GRID, colour_grid, colour_icon_view,
+    colour_tone,
+};
 pub use compress::{CompressPreview, compress_preview};
 pub use directory::{Load, Where, home_folder, use_directory, use_places};
-pub use folder_table::{APP_SCHEME, FOLDER_SCHEME, folder_table, location_of, place_of};
-pub use named::{RECENT_SCHEME, Root, Roots, TRASH_SCHEME, Typed};
-pub use colour::{COLOUR_GRIDS, ColourIcon, PIXEL_GRIDS, Tone, VECTOR_GRID, colour_grid, colour_icon_view, colour_tone};
+pub use drag::{FileDrag, file_drag, provide_file_drag};
 pub use file_icon::{
     Emblem, FileIcon, FileIconSize, FileKind, Source, Tint, file_icon_view, file_icon_view_floating,
 };
+pub use folder_table::{APP_SCHEME, FOLDER_SCHEME, folder_table, location_of, place_of};
+pub use named::{RECENT_SCHEME, Root, Roots, TRASH_SCHEME, Typed};
 pub use places_view::{PlacesMenu, PlacesSidebar};
+pub use search::{Deep, DeepResults, Find, RunKey, use_search_run};
 pub use skeleton::skeleton;
-pub use zoom::default_zoom_px;
-pub use states::{empty_state, error_state, loading_state, no_results_state};
+pub use states::{empty_state, error_state, loading_state};
 pub use view::FileView;
-pub use actions::Capabilities;
-pub use drag::{FileDrag, file_drag, provide_file_drag};
 pub use view_state::{load as remembered, save as remember};
+pub use zoom::default_zoom_px;
 
 /// The version of the compiled-in dialog; see the module documentation.
 pub const VERSION: u32 = 1;

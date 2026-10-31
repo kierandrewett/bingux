@@ -121,7 +121,13 @@ impl Component for GridView {
         let bucket = bucket_px(metrics.icon, device_scale);
         ctx.lattice.set(Some(metrics.lattice(self.rows.len())));
         let settle: Settle = use_hook(|| Rc::new(Cell::new(None)));
-        anchor_zoom(&ctx, f32::from(self.icon_px), metrics.line, metrics.columns, &settle);
+        anchor_zoom(
+            &ctx,
+            f32::from(self.icon_px),
+            metrics.line,
+            metrics.columns,
+            &settle,
+        );
 
         let lines = self.rows.len().div_ceil(metrics.columns);
         let data = GridData {
@@ -180,7 +186,11 @@ impl Component for GridView {
 }
 
 /// The keys of the grid that move the cursor. Returns true when used.
-pub(super) fn navigate(ctx: &Ctx, event: &Event<KeyboardEventData>, direction: crate::controls::direction::Direction) -> bool {
+pub(super) fn navigate(
+    ctx: &Ctx,
+    event: &Event<KeyboardEventData>,
+    direction: crate::controls::direction::Direction,
+) -> bool {
     let count = ctx.rows.len();
     if count == 0 {
         return false;
@@ -244,8 +254,7 @@ impl Component for Tile {
         };
         let row = self.row;
         if !entry.sized {
-            ctx.wants
-                .want(&self.rows.listing, &[self.rows.order[row]]);
+            ctx.wants.want(&self.rows.listing, &[self.rows.order[row]]);
         }
         let metrics = self.metrics;
         let selected = ctx.env.selection.read().contains(&entry.path);
@@ -260,7 +269,11 @@ impl Component for Tile {
         let enabled = ctx.selectable(entry);
         let dim = !enabled || ctx.cut_dim(&entry.path);
 
-        let preview = if ctx.thumbnails { Preview::Full } else { Preview::Off };
+        let preview = if ctx.thumbnails {
+            Preview::Full
+        } else {
+            Preview::Off
+        };
         let face = face(&tokens, entry, self.icon_px, self.bucket, preview, selected);
         let name_room = metrics.tile - 2.0 * S1.px();
         let caption: Element = if renaming {
@@ -269,7 +282,7 @@ impl Component for Tile {
                 .width(name_room)
                 .into()
         } else {
-            name_label(&tokens, &entry.name, name_room, true, &ctx.marks(&entry.name))
+            name_label(&tokens, &entry.name, name_room, true)
         };
         rect()
             .component("Tile")
@@ -362,7 +375,7 @@ impl Component for Tile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::files::zoom::{LADDER, kind_of, ViewKind};
+    use crate::files::zoom::{LADDER, ViewKind, kind_of};
 
     const CAPTION: f32 = 28.0;
     const NAME_GAP: f32 = 4.0;
@@ -376,8 +389,14 @@ mod tests {
         let mut last = metrics(2000.0, 48);
         for px in [64, 96, 128, 192] {
             let next = metrics(2000.0, px);
-            assert!(next.tile >= last.tile && next.tile_height > last.tile_height, "{px}");
-            assert_eq!(next.caption, last.caption, "the name's line is {px} px tall too");
+            assert!(
+                next.tile >= last.tile && next.tile_height > last.tile_height,
+                "{px}"
+            );
+            assert_eq!(
+                next.caption, last.caption,
+                "the name's line is {px} px tall too"
+            );
             assert_eq!(next.icon, f32::from(px));
             last = next;
         }
@@ -385,10 +404,16 @@ mod tests {
 
     #[test]
     fn the_icon_sits_inside_the_tile_with_room_for_the_name() {
-        for px in LADDER.into_iter().filter(|px| kind_of(*px) == ViewKind::Grid) {
+        for px in LADDER
+            .into_iter()
+            .filter(|px| kind_of(*px) == ViewKind::Grid)
+        {
             let m = metrics(2000.0, px);
             assert!(m.icon + 2.0 * TILE_INSET <= m.tile, "{px}");
-            assert_eq!(m.tile_height, 2.0 * TILE_INSET + m.icon + NAME_GAP + CAPTION);
+            assert_eq!(
+                m.tile_height,
+                2.0 * TILE_INSET + m.icon + NAME_GAP + CAPTION
+            );
             assert_eq!(m.line, m.gap + m.tile_height);
         }
     }
@@ -409,7 +434,10 @@ mod tests {
         for width in (200..1200).step_by(7) {
             let cap = crate::files::zoom::cap_for_width(width as f32);
             if kind_of(cap) == ViewKind::Grid {
-                assert!(metrics(width as f32, cap).columns >= 2, "{width} px at {cap}");
+                assert!(
+                    metrics(width as f32, cap).columns >= 2,
+                    "{width} px at {cap}"
+                );
             }
         }
     }

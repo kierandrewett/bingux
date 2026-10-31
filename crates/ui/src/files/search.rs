@@ -1,55 +1,47 @@
-//! Search in the file views: what is asked, how it runs, what the list is told.
+//! Search in the file views: what is asked, and how it runs.
 //!
-//! The search has its own bar under the toolbar ([`search_bar`](super::search_bar):
-//! the field, the scope and the filters) and its own backend
-//! ([`bingux_files::find`]). `design/files-search.md` says how the pieces fit
-//! and what is not done; this module is the state they share.
+//! The question is asked in the location field
+//! ([`omnibox`](super::omnibox)), which shows the answer as it comes in; the
+//! backend is [`bingux_files::find`]. `design/files-search.md` says how the
+//! pieces fit and what is not done; this module is the state they share.
 //!
 //! # What is asked
 //!
-//! [`Find`] holds what the bar edits, per tab: whether the bar is open, where
-//! to look ([`Scope`]), and the filters. The words are the text of the field,
-//! which the owner keeps (`draft`): `report "tax return" -draft`. A
-//! `key:value` typed in the field (`type:image`, `size:>1MB`, the full
-//! language is in [`bingux_files::find::query`]) turns into a filter, shown as
-//! a token under the field, the moment a space ends it. [`Find::query`] is
-//! the typed [`Query`] of the two together; the text and the Filters panel
-//! never disagree, because there is one place the filters live.
+//! [`Find`] holds what the scope and filter chips edit, per tab: where to
+//! look ([`Scope`]) and the filters. The words are the text of the field:
+//! `report "tax return" -draft`. A `key:value` typed in the field
+//! (`type:image`, `size:>1MB`, the full language is in
+//! [`bingux_files::find::query`]) turns into a filter, shown as a chip, the
+//! moment a space ends it. [`Find::query`] is the typed [`Query`] of the two
+//! together; the text and the chips never disagree, because there is one
+//! place the filters live.
 //!
 //! # Where it runs
 //!
-//! [`Scope::Folder`] filters the listing in memory, as the person types;
-//! nothing is read. Every other scope is a search of folders:
-//! [`use_search_run`] runs [`bingux_files::find::run`] on a thread of its own
-//! (the names index first, then the live walk) and publishes what it finds
-//! every 60 ms. A changed query, a changed scope, another folder, Stop or the
-//! window going away cancels it.
+//! Every scope is a search of folders: [`use_search_run`] runs
+//! [`bingux_files::find::run`] on a thread of its own (the names index first,
+//! then the live walk) and publishes what it finds every 60 ms. A changed
+//! query, a changed scope, another folder or the field going away cancels it.
 //!
-//! # What the list does while it runs
+//! # What the card does while it runs
 //!
-//! Rows are only appended: nothing already on show moves while the search
-//! runs, whatever the sort. When it ends the list is put in the chosen order
-//! once. The previous results stay on show until the new search has its first
-//! results, so typing one more letter does not blank the list.
-//!
-//! [`DeepResults::listing`] is a [`Listing`] of the folder the search started
-//! in, so a file view shows results like any folder: with a Location column
-//! for the folder each result is in.
+//! Results are only appended: nothing already on show moves while the search
+//! runs. The previous results stay on show until the new search has its
+//! first results, so typing one more letter does not blank the card.
 
 use std::cell::RefCell;
-use std::ops::Range;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::Duration;
 
 use bingux_files::find::{
-    self, Event, Filters, Invalid, Matcher, NameIndex, Plan, Query, Scope, SortBy, Summary, split_pending,
+    self, Event, Filters, Invalid, NameIndex, Plan, Query, Scope, SortBy, Summary, split_pending,
 };
 use bingux_files::listing::Cancel;
 use bingux_files::mounts::MountKind;
-use bingux_files::{Entry, Filter, Listing, Selection};
+use bingux_files::{Entry, Filter, Listing};
 use freya::prelude::*;
 
 use super::address_target::StopOnDrop;
@@ -65,23 +57,14 @@ pub const MAX_RESULTS: usize = 10_000;
 // ---------------------------------------------------------------------------
 
 /// The search a tab is making, apart from the words. Held by whoever owns the
-/// bar (the chooser), so the bar, the list and the status line read one state.
+/// field (the chooser), so it outlives the field and every tab has its own.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Find {
-    /// The search bar shows, and the list is narrowed by what it asks.
-    pub open: bool,
-    /// Where to look. It stays when the search ends, so a person who
-    /// searches "Everywhere" does not choose it again for the next search.
+    /// Where to look. It stays between searches, so a person who chooses
+    /// "Everywhere" does not choose it again for the next one.
     pub scope: Scope,
-    /// Filters, from the Filters panel and from `key:value` typed in the field.
+    /// Filters, from the chips and from `key:value` typed in the field.
     pub filters: Filters,
-    /// The Filters panel is open.
-    pub filters_open: bool,
-    /// Counts requests to put the keyboard in the field, so a search started
-    /// from the list reaches a bar that is already open.
-    pub focus: u32,
-    /// The selection from before the search began, given back on Escape.
-    restore: Option<Selection>,
 }
 
 /// `typed` laid over `base`: what the field says wins where both say
@@ -128,24 +111,6 @@ impl Find {
         }
     }
 
-    /// The query when there is something to narrow the list by, else `None`
-    /// (the bar is closed, or nothing is typed and no filter is set).
-    pub fn active(&self, text: &str) -> Option<Query> {
-        if !self.open {
-            return None;
-        }
-        let query = self.query(text);
-        (!query.is_blank()).then_some(query)
-    }
-
-    /// Open the bar. `selection` is what Escape gives back.
-    pub fn begin(&mut self, selection: &Selection) {
-        if !self.open {
-            self.open = true;
-            self.restore = Some(selection.clone());
-        }
-    }
-
     /// Turn the `key:value` tokens of `text` into filters. Done when a space
     /// ends one, or with `finished` (Enter). Returns the text the field
     /// should hold now, when it is not the text it has.
@@ -168,117 +133,6 @@ impl Find {
         }
         (words != text).then_some(words)
     }
-
-    /// End the search: the bar closes and the filters are dropped; the scope
-    /// stays. Returns the selection to give back.
-    pub fn clear(&mut self) -> Option<Selection> {
-        let restore = self.restore.take();
-        *self = Find {
-            scope: std::mem::take(&mut self.scope),
-            ..Find::default()
-        };
-        restore
-    }
-}
-
-// ---------------------------------------------------------------------------
-// What the list and the status line are told
-// ---------------------------------------------------------------------------
-
-/// How a search of folders is going, as the bar, the list and the status
-/// line tell it.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct DeepStatus {
-    /// The folder the search started in: the Location column is relative to it.
-    pub root: PathBuf,
-    pub found: usize,
-    pub folders: usize,
-    pub running: bool,
-    /// The person pressed Stop.
-    pub stopped: bool,
-    /// The limit was reached.
-    pub truncated: bool,
-    /// Folders that could not be read.
-    pub unreadable: usize,
-}
-
-/// The matcher a search marks names with.
-#[derive(Clone, Debug)]
-pub struct Marks {
-    /// `None` when the query cannot run (a bad regular expression).
-    matcher: Option<Arc<Matcher>>,
-    text: String,
-}
-
-impl Marks {
-    pub fn new(matcher: Option<Arc<Matcher>>, text: String) -> Marks {
-        Marks { matcher, text }
-    }
-
-    /// The bytes of `name` the search matched, to draw marked.
-    pub fn highlight(&self, name: &str) -> Vec<Range<usize>> {
-        self.matcher.as_ref().map(|matcher| matcher.highlight(name)).unwrap_or_default()
-    }
-
-    /// The query as text: what a view's scroll position is keyed by.
-    pub fn text(&self) -> &str {
-        &self.text
-    }
-}
-
-impl PartialEq for Marks {
-    fn eq(&self, other: &Self) -> bool {
-        match (&self.matcher, &other.matcher) {
-            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
-            (None, None) => self.text == other.text,
-            _ => false,
-        }
-    }
-}
-
-/// What a file view shows of a search: the matcher to mark names with, how
-/// many entries the folder has, and the results of a search of folders when
-/// they are shown.
-#[derive(Clone, Debug, PartialEq)]
-pub struct SearchView {
-    pub query: Marks,
-    /// Entries of the folder on show that the search chose among (hidden
-    /// ones and the ones the file type filter removes not counted).
-    pub of: usize,
-    /// Set while the list shows the results of a search of folders.
-    pub deep: Option<DeepStatus>,
-    /// Where it looks, in words: `Pictures`, `this folder`.
-    pub place: String,
-    /// The query cannot run: what is wrong with it.
-    pub invalid: Option<String>,
-    /// The order the results are in.
-    pub sort: SortBy,
-    /// The words searched for, without the filters.
-    pub words: String,
-}
-
-/// `1204` as `1,204`.
-pub(super) fn count(number: usize) -> String {
-    let digits = number.to_string();
-    let mut text = String::with_capacity(digits.len() + digits.len() / 3);
-    for (at, digit) in digits.chars().enumerate() {
-        if at > 0 && (digits.len() - at) % 3 == 0 {
-            text.push(',');
-        }
-        text.push(digit);
-    }
-    text
-}
-
-/// Move the cursor of `selection` one row within `order`, for Up and Down in
-/// the field.
-pub fn step_selection(selection: &mut Selection, order: &[&Path], by: i32) {
-    let key = if by < 0 {
-        bingux_files::selection::Move::Up
-    } else {
-        bingux_files::selection::Move::Down
-    };
-    selection.step(key, order, false);
 }
 
 // ---------------------------------------------------------------------------
@@ -306,21 +160,6 @@ pub struct DeepResults {
     pub missing: Option<String>,
 }
 
-impl DeepResults {
-    /// How the bar and the list tell it.
-    pub fn status(&self) -> DeepStatus {
-        DeepStatus {
-            root: self.listing.path.clone(),
-            found: self.listing.entries.len(),
-            folders: self.folders,
-            running: self.running,
-            stopped: self.stopped,
-            truncated: self.truncated,
-            unreadable: self.unreadable,
-        }
-    }
-}
-
 /// The handle to the search of folders of a view.
 #[derive(Clone)]
 pub struct Deep {
@@ -340,7 +179,11 @@ impl Deep {
 
     /// The results of `key`, when that is the search they are of.
     pub fn results_for(&self, key: &str) -> Option<Arc<DeepResults>> {
-        self.results.read().as_ref().filter(|results| results.key == key).cloned()
+        self.results
+            .read()
+            .as_ref()
+            .filter(|results| results.key == key)
+            .cloned()
     }
 
     /// Stop reading folders. What has been found stays.
@@ -473,26 +316,32 @@ async fn follow_run(
         include_noise: key.include_noise,
         chooser_filter: key.filter.clone(),
         max_hits: MAX_RESULTS,
-        index: key.roots.iter().any(|root| root.starts_with(&key.home)).then(|| NameIndex::global(&key.home)),
+        index: key
+            .roots
+            .iter()
+            .any(|root| root.starts_with(&key.home))
+            .then(|| NameIndex::global(&key.home)),
     };
-    let spawned = std::thread::Builder::new().name("bingux-file-search".into()).spawn({
-        let cancel = cancel.clone();
-        move || {
-            #[cfg(test)]
-            let hold = holds_the_walk(&plan.roots);
-            let summary = find::run(&plan, &cancel, &mut |event| {
+    let spawned = std::thread::Builder::new()
+        .name("bingux-file-search".into())
+        .spawn({
+            let cancel = cancel.clone();
+            move || {
                 #[cfg(test)]
-                let found = matches!(event, Event::Found(_));
-                let open = send.send(Message::Event(event)).is_ok();
-                #[cfg(test)]
-                if hold && found {
-                    hold_until_stopped(&cancel);
-                }
-                open
-            });
-            let _ = send.send(Message::Done(summary));
-        }
-    });
+                let hold = holds_the_walk(&plan.roots);
+                let summary = find::run(&plan, &cancel, &mut |event| {
+                    #[cfg(test)]
+                    let found = matches!(event, Event::Found(_));
+                    let open = send.send(Message::Event(event)).is_ok();
+                    #[cfg(test)]
+                    if hold && found {
+                        hold_until_stopped(&cancel);
+                    }
+                    open
+                });
+                let _ = send.send(Message::Done(summary));
+            }
+        });
     if spawned.is_err() {
         state.running = false;
         results.set(Some(Arc::new(state)));
@@ -552,7 +401,9 @@ const HOLD_CAP: Duration = Duration::from_secs(60);
 /// frame takes longer than the whole walk, and the search was over before Stop was pressed.
 #[cfg(test)]
 fn holds_the_walk(roots: &[PathBuf]) -> bool {
-    roots.iter().any(|root| root.to_string_lossy().ends_with("-slow-walk"))
+    roots
+        .iter()
+        .any(|root| root.to_string_lossy().ends_with("-slow-walk"))
 }
 
 #[cfg(test)]
@@ -568,18 +419,19 @@ mod tests {
     use super::*;
     use bingux_files::find::{Hidden, Kind};
 
-    fn selection_of(path: &str) -> Selection {
-        let mut selection = Selection::new();
-        selection.select_only(Path::new(path));
-        selection
-    }
-
     #[test]
     fn a_key_typed_in_the_field_becomes_a_filter_when_a_space_ends_it() {
         let mut find = Find::default();
-        assert_eq!(find.lift("report type:image", false), None, "not closed yet");
+        assert_eq!(
+            find.lift("report type:image", false),
+            None,
+            "not closed yet"
+        );
         assert_eq!(find.filters, Filters::default());
-        assert_eq!(find.lift("report type:image ", false).as_deref(), Some("report "));
+        assert_eq!(
+            find.lift("report type:image ", false).as_deref(),
+            Some("report ")
+        );
         assert_eq!(find.filters.kinds, [Kind::Image]);
         // Words alone change nothing.
         assert_eq!(find.lift("report ", false), None);
@@ -600,41 +452,21 @@ mod tests {
         assert_eq!(query.filters.kinds, [Kind::Image]);
         assert_eq!(query.filters.exts, ["png"]);
         // An open key is left out until a space closes it.
-        assert_eq!(find.query("beach ext:pn").filters.exts, Vec::<String>::new());
+        assert_eq!(
+            find.query("beach ext:pn").filters.exts,
+            Vec::<String>::new()
+        );
         assert_eq!(find.query("beach ext:pn").plain_text(), "beach");
-        // What is typed wins over what the panel set.
+        // What is typed wins over what the chips set.
         find.filters.size = Some(find::SizeCond::Gt(5));
-        assert_eq!(find.query("size:<1k ").filters.size, Some(find::SizeCond::Lt(1000)));
-        // Nothing asked: nothing narrows the list, open or not.
-        assert_eq!(find.active("beach"), None, "closed");
-        find.open = true;
-        assert!(find.active("beach").is_some());
-        assert!(find.active("").is_some(), "a filter alone is a search");
-        find.filters = Filters::default();
-        assert_eq!(find.active(""), None);
-        assert_eq!(find.active("  "), None);
-    }
-
-    #[test]
-    fn closing_the_search_gives_the_selection_back_once_and_keeps_the_scope() {
-        let before = selection_of("/x/keep");
-        let mut find = Find::default();
-        find.begin(&before);
-        find.begin(&Selection::new());
-        find.scope = Scope::Home;
-        find.filters.kinds = vec![Kind::Audio];
-        find.filters_open = true;
-        assert_eq!(find.clear(), Some(before));
-        assert_eq!(find.clear(), None);
-        assert_eq!(find.scope, Scope::Home);
-        assert!(!find.open && !find.filters_open);
-        assert_eq!(find.filters, Filters::default());
-    }
-
-    #[test]
-    fn counts_have_thousands_separators() {
-        assert_eq!(count(0), "0");
-        assert_eq!(count(999), "999");
-        assert_eq!(count(10_000), "10,000");
+        assert_eq!(
+            find.query("size:<1k ").filters.size,
+            Some(find::SizeCond::Lt(1000))
+        );
+        // Nothing typed and nothing chosen is a blank query: nothing is searched for.
+        assert!(Find::default().query("").is_blank());
+        assert!(Find::default().query("  ").is_blank());
+        assert!(!Find::default().query("beach").is_blank());
+        assert!(!find.query("").is_blank(), "a filter alone is a search");
     }
 }

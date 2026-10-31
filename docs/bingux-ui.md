@@ -661,7 +661,7 @@ Settings (`Mode::Hierarchical`), the file views and the chooser
 (`Mode::Linear`) differ only in the table's mode; nothing keeps a second
 history. The rules, tested in `nav/model.rs` and, for the file views, by a
 seeded random walk of 12,000 histories against a browser's (`files/history_fuzz.rs`)
-and 10,000 windows of tabs (`apps/files/src/fuzz.rs`):
+and 10,000 windows of tabs (`files/tabs_fuzz.rs`):
 
 | Rule                                   | Hierarchical (Settings)                                                                                             | Linear (Files, the chooser)                                                                                             |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
@@ -953,7 +953,12 @@ Every length is a token. The strip is `Dim::TabBar` tall (40 px, 44 px at compac
 | Keyboard         | Only the selected tab is in the tab order. The arrows are the screen's: Left and Right move the selection and the focus (Right goes back in a right-to-left strip), Home and End go to the first and the last; Ctrl+Shift+Left and Right move the selected tab (`on_reorder`); Delete or Ctrl+W closes the selected tab (also a lone one) and the focus follows to its neighbour; Ctrl+T calls `on_new`; Ctrl+Shift+T calls `on_reopen`. The tab's focus ring is drawn inside the tab, with its rounded corners, so the scroll region cannot clip it. The dragged tab is lifted by a layer (`HELD_LAYER`) because Freya paints by depth in the tree, so a tab's contents would otherwise draw over a neighbour's fill. A tab wider than the room left in a scrolling region shows its start.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Accessibility    | The strip is a `TabList` named "Tabs"; each tab is a `Tab` named by its title with its selected state. The buttons are named "Close <title>", "Tab list" and "New tab".                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
-When a tab closes the host picks the tab that takes the selection: `tab_close::selection_after_close(ids, closed, selected)` is the browser's rule (the neighbour to the right, else the left; the selection stays if another tab closed), and `tab_close::others`, `tab_close::to_the_left` and `tab_close::to_the_right` give the sets for the three menu items. Files keeps its tabs as a plain `TabSet` (new tabs open beside the one on show; `files::ClosedTabs` is the stack behind Reopen closed tab: the last 10 closed tabs with their place and their `TabMemory`, so Back and Forward come back too, and a closed group (others, to the left, to the right) comes back left to right at its places; `TabMemory::duplicate` is Duplicate tab). Closing the last tab closes the window, with a confirmation only if `files::operations_running()` (a copy, move or compression is going).
+When a tab closes the host picks the tab that takes the selection: `tab_close::selection_after_close(ids, closed, selected)` is the browser's rule (the neighbour to the right, else the left; the selection stays if another tab closed), and `tab_close::others`, `tab_close::to_the_left` and `tab_close::to_the_right` give the sets for the three menu items. The rest is `bingux_ui::tabs`, the same for every application with tabs:
+
+- **`TabSet<P: TabContent>`** is the tabs as plain data (tested without a window): a new tab opens beside the one on show; `ClosedTabs<P>` is the stack behind Reopen closed tab (the last `CLOSED_TABS_KEPT`, 10, with their place and their content, and a closed group comes back left to right at its places); `duplicate` asks the content for a copy (`TabContent::duplicate`); `detach`, `detach_others`, `detach_all`, `insert_moved` and `adopt` move tabs between windows without losing or duplicating one, and tell the content it is leaving (`TabContent::depart`). What a tab shows is the application's `P`: Files' is `files::FileTab` (a place and its `TabMemory`, so Back and Forward come back with a reopened or moved tab).
+- **`Tabs::new(set, use_window(), use_overlays())`** is the set put on screen, `Copy` so every handler takes its own: `.strip(items, &tab_window, new_tab)` is the tab strip wired to open, select, close, close several, duplicate, reopen, reorder and tear off; `.shortcuts(new_tab)` is the key handler (Ctrl+T, Ctrl+Shift+T, Ctrl+W, Ctrl+Tab, Ctrl+Page Down and Up, Alt+1 to 9); `.menu_items(new_tab)` are the menu's New tab, Close tab and Reopen closed tab. Closing the last tab closes the window; `.guard(f)` makes it ask first when `f` returns a `CloseWarning` (Files asks only if `files::operations_running()`: a copy, move or compression is going).
+- **`use_tab_window(set, title)`** makes the window one of the application's windows: the compositor's title follows the tab on show (with the application's name and, for a second window, its number), the windows know one another so a tab torn off its strip (`Detach`) can be dropped on another window's strip, and `TabWindow::root(rect())` fades the carried window and ends the carry when the pointer comes back. The compositor questions it asks (sway's IPC, Gnoblin's control socket) are `bingux_ui::window::compositor`; the whole behaviour and what each compositor allows is `design/tab-tearoff.md`.
+- A second application's tabs are another `TabContent` and nothing else: no copy of the set, the window registry or the tear-off.
 
 The taxonomy's Tabs entry shows each state in a bar over a page at both densities: select, close and add with drag; every close route and the menu; many tabs; the first, a middle and the last tab selected; nine tabs; long titles (faded); icons; a lone tab with its close button; no New tab button; keyboard focus; a right-to-left strip; the pointer on one tab. `controls/tab_geometry.rs` holds the geometry tests (the strip is a tab bar tall, a tab is the same distance from the strip's top and bottom and as tall as an end button, the content width and its inverse), `controls/tab_tests.rs` the rendered ones (every width, density and reading direction; a tab's four corners are one radius and its fill is the selection, hover or bar colour in both schemes; the page's corners and top edge are the page's colour whichever tab is selected), `controls/tab_close.rs` the closing rules (selection, `to_the_left`, `others`, `to_the_right`, the menu's rows and their order, rapid closure with a fake clock), `controls/tab_scroll.rs` the scroll rules (logical and screen offsets, wheel and finger, scroll into view, mirrored), `controls/tab_tear.rs` the tear thresholds and the layout a host asks (`index_at`, `boundary`, both directions), `controls/tabs.rs` the layout, the fill and the hit-test, and `controls/tab_tests.rs` renders strips at mouse and compact density: the selected tab's bottom edge is the content's top edge at every width, the card's margins are equal on the left, right and bottom and its corners are checked to the pixel, the New tab button is the same distance from the top, the bottom, the last tab and the trailing edge, everything is inside the strip, tab widths are uniform, the seam and the flares are checked to the pixel in both schemes, the close button's size, its press not reaching the drag region, the selection after a close, the menu (with Close tabs to the left), Reopen, rapid closure, and the keyboard, drag and motion behaviour.
 
@@ -1385,7 +1390,7 @@ What the dialog has:
 | Part                       | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Toolbar                    | Back, Forward, Parent folder (a chevron up), Refresh, the address bar, the file type dropdown, New folder, a list or thumbnails switch and the view menu (sort, hidden files). Every button follows the `Control` radius like any other button, and the view menu opens against its own button, not at the pointer. Refresh (also F5 and Ctrl+R) reads the folder again even when no change was seen, as a network or removable drive sends none; the selection, scroll position and filter stay. While a folder is being read (a first load, the check of a cached listing, a read F5 asked for, a subfolder search) the same button turns into Stop: `icon_button(Icon::Refresh, f).morph(Icon::MediaPlaybackStop, stopping)`, so its box, hover, pressed and focus state carry through, and its tooltip and name are `Refresh (F5)` and `Stop (Esc)`. Stop shows after 150 ms of reading and stays at least 300 ms (`Dwell::LOADING`); pressing it, or Escape while it shows, stops the read (`Reload::stop`) and keeps the listing. See "Reload and Stop" in `docs/files.md`.                                                                                                                                                                                                                                                                                                                          |
-| Address bar (`AddressBar`) | The path as crumbs (search is the bar under the toolbar, see [Search](#search-in-the-file-views)). The field takes the `Control` radius and a 4 px padding, so each crumb inside it takes the `Inner` radius (12 less 4). Each crumb has a chevron that lists that folder's subfolders. A trail that does not fit keeps its first and last crumb and hides the middle behind one `…` menu. Click the empty end, press Ctrl+L, or type `/` or `~` to edit the path as text. Typing shows completions (folders first); Tab completes, Up and Down choose, Enter opens, Escape closes. Errors show inline: not found, not a folder, no permission, not responding. `~`, relative paths and `file://` work. A **named place** shows its icon and name, never a path: Home, **Trash** (field `trash:///`, and `trash:///Old folder/` inside it, completed from the bin) and **Recent** (`recent:///`); typing any spelling of one (`trash://`, `~/.local/share/Trash/files`, `Trash`) opens it. See [File views](#file-views).                                                                                                                                                                                                                                                                                                                                                                                  |
+| Address bar (`AddressBar`) | The path as crumbs (the same box becomes the location and search field, see [Location field and search](#location-field-and-search)). The field takes the `Control` radius and a 4 px padding, so each crumb inside it takes the `Inner` radius (12 less 4). Each crumb has a chevron that lists that folder's subfolders. A trail that does not fit keeps its first and last crumb and hides the middle behind one `…` menu. Click the empty end, press Ctrl+L, or type `/` or `~` to edit the path as text. Typing shows completions (folders first); Tab completes, Up and Down choose, Enter opens, Escape closes. Errors show inline: not found, not a folder, no permission, not responding. `~`, relative paths and `file://` work. A **named place** shows its icon and name, never a path: Home, **Trash** (field `trash:///`, and `trash:///Old folder/` inside it, completed from the bin) and **Recent** (`recent:///`); typing any spelling of one (`trash://`, `~/.local/share/Trash/files`, `Trash`) opens it. See [File views](#file-views).                                                                                                                                                                                                                                                                                                                                               |
 | Sidebar (`PlacesSidebar`)  | Recent, Home and the user folders (with their own icons by path), Bookmarks, then Drives: Computer and every mount, each with a usage bar and "X free of Y". A drive that does not answer says "Not responding". There are no buttons on the rows: every row has a context menu (right click, long press, the Menu key or Shift+F10) of text items, built in `files/place_menu.rs` from `PlaceFacts` by a pure `place_plan` that the tests read, in the list menu's grouping: open (Open or, for a drive that is not mounted, Mount; Open in new tab where the window has tabs), what changes the place (Rename… for a bookmark, Eject and Unmount or Unmount for a drive, Empty Trash on the Trash, grey while it is empty), the path and bookmark (Copy path, Add to or Remove from bookmarks), then Properties. Properties opens the list's Properties dialog for the place's folder (`properties::show_folder_properties`; the Trash shows its item count and size, a drive its free space bar); Recent and a drive that is not mounted have none. The menu's shortcut hints are keys the focused row answers to through the same command handler: Enter, Alt+Enter, F2, Delete, Ctrl+Shift+C. The folders have their own icons: a folder with a page for Documents, a down arrow for Downloads, and so on. A phone gets `PlacesMenu`, a sheet with the same rows that closes before Properties opens. |
 | File type filter           | A dropdown in the toolbar on a desktop; on a phone a "File type" row at the bottom. The sidebar runs the dialog's full height: there is no footer under it, and the name field of Save, the request's choices and any problem sit in a strip at the bottom of the content pane. With no filters in the request it offers All files, Images, Audio, Video, Documents, Archives and Text. `presets(true)` adds those after the request's own. The list shows only matching files (folders always stay) and the empty state says when the filter hides everything. The status pill floats over the bottom-right corner of the list on an opaque floating surface and takes no row. It says `95 items`, `1 of 95 selected (19 kB)` when something is selected, `3 of 120 match` while a search is on, and what a running operation is doing; it does not report hidden files or what the filter hides. It follows the pointer over the whole window: when the pointer comes within a small margin it slides to the other bottom corner, and it returns when the pointer leaves the list.                                                                                                                                                                                                                                                                                                                       |
 | New folder                 | The toolbar button, Ctrl+Shift+N and the empty-space menu make a folder and start renaming it in the list, with the name checked as you type.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
@@ -1454,7 +1459,7 @@ ChooserRequest::open()
 
 Keyboard: Tab walks the toolbar, list and the strip under it. In the list the arrows, Home,
 End and Page keys move (Shift extends when several files are allowed), typing a
-name starts a search of the folder (see [Search](#search-in-the-file-views)),
+name starts a search in the location field (see [Location field and search](#location-field-and-search)),
 Ctrl+A selects all, Enter opens. Ctrl+L, or typing `/` or `~`,
 edits the path as text. Backspace or Alt+Up goes to the parent folder, Alt+Left
 back, Alt+Right forward, Alt+Home home, Ctrl+H toggles hidden files, and Escape
@@ -1466,55 +1471,82 @@ get their own icon. It is decided by the path alone, as the person sees it:
 share's own folder, reached by its real path, is a plain folder. No call
 touches the disk, so it costs nothing on a network mount.
 
-### Search in the file views
+### Location field and search
 
-Search has its own bar under the toolbar, not the address bar. The address bar
-holds a place (trail or typed path) and nothing else. User-facing behaviour is
-in `docs/files.md` ("Search"); the design, numbers and gaps are in
-`design/files-search.md`. This is how an app builds it.
+The address bar holds a place at rest (the trail) and, once edited, the one
+field where a place is typed and a search is made. There is no search bar under
+the toolbar and no Filters button. User-facing behaviour is in
+`docs/files.md` ("Location and search"); the engine's design, numbers and
+gaps are in `design/files-search.md`. This is how an app builds it.
 
 ```text
-toolbar
-[ SearchField ........... ]  [ Search in: dropdown ]  [ Filters (n) ]     SearchBar row 1
-[ token x ] [ token x ]  Clear all                      status  [Stop]     SearchBar row 2
-list or grid, with a Location column for results
+resting          [ Home > Documents > ]
+editing          [ ~/Documents/                ]        no card yet
+typing           +--------------------------------+     the card grows out of the field:
+                 | re                           x |     same left edge and width, the field is its first row
+                 | [This folder][Home][Everywhere][Folder...]
+                 | [Documents][Images][Audio][Video][Folders]
+                 | [Today][This week][This year][Under 1 MB][Over 100 MB]
+                 |  In this folder   rows of this folder's entries
+                 |  Places           bookmarks, user folders, folders lately visited
+                 |  Search in Documents          12 found
+                 |   results, streaming, each with "Show in folder"
+                 +--------------------------------+
 ```
 
-**State.** `Find` (`files/search.rs`) is the search a tab is making apart from
-its words: `open`, `scope` ([`Scope`](bingux_files::find::Scope): This folder,
-Subfolders, Home, Everywhere, a place), `filters`
-([`Filters`](bingux_files::find::Filters)), `filters_open` and a focus counter.
-The words are the text of the field, kept by the owner (`words`, a
-`State<String>`). `Find::query(words)` is the typed
-[`Query`](bingux_files::find::Query) of the two together. A `key:value` typed
-in the field is lifted into `Find::filters` when a space ends it
-(`Find::lift`), and the field is given back the words that are left, so the
-text and the Filters panel never disagree; a key still being typed
-(`type:imag`) is not part of the query (`find::split_pending`).
+**`Omnibox`** (`controls/omnibox.rs`) is the control, for any app: a text
+field and a card laid over the page from the field's own corner. The field's
+place in the layout is a box of the field's height, so nothing around it moves
+when the card opens, grows or closes; the card is no taller than the room below
+the field in the window and follows the window's size. It opens only once the
+text has been typed (editing alone shows a plain field), and closes on Escape
+(the field keeps the keyboard; Escape again leaves it), when the field is left
+or when there is nothing to offer. Its height is `use_tween`ed over
+`MOTION_MS`: a card closed half way opens again from where it is, rows that
+stream in make it grow and never jump, and with reduced motion it is at its
+height at once. The caller gives it `OmniItem`s: choosable rows
+(`OmniRow`: lead icon, `OmniPart` name with the match heavier, detail, a chip,
+what Enter does, what Tab fills in), headings, notices (`Busy`, `Quiet`,
+`Danger`) and strips of `omni_chip` toggles. Rows are `listbox` options, the
+field a `combobox`, every chip a button with its name (`Remove ...` on a
+removable one) and its toggled state. A second use: an editor's "Go to
+file" or a settings search with scope chips builds the same.
 
-**Pieces.**
+| Key                 | Does                                                                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Down, Up            | the next or previous row, wrapping; Down shows a card Escape closed                                                             |
+| Enter               | the highlighted row, else the field's `on_submit`                                                                               |
+| Ctrl+Enter          | the highlighted row's chip (`Show in folder`)                                                                                   |
+| Tab, Shift+Tab      | fill the row's text or the common start of the candidates; else the next or previous row                                        |
+| Escape              | close the card; with no card, leave the field                                                                                   |
+| Alt+1, Alt+2, Alt+3 | the scope chips This folder, Home, Everywhere (the field takes them, so they do not also switch tabs while it has the keyboard) |
 
-| Piece                                       | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SearchBar` (`files/search_bar.rs`)         | The bar. Row 1 is the library `search_field` (with its new `on_arrow`), a `dropdown` for the scope (the user folders and bookmarks of the sidebar after the four core scopes) and the Filters button. Row 2 is the tokens (`FilterToken`: caption text on `AccentSoft`, a `Dim::InlineButton` remove button) and the status line (`status_text`, a polite `Status` region, Stop while it runs). On a phone the field has a row to itself and the scope and Filters share the next. |
-| `FiltersButton` (`files/search_filters.rs`) | The button (`Filters (2)`) and the panel it opens: a `Panel` of `PanelKind::Choice`, so a popover on a desktop and a sheet on a phone. Rows of label and `dropdown`, a range shows two `text_field`s, three `switch` rows, Reset and Done. Every row is `Dim::Control` tall, so the panel's height is a sum of tokens (`form_height`).                                                                                                                                             |
-| `use_search_run(RunKey, mount) -> Deep`     | Runs `bingux_files::find::run` on a thread of its own while a search of folders is on show, publishes every 60 ms, cancels when the key changes, on Stop, or when the component goes. `Deep::latest`, `running`, `stop`.                                                                                                                                                                                                                                                           |
-| `select_shown` (`files/chooser.rs`)         | The rows: the folder narrowed in memory, or the results (arrival order while running, the chosen order once).                                                                                                                                                                                                                                                                                                                                                                      |
-| `no_results_state` (`files/states.rs`)      | "Nothing found" with a button per way out.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+The chips are not tab stops: the keyboard reaches what they do through
+operators typed in the field (`type:image`, `ext:pdf`, `size:>1MB`,
+`modified:week`, `in:~/Music`), which become chips the moment a space ends them
+(`Find::lift`), and Alt+1 to 3.
 
-**Rules.** The first row never changes size while results stream; the second
-row's height is fixed unless tokens wrap, which only a person's own filter
-choice causes. Results are appended while a search runs: nothing already on
-show moves, whatever the sort; the list is ordered once when the search ends.
-The previous results stay until the new search has its first. Column headers
-sort results (a second press goes back to relevance); the header marks nothing
-while the order is relevance. A navigation, Escape in the list, or Escape in an
-empty field ends the search; the scope is kept.
+**The Files field** (`files/omnibox.rs`, model in `files/omnibox_model.rs`) is
+what the card holds. Text that begins like a path (`/`, `~`, `./`, `../`,
+`file:`, `trash:`, `recent:`, or `a/b`) is a place: the folders and files that
+complete it, segment by segment through `bingux_files::location::Completer`
+(hidden names when hidden files show, a slow folder says "Searching" and is
+asked again), Tab fills what they share, Enter opens it or says why not
+(not found, not a folder, no permission, not responding, a file where a folder
+is wanted). Any other text is a search: entries of this folder, places by that
+name (bookmarks and user folders first, then folders visited lately), recent
+searches, and the engine's results over the scope chosen by the chips
+(`This folder`, `Home`, `Everywhere`, or a folder picked under `Folder...`). The
+first row is highlighted, so Enter opens it; a result opens its file (a folder
+opens that folder), and its chip shows it in its folder, selected.
 
-**Keys.** Ctrl+F opens or focuses; Ctrl+Shift+F toggles the panel; Enter opens
-the selected result or the first; Down moves to the list; Up steps up in the
-field; Escape clears, then closes. With the field empty and focused the recent
-searches drop down (`Recents`, eight, in `$XDG_STATE_HOME/bingux/files/recent-searches`).
+**State.** `Find` (`files/search.rs`) is the scope and filters a tab keeps, and
+`OmniDraft` the text. `Find::query(text)` is the typed
+[`Query`](bingux_files::find::Query) of the text and the chips together; a
+key still being typed (`type:imag`) is not part of it (`find::split_pending`).
+`use_search_run(RunKey, mount) -> Deep` runs `bingux_files::find::run` on a
+thread of its own, publishes every 60 ms, and cancels when the key changes or
+the field goes away. Results are appended: nothing on show moves while it runs.
 
 **The backend** (`bingux_files::find`, UI-free) is described in
 `design/files-search.md`: `Query` (parse and print, tested by round trip), `Matcher`
@@ -2072,8 +2104,8 @@ section 8.
 
 ### Searching files is not this, but uses it
 
-The file view's search (`bingux_files::find`, see [Search in the file
-views](#search-in-the-file-views)) does not register a `Searchable`: file
+The file view's search (`bingux_files::find`, see [Location field and
+search](#location-field-and-search)) does not register a `Searchable`: file
 names are not records an app owns, and the crawl and the swap of a fresh index
 for the old one are its own. It does use the engine: the names under the home
 folder are an `Index` of `bingux-search`, which answers a search there before

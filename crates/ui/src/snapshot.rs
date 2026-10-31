@@ -19,7 +19,9 @@ use freya::prelude::*;
 use freya::torin::prelude::Size2D;
 use freya_components::integration::integration;
 use freya_testing::TestingRunner;
-use freya_testing::prelude::{KeyboardEventName, MouseEventName, PlatformEvent, TouchEventName, TouchPhase};
+use freya_testing::prelude::{
+    KeyboardEventName, MouseEventName, PlatformEvent, TouchEventName, TouchPhase,
+};
 
 use crate::nav::Location;
 use crate::theme::font_family;
@@ -63,11 +65,7 @@ impl Snapshot {
     /// The pointer methods take the runner's own units, which are physical
     /// pixels at this scale; the layout and the PNG are in physical pixels
     /// too.
-    pub fn with_scale(
-        app: impl Fn() -> Element + 'static,
-        size: SnapshotSize,
-        scale: f64,
-    ) -> Self {
+    pub fn with_scale(app: impl Fn() -> Element + 'static, size: SnapshotSize, scale: f64) -> Self {
         // A headless run presses real controls: the Settings pages write through the
         // `gsettings` command, and a test, a sweep or a capture must never change the
         // person's dconf.
@@ -156,7 +154,11 @@ impl Snapshot {
     /// enough for a loaded machine is a long wait on an idle one, and one that suits the idle
     /// machine fails on a loaded one. A test that waits for something to appear says what, with a
     /// generous cap, and goes on the moment it is there. The caller asserts on the result.
-    pub fn settle_until(&mut self, cap: Duration, mut done: impl FnMut(&mut Snapshot) -> bool) -> bool {
+    pub fn settle_until(
+        &mut self,
+        cap: Duration,
+        mut done: impl FnMut(&mut Snapshot) -> bool,
+    ) -> bool {
         let end = Instant::now() + cap;
         loop {
             if done(self) {
@@ -263,7 +265,11 @@ impl Snapshot {
         }
         let paragraphs: Vec<(f32, f32)> = self.runner.find_many(|node, element| {
             let paragraph = Paragraph::try_downcast(element)?;
-            let plain: String = paragraph.spans.iter().map(|span| span.text.to_string()).collect();
+            let plain: String = paragraph
+                .spans
+                .iter()
+                .map(|span| span.text.to_string())
+                .collect();
             if !plain.contains(text) {
                 return None;
             }
@@ -470,6 +476,7 @@ impl Snapshot {
     /// - `touch_down x,y`, `touch_move x,y`, `touch_up x,y`: one finger held across steps
     /// - `scroll x,y,dy`, `drag x1,y1,x2,y2`, `down x,y`/`move x,y`/`up x,y`
     /// - `key escape|return|tab|space|left|right|up|down|CHARACTER`, with `shift+`, `ctrl+` or `alt+` in front
+    /// - `type TEXT`: each character of TEXT as a key, to the focused field
     /// - `click-text TEXT`: click the label with that text
     /// - `click-name NAME`: click the control with that accessible name (one with no text of its own)
     /// - `address LOCATION`: open a location (a URI or a bare path of `scheme`),
@@ -540,6 +547,12 @@ impl Snapshot {
                 "up" => {
                     let [x, y] = numbers::<2>(rest)?;
                     self.release((x, y));
+                }
+                "type" => {
+                    // Each character of the rest of the command, as a key press.
+                    for character in rest.chars() {
+                        self.key(Key::Character(character.to_string()));
+                    }
                 }
                 "key" => {
                     // Any of `shift+`, `ctrl+` and `alt+` in front.
@@ -642,8 +655,10 @@ impl Snapshot {
     /// Every focus ring of the current frame with the face it belongs to,
     /// for [`crate::focus::ring_check`].
     pub fn focus_rings(&mut self) -> Vec<crate::focus::ring_check::RingProbe> {
-        let snapshot =
-            crate::inspector::snapshot::Snapshot::capture_headless(&self.runner, scale_factor() as f32);
+        let snapshot = crate::inspector::snapshot::Snapshot::capture_headless(
+            &self.runner,
+            scale_factor() as f32,
+        );
         crate::focus::ring_check::probes(&snapshot)
             .into_iter()
             .map(|(_, probe)| probe)
@@ -740,8 +755,10 @@ impl Snapshot {
     /// The layout findings of the current frame: what the inspector's Layout
     /// tab would list for this window.
     pub fn layout_findings(&mut self) -> Vec<crate::inspector::layout_checks::Finding> {
-        let snapshot =
-            crate::inspector::snapshot::Snapshot::capture_headless(&self.runner, scale_factor() as f32);
+        let snapshot = crate::inspector::snapshot::Snapshot::capture_headless(
+            &self.runner,
+            scale_factor() as f32,
+        );
         crate::inspector::layout_checks::check(&snapshot)
     }
 
@@ -750,8 +767,10 @@ impl Snapshot {
     /// rest (not hovered, pressed, open or `filled()`/`active()` by design)
     /// paints none, in a header and in a toolbar alike.
     pub fn icon_buttons(&mut self) -> Vec<IconButtonLook> {
-        let tree =
-            crate::inspector::snapshot::Snapshot::capture_headless(&self.runner, scale_factor() as f32);
+        let tree = crate::inspector::snapshot::Snapshot::capture_headless(
+            &self.runner,
+            scale_factor() as f32,
+        );
         tree.nodes
             .iter()
             .filter_map(|node| {
@@ -791,8 +810,10 @@ impl Snapshot {
         let Some(file) = std::env::var_os("BINGUX_UI_LAYOUT_LINT") else {
             return;
         };
-        let tree =
-            crate::inspector::snapshot::Snapshot::capture_headless(&self.runner, scale_factor() as f32);
+        let tree = crate::inspector::snapshot::Snapshot::capture_headless(
+            &self.runner,
+            scale_factor() as f32,
+        );
         if std::env::var_os("BINGUX_UI_LAYOUT_TREE").is_some() {
             let _ = fs::write(shot.with_extension("tree.txt"), tree.outline());
         }
@@ -818,8 +839,10 @@ impl Snapshot {
         let findings: Vec<_> = found.iter().map(|finding| finding.json()).collect();
         // The named insets by "Class/name", each value with how often it was
         // measured, for `scripts/layout-lint.py --parity`.
-        let mut metrics: std::collections::BTreeMap<String, std::collections::BTreeMap<String, u32>> =
-            Default::default();
+        let mut metrics: std::collections::BTreeMap<
+            String,
+            std::collections::BTreeMap<String, u32>,
+        > = Default::default();
         for metric in crate::inspector::layout_checks::metrics(&tree) {
             *metrics
                 .entry(format!("{}/{}", metric.class, metric.name))

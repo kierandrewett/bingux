@@ -1,12 +1,11 @@
 //! The pill over a file view: how many items there are, how many are
-//! selected, how a search is going, and what the view is doing.
+//! selected, and what the view is doing.
 //!
 //! It floats over the bottom-right corner of the list, sized to its text, like
 //! a browser's link preview, so it takes no row from the list. The surface,
 //! border and padding are the tooltip's, and the fill is opaque, so a row under
 //! it never shows through. It says as little as it can: `95 items`, or
-//! `1 of 95 selected (19 kB)` once something is selected, or `3 of 120 match`
-//! while a search is on. What the view hides (dot files, the file type filter)
+//! `1 of 95 selected (19 kB)` once something is selected. What the view hides (dot files, the file type filter)
 //! is not its business: the view menu and the empty state say that.
 //!
 //! It keeps out of the pointer's way. The pointer is followed on the whole
@@ -56,8 +55,6 @@ pub(super) struct StatusInfo {
     pub complete: bool,
     /// The drive has not answered for a while.
     pub unresponsive: bool,
-    /// A search is narrowing or replacing the list.
-    pub search: Option<SearchLine>,
     /// The folder on show is in the Trash: the line says so.
     pub trash: bool,
     /// Where the one selected item leads, when it is a link.
@@ -65,20 +62,6 @@ pub(super) struct StatusInfo {
     /// The read of the folder was stopped (Stop, Escape): what is shown is
     /// what had been read.
     pub stopped: bool,
-}
-
-/// What a search says about the list.
-#[derive(Clone, Debug, PartialEq)]
-pub(super) enum SearchLine {
-    /// The folder on show is filtered: `matches` of its `of` items.
-    Folder { matches: usize, of: usize },
-    /// A search of folders is running or has ended.
-    Subfolders {
-        found: usize,
-        folders: usize,
-        running: bool,
-        truncated: bool,
-    },
 }
 
 /// `1204` as `1,204`.
@@ -95,11 +78,19 @@ fn grouped(number: usize) -> String {
 }
 
 fn item_count(count: usize) -> String {
-    format!("{} {}", grouped(count), if count == 1 { "item" } else { "items" })
+    format!(
+        "{} {}",
+        grouped(count),
+        if count == 1 { "item" } else { "items" }
+    )
 }
 
 fn folder_count(count: usize) -> String {
-    format!("{} {}", grouped(count), if count == 1 { "folder" } else { "folders" })
+    format!(
+        "{} {}",
+        grouped(count),
+        if count == 1 { "folder" } else { "folders" }
+    )
 }
 
 /// The text of the line while nothing else is going on.
@@ -117,39 +108,8 @@ pub(super) fn status_text(info: &StatusInfo) -> String {
     if info.selected_bytes > 0 {
         size = format!(" ({})", display::size(info.selected_bytes));
     }
-    match &info.search {
-        Some(SearchLine::Folder { matches, of }) => {
-            let mut text = format!("{} of {} match", grouped(*matches), grouped(*of));
-            if info.selected > 0 {
-                text.push_str(&format!(" · {} selected{size}", grouped(info.selected)));
-            }
-            text
-        }
-        Some(SearchLine::Subfolders {
-            found,
-            folders,
-            running,
-            truncated,
-        }) => {
-            let mut text = match (running, truncated) {
-                (true, _) => format!(
-                    "Searching… {} found · {} read",
-                    grouped(*found),
-                    folder_count(*folders)
-                ),
-                (false, true) => format!("{} found · limit reached", grouped(*found)),
-                (false, false) => format!(
-                    "{} found · {} read",
-                    grouped(*found),
-                    folder_count(*folders)
-                ),
-            };
-            if info.selected > 0 {
-                text.push_str(&format!(" · {} selected{size}", grouped(info.selected)));
-            }
-            text
-        }
-        None if info.selected > 0 => format!(
+    match () {
+        _ if info.selected > 0 => format!(
             "{}{} of {} selected{size}{}",
             if info.trash { "Trash · " } else { "" },
             grouped(info.selected),
@@ -158,8 +118,8 @@ pub(super) fn status_text(info: &StatusInfo) -> String {
                 .as_ref()
                 .map_or_else(String::new, |target| format!(" · Link to {target}"))
         ),
-        None if info.trash => format!("Trash · {}", item_count(info.shown)),
-        None => item_count(info.shown),
+        _ if info.trash => format!("Trash · {}", item_count(info.shown)),
+        _ => item_count(info.shown),
     }
 }
 
@@ -171,12 +131,7 @@ pub(super) fn status_line(info: StatusInfo, ui: Ui) -> Element {
 /// Whether the pill has something to say. An empty folder says nothing: its
 /// empty state already does.
 fn has_news(info: &StatusInfo) -> bool {
-    info.loading
-        || info.unresponsive
-        || info.stopped
-        || info.shown > 0
-        || info.selected > 0
-        || info.search.is_some()
+    info.loading || info.unresponsive || info.stopped || info.shown > 0 || info.selected > 0
 }
 
 /// The bottom corner of the view the pill sits in.
@@ -299,7 +254,11 @@ impl Component for StatusLine {
         let (text, ink) = match notice {
             Some(notice) => (
                 notice.text,
-                if notice.error { Ink::DangerOnFloating } else { Ink::OnFloating },
+                if notice.error {
+                    Ink::DangerOnFloating
+                } else {
+                    Ink::OnFloating
+                },
             ),
             None => (status_text(&self.info), Ink::OnFloating),
         };
@@ -320,8 +279,10 @@ impl Component for StatusLine {
         // text (a link's target) is cut with an ellipsis inside the strip, not laid out wider than it
         // and pinned past its left edge.
         let pill = surface(rect().position(anchor))
-            // ui-lint: allow(the pill's cap is the strip's measured width less the edge it keeps on each side)
-            .maybe(strip_width > 0.0, |pill| pill.max_width(Size::px((strip_width - 2.0 * edge).max(0.0))))
+            .maybe(strip_width > 0.0, |pill| {
+                // ui-lint: allow(the pill's cap is the strip's measured width less the edge it keeps on each side)
+                pill.max_width(Size::px((strip_width - 2.0 * edge).max(0.0)))
+            })
             .on_sized(move |event: Event<SizedEventData>| {
                 size.set_if_modified((event.area.width(), event.area.height()));
             })
@@ -380,7 +341,10 @@ mod tests {
             link: Some("/mnt/x/Downloads".into()),
             ..info(5)
         };
-        assert_eq!(status_text(&one), "1 of 5 selected · Link to /mnt/x/Downloads");
+        assert_eq!(
+            status_text(&one),
+            "1 of 5 selected · Link to /mnt/x/Downloads"
+        );
     }
 
     #[test]
@@ -403,34 +367,6 @@ mod tests {
         };
         assert_eq!(status_text(&stopped), "Stopped · 12,000 items read so far");
         assert!(has_news(&stopped));
-    }
-
-    #[test]
-    fn a_search_says_how_many_items_match() {
-        let search = |matches, of| StatusInfo {
-            search: Some(SearchLine::Folder { matches, of }),
-            ..info(matches)
-        };
-        assert_eq!(status_text(&search(3, 120)), "3 of 120 match");
-        assert_eq!(status_text(&search(0, 1204)), "0 of 1,204 match");
-        // Nothing matching is still news: the pill must not vanish.
-        assert!(has_news(&search(0, 5)));
-        let deep = |running, truncated| StatusInfo {
-            search: Some(SearchLine::Subfolders {
-                found: 12,
-                folders: 340,
-                running,
-                truncated,
-            }),
-            selected: 1,
-            ..info(12)
-        };
-        assert_eq!(
-            status_text(&deep(true, false)),
-            "Searching… 12 found · 340 folders read · 1 selected"
-        );
-        assert!(status_text(&deep(false, false)).starts_with("12 found · 340 folders read"));
-        assert!(status_text(&deep(false, true)).starts_with("12 found · limit reached"));
     }
 
     #[test]
@@ -493,8 +429,14 @@ mod tests {
 
     #[test]
     fn the_pill_sits_in_the_bottom_corners_inset_by_the_edge() {
-        assert_eq!(pill_bounds(LIST, PILL, Corner::Right, 8.0), (772.0, 568.0, 892.0, 592.0));
-        assert_eq!(pill_bounds(LIST, PILL, Corner::Left, 8.0), (108.0, 568.0, 228.0, 592.0));
+        assert_eq!(
+            pill_bounds(LIST, PILL, Corner::Right, 8.0),
+            (772.0, 568.0, 892.0, 592.0)
+        );
+        assert_eq!(
+            pill_bounds(LIST, PILL, Corner::Left, 8.0),
+            (108.0, 568.0, 228.0, 592.0)
+        );
     }
 
     #[test]
@@ -518,7 +460,13 @@ mod tests {
     fn a_pointer_close_to_both_corners_does_not_make_the_pill_flicker() {
         let narrow: Bounds = (0.0, 0.0, 260.0, 600.0);
         let at = (130.0, 580.0);
-        assert_eq!(corner_for(Corner::Right, narrow, PILL, at, 8.0, 12.0), Corner::Right);
-        assert_eq!(corner_for(Corner::Left, narrow, PILL, at, 8.0, 12.0), Corner::Left);
+        assert_eq!(
+            corner_for(Corner::Right, narrow, PILL, at, 8.0, 12.0),
+            Corner::Right
+        );
+        assert_eq!(
+            corner_for(Corner::Left, narrow, PILL, at, 8.0, 12.0),
+            Corner::Left
+        );
     }
 }

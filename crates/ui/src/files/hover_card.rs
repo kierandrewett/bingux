@@ -134,9 +134,7 @@ impl Track {
         self.shown = None;
         let at = self.pointer.unwrap_or_default();
         self.target = row.map(|row| Hover { row, at });
-        self.since = self
-            .target
-            .map(|_| now.checked_sub(STILL).unwrap_or(now));
+        self.since = self.target.map(|_| now.checked_sub(STILL).unwrap_or(now));
     }
 
     /// What the card shows now, the decision the others only prepare.
@@ -428,20 +426,22 @@ impl Component for HoverCard {
                 .parent()
                 .map(|parent| parent.to_string_lossy().into_owned())
         } else {
-            ctx.result_folder(entry).map(|folder| format!("In {folder}"))
+            None
         };
-        let reserve_place = ctx.recent
-            || ctx
-                .search
-                .as_ref()
-                .is_some_and(|search| search.deep.is_some());
+        let reserve_place = ctx.recent;
         // Where a link leads is what the link itself says: `readlink` does
         // not touch the target, so a stalled mount cannot hold the card.
         let link = entry
             .symlink
             .then(|| std::fs::read_link(&entry.path).ok())
             .flatten();
-        let lines = card_lines(entry, modified.as_deref(), place, reserve_place, link.as_deref());
+        let lines = card_lines(
+            entry,
+            modified.as_deref(),
+            place,
+            reserve_place,
+            link.as_deref(),
+        );
 
         let origin = *self.origin.read();
         let (width, height) = (*size.read()).unwrap_or((0.0, 0.0));
@@ -510,9 +510,19 @@ mod tests {
         let t0 = Instant::now();
         let mut track = Track::default();
         track.enter(at(3), t0);
-        let moved = Hover { row: 3, at: (99.0, 9.0) };
-        assert!(!track.enter(moved, after(t0, 300)), "no change for the row it is on");
-        assert_eq!(track.commit(after(t0, 700)), Some(at(3)), "the delay was not restarted");
+        let moved = Hover {
+            row: 3,
+            at: (99.0, 9.0),
+        };
+        assert!(
+            !track.enter(moved, after(t0, 300)),
+            "no change for the row it is on"
+        );
+        assert_eq!(
+            track.commit(after(t0, 700)),
+            Some(at(3)),
+            "the delay was not restarted"
+        );
     }
 
     #[test]
@@ -525,7 +535,11 @@ mod tests {
         track.leave(3);
         track.enter(at(4), after(t0, 800));
         assert_eq!(track.wake(after(t0, 800)), Some(FRAME));
-        assert_eq!(track.commit(after(t0, 816)), Some(at(4)), "the new row at once, with no wait");
+        assert_eq!(
+            track.commit(after(t0, 816)),
+            Some(at(4)),
+            "the new row at once, with no wait"
+        );
         assert_eq!(track.wake(after(t0, 816)), None);
     }
 
@@ -538,7 +552,10 @@ mod tests {
         assert!(track.leave(3));
         assert_eq!(track.wake(after(t0, 710)), Some(FRAME));
         assert_eq!(track.commit(after(t0, 726)), None);
-        assert!(!track.leave(3), "a row that was not hovered is not a change");
+        assert!(
+            !track.leave(3),
+            "a row that was not hovered is not a change"
+        );
     }
 
     #[test]
@@ -561,14 +578,26 @@ mod tests {
         assert_eq!(track.commit(after(t0, 700)), Some(at(3)));
 
         track.begin_scroll();
-        assert_eq!(track.commit(after(t0, 800)), None, "hidden the moment the scroll starts");
+        assert_eq!(
+            track.commit(after(t0, 800)),
+            None,
+            "hidden the moment the scroll starts"
+        );
         // Rows go by under the pointer, a new row every frame, for a second.
         for frame in 0..60_u64 {
             let now = after(t0, 800 + 16 * frame);
             track.leave(frame as usize + 3);
             track.enter(at(frame as usize + 4), now);
-            assert_eq!(track.commit(now), None, "frame {frame}: no card while it scrolls");
-            assert_eq!(track.wake(now), None, "frame {frame}: and no commit to wait for");
+            assert_eq!(
+                track.commit(now),
+                None,
+                "frame {frame}: no card while it scrolls"
+            );
+            assert_eq!(
+                track.wake(now),
+                None,
+                "frame {frame}: and no commit to wait for"
+            );
         }
     }
 
@@ -585,16 +614,29 @@ mod tests {
         // on a row that the geometry says is row 12: a glide gave no event.
         let still = after(t0, 1100);
         track.end_scroll(Some(12), still);
-        assert_eq!(track.commit(still), None, "not at the instant the scroll ends");
+        assert_eq!(
+            track.commit(still),
+            None,
+            "not at the instant the scroll ends"
+        );
         assert_eq!(
             track.wake(still),
             Some(CARD_DELAY - STILL),
             "700 ms after the content last moved, 200 of them already waited"
         );
         assert_eq!(track.commit(after(t0, 1100 + 400)), None);
-        let shown = track.commit(after(t0, 1100 + 500)).expect("the card is back");
-        assert_eq!(shown.row, 12, "the row the pointer is on now, not the one an event named");
-        assert_eq!(shown.at, at(9).at, "at the pointer, where the last event saw it");
+        let shown = track
+            .commit(after(t0, 1100 + 500))
+            .expect("the card is back");
+        assert_eq!(
+            shown.row, 12,
+            "the row the pointer is on now, not the one an event named"
+        );
+        assert_eq!(
+            shown.at,
+            at(9).at,
+            "at the pointer, where the last event saw it"
+        );
     }
 
     #[test]
@@ -618,7 +660,10 @@ mod tests {
         track.commit(after(t0, 700));
         track.clear();
         assert_eq!(track.commit(after(t0, 800)), None);
-        assert!(track.enter(at(3), after(t0, 900)), "the same row is a new hover after a clear");
+        assert!(
+            track.enter(at(3), after(t0, 900)),
+            "the same row is a new hover after a clear"
+        );
     }
 
     #[test]
@@ -658,7 +703,13 @@ mod tests {
     #[test]
     fn the_card_has_the_same_lines_before_and_after_the_listing_has_the_size() {
         let before = card_lines(&entry("a.txt", None), None, None, false, None);
-        let after = card_lines(&entry("a.txt", Some(2)), Some("15 Nov 2023"), None, false, None);
+        let after = card_lines(
+            &entry("a.txt", Some(2)),
+            Some("15 Nov 2023"),
+            None,
+            false,
+            None,
+        );
         assert_eq!(before.len(), after.len(), "{before:?} against {after:?}");
         assert_eq!(before[2], "Modified …");
         assert_eq!(after[1], "Text document · 2 bytes");
@@ -680,10 +731,23 @@ mod tests {
 
     #[test]
     fn a_view_with_places_keeps_a_line_for_each_card() {
-        let with = card_lines(&entry("a.txt", Some(2)), Some("1 Jan"), Some("In sub".into()), true, None);
+        let with = card_lines(
+            &entry("a.txt", Some(2)),
+            Some("1 Jan"),
+            Some("In sub".into()),
+            true,
+            None,
+        );
         let without = card_lines(&entry("b.txt", Some(2)), Some("1 Jan"), None, true, None);
         assert_eq!(with.len(), 4);
-        assert_eq!(without.len(), 4, "the line is kept, blank, so the cards are alike");
-        assert_eq!(card_lines(&entry("c.txt", Some(2)), Some("1 Jan"), None, false, None).len(), 3);
+        assert_eq!(
+            without.len(),
+            4,
+            "the line is kept, blank, so the cards are alike"
+        );
+        assert_eq!(
+            card_lines(&entry("c.txt", Some(2)), Some("1 Jan"), None, false, None).len(),
+            3
+        );
     }
 }

@@ -26,6 +26,7 @@ use super::chooser::browse_body;
 use super::directory::Where;
 use super::folder_table::{folder_table, location_of};
 use crate::nav::NavModel;
+use crate::tabs::TabContent;
 
 /// The number the next [`TabMemory`] takes.
 static NEXT: AtomicU64 = AtomicU64::new(1);
@@ -154,50 +155,51 @@ impl PartialEq for TabMemory {
     }
 }
 
-/// A tab that was closed: where it stood among its neighbours, the folder it
-/// showed, and its memory, so reopening it brings back its Back and Forward
-/// lists as well as the folder.
-#[derive(Clone)]
-pub struct ClosedTab {
-    pub index: usize,
+/// What a Files tab shows: the folder, which the strip titles it by, and the
+/// memory its body keeps its history and view in. It is what a window's
+/// [`TabSet`](crate::tabs::TabSet) holds, so the rules of tabs (opening beside
+/// the one on show, closing, reopening, moving to another window) are the
+/// SDK's, the same as any other application's.
+#[derive(Clone, PartialEq)]
+pub struct FileTab {
+    /// The place the tab is at now: its history's current entry.
     pub at: Where,
     pub memory: TabMemory,
 }
 
-/// The tabs closed most recently, newest last: what *Reopen closed tab*
-/// (Ctrl+Shift+T) takes from. It keeps the last [`ClosedTabs::LIMIT`]; the
-/// oldest is forgotten first.
-#[derive(Clone, Default)]
-pub struct ClosedTabs {
-    stack: Vec<ClosedTab>,
-}
-
-impl ClosedTabs {
-    /// How many closed tabs are remembered.
-    pub const LIMIT: usize = 10;
-
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn push(&mut self, closed: ClosedTab) {
-        self.stack.push(closed);
-        if self.stack.len() > Self::LIMIT {
-            self.stack.remove(0);
+impl FileTab {
+    /// A tab on `at`, with a history of its own.
+    pub fn new(at: Where) -> Self {
+        Self {
+            memory: TabMemory::new(at.clone()),
+            at,
         }
     }
 
-    /// The tab closed last, which is no longer remembered.
-    pub fn pop(&mut self) -> Option<ClosedTab> {
-        self.stack.pop()
+    /// The tab selects `file` in the folder it shows first, once (a file
+    /// named on the command line opens its folder with the file selected).
+    pub fn selecting(self, file: Option<PathBuf>) -> Self {
+        if let Some(file) = file {
+            self.memory.select_on_open(file);
+        }
+        self
+    }
+}
+
+impl TabContent for FileTab {
+    /// A tab that starts where this one is, with its own Back and Forward
+    /// lists.
+    fn duplicate(&self) -> Self {
+        Self {
+            at: self.at.clone(),
+            memory: self.memory.duplicate(),
+        }
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.stack.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        self.stack.len()
+    /// The tab's view is written down for the window that takes it
+    /// ([`TabMemory::depart`]).
+    fn depart(&self) {
+        self.memory.depart();
     }
 }
 
@@ -242,57 +244,26 @@ pub fn browse(browse: Browse) -> Element {
 mod tests {
     use super::*;
 
-    fn closed(index: usize, folder: &str) -> ClosedTab {
-        let at = Where::Folder(PathBuf::from(folder));
-        ClosedTab { index, memory: TabMemory::new(at.clone()), at }
-    }
-
-    fn folder_of(tab: &ClosedTab) -> String {
-        match &tab.at {
-            Where::Folder(path) => path.to_string_lossy().into_owned(),
-            Where::Recent => "recent".to_string(),
-        }
+    #[test]
+    fn a_duplicate_tab_starts_where_the_tab_is_with_a_history_of_its_own() {
+        let tab = FileTab::new(Where::Folder(PathBuf::from("/a")));
+        let copy = tab.duplicate();
+        assert_eq!(copy.at, tab.at);
+        assert!(copy.memory != tab.memory, "its own Back and Forward lists");
+        assert!(copy != tab);
     }
 
     #[test]
-    fn the_last_closed_tab_comes_back_first_at_its_place() {
-        let mut stack = ClosedTabs::new();
-        assert!(stack.is_empty());
-        assert!(stack.pop().is_none(), "nothing to reopen");
-        stack.push(closed(0, "/a"));
-        stack.push(closed(2, "/b"));
-        assert_eq!(stack.len(), 2);
-        let last = stack.pop().expect("the last closed tab");
-        assert_eq!((last.index, folder_of(&last).as_str()), (2, "/b"));
-        let first = stack.pop().expect("then the one before");
-        assert_eq!((first.index, folder_of(&first).as_str()), (0, "/a"));
-        assert!(stack.is_empty());
-    }
-
-    #[test]
-    fn the_stack_keeps_only_the_most_recent_ones() {
-        let mut stack = ClosedTabs::new();
-        for n in 0..ClosedTabs::LIMIT + 3 {
-            stack.push(closed(n, &format!("/f{n}")));
-        }
-        assert_eq!(stack.len(), ClosedTabs::LIMIT);
-        let newest = stack.pop().unwrap();
-        assert_eq!(folder_of(&newest), format!("/f{}", ClosedTabs::LIMIT + 2));
-        let mut oldest = newest;
-        while let Some(tab) = stack.pop() {
-            oldest = tab;
-        }
-        assert_eq!(folder_of(&oldest), "/f3", "the three oldest were forgotten");
-    }
-
-    #[test]
-    fn a_reopened_tab_keeps_its_own_memory() {
-        let mut stack = ClosedTabs::new();
-        let tab = closed(1, "/a");
-        let memory = tab.memory.clone();
-        stack.push(tab);
-        let back = stack.pop().unwrap();
-        assert!(back.memory == memory, "the same history comes back, not a new one");
+    fn a_tab_reopened_from_the_closed_ones_keeps_its_own_memory() {
+        let mut set = crate::tabs::TabSet::new(FileTab::new(Where::Folder(PathBuf::from("/a"))));
+        let id = set.open(FileTab::new(Where::Folder(PathBuf::from("/b"))));
+        let memory = set.content(id).expect("the tab").memory.clone();
+        set.close(id);
+        let back = set.reopen().expect("it comes back");
+        assert!(
+            set.content(back).expect("the tab").memory == memory,
+            "the same history comes back, not a new one"
+        );
     }
 
     #[test]
@@ -301,7 +272,11 @@ mod tests {
         let two = one.duplicate();
         assert!(one != two, "a duplicate is a different tab");
         assert_ne!(one.id(), two.id(), "with a number of its own");
-        assert_eq!(one.model().location(), two.model().location(), "that starts where the first one is");
+        assert_eq!(
+            one.model().location(),
+            two.model().location(),
+            "that starts where the first one is"
+        );
     }
 
     #[test]
@@ -311,29 +286,58 @@ mod tests {
         let in_the_old_window = memory.downgrade();
         assert!(in_the_old_window.upgrade().is_some());
         memory.publish(|| Box::new(("sorted", 42_u32)));
-        assert!(memory.take_view::<(&str, u32)>().is_none(), "nothing has left yet");
+        assert!(
+            memory.take_view::<(&str, u32)>().is_none(),
+            "nothing has left yet"
+        );
 
         // The host moves the tab: the same memory, whoever holds it.
         let in_the_new_window = memory.clone();
         memory.depart();
-        assert!(in_the_new_window == memory && in_the_new_window.id() == id, "moved, not made again");
-        assert_eq!(in_the_new_window.model().location(), &location, "the history is where it was");
-        assert!(in_the_old_window.upgrade().is_none(), "the window it left sees it gone, and lets go of its states");
-        assert!(in_the_new_window.downgrade().upgrade().is_some(), "the window it joins has its own residence");
+        assert!(
+            in_the_new_window == memory && in_the_new_window.id() == id,
+            "moved, not made again"
+        );
+        assert_eq!(
+            in_the_new_window.model().location(),
+            &location,
+            "the history is where it was"
+        );
+        assert!(
+            in_the_old_window.upgrade().is_none(),
+            "the window it left sees it gone, and lets go of its states"
+        );
+        assert!(
+            in_the_new_window.downgrade().upgrade().is_some(),
+            "the window it joins has its own residence"
+        );
 
-        assert_eq!(in_the_new_window.take_view::<(&str, u32)>(), Some(("sorted", 42)));
-        assert!(in_the_new_window.take_view::<(&str, u32)>().is_none(), "the snapshot is handed over once");
+        assert_eq!(
+            in_the_new_window.take_view::<(&str, u32)>(),
+            Some(("sorted", 42))
+        );
+        assert!(
+            in_the_new_window.take_view::<(&str, u32)>().is_none(),
+            "the snapshot is handed over once"
+        );
     }
 
     #[test]
     fn a_departure_with_no_body_to_ask_has_nothing_to_hand_over() {
         let memory = TabMemory::new(Where::Recent);
         memory.depart();
-        assert!(memory.take_view::<u32>().is_none(), "a tab that was never shown has no states");
+        assert!(
+            memory.take_view::<u32>().is_none(),
+            "a tab that was never shown has no states"
+        );
         memory.publish(|| Box::new(7_u32));
         memory.depart();
         memory.depart();
-        assert_eq!(memory.take_view::<u32>(), Some(7), "the second departure does not wipe the first's");
+        assert_eq!(
+            memory.take_view::<u32>(),
+            Some(7),
+            "the second departure does not wipe the first's"
+        );
     }
 
     #[test]
@@ -350,9 +354,14 @@ mod tests {
         let memory = TabMemory::new(Where::Recent);
         let recorded = Rc::new(Cell::new(0_u32));
         let seen = recorded.clone();
-        let token = super::super::scroll_memory::register(memory.id(), move || seen.set(seen.get() + 1));
+        let token =
+            super::super::scroll_memory::register(memory.id(), move || seen.set(seen.get() + 1));
         memory.depart();
-        assert_eq!(recorded.get(), 1, "the view on show was asked to record where it is scrolled");
+        assert_eq!(
+            recorded.get(),
+            1,
+            "the view on show was asked to record where it is scrolled"
+        );
         super::super::scroll_memory::unregister(token);
         memory.depart();
         assert_eq!(recorded.get(), 1, "a view that has gone is not asked");

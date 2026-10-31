@@ -58,6 +58,8 @@ pub(crate) const TOOLTIP: Layer = Layer::Overlay;
 pub(crate) const HOVER_CARD: Layer = Layer::Overlay;
 /// An editor that floats over its content: the rename field, the text edit bar.
 pub(crate) const INLINE_EDITOR: Layer = Layer::Overlay;
+/// The card an omnibox grows out of its field: over the page under it.
+pub(crate) const OMNIBOX: Layer = Layer::Overlay;
 /// A status pill over a view.
 pub(crate) const STATUS_PILL: Layer = Layer::Overlay;
 /// A floating card of a view (drag badge, banner) over its rows.
@@ -195,16 +197,33 @@ impl WindowStack {
 
     /// Opens a window. It goes above its parent's family (rule 1), on top of everything without
     /// a parent (rule 2), and a popup above every non-popup of its family (rule 3).
-    pub fn open(&mut self, id: u64, kind: WindowKind, parent: Option<u64>, modal: bool, name: &str) {
+    pub fn open(
+        &mut self,
+        id: u64,
+        kind: WindowKind,
+        parent: Option<u64>,
+        modal: bool,
+        name: &str,
+    ) {
         self.order.retain(|entry| entry.id != id);
         let parent = parent.filter(|parent| self.index(*parent).is_some());
-        let entry = StackEntry { id, kind, parent, modal, name: name.to_string() };
+        let entry = StackEntry {
+            id,
+            kind,
+            parent,
+            modal,
+            name: name.to_string(),
+        };
         let at = match parent {
             None => self.order.len(),
             Some(parent) => {
                 let family = self.family(parent);
                 // The family's last window; a non-popup stops below the family's popups.
-                let last = family.iter().filter_map(|member| self.index(*member)).max().unwrap_or(0);
+                let last = family
+                    .iter()
+                    .filter_map(|member| self.index(*member))
+                    .max()
+                    .unwrap_or(0);
                 if kind.is_popup() {
                     last + 1
                 } else {
@@ -244,8 +263,10 @@ impl WindowStack {
     pub fn raise(&mut self, id: u64) {
         let root = self.root_of(id);
         let family = self.family(root);
-        let (mut moved, kept): (Vec<_>, Vec<_>) =
-            self.order.drain(..).partition(|entry| family.contains(&entry.id));
+        let (mut moved, kept): (Vec<_>, Vec<_>) = self
+            .order
+            .drain(..)
+            .partition(|entry| family.contains(&entry.id));
         self.order = kept;
         self.order.append(&mut moved);
         self.trace();
@@ -266,7 +287,9 @@ impl WindowStack {
                 "{depth:>2} #{} {:?} parent={} modal={} {}",
                 entry.id,
                 entry.kind,
-                entry.parent.map_or("-".to_string(), |parent| format!("#{parent}")),
+                entry
+                    .parent
+                    .map_or("-".to_string(), |parent| format!("#{parent}")),
                 entry.modal,
                 entry.name
             ));
@@ -312,7 +335,9 @@ mod tests {
         assert!(LEVEL_DIALOG < LEVEL_TOAST && LEVEL_TOAST < LEVEL_MENU_OVER_DIALOG);
         assert!(TAB_HELD < TAB_MARKER);
         assert!(SLIDE_HEADER < BACK_VEIL && BACK_VEIL <= POPUP_OUTLINE && POPUP_OUTLINE < HEADER);
-        assert!(HEADER < SLIDE_SHEET && SLIDE_SHEET < SLIDE_CONTROLS && SLIDE_CONTROLS < BACK_SHIELD);
+        assert!(
+            HEADER < SLIDE_SHEET && SLIDE_SHEET < SLIDE_CONTROLS && SLIDE_CONTROLS < BACK_SHIELD
+        );
     }
 
     #[test]
@@ -386,7 +411,10 @@ mod tests {
         assert_eq!(stack.ids(), vec![1, 2]);
         assert_eq!(stack.order[1].kind, WindowKind::Tool);
         assert_eq!(stack.order[1].parent, Some(1));
-        assert!(!stack.order[1].modal && !stack.blocked(1), "an inspector never blocks its target");
+        assert!(
+            !stack.order[1].modal && !stack.blocked(1),
+            "an inspector never blocks its target"
+        );
         // A dialog the target opens afterwards goes above the target and its inspector's family.
         stack.open(3, WindowKind::Dialog, Some(1), true, "About");
         assert_eq!(stack.ids(), vec![1, 2, 3]);
@@ -399,7 +427,11 @@ mod tests {
         stack.open(3, WindowKind::Popup, Some(1), false, "files menu");
         stack.open(4, WindowKind::Popup, Some(2), false, "inspector menu");
         let ids = stack.ids();
-        let at = |id: u64| ids.iter().position(|member| *member == id).expect("in the stack");
+        let at = |id: u64| {
+            ids.iter()
+                .position(|member| *member == id)
+                .expect("in the stack")
+        };
         // A popup is above every non-popup of its family: a menu of the target is above the
         // inspector that watches it, and the inspector's own is above both windows.
         assert!(at(3) > at(2) && at(3) > at(1));
@@ -416,13 +448,21 @@ mod tests {
         stack.open(3, WindowKind::Toplevel, None, false, "Tear-off");
         assert_eq!(stack.ids(), vec![1, 2, 3]);
         stack.raise(2);
-        assert_eq!(stack.ids(), vec![3, 1, 2], "the inspector is never behind its target");
+        assert_eq!(
+            stack.ids(),
+            vec![3, 1, 2],
+            "the inspector is never behind its target"
+        );
         stack.raise(3);
         stack.raise(1);
         assert_eq!(stack.ids(), vec![3, 1, 2]);
         // The inspector of the inspector hangs from the inspector.
         stack.open_tool(4, 2, "inspector of inspector");
-        assert_eq!(stack.close(1), vec![4, 2, 1], "newest first, the whole family");
+        assert_eq!(
+            stack.close(1),
+            vec![4, 2, 1],
+            "newest first, the whole family"
+        );
         assert_eq!(stack.ids(), vec![3]);
     }
 
@@ -462,7 +502,9 @@ mod tests {
         stack.open(2, WindowKind::Popup, Some(1), false, "menu");
         let dump = stack.dump();
         let lines: Vec<&str> = dump.lines().collect();
-        assert!(lines[0].contains("#2") && lines[0].contains("Popup") && lines[0].contains("parent=#1"));
+        assert!(
+            lines[0].contains("#2") && lines[0].contains("Popup") && lines[0].contains("parent=#1")
+        );
         assert!(lines[1].contains("#1") && lines[1].contains("Files"));
     }
 }

@@ -41,7 +41,10 @@ struct Setup {
 
 impl Setup {
     fn pics() -> Setup {
-        Setup { at: Where::Folder(home().join("Pics")), typed: None }
+        Setup {
+            at: Where::Folder(home().join("Pics")),
+            typed: None,
+        }
     }
 }
 
@@ -50,7 +53,11 @@ struct Root(Case, Setup);
 
 impl Component for Root {
     fn render(&self) -> impl IntoElement {
-        let scheme = if self.0.dark { Scheme::PreferDark } else { Scheme::PreferLight };
+        let scheme = if self.0.dark {
+            Scheme::PreferDark
+        } else {
+            Scheme::PreferLight
+        };
         let tokens = Tokens::new(DEFAULT_ACCENT, scheme, false);
         let shared = use_hook(move || SharedTokens(State::create(tokens)));
         use_provide_root_context(move || shared);
@@ -80,16 +87,25 @@ impl Component for Bar {
             let starts = starts.is_some();
             move || starts
         });
-        let draft = use_state(move || starts.unwrap_or_default());
+        let draft = use_hook(move || {
+            let mut draft = crate::controls::OmniDraft::create();
+            draft.set_in_place(starts.unwrap_or_default());
+            draft
+        });
+        let find = use_state(super::search::Find::default);
         let home = home();
-        rect().expanded().tw(&tokens, &[p(S4)]).child(AddressBar::new(
-            self.0.at.clone(),
-            home,
-            editing,
-            draft,
-            |to: Where| OPENED.with_borrow_mut(|opened| opened.push(to)),
-            |_: PathBuf| {},
-        ))
+        rect()
+            .expanded()
+            .tw(&tokens, &[p(S4)])
+            .child(AddressBar::new(
+                self.0.at.clone(),
+                home,
+                editing,
+                draft,
+                find,
+                |to: Where| OPENED.with_borrow_mut(|opened| opened.push(to)),
+                |_: PathBuf| {},
+            ))
     }
 }
 
@@ -98,17 +114,34 @@ fn open(case: Case) -> Snapshot {
 }
 
 fn open_with(case: Case, setup: Setup) -> Snapshot {
-    let size = if case.phone { (390.0, 160.0) } else { (800.0, 160.0) };
-    let mut shot = Snapshot::with_scale(move || Root(case, setup.clone()).into_element(), size, 1.0);
+    let size = if case.phone {
+        (390.0, 160.0)
+    } else {
+        (800.0, 160.0)
+    };
+    let mut shot =
+        Snapshot::with_scale(move || Root(case, setup.clone()).into_element(), size, 1.0);
     shot.settle(Duration::from_millis(300));
     shot
 }
 
 const CASES: [Case; 4] = [
-    Case { dark: false, phone: false },
-    Case { dark: true, phone: false },
-    Case { dark: false, phone: true },
-    Case { dark: true, phone: true },
+    Case {
+        dark: false,
+        phone: false,
+    },
+    Case {
+        dark: true,
+        phone: false,
+    },
+    Case {
+        dark: false,
+        phone: true,
+    },
+    Case {
+        dark: true,
+        phone: true,
+    },
 ];
 
 fn tree(shot: &mut Snapshot) -> Tree {
@@ -134,7 +167,10 @@ fn area(node: &Node) -> Area {
 }
 
 fn centre(area: Area) -> (f32, f32) {
-    (area.min_x() + area.width() / 2.0, area.min_y() + area.height() / 2.0)
+    (
+        area.min_x() + area.width() / 2.0,
+        area.min_y() + area.height() / 2.0,
+    )
 }
 
 /// What the bar is made of, as laid out.
@@ -207,7 +243,10 @@ fn try_layout(shot: &mut Snapshot) -> Option<Layout> {
             && node.text.as_deref().is_some_and(|text| !text.is_empty())
     })?;
     // A paragraph starts its text after its own padding.
-    let pad = text_node.props.as_ref().map_or(0.0, |props| props.padding[3]);
+    let pad = text_node
+        .props
+        .as_ref()
+        .map_or(0.0, |props| props.padding[3]);
     let text = area(text_node);
     let text_x = text.min_x() + pad;
     let button = tree
@@ -217,7 +256,15 @@ fn try_layout(shot: &mut Snapshot) -> Option<Layout> {
         .map(|node| area(node))
         .next();
     let words = text_node.text.clone().unwrap_or_default();
-    Some(Layout { bar, face, icon, text, text_x, button, words })
+    Some(Layout {
+        bar,
+        face,
+        icon,
+        text,
+        text_x,
+        button,
+        words,
+    })
 }
 
 /// Enters the typed-path field the way a person does: a press on a phone's
@@ -227,7 +274,10 @@ fn enter(shot: &mut Snapshot, case: Case) {
     let at = if case.phone {
         centre(before.button.expect("a phone's pencil"))
     } else {
-        (before.face.max_x() - 12.0, before.face.min_y() + before.face.height() / 2.0)
+        (
+            before.face.max_x() - 12.0,
+            before.face.min_y() + before.face.height() / 2.0,
+        )
     };
     shot.click(at.0, at.1);
     shot.settle(Duration::from_millis(300));
@@ -236,7 +286,10 @@ fn enter(shot: &mut Snapshot, case: Case) {
         .iter()
         .filter_map(|node| node.a11y.component.clone())
         .collect();
-    assert!(names.iter().any(|name| name == "AddressEdit"), "{case:?}: the field opened");
+    assert!(
+        names.iter().any(|name| name == "LocationField"),
+        "{case:?}: the field opened"
+    );
 }
 
 fn leave(shot: &mut Snapshot, case: Case) {
@@ -247,7 +300,10 @@ fn leave(shot: &mut Snapshot, case: Case) {
         .iter()
         .filter_map(|node| node.a11y.component.clone())
         .collect();
-    assert!(!names.iter().any(|name| name == "AddressEdit"), "{case:?}: Escape closed the field");
+    assert!(
+        !names.iter().any(|name| name == "LocationField"),
+        "{case:?}: Escape closed the field"
+    );
 }
 
 fn close(a: f32, b: f32) -> bool {
@@ -260,7 +316,9 @@ fn same(problems: &mut Vec<String>, case: Case, what: &str, crumbs: Area, typed:
         && close(crumbs.width(), typed.width())
         && close(crumbs.height(), typed.height()))
     {
-        problems.push(format!("{case:?}: the {what} moved when the field opened: {crumbs:?} -> {typed:?}"));
+        problems.push(format!(
+            "{case:?}: the {what} moved when the field opened: {crumbs:?} -> {typed:?}"
+        ));
     }
 }
 
@@ -280,8 +338,7 @@ fn entering_the_field_moves_nothing() {
         if !close(crumbs.text_x, typed.text_x) {
             problems.push(format!(
                 "{case:?}: the first text starts at x {} in crumbs and {} typed",
-                crumbs.text_x,
-                typed.text_x
+                crumbs.text_x, typed.text_x
             ));
         }
         let middle = |a: Area| a.min_y() + a.height() / 2.0;
@@ -332,7 +389,12 @@ impl Frame {
         let row = info.min_row_bytes();
         let mut bytes = vec![0u8; info.compute_byte_size(row)];
         assert!(surface.canvas().read_pixels(&info, &mut bytes, row, (0, 0)));
-        Self { bytes, row, width: image.width() as usize, height: image.height() as usize }
+        Self {
+            bytes,
+            row,
+            width: image.width() as usize,
+            height: image.height() as usize,
+        }
     }
 
     fn pixel(&self, x: f32, y: f32) -> [u8; 3] {
@@ -373,17 +435,32 @@ fn controls(shot: &mut Snapshot, case: Case) -> Vec<Control> {
             .iter()
             .find(|node| node.a11y.component.as_deref() == Some("AddressCompact"))
             .expect("the trail");
-        found.push(Control { name: "folder name", face: area(trail) });
+        found.push(Control {
+            name: "folder name",
+            face: area(trail),
+        });
         let pencil = by("IconButton").into_iter().next().expect("the pencil");
-        found.push(Control { name: "pencil", face: pencil });
+        found.push(Control {
+            name: "pencil",
+            face: pencil,
+        });
     } else {
         let mut crumbs = by("AddressCrumb");
         crumbs.sort_by(|a, b| a.min_x().total_cmp(&b.min_x()));
         let mut chevrons = by("AddressChevron");
         chevrons.sort_by(|a, b| a.min_x().total_cmp(&b.min_x()));
-        found.push(Control { name: "first crumb", face: crumbs[0] });
-        found.push(Control { name: "last crumb", face: *crumbs.last().unwrap() });
-        found.push(Control { name: "first chevron", face: chevrons[0] });
+        found.push(Control {
+            name: "first crumb",
+            face: crumbs[0],
+        });
+        found.push(Control {
+            name: "last crumb",
+            face: *crumbs.last().unwrap(),
+        });
+        found.push(Control {
+            name: "first chevron",
+            face: chevrons[0],
+        });
     }
     found
 }
@@ -412,10 +489,26 @@ fn every_control_of_the_bar_has_a_hover_and_a_pressed_fill() {
             shot.release((380.0, 150.0));
             shot.settle(Duration::from_millis(250));
             let after = Frame::of(&mut shot).pixel(at.0, at.1);
-            assert_ne!(rest, hover, "{case:?}: the {} paints no hover fill", control.name);
-            assert_ne!(hover, pressed, "{case:?}: the {} paints no pressed fill", control.name);
-            assert_ne!(rest, pressed, "{case:?}: the {} is pressed like it is at rest", control.name);
-            assert_eq!(rest, after, "{case:?}: the {} stays lit after the pointer left", control.name);
+            assert_ne!(
+                rest, hover,
+                "{case:?}: the {} paints no hover fill",
+                control.name
+            );
+            assert_ne!(
+                hover, pressed,
+                "{case:?}: the {} paints no pressed fill",
+                control.name
+            );
+            assert_ne!(
+                rest, pressed,
+                "{case:?}: the {} is pressed like it is at rest",
+                control.name
+            );
+            assert_eq!(
+                rest, after,
+                "{case:?}: the {} stays lit after the pointer left",
+                control.name
+            );
         }
     }
 }
@@ -440,11 +533,17 @@ fn the_folder_name_stays_lit_while_its_sheet_is_open() {
         shot.settle(Duration::from_millis(300));
         keep(&mut shot, case, "sheet open");
         let open = Frame::of(&mut shot).pixel(at.0, at.1);
-        assert_ne!(rest, open, "{case:?}: the folder name is not lit while its sheet is open");
+        assert_ne!(
+            rest, open,
+            "{case:?}: the folder name is not lit while its sheet is open"
+        );
         shot.key(Key::Named(NamedKey::Escape));
         shot.settle(Duration::from_millis(500));
         let closed = Frame::of(&mut shot).pixel(at.0, at.1);
-        assert_eq!(rest, closed, "{case:?}: the folder name stays lit after its sheet closed");
+        assert_eq!(
+            rest, closed,
+            "{case:?}: the folder name stays lit after its sheet closed"
+        );
     }
 }
 
@@ -455,11 +554,23 @@ fn the_rings_of_both_modes_are_around_their_boxes() {
         shot.key(Key::Named(NamedKey::Tab));
         shot.settle(Duration::from_millis(200));
         let probes = shot.focus_rings();
-        assert!(!probes.is_empty(), "{case:?}: Tab puts a ring on the first control");
-        assert!(shot.ring_mismatches().is_empty(), "{case:?}: a ring is off its box in crumbs mode");
+        assert!(
+            !probes.is_empty(),
+            "{case:?}: Tab puts a ring on the first control"
+        );
+        assert!(
+            shot.ring_mismatches().is_empty(),
+            "{case:?}: a ring is off its box in crumbs mode"
+        );
         enter(&mut shot, case);
-        assert!(!shot.focus_rings().is_empty(), "{case:?}: the field has a ring");
-        assert!(shot.ring_mismatches().is_empty(), "{case:?}: a ring is off its box in field mode");
+        assert!(
+            !shot.focus_rings().is_empty(),
+            "{case:?}: the field has a ring"
+        );
+        assert!(
+            shot.ring_mismatches().is_empty(),
+            "{case:?}: a ring is off its box in field mode"
+        );
     }
 }
 
@@ -481,7 +592,13 @@ struct Named {
 
 fn named_places() -> Vec<Named> {
     vec![
-        Named { what: "trash", at: Where::Folder(trash()), first: "Trash", last: "Trash", field: "trash:///".into() },
+        Named {
+            what: "trash",
+            at: Where::Folder(trash()),
+            first: "Trash",
+            last: "Trash",
+            field: "trash:///".into(),
+        },
         Named {
             what: "trash-inside",
             at: Where::Folder(trash().join("Old folder")),
@@ -489,14 +606,24 @@ fn named_places() -> Vec<Named> {
             last: "Old folder",
             field: "trash:///Old folder/".into(),
         },
-        Named { what: "recent", at: Where::Recent, first: "Recent", last: "Recent", field: "recent:///".into() },
+        Named {
+            what: "recent",
+            at: Where::Recent,
+            first: "Recent",
+            last: "Recent",
+            field: "recent:///".into(),
+        },
     ]
 }
 
 /// Every text drawn inside the bar, left to right.
 fn words_in_bar(shot: &mut Snapshot) -> Vec<String> {
     let tree = tree(shot);
-    let Some(bar) = tree.nodes.iter().find(|node| node.a11y.component.as_deref() == Some("AddressBar")) else {
+    let Some(bar) = tree
+        .nodes
+        .iter()
+        .find(|node| node.a11y.component.as_deref() == Some("AddressBar"))
+    else {
         return Vec::new();
     };
     let bar = area(bar);
@@ -504,39 +631,78 @@ fn words_in_bar(shot: &mut Snapshot) -> Vec<String> {
         .nodes
         .iter()
         .filter(|node| inside(node, bar) && matches!(node.kind, Kind::Label | Kind::Paragraph))
-        .filter_map(|node| Some((area(node).min_x(), node.text.clone().filter(|text| !text.is_empty())?)))
+        .filter_map(|node| {
+            Some((
+                area(node).min_x(),
+                node.text.clone().filter(|text| !text.is_empty())?,
+            ))
+        })
         .collect();
     found.sort_by(|a, b| a.0.total_cmp(&b.0));
     found.into_iter().map(|(_, text)| text).collect()
 }
 
 #[test]
-fn a_named_place_shows_its_name_in_the_trail_and_its_address_in_the_field_without_moving_anything() {
+fn a_named_place_shows_its_name_in_the_trail_and_its_address_in_the_field_without_moving_anything()
+{
     let mut problems = Vec::new();
     for case in CASES {
         for place in named_places() {
-            let mut shot = open_with(case, Setup { at: place.at.clone(), typed: None });
+            let mut shot = open_with(
+                case,
+                Setup {
+                    at: place.at.clone(),
+                    typed: None,
+                },
+            );
             keep(&mut shot, case, &format!("{}-crumbs", place.what));
             let crumbs = layout(&mut shot);
             let expected = if case.phone { place.last } else { place.first };
             if crumbs.words != expected {
-                problems.push(format!("{case:?} {}: the trail starts with {:?}, not {expected:?}", place.what, crumbs.words));
+                problems.push(format!(
+                    "{case:?} {}: the trail starts with {:?}, not {expected:?}",
+                    place.what, crumbs.words
+                ));
             }
             let all = words_in_bar(&mut shot).join("|");
             for raw in ["files", ".local", "share", "Trash/", "home"] {
                 if all.contains(raw) {
-                    problems.push(format!("{case:?} {}: the trail shows {raw:?}: {all}", place.what));
+                    problems.push(format!(
+                        "{case:?} {}: the trail shows {raw:?}: {all}",
+                        place.what
+                    ));
                 }
             }
             enter(&mut shot, case);
             keep(&mut shot, case, &format!("{}-typed", place.what));
             let typed = layout(&mut shot);
             if typed.words != place.field {
-                problems.push(format!("{case:?} {}: the field holds {:?}, not {:?}", place.what, typed.words, place.field));
+                problems.push(format!(
+                    "{case:?} {}: the field holds {:?}, not {:?}",
+                    place.what, typed.words, place.field
+                ));
             }
-            same(&mut problems, case, &format!("{} bar", place.what), crumbs.bar, typed.bar);
-            same(&mut problems, case, &format!("{} box", place.what), crumbs.face, typed.face);
-            same(&mut problems, case, &format!("{} first icon", place.what), crumbs.icon, typed.icon);
+            same(
+                &mut problems,
+                case,
+                &format!("{} bar", place.what),
+                crumbs.bar,
+                typed.bar,
+            );
+            same(
+                &mut problems,
+                case,
+                &format!("{} box", place.what),
+                crumbs.face,
+                typed.face,
+            );
+            same(
+                &mut problems,
+                case,
+                &format!("{} first icon", place.what),
+                crumbs.icon,
+                typed.icon,
+            );
             if !close(crumbs.text_x, typed.text_x) {
                 problems.push(format!(
                     "{case:?} {}: the first text starts at x {} in the trail and {} in the field",
@@ -545,7 +711,13 @@ fn a_named_place_shows_its_name_in_the_trail_and_its_address_in_the_field_withou
             }
             leave(&mut shot, case);
             let back = layout(&mut shot);
-            same(&mut problems, case, &format!("{} box back", place.what), crumbs.face, back.face);
+            same(
+                &mut problems,
+                case,
+                &format!("{} box back", place.what),
+                crumbs.face,
+                back.face,
+            );
         }
     }
     assert!(problems.is_empty(), "{}", problems.join("\n"));
@@ -555,7 +727,13 @@ fn a_named_place_shows_its_name_in_the_trail_and_its_address_in_the_field_withou
 fn submit(text: &str) -> Vec<Where> {
     OPENED.with_borrow_mut(Vec::clear);
     let case = CASES[0];
-    let mut shot = open_with(case, Setup { at: Where::Folder(home().join("Pics")), typed: Some(text.to_owned()) });
+    let mut shot = open_with(
+        case,
+        Setup {
+            at: Where::Folder(home().join("Pics")),
+            typed: Some(text.to_owned()),
+        },
+    );
     shot.settle(Duration::from_millis(300));
     shot.key(Key::Named(NamedKey::Enter));
     // The check of a text that names a folder on the disk runs on a worker.

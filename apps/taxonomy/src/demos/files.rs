@@ -7,17 +7,19 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
 
+use bingux_ui::controls::OmniDraft;
 use bingux_ui::files::model::{Places, Selection, Sort};
 use bingux_ui::files::{
-    AddressBar, BarStatus, Browse, ChooserRequest, Find, SearchBar, ColourIcon, FileIcon, FileKind, FileView, Load, PlacesMenu, PlacesSidebar,
-    TabMemory, Where, browse, choose, colour_icon_view, default_zoom_px, empty_state, error_state, file_icon_view,
-    home_folder, loading_state, skeleton, use_directory,
+    AddressBar, Browse, ChooserRequest, ColourIcon, FileIcon, FileKind, FileView, Find, Load,
+    PlacesMenu, PlacesSidebar, TabMemory, Where, browse, choose, colour_icon_view, default_zoom_px,
+    empty_state, error_state, file_icon_view, home_folder, loading_state, skeleton, use_directory,
 };
+use bingux_ui::prelude::*;
 use bingux_ui::preview::{
-    ControlState, DocumentControls, DocumentState, MediaControls, Mode, PreviewDock, PreviewHost, PreviewNav, PreviewSource, Step,
+    ControlState, DocumentControls, DocumentState, MediaControls, Mode, PreviewDock, PreviewHost,
+    PreviewNav, PreviewSource, Step,
 };
 use bingux_ui::shell::use_overlays;
-use bingux_ui::prelude::*;
 use freya::prelude::*;
 
 use super::common::rows;
@@ -76,9 +78,15 @@ static FIXTURE: LazyLock<PathBuf> = LazyLock::new(|| {
             let _ = std::fs::write(&target, bytes);
         }
     }
-    let _ = std::fs::write(root.join("Documents/Quarterly report.pdf"), bingux_preview_core::testing::three_page_pdf());
+    let _ = std::fs::write(
+        root.join("Documents/Quarterly report.pdf"),
+        bingux_preview_core::testing::three_page_pdf(),
+    );
     let _ = std::fs::create_dir_all(root.join("Videos"));
-    let _ = std::fs::write(root.join("Music/Tone.wav"), bingux_preview_core::testing::wav_tone(4));
+    let _ = std::fs::write(
+        root.join("Music/Tone.wav"),
+        bingux_preview_core::testing::wav_tone(4),
+    );
     make_film(&root.join("Videos/Holiday clip.webm"));
     root
 });
@@ -89,10 +97,38 @@ static FIXTURE: LazyLock<PathBuf> = LazyLock::new(|| {
 fn make_film(path: &Path) {
     let _ = std::process::Command::new("gst-launch-1.0")
         .arg("-q")
-        .args(["videotestsrc", "pattern=ball", "num-buffers=120", "!", "video/x-raw,width=480,height=270,framerate=30/1", "!", "videoconvert", "!"])
-        .args(["vp8enc", "deadline=1", "keyframe-max-dist=15", "!", "webmmux", "name=mux", "!", "filesink"])
+        .args([
+            "videotestsrc",
+            "pattern=ball",
+            "num-buffers=120",
+            "!",
+            "video/x-raw,width=480,height=270,framerate=30/1",
+            "!",
+            "videoconvert",
+            "!",
+        ])
+        .args([
+            "vp8enc",
+            "deadline=1",
+            "keyframe-max-dist=15",
+            "!",
+            "webmmux",
+            "name=mux",
+            "!",
+            "filesink",
+        ])
         .arg(format!("location={}", path.display()))
-        .args(["audiotestsrc", "num-buffers=190", "samplesperbuffer=1024", "!", "audioconvert", "!", "vorbisenc", "!", "mux."])
+        .args([
+            "audiotestsrc",
+            "num-buffers=190",
+            "samplesperbuffer=1024",
+            "!",
+            "audioconvert",
+            "!",
+            "vorbisenc",
+            "!",
+            "mux.",
+        ])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status();
@@ -181,9 +217,10 @@ const LIST_HEIGHT: f32 = 340.0;
 /// The nine zoom levels of the ladder: the first four are list rows, the rest
 /// are grids of larger and larger tiles.
 pub const FILE_VIEW: &[Spec] = &[
-    Spec::live("List, the default zoom (16 px icons; 32 px on a phone)", || {
-        folder(documents(), default_zoom_px())
-    })
+    Spec::live(
+        "List, the default zoom (16 px icons; 32 px on a phone)",
+        || folder(documents(), default_zoom_px()),
+    )
     .page(LIST_HEIGHT),
     Spec::live("List, 20 px", || folder(documents(), 20)).page(LIST_HEIGHT),
     Spec::live("List, 24 px", || folder(documents(), 24)).page(LIST_HEIGHT),
@@ -255,7 +292,10 @@ fn labelled(tokens: &Tokens, icon: &FileIcon, size: u16, selected: bool, name: S
 
 /// A wrapping line of icons.
 fn flow(tokens: &Tokens) -> Rect {
-    rect().tw(tokens, &[w_full(), flex_row(), wrap(S3), gap(S3), items(Align::End)])
+    rect().tw(
+        tokens,
+        &[w_full(), flex_row(), wrap(S3), gap(S3), items(Align::End)],
+    )
 }
 
 /// The icon every surface draws: each kind of file, at each size the view
@@ -467,70 +507,78 @@ pub const FILE_ICON: &[Spec] = &[
 fn trash_folder() -> PathBuf {
     bingux_ui::files::Roots::current()
         .trash_folder()
-        .map_or_else(|| fixture().join(".local/share/Trash/files"), std::path::Path::to_path_buf)
+        .map_or_else(
+            || fixture().join(".local/share/Trash/files"),
+            std::path::Path::to_path_buf,
+        )
 }
 
 fn address(at: Where, editing: bool, draft: &str) -> Element {
+    address_with(at, editing, draft, Find::default())
+}
+
+fn address_with(at: Where, editing: bool, draft: &str, asked: Find) -> Element {
     let editing = use_state(|| editing);
-    let draft = use_state(|| draft.to_string());
+    let draft = use_hook(|| {
+        let mut value = OmniDraft::create();
+        value.set_in_place(draft);
+        value
+    });
+    let find = use_state(move || asked.clone());
     AddressBar::new(
         at,
         fixture().to_path_buf(),
         editing,
         draft,
+        find,
         |_: Where| {},
         |_: PathBuf| {},
     )
     .into_element()
 }
 
-fn search_bar(filters_open: bool, words: &str, filters: &str, status: BarStatus) -> Element {
-    use bingux_ui::files::model::find::{Query, Recents, Scope};
-    let find = use_state(|| {
-        let mut find = Find::default();
-        find.open = true;
-        find.filters_open = filters_open;
-        find.filters = Query::parse(filters).filters;
-        find
-    });
-    let draft = use_state(|| words.to_string());
-    let include_noise = use_state(|| true);
-    let recents = use_state(Recents::default);
-    let choices = bingux_ui::files::scope_choices(&Places::default(), fixture(), &Scope::Subfolders);
-    SearchBar {
-        find,
-        draft,
-        choices,
-        status,
-        include_noise,
-        recents,
-        on_open: EventHandler::new(|_: ()| {}),
-        on_step: EventHandler::new(|_: i32| {}),
-        on_list: EventHandler::new(|_: ()| {}),
-        on_close: EventHandler::new(|_: ()| {}),
-        on_stop: EventHandler::new(|_: ()| {}),
-    }
-    .into_element()
+/// The location field in a folder of the fixture, edited, with `typed` already in it: the card
+/// shows for text that is not the text the field rests with.
+fn omnibox(at: &str, typed: &str) -> Element {
+    address(Where::Folder(fixture().join(at)), true, typed)
 }
 
-fn found(running: bool) -> BarStatus {
-    BarStatus { place: "Documents".into(), asked: true, walking: true, running, found: 1204, ..BarStatus::default() }
-}
-
-pub const SEARCH_BAR: &[Spec] = &[
-    Spec::live("Resting: the field, where to look, Filters", || {
-        search_bar(false, "", "", BarStatus { place: "Documents".into(), ..BarStatus::default() })
+pub const OMNIBOX: &[Spec] = &[
+    Spec::live("Resting: the trail; a press on its empty end edits", || {
+        address(Where::Folder(fixture().join("Documents")), false, "")
     })
     .wide(),
-    Spec::forced("Searching: spinner, count and Stop", || search_bar(false, "report", "", found(true))).wide(),
-    Spec::forced("Done: how many were found", || search_bar(false, "report", "", found(false))).wide(),
-    Spec::forced("Filters set: tokens and Clear all", || {
-        search_bar(false, "report", "type:image size:>10MB modified:week", found(false))
-    })
+    Spec::forced(
+        "Editing: a plain field, no card until something is typed",
+        || omnibox("Documents", ""),
+    )
     .wide(),
-    Spec::forced("The Filters panel", || search_bar(false, "report", "type:image", found(false)))
-        .wide()
-        .script("click-text Filters; wait 600; save {out}"),
+    Spec::forced(
+        "A path: the folders that complete it grow out of the field",
+        || omnibox("Documents", "Photos/"),
+    )
+    .page(320.0),
+    Spec::forced(
+        "Words: this folder, places and a search, with chips for scope and filters",
+        || omnibox("Documents", "re"),
+    )
+    .page(520.0),
+    Spec::forced(
+        "A filter chip is on (typed as `type:image`, or pressed), and keeps what it names",
+        || {
+            let mut asked = Find::default();
+            asked.filters.kinds = vec![bingux_ui::files::model::find::Kind::Image];
+            asked.filters.exts = vec!["png".to_string()];
+            address_with(
+                Where::Folder(fixture().join("Documents")),
+                true,
+                "re",
+                asked,
+            )
+        },
+    )
+    .page(520.0),
+    Spec::forced("Nothing found", || omnibox("Documents", "zzzzqqq")).page(300.0),
 ];
 
 pub const ADDRESS_BAR: &[Spec] = &[
@@ -592,21 +640,38 @@ pub const PLACES: &[Spec] = &[
             .into_element()
     })
     .page(420.0),
-    Spec::live("Right-click a folder of yours: Open, Open in new tab, Copy path, Properties", app_sidebar)
-        .page(420.0)
-        .script("wait 600; rclick-text Documents; wait 400; save {out}"),
-    Spec::live("Right-click a bookmark: Rename…, Copy path, Remove from bookmarks", app_sidebar)
-        .page(420.0)
-        .script("wait 600; rclick-text Photos; wait 400; save {out}"),
-    Spec::live("Right-click Recent: Open only, there is no folder", app_sidebar)
-        .page(420.0)
-        .script("wait 600; rclick-text Recent; wait 400; save {out}"),
-    Spec::live("Menu key (Shift+F10) on a focused row opens its menu", app_sidebar)
-        .page(420.0)
-        .script("wait 600; click-text Music; wait 300; key shift+f10; wait 400; save {out}"),
-    Spec::live("Properties on a place: the dialog of its folder", app_sidebar)
-        .page(520.0)
-        .script("wait 600; rclick-text Documents; wait 400; click-text Properties; wait 900; save {out}"),
+    Spec::live(
+        "Right-click a folder of yours: Open, Open in new tab, Copy path, Properties",
+        app_sidebar,
+    )
+    .page(420.0)
+    .script("wait 600; rclick-text Documents; wait 400; save {out}"),
+    Spec::live(
+        "Right-click a bookmark: Rename…, Copy path, Remove from bookmarks",
+        app_sidebar,
+    )
+    .page(420.0)
+    .script("wait 600; rclick-text Photos; wait 400; save {out}"),
+    Spec::live(
+        "Right-click Recent: Open only, there is no folder",
+        app_sidebar,
+    )
+    .page(420.0)
+    .script("wait 600; rclick-text Recent; wait 400; save {out}"),
+    Spec::live(
+        "Menu key (Shift+F10) on a focused row opens its menu",
+        app_sidebar,
+    )
+    .page(420.0)
+    .script("wait 600; click-text Music; wait 300; key shift+f10; wait 400; save {out}"),
+    Spec::live(
+        "Properties on a place: the dialog of its folder",
+        app_sidebar,
+    )
+    .page(520.0)
+    .script(
+        "wait 600; rclick-text Documents; wait 400; click-text Properties; wait 900; save {out}",
+    ),
 ];
 
 /// The places of the fixture home (Documents, Music, Downloads, Videos and a
@@ -623,7 +688,10 @@ fn fixture_places() -> Places {
                     .to_owned(),
             ),
             mounts: None,
-            bookmarks: Some(format!("file://{} Photos\n", home.join("Documents/Photos").display())),
+            bookmarks: Some(format!(
+                "file://{} Photos\n",
+                home.join("Documents/Photos").display()
+            )),
         },
         |path| path.is_dir(),
     )
@@ -752,38 +820,54 @@ fn docked() -> Element {
                 .height(Size::fill())
                 .child(folder(documents(), 32)),
         )
-        .child(PreviewDock::new(true, row_area(), Some(source), preview_nav()))
+        .child(PreviewDock::new(
+            true,
+            row_area(),
+            Some(source),
+            preview_nav(),
+        ))
         .into_element()
 }
 
 pub const PREVIEW: &[Spec] = &[
-    Spec::live("Popup: a picture (Open, Info, dock, full screen, Close)", || {
-        preview("Documents/Photos/network.svg", Mode::Popup)
-    })
+    Spec::live(
+        "Popup: a picture (Open, Info, dock, full screen, Close)",
+        || preview("Documents/Photos/network.svg", Mode::Popup),
+    )
     .page(460.0),
-    Spec::live("Popup: a text file (Info on the right, W wraps lines)", || {
-        preview("Documents/Notes.txt", Mode::Popup)
-    })
+    Spec::live(
+        "Popup: a text file (Info on the right, W wraps lines)",
+        || preview("Documents/Notes.txt", Mode::Popup),
+    )
     .page(360.0),
-    Spec::live("Popup: a film (Space plays and pauses, arrows seek, the bar fades while it plays)", || {
-        preview("Videos/Holiday clip.webm", Mode::Popup)
-    })
+    Spec::live(
+        "Popup: a film (Space plays and pauses, arrows seek, the bar fades while it plays)",
+        || preview("Videos/Holiday clip.webm", Mode::Popup),
+    )
     .page(520.0),
-    Spec::live("Pane: a film waits on its first frame until you play it", || {
-        rect()
-            .width(Size::px(bingux_ui::preview::DEFAULT_WIDTH))
-            .height(Size::px(PANE_HEIGHT))
-            .child(preview("Videos/Holiday clip.webm", Mode::Pane))
-            .into_element()
-    })
+    Spec::live(
+        "Pane: a film waits on its first frame until you play it",
+        || {
+            rect()
+                .width(Size::px(bingux_ui::preview::DEFAULT_WIDTH))
+                .height(Size::px(PANE_HEIGHT))
+                .child(preview("Videos/Holiday clip.webm", Mode::Pane))
+                .into_element()
+        },
+    )
     .page(PANE_HEIGHT),
-    Spec::live("Popup: a song (its card, the same controls)", || preview("Music/Tone.wav", Mode::Popup))
-        .page(420.0),
-    Spec::forced("A film the player cannot open: the reason and Open", || preview("Music/Track 01.mp3", Mode::Popup))
-        .page(420.0),
-    Spec::live("Popup: a PDF (scroll, Ctrl+wheel zooms, Ctrl+F finds, F9 shows pages)", || {
-        preview("Documents/Quarterly report.pdf", Mode::Popup)
+    Spec::live("Popup: a song (its card, the same controls)", || {
+        preview("Music/Tone.wav", Mode::Popup)
     })
+    .page(420.0),
+    Spec::forced("A film the player cannot open: the reason and Open", || {
+        preview("Music/Track 01.mp3", Mode::Popup)
+    })
+    .page(420.0),
+    Spec::live(
+        "Popup: a PDF (scroll, Ctrl+wheel zooms, Ctrl+F finds, F9 shows pages)",
+        || preview("Documents/Quarterly report.pdf", Mode::Popup),
+    )
     .page(620.0),
     Spec::live("Pane: a PDF with the compact toolbar", || {
         rect()
@@ -793,7 +877,10 @@ pub const PREVIEW: &[Spec] = &[
             .into_element()
     })
     .page(PANE_HEIGHT),
-    Spec::forced("Pane: a PDF that is damaged", || preview("Documents/Scan 003.pdf", Mode::Pane)).page(PANE_HEIGHT),
+    Spec::forced("Pane: a PDF that is damaged", || {
+        preview("Documents/Scan 003.pdf", Mode::Pane)
+    })
+    .page(PANE_HEIGHT),
     Spec::forced("Pane: the same content in a column", || {
         rect()
             .width(Size::px(bingux_ui::preview::DEFAULT_WIDTH))
@@ -818,7 +905,10 @@ pub const PREVIEW: &[Spec] = &[
     Spec::live("Over the window: Space or Escape closes it", || {
         let overlays = use_overlays();
         action_button("Preview Notes.txt", move |_| {
-            bingux_ui::preview::open(overlays, PreviewSource::path(fixture().join("Documents/Notes.txt")));
+            bingux_ui::preview::open(
+                overlays,
+                PreviewSource::path(fixture().join("Documents/Notes.txt")),
+            );
         })
         .into_element()
     })
@@ -854,28 +944,74 @@ fn playing() -> ControlState {
 
 /// The media control bar in each of its states.
 pub const PLAYER_CONTROLS: &[Spec] = &[
-    Spec::live("Playing: the bar, with the buffered range ahead of the thumb", || over_picture(MediaControls::new(playing(), |_| {}))).page(120.0)
+    Spec::live(
+        "Playing: the bar, with the buffered range ahead of the thumb",
+        || over_picture(MediaControls::new(playing(), |_| {})),
+    )
+    .page(120.0)
     .script("wait 800; save {out}"),
-    Spec::live("Paused", || over_picture(MediaControls::new(ControlState { playing: false, ..playing() }, |_| {}))).page(120.0)
+    Spec::live("Paused", || {
+        over_picture(MediaControls::new(
+            ControlState {
+                playing: false,
+                ..playing()
+            },
+            |_| {},
+        ))
+    })
+    .page(120.0)
     .script("wait 800; save {out}"),
     Spec::live("Muted, and a speed other than 1x", || {
-        over_picture(MediaControls::new(ControlState { muted: true, rate: 1500, ..playing() }, |_| {}))
+        over_picture(MediaControls::new(
+            ControlState {
+                muted: true,
+                rate: 1500,
+                ..playing()
+            },
+            |_| {},
+        ))
     })
     .page(120.0)
     .script("wait 800; save {out}"),
     Spec::live("At the end: play again", || {
-        over_picture(MediaControls::new(ControlState { playing: false, ended: true, progress: 1.0, position_ns: 212_000_000_000, buffered: 1.0, ..playing() }, |_| {}))
+        over_picture(MediaControls::new(
+            ControlState {
+                playing: false,
+                ended: true,
+                progress: 1.0,
+                position_ns: 212_000_000_000,
+                buffered: 1.0,
+                ..playing()
+            },
+            |_| {},
+        ))
     })
     .page(120.0)
     .script("wait 800; save {out}"),
     Spec::live("A stream that cannot seek: the bar is inert", || {
-        over_picture(MediaControls::new(ControlState { seekable: false, duration_ns: 0, progress: 0.0, position_ns: 0, ..playing() }, |_| {}))
+        over_picture(MediaControls::new(
+            ControlState {
+                seekable: false,
+                duration_ns: 0,
+                progress: 0.0,
+                position_ns: 0,
+                ..playing()
+            },
+            |_| {},
+        ))
     })
     .page(120.0)
     .script("wait 800; save {out}"),
-    Spec::live("Compact: the docked pane and a phone (play, position, seek, mute)", || {
-        over_picture(MediaControls::new(playing(), |_| {}).docked(true).width(bingux_ui::preview::MIN_WIDTH))
-    })
+    Spec::live(
+        "Compact: the docked pane and a phone (play, position, seek, mute)",
+        || {
+            over_picture(
+                MediaControls::new(playing(), |_| {})
+                    .docked(true)
+                    .width(bingux_ui::preview::MIN_WIDTH),
+            )
+        },
+    )
     .page(120.0)
     .script("wait 800; save {out}"),
 ];
@@ -885,13 +1021,33 @@ pub const PLAYER_CONTROLS: &[Spec] = &[
 pub const DOCUMENT_CONTROLS: &[Spec] = &[
     Spec::live("Page 2 of 12 at fit width", || {
         let text = use_state(|| "2".to_owned());
-        DocumentControls::new(DocumentState { page: 1, pages: 12, zoom: "Fit width".to_owned(), find: false }, text, |_| {}).into_element()
+        DocumentControls::new(
+            DocumentState {
+                page: 1,
+                pages: 12,
+                zoom: "Fit width".to_owned(),
+                find: false,
+            },
+            text,
+            |_| {},
+        )
+        .into_element()
     })
     .page(120.0)
     .script("wait 800; save {out}"),
     Spec::live("Fit page, the default of a document, with find on", || {
         let text = use_state(|| "7".to_owned());
-        DocumentControls::new(DocumentState { page: 6, pages: 12, zoom: "Fit page".to_owned(), find: true }, text, |_| {}).into_element()
+        DocumentControls::new(
+            DocumentState {
+                page: 6,
+                pages: 12,
+                zoom: "Fit page".to_owned(),
+                find: true,
+            },
+            text,
+            |_| {},
+        )
+        .into_element()
     })
     .page(120.0)
     .script("wait 800; save {out}"),
@@ -899,7 +1055,16 @@ pub const DOCUMENT_CONTROLS: &[Spec] = &[
         let text = use_state(|| "1".to_owned());
         rect()
             .width(Size::px(bingux_ui::preview::DEFAULT_WIDTH))
-            .child(DocumentControls::new(DocumentState { page: 0, pages: 3, zoom: "125%".to_owned(), find: false }, text, |_| {}))
+            .child(DocumentControls::new(
+                DocumentState {
+                    page: 0,
+                    pages: 3,
+                    zoom: "125%".to_owned(),
+                    find: false,
+                },
+                text,
+                |_| {},
+            ))
             .into_element()
     })
     .page(120.0)

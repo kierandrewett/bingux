@@ -18,14 +18,14 @@ documented in `crates/files/src/find/query.rs`.
 
 Paths below are at `2b4710c`; the files named here were replaced in Part 2.
 
-| Step | Where | What happened |
-| ---- | ----- | ------------- |
-| Field | `crates/ui/src/files/address_edit.rs` | The **address bar** was the search box. One text field took a path or a search. Ctrl+F or a letter typed on the list set `Find.scoped` and turned the bar's field into a search field with a chip `in <Folder>` inside it. |
-| Path or search | `crates/files/src/search.rs` `classify` | Without touching the disk: text starting `/`, `~`, `./`, `../` or a scheme, or naming an entry of the folder, was a path; anything else a query. |
-| Model | `crates/files/src/search.rs` `Query` | A `Query` was the trimmed text plus its whitespace-split words. No operators, no filters, no quotes. `Query::matches(name)` gave a `Tier`: exact, prefix, word start, substring, all words in any order, fuzzy (3+ letters in order, within a window of `2n + 4`). Case-insensitive, file **name** only. |
-| Stage 1 | `chooser.rs` `select_shown` | The loaded folder listing was filtered in memory on every keystroke (`rank`), sorted by tier; ties kept the person's sort. No disk read. |
-| Stage 2 | `files/search.rs` `use_subfolder_search`, `follow_walk` | Only on request (the row "Search subfolders for …", Ctrl+Enter or Shift+Enter, or Enter with no match) a thread ran `bingux_files::search::walk`. |
-| Results | `follow_walk` → `chooser.rs` | The thread sent batches over an `mpsc` channel; a task polled every 60 ms, rebuilt a whole `Listing` of the matches (cloning every entry: about 1 ms per publish at 10,000 results, measured) and put it in a `State`. The file view showed it as a folder with a Location column. |
+| Step           | Where                                                   | What happened                                                                                                                                                                                                                                                                                            |
+| -------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Field          | `crates/ui/src/files/address_edit.rs`                   | The **address bar** was the search box. One text field took a path or a search. Ctrl+F or a letter typed on the list set `Find.scoped` and turned the bar's field into a search field with a chip `in <Folder>` inside it.                                                                               |
+| Path or search | `crates/files/src/search.rs` `classify`                 | Without touching the disk: text starting `/`, `~`, `./`, `../` or a scheme, or naming an entry of the folder, was a path; anything else a query.                                                                                                                                                         |
+| Model          | `crates/files/src/search.rs` `Query`                    | A `Query` was the trimmed text plus its whitespace-split words. No operators, no filters, no quotes. `Query::matches(name)` gave a `Tier`: exact, prefix, word start, substring, all words in any order, fuzzy (3+ letters in order, within a window of `2n + 4`). Case-insensitive, file **name** only. |
+| Stage 1        | `chooser.rs` `select_shown`                             | The loaded folder listing was filtered in memory on every keystroke (`rank`), sorted by tier; ties kept the person's sort. No disk read.                                                                                                                                                                 |
+| Stage 2        | `files/search.rs` `use_subfolder_search`, `follow_walk` | Only on request (the row "Search subfolders for …", Ctrl+Enter or Shift+Enter, or Enter with no match) a thread ran `bingux_files::search::walk`.                                                                                                                                                        |
+| Results        | `follow_walk` → `chooser.rs`                            | The thread sent batches over an `mpsc` channel; a task polled every 60 ms, rebuilt a whole `Listing` of the matches (cloning every entry: about 1 ms per publish at 10,000 results, measured) and put it in a `State`. The file view showed it as a folder with a Location column.                       |
 
 Details the question asked about:
 
@@ -34,7 +34,7 @@ Details the question asked about:
   directory read at a time.
 - **Hidden files.** Skipped (entries starting with `.` and names in the
   folder's `.hidden` file) unless "Show hidden files" was on, in the walk as
-  in the filter. Hidden *folders* were not entered.
+  in the filter. Hidden _folders_ were not entered.
 - **Indexing.** None. Nothing was kept between searches; every walk read the
   folders again.
 - **Cancellation.** A `Cancel` flag checked before every folder and every 32
@@ -44,7 +44,7 @@ Details the question asked about:
 - **Streaming.** Batches of 64 matches or 50 ms, whichever came first; the UI
   picked them up every 60 ms.
 - **Ranking.** By tier, for results as for the folder. Because
-  `select_shown` ranked the *whole* result list on every publish, rows
+  `select_shown` ranked the _whole_ result list on every publish, rows
   already on show **moved** as better matches arrived: the list reordered
   while it streamed, and the selection and scroll position had nothing stable
   to hold on to.
@@ -67,7 +67,7 @@ Details the question asked about:
 
 - **`Searchable`** (`crates/search/src/service.rs`, re-exported as
   `bingux_ui::search::Searchable`) is the trait an app implements to register
-  *app-owned structured records* (a name, a `Schema`, a `documents()`
+  _app-owned structured records_ (a name, a `Schema`, a `documents()`
   iterator) with the process-wide `SearchService`. Settings uses it for its
   pages and rows (`apps/settings/src/settings_index.rs`,
   `pages/search.rs`). `design/search.md` section 2 lists "full-text search
@@ -80,7 +80,7 @@ Details the question asked about:
 - **`bingux-searchd`** (`services/searchd`, commit `4e5e397` and
   earlier) is the Spotlight daemon. The shell talks to it over
   `$XDG_RUNTIME_DIR/bingux/search-v1.sock`. Its file provider
-  (`providers.rs`) reads a *fixed list of roots* (`config.rs` `file_roots`),
+  (`providers.rs`) reads a _fixed list of roots_ (`config.rs` `file_roots`),
   keeps its own cached file list (`index_files_with_progress`) and asks
   `plocate` for up to 256 paths per seed; it drops every hidden path. Results
   are launcher-sized (`ProviderResult { title, subtitle, icon, score }`).
@@ -114,12 +114,12 @@ just the flag "the bar is a search box".
 
 There were none in the search itself. What a person could reach:
 
-| Option | Where | What it did |
-| ------ | ----- | ----------- |
-| Show hidden files | view menu, Ctrl+H | Also decided whether the walk read hidden entries. |
-| Search build and dependency folders | view menu (lasted for the window) | Whether the walk entered `node_modules`, `target`, `.git` and seven more. |
-| Sort | column headers | Ignored while a search was on: the tier order replaced it. |
-| File type dropdown | toolbar, **file dialogs only** (`shows_filters` required `Host::Dialog`) | The chooser's own filter (`*.png`, `image/*`); the walker honoured it. Not shown in the Files app. |
+| Option                              | Where                                                                    | What it did                                                                                        |
+| ----------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| Show hidden files                   | view menu, Ctrl+H                                                        | Also decided whether the walk read hidden entries.                                                 |
+| Search build and dependency folders | view menu (lasted for the window)                                        | Whether the walk entered `node_modules`, `target`, `.git` and seven more.                          |
+| Sort                                | column headers                                                           | Ignored while a search was on: the tier order replaced it.                                         |
+| File type dropdown                  | toolbar, **file dialogs only** (`shows_filters` required `Host::Dialog`) | The chooser's own filter (`*.png`, `image/*`); the walker honoured it. Not shown in the Files app. |
 
 Nothing offered type, date, size, name matching, case or where to look, and
 nothing in the interface said there were options at all: no search button,
@@ -127,28 +127,27 @@ no menu, no hint. Ctrl+F or typing was the only way in.
 
 # Part 2: what replaces it
 
-
 ## 2.1 Parts
 
-| Layer | Where | What |
-| ----- | ----- | ---- |
-| Query model | `crates/files/src/find/query.rs` | Typed `Query { terms, filters }`; `parse`, `parse_checked`, `Display`; `split_pending` (a `key:value` still being typed). Round trip tested on 20,000 random queries and 30,000 random strings. |
-| Matcher | `find/matcher.rs` | `Matcher::new(&Query)`; name tiers (exact, prefix, word, substring, words, fuzzy), `match:starts|exact|regex`, `-word`, `name:` globs, `ext:`, `type:`, `size:`, `modified:` (the person's local day, via `localtime_r`), `hidden:`, `case:`; `Rank` = tier, penalty, depth. |
-| Index | `find/index.rs` | `NameIndex`: the names under home in a `bingux_search::Index` (searchable `name`; filterable `ext`, `kind`, `under`). Crawled on a nice'd thread, built aside and swapped, at most 500,000 names, stale after 5 minutes. No sizes or dates: a hit is read from disk when returned. |
-| Walk | `find/walk.rs` | The old walker, over several roots, with the matcher and a `known` set. |
-| Engine | `find/engine.rs` | `run(plan, cancel, emit)`: index answer first (verified on disk, ranked, one batch), then the walk skipping what was sent. Cancel stops between index hits and within 32 entries of the walk. |
-| Scope, history | `find/scope.rs`, `find/history.rs` | Scope roots; eight recent searches in `$XDG_STATE_HOME/bingux/files/recent-searches`. |
-| UI | `crates/ui/src/files/search.rs`, `search_bar.rs`, `search_filters.rs`, `states.rs`, `chooser.rs` | `Find` state, `use_search_run`, the bar, the Filters panel, the no-results state, `select_shown`. The address bar is path-only again. |
+| Layer          | Where                                                                                                  | What                                                                                                                                                                                                                                                                               |
+| -------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Query model    | `crates/files/src/find/query.rs`                                                                       | Typed `Query { terms, filters }`; `parse`, `parse_checked`, `Display`; `split_pending` (a `key:value` still being typed). Round trip tested on 20,000 random queries and 30,000 random strings.                                                                                    |
+| Matcher        | `find/matcher.rs`                                                                                      | `Matcher::new(&Query)`; name tiers (exact, prefix, word, substring, words, fuzzy), `match:starts                                                                                                                                                                                   | exact | regex`, `-word`, `name:`globs,`ext:`, `type:`, `size:`, `modified:`(the person's local day, via`localtime_r`), `hidden:`, `case:`; `Rank` = tier, penalty, depth. |
+| Index          | `find/index.rs`                                                                                        | `NameIndex`: the names under home in a `bingux_search::Index` (searchable `name`; filterable `ext`, `kind`, `under`). Crawled on a nice'd thread, built aside and swapped, at most 500,000 names, stale after 5 minutes. No sizes or dates: a hit is read from disk when returned. |
+| Walk           | `find/walk.rs`                                                                                         | The old walker, over several roots, with the matcher and a `known` set.                                                                                                                                                                                                            |
+| Engine         | `find/engine.rs`                                                                                       | `run(plan, cancel, emit)`: index answer first (verified on disk, ranked, one batch), then the walk skipping what was sent. Cancel stops between index hits and within 32 entries of the walk.                                                                                      |
+| Scope, history | `find/scope.rs`, `find/history.rs`                                                                     | Scope roots; eight recent searches in `$XDG_STATE_HOME/bingux/files/recent-searches`.                                                                                                                                                                                              |
+| UI             | `crates/ui/src/files/search.rs`, `omnibox.rs`, `omnibox_model.rs`, `crates/ui/src/controls/omnibox.rs` | `Find` (scope and filters), `use_search_run`, the location field and its card (scope and filter chips, results), the `Omnibox` control. There is no search bar, no Filters panel and no in-list result view: the card is where a search is made and shown.                         |
 
 ## 2.2 Streaming and stability
 
 A walk produces results in discovery order and a consumer cannot know the best
-match is still to come, so ranking while streaming moves rows (what the old
-list did). Now rows are appended in arrival order while the search runs, the
-index's batch (already in relevance order) comes first, and the list is put in
-the chosen order once at the end. The bar's boxes do not change size while
-results arrive (`nothing_around_the_list_moves_while_results_stream_in`, 4,000
-files, 30 frames).
+match is still to come, so ranking while streaming moves rows. Rows are
+appended in arrival order while the search runs and the index's batch (already
+in relevance order) comes first. The card's height follows what it holds over
+150 ms, so streamed rows make it grow a little at a time; what is under the card
+never moves (`motion_stress::omnibox`: the line under the field is constant on
+every frame of an open, a close, and rows streaming in).
 
 ## 2.3 What the index is and is not
 
@@ -160,12 +159,12 @@ found by the walk and a file removed is dropped when read.
 
 ## 2.4 Measured (100,000 files, 5,321 folders, tmpfs, warm, release)
 
-| | Walk only | With index ready |
-| - | - | - |
-| first result, a common word | 20 to 27 ms | 7 to 13 ms |
-| complete (10,000 results) | 200 to 300 ms | 215 to 275 ms |
-| a word that matches nothing | 150 to 220 ms | 160 to 240 ms |
-| near miss (`reprot`) | only fuzzy hits | 1,000 from the index in 12 ms, then the walk |
+|                             | Walk only       | With index ready                             |
+| --------------------------- | --------------- | -------------------------------------------- |
+| first result, a common word | 20 to 27 ms     | 7 to 13 ms                                   |
+| complete (10,000 results)   | 200 to 300 ms   | 215 to 275 ms                                |
+| a word that matches nothing | 150 to 220 ms   | 160 to 240 ms                                |
+| near miss (`reprot`)        | only fuzzy hits | 1,000 from the index in 12 ms, then the walk |
 
 Index build: 105,320 names in 2.3 s on one nice'd thread; the process held 104 MB.
 On tmpfs with a warm cache the walk is already fast, so the index's gain here is
@@ -176,26 +175,26 @@ modest; it matters on a cold disk or a large home, which was not measured.
 - **Not on the searchd path, by decision.** Files neither queries
   `bingux-searchd` nor publishes its index to it, and registers no `Searchable`.
   Evidence, both directions:
-  - *Files asking searchd*: the shell protocol's request is `query` with a
-    `limit: u8` and no scope (`services/searchd/src/protocol.rs`); its file
-    provider reads `file_roots` from config (at most 32), takes up to 256 paths
-    per `plocate` seed and drops every path with a hidden component
-    (`providers.rs` `query_os_index`). It cannot answer "below this folder,
-    hidden included, up to 10,000". Doing it would need a protocol v2 with a
-    scope and paging; until then searchd would give an incomplete answer that
-    looks complete.
-  - *searchd asking Files* (one index for both): `app_search` only takes hits
-    that carry a `uri` and a `title` (`app_search.rs`), so every document would
-    grow by both (about 100 bytes of the 280 per document measured in
-    `design/search.md`), the index would have to be `external` (`design/search.md`
-    section 8.6: nothing is exposed by default, and a listing of every file name
-    under home is exactly what a person must opt in to), a `bingux.search-app`
-    manifest and a served socket (`bingux_search::ipc::serve`) are needed, and
-    the index only exists after a first Files search, so the launcher would
-    see nothing in a fresh session. The launcher already has its own file index
-    (walker + plocate). Sharing is worth it only with a persisted snapshot
-    (`design/search.md` 8.7) and an opt-in; neither is built.
-  The names index is in this process only and is not written to disk.
+    - _Files asking searchd_: the shell protocol's request is `query` with a
+      `limit: u8` and no scope (`services/searchd/src/protocol.rs`); its file
+      provider reads `file_roots` from config (at most 32), takes up to 256 paths
+      per `plocate` seed and drops every path with a hidden component
+      (`providers.rs` `query_os_index`). It cannot answer "below this folder,
+      hidden included, up to 10,000". Doing it would need a protocol v2 with a
+      scope and paging; until then searchd would give an incomplete answer that
+      looks complete.
+    - _searchd asking Files_ (one index for both): `app_search` only takes hits
+      that carry a `uri` and a `title` (`app_search.rs`), so every document would
+      grow by both (about 100 bytes of the 280 per document measured in
+      `design/search.md`), the index would have to be `external` (`design/search.md`
+      section 8.6: nothing is exposed by default, and a listing of every file name
+      under home is exactly what a person must opt in to), a `bingux.search-app`
+      manifest and a served socket (`bingux_search::ipc::serve`) are needed, and
+      the index only exists after a first Files search, so the launcher would
+      see nothing in a fresh session. The launcher already has its own file index
+      (walker + plocate). Sharing is worth it only with a persisted snapshot
+      (`design/search.md` 8.7) and an opt-in; neither is built.
+      The names index is in this process only and is not written to disk.
 - **No file contents search.** The option is omitted, not disabled.
 - **No saved searches** (a places entry would need a new place kind). Recent
   searches exist.

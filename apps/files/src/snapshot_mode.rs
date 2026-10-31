@@ -20,7 +20,7 @@ use bingux_ui::snapshot::Snapshot;
 use bingux_ui::style::{Paint, Tw, bg, h_full, w_full};
 use freya::prelude::*;
 
-use crate::{app, target};
+use crate::app;
 
 /// The window size when `BINGUX_FILES_SNAPSHOT_SIZE` is not set.
 const SIZE: (f32, f32) = (1100.0, 760.0);
@@ -33,7 +33,7 @@ pub fn run(dir: &str, folder: Option<&str>) {
             Some((w.trim().parse().ok()?, h.trim().parse().ok()?))
         })
         .unwrap_or(SIZE);
-    let address = target::normalise(OsStr::new(folder.unwrap_or("~")));
+    let address = bingux_ui::files::launch::normalise(OsStr::new(folder.unwrap_or("~")));
     let location = Location::parse(&address).unwrap_or_else(|| {
         eprintln!("[snapshot] not a location: {address}");
         std::process::exit(2);

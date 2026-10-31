@@ -19,8 +19,6 @@ use std::rc::Rc;
 
 use freya::prelude::Area;
 
-use super::view::Rows;
-
 /// Who a record belongs to: the id of a tab of the Files app, or 0 for a
 /// dialog, which has one view.
 pub(super) type Owner = u64;
@@ -113,7 +111,10 @@ pub(super) fn unregister(token: u64) {
 pub(super) fn flush(owner: Owner) {
     // Called outside the borrow: recording writes to the memory.
     let records: Vec<Flush> = LIVE.with_borrow(|live| {
-        live.iter().filter(|(_, other, _)| *other == owner).map(|(_, _, record)| record.clone()).collect()
+        live.iter()
+            .filter(|(_, other, _)| *other == owner)
+            .map(|(_, _, record)| record.clone())
+            .collect()
     });
     for record in records {
         record();
@@ -188,73 +189,9 @@ pub(super) fn measure(owner: Owner, change: impl FnOnce(&mut Measured)) {
     });
 }
 
-/// The search a view was last shown with: its text, and whether the rows are
-/// results from the subfolders.
-pub(super) type SearchKey = Option<(String, bool)>;
-
-/// Decides when a search sends the list back to the top: when the search
-/// changes and the rows it shows change with it. A search that keeps its text
-/// while results stream in, and one whose new text leaves the very same rows,
-/// keep the scroll where it is.
-pub(super) struct SearchTop {
-    key: SearchKey,
-    rows: Rows,
-}
-
-impl SearchTop {
-    pub fn new(key: SearchKey, rows: Rows) -> Self {
-        Self { key, rows }
-    }
-
-    /// Note what this render shows. True when the list should go to the top.
-    pub fn moves(&mut self, key: SearchKey, rows: &Rows) -> bool {
-        let searched = self.key != key;
-        let moved = searched && !same_rows(&self.rows, rows);
-        if searched {
-            self.key = key;
-        }
-        self.rows = rows.clone();
-        moved
-    }
-}
-
-/// Whether two sets of rows are the same files in the same order.
-fn same_rows(a: &Rows, b: &Rows) -> bool {
-    if std::sync::Arc::ptr_eq(&a.listing, &b.listing) && std::sync::Arc::ptr_eq(&a.order, &b.order) {
-        return true;
-    }
-    a.len() == b.len() && (0..a.len()).all(|row| a.entry(row).path == b.entry(row).path)
-}
-
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
-    use bingux_files::{Entry, Kind, Listing};
-
     use super::*;
-
-    fn rows(names: &[&str]) -> Rows {
-        let mut listing = Listing::new("/folder");
-        for name in names {
-            listing.entries.push(Entry::named(
-                PathBuf::from("/folder").join(name),
-                (*name).to_string(),
-                Kind::File,
-                false,
-                false,
-            ));
-        }
-        let order = (0..names.len()).collect();
-        Rows {
-            listing: Arc::new(listing),
-            order: Arc::new(order),
-        }
-    }
-
-    fn key(text: &str, deep: bool) -> SearchKey {
-        Some((text.to_string(), deep))
-    }
 
     #[test]
     fn a_tab_returns_to_its_own_place_in_a_folder_two_tabs_share() {
@@ -300,43 +237,6 @@ mod tests {
             came_from(2, Path::new("/home/b")),
             Some(PathBuf::from("/home/b/inner"))
         );
-    }
-
-    #[test]
-    fn results_streaming_in_under_the_same_text_keep_the_scroll() {
-        let mut top = SearchTop::new(key("re", true), rows(&["report"]));
-        assert!(!top.moves(key("re", true), &rows(&["report", "readme"])));
-        assert!(!top.moves(key("re", true), &rows(&["report", "readme", "rest"])));
-    }
-
-    #[test]
-    fn a_new_text_that_changes_the_rows_goes_to_the_top() {
-        let mut top = SearchTop::new(None, rows(&["a", "b", "c"]));
-        assert!(top.moves(key("a", false), &rows(&["a"])));
-        assert!(top.moves(key("ab", false), &rows(&["ab"])));
-        // Clearing the search brings every file back.
-        assert!(top.moves(None, &rows(&["a", "b", "c"])));
-    }
-
-    #[test]
-    fn a_new_text_that_leaves_the_same_rows_keeps_the_scroll() {
-        let mut top = SearchTop::new(key("r", false), rows(&["report", "readme"]));
-        assert!(!top.moves(key("re", false), &rows(&["report", "readme"])));
-    }
-
-    #[test]
-    fn rows_are_compared_by_file_not_by_position() {
-        let mut top = SearchTop::new(key("a", true), rows(&["one", "two"]));
-        // Both lists are 0..2, but they hold other files.
-        assert!(top.moves(key("b", true), &rows(&["three", "four"])));
-    }
-
-    #[test]
-    fn the_rows_streamed_since_the_last_render_are_what_a_new_text_is_compared_with() {
-        let mut top = SearchTop::new(key("re", true), rows(&["report"]));
-        assert!(!top.moves(key("re", true), &rows(&["report", "readme"])));
-        // The new text shows the two files already on screen.
-        assert!(!top.moves(key("rea", true), &rows(&["report", "readme"])));
     }
 }
 
