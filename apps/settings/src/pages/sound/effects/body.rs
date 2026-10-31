@@ -68,7 +68,7 @@ impl Component for EffectsBody {
                 hstack(S2)
                     .tw_layout(&[items(Align::Center)])
                     .child(switch(enabled, move |on: bool| fx.set_enabled(on)))
-                    .child(caption("Effects")),
+                    .maybe_child((!is_compact()).then(|| caption("Effects"))),
             )
             .child(tabs)
             .child(presets::menu(fx, &data));

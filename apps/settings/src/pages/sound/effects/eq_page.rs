@@ -28,6 +28,20 @@ pub(super) struct EqPage {
     pub mid_side: bool,
 }
 
+/// A frequency in the room of a band's strip: 60, 250, 1k, 8k, 15k.
+fn short_hz(hz: f64) -> String {
+    if hz >= 1000.0 {
+        let k = hz / 1000.0;
+        if (k - k.round()).abs() < 0.05 {
+            format!("{k:.0}k")
+        } else {
+            format!("{k:.1}k")
+        }
+    } else {
+        format!("{hz:.0}")
+    }
+}
+
 fn db_of(linear: f64) -> f64 {
     20.0 * linear.max(1e-4).log10()
 }
@@ -131,8 +145,8 @@ impl Component for EqPage {
                             .child(caption(format!("{}", index + 1))),
                     )
                     .child(strip_fader)
-                    .child(caption(Unit::Hz.format(frequency)))
-                    .child(caption(format!("{:+.0} dB", gain_db))),
+                    .child(caption(short_hz(frequency)))
+                    .child(caption(format!("{:+.0}", gain_db))),
             );
         }
 

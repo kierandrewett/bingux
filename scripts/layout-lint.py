@@ -125,6 +125,7 @@ POPUPS = [
     ("about-rename", "about", "click-text Rename"),
     ("users-password", "users", "click-text Change password"),
     ("sound-test", "sound", "click-text Test speakers"),
+    ("sound-effects", "sound", "click-text Effects"),
     ("ethernet-new-profile", "network/ethernet", "click-text Add profile…"),
 ]
 # Popups that a snapshot opens itself (BINGUX_SETTINGS_SNAPSHOT_OPEN).
@@ -198,6 +199,12 @@ RULE_UNMAPPED = {
 # the node's description, and why the box is meant to look like this. An entry
 # that matches nothing is reported, so the list cannot rot.
 ALLOWED: list[dict] = [
+    {
+        "rule": "dead-space",
+        "capture": r"^popup-sound-effects",
+        "where": r'Dialog #\d+ "Effects"',
+        "why": "The effects popup is a fixed-size task (a stack beside a page, each scrolling on its own), so with no effects yet the stack and the page are shorter than the panel; the panel does not shrink to its content.",
+    },
     {
         "rule": "value-ellipsised",
         "capture": r"^(taxonomy:files_|files)",
@@ -310,7 +317,7 @@ ALLOWED: list[dict] = [
         "rule": "wrapped",
         "capture": r"^taxonomy:files_file-icons",
         "where": r"text #\d+ \"",
-        "why": "A specimen caption under an icon in the 16 and 20 px rows of the file-icons page: the tile is as wide as the icon it shows, so a kind's name (\"Data\") breaks in it. The caption names the specimen and is not copy that must fit.",
+        "why": 'A specimen caption under an icon in the 16 and 20 px rows of the file-icons page: the tile is as wide as the icon it shows, so a kind\'s name ("Data") breaks in it. The caption names the specimen and is not copy that must fit.',
     },
     {
         "rule": "wrapped",
@@ -360,10 +367,26 @@ def allowed(finding: dict, capture: str) -> dict | None:
 # ALLOWED entry for the rule "parity", matched on the pages and on "Class/name".
 PARITY_SCALE_MAX = 1.4
 PARITY_HELD: list[tuple[str, str, str]] = [
-    ("FileRow", r"^(padding-(left|right)|icon-left)$", "FILE_ROW_INSET is (8, 8): a file's icon sits the same distance from the list's edge at every width, only the rows' height changes (PH-03)."),
-    ("AlertDialog", r"^padding-", "DIALOG_INSET is 12 at every density, so a button's radius is the card's less the inset (SP-18, BR-01)."),
-    (r".*", r"^radius$", "Radii are held equal on phone and desktop: nothing is rounder by accident (design/rules.md, 'Held equal on phone and desktop')."),
-    ("HeaderBar", r"^padding-right$", "The header rail's end inset is S2 (8 px) at every density; its start inset depends on whether a leading control (Back) is there."),
+    (
+        "FileRow",
+        r"^(padding-(left|right)|icon-left)$",
+        "FILE_ROW_INSET is (8, 8): a file's icon sits the same distance from the list's edge at every width, only the rows' height changes (PH-03).",
+    ),
+    (
+        "AlertDialog",
+        r"^padding-",
+        "DIALOG_INSET is 12 at every density, so a button's radius is the card's less the inset (SP-18, BR-01).",
+    ),
+    (
+        r".*",
+        r"^radius$",
+        "Radii are held equal on phone and desktop: nothing is rounder by accident (design/rules.md, 'Held equal on phone and desktop').",
+    ),
+    (
+        "HeaderBar",
+        r"^padding-right$",
+        "The header rail's end inset is S2 (8 px) at every density; its start inset depends on whether a leading control (Back) is there.",
+    ),
 ]
 # The insets compared: the ones that are one token, not a width.
 PARITY_METRICS = re.compile(
@@ -426,7 +449,10 @@ def parity_findings(results: list[dict]) -> list[dict]:
                 "node": 0,
                 "target": metric,
                 "path": "",
-                "what": bad + f"; on {len(keys)} page(s): " + ", ".join(sorted(keys)[:4]) + (" ..." if len(keys) > 4 else ""),
+                "what": bad
+                + f"; on {len(keys)} page(s): "
+                + ", ".join(sorted(keys)[:4])
+                + (" ..." if len(keys) > 4 else ""),
                 "numbers": {"desktop": desktop, "phone": phone},
                 "capture": "parity:" + ",".join(sorted(keys)),
             }
@@ -441,9 +467,7 @@ def build() -> None:
         check=True,
         env=env,
     )
-    subprocess.run(
-        ["cargo", "build", "--manifest-path", str(TAXONOMY / "Cargo.toml")], check=True, env=env
-    )
+    subprocess.run(["cargo", "build", "--manifest-path", str(TAXONOMY / "Cargo.toml")], check=True, env=env)
     subprocess.run(
         ["cargo", "build", "--features", "snapshot", "--manifest-path", str(FILES / "Cargo.toml")],
         check=True,
@@ -568,7 +592,9 @@ def taxonomy_jobs(pages: list[str] | None = None) -> list[dict]:
 LONG_NAME = "Quarterly-financial-statements-and-board-report-for-the-2026-financial-year-final-v3-reviewed.pdf"
 LONG_DIR = "Photographs-from-the-summer-expedition-to-the-northern-coast-with-the-whole-family"
 LONG_LINK = "shortcut-to-the-shared-archive-of-scanned-documents-and-correspondence-2019-2026"
-LONG_TARGET = "/srv/archive/shared/departments/finance/audited-accounts/2026/quarter-three/scanned-originals/final-signed"
+LONG_TARGET = (
+    "/srv/archive/shared/departments/finance/audited-accounts/2026/quarter-three/scanned-originals/final-signed"
+)
 PROPERTIES = "key ctrl+a; wait 300; key alt+Return; wait 1400"
 
 
@@ -673,7 +699,10 @@ def main() -> int:
 
     def run_all(batch: list[dict]) -> None:
         with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
-            futures = [pool.submit(run_job, job, workdir, args.timeout * (30 if job["name"].startswith("taxonomy") else 1)) for job in batch]
+            futures = [
+                pool.submit(run_job, job, workdir, args.timeout * (30 if job["name"].startswith("taxonomy") else 1))
+                for job in batch
+            ]
             for future in concurrent.futures.as_completed(futures):
                 result = future.result()
                 results.append(result)
@@ -720,7 +749,9 @@ def main() -> int:
 
     used = {entry["why"] for finding in findings for entry in [allowed(finding, finding["capture"])] if entry}
     # An entry for the mirror check is only expected to match when it ran.
-    unused = [entry for entry in ALLOWED if entry["why"] not in used and (args.rtl or entry["rule"] != "direction-asymmetric")]
+    unused = [
+        entry for entry in ALLOWED if entry["why"] not in used and (args.rtl or entry["rule"] != "direction-asymmetric")
+    ]
     failures = [finding for finding in findings if not finding["allowed"]]
 
     by_rule = Counter(finding["rule"] for finding in failures)

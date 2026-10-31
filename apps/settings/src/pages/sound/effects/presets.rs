@@ -52,7 +52,15 @@ pub(super) fn menu(fx: Fx, data: &Loaded) -> Element {
         let current = current.clone();
         move |_| confirm_delete(fx, current.clone())
     }));
-    menu_button(format!("Preset: {current}"), items).into()
+    menu_button(
+        if is_compact() {
+            "Presets".to_string()
+        } else {
+            format!("Preset: {current}")
+        },
+        items,
+    )
+    .into()
 }
 
 /// Make `name` the preset in use and play it.

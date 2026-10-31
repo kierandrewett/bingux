@@ -430,6 +430,39 @@ impl SliderLine {
 impl From<SliderLine> for Element {
     fn from(line: SliderLine) -> Element {
         let on_moved = line.on_moved;
+        if is_compact() {
+            // A phone: the title on its own line, the track and readout under it.
+            let tokens = use_tokens();
+            return rect()
+                .tw(
+                    &tokens,
+                    &[flex_col(), gap(S2), w_full(), px(GUTTER), py(S3)],
+                )
+                .child(bingux_ui::typography::BODY.label(&tokens, line.title.clone()))
+                .child(
+                    rect()
+                        .tw(
+                            &tokens,
+                            &[flex_row(), items(Align::Center), gap(S3), w_full()],
+                        )
+                        .child(
+                            rect().width(Size::flex(1.0)).child(
+                                slider(line.value, move |value: f64| on_moved.call(value))
+                                    .fill()
+                                    .label(line.title),
+                            ),
+                        )
+                        .child(
+                            rect()
+                                .tw(
+                                    &tokens,
+                                    &[w(Dim::SliderValue), flex_row(), justify(Align::End)],
+                                )
+                                .child(caption(line.text)),
+                        ),
+                )
+                .into();
+        }
         row(line.title.clone())
             .trailing(
                 hstack(S3)
