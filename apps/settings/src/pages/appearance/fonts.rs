@@ -16,7 +16,7 @@ use super::{Loaded, reload, set_font};
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
     Group, Overlays, PageHead, Status, dropdown, menu_item, page_column, row, search_field,
-    skeleton_row, skeleton_row_subtitled, status, use_overlays, use_tokens,
+    skeleton_row, skeleton_row_slot, status, use_overlays, use_tokens,
 };
 use bingux_ui::prelude::use_router;
 use bingux_ui::style::*;
@@ -376,7 +376,7 @@ impl Component for FontPage {
         let mut rows: Vec<Element> = Vec::new();
         if !loaded {
             rows.push(skeleton_row());
-            rows.extend((0..PLACEHOLDER_ROWS).map(|_| skeleton_row_subtitled()));
+            rows.extend((0..PLACEHOLDER_ROWS).map(|_| skeleton_row_slot()));
         }
         if loaded && !searching && filter_key == FILTER_ALL {
             let pick = on_pick.clone();

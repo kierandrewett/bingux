@@ -30,17 +30,17 @@ use crate::pages::desktop::{
     preview::{Frame, Scene, framed, scene},
 };
 use crate::routes;
-use bingux_ui::prelude::use_router;
 use crate::system::{
     self, CommandError, background, background_then, optimistic, optimistic_then, which,
 };
 use crate::theme::{Scheme, SharedTokens, Tokens, accent_names, read_gsettings};
-use crate::ui::typography::{BODY, EMPHASIS};
 use crate::ui::files::{self, ChooserRequest, Filter, ViewMode};
+use crate::ui::typography::{BODY, EMPHASIS};
 use crate::ui::{
     Group, Icon, Overlays, PageHead, Status, Window, focus_stop, icon, menu_item, menu_separator,
     page_column, row, skeleton_shape, status, use_overlays, use_tokens, use_window,
 };
+use bingux_ui::prelude::use_router;
 use bingux_ui::style::*;
 use interface::{Interface, Setting, text_size_row, theme_group};
 
@@ -215,11 +215,7 @@ fn change(mut model: State<Option<Loaded>>, overlays: Overlays, setting: Setting
 /// even pitch. The selected one is ringed in the text colour and carries a
 /// check. Hovering shows the accent's name. A component of its own: its focus
 /// stop is a hook, and the page returns early while it loads.
-fn swatch(
-    name: &'static str,
-    selected: bool,
-    on_press: impl Into<EventHandler<()>>,
-) -> Element {
+fn swatch(name: &'static str, selected: bool, on_press: impl Into<EventHandler<()>>) -> Element {
     Swatch {
         name,
         selected,
@@ -437,7 +433,14 @@ impl Component for AppearancePage {
                         &[w_full(), h(Dim::ArrangementHeight), bg(Paint::Control)],
                     )),
                 ))
-                .child(skeleton_shape(&[2, 2, 3, 3, 1, 1]));
+                // The wallpaper group is drawn by the real picker, which has placeholder
+                // tiles of its own and needs nothing from the model to lay out: a grid of
+                // tiles is not something a skeleton of rows can stand in for. The groups under
+                // it are Font, Themes, Accent colour and Colour scheme.
+                .child(WallpaperPicker {
+                    current: String::new(),
+                })
+                .child(skeleton_shape(&[2, 2, 1, 1]));
         };
         let model_value = match loaded {
             Ok(value) => value,
@@ -477,7 +480,7 @@ impl Component for AppearancePage {
                         menu_item("Choose picture", move |_| {
                             choose_wallpaper(model, overlays, window)
                         })
-                            .icon(Icon::ImageGeneric),
+                        .icon(Icon::ImageGeneric),
                         menu_separator(),
                         menu_item("Use system wallpaper", move |_| {
                             set_wallpaper(model, overlays, None)
@@ -499,59 +502,59 @@ impl Component for AppearancePage {
                 ),
             ));
 
-        bingux_ui::stage::staged(page_column()
-            .child(PageHead::new())
-            .child(picture)
-            .child(WallpaperPicker {
-                current: model_value.wallpaper.clone(),
-            })
-            .child(
-                Group::titled("Font")
-                    .rows(
-                        model_value
-                            .interface
-                            .as_ref()
-                            .map(|interface| text_size_row(interface, on_setting)),
-                    )
-                    .row(
-                        row("Font")
-                            .value(font_name)
-                            .navigates()
-                            .on_press(move |_| router.open(routes::font())),
-                    ),
-            )
-            .maybe_child(
-                model_value
-                    .interface
-                    .as_ref()
-                    .map(|interface| Element::from(theme_group(interface, on_setting))),
-            )
-            .maybe_child(model_value.gsettings.then(|| {
-                Element::from(
-                    Group::titled("Accent colour").row(
-                        rect()
-                            .tw(&tokens, BOX_BODY)
-                            .tw(
-                                &tokens,
-                                &[
-                                    flex_row(),
-                                    wrap(S2),
-                                    justify(Align::Center),
-                                    items(Align::Center),
-                                    gap(S2),
-                                ],
-                            )
-                            .children(swatches),
-                    ),
-                )
-            }))
-            // The shell and this window are always dark; the scheme is what
-            // GTK applications and the portal follow, and it picks the
-            // accent variant.
-            .maybe_child(model_value.gsettings.then(|| {
-                Element::from(
-                    Group::titled("Colour scheme")
+        bingux_ui::stage::staged(
+            page_column()
+                .child(PageHead::new())
+                .child(picture)
+                .child(WallpaperPicker {
+                    current: model_value.wallpaper.clone(),
+                })
+                .child(
+                    Group::titled("Font")
+                        .rows(
+                            model_value
+                                .interface
+                                .as_ref()
+                                .map(|interface| text_size_row(interface, on_setting)),
+                        )
                         .row(
+                            row("Font")
+                                .value(font_name)
+                                .navigates()
+                                .on_press(move |_| router.open(routes::font())),
+                        ),
+                )
+                .maybe_child(
+                    model_value
+                        .interface
+                        .as_ref()
+                        .map(|interface| Element::from(theme_group(interface, on_setting))),
+                )
+                .maybe_child(model_value.gsettings.then(|| {
+                    Element::from(
+                        Group::titled("Accent colour").row(
+                            rect()
+                                .tw(&tokens, BOX_BODY)
+                                .tw(
+                                    &tokens,
+                                    &[
+                                        flex_row(),
+                                        wrap(S2),
+                                        justify(Align::Center),
+                                        items(Align::Center),
+                                        gap(S2),
+                                    ],
+                                )
+                                .children(swatches),
+                        ),
+                    )
+                }))
+                // The shell and this window are always dark; the scheme is what
+                // GTK applications and the portal follow, and it picks the
+                // accent variant.
+                .maybe_child(model_value.gsettings.then(|| {
+                    Element::from(
+                        Group::titled("Colour scheme").row(
                             rect()
                                 .tw(&tokens, BOX_BODY)
                                 .tw(&tokens, &[items(Align::Center)])
@@ -596,14 +599,15 @@ impl Component for AppearancePage {
                                         )),
                                 ),
                         ),
-                )
-            }))
-            .maybe_child((!model_value.gsettings).then(|| {
-                Element::from(status(Status::Info(
-                    "\"Accent colour\" and \"Colour scheme\" are not available on this system."
-                        .into(),
-                )))
-            })))
+                    )
+                }))
+                .maybe_child((!model_value.gsettings).then(|| {
+                    Element::from(status(Status::Info(
+                        "\"Accent colour\" and \"Colour scheme\" are not available on this system."
+                            .into(),
+                    )))
+                })),
+        )
     }
 }
 

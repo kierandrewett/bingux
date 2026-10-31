@@ -1110,7 +1110,7 @@ pub static ENTRIES: &[Entry] = &[
         name: "Skeleton",
         category: Category::Containers,
         page: "Feedback",
-        api: "skeleton() / skeleton_shape(&[rows per group]) / skeleton_rows(&[titles]) / skeleton_row() / skeleton_row_subtitled() / skeleton_caption()",
+        api: "skeleton() / skeleton_shape(&[rows per group]) / skeleton_rows(&[titles]) / skeleton_row() / skeleton_row_subtitled() / skeleton_row_slot() / skeleton_caption()",
         doc: "components",
         covers: &[
             "skeleton",
@@ -1118,6 +1118,7 @@ pub static ENTRIES: &[Entry] = &[
             "skeleton_rows",
             "skeleton_row",
             "skeleton_row_subtitled",
+            "skeleton_row_slot",
             "skeleton_caption",
         ],
         body: Body::States(containers::SKELETON),

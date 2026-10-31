@@ -52,8 +52,19 @@ pub(crate) const FIRST_ROWS: usize = 24;
 pub(crate) const MORE_ROWS: usize = 12;
 
 thread_local! {
+    /// The pages (by location) that had a stand-in on screen and have not been mounted since: the
+    /// next page that mounts there replaces the stand-in with its data landing, not a page that
+    /// slides in. See [`use_provisional`].
+    static STAND_INS: RefCell<std::collections::HashSet<String>> = RefCell::new(std::collections::HashSet::new());
     /// The height of each page, by location, the last time it was whole.
     static HEIGHTS: RefCell<HashMap<String, f32>> = RefCell::new(HashMap::new());
+}
+
+/// The page's own place: what [`PageLocation`] says, else where the router is.
+fn page_key() -> Option<String> {
+    try_consume_context::<PageLocation>()
+        .map(|place| place.0)
+        .or_else(|| crate::nav::router::try_router().map(|router| router.location().path_text()))
 }
 
 /// Whether staging is off (`BINGUX_NO_STAGE` is set).
@@ -123,6 +134,14 @@ impl PageFill {
 pub fn use_provisional(active: bool) {
     let fill = use_hook(try_consume_context::<PageFill>);
     let counted = use_hook(|| Rc::new(Cell::new(false)));
+    // A page that replaces this stand-in is the data landing in a page that is already on
+    // screen. It is mounted whole: staged a group a frame it would show the page's first
+    // groups under blank space where the stand-in was, and the rest popping in one by one.
+    use_hook(|| {
+        if active && let Some(key) = page_key() {
+            STAND_INS.with_borrow_mut(|marks| marks.insert(key));
+        }
+    });
     if let Some(fill) = &fill {
         if active && !counted.get() {
             fill.provisional.set(fill.provisional.get() + 1);
@@ -261,7 +280,22 @@ impl Component for Staged {
     fn render(&self) -> impl IntoElement {
         let total = self.children.len();
         let mut shown = use_state(|| FIRST);
-        let done = use_hook(|| Rc::new(Cell::new(false)));
+        let place = use_hook(page_key);
+        let replaces_stand_in = use_hook({
+            let place = place.clone();
+            move || place.is_some_and(|key| STAND_INS.with_borrow_mut(|marks| marks.remove(&key)))
+        });
+        // Marks left by stand-ins inside this page (a skeleton row in one of its groups) are not for
+        // the next page that mounts here.
+        use_drop({
+            let place = place.clone();
+            move || {
+                if let Some(key) = &place {
+                    STAND_INS.with_borrow_mut(|marks| marks.remove(key));
+                }
+            }
+        });
+        let done = use_hook(|| Rc::new(Cell::new(replaces_stand_in)));
         let known = use_hook(|| Rc::new(Cell::new(total)));
         known.set(total);
         // What the host of the page, if there is one, is told (see `provide_page`):

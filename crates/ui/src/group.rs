@@ -679,6 +679,19 @@ fn skeleton_line(tokens: &Tokens, kind: char) -> Element {
             )
             .child(bar(Dim::SkeletonValue))
             .into(),
+        // A list whose rows are mounted in slots of a fixed height (`Dim::RowSubtitle`, as
+        // the font list's are) is as tall as its slots, whatever its rows' text is.
+        'S' => rect()
+            .tw(tokens, ROW)
+            .tw(tokens, &[h(Dim::RowSubtitle)])
+            .child(
+                rect()
+                    .tw(tokens, &[flex_col(), gap(S1), w_flex()])
+                    .child(bar(Dim::SkeletonLabel))
+                    .child(bar(Dim::SkeletonValue)),
+            )
+            .child(bar(Dim::SkeletonValue))
+            .into(),
         _ => rect()
             .tw(tokens, ROW)
             .child(
@@ -723,25 +736,31 @@ impl Component for Skeleton {
 /// One row-sized placeholder for a group whose rows are not known yet, so the
 /// group keeps its place while its data loads.
 pub fn skeleton_row() -> Element {
-    SkeletonRow { subtitle: false }.into()
+    SkeletonRow { kind: '-' }.into()
 }
 
 /// As [`skeleton_row`], as tall as a row with a second line of text, for a list
 /// whose rows have a subtitle (a chosen zone's offset, a font's sample).
 pub fn skeleton_row_subtitled() -> Element {
-    SkeletonRow { subtitle: true }.into()
+    SkeletonRow { kind: '=' }.into()
+}
+
+/// As [`skeleton_row`], for a list whose rows are mounted in slots of a fixed height
+/// (`Dim::RowSubtitle`: the font list), so the placeholder is as tall as a slot.
+pub fn skeleton_row_slot() -> Element {
+    SkeletonRow { kind: 'S' }.into()
 }
 
 #[derive(PartialEq)]
 struct SkeletonRow {
-    subtitle: bool,
+    kind: char,
 }
 
 impl Component for SkeletonRow {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         crate::stage::use_provisional(true);
-        skeleton_line(&tokens, if self.subtitle { '=' } else { '-' })
+        skeleton_line(&tokens, self.kind)
     }
 }
 

@@ -9,6 +9,7 @@ use bingux_ui::style::*;
 use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 use freya::prelude::*;
 
+use super::loading::revealed;
 use crate::system::{self, CommandResult};
 use crate::theme::Tokens;
 use crate::ui::typography::{CAPTION, EMPHASIS, Ink, TITLE};
@@ -453,8 +454,8 @@ impl Component for AboutPage {
         };
         let loaded = model.read().clone();
         use_page_busy(loaded.is_none());
-        // Until the facts arrive every value is blank, and each line keeps its
-        // height, so nothing moves when the values fill in.
+        // Until the facts arrive every value is blank (and the page is hidden, see
+        // the end of this function).
         let arrived = loaded.is_some();
         let facts = loaded.unwrap_or_default();
         let name = shown
@@ -589,14 +590,23 @@ impl Component for AboutPage {
                 .into()
         });
 
-        bingux_ui::stage::staged(page_column()
-            .child(hero)
-            .child(section(
-                &tokens,
-                "System details",
-                Group::new(None).rows(details),
-            ))
-            .child(section(&tokens, "Storage", storage)))
+        // How many lines each value takes (the name, the model, a processor, a graphics
+        // card) is the machine's: on a phone they wrap, and a blank value cannot say how.
+        // So with no saved facts the page is hidden, and fades in at its final layout
+        // when they land; with saved facts it shows at once (see `loading::revealed`).
+        revealed(
+            bingux_ui::stage::staged(
+                page_column()
+                    .child(hero)
+                    .child(section(
+                        &tokens,
+                        "System details",
+                        Group::new(None).rows(details),
+                    ))
+                    .child(section(&tokens, "Storage", storage)),
+            ),
+            !arrived,
+        )
     }
 }
 

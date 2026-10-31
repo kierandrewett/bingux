@@ -774,31 +774,68 @@ the loaded page often differ in how many of them they draw.
 few subpages at desktop and 390x800 size with no saved values, the colour
 scheme pinned from the first frame, and every background result held back 1.5
 seconds (`BINGUX_UI_RESULT_DELAY_MS`, testing builds), records every frame and
-fails on three things: a row separator or card border that moves by 4 px or
-more between two frames of the load (every frame pair of a shift counts, not
-only its first and last, and a block of rules that jumps farther than the
-matcher's 160 px window is followed too), text that appears after the page's
-first paint with nothing at its place before (a pop-in), and a page that shows
-its error card because of a hook mismatch. Data that comes from the machine is
-replaced by fakes (`BINGUX_SETTINGS_FAKE_NETWORK`, `_MODEM`, `_DISPLAYS`,
-`_BLUETOOTH`, `_INPUT`; snapshot builds only), so a run says the same on every
-computer. Build with `--features snapshot` first.
+fails on three things:
+
+- a row separator or card border that moves by 4 px or more between two frames
+  of the load. Every frame pair of a shift counts (the biggest move of a shift
+  that takes several frames is in the middle), and a block of at least two rules
+  that jumps farther than the matcher's 160 px window is followed too. A rule
+  must be as wide as the page's column (90% of the widest rule of the frames):
+  the miniature desktop of the Desktop page and a segmented control's selection
+  bar are not card edges. The two edges of a slider's track, 4 to 8 px apart,
+  are a control, and are not paired with separators either;
+- text that appears after the page's first paint with nothing at its place
+  before (a pop-in). Text that lands on a card or a skeleton bar is a value, not
+  a row, and a scrollbar thumb is not text. Both are shown by a picture in
+  `tests/frame-walk.test.py`, which holds what the matcher reports and what it
+  does not;
+- a page that shows its error card because of a hook mismatch.
+
+Data that comes from the machine is replaced by fakes
+(`BINGUX_SETTINGS_FAKE_NETWORK`, `_MODEM`, `_DISPLAYS`, `_BLUETOOTH`, `_INPUT`;
+snapshot builds only), so a run says the same on every computer. Build with
+`--features snapshot` first.
 
 A placeholder must be what the machine reads when nothing has been changed
 (the schema default), not a guess: the Keyboard page drew a Num Lock sign-in
 row from a guess that the loaded page hid, and the page moved by 50 px when the
 read landed. A list's placeholder rows are as tall as the rows that replace
-them (`skeleton_row`, `skeleton_row_subtitled`, `skeleton_caption`), and a list
-that needs two reads (the time zones and the clock model) draws its rows only
-when both are in.
+them (`skeleton_row`, `skeleton_row_subtitled`, `skeleton_row_slot` for a list
+in fixed-height slots, `skeleton_caption`), and a list that needs two reads (the
+time zones and the clock model) draws its rows only when both are in. A grid
+(the wallpaper tiles) is drawn by its own component while the page loads, not
+by a skeleton of rows. A page whose lines wrap with the machine's own text (About
+on a phone) is hidden behind `loading::revealed` until its facts land.
 
 What sits under a page (the Related group) waits while a stand-in holds the
 page's place: a skeleton mounts `stage::use_provisional`, and a page hidden
 behind `loading::revealed` announces itself the same way, so the group is
 placed once, under the page that replaces the stand-in, and is not pushed down.
-`crates/ui/src/loading_shape_tests.rs` holds this at component level: the
-boxes of a placeholder list and of the loaded list are the same, and the
-Related group is absent while a stand-in is on screen.
+The page that replaces the stand-in mounts whole, not a group a frame, so the
+data landing does not show its first groups over blank space and the rest
+arriving one by one. `crates/ui/src/loading_shape_tests.rs` holds this at
+component level: the boxes of a placeholder list and of the loaded list are the
+same, the Related group is absent while a stand-in is on screen, and a page that
+replaces a stand-in is whole one frame after its data lands.
+
+## Scrolling through a subpage
+
+A page keeps its scroll offset through a push and Back. The scroll view cuts the
+offset on its controller to the content it has laid out, and a page that is built
+again is short for its first frames (it mounts a group a frame), so the offset was
+lost when the page was built for the slide. `stage` keeps the height of a page it
+has seen under the page's own location (`stage::PageLocation`, given by the split
+view to each page, the one that slides out included), and a page that is built
+again is as tall as it was. A wheel notch while a slide runs is taken by
+`slide_shield` and reaches neither page: the page keeps the offset it had until
+the slide is over.
+
+`crates/ui/src/shell/scroll_slide_tests.rs` holds this frame by frame, and
+`scripts/scroll-continuity.py` holds it on the real Network page
+(`settings-network-slide-*`): the page is at its offset after Back whatever the
+wheel did during either slide, and in every frame of both slides each page's text
+is the same distance down its page as when it settled, across by one slide offset
+shared by all of the page's texts.
 
 ## Profiling
 

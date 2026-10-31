@@ -69,8 +69,8 @@ pub mod prelude {
     pub use crate::files::{self, ChooserRequest, Chosen};
     pub use crate::group::{
         Group, Status, StatusBlock, action_row, caption, centered_caption, form_row, group_head,
-        heading, section_label, skeleton, skeleton_caption, skeleton_row, skeleton_row_subtitled,
-        skeleton_rows, skeleton_shape, status,
+        heading, section_label, skeleton, skeleton_caption, skeleton_row, skeleton_row_slot,
+        skeleton_row_subtitled, skeleton_rows, skeleton_shape, status,
     };
     pub use crate::icons::{Icon, icon};
     pub use crate::layout::{

@@ -264,3 +264,48 @@ fn what_sits_under_a_page_waits_while_a_skeleton_holds_the_pages_place() {
 fn what_sits_under_a_page_waits_while_the_page_is_hidden_and_loading() {
     under_a_stand_in(Stand::Hidden);
 }
+
+/// A page whose data lands: a hidden stand-in, then the loaded page as a staged column of groups.
+#[derive(PartialEq)]
+struct Landing;
+
+impl Component for Landing {
+    fn render(&self) -> impl IntoElement {
+        let tokens = crate::theme::provide_tokens();
+        provide_context(crate::stage::PageLocation("landing".into()));
+        let loaded = use_state(|| false);
+        let mut set = loaded;
+        crate::stage::use_provisional(!*loaded.read());
+        let content: Element = if *loaded.read() {
+            let column = (0..6).fold(page_column(), |column, group| {
+                column.child(Group::titled(&format!("Landed {group}")).rows(
+                    (0..2).map(|index| row(format!("Landed row {group}.{index}")).into_element()),
+                ))
+            });
+            crate::stage::staged(column).into()
+        } else {
+            rect().into()
+        };
+        rect()
+            .expanded()
+            .tw(&tokens, &[p(S4)])
+            .child(crate::shell::OverlayHost::new(
+                rect()
+                    .child(row("Land").on_press(move |_| set.set(true)))
+                    .child(content),
+            ))
+    }
+}
+
+#[test]
+fn a_page_that_replaces_a_stand_in_mounts_whole_not_a_group_a_frame() {
+    let mut shot = Snapshot::new(|| Landing.into(), (700.0, 1200.0));
+    shot.settle(Duration::from_millis(300));
+    assert!(shot.click_text("Land"), "the Land row is on screen");
+    shot.settle(FRAME);
+    assert!(
+        has(&mut shot, "Landed row 5.1"),
+        "one frame after the data landed the last group is still missing: {:?}",
+        labels(&mut shot)
+    );
+}
