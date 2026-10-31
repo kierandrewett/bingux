@@ -1125,6 +1125,15 @@ pub static ENTRIES: &[Entry] = &[
     },
     // ---- Navigation --------------------------------------------------------
     Entry {
+        name: "Master and detail",
+        category: Category::Navigation,
+        page: "Split view",
+        api: "master_detail(master, detail, show_detail, on_back).back_label(text): a list at the left and its page at the right; on a phone one at a time, the page pushed over the list with a Back button. For the inside of a popup or sheet; the second user is any settings popup that lists things (input sources, saved networks)",
+        doc: "components",
+        covers: &["MasterDetail", "master_detail", "MASTER_WIDTH"],
+        body: Body::States(navigation::MASTER_DETAIL),
+    },
+    Entry {
         name: "Navigation split view",
         category: Category::Navigation,
         page: "Split view",
@@ -1335,6 +1344,24 @@ pub static ENTRIES: &[Entry] = &[
         doc: "components",
         covers: &["LevelRow", "level_row", "slider_row"],
         body: Body::States(data::LEVEL_ROW),
+    },
+    Entry {
+        name: "Fader",
+        category: Category::Data,
+        page: "Meters and bars",
+        api: "fader(percent, on_moved).height(px).step(percent).label(text).enabled(bool): a vertical slider for a bank of levels (equalizer bands, mixer channels). Up and Down move it, Shift ten steps, Page Up and Page Down ten, Home and End the ends",
+        doc: "components",
+        covers: &["Fader", "fader"],
+        body: Body::States(data::FADER),
+    },
+    Entry {
+        name: "Level meter",
+        category: Category::Data,
+        page: "Meters and bars",
+        api: "level_meter(0..1).label(text): a bar for a sound level that turns to the warning colour above LEVEL_WARN. The caller measures the level",
+        doc: "components",
+        covers: &["LevelMeter", "level_meter", "LEVEL_WARN"],
+        body: Body::States(data::LEVEL_METER),
     },
     Entry {
         name: "Usage meter, bar and stat tile",

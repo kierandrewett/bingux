@@ -446,11 +446,26 @@ impl bingux_ui::search::Searchable for DemoWords {
         use bingux_ui::search::Document;
         let rows: [(&str, &str, &str, &str); 6] = [
             ("proxy", "Proxy", "network", "Network"),
-            ("wifi-password", "Wi-Fi password", "saved key passphrase", "Network"),
-            ("bluetooth", "Bluetooth", "devices pair headphones", "Devices"),
+            (
+                "wifi-password",
+                "Wi-Fi password",
+                "saved key passphrase",
+                "Network",
+            ),
+            (
+                "bluetooth",
+                "Bluetooth",
+                "devices pair headphones",
+                "Devices",
+            ),
             ("keyboard", "Keyboard layout", "input method", "Devices"),
             ("accent", "Accent colour", "theme", "Appearance"),
-            ("night-light", "Night light", "colour temperature", "Displays"),
+            (
+                "night-light",
+                "Night light",
+                "colour temperature",
+                "Displays",
+            ),
         ];
         Box::new(rows.into_iter().map(|(id, title, words, page)| {
             Document::new(id)
@@ -487,6 +502,29 @@ fn search_service_demo() -> Element {
         .into()
 }
 
-pub const SEARCH_SERVICE: &[Spec] = &[
-    Spec::live("Type: a typo (`blutooth`) still finds Bluetooth", search_service_demo),
-];
+pub const SEARCH_SERVICE: &[Spec] = &[Spec::live(
+    "Type: a typo (`blutooth`) still finds Bluetooth",
+    search_service_demo,
+)];
+
+pub const MASTER_DETAIL: &[Spec] = &[Spec::live("A list and its page", || {
+    let selected = use_state(|| 0_usize);
+    let names = ["Equalizer", "Compressor", "Limiter"];
+    let rows_for = move |current: usize| -> Element {
+        let mut selected = selected;
+        Group::new(None::<String>)
+            .rows(names.iter().enumerate().map(|(index, name)| {
+                row(*name)
+                    .selected(index == current)
+                    .on_press(move |_| selected.set(index))
+                    .into_element()
+            }))
+            .into_element()
+    };
+    let current = *selected.read();
+    let detail = Group::titled(names[current])
+        .row(row("Settings of this effect"))
+        .into_element();
+    master_detail(rows_for(current), detail, true, |()| {}).into_element()
+})
+.page(260.0)];

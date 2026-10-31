@@ -217,14 +217,6 @@ pub fn sound_applications() -> Target {
     PageId::Sound.location().join("applications").into()
 }
 
-/// The plugin chain and presets of the sound effects.
-pub fn sound_effects() -> Target {
-    PageId::Sound.location().join("effects").into()
-}
-/// One effect of the chain, for a phone: `token` is `output.<plugin id>`.
-pub fn sound_effect(token: &str, name: &str) -> Target {
-    Target::from(PageId::Sound.location().join("effects").join(token)).titled(name)
-}
 
 /// One input source, by its value in the configuration file, with its name
 /// for the header.
@@ -317,13 +309,7 @@ pub fn table() -> RouteTable {
         })
         .route("sound/applications")
         .title("Application volumes")
-        .page(|_| sound::ApplicationsPage.into())
-        .route("sound/effects")
-        .title("Effects")
-        .page(|_| sound::EffectsPage.into())
-        .route("sound/effects/:effect")
-        .title_with(|p| p.str("effect").split_once('.').map_or(p.str("effect"), |(_, id)| id).to_string())
-        .page(|p| sound::EffectPage { token: p.str("effect").to_string() }.into());
+        .page(|_| sound::ApplicationsPage.into());
 
     network_routes(table)
 }
@@ -648,7 +634,6 @@ mod tests {
         assert_eq!(canonical("displays/1"), "display/1");
         assert_eq!(canonical("user-accounts"), "users");
         assert_eq!(canonical("apps/default"), "applications/default");
-        assert_eq!(canonical("sound/effects"), "sound/effects");
         assert_eq!(legacy(&location("appearance?x=1#frag")).to_string(), format!("{SCHEME}://background?x=1#frag"));
     }
 
@@ -704,7 +689,6 @@ mod tests {
             "keyboard/shortcuts",
             "keyboard/input/xkb/us",
             "sound/applications",
-            "sound/effects",
         ] {
             let place = table.canonical(&location(text));
             assert!(table.resolve(&place).is_some(), "{text} names no page");

@@ -110,7 +110,13 @@ pub fn input_ports(direction: Direction, role: &Role) -> [String; 2] {
 /// The two ports sound leaves a stage by.
 pub fn output_ports(direction: Direction, role: &Role) -> [String; 2] {
     let node = names(direction, role).playback;
-    [format!("{node}:output_FL"), format!("{node}:output_FR")]
+    // A virtual microphone is a source, whose ports are named for capturing.
+    let prefix = if matches!((direction, role), (Direction::Input, Role::Tail)) {
+        "capture"
+    } else {
+        "output"
+    };
+    [format!("{node}:{prefix}_FL"), format!("{node}:{prefix}_FR")]
 }
 
 /// Why an effect has no stage.
@@ -562,7 +568,7 @@ mod tests {
         assert_eq!(names(Direction::Input, &Role::Tail).playback, INPUT_NODE);
         assert_eq!(
             output_ports(Direction::Input, &Role::Tail)[0],
-            "bingux_effects_input:output_FL"
+            "bingux_effects_input:capture_FL"
         );
         assert_eq!(
             input_ports(Direction::Input, &Role::Tail)[1],

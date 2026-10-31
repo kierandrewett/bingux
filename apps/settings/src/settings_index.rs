@@ -673,7 +673,6 @@ fn subpage(page: PageId, title: &str) -> Option<&'static str> {
         (PageId::DateTime, "Time zone") => "timezone",
         (PageId::Appearance, "Font") => "font",
         (PageId::Sound, "Application volumes") => "applications",
-        (PageId::Sound, "Effects") => "effects",
         (PageId::Applications, "Default applications" | "Open by default") => "default",
         _ => return None,
     })
