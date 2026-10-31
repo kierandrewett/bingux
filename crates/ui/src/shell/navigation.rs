@@ -443,6 +443,8 @@ impl Slide {
     ) -> Self {
         let start_x = match (motion, shown) {
             (Motion::Push, Some((Motion::Pop, x))) => x,
+            // A push that interrupts a predictive pop starts from where the screen has got to.
+            (Motion::Push, Some((Motion::Predictive, x))) => x.clamp(0.0, 1.0),
             (Motion::Push, _) => 1.0,
             (Motion::Pop, Some((Motion::Push, x))) => x,
             (Motion::Pop, _) => 0.0,
@@ -1087,6 +1089,13 @@ impl Component for NavigationSplitView {
                 let motion = motion_for(change.transition, narrow)
                     .filter(|motion| tokens.motion(motion.ms()) > 0);
                 let shown = memory.shown.take();
+                // A back that interrupts a push turns the push around from where the page is. A
+                // predictive pop starts from the page at rest, so the page would jump from the
+                // middle of its slide to its place and leave from there.
+                let motion = match (motion, shown) {
+                    (Some(Motion::Predictive), Some((Motion::Push, _))) => Some(Motion::Pop),
+                    (motion, _) => motion,
+                };
                 let outgoing_scroll = memory.scroll_for(change.from.id);
                 let started = *runs.peek();
                 memory.active = match (motion, memory.element.clone()) {
@@ -1390,6 +1399,8 @@ impl Component for NavigationSplitView {
             let built: Rect = match &active {
                 Some(slide) if slide.motion == Motion::Predictive => {
                     let pose = pose_of(slide.d0, slide.eased(time));
+                    // Where the lifted screen is, for a push that interrupts this pop.
+                    memory.borrow_mut().shown = Some((slide.motion, pose.current_dx));
                     let outgoing = slide
                         .outgoing_screen
                         .clone()
@@ -1411,6 +1422,20 @@ impl Component for NavigationSplitView {
                         Some(card),
                         &tokens,
                         rect().width(Size::fill()).height(Size::fill()).child(screen),
+                    ))
+                }
+                Some(slide) if slide.motion == Motion::Pop => {
+                    // A pop that turned a push around: the page it came from goes back out to the
+                    // right from where it was, over the screen beneath it.
+                    let x = slide.at(time);
+                    memory.borrow_mut().shown = Some((slide.motion, x));
+                    let outgoing = slide.outgoing_screen.clone().unwrap_or_else(|| rect().into());
+                    stage.child(at_rest(screen)).child(slide_frame(
+                        x * width,
+                        1.0,
+                        Some(card_amount(x)),
+                        &tokens,
+                        rect().width(Size::fill()).height(Size::fill()).child(outgoing),
                     ))
                 }
                 Some(slide) => {
