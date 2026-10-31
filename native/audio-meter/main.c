@@ -18,7 +18,7 @@ typedef struct Meter {
     uint32_t id, sink;
     pa_stream* stream;
     pa_proplist* properties;
-    bool muted, corked, active, removed;
+    bool muted, corked, active, removed, seen;
     float peak;
     uint64_t sampled, candidate, audible, retry_at;
     struct Meter* next;
@@ -28,6 +28,12 @@ static pa_mainloop* mainloop;
 static pa_context* context;
 static bool dirty = true;
 static volatile sig_atomic_t stopped;
+// The event stream alone cannot guarantee that a meter lives only as long as its
+// sink input: a reply to a change query can arrive after the remove event and
+// recreate the meter, and nothing then removes it. A sweep compares meters with
+// the server's own list and retires the ones it no longer lists.
+#define SWEEP_MS 5000
+static bool sweeping;
 
 static uint64_t now_ms(void) {
     struct timespec time;
@@ -114,8 +120,22 @@ static void sink_info(pa_context* ctx, const pa_sink_info* info, int eol, void* 
                                      PA_STREAM_DONT_MOVE) < 0)
         drop_stream(meter);
 }
+static void end_sweep(void) {
+    sweeping = false;
+    for (Meter* meter = meters; meter; meter = meter->next) {
+        if (meter->seen || meter->removed)
+            continue;
+        drop_stream(meter);
+        meter->removed = true;
+        meter->corked = true;
+    }
+}
 static void input_info(pa_context* ctx, const pa_sink_input_info* info, int eol, void* userdata) {
-    (void)userdata;
+    bool sweep = userdata != NULL;
+    if (eol > 0 && sweep)
+        end_sweep();
+    else if (eol && sweep)
+        sweeping = false;
     if (eol || !info)
         return;
     Meter* meter = find(info->index);
@@ -135,6 +155,7 @@ static void input_info(pa_context* ctx, const pa_sink_input_info* info, int eol,
     meter->muted = info->mute || (info->has_volume && pa_cvolume_max(&info->volume) == 0);
     meter->corked = info->corked;
     meter->removed = false;
+    meter->seen = true;
     if (meter->properties)
         pa_proplist_free(meter->properties);
     meter->properties = pa_proplist_copy(info->proplist);
@@ -249,6 +270,19 @@ static void tick(pa_mainloop_api* api, pa_time_event* event, const struct timeva
         }
         if (meter->removed && !meter->active)
             remove_meter(meter->id);
+    }
+    static uint64_t swept;
+    if (!sweeping && pa_context_get_state(context) == PA_CONTEXT_READY && now - swept >= SWEEP_MS) {
+        swept = now;
+        sweeping = true;
+        for (Meter* meter = meters; meter; meter = meter->next)
+            meter->seen = false;
+        pa_operation* operation =
+            pa_context_get_sink_input_info_list(context, input_info, (void*)&swept);
+        if (operation)
+            pa_operation_unref(operation);
+        else
+            sweeping = false;
     }
     if (dirty) {
         emit();
