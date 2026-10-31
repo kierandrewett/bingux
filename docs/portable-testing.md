@@ -1,5 +1,8 @@
 # Testing outside Gnoblin
 
+This page is for looking at the shell by hand in a nested Sway window. Automated tests of the desktop run on
+Gnoblin in a private sandbox; see [desktop testing](desktop-testing.md).
+
 Bingux's UI is Quickshell/QML. It can run on a Wayland compositor with
 `wlr-layer-shell`; it does not need Mutter to draw its panels. Stock GNOME does
 not expose this protocol. Run a nested compositor there instead.
