@@ -97,7 +97,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             clang pkg-config libwayland-dev libxkbcommon-dev libfontconfig-dev libfreetype-dev \
-            libegl-dev libgl-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev tesseract-ocr
+            libegl-dev libgl-dev libgles-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev tesseract-ocr
           python -m pip install pytest pillow numpy
       - name: Build Settings (snapshot mode) and its config backend
         run: |
