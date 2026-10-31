@@ -90,7 +90,10 @@ ShellPopup {
         id: menuSurface
         anchors.fill: parent
         contentWidth: width
-        contentHeight: menuColumn.implicitHeight + 12
+        // The card insets the body by `contentPadding` on every side and `popupHeight`
+        // already adds it, so the viewport is exactly the column's height. Extra height
+        // here made a menu that fits scroll by that much.
+        contentHeight: menuColumn.implicitHeight
 
         ColumnLayout {
             id: menuColumn
