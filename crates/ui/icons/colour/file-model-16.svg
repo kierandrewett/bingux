@@ -6,7 +6,7 @@
     <path d="M10.424 1.424C10.19 1.19 10 1.269 10 1.6L10 5L13.4 5C13.731 5 13.81 4.81 13.576 4.576Z" fill="#000" fill-opacity=".22"/>
     <clipPath id="page"><path d="M2 3C2 1.895 2.895 1 4 1L9.4 1C9.731 1 10.19 1.19 10.424 1.424L13.576 4.576C13.81 4.81 14 5.269 14 5.6L14 13C14 14.105 13.105 15 12 15L4 15C2.895 15 2 14.105 2 13Z"/></clipPath>
     <path d="M2 3C2 1.895 2.895 1 4 1L9.4 1C9.731 1 10.19 1.19 10.424 1.424L13.576 4.576C13.81 4.81 14 5.269 14 5.6L14 13C14 14.105 13.105 15 12 15L4 15C2.895 15 2 14.105 2 13Z" fill="none" stroke="#000" stroke-opacity="0.26" stroke-width="2" clip-path="url(#page)"/>
-    <rect x="4" y="8" width="5" height="5" fill="currentColor"/>
-    <polygon points="4,8 7,6 12,6 9,8" fill="currentColor" fill-opacity=".8"/>
-    <polygon points="9,8 12,6 12,11 9,13" fill="currentColor" fill-opacity=".6"/>
+    <polygon points="8,6 12,8 8,10 4,8" fill="currentColor"/>
+    <polygon points="4,9 8,11 8,14 4,12" fill="currentColor" fill-opacity=".55"/>
+    <polygon points="12,9 8,11 8,14 12,12" fill="currentColor" fill-opacity=".8"/>
 </svg>

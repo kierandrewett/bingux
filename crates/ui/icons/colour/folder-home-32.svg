@@ -10,6 +10,5 @@
     <path d="M3 15C3 12.791 4.791 11 7 11L25 11C27.209 11 29 12.791 29 15L29 24C29 26.209 27.209 28 25 28L7 28C4.791 28 3 26.209 3 24Z" fill="#fff" fill-opacity=".28"/>
     <path d="M3 15C3 12.791 4.791 11 7 11L25 11C27.209 11 29 12.791 29 15L29 24C29 26.209 27.209 28 25 28L7 28C4.791 28 3 26.209 3 24Z" fill="url(#lit)"/>
     <path d="M4.8 11L24.2 11L24.2 12L4.8 12Z" fill="#fff" fill-opacity=".6"/>
-    <polygon points="8,20 16,14 24,20" fill="currentColor"/>
-    <path d="M10 20H22V26H10ZM14 22H18V26H14Z" fill="currentColor" fill-rule="evenodd"/>
+    <path d="M16 11L26 20H24V26H19V21H13V26H8V20H6Z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="butt"/>
 </svg>

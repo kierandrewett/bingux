@@ -304,7 +304,7 @@ Item {
         spacing: 8
         SymbolicIcon {
             implicitSize: 16
-            source: AdwaitaIcons.source(header.iconName)
+            source: BinguxIcons.source(header.iconName)
             color: Theme.muted
         }
         Caption {

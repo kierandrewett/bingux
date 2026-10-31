@@ -1,3 +1,5 @@
-<svg viewBox="0 0 16 16">
-  <fork name="Copy" weight="bold" mode="exact"/>
+<svg viewBox="0 0 16 16" fill="none">
+  <rect x="2.75" y="2.75" width="7.5" height="7.5" rx="2" stroke="black" stroke-width="1.5"/>
+  <rect x="4" y="4" width="11" height="11" rx="3.75" fill="black" data-op="cut"/>
+  <rect x="5.75" y="5.75" width="7.5" height="7.5" rx="2" stroke="black" stroke-width="1.5"/>
 </svg>

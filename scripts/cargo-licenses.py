@@ -24,6 +24,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from crate_dirs import crate_dir  # noqa: E402
 
@@ -44,8 +45,8 @@ PROGRAMS = {
 
 
 # The RPM package that ships each program, and the licences that package adds
-# for files that are not Rust crates (the bundled Adwaita icons are LGPL and
-# CC-BY-SA; the project's own code is GPL).
+# for files that are not Rust crates (Quickshell, which the shell binary embeds, is
+# LGPL; the project's own code is GPL).
 PACKAGE_OF = {
     "bingux-settings": "bingux-settings",
     "bingux-files": "bingux-files",
@@ -58,7 +59,7 @@ PACKAGE_OF = {
     "bingux-dsp": "bingux-audio-effects",
 }
 OWN = ["GPL-3.0-or-later"]
-EXTRA = {"bingux": ["LGPL-3.0-or-later", "CC-BY-SA-3.0"]}
+EXTRA = {"bingux": ["LGPL-3.0-or-later"]}
 
 
 def normalise(expression):
@@ -167,9 +168,7 @@ def expression(licences):
     atoms = {term for licence in licences for term in terms(licence)}
     plain = {atom for atom in atoms if " OR " not in atom}
     kept = {
-        atom
-        for atom in atoms
-        if atom in plain or not any(option.strip() in plain for option in atom.split(" OR "))
+        atom for atom in atoms if atom in plain or not any(option.strip() in plain for option in atom.split(" OR "))
     }
     wrap = len(kept) > 1
     return " AND ".join(f"({atom})" if wrap and " OR " in atom else atom for atom in sorted(kept))

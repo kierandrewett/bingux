@@ -36,7 +36,7 @@ not ordered correctly by the Makefile generator). The Makefile sets
 - Environment defaults (set only when unset and when the path exists):
   `QML_IMPORT_PATH`, `PATH`, `XDG_DATA_DIRS`, `BINGUX_HELPER_DIR`,
   `BINGUX_CONFIG_BIN`, `BINGUX_SETTINGS_BIN`, `BINGUX_AUDIO_METER`,
-  `BINGUX_ADWAITA_ICON_DIR`, `BINGUX_PYTHON=python3`, `BINGUX_QUICKSHELL`
+  `BINGUX_PYTHON=python3`, `BINGUX_QUICKSHELL`
   (the binary itself) and `BINGUX_CONFIG_PATH` (the shell directory).
 - The core-dump limit is set to zero before Quickshell starts.
 

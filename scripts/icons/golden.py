@@ -130,10 +130,17 @@ class Drawing:
             self.shapes.append((polys, rule, alpha * (fill.opacity if fill.opacity is not None else 1.0)))
         self.polys = [poly for polys, _, _ in self.shapes for poly in polys]
 
-    def coverage(self, size: int) -> np.ndarray:
-        """Coverage in 0..1 at `size` px, the shapes laid over each other."""
+    def coverage(self, size: int, flat: bool = False) -> np.ndarray:
+        """Coverage in 0..1 at `size` px, the shapes laid over each other.
+
+        `flat` draws every shape at full opacity: the silhouette, which is what the size, centre, dot and
+        symmetry rules judge. A dimmed part (build.py `data-dim`, a path with `fill-opacity`) is part of the
+        silhouette: it is what makes a Wi-Fi arc without signal still an arc. Without `flat` the dim part is
+        as faint as it is drawn, which is what the raster hash and `pixels` record."""
         out = np.zeros((size, size))
         for polys, rule, alpha in self.shapes:
+            if flat:
+                alpha = 1.0
             if "evenodd" in rule:
                 total = sum(raster.coverage([poly], size, self.grid) for poly in polys)
                 cov = 1.0 - np.abs(1.0 - np.mod(total, 2.0))
@@ -182,7 +189,7 @@ def components(mask: np.ndarray) -> list[tuple[int, int, int, int, int]]:
 def measure(drawing: Drawing, file: Path) -> dict:
     """Every number of one icon: the golden record and what the rules read."""
     record: dict = {"grid": drawing.grid}
-    fine = drawing.coverage(FINE)
+    fine = drawing.coverage(FINE, flat=True)
     k = drawing.grid / FINE
     mask = fine > 0.5
     dots = []
@@ -192,13 +199,13 @@ def measure(drawing: Drawing, file: Path) -> dict:
             dots.append([round(w, 2), round(h, 2), round(area * k * k / (w * h), 2) if w * h else 0.0])
     record["dots"] = sorted(dots)
     record["components"] = len(components(mask))
-    area = float(drawing.coverage(FINE).sum()) * k * k
+    area = float(fine.sum()) * k * k
     perimeter = drawing.perimeter()
     record["stroke"] = round(2 * area / perimeter, 3) if perimeter else 0.0
     # The number of separate inked runs along the vertical through the middle: a Wi-Fi icon is its arcs and a dot.
     column = mask[:, FINE // 2 - 1 : FINE // 2 + 1].any(axis=1)
     record["runs"] = int(np.count_nonzero(column[1:] & ~column[:-1]) + int(column[0]))
-    asym = raster.asymmetry(drawing.coverage(drawing.grid and int(drawing.grid)))
+    asym = raster.asymmetry(drawing.coverage(drawing.grid and int(drawing.grid), flat=True))
     record["asym"] = [round(asym[0], 3), round(asym[1], 4)]
     native = int(drawing.grid)
     renditions = {}
@@ -206,9 +213,9 @@ def measure(drawing: Drawing, file: Path) -> dict:
         sizes = SIZES if drawing.grid == 16 else (native,)
         for size in sizes:
             px = size * scale
-            cov = drawing.coverage(px)
+            cov = drawing.coverage(px, flat=True)
             ink = raster.ink_extents(cov, grid=float(px))
-            gray = np.round(cov * 255).astype(np.uint8)
+            gray = np.round(drawing.coverage(px) * 255).astype(np.uint8)
             soft = raster.soft_edge_pixels(cov)
             renditions[f"{size}@{scale}"] = [
                 round(ink[0], 2),
@@ -220,7 +227,7 @@ def measure(drawing: Drawing, file: Path) -> dict:
                 hashlib.sha1(gray.tobytes()).hexdigest()[:10],
             ]
     record["r"] = renditions
-    cov16 = drawing.coverage(native)
+    cov16 = drawing.coverage(native)  # as drawn, dim parts faint: the record shows where a change is
     record["pixels"] = "".join("0123456789abcdef"[int(round(v * 15))] for v in cov16.reshape(-1))
     return record
 
@@ -258,7 +265,12 @@ def absolute_problems(measures: dict[str, dict], labels) -> list[str]:
             problems.append(f"[IC-01] {name}: the ink leaves its box ({ink})")
         row = labels.rows.get(short)
         glyph = row.glyph if row else ""
-        if name.endswith("-symbolic.svg") and (labels.policy.get(short) == "drawn" or " dot" in glyph):
+        # An icon whose arcs are cut by a slash has small arc ends that look like dots to this measure (`#exempt dots`).
+        if (
+            name.endswith("-symbolic.svg")
+            and short not in labels.exempt.get("dots", set())
+            and (labels.policy.get(short) == "drawn" or " dot" in glyph)
+        ):
             for w, h, fill in record["dots"]:
                 aspect = abs(w / h - 1.0) if h else 1.0
                 if not ROUND_FILL[0] <= fill <= ROUND_FILL[1] or aspect > ROUND_ASPECT:
@@ -266,11 +278,19 @@ def absolute_problems(measures: dict[str, dict], labels) -> list[str]:
                         f"[IC-05] {name}: a dot {w:.2f} x {h:.2f} grid units fills {fill:.2f} of its box; "
                         f"a dot is a circle ({ROUND_FILL[0]} to {ROUND_FILL[1]}, near square)"
                     )
-        if short.startswith("network-wireless") and short in ("network-wireless",) or short.startswith("network-wireless-signal-"):
+        if (
+            short.startswith("network-wireless")
+            and short in ("network-wireless",)
+            or short.startswith("network-wireless-signal-")
+        ):
             if record["runs"] > 3:
-                problems.append(f"[IC-03] {name}: {record['runs']} marks along its middle; a Wi-Fi icon has two arcs and a dot at most")
+                problems.append(
+                    f"[IC-03] {name}: {record['runs']} marks along its middle; a Wi-Fi icon has two arcs and a dot at most"
+                )
         if short in labels.symmetric and (record["asym"][0] > 0.15 or record["asym"][1] > 0.03):
-            problems.append(f"[AL-15] {name}: not its own mirror image (worst pixel {record['asym'][0]:.2f}, mean {record['asym'][1]:.3f})")
+            problems.append(
+                f"[AL-15] {name}: not its own mirror image (worst pixel {record['asym'][0]:.2f}, mean {record['asym'][1]:.3f})"
+            )
     return problems
 
 
@@ -285,7 +305,11 @@ def compare(now: dict, then: dict, name: str) -> tuple[list[str], int]:
         out.append(f"[IC-05] {name}: stroke weight {then['stroke']:.2f} -> {now['stroke']:.2f} grid units")
     if [d[:2] for d in now["dots"]] != [d[:2] for d in then["dots"]] and (
         len(now["dots"]) != len(then["dots"])
-        or any(abs(a[i] - b[i]) > (DOT_GRID if i < 2 else DOT_FILL) for a, b in zip(now["dots"], then["dots"]) for i in range(3))
+        or any(
+            abs(a[i] - b[i]) > (DOT_GRID if i < 2 else DOT_FILL)
+            for a, b in zip(now["dots"], then["dots"])
+            for i in range(3)
+        )
     ):
         out.append(f"[IC-05] {name}: dots {then['dots']} -> {now['dots']} (width, height, fill of its box)")
     elif any(abs(a[2] - b[2]) > DOT_FILL for a, b in zip(now["dots"], then["dots"])):
@@ -299,9 +323,13 @@ def compare(now: dict, then: dict, name: str) -> tuple[list[str], int]:
         names = ("left", "top", "right", "bottom")
         for i, edge in enumerate(names):
             if abs(rendition[i] - before[i]) > EDGE_PX * scale:
-                out.append(f"[IC-01] {name} at {key}: the ink's {edge} edge moved {before[i]:.2f} -> {rendition[i]:.2f} px")
+                out.append(
+                    f"[IC-01] {name} at {key}: the ink's {edge} edge moved {before[i]:.2f} -> {rendition[i]:.2f} px"
+                )
         if abs(rendition[4] - before[4]) > COVERAGE_REL * max(before[4], 1e-9):
-            out.append(f"[IC-05] {name} at {key}: coverage {before[4]:.3f} -> {rendition[4]:.3f} ({(rendition[4] / max(before[4], 1e-9) - 1) * 100:+.1f}%)")
+            out.append(
+                f"[IC-05] {name} at {key}: coverage {before[4]:.3f} -> {rendition[4]:.3f} ({(rendition[4] / max(before[4], 1e-9) - 1) * 100:+.1f}%)"
+            )
         if abs(rendition[5] - before[5]) > 4 + 0.2 * before[5]:
             out.append(f"[IC-01] {name} at {key}: {before[5]} -> {rendition[5]} soft edge pixels")
         if rendition[6] != before[6]:
@@ -310,7 +338,11 @@ def compare(now: dict, then: dict, name: str) -> tuple[list[str], int]:
     levels = [abs(int(x, 16) - int(y, 16)) for x, y in zip(a, b)]
     inked = max(1, sum(1 for x, y in zip(a, b) if x != "0" or y != "0"))
     if levels and (sum(levels) / 15 / inked > PIXELS_MEAN or max(levels) / 15 > PIXELS_MAX):
-        spots = [(i % int(math.sqrt(len(a))), i // int(math.sqrt(len(a)))) for i, v in enumerate(levels) if v / 15 > PIXELS_MAX][:3]
+        spots = [
+            (i % int(math.sqrt(len(a))), i // int(math.sqrt(len(a))))
+            for i, v in enumerate(levels)
+            if v / 15 > PIXELS_MAX
+        ][:3]
         out.append(
             f"[IC-05] {name}: the 16 px picture differs: {sum(levels) / 15 / inked:.1%} of its ink, worst pixel {max(levels)}/15"
             + (f" at {spots}" if spots else "")
@@ -323,10 +355,19 @@ def load_golden() -> dict:
 
 
 def write_golden(measures: dict[str, dict]) -> None:
-    lines = ["{", '"version": 1,', f'"sizes": {json.dumps(list(SIZES))},', f'"scales": {json.dumps(list(SCALES))},', '"icons": {']
+    lines = [
+        "{",
+        '"version": 1,',
+        f'"sizes": {json.dumps(list(SIZES))},',
+        f'"scales": {json.dumps(list(SCALES))},',
+        '"icons": {',
+    ]
     names = sorted(measures)
     for i, name in enumerate(names):
-        lines.append(f"{json.dumps(name)}: {json.dumps(measures[name], separators=(',', ':'), sort_keys=True)}" + ("," if i + 1 < len(names) else ""))
+        lines.append(
+            f"{json.dumps(name)}: {json.dumps(measures[name], separators=(',', ':'), sort_keys=True)}"
+            + ("," if i + 1 < len(names) else "")
+        )
     lines += ["}", "}"]
     GOLDEN.write_text("\n".join(lines) + "\n")
 
@@ -346,7 +387,9 @@ def sheet(path: Path, size: int, scale: int) -> None:
     draw = ImageDraw.Draw(image)
     for i, name in enumerate(names):
         cov = Drawing(ICONS / name).coverage(px)
-        tile = (cov[..., None] * np.array([235, 235, 240]) + (1 - cov[..., None]) * np.array([30, 30, 34])).astype(np.uint8)
+        tile = (cov[..., None] * np.array([235, 235, 240]) + (1 - cov[..., None]) * np.array([30, 30, 34])).astype(
+            np.uint8
+        )
         x, y = (i % columns) * cell + 6 * scale, (i // columns) * cell + 6 * scale
         image.paste(Image.fromarray(tile), (x, y))
     draw.text((4, 2), f"{len(names)} icons at {size} px x{scale}", fill=(150, 150, 160))
@@ -415,7 +458,9 @@ def main() -> int:
     parser.add_argument("--scale", type=int, default=2)
     parser.add_argument("--fixtures", action="store_true", help="only check the checks on their own drawings")
     parser.add_argument("--explain", help="every number of one icon beside its golden")
-    parser.add_argument("--verbose", action="store_true", help="also list icons whose pixels changed within the tolerances")
+    parser.add_argument(
+        "--verbose", action="store_true", help="also list icons whose pixels changed within the tolerances"
+    )
     args = parser.parse_args()
 
     problems = run_fixtures()
@@ -454,10 +499,14 @@ def main() -> int:
     drift = 0
     for name in sorted(set(measures) | set(golden)):
         if name not in golden:
-            failures.append(f"[IC-05] {name}: new icon, not in golden.json: look at it, then `scripts/icons/golden.py --update`")
+            failures.append(
+                f"[IC-05] {name}: new icon, not in golden.json: look at it, then `scripts/icons/golden.py --update`"
+            )
             continue
         if name not in measures:
-            failures.append(f"[IC-05] {name}: in golden.json but not in the set any more: `scripts/icons/golden.py --update`")
+            failures.append(
+                f"[IC-05] {name}: in golden.json but not in the set any more: `scripts/icons/golden.py --update`"
+            )
             continue
         found, changed = compare(measures[name], golden[name], name)
         failures += found
@@ -472,7 +521,9 @@ def main() -> int:
         f"{len(failures)} findings, {drift} icons with pixels that differ inside the tolerances"
     )
     if failures:
-        print("If the change is meant: look at the sheet (`golden.py --sheet /tmp/icons.png`), then `scripts/icons/golden.py --update`.")
+        print(
+            "If the change is meant: look at the sheet (`golden.py --sheet /tmp/icons.png`), then `scripts/icons/golden.py --update`."
+        )
     return 1 if failures else 0
 
 

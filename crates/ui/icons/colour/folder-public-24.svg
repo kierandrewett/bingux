@@ -6,6 +6,6 @@
     <path d="M2 11C2 9.343 3.343 8 5 8L19 8C20.657 8 22 9.343 22 11L22 18C22 19.657 20.657 21 19 21L5 21C3.343 21 2 19.657 2 18Z" fill="#fff" fill-opacity=".28"/>
     <path d="M2 11C2 9.343 3.343 8 5 8L19 8C20.657 8 22 9.343 22 11L22 18C22 19.657 20.657 21 19 21L5 21C3.343 21 2 19.657 2 18Z" fill="url(#lit)"/>
     <path d="M3.35 8L18.65 8L18.65 9L3.35 9Z" fill="#fff" fill-opacity=".6"/>
-    <circle cx="12" cy="13" r="2.5" fill="currentColor"/>
-    <path d="M8 20A4.5 4.5 0 0 1 17 20Z" fill="currentColor"/>
+    <circle cx="12" cy="12" r="3" fill="currentColor"/>
+    <path d="M6.5 19.5Q6.5 15.75 12.5 15.5Q17.75 15.5 17.5 19.5Z" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round" stroke-linecap="butt"/>
 </svg>

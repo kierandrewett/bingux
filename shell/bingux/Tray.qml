@@ -174,7 +174,7 @@ Item {
                     }
 
                     function iconSource(icon) {
-                        return trayButton.isSafeIconSource(icon) ? icon : AdwaitaIcons.source("application-x-executable", "application-x-executable");
+                        return trayButton.isSafeIconSource(icon) ? icon : BinguxIcons.source("application-x-executable", "application-x-executable");
                     }
 
                     implicitWidth: root.presentation?.custom ? customFace.implicitWidth + Theme.barPrimaryPadding * 2 : Theme.barIconTarget
@@ -202,7 +202,7 @@ Item {
                         presentation: Object.assign({}, root.presentation || {}, {
                             label: root.presentation?.labelOverridden ? root.presentation.label : trayButton.Accessible.name
                         })
-                        iconSource: root.presentation?.iconOverridden ? AdwaitaIcons.source(root.presentation.icon) : trayButton.iconSource(trayButton.modelData.icon)
+                        iconSource: root.presentation?.iconOverridden ? BinguxIcons.source(root.presentation.icon) : trayButton.iconSource(trayButton.modelData.icon)
                         colouredIcon: !root.presentation?.iconOverridden
                     }
 

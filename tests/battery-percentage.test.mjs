@@ -4,12 +4,25 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const source = readFileSync(new URL("../shell/bingux/SystemIndicators.qml", import.meta.url), "utf8");
-const method = source.slice(source.indexOf("    function batteryAccessibleName()"), source.indexOf("    function changeVolume("));
+const method = source.slice(
+    source.indexOf("    function batteryAccessibleName()"),
+    source.indexOf("    function changeVolume("),
+);
 
 test("battery summary converts Quickshell charge fractions and follows updates", () => {
-    const context = vm.createContext({ laptopBatteryAvailable: true, battery: { percentage: 0.8 }, UPower: { onBattery: true } });
+    const context = vm.createContext({
+        laptopBatteryAvailable: true,
+        battery: { percentage: 0.8 },
+        UPower: { onBattery: true },
+    });
     vm.runInContext(method, context);
-    for (const [fraction, expected] of [[0.8, 80], [0.426, 43], [0.01, 1], [0, 0], [1, 100]]) {
+    for (const [fraction, expected] of [
+        [0.8, 80],
+        [0.426, 43],
+        [0.01, 1],
+        [0, 0],
+        [1, 100],
+    ]) {
         context.battery.percentage = fraction;
         assert.equal(context.batteryAccessibleName(), `Battery ${expected} percent, discharging`);
     }
@@ -17,4 +30,36 @@ test("battery summary converts Quickshell charge fractions and follows updates",
     assert.equal(context.batteryAccessibleName(), "Battery 100 percent, charging");
     context.laptopBatteryAvailable = false;
     assert.equal(context.batteryAccessibleName(), "Battery status unavailable");
+});
+
+test("battery icon is the battery-level-N file for the charge, its state and presence", () => {
+    const state = { Unknown: 0, Charging: 1, Discharging: 2, Empty: 3, FullyCharged: 4 };
+    const context = vm.createContext({
+        laptopBatteryAvailable: true,
+        battery: { percentage: 0.8, state: state.Discharging },
+        UPowerDeviceState: state,
+    });
+    vm.runInContext(method, context);
+    for (const [fraction, level] of [
+        [0, 0],
+        [0.04, 0],
+        [0.05, 10],
+        [0.426, 40],
+        [0.45, 50],
+        [0.84, 80],
+        [0.85, 90],
+        [0.995, 100],
+        [1, 100],
+    ]) {
+        context.battery.percentage = fraction;
+        context.battery.state = state.Discharging;
+        assert.equal(context.batteryIconName(), `battery-level-${level}-symbolic`, `${fraction} discharging`);
+        context.battery.state = state.Charging;
+        assert.equal(context.batteryIconName(), `battery-level-${level}-charging-symbolic`, `${fraction} charging`);
+    }
+    context.battery.percentage = 1;
+    context.battery.state = state.FullyCharged;
+    assert.equal(context.batteryIconName(), "battery-level-100-charged-symbolic");
+    context.laptopBatteryAvailable = false;
+    assert.equal(context.batteryIconName(), "battery-missing-symbolic");
 });

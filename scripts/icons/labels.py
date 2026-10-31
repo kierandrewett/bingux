@@ -12,7 +12,7 @@ review sheets need:
   #policy <category>: file file ...      fill/outline category of those icons
   #symmetric: file file ...              must be left-right symmetric about x = 8
   #mark: file file ...                   a small control mark (chevron, tick, plus)
-  #exempt <rule>: file file ...          rule is one of size, centre, soft
+  #exempt <rule>: file file ...          rule is one of size, centre, soft, dots (golden.py)
   #mirror_rtl: file file ...             drawn with a direction (an arrow, a chevron, a panel
                                          at one side): flipped left to right when the interface
                                          reads right to left (`Icon::mirrors_in_rtl`, design/rtl.md)
@@ -86,7 +86,9 @@ def load(path: Path = LABELS) -> Labels:
         if not parts[3].startswith("custom"):
             match = FORK_SPEC.match(parts[3])
             if not match:
-                raise SystemExit(f"labels.tsv:{number}: glyph must be `custom: ..` or `Name weight [k=v ..]`: {parts[3]}")
+                raise SystemExit(
+                    f"labels.tsv:{number}: glyph must be `custom: ..` or `Name weight [k=v ..]`: {parts[3]}"
+                )
             row.fork, row.weight = match.group(1), match.group(2)
             for item in match.group(3).split():
                 key, value = item.split("=", 1)

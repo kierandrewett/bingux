@@ -182,26 +182,19 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
         # (bingux_dsp) with the compressor, limiter, reverb and the rest.
         cargo / "release/bingux-effects": prefix / "bin/bingux-effects",
         cargo / "release/libbingux_dsp.so": ladspa / "libbingux_dsp.so",
-        source / "apps/settings/bingux-settings.desktop": prefix
-        / "share/applications/bingux-settings.desktop",
-        source / "apps/settings/bingux-settings.svg": prefix
-        / "share/icons/hicolor/scalable/apps/bingux-settings.svg",
+        source / "apps/settings/bingux-settings.desktop": prefix / "share/applications/bingux-settings.desktop",
+        source / "apps/settings/bingux-settings.svg": prefix / "share/icons/hicolor/scalable/apps/bingux-settings.svg",
         cargo / "release/bingux-files": prefix / "bin/bingux-files",
-        source / "apps/files/bingux-files.desktop": prefix
-        / "share/applications/bingux-files.desktop",
-        source / "apps/files/bingux-files.svg": prefix
-        / "share/icons/hicolor/scalable/apps/bingux-files.svg",
+        source / "apps/files/bingux-files.desktop": prefix / "share/applications/bingux-files.desktop",
+        source / "apps/files/bingux-files.svg": prefix / "share/icons/hicolor/scalable/apps/bingux-files.svg",
         cargo / "release/bingux-taxonomy": prefix / "bin/bingux-taxonomy",
         # The helper Files runs for films, songs and PDFs; found beside bingux-files.
         cargo / "release/bingux-preview-host": prefix / "bin/bingux-preview-host",
-        source / "apps/taxonomy/bingux-taxonomy.desktop": prefix
-        / "share/applications/bingux-taxonomy.desktop",
-        source / "apps/taxonomy/bingux-taxonomy.svg": prefix
-        / "share/icons/hicolor/scalable/apps/bingux-taxonomy.svg",
+        source / "apps/taxonomy/bingux-taxonomy.desktop": prefix / "share/applications/bingux-taxonomy.desktop",
+        source / "apps/taxonomy/bingux-taxonomy.svg": prefix / "share/icons/hicolor/scalable/apps/bingux-taxonomy.svg",
         # Tells bingux-searchd that Settings exposes search: its program (opens a
         # hit's address) and its id. See design/search.md section 8.
-        source / "packaging/search-apps/bingux-settings.json": prefix
-        / "share/bingux/search-apps/bingux-settings.json",
+        source / "packaging/search-apps/bingux-settings.json": prefix / "share/bingux/search-apps/bingux-settings.json",
         source / "scripts/bingux-greeter-session": prefix / "bin/bingux-greeter-session",
         source / "scripts/bingux-bsm-greeter": prefix / "bin/bingux-bsm-greeter",
         source / "gnoblin/bingux.lua": prefix / "share/gnoblin/conf.d/bingux.lua",
@@ -243,31 +236,9 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
             destination_path.chmod(0o755)
         installed.append(destination.relative_to(prefix))
 
-    adwaita_source = source / "subprojects/adwaita-icon-theme"
-    adwaita_assets = adwaita_source / "Adwaita"
-    adwaita_index = adwaita_source / "index.theme"
-    if not adwaita_index.is_file() or not (adwaita_assets / "symbolic").is_dir():
-        raise ValueError(
-            "Adwaita icon theme submodule is missing; run git submodule update --init subprojects/adwaita-icon-theme"
-        )
-    # Private to Bingux (AdwaitaIcons.qml reads BINGUX_ADWAITA_ICON_DIR), so it
-    # never collides with the distribution's adwaita-icon-theme under icons/.
-    adwaita_install = prefix / "share/bingux/icons/Adwaita"
-    copy(adwaita_index, adwaita_install / "index.theme")
-    for path in adwaita_assets.rglob("*"):
-        if path.is_file():
-            copy(path, adwaita_install / path.relative_to(adwaita_assets))
-    for license_name in ("COPYING", "COPYING_CCBYSA3", "COPYING_LGPL"):
-        copy(
-            adwaita_source / license_name,
-            prefix / "share/licenses/bingux/adwaita-icon-theme" / license_name,
-        )
-    folder_open = adwaita_install / "scalable/status/folder-open.svg"
-    if not folder_open.is_file():
-        copy(
-            adwaita_assets / "scalable/places/folder.svg",
-            folder_open,
-        )
+    # The shell's icons are the Bingux set (shell/bingux/icons, inside the shell archive);
+    # only their licence is installed beside the others.
+    copy(source / "shell/bingux/icons/COPYING", prefix / "share/licenses/bingux/icons/COPYING")
 
     # The QML, scripts and assets travel in the shell archive next to the QML
     # plugins; bingux-shell unpacks it per user. The Python helpers the shell
@@ -721,7 +692,14 @@ def uninstall_user(prefix, no_systemd):
 # Gnoblin module, no session or user-service changes. A manifest records every
 # file, its checksum, the file it displaced and the folders it created, so
 # --uninstall removes exactly that and puts the displaced files back.
-APPS_PROGRAMS = ("bingux-config", "bingux-settings", "bingux-files", "bingux-preview-host", "bingux-taxonomy", "bingux-effects")
+APPS_PROGRAMS = (
+    "bingux-config",
+    "bingux-settings",
+    "bingux-files",
+    "bingux-preview-host",
+    "bingux-taxonomy",
+    "bingux-effects",
+)
 APPS_MANIFEST = Path("share/bingux-apps/manifest.json")
 APPS_HELPER = Path("share/bingux-apps/install-shell.py")
 APPS_BACKUP_SUFFIX = ".pre-bingux-apps.bak"

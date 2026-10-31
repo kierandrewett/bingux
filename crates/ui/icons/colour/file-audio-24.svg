@@ -6,9 +6,9 @@
     <path d="M15.707 1.707C15.317 1.317 15 1.448 15 2L15 6.2C15 6.642 15.358 7 15.8 7L20 7C20.552 7 20.683 6.683 20.293 6.293Z" fill="#000" fill-opacity=".22"/>
     <clipPath id="page"><path d="M3 4C3 2.343 4.343 1 6 1L14 1C14.552 1 15.317 1.317 15.707 1.707L20.293 6.293C20.683 6.683 21 7.448 21 8L21 20C21 21.657 19.657 23 18 23L6 23C4.343 23 3 21.657 3 20Z"/></clipPath>
     <path d="M3 4C3 2.343 4.343 1 6 1L14 1C14.552 1 15.317 1.317 15.707 1.707L20.293 6.293C20.683 6.683 21 7.448 21 8L21 20C21 21.657 19.657 23 18 23L6 23C4.343 23 3 21.657 3 20Z" fill="none" stroke="#000" stroke-opacity="0.26" stroke-width="2" clip-path="url(#page)"/>
-    <circle cx="9" cy="18" r="2.5" fill="currentColor"/>
-    <circle cx="15" cy="16.5" r="2.5" fill="currentColor"/>
-    <rect x="11" y="11" width="2" height="7" fill="currentColor"/>
+    <rect x="9" y="11" width="2" height="7" fill="currentColor"/>
     <rect x="17" y="9" width="2" height="8" fill="currentColor"/>
-    <polygon points="11,11 18,9 18,12 11,14" fill="currentColor"/>
+    <line x1="10" y1="11" x2="17" y2="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="miter" stroke-linecap="butt"/>
+    <circle cx="8.5" cy="18" r="2.5" fill="currentColor"/>
+    <circle cx="16" cy="16.5" r="2.5" fill="currentColor"/>
 </svg>

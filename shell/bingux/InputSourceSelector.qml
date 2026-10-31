@@ -401,7 +401,7 @@ Item {
                             anchors.rightMargin: 10
                             anchors.verticalCenter: parent.verticalCenter
                             implicitSize: 14
-                            source: AdwaitaIcons.source("object-select-symbolic")
+                            source: BinguxIcons.source("object-select-symbolic")
                             color: Theme.accent
                             visible: root.metrics.currentInputSource !== null && root.sourceKey(sourceAction.modelData) === root.sourceKey(root.metrics.currentInputSource)
                         }

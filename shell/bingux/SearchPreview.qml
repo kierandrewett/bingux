@@ -649,7 +649,7 @@ Item {
                         easing.type: Easing.OutCubic
                     }
                 }
-                source: AdwaitaIcons.source(previewControl.iconName)
+                source: BinguxIcons.source(previewControl.iconName)
                 color: Theme.muted
                 opacity: previewControl.enabled ? 1 : 0.4
             }

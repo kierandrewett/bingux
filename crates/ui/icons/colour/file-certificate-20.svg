@@ -6,7 +6,6 @@
     <path d="M12.566 1.566C12.253 1.253 12 1.358 12 1.8L12 6L16.2 6C16.642 6 16.747 5.747 16.434 5.434Z" fill="#000" fill-opacity=".22"/>
     <clipPath id="page"><path d="M3 3.5C3 2.119 4.119 1 5.5 1L11.2 1C11.642 1 12.253 1.253 12.566 1.566L16.434 5.434C16.747 5.747 17 6.358 17 6.8L17 16.5C17 17.881 15.881 19 14.5 19L5.5 19C4.119 19 3 17.881 3 16.5Z"/></clipPath>
     <path d="M3 3.5C3 2.119 4.119 1 5.5 1L11.2 1C11.642 1 12.253 1.253 12.566 1.566L16.434 5.434C16.747 5.747 17 6.358 17 6.8L17 16.5C17 17.881 15.881 19 14.5 19L5.5 19C4.119 19 3 17.881 3 16.5Z" fill="none" stroke="#000" stroke-opacity="0.26" stroke-width="2" clip-path="url(#page)"/>
-    <path d="M5 13A3.125 3.125 0 1 0 11 13A3.125 3.125 0 1 0 5 13ZM7 13A1.25 1.25 0 1 0 9 13A1.25 1.25 0 1 0 7 13Z" fill="currentColor" fill-rule="evenodd"/>
-    <rect x="11" y="11" width="4" height="3" fill="currentColor"/>
-    <rect x="14" y="14" width="1" height="2" fill="currentColor"/>
+    <path d="M7 14L6 18L9 17L12 18L11 14Z" fill="currentColor"/>
+    <path d="M5 11A4.375 4.375 0 1 1 14 11A4.375 4.375 0 1 1 5 11ZM8 11A1.875 1.875 0 1 0 11 11A1.875 1.875 0 1 0 8 11Z" fill="currentColor" fill-rule="evenodd"/>
 </svg>

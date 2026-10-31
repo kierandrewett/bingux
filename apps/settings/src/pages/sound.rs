@@ -23,13 +23,13 @@ use bingux_ui::window::{PopupFlags, WindowParent};
 
 use crate::apps;
 use crate::routes;
-use bingux_ui::prelude::use_router;
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
     Group, Icon, IconButton, LevelRow, MenuItem, Overlays, Status, action_button, app_icon,
-    dropdown, hstack, icon_button, level_row, menu_item, page_column, row, status,
-    switch_row, use_overlays, use_tokens,
+    dropdown, hstack, icon_button, level_row, menu_item, page_column, row, status, switch_row,
+    use_overlays, use_tokens,
 };
+use bingux_ui::prelude::use_router;
 
 use self::meter::{LevelMeter, Source};
 use super::loading::revealed;
@@ -125,7 +125,7 @@ impl Form {
             Form::Webcam => Icon::CameraWeb,
             Form::Display => Icon::Display,
             Form::Bluetooth => Icon::Bluetooth,
-            Form::Card => Icon::AudioCard,
+            Form::Card => Icon::Sound,
         }
     }
 }
@@ -1514,7 +1514,10 @@ fn set_default(ctx: Ctx, kind: Kind, id: u32) {
         Kind::Output => engine::Direction::Output,
         Kind::Input => engine::Direction::Input,
     };
-    if engine::store::Store::default().state().of(direction).enabled
+    if engine::store::Store::default()
+        .state()
+        .of(direction)
+        .enabled
         && let Some(device) = devices.iter().find(|device| device.id == id)
     {
         set_effects_device(ctx, direction, device.node_name.clone());
@@ -1798,11 +1801,11 @@ fn channel_group(
     }
     // The boost only applies to the output, so the switch is shown there alone.
     if kind == Kind::Output {
-        group = group.row(
-            switch_row("Allow volume above 100%", above, move |on: bool| {
-                set_above_100(ctx, on)
-            }),
-        );
+        group = group.row(switch_row(
+            "Allow volume above 100%",
+            above,
+            move |on: bool| set_above_100(ctx, on),
+        ));
     }
     group
 }
@@ -2136,9 +2139,13 @@ impl Component for SoundPage {
                         .navigates()
                         .on_press(move |_| router.open(routes::sound_effects())),
                 )
-                .row(switch_row("Output effects", preset.is_some(), move |on: bool| {
-                    set_output_effects(effects_on, overlays, on);
-                })),
+                .row(switch_row(
+                    "Output effects",
+                    preset.is_some(),
+                    move |on: bool| {
+                        set_output_effects(effects_on, overlays, on);
+                    },
+                )),
         );
         revealed(page, false)
     }
@@ -2169,11 +2176,11 @@ impl Component for AppSound {
         }
         let group = page_column();
         group
-            .child(
-                Group::titled("Sound").rows(streams.iter().map(|stream| {
+            .child(Group::titled("Sound").rows(
+                streams.iter().map(|stream| {
                     app_row(std::slice::from_ref(*stream), data.above_100, ctx, true)
-                })),
-            )
+                }),
+            ))
             .into()
     }
 }

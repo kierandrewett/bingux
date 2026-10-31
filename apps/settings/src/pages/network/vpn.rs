@@ -25,8 +25,8 @@ use crate::pages::loading::veiled;
 use crate::routes;
 use crate::system::{self, CommandError};
 use crate::ui::{
-    CANCEL_ID, Group, ResponseKind, SpinnerSize, Status, action_strip, dialog, page_column, row, spinner,
-    status, strip_action, switch, use_tokens,
+    CANCEL_ID, Group, ResponseKind, SpinnerSize, Status, action_strip, dialog, page_column, row,
+    spinner, status, strip_action, switch, use_tokens,
 };
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 use bingux_ui::style::*;
@@ -222,7 +222,7 @@ fn vpn_menu(ctx: NetCtx, name: &str, up: bool) -> Vec<MenuItem> {
     };
     vec![
         toggle,
-        menu_item("Edit", move |_| ctx.router.open(edit.clone())).icon(Icon::PreferencesSystem),
+        menu_item("Edit", move |_| ctx.router.open(edit.clone())).icon(Icon::Pencil),
         menu_separator(),
         menu_item("Delete", move |_| confirm_delete(ctx, delete.clone()))
             .icon(Icon::UserTrash)

@@ -10,6 +10,7 @@
     <path d="M3 15C3 12.791 4.791 11 7 11L25 11C27.209 11 29 12.791 29 15L29 24C29 26.209 27.209 28 25 28L7 28C4.791 28 3 26.209 3 24Z" fill="#fff" fill-opacity=".28"/>
     <path d="M3 15C3 12.791 4.791 11 7 11L25 11C27.209 11 29 12.791 29 15L29 24C29 26.209 27.209 28 25 28L7 28C4.791 28 3 26.209 3 24Z" fill="url(#lit)"/>
     <path d="M4.8 11L24.2 11L24.2 12L4.8 12Z" fill="#fff" fill-opacity=".6"/>
-    <path d="M8 14H24V24H8ZM10 16H22V22H10Z" fill="currentColor" fill-rule="evenodd"/>
-    <rect x="12" y="24" width="8" height="2" fill="currentColor"/>
+    <path d="M7 15C7 13.895 7.895 13 9 13L23 13C24.105 13 25 13.895 25 15L25 23C25 24.105 24.105 25 23 25L9 25C7.895 25 7 24.105 7 23Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="miter" stroke-linecap="butt"/>
+    <rect x="8" y="22" width="16" height="2" fill="currentColor"/>
+    <path d="M10 17C10 16.448 10.448 16 11 16L15 16C15.552 16 16 16.448 16 17L16 19C16 19.552 15.552 20 15 20L11 20C10.448 20 10 19.552 10 19Z" fill="currentColor"/>
 </svg>

@@ -18,7 +18,7 @@ ActivityIndicator {
     filled: true
     activityColor: isRecording || finalizing ? Theme.recordingIndicator : Theme.privacyIndicator
     interactive: !finalizing && (capture.busy || privacy.available)
-    trailingIcon: finalizing ? "document-save-symbolic" : "screencast-stop-symbolic"
+    trailingIcon: finalizing ? "document-save-symbolic" : "media-playback-stop-symbolic"
     label: capture.recording ? capture.elapsedText + "  Stop" : finalizing ? "Saving…" : capture.state === "countdown" ? String(capture.countdown) : capture.state === "starting" ? "Starting…" : privacy.elapsedText
     tooltip: finalizing ? "Saving screen recording" : capture.busy && !capture.recording ? "Cancel capture" : hoveredAt > 0 ? "Stop at " + hoveredTime + " · Trim this hover and click" : "Stop screen recording"
     onClicked: {

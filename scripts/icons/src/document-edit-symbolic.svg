@@ -1,3 +1,7 @@
-<svg viewBox="0 0 16 16">
-  <fork name="NotePencil" weight="fill" mode="exact"/>
+<svg viewBox="0 0 16 16" fill="none">
+  <polyline points="9.5,2.75 2.75,2.75 2.75,13.25 13.25,13.25 13.25,7.5" stroke="black" stroke-width="1.5" data-round="2.5"/>
+  <path d="M6.2 9.8 L7.331 6.123 L11.998 1.456 L14.544 4.002 L9.877 8.669Z" fill="black" stroke="black" stroke-width="3" data-op="cut"/>
+  <path d="M6.2 9.8 L7.331 6.123 L9.877 8.669Z" fill="black" stroke="black" stroke-width="1" stroke-linejoin="round"/>
+  <path d="M8.038 5.416 L9.453 4.002 L11.998 6.547 L10.584 7.962Z" fill="black"/>
+  <path d="M10.16 3.295 L11.998 1.456 L14.544 4.002 L12.705 5.84Z" fill="black" stroke="black" stroke-width="1" stroke-linejoin="round"/>
 </svg>

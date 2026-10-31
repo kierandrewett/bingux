@@ -5,5 +5,5 @@
     <path d="M1 7C1 5.895 1.895 5 3 5L13 5C14.105 5 15 5.895 15 7L15 12C15 13.105 14.105 14 13 14L3 14C1.895 14 1 13.105 1 12Z"/>
     <path d="M1 7C1 5.895 1.895 5 3 5L13 5C14.105 5 15 5.895 15 7L15 12C15 13.105 14.105 14 13 14L3 14C1.895 14 1 13.105 1 12Z" fill="#fff" fill-opacity=".28"/>
     <path d="M1 7C1 5.895 1.895 5 3 5L13 5C14.105 5 15 5.895 15 7L15 12C15 13.105 14.105 14 13 14L3 14C1.895 14 1 13.105 1 12Z" fill="url(#lit)"/>
-    <path d="M6 7H10V13H6ZM7 9H9V10H7ZM7 11H9V12H7Z" fill="currentColor" fill-rule="evenodd"/>
+    <path d="M5 6H9L11 8V13H5ZM6 10H9V11H6ZM6 12H9V13H6Z" fill="currentColor" fill-rule="evenodd"/>
 </svg>

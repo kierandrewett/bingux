@@ -1,25 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" data-chrome="none">
-  <rect x="4" y="2" width="4" height="4" rx="1" fill="shade"/>
-  <rect x="8" y="3" width="4" height="3" rx="1" fill="shade"/>
-  <rect x="4" y="1" width="4" height="5" rx="1" fill="paper"/>
-  <rect x="8" y="2" width="4" height="4" rx="1" fill="paper"/>
-  <path d="M3 6H13V12Q13 14 11 14H5Q3 14 3 12Z" fill="body"/>
-  <path d="M3 6H13V12Q13 14 11 14H5Q3 14 3 12Z" fill="light"/>
-  <path d="M3 6H13V12Q13 14 11 14H5Q3 14 3 12Z" fill="lit"/>
-  <rect x="2" y="4" width="12" height="2" rx="1" fill="body"/>
-  <rect x="2" y="4" width="12" height="2" rx="1" fill="shade"/>
-  <rect x="6" y="8" width="1" height="4" fill="ink"/>
-  <rect x="9" y="8" width="1" height="4" fill="ink"/>
-  <g data-grid="128">
-    <rect x="29" y="0" width="36" height="52" rx="8" fill="shade" transform="rotate(-10 47 26)"/>
-    <rect x="61" y="5" width="38" height="46" rx="8" fill="shade" transform="rotate(9 80 28)"/>
-    <rect x="32" y="2" width="30" height="46" rx="6" fill="paper" transform="rotate(-10 47 25)"/>
-    <rect x="64" y="8" width="32" height="40" rx="6" fill="paper" transform="rotate(9 80 28)"/>
-    <path d="M26 54H102L97 104Q96 116 84 116H44Q32 116 31 104Z" fill="body"/>
-    <path d="M26 54H102L97 104Q96 116 84 116H44Q32 116 31 104Z" fill="light"/>
-    <path d="M26 54H102L97 104Q96 116 84 116H44Q32 116 31 104Z" fill="lit"/>
-    <rect x="14" y="32" width="100" height="22" rx="11" fill="body"/>
-    <rect x="14" y="32" width="100" height="22" rx="11" fill="shade"/>
-    <path d="M52 72V98M64 72V98M76 72V98" fill="none" stroke="ink" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-  </g>
+  <path d="M4.05 4.8L4.85 1.2Q5.05 0.4 5.85 0.5L7.85 0.8Q8.65 1 8.45 1.8L7.55 4.8Z" fill="shade"/>
+  <path d="M4.95 4.8L5.75 1.2Q5.95 0.4 6.75 0.5L8.75 0.8Q9.55 1 9.35 1.8L8.45 4.8Z" fill="shade"/>
+  <path d="M7.05 4.8L7.45 1.6Q7.55 0.8 8.35 0.9L10.55 1.3Q11.35 1.5 11.25 2.3L10.75 4.8Z" fill="shade"/>
+  <path d="M7.95 4.8L8.35 1.6Q8.45 0.8 9.25 0.9L11.45 1.3Q12.25 1.5 12.15 2.3L11.65 4.8Z" fill="shade"/>
+  <path d="M4.5 5L5.3 1.4Q5.5 0.6 6.3 0.7L8.3 1Q9.1 1.2 8.9 2L8 5Z" fill="paper"/>
+  <path d="M7.5 5L7.9 1.8Q8 1 8.8 1.1L11 1.5Q11.8 1.7 11.7 2.5L11.2 5Z" fill="paper"/>
+  <path d="M3 6H13L12 12.5Q11.8 15 9.5 15H6.5Q4.2 15 4 12.5Z" fill="body"/>
+  <path d="M3 6H13L12 12.5Q11.8 15 9.5 15H6.5Q4.2 15 4 12.5Z" fill="light"/>
+  <path d="M3 6H13L12 12.5Q11.8 15 9.5 15H6.5Q4.2 15 4 12.5Z" fill="lit"/>
+  <rect x="2" y="3.5" width="12" height="2.5" rx="1.25" fill="body"/>
+  <rect x="2" y="3.5" width="12" height="2.5" rx="1.25" fill="shade"/>
+  <rect x="6" y="8" width="1" height="4" rx="0.5" fill="ink"/>
+  <rect x="9" y="8" width="1" height="4" rx="0.5" fill="ink"/>
 </svg>

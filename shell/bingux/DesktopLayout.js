@@ -46,7 +46,7 @@ const widgets = [
     {
         id: "privacy",
         label: "Privacy",
-        icon: "microphone-sensitivity-high-symbolic",
+        icon: "audio-input-microphone-symbolic",
         contexts: ["desktop", "locked"],
     },
     { id: "capture", label: "Recording", icon: "media-record-symbolic", contexts: ["desktop"] },
@@ -80,7 +80,7 @@ function freshInstanceId(layout, kind) {
     return "";
 }
 const decorationWidgets = [
-    { id: "label", label: "Label", icon: "document-edit-symbolic", decoration: true },
+    { id: "label", label: "Label", icon: "font-x-generic-symbolic", decoration: true },
     { id: "icon", label: "Icon", icon: "starred-symbolic", decoration: true },
 ];
 function isDecoration(id) {

@@ -2,18 +2,18 @@
 //! Files app icon: rounded shapes of one radius ratio, light falling from above
 //! (a pale sheen on the top, a soft shade at the foot), a darker back layer, a
 //! thin highlight on the top edge. A file is a rounded page with a rounded
-//! folded corner and a glyph or a short label; a folder has a tab, a back, the
+//! folded corner and a picture of what it holds; a folder has a tab, a back, the
 //! paper standing in it and a lighter front panel.
 //!
 //! They are a second set beside the symbolic one (`icons.rs`): the sources are
 //! `scripts/icons/colour/*.svg`, compiled by `scripts/icons/colour.py` into
 //! `icons/colour/<name>-<grid>.svg` for five grids: 16, 20, 24 and 32 are pixel
-//! grids (straight edges on whole pixels, only the corners turn), 128 is a
-//! vector. An icon of 40 px or less is drawn from the pixel grid whose whole
-//! multiple is nearest the size asked for ([`colour_grid`]), so 16, 20, 24 and
-//! 32 px, and their 2x, land on whole pixels; a larger one (48, 64, 96, 128,
-//! 192, ...) is drawn from the vector at any scale. Labels (`XLS`, `PDF`) are
-//! drawn from 24 px up; below it the page carries a glyph.
+//! grids (straight edges on whole pixels; curves and diagonals smooth, and the
+//! corners turn), 128 is the same drawing as a vector. An icon of 40 px or less
+//! is drawn from the pixel grid whose whole multiple is nearest the size asked
+//! for ([`colour_grid`]), so 16, 20, 24 and 32 px, and their 2x, land on whole
+//! pixels; a larger one (48, 64, 96, 128, 192, ...) is drawn from the vector at
+//! any scale. No icon spells its extension: the glyph is a picture at every size.
 //!
 //! # Colour
 //!
@@ -54,7 +54,9 @@ use std::sync::{LazyLock, Mutex};
 
 use freya::prelude::*;
 
-use crate::contrast::{AA_LARGE, AA_TEXT, Oklch, composite, ensure_contrast, on_colour_over, worst_ratio};
+use crate::contrast::{
+    AA_LARGE, AA_TEXT, Oklch, composite, ensure_contrast, on_colour_over, worst_ratio,
+};
 use crate::theme::Tokens;
 
 /// Every colour icon, one per `scripts/icons/colour/<name>.svg`; the table of
@@ -348,7 +350,13 @@ pub const PAGE_BODY: f32 = 1.4;
 /// Every ground a row's icon sits on: the opaque layers, and each of them
 /// under the hover, press and selection layers.
 pub fn grounds(tokens: &Tokens) -> Vec<Color> {
-    let layers = [tokens.bg, tokens.sidebar, tokens.card, tokens.control, tokens.popover];
+    let layers = [
+        tokens.bg,
+        tokens.sidebar,
+        tokens.card,
+        tokens.control,
+        tokens.popover,
+    ];
     let mut all = layers.to_vec();
     for layer in layers {
         for state in [tokens.hover, tokens.pressed, tokens.selection] {
@@ -362,7 +370,10 @@ pub fn grounds(tokens: &Tokens) -> Vec<Color> {
 /// make of a body colour.
 fn over(white: bool, alpha: f32, under: Color) -> Color {
     let v = if white { 255 } else { 0 };
-    composite(Color::from_argb((alpha * 255.0).round() as u8, v, v, v), under)
+    composite(
+        Color::from_argb((alpha * 255.0).round() as u8, v, v, v),
+        under,
+    )
 }
 
 /// `white` over `under` at `alpha` after `then`, as the compiled SVG layers
@@ -376,7 +387,11 @@ fn white_twice(first: f32, then: f32) -> f32 {
 /// front panel lifted, the top of the panel under the sheen too, and the back under the shade.
 pub fn edges(body: Color, folder: bool) -> [Color; 3] {
     if folder {
-        [over(true, FACE_LIGHT, body), over(true, white_twice(FACE_LIGHT, LIT_TOP), body), over(false, SHADE, body)]
+        [
+            over(true, FACE_LIGHT, body),
+            over(true, white_twice(FACE_LIGHT, LIT_TOP), body),
+            over(false, SHADE, body),
+        ]
     } else {
         [
             over(false, RIM, body),
@@ -388,16 +403,28 @@ pub fn edges(body: Color, folder: bool) -> [Color; 3] {
 
 /// The least contrast on a ground each of [`edges`] must show.
 pub fn edge_limits(folder: bool) -> [f32; 3] {
-    if folder { [FACE_MID, FACE_EDGE, BACK_EDGE] } else { [AA_LARGE, LIT_EDGE, AA_LARGE] }
+    if folder {
+        [FACE_MID, FACE_EDGE, BACK_EDGE]
+    } else {
+        [AA_LARGE, LIT_EDGE, AA_LARGE]
+    }
 }
 
 /// Where a glyph sits: a page's body under a share of the sheen and of the
 /// shade; a folder's panel, lifted, under a share of the sheen.
 pub fn glyph_grounds(body: Color, folder: bool) -> [Color; 3] {
     if folder {
-        [over(true, FACE_LIGHT, body), over(true, white_twice(FACE_LIGHT, GLYPH_LIT_FOLDER), body), over(true, FACE_LIGHT, body)]
+        [
+            over(true, FACE_LIGHT, body),
+            over(true, white_twice(FACE_LIGHT, GLYPH_LIT_FOLDER), body),
+            over(true, FACE_LIGHT, body),
+        ]
     } else {
-        [body, over(true, GLYPH_LIT_PAGE, body), over(false, GLYPH_DEEP_PAGE, body)]
+        [
+            body,
+            over(true, GLYPH_LIT_PAGE, body),
+            over(false, GLYPH_DEEP_PAGE, body),
+        ]
     }
 }
 
@@ -405,7 +432,10 @@ pub fn glyph_grounds(body: Color, folder: bool) -> [Color; 3] {
 /// at its [`edge_limits`], a page's body apart from the ground at [`PAGE_BODY`]
 /// (inside its rim), and an ink reads on it where a glyph sits.
 fn shows(body: Color, grounds: &[Color], folder: bool) -> bool {
-    edges(body, folder).iter().zip(edge_limits(folder)).all(|(edge, least)| worst_ratio(*edge, grounds) >= least)
+    edges(body, folder)
+        .iter()
+        .zip(edge_limits(folder))
+        .all(|(edge, least)| worst_ratio(*edge, grounds) >= least)
         && (folder || worst_ratio(body, grounds) >= PAGE_BODY)
         && worst_ratio(ink_for(body, folder), &glyph_grounds(body, folder)) >= AA_TEXT
 }
@@ -429,11 +459,20 @@ fn settle(body: Color, grounds: &[Color], folder: bool, dark: bool) -> Color {
 fn ink_for(body: Color, folder: bool) -> Color {
     let base = Oklch::from_colour(body);
     let ground = glyph_grounds(body, folder);
-    let white = Oklch { l: WHITE_INK_L, c: (base.c * 0.12).min(0.02), h: base.h }.to_colour();
+    let white = Oklch {
+        l: WHITE_INK_L,
+        c: (base.c * 0.12).min(0.02),
+        h: base.h,
+    }
+    .to_colour();
     if !folder && worst_ratio(white, &ground) >= AA_TEXT {
         return white;
     }
-    let mut deep = Oklch { l: DEEP_INK_L, c: (base.c * 0.55).min(0.09), h: base.h };
+    let mut deep = Oklch {
+        l: DEEP_INK_L,
+        c: (base.c * 0.55).min(0.09),
+        h: base.h,
+    };
     for _ in 0..30 {
         if worst_ratio(deep.to_colour(), &ground) >= AA_TEXT {
             return deep.to_colour();
@@ -447,7 +486,11 @@ fn ink_for(body: Color, folder: bool) -> Color {
 /// `shown`, at its hue and a chroma raised to meet the lift's loss of colour.
 fn unlifted(shown: Color) -> Color {
     let wanted = Oklch::from_colour(shown);
-    let body = |l: f32| Oklch { l, c: wanted.c * 1.25, h: wanted.h };
+    let body = |l: f32| Oklch {
+        l,
+        c: wanted.c * 1.25,
+        h: wanted.h,
+    };
     let (mut low, mut high) = (0.0_f32, wanted.l);
     for _ in 0..24 {
         let mid = (low + high) / 2.0;
@@ -467,7 +510,9 @@ fn derive(icon: ColourIcon, tokens: &Tokens) -> Tone {
         Some((hue, chroma)) => {
             let (l, c) = match dark {
                 true => (PAGE_L_DARK, chroma),
-                false if YELLOW_HUES.contains(&hue) => (PAGE_L_LIGHT + YELLOW_LIGHT_BONUS, chroma * YELLOW_CHROMA),
+                false if YELLOW_HUES.contains(&hue) => {
+                    (PAGE_L_LIGHT + YELLOW_LIGHT_BONUS, chroma * YELLOW_CHROMA)
+                }
                 false => (PAGE_L_LIGHT, chroma),
             };
             Oklch { l, c, h: hue }.to_colour()
@@ -481,7 +526,10 @@ fn derive(icon: ColourIcon, tokens: &Tokens) -> Tone {
     // A page's silhouette is held by its rim, not by its body, so the body is only moved as far
     // as `shows` asks: a light yellow stays a light yellow.
     let body = settle(start, &grounds, icon.is_folder(), dark);
-    Tone { body, ink: ink_for(body, icon.is_folder()) }
+    Tone {
+        body,
+        ink: ink_for(body, icon.is_folder()),
+    }
 }
 
 type ToneKey = (ColourIcon, bool, [u8; 4]);
@@ -490,8 +538,17 @@ type ToneKey = (ColourIcon, bool, [u8; 4]);
 /// family's for a file. Derived once per icon, scheme and accent.
 pub fn colour_tone(icon: ColourIcon, tokens: &Tokens) -> Tone {
     static TONES: LazyLock<Mutex<HashMap<ToneKey, Tone>>> = LazyLock::new(Default::default);
-    let accent = [tokens.accent.r(), tokens.accent.g(), tokens.accent.b(), tokens.accent.a()];
-    let key = (icon, tokens.scheme.is_dark(), if icon.is_folder() { accent } else { [0; 4] });
+    let accent = [
+        tokens.accent.r(),
+        tokens.accent.g(),
+        tokens.accent.b(),
+        tokens.accent.a(),
+    ];
+    let key = (
+        icon,
+        tokens.scheme.is_dark(),
+        if icon.is_folder() { accent } else { [0; 4] },
+    );
     if let Some(found) = TONES.lock().ok().and_then(|map| map.get(&key).copied()) {
         return found;
     }

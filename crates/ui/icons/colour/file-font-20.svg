@@ -6,6 +6,6 @@
     <path d="M12.566 1.566C12.253 1.253 12 1.358 12 1.8L12 6L16.2 6C16.642 6 16.747 5.747 16.434 5.434Z" fill="#000" fill-opacity=".22"/>
     <clipPath id="page"><path d="M3 3.5C3 2.119 4.119 1 5.5 1L11.2 1C11.642 1 12.253 1.253 12.566 1.566L16.434 5.434C16.747 5.747 17 6.358 17 6.8L17 16.5C17 17.881 15.881 19 14.5 19L5.5 19C4.119 19 3 17.881 3 16.5Z"/></clipPath>
     <path d="M3 3.5C3 2.119 4.119 1 5.5 1L11.2 1C11.642 1 12.253 1.253 12.566 1.566L16.434 5.434C16.747 5.747 17 6.358 17 6.8L17 16.5C17 17.881 15.881 19 14.5 19L5.5 19C4.119 19 3 17.881 3 16.5Z" fill="none" stroke="#000" stroke-opacity="0.26" stroke-width="2" clip-path="url(#page)"/>
-    <rect x="5" y="9" width="10" height="2" fill="currentColor"/>
-    <rect x="9" y="11" width="2" height="5" fill="currentColor"/>
+    <polyline points="6,16 10,8 14,16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <line x1="7.5" y1="13.5" x2="12.5" y2="13.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="miter" stroke-linecap="round"/>
 </svg>

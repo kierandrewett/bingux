@@ -164,7 +164,7 @@ FocusScope {
             summary: "Battery 84 percent, charging"
             barLayout: root.barLayout
             barWindow: DesktopEditing.editor?.nativeWindow
-            presentation: Object.assign({}, root.controlPresentation(label, "battery-good-symbolic", true, true), {
+            presentation: Object.assign({}, root.controlPresentation(label, "battery-level-80-charging-symbolic", true, true), {
                 custom: true
             })
         }
@@ -305,7 +305,7 @@ FocusScope {
                     id: "mail",
                     title: "Mail",
                     tooltipTitle: "Mail",
-                    icon: AdwaitaIcons.source("mail-unread-symbolic"),
+                    icon: BinguxIcons.source("mail-unread-symbolic"),
                     menu: null,
                     onlyMenu: false,
                     hasMenu: false
@@ -314,7 +314,7 @@ FocusScope {
                     id: "vpn",
                     title: "VPN",
                     tooltipTitle: "VPN",
-                    icon: AdwaitaIcons.source("network-vpn-symbolic"),
+                    icon: BinguxIcons.source("network-vpn-symbolic"),
                     menu: null,
                     onlyMenu: false,
                     hasMenu: false
@@ -323,7 +323,7 @@ FocusScope {
                     id: "drive",
                     title: "Files",
                     tooltipTitle: "Files",
-                    icon: AdwaitaIcons.source("drive-harddisk-symbolic"),
+                    icon: BinguxIcons.source("drive-harddisk-symbolic"),
                     menu: null,
                     onlyMenu: false,
                     hasMenu: false

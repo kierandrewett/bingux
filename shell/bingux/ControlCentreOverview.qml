@@ -264,7 +264,7 @@ GridLayout {
             visible: (placed || root.groupPosition("controls-header", widgetId) >= 0) && (available || DesktopEditing.active)
             available: root.indicators.laptopBatteryAvailable
             summary: root.indicators.batteryAccessibleName()
-            iconName: root.indicators.laptopBatteryAvailable ? root.indicators.battery.iconName : "battery-missing-symbolic"
+            iconName: root.indicators.batteryIconName()
             onClicked: root.openDetail("power", batteryControl)
             presentation: Object.assign({}, DesktopLayout.presentation(root.desktop, widgetId, container || "controls-header", label, batteryControl.iconName, true, true, placed ? "" : headerControls.container || "control-centre"), {
                 custom: true
@@ -290,7 +290,7 @@ GridLayout {
             id: lockControl
             widgetId: "control-lock"
             objectName: "controlLock"
-            iconName: "system-lock-screen-symbolic"
+            iconName: "network-wireless-encrypted-symbolic"
             label: "Lock"
             onClicked: root.lockRequested()
         }
@@ -508,7 +508,7 @@ GridLayout {
         implicitHeight: barLayout ? Theme.barHeight : 28
         flat: true
         text: "Customise controls..."
-        iconName: "document-edit-symbolic"
+        iconName: "pencil-symbolic"
         presentation: DesktopLayout.presentation(root.desktop, widgetId, container || "control-centre", text, iconName, barLayout, !barLayout)
         BarTooltip {
             anchorItem: customiseControl

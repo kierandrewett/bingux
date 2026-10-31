@@ -10,7 +10,9 @@
     <path d="M3 15C3 12.791 4.791 11 7 11L25 11C27.209 11 29 12.791 29 15L29 24C29 26.209 27.209 28 25 28L7 28C4.791 28 3 26.209 3 24Z" fill="#fff" fill-opacity=".28"/>
     <path d="M3 15C3 12.791 4.791 11 7 11L25 11C27.209 11 29 12.791 29 15L29 24C29 26.209 27.209 28 25 28L7 28C4.791 28 3 26.209 3 24Z" fill="url(#lit)"/>
     <path d="M4.8 11L24.2 11L24.2 12L4.8 12Z" fill="#fff" fill-opacity=".6"/>
-    <circle cx="14" cy="23" r="3" fill="currentColor"/>
-    <rect x="16" y="14" width="2" height="10" fill="currentColor"/>
-    <polygon points="18,14 22,16 22,20 18,18" fill="currentColor"/>
+    <rect x="12" y="14" width="2" height="10" fill="currentColor"/>
+    <rect x="22" y="12" width="2" height="10" fill="currentColor"/>
+    <line x1="13.5" y1="14.5" x2="23.5" y2="12.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="miter" stroke-linecap="butt"/>
+    <circle cx="11" cy="24" r="3" fill="currentColor"/>
+    <circle cx="21" cy="22" r="3" fill="currentColor"/>
 </svg>

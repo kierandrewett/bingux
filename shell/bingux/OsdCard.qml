@@ -113,7 +113,7 @@ Rectangle {
                     anchors.centerIn: parent
                     implicitSize: Theme.osdIconSize
                     color: card.presentedRequest?.icon.includes("muted") ? card.inkMuted : card.accent
-                    source: AdwaitaIcons.source(card.presentedRequest ? card.presentedRequest.icon : "dialog-information-symbolic", "dialog-information-symbolic")
+                    source: BinguxIcons.source(card.presentedRequest ? card.presentedRequest.icon : "dialog-information-symbolic", "dialog-information-symbolic")
                 }
             }
             ColumnLayout {

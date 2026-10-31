@@ -14,39 +14,41 @@ every package: `bingux`, `bingux-config`, `bingux-settings`, `bingux-files`,
    refuses a tree with changes.
 2. Set the version everywhere it is written:
 
-   | File | What to change |
-   | --- | --- |
-   | `Makefile` | `VERSION ?=` |
-   | `packaging/rpm/bingux.spec` | `Version:`, and a new `%changelog` entry |
-   | `packaging/arch/PKGBUILD` | `pkgver=`, and `pkgrel=1` |
-   | `{apps,crates,services,bsm}/*/Cargo.toml` | `version =` of every crate, then `cargo update -w --offline` in each |
-   | `packaging/metainfo/*.metainfo.xml` | a new `<release version= date=>` first in `<releases>` |
-   | `packaging/man/*.1` | the version and date in the `.TH` line |
+    | File                                      | What to change                                                       |
+    | ----------------------------------------- | -------------------------------------------------------------------- |
+    | `Makefile`                                | `VERSION ?=`                                                         |
+    | `packaging/rpm/bingux.spec`               | `Version:`, and a new `%changelog` entry                             |
+    | `packaging/arch/PKGBUILD`                 | `pkgver=`, and `pkgrel=1`                                            |
+    | `{apps,crates,services,bsm}/*/Cargo.toml` | `version =` of every crate, then `cargo update -w --offline` in each |
+    | `packaging/metainfo/*.metainfo.xml`       | a new `<release version= date=>` first in `<releases>`               |
+    | `packaging/man/*.1`                       | the version and date in the `.TH` line                               |
 
-   `make rpm-check` fails when the Makefile, the spec, the PKGBUILD, the metainfo
-   files and the man pages disagree.
+    `make rpm-check` fails when the Makefile, the spec, the PKGBUILD, the metainfo
+    files and the man pages disagree.
+
 3. Run the checks that need no build: `make rpm-check`. Then run
    `python3 scripts/cargo-licenses.py --summary` and update the `License:` tags
    of the spec and the `license=` arrays of the PKGBUILD if the dependency set
    changed; `make rpm-check` compares the spec.
 4. Commit, tag and push:
 
-   ```sh
-   git commit -am "release: 0.2.0"
-   git tag -s v0.2.0 -m "Bingux 0.2.0"
-   git push origin main v0.2.0
-   ```
+    ```sh
+    git commit -am "release: 0.2.0"
+    git tag -s v0.2.0 -m "Bingux 0.2.0"
+    git push origin main v0.2.0
+    ```
 
 5. Build the source archive from the tag:
 
-   ```sh
-   make source-archive VERSION=0.2.0
-   sha256sum dist/bingux-0.2.0.tar.xz
-   ```
+    ```sh
+    make source-archive VERSION=0.2.0
+    sha256sum dist/bingux-0.2.0.tar.xz
+    ```
 
-   The archive is reproducible: the same commit gives the same bytes. It holds
-   the tracked tree and the pinned `adwaita-icon-theme` submodule, which
-   `git archive` does not follow.
+    The archive is reproducible: the same commit gives the same bytes. It holds
+    the tracked tree and the pinned Quickshell submodule, which
+    `git archive` does not follow.
+
 6. Build and check the packages, below.
 7. Publish the packages and attach the archive, checksums, the source RPM and
    the RPMs to a GitHub release.
@@ -115,13 +117,13 @@ point real machines at it.
 The repository has no workflows yet. These are the jobs a workflow needs, each
 with the command it runs:
 
-| Job | Runs in | Command | When |
-| --- | --- | --- | --- |
-| Package definitions | any container with Python and `desktop-file-utils` and `appstream` | `make rpm-check` | every pull request |
-| RPM build | `fedora:43` with `rpm-build` and the spec's `BuildRequires` | `make rpm-package` | every pull request and tag |
-| RPM install | a clean `fedora:43` | `dnf install ./RPMS/x86_64/*.rpm`, then `rpm -V` and `desktop-file-validate /usr/share/applications/bingux-*.desktop` | after the RPM build |
-| Arch build | `archlinux` | `make arch-package` | every pull request and tag |
-| Release | any | upload the archive, checksums, source RPM, RPMs and Arch packages to the GitHub release of the tag | tag `v*` |
+| Job                 | Runs in                                                            | Command                                                                                                               | When                       |
+| ------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| Package definitions | any container with Python and `desktop-file-utils` and `appstream` | `make rpm-check`                                                                                                      | every pull request         |
+| RPM build           | `fedora:43` with `rpm-build` and the spec's `BuildRequires`        | `make rpm-package`                                                                                                    | every pull request and tag |
+| RPM install         | a clean `fedora:43`                                                | `dnf install ./RPMS/x86_64/*.rpm`, then `rpm -V` and `desktop-file-validate /usr/share/applications/bingux-*.desktop` | after the RPM build        |
+| Arch build          | `archlinux`                                                        | `make arch-package`                                                                                                   | every pull request and tag |
+| Release             | any                                                                | upload the archive, checksums, source RPM, RPMs and Arch packages to the GitHub release of the tag                    | tag `v*`                   |
 
 Each build job should upload `/var/tmp/BinguxPkg` as an artifact. The Rust and
 Skia build takes tens of minutes; cache the Cargo registry and a target

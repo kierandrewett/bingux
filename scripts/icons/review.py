@@ -65,14 +65,16 @@ def font(size: int, mono: bool = False) -> ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
-def outline_of_svg(text: str):
-    """The filled outline of one of our icon files (paths with an optional transform)."""
+def outline_of_svg(text: str, dim: bool = False):
+    """The filled outline of one of our icon files (paths with an optional transform).
+
+    `dim=False` is the solid part and `dim=True` the part drawn with a `fill-opacity` (build.py `data-dim`)."""
     import xml.etree.ElementTree as ET
 
     root = ET.fromstring(text)
     acc = build.pathops.Path()
     for node in root.iter():
-        if node.tag.removeprefix(build.SVG_NS) != "path":
+        if node.tag.removeprefix(build.SVG_NS) != "path" or ("fill-opacity" in node.attrib) != dim:
             continue
         sp = SvgPath(node.attrib["d"])
         if node.attrib.get("transform"):
@@ -83,14 +85,25 @@ def outline_of_svg(text: str):
     return build.pathops.simplify(acc)
 
 
+class Polys(list):
+    """The polygons of an icon's solid part, with `dim` the polygons of its dim part (`data-dim`; empty for most icons)."""
+
+    dim: list = []
+
+
 def polys_of_file(path: Path):
-    return build.polygons(outline_of_svg(path.read_text()))
+    text = path.read_text()
+    polys = Polys(build.polygons(outline_of_svg(text)))
+    polys.dim = build.polygons(outline_of_svg(text, dim=True))
+    return polys
 
 
 def cell(polys, size: int, zoom: int, scheme) -> Image.Image:
     """`size` px raster magnified `zoom` times, ink on background."""
     bg, ink = scheme
     cov = raster.coverage(polys, size)[:, :, None]
+    if getattr(polys, "dim", None):
+        cov = np.maximum(cov, build.DIM_ALPHA * raster.coverage(polys.dim, size)[:, :, None])
     rgb = np.array(bg, dtype=np.float64) * (1 - cov) + np.array(ink, dtype=np.float64) * cov
     image = Image.fromarray(np.round(rgb).astype(np.uint8), "RGB")
     return image.resize((size * zoom, size * zoom), Image.NEAREST)
@@ -406,7 +419,7 @@ h2{margin:28px 0 8px;font-size:18px}
 .real{display:flex;gap:6px;margin-top:8px;align-items:center;font-size:11px;color:var(--muted)}
 .real span{display:inline-flex;padding:8px;border-radius:6px}
 .real .d{background:#121214}.real .l{background:#fafafa;border:1px solid var(--line)}
-.real img{image-rendering:pixelated}.inv{filter:invert(1) brightness(1.8)}.miss{color:#b3402f;margin:8px 0}
+.real img{image-rendering:pixelated}.inv{filter:invert(1) brightness(1.8)}
 .meta h3{margin:0;font-size:15px}.meta code{color:var(--muted);font-size:12px}
 .meta p{margin:4px 0}.k{color:var(--muted)}
 .verdicts{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
@@ -445,15 +458,13 @@ for (const it of ITEMS) {
   const tile = (k, label, scale) => `<div class="tile"><img src="${png(it.tiles[k])}" width="${it.sizes[k] * scale}" height="${it.sizes[k] * scale}"><div>${label}</div></div>`;
   const vec = (px, label, dark) => `<div class="tile"><img class="${dark && it.symbolic ? "inv" : ""}" style="background:${dark ? "#121214" : "#fafafa"}" src="data:image/svg+xml;base64,${it.svg}" width="${px}" height="${px}"><div>${label}</div></div>`;
   const vecReal = (px, dark) => `<span class="${dark ? "d" : "l"}"><img class="${dark && it.symbolic ? "inv" : ""}" src="data:image/svg+xml;base64,${it.svg}" width="${px}" height="${px}"></span>`;
-  const shown = it.missing
-    ? `<p class="miss">No icon file. The shell asks for this name, and the theme has nothing to draw.</p>`
-    : it.svg
+  const shown = it.svg
     ? `<div class="tiles">${vec(32, "16 dark", true)}${vec(32, "16 light", false)}${vec(48, "24 light", false)}${vec(96, "48 light", false)}</div>
     <div class="real">${vecReal(16, true)}${vecReal(16, false)}${vecReal(24, false)}${vecReal(48, false)}actual size</div>`
-    : `<div class="tiles">${tile("d16","16 dark",4)}${tile("l16","16 light",4)}${tile("l18","18 light",4)}${tile("l48","48 light",2)}</div>
-    <div class="real"><span class="d"><img src="${png(it.tiles.d16)}" width="16" height="16"></span><span class="l"><img src="${png(it.tiles.l16)}" width="16" height="16"></span><span class="l"><img src="${png(it.tiles.l18)}" width="18" height="18"></span>actual size</div>`;
+    : `<div class="tiles">${(it.tilelist || [["d16","16 dark",4],["l16","16 light",4],["l18","18 light",4],["l48","48 light",2]]).map(([k, l, s]) => tile(k, l, s)).join("")}</div>
+    <div class="real">${(it.reals || [["d16",1,1],["l16",0,1],["l18",0,1]]).map(([k, dark, div]) => `<span class="${dark ? "d" : "l"}"><img src="${png(it.tiles[k])}" width="${it.sizes[k] / div}" height="${it.sizes[k] / div}"></span>`).join("")}actual size</div>`;
   el.innerHTML = `<div>${shown}</div>
-    <div class="meta"><h3>${it.variant ? "Icon::" + it.variant : it.svg ? it.category : "(shell / QML only)"}</h3><code>${it.id}</code>
+    <div class="meta"><h3>${it.variant ? "Icon::" + it.variant : it.svg ? it.category : it.tilelist ? "Colour icon" : "(shell / QML only)"}</h3><code>${it.id}</code>
     <p><span class="k">Used:</span> ${it.where}</p>${it.metaphor ? `<p><span class="k">Metaphor:</span> ${it.metaphor}</p>` : ""}
     <p><span class="k">Category:</span> ${it.category} &nbsp; <span class="k">Glyph:</span> ${it.glyph}</p>
     <div class="verdicts">${VERDICTS.map(([v, l]) => `<label class="v-${v}"><input type="radio" name="v-${it.id}" value="${v}"><span>${l}</span></label>`).join("")}</div>
@@ -523,9 +534,9 @@ def png_base64(image: Image.Image) -> str:
     return base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
-def extra_items(ours: set[str]) -> list[dict]:
-    """Icons that are not in the generated symbolic set: the colour file and folder icons, the application icons,
-    and the theme icons the shell asks for by name. They are shown as the browser draws the vector file."""
+def extra_items() -> list[dict]:
+    """Icons that are not in the generated symbolic set: the colour file and folder icons and the application
+    icons. They are shown as the browser draws the vector file."""
     import base64
     import html
 
@@ -543,17 +554,64 @@ def extra_items(ours: set[str]) -> list[dict]:
         }
 
     items = []
+    import io
+    import subprocess
+
+    import colour as colourmod
+
+    def colour_tile(name: str, size: int, scale: int, dark: bool) -> Image.Image:
+        """The compiled icon as the app draws it: the grid colour_grid picks for `size`, rasterised at
+        `size * scale` px, in a stand-in palette (the family's hue, the scheme's lightness)."""
+        scheme = "dark" if dark else "light"
+        hue, chroma = colourmod.SHEET_BODY[colourmod.family_of(name)]
+        body_l, ink_l = colourmod.SHEET_L[scheme]
+        body = colourmod.oklch_hex(body_l, chroma, hue)
+        ink = colourmod.oklch_hex(ink_l, min(chroma, 0.05), hue)
+        svg = (colourmod.OUT / f"{name}-{colourmod.pick_grid(size)}.svg").read_text()
+        svg = svg.replace("<svg ", f'<svg fill="{body}" color="{ink}" ', 1)
+        px = str(size * scale)
+        png = subprocess.run(
+            ["rsvg-convert", "-w", px, "-h", px], input=svg.encode(), capture_output=True, check=True
+        ).stdout
+        shot = Image.open(io.BytesIO(png)).convert("RGBA")
+        ground = Image.new("RGBA", shot.size, (0x12, 0x12, 0x14, 255) if dark else (0xFA, 0xFA, 0xFA, 255))
+        return Image.alpha_composite(ground, shot)
+
     for path in sorted((HERE / "colour").glob("*.svg")):
         kind = "folder" if path.stem.startswith(("folder", "trash")) else "file type"
+        shots = {
+            "d16": (16, 1, True),
+            "l16": (16, 1, False),
+            "d32": (32, 1, True),
+            "l32": (32, 1, False),
+            "l48": (48, 1, False),
+            "l16x2": (16, 2, False),
+        }
+        tiles = {key: colour_tile(path.stem, *args) for key, args in shots.items()}
         items.append(
-            entry(
-                "files-colour",
-                path.stem,
-                path,
-                f"Files: {kind} icon, drawn in colour",
-                "colour",
-                False,
-            )
+            {
+                "id": path.stem,
+                "group": "files-colour",
+                "variant": None,
+                "category": "colour",
+                "glyph": html.escape(str(path.relative_to(REPO))),
+                "where": html.escape(
+                    f"Files: {kind} icon, drawn in colour. Rendered from the compiled icons in a stand-in palette (the app takes its colours from the theme)."
+                ),
+                "metaphor": "",
+                "symbolic": False,
+                "svg": None,
+                "sizes": {key: tile.width for key, tile in tiles.items()},
+                "tiles": {key: png_base64(tile) for key, tile in tiles.items()},
+                "tilelist": [
+                    ["d16", "16 dark", 3],
+                    ["l16", "16 light", 3],
+                    ["d32", "32 dark", 2],
+                    ["l32", "32 light", 2],
+                    ["l48", "48 (vector)", 1],
+                ],
+                "reals": [["d16", 1, 1], ["l16", 0, 1], ["l32", 0, 1], ["l16x2", 0, 2], ["l48", 0, 1]],
+            }
         )
     apps = [
         *sorted((REPO / "apps").glob("*/*.svg")),
@@ -571,71 +629,6 @@ def extra_items(ours: set[str]) -> list[dict]:
                     False,
                 )
             )
-    users: dict[str, set[str]] = {}
-    for qml in sorted((REPO / "shell/bingux").rglob("*.qml")):
-        for name in re.findall(r'"([a-z0-9][a-z0-9.-]*)-symbolic"', qml.read_text()):
-            users.setdefault(name, set()).add(qml.name)
-    theme = Path("/usr/share/icons/Adwaita/symbolic")
-    aliases = dict(
-        re.findall(
-            r'"([^"]+)":\s*"([^"]+)"',
-            (REPO / "shell/bingux/AdwaitaIconIndex.js").read_text().split("var paths")[0],
-        )
-    )
-    drawn = {
-        "screencast-stop": (
-            "ActivityIndicator.qml draws it as a 10 px square with a 1.5 px radius in a 16 px box. "
-            "It does not use the theme glyph, so the shell's alias to media-playback-stop is never shown.",
-            '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">'
-            '<rect x="3" y="3" width="10" height="10" rx="1.5" fill="#2e3436"/></svg>',
-        )
-    }
-    for name in sorted(users):
-        if name in ours:
-            continue
-        if name in drawn:
-            note, svg = drawn[name]
-            used = ", ".join(sorted(users[name]))
-            items.append(
-                {
-                    "id": name,
-                    "group": "shell-theme",
-                    "variant": None,
-                    "category": "drawn in QML",
-                    "glyph": "Rectangle in ActivityIndicator.qml",
-                    "where": html.escape(f"Shell: {used}. {note}"),
-                    "metaphor": "",
-                    "symbolic": True,
-                    "svg": base64.b64encode(svg.encode()).decode("ascii"),
-                }
-            )
-            continue
-        target = aliases.get(f"{name}-symbolic", aliases.get(name, f"{name}-symbolic"))
-        found = next(iter(sorted(theme.glob(f"*/{target}.svg"))), None)
-        where = "Shell: " + ", ".join(sorted(users[name])[:4]) + (" and more" if len(users[name]) > 4 else "")
-        if target != f"{name}-symbolic":
-            where += f" (the shell maps it to {target})"
-        if found is None:
-            print(
-                f"review: shell icon {name} has no file in the Adwaita theme; added as a missing card",
-                file=sys.stderr,
-            )
-            items.append(
-                {
-                    "id": name,
-                    "group": "shell-theme",
-                    "variant": None,
-                    "category": "no file",
-                    "glyph": "",
-                    "where": html.escape(where),
-                    "metaphor": "",
-                    "symbolic": True,
-                    "svg": None,
-                    "missing": True,
-                }
-            )
-            continue
-        items.append(entry("shell-theme", name, found, where, "Adwaita theme", True))
     return items
 
 
@@ -682,7 +675,7 @@ def page(out: Path, icons: Path) -> None:
                     "tiles": {key: png_base64(tile) for key, tile in tiles.items()},
                 }
             )
-    items.extend(extra_items({stem for _, files in groups for stem in files} | set(labels.rows)))
+    items.extend(extra_items())
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(PAGE_TEMPLATE.replace("__ITEMS__", json.dumps(items).replace("</", "<\\/")))
     print(f"review: wrote {len(items)} icons to {out}")

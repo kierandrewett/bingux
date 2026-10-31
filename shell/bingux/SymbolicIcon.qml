@@ -7,7 +7,7 @@ Item {
     property url source: ""
     property int implicitSize: Theme.iconSize
     property color color: Theme.text
-    readonly property url resolvedSource: AdwaitaIcons.source(source)
+    readonly property url resolvedSource: BinguxIcons.source(source)
     implicitWidth: implicitSize
     implicitHeight: implicitSize
     IconImage {

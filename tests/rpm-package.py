@@ -110,7 +110,12 @@ class AppStreamTest(unittest.TestCase):
     def test_metainfo_validates(self):
         for _, component in APPLICATIONS.values():
             result = subprocess.run(
-                ["appstreamcli", "validate", "--no-net", str(ROOT / "packaging/metainfo" / f"{component}.metainfo.xml")],
+                [
+                    "appstreamcli",
+                    "validate",
+                    "--no-net",
+                    str(ROOT / "packaging/metainfo" / f"{component}.metainfo.xml"),
+                ],
                 capture_output=True,
                 text=True,
                 check=False,
@@ -221,14 +226,20 @@ class RpmPackageTest(unittest.TestCase):
         for build_requirement in ("gstreamer-1.0", "gstreamer-app-1.0", "gstreamer-video-1.0", "poppler-glib"):
             self.assertIn(f"BuildRequires:  pkgconfig({build_requirement})", self.spec)
 
-    def test_the_bundled_adwaita_icons_do_not_overlap_the_distribution(self):
-        self.assertNotIn("%{_datadir}/icons/Adwaita", self.spec)
-        self.assertNotIn("/usr/share/icons/Adwaita", self.spec)
-        self.assertNotIn("/usr/share/licenses/adwaita-icon-theme", self.spec)
+    def test_no_adwaita_icons_are_installed(self):
+        self.assertNotIn("Adwaita", self.spec.replace("adwaita-sans-fonts", ""))
+        self.assertNotIn("adwaita-icon-theme", self.spec)
+        self.assertNotIn("/share/bingux/icons", self.spec)
+        self.assertIn("/licenses/bingux/icons/COPYING", self.spec)
 
     def test_no_scriptlet_hand_updates_desktop_caches(self):
         code = "\n".join(line for line in self.spec.splitlines() if not line.lstrip().startswith("#"))
-        for command in ("update-desktop-database", "gtk-update-icon-cache", "update-mime-database", "glib-compile-schemas"):
+        for command in (
+            "update-desktop-database",
+            "gtk-update-icon-cache",
+            "update-mime-database",
+            "glib-compile-schemas",
+        ):
             self.assertNotIn(command, code)
 
     @unittest.skipUnless(shutil.which("cargo"), "cargo is not installed")

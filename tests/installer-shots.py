@@ -25,10 +25,20 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRATCH_BASE = Path.home() / ".cache" / "bingux-InstallerUI"
-ICON_DIR = ROOT / "subprojects/adwaita-icon-theme/Adwaita"
 EXPECTED = [
-    "welcome", "keyboard", "network", "timezone", "hostname", "disk", "partitions", "storage",
-    "account", "summary", "progress", "finished", "error",
+    "welcome",
+    "keyboard",
+    "network",
+    "timezone",
+    "hostname",
+    "disk",
+    "partitions",
+    "storage",
+    "account",
+    "summary",
+    "progress",
+    "finished",
+    "error",
 ]
 
 
@@ -111,7 +121,6 @@ def main():
             "WLR_RENDERER": "pixman",
             "WLR_LIBINPUT_NO_DEVICES": "1",
             "BINGUX_SOFTWARE_RENDERING": os.environ.get("BINGUX_SOFTWARE_RENDERING", "1"),
-            "BINGUX_ADWAITA_ICON_DIR": str(ICON_DIR),
             "BINGUX_INSTALLER_SOCKET": daemon_socket,
             "INSTALLER_SHOTS_ACK": str(ack),
             "INSTALLER_SHOTS_WALLPAPER": wallpaper.as_uri(),

@@ -6,5 +6,6 @@
     <path d="M15.707 1.707C15.317 1.317 15 1.448 15 2L15 6.2C15 6.642 15.358 7 15.8 7L20 7C20.552 7 20.683 6.683 20.293 6.293Z" fill="#000" fill-opacity=".22"/>
     <clipPath id="page"><path d="M3 4C3 2.343 4.343 1 6 1L14 1C14.552 1 15.317 1.317 15.707 1.707L20.293 6.293C20.683 6.683 21 7.448 21 8L21 20C21 21.657 19.657 23 18 23L6 23C4.343 23 3 21.657 3 20Z"/></clipPath>
     <path d="M3 4C3 2.343 4.343 1 6 1L14 1C14.552 1 15.317 1.317 15.707 1.707L20.293 6.293C20.683 6.683 21 7.448 21 8L21 20C21 21.657 19.657 23 18 23L6 23C4.343 23 3 21.657 3 20Z" fill="none" stroke="#000" stroke-opacity="0.26" stroke-width="2" clip-path="url(#page)"/>
-    <path d="M6 14h3v1h-3zM8 15h1v1h-1zM7 16h1v1h-1zM6 17h1v1h-1zM6 18h3v1h-3zM10 14h3v1h-3zM11 15h1v1h-1zM11 16h1v1h-1zM11 17h1v1h-1zM10 18h3v1h-3zM14 14h2v1h-2zM14 15h1v1h-1zM16 15h1v1h-1zM14 16h2v1h-2zM14 17h1v1h-1zM14 18h1v1h-1z" fill="currentColor"/>
+    <path d="M6 10.5C6 9.672 6.672 9 7.5 9L16.5 9C17.328 9 18 9.672 18 10.5L18 12.5C18 13.328 17.328 14 16.5 14L7.5 14C6.672 14 6 13.328 6 12.5Z" fill="currentColor"/>
+    <path d="M8 15H17V19Q17 20.5 15 20H9Q7.5 20 8 19ZM11 16H14V18H11Z" fill="currentColor" fill-rule="evenodd"/>
 </svg>

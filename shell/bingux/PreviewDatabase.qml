@@ -66,7 +66,7 @@ Rectangle {
                 x: tableChoice.width - width - 8
                 y: (tableChoice.height - height) / 2
                 implicitSize: 14
-                source: AdwaitaIcons.source("pan-down-symbolic")
+                source: BinguxIcons.source("pan-down-symbolic")
                 color: Theme.muted
             }
         }

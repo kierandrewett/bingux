@@ -28,7 +28,7 @@ SessionGlass {
     SymbolicIcon {
         anchors.centerIn: parent
         implicitSize: Theme.iconSize
-        source: AdwaitaIcons.source(root.iconName)
+        source: BinguxIcons.source(root.iconName)
         color: root.theme.ink
     }
 

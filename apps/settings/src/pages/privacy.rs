@@ -527,7 +527,7 @@ fn rule_row(data: &Model, index: usize, ctx: Ctx) -> Row {
     let model = data.clone();
     let edit_rule = rule.clone();
     actions = actions.child(
-        icon_button(Icon::DocumentOpen, move |_| {
+        icon_button(Icon::Pencil, move |_| {
             open_editor(ctx, &model, Some(index), Draft::from_rule(&edit_rule));
         })
         .tooltip("Edit rule"),

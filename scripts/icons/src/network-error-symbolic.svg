@@ -1,3 +1,6 @@
 <svg viewBox="0 0 16 16">
-  <fork name="NetworkX" weight="bold" mode="exact"/>
+  <fork name="Network" weight="fill" mode="exact"/>
+  <circle cx="12.5" cy="12.5" r="4.6" fill="black" data-op="cut"/>
+  <line x1="10.5" y1="10.5" x2="14.5" y2="14.5" stroke="black" stroke-width="2"/>
+  <line x1="14.5" y1="10.5" x2="10.5" y2="14.5" stroke="black" stroke-width="2"/>
 </svg>

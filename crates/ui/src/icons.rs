@@ -5,7 +5,8 @@
 //! icons. The SVG files live in `icons/` and are generated from
 //! `scripts/icons/src` by `make icons`; see `icons/COPYING` for the licence.
 //! Each icon is one fill path, recoloured at draw time so it follows the
-//! active theme.
+//! active theme. A level icon (Wi-Fi signal, battery) has a second path with
+//! `fill-opacity` for the parts that are off; the tint keeps that opacity.
 
 use freya::prelude::*;
 
@@ -81,7 +82,6 @@ pub enum Icon {
     AudioVolumeMuted,
     AudioVolumeLow,
     AudioVolumeMedium,
-    AudioCard,
     CameraWeb,
     DisplayBrightness,
     NightLight,
@@ -90,11 +90,22 @@ pub enum Icon {
     PowerProfileBalanced,
     PowerProfilePerformance,
     SystemShutdown,
+    BatteryLevel0,
+    BatteryLevel10,
+    BatteryLevel20,
+    BatteryLevel30,
+    BatteryLevel40,
     BatteryLevel50,
+    BatteryLevel60,
+    BatteryLevel70,
+    BatteryLevel80,
+    BatteryLevel90,
     BatteryLevel100,
     ViewReveal,
     ViewConceal,
     DocumentEdit,
+    /// A pencil: edit something (a path, a connection, an access point). `DocumentEdit` is only for editing a document.
+    Pencil,
     UserInfo,
     Starred,
     NonStarred,
@@ -118,10 +129,8 @@ pub enum Icon {
     /// Subtitles.
     MediaViewSubtitles,
     DialogPassword,
-    SystemLockScreen,
     SendTo,
     FolderDownload,
-    PreferencesDesktopKeyboardShortcuts,
     InputTouchpad,
     PreferencesOther,
     ViewList,
@@ -130,8 +139,6 @@ pub enum Icon {
     InputTablet,
     NetworkServer,
     AvatarDefault,
-    SecurityHigh,
-    SecurityLow,
     FindLocation,
     MailUnread,
     ApplicationsMultimedia,
@@ -163,18 +170,15 @@ pub enum Icon {
     FolderPublicshare,
     FolderDesktop,
     WindowNew,
-    GoUp,
     DefaultAppText,
     DefaultAppDocuments,
     DragHandle,
     /// A PDF file.
     ApplicationPdf,
-    /// A word-processor document.
-    XOfficeDocument,
     /// A spreadsheet.
-    XOfficeSpreadsheet,
+    Table,
     /// A presentation.
-    XOfficePresentation,
+    Presentation,
     /// A font file.
     FontXGeneric,
     /// Source code or a script.
@@ -183,6 +187,52 @@ pub enum Icon {
     ApplicationXGeneric,
     /// The badge on the icon of a symbolic link.
     EmblemSymbolicLink,
+    /// Recording: the dot of a recording indicator.
+    MediaRecord,
+    /// Previous track.
+    MediaSkipBackward,
+    /// Next track.
+    MediaSkipForward,
+    /// Back 10 seconds.
+    MediaSeekBackward,
+    /// Forward 10 seconds.
+    MediaSeekForward,
+    /// Microphone muted.
+    AudioInputMicrophoneMuted,
+    /// Connected, kind of network unknown.
+    NetworkTransmitReceive,
+    /// Devices on one local network.
+    NetworkWorkgroup,
+    /// Screen sharing in progress.
+    ScreenShared,
+    /// Log out of the session.
+    SystemLogOut,
+    /// Restart the machine.
+    SystemReboot,
+    /// Switch to another user.
+    SystemSwitchUser,
+    /// A clear day: the sun.
+    WeatherClear,
+    /// A still camera.
+    CameraPhoto,
+    /// A numbered list.
+    ViewListOrdered,
+    /// A ticked box.
+    CheckboxChecked,
+    /// A paragraph of plain text.
+    FormatTextPlaintext,
+    /// Bold text.
+    FormatTextBold,
+    /// Italic text.
+    FormatTextItalic,
+    /// Struck-through text.
+    FormatTextStrikethrough,
+    /// Code, written as angle brackets.
+    FormatCode,
+    /// A quotation, written as quotation marks.
+    FormatQuote,
+    /// A link, written as a chain.
+    InsertLink,
     /// Any icon of the chat fork at any weight, as the fork draws it (feature `chat-icons`).
     #[cfg(feature = "chat-icons")]
     Chat(crate::chat_icons::ChatIcon, crate::chat_icons::ChatWeight),
@@ -190,7 +240,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 153] = [
+    pub const ALL: [Icon; 179] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -259,7 +309,6 @@ impl Icon {
         Self::AudioVolumeMuted,
         Self::AudioVolumeLow,
         Self::AudioVolumeMedium,
-        Self::AudioCard,
         Self::CameraWeb,
         Self::DisplayBrightness,
         Self::NightLight,
@@ -268,11 +317,21 @@ impl Icon {
         Self::PowerProfileBalanced,
         Self::PowerProfilePerformance,
         Self::SystemShutdown,
+        Self::BatteryLevel0,
+        Self::BatteryLevel10,
+        Self::BatteryLevel20,
+        Self::BatteryLevel30,
+        Self::BatteryLevel40,
         Self::BatteryLevel50,
+        Self::BatteryLevel60,
+        Self::BatteryLevel70,
+        Self::BatteryLevel80,
+        Self::BatteryLevel90,
         Self::BatteryLevel100,
         Self::ViewReveal,
         Self::ViewConceal,
         Self::DocumentEdit,
+        Self::Pencil,
         Self::UserInfo,
         Self::Starred,
         Self::NonStarred,
@@ -287,10 +346,8 @@ impl Icon {
         Self::ObjectRotateLeft,
         Self::MediaViewSubtitles,
         Self::DialogPassword,
-        Self::SystemLockScreen,
         Self::SendTo,
         Self::FolderDownload,
-        Self::PreferencesDesktopKeyboardShortcuts,
         Self::InputTouchpad,
         Self::PreferencesOther,
         Self::ViewList,
@@ -299,8 +356,6 @@ impl Icon {
         Self::InputTablet,
         Self::NetworkServer,
         Self::AvatarDefault,
-        Self::SecurityHigh,
-        Self::SecurityLow,
         Self::FindLocation,
         Self::MailUnread,
         Self::ApplicationsMultimedia,
@@ -332,18 +387,39 @@ impl Icon {
         Self::FolderPublicshare,
         Self::FolderDesktop,
         Self::WindowNew,
-        Self::GoUp,
         Self::DefaultAppText,
         Self::DefaultAppDocuments,
         Self::DragHandle,
         Self::ApplicationPdf,
-        Self::XOfficeDocument,
-        Self::XOfficeSpreadsheet,
-        Self::XOfficePresentation,
+        Self::Table,
+        Self::Presentation,
         Self::FontXGeneric,
         Self::TextXScript,
         Self::ApplicationXGeneric,
         Self::EmblemSymbolicLink,
+        Self::MediaRecord,
+        Self::MediaSkipBackward,
+        Self::MediaSkipForward,
+        Self::MediaSeekBackward,
+        Self::MediaSeekForward,
+        Self::AudioInputMicrophoneMuted,
+        Self::NetworkTransmitReceive,
+        Self::NetworkWorkgroup,
+        Self::ScreenShared,
+        Self::SystemLogOut,
+        Self::SystemReboot,
+        Self::SystemSwitchUser,
+        Self::WeatherClear,
+        Self::CameraPhoto,
+        Self::ViewListOrdered,
+        Self::CheckboxChecked,
+        Self::FormatTextPlaintext,
+        Self::FormatTextBold,
+        Self::FormatTextItalic,
+        Self::FormatTextStrikethrough,
+        Self::FormatCode,
+        Self::FormatQuote,
+        Self::InsertLink,
     ];
 
     /// The embedded SVG source for this icon.
@@ -361,9 +437,7 @@ impl Icon {
             Self::WindowMaximize => include_bytes!("../icons/window-maximize-symbolic.svg"),
             Self::WindowRestore => include_bytes!("../icons/window-restore-symbolic.svg"),
             Self::Appearance => include_bytes!("../icons/applications-graphics-symbolic.svg"),
-            Self::Desktop => {
-                include_bytes!("../icons/preferences-desktop-wallpaper-symbolic.svg")
-            }
+            Self::Desktop => include_bytes!("../icons/preferences-desktop-symbolic.svg"),
             Self::Search => include_bytes!("../icons/system-search-symbolic.svg"),
             Self::Filter => include_bytes!("../icons/view-filter-symbolic.svg"),
             Self::Network => include_bytes!("../icons/network-wireless-symbolic.svg"),
@@ -440,7 +514,6 @@ impl Icon {
             Self::AudioVolumeMuted => include_bytes!("../icons/audio-volume-muted-symbolic.svg"),
             Self::AudioVolumeLow => include_bytes!("../icons/audio-volume-low-symbolic.svg"),
             Self::AudioVolumeMedium => include_bytes!("../icons/audio-volume-medium-symbolic.svg"),
-            Self::AudioCard => include_bytes!("../icons/audio-card-symbolic.svg"),
             Self::CameraWeb => include_bytes!("../icons/camera-web-symbolic.svg"),
             Self::DisplayBrightness => include_bytes!("../icons/display-brightness-symbolic.svg"),
             Self::NightLight => include_bytes!("../icons/night-light-symbolic.svg"),
@@ -455,16 +528,28 @@ impl Icon {
                 include_bytes!("../icons/power-profile-performance-symbolic.svg")
             }
             Self::SystemShutdown => include_bytes!("../icons/system-shutdown-symbolic.svg"),
+            Self::BatteryLevel0 => include_bytes!("../icons/battery-level-0-symbolic.svg"),
+            Self::BatteryLevel10 => include_bytes!("../icons/battery-level-10-symbolic.svg"),
+            Self::BatteryLevel20 => include_bytes!("../icons/battery-level-20-symbolic.svg"),
+            Self::BatteryLevel30 => include_bytes!("../icons/battery-level-30-symbolic.svg"),
+            Self::BatteryLevel40 => include_bytes!("../icons/battery-level-40-symbolic.svg"),
             Self::BatteryLevel50 => include_bytes!("../icons/battery-level-50-symbolic.svg"),
+            Self::BatteryLevel60 => include_bytes!("../icons/battery-level-60-symbolic.svg"),
+            Self::BatteryLevel70 => include_bytes!("../icons/battery-level-70-symbolic.svg"),
+            Self::BatteryLevel80 => include_bytes!("../icons/battery-level-80-symbolic.svg"),
+            Self::BatteryLevel90 => include_bytes!("../icons/battery-level-90-symbolic.svg"),
             Self::BatteryLevel100 => include_bytes!("../icons/battery-level-100-symbolic.svg"),
             Self::ViewReveal => include_bytes!("../icons/view-reveal-symbolic.svg"),
             Self::ViewConceal => include_bytes!("../icons/view-conceal-symbolic.svg"),
             Self::DocumentEdit => include_bytes!("../icons/document-edit-symbolic.svg"),
+            Self::Pencil => include_bytes!("../icons/pencil-symbolic.svg"),
             Self::UserInfo => include_bytes!("../icons/user-info-symbolic.svg"),
             Self::Starred => include_bytes!("../icons/starred-symbolic.svg"),
             Self::NonStarred => include_bytes!("../icons/non-starred-symbolic.svg"),
             Self::ObjectRotateRight => include_bytes!("../icons/object-rotate-right-symbolic.svg"),
-            Self::MediaPlaybackStart => include_bytes!("../icons/media-playback-start-symbolic.svg"),
+            Self::MediaPlaybackStart => {
+                include_bytes!("../icons/media-playback-start-symbolic.svg")
+            }
             Self::MediaPlaybackStop => include_bytes!("../icons/media-playback-stop-symbolic.svg"),
             Self::ViewFullscreen => include_bytes!("../icons/view-fullscreen-symbolic.svg"),
             Self::ViewRestore => include_bytes!("../icons/view-restore-symbolic.svg"),
@@ -472,14 +557,12 @@ impl Icon {
             Self::ZoomOut => include_bytes!("../icons/zoom-out-symbolic.svg"),
             Self::ZoomFitBest => include_bytes!("../icons/zoom-fit-best-symbolic.svg"),
             Self::ObjectRotateLeft => include_bytes!("../icons/object-rotate-left-symbolic.svg"),
-            Self::MediaViewSubtitles => include_bytes!("../icons/media-view-subtitles-symbolic.svg"),
+            Self::MediaViewSubtitles => {
+                include_bytes!("../icons/media-view-subtitles-symbolic.svg")
+            }
             Self::DialogPassword => include_bytes!("../icons/dialog-password-symbolic.svg"),
-            Self::SystemLockScreen => include_bytes!("../icons/system-lock-screen-symbolic.svg"),
             Self::SendTo => include_bytes!("../icons/send-to-symbolic.svg"),
             Self::FolderDownload => include_bytes!("../icons/folder-download-symbolic.svg"),
-            Self::PreferencesDesktopKeyboardShortcuts => {
-                include_bytes!("../icons/preferences-desktop-keyboard-shortcuts-symbolic.svg")
-            }
             Self::InputTouchpad => include_bytes!("../icons/input-touchpad-symbolic.svg"),
             Self::PreferencesOther => include_bytes!("../icons/preferences-other-symbolic.svg"),
             Self::ViewList => include_bytes!("../icons/view-list-symbolic.svg"),
@@ -488,8 +571,6 @@ impl Icon {
             Self::InputTablet => include_bytes!("../icons/input-tablet-symbolic.svg"),
             Self::NetworkServer => include_bytes!("../icons/network-server-symbolic.svg"),
             Self::AvatarDefault => include_bytes!("../icons/avatar-default-symbolic.svg"),
-            Self::SecurityHigh => include_bytes!("../icons/security-high-symbolic.svg"),
-            Self::SecurityLow => include_bytes!("../icons/security-low-symbolic.svg"),
             Self::FindLocation => include_bytes!("../icons/find-location-symbolic.svg"),
             Self::MailUnread => include_bytes!("../icons/mail-unread-symbolic.svg"),
             Self::ApplicationsMultimedia => {
@@ -527,18 +608,53 @@ impl Icon {
             Self::FolderPublicshare => include_bytes!("../icons/folder-publicshare-symbolic.svg"),
             Self::FolderDesktop => include_bytes!("../icons/folder-desktop-symbolic.svg"),
             Self::WindowNew => include_bytes!("../icons/window-new-symbolic.svg"),
-            Self::GoUp => include_bytes!("../icons/go-up-symbolic.svg"),
             Self::DefaultAppText => include_bytes!("../icons/default-app-text-symbolic.svg"),
-            Self::DefaultAppDocuments => include_bytes!("../icons/default-app-documents-symbolic.svg"),
+            Self::DefaultAppDocuments => {
+                include_bytes!("../icons/default-app-documents-symbolic.svg")
+            }
             Self::DragHandle => include_bytes!("../icons/list-drag-handle-symbolic.svg"),
             Self::ApplicationPdf => include_bytes!("../icons/application-pdf-symbolic.svg"),
-            Self::XOfficeDocument => include_bytes!("../icons/x-office-document-symbolic.svg"),
-            Self::XOfficeSpreadsheet => include_bytes!("../icons/x-office-spreadsheet-symbolic.svg"),
-            Self::XOfficePresentation => include_bytes!("../icons/x-office-presentation-symbolic.svg"),
+            Self::Table => include_bytes!("../icons/table-symbolic.svg"),
+            Self::Presentation => include_bytes!("../icons/presentation-symbolic.svg"),
             Self::FontXGeneric => include_bytes!("../icons/font-x-generic-symbolic.svg"),
             Self::TextXScript => include_bytes!("../icons/text-x-script-symbolic.svg"),
-            Self::ApplicationXGeneric => include_bytes!("../icons/application-x-generic-symbolic.svg"),
-            Self::EmblemSymbolicLink => include_bytes!("../icons/emblem-symbolic-link-symbolic.svg"),
+            Self::ApplicationXGeneric => {
+                include_bytes!("../icons/application-x-generic-symbolic.svg")
+            }
+            Self::EmblemSymbolicLink => {
+                include_bytes!("../icons/emblem-symbolic-link-symbolic.svg")
+            }
+            Self::MediaRecord => include_bytes!("../icons/media-record-symbolic.svg"),
+            Self::MediaSkipBackward => include_bytes!("../icons/media-skip-backward-symbolic.svg"),
+            Self::MediaSkipForward => include_bytes!("../icons/media-skip-forward-symbolic.svg"),
+            Self::MediaSeekBackward => include_bytes!("../icons/media-seek-backward-symbolic.svg"),
+            Self::MediaSeekForward => include_bytes!("../icons/media-seek-forward-symbolic.svg"),
+            Self::AudioInputMicrophoneMuted => {
+                include_bytes!("../icons/audio-input-microphone-muted-symbolic.svg")
+            }
+            Self::NetworkTransmitReceive => {
+                include_bytes!("../icons/network-transmit-receive-symbolic.svg")
+            }
+            Self::NetworkWorkgroup => include_bytes!("../icons/network-workgroup-symbolic.svg"),
+            Self::ScreenShared => include_bytes!("../icons/screen-shared-symbolic.svg"),
+            Self::SystemLogOut => include_bytes!("../icons/system-log-out-symbolic.svg"),
+            Self::SystemReboot => include_bytes!("../icons/system-reboot-symbolic.svg"),
+            Self::SystemSwitchUser => include_bytes!("../icons/system-switch-user-symbolic.svg"),
+            Self::WeatherClear => include_bytes!("../icons/weather-clear-symbolic.svg"),
+            Self::CameraPhoto => include_bytes!("../icons/camera-photo-symbolic.svg"),
+            Self::ViewListOrdered => include_bytes!("../icons/view-list-ordered-symbolic.svg"),
+            Self::CheckboxChecked => include_bytes!("../icons/checkbox-checked-symbolic.svg"),
+            Self::FormatTextPlaintext => {
+                include_bytes!("../icons/format-text-plaintext-symbolic.svg")
+            }
+            Self::FormatTextBold => include_bytes!("../icons/format-text-bold-symbolic.svg"),
+            Self::FormatTextItalic => include_bytes!("../icons/format-text-italic-symbolic.svg"),
+            Self::FormatTextStrikethrough => {
+                include_bytes!("../icons/format-text-strikethrough-symbolic.svg")
+            }
+            Self::FormatCode => include_bytes!("../icons/format-code-symbolic.svg"),
+            Self::FormatQuote => include_bytes!("../icons/format-quote-symbolic.svg"),
+            Self::InsertLink => include_bytes!("../icons/insert-link-symbolic.svg"),
             #[cfg(feature = "chat-icons")]
             // A weight the fork lacks is drawn in the regular weight, which every fork icon has.
             Self::Chat(icon, weight) => icon
@@ -598,7 +714,12 @@ pub fn icon(icon: Icon, size: crate::style::IconSize, color: Color) -> SvgViewer
 
 /// [`icon`] with its size scaled by `scale` and rounded to whole pixels, so a
 /// zooming view keeps its glyph edges sharp. The size is never below 1 px.
-pub fn icon_scaled(icon: Icon, size: crate::style::IconSize, scale: f32, color: Color) -> SvgViewer {
+pub fn icon_scaled(
+    icon: Icon,
+    size: crate::style::IconSize,
+    scale: f32,
+    color: Color,
+) -> SvgViewer {
     glyph(icon, (size.px() * scale).round().max(1.0), color)
 }
 
@@ -629,7 +750,27 @@ impl Icon {
                 | Self::ViewList
                 | Self::HelpBrowser
                 | Self::EmblemSymbolicLink
+                | Self::SystemLogOut
         )
+    }
+
+    /// The battery icon filled to `percent` (0 to 100, more is 100), rounded to
+    /// the nearest ten: one of the `battery-level-N` files, which draw the
+    /// charge as the filled part of the body and the rest dimmed.
+    pub const fn battery_level(percent: u8) -> Self {
+        match (percent.saturating_add(5) / 10) * 10 {
+            0 => Self::BatteryLevel0,
+            10 => Self::BatteryLevel10,
+            20 => Self::BatteryLevel20,
+            30 => Self::BatteryLevel30,
+            40 => Self::BatteryLevel40,
+            50 => Self::BatteryLevel50,
+            60 => Self::BatteryLevel60,
+            70 => Self::BatteryLevel70,
+            80 => Self::BatteryLevel80,
+            90 => Self::BatteryLevel90,
+            _ => Self::BatteryLevel100,
+        }
     }
 }
 
@@ -673,9 +814,22 @@ mod tests {
         }
         for file in labelled {
             assert!(
-                Icon::ALL.iter().any(|icon| files_of(*icon).iter().any(|name| name == file)),
+                Icon::ALL
+                    .iter()
+                    .any(|icon| files_of(*icon).iter().any(|name| name == file)),
                 "`#mirror_rtl` names {file}, which no Icon draws"
             );
         }
+    }
+
+    #[test]
+    fn battery_level_picks_the_nearest_ten_and_never_goes_past_full() {
+        assert_eq!(Icon::battery_level(0), Icon::BatteryLevel0);
+        assert_eq!(Icon::battery_level(4), Icon::BatteryLevel0);
+        assert_eq!(Icon::battery_level(5), Icon::BatteryLevel10);
+        assert_eq!(Icon::battery_level(49), Icon::BatteryLevel50);
+        assert_eq!(Icon::battery_level(85), Icon::BatteryLevel90);
+        assert_eq!(Icon::battery_level(100), Icon::BatteryLevel100);
+        assert_eq!(Icon::battery_level(255), Icon::BatteryLevel100);
     }
 }

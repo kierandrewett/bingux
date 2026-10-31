@@ -187,8 +187,8 @@ rules-check:
 	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/rules-check.py --jobs $(JOBS) $(ARGS)
 
 check: doctor-build native daemons
-	python3 scripts/generate-adwaita-icon-index.py --check
 	python3 scripts/ui-lint.py
+	python3 scripts/ui-lint.py --self-test
 	python3 scripts/taxonomy-check.py
 	cd $(BUILD_DIR)/text && $(QMAKE) $(ROOT)/native/text-layout/spacing-test.pro -o Makefile.tests && $(MAKE) -f Makefile.tests
 	QT_QPA_PLATFORM=offscreen $(BUILD_DIR)/text/spacing-test

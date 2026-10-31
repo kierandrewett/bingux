@@ -6,8 +6,9 @@
     <path d="M84.243 12.243C81.899 9.899 80 10.686 80 14L80 35C80 37.761 82.239 40 85 40L106 40C109.314 40 110.101 38.101 107.757 35.757Z" fill="#000" fill-opacity=".22"/>
     <clipPath id="page"><path d="M16 22C16 14.268 22.268 8 30 8L74 8C77.314 8 81.899 9.899 84.243 12.243L107.757 35.757C110.101 38.101 112 42.686 112 46L112 106C112 113.732 105.732 120 98 120L30 120C22.268 120 16 113.732 16 106Z"/></clipPath>
     <path d="M16 22C16 14.268 22.268 8 30 8L74 8C77.314 8 81.899 9.899 84.243 12.243L107.757 35.757C110.101 38.101 112 42.686 112 46L112 106C112 113.732 105.732 120 98 120L30 120C22.268 120 16 113.732 16 106Z" fill="none" stroke="#000" stroke-opacity="0.26" stroke-width="6" clip-path="url(#page)"/>
-    <circle cx="50" cy="96" r="10" fill="currentColor"/>
-    <circle cx="80" cy="90" r="10" fill="currentColor"/>
-    <path d="M60 96V60L90 52V88" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M60 60L90 52V68L60 76Z" fill="currentColor" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
+    <rect x="48" y="56" width="8" height="40" fill="currentColor"/>
+    <rect x="88" y="48" width="8" height="40" fill="currentColor"/>
+    <line x1="52" y1="59.2" x2="92" y2="51.2" fill="none" stroke="currentColor" stroke-width="12" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="44" cy="96" r="12" fill="currentColor"/>
+    <circle cx="84" cy="88" r="12" fill="currentColor"/>
 </svg>

@@ -9,7 +9,7 @@
 //! For every size (12, 14, 16, 18, 20, 48) and both schemes (white on black,
 //! dark on light) it writes `OUT_DIR/sheet-<size>-<scheme>.png` at 1:1: each
 //! column is one icon from `OURS_DIR`, with the file of the same name from each
-//! `ROW_DIR` (the Adwaita originals, or other candidate sets) beneath it. Zoom
+//! `ROW_DIR` (a reference set, or other candidate sets) beneath it. Zoom
 //! the PNGs with a nearest-neighbour filter to judge pixels.
 //!
 //! `ICON_SHEET_SIZES=16,20` limits the sizes. `ICON_SHEET_TOPBAR=FILE` names a

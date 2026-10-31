@@ -96,8 +96,8 @@ ColumnLayout {
         offsetY: 1
         colour: Qt.rgba(0, 0, 0, 0.45)
         Text {
-            textFormat: Text.PlainText
             id: accountLabel
+            textFormat: Text.PlainText
             width: parent.width
             text: root.displayName
             color: root.theme.ink
@@ -147,8 +147,8 @@ ColumnLayout {
         }
     }
     Text {
-        textFormat: Text.PlainText
         id: status
+        textFormat: Text.PlainText
         objectName: "sessionStatus"
         Layout.fillWidth: true
         Layout.topMargin: -2
@@ -284,7 +284,7 @@ ColumnLayout {
             }
             contentItem: SymbolicIcon {
                 implicitSize: 12
-                source: AdwaitaIcons.source("go-next-symbolic")
+                source: BinguxIcons.source("go-next-symbolic")
                 color: root.theme.ink
             }
         }

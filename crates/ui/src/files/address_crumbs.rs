@@ -8,26 +8,26 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use bingux_files::Kind;
 use bingux_files::listing::Cancel;
 use bingux_files::location::subfolders;
 use bingux_files::places::Places;
-use bingux_files::Kind;
 use freya::prelude::*;
 
 use super::address_list::{Lead, ListRow, NoticeRow, Part, rows_height, scroll_offset};
 use super::address_target::StopOnDrop;
 use super::address_trail::{Item, Metrics, layout};
 use super::directory::Where;
-use super::named::Roots;
 use super::file_icon::{FileIcon, FileKind, file_icon_view};
+use super::named::Roots;
 use crate::component::ComponentName;
 use crate::controls::path_label::measure_text;
-use crate::controls::tooltip::hover_tip;
 use crate::controls::text_field::field_action;
+use crate::controls::tooltip::hover_tip;
 use crate::controls::{StopRing, focus_stop_press, focus_stop_pressed, focus_stop_with};
 use crate::icons::{self, Icon};
-use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
 use crate::shell::menu_query::{Candidate, Mark, Reaction};
+use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
 use crate::shell::type_ahead::use_list_query;
 use crate::shell::{MenuItem, Overlays, menu_item, menu_separator};
 use crate::style::*;
@@ -315,7 +315,11 @@ fn crumb_menu(
     };
     let roots = Roots::current();
     let in_trash = roots.below_trash(path).is_some();
-    let copy_label = if in_trash { "Copy location" } else { "Copy path" };
+    let copy_label = if in_trash {
+        "Copy location"
+    } else {
+        "Copy path"
+    };
     let mut items = vec![
         menu_item("Open", move |_| {
             on_open.call(Where::Folder(open_path.clone()));
@@ -371,9 +375,11 @@ impl Component for CrumbButton {
                 .tw(&tokens, &[w(Dim::Dense), h_full(), center()])
                 .child(file_icon_view(&tokens, &icon, IconSize::Control, false))
         });
-        let content = rect().component("AddressCrumb").tw(&tokens, &[h(Dim::Dense)]).child(
-            face.attach(
-                rect().tw(
+        let content = rect()
+            .component("AddressCrumb")
+            .tw(&tokens, &[h(Dim::Dense)])
+            .child(
+                face.attach(rect().tw(
                     &tokens,
                     &[
                         flex_row(),
@@ -384,15 +390,14 @@ impl Component for CrumbButton {
                         rounded(Radius::Inner),
                         surface(Paint::Transparent, face.hovering(), face.pressing(), false),
                     ],
+                ))
+                .maybe_child(lead)
+                .child(
+                    BODY.in_ink(ink)
+                        .label(&tokens, self.shown.clone())
+                        .max_lines(1),
                 ),
-            )
-            .maybe_child(lead)
-            .child(
-                BODY.in_ink(ink)
-                    .label(&tokens, self.shown.clone())
-                    .max_lines(1),
-            ),
-        );
+            );
         let stop = focus_stop_pressed(
             use_a11y(),
             content,
@@ -448,9 +453,11 @@ impl Component for OverflowButton {
                 focus() == Focus::Keyboard,
             );
         });
-        let content = rect().component("AddressOverflow").tw(&tokens, &[h(Dim::Dense)]).child(
-            face.attach(
-                rect().tw(
+        let content = rect()
+            .component("AddressOverflow")
+            .tw(&tokens, &[h(Dim::Dense)])
+            .child(
+                face.attach(rect().tw(
                     &tokens,
                     &[
                         flex_row(),
@@ -460,14 +467,13 @@ impl Component for OverflowButton {
                         rounded(Radius::Inner),
                         surface(Paint::Transparent, face.hovering(), face.pressing(), false),
                     ],
+                ))
+                .child(
+                    BODY.in_ink(Ink::Muted)
+                        .label(&tokens, "…".to_string())
+                        .max_lines(1),
                 ),
-            )
-            .child(
-                BODY.in_ink(Ink::Muted)
-                    .label(&tokens, "…".to_string())
-                    .max_lines(1),
-            ),
-        );
+            );
         let stop = focus_stop_with(
             id,
             content,
@@ -870,7 +876,7 @@ impl Component for CompactTrail {
         };
         rows.push(
             ListRow {
-                icon: Lead::Action(Icon::DocumentEdit),
+                icon: Lead::Action(Icon::Pencil),
                 parts: vec![Part::plain("Type a path")],
                 current: false,
                 highlighted: false,
@@ -912,13 +918,23 @@ impl Component for CompactTrail {
                         h_full(),
                         pr(S3),
                         rounded(Radius::Control),
-                        surface(Paint::Control, face.hovering() || open(), face.pressing(), false),
+                        surface(
+                            Paint::Control,
+                            face.hovering() || open(),
+                            face.pressing(),
+                            false,
+                        ),
                     ],
                 ))
                 .child(
                     rect()
                         .tw(&tokens, &[w(Dim::Control), h_full(), center()])
-                        .child(file_icon_view(&tokens, &current_icon, IconSize::Control, false)),
+                        .child(file_icon_view(
+                            &tokens,
+                            &current_icon,
+                            IconSize::Control,
+                            false,
+                        )),
                 )
                 .child(
                     BODY.in_ink(Ink::Text)
@@ -970,8 +986,14 @@ impl Component for CompactTrail {
             .child(rect().tw(&tokens, &[w_flex(), h_full()]).child(trail))
             .child(
                 rect()
-                    .tw(&tokens, &[flex_row(), items(Align::Center), h_full(), pr(FIELD_INSET)])
-                    .child(field_action(Icon::DocumentEdit, move |_: ()| on_edit.call(())).tooltip("Type a path")),
+                    .tw(
+                        &tokens,
+                        &[flex_row(), items(Align::Center), h_full(), pr(FIELD_INSET)],
+                    )
+                    .child(
+                        field_action(Icon::Pencil, move |_: ()| on_edit.call(()))
+                            .tooltip("Type a path"),
+                    ),
             )
             .child(Element::from(panel))
     }

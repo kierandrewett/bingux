@@ -1,14 +1,16 @@
 <svg height="32px" viewBox="0 0 32 32" width="32px" xmlns="http://www.w3.org/2000/svg">
     <defs><linearGradient id="lit" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.32"/><stop offset="0.55" stop-color="#fff" stop-opacity="0"/></linearGradient><linearGradient id="paper" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#ebeae8"/></linearGradient></defs>
-    <path d="M8 6C8 4.895 8.895 4 10 4L14 4C15.105 4 16 4.895 16 6L16 10C16 11.105 15.105 12 14 12L10 12C8.895 12 8 11.105 8 10Z" fill="#000" fill-opacity=".22"/>
-    <path d="M16 8C16 6.895 16.895 6 18 6L22 6C23.105 6 24 6.895 24 8L24 10C24 11.105 23.105 12 22 12L18 12C16.895 12 16 11.105 16 10Z" fill="#000" fill-opacity=".22"/>
-    <path d="M8 4C8 2.895 8.895 2 10 2L14 2C15.105 2 16 2.895 16 4L16 10C16 11.105 15.105 12 14 12L10 12C8.895 12 8 11.105 8 10Z" fill="url(#paper)"/>
-    <path d="M16 6C16 4.895 16.895 4 18 4L22 4C23.105 4 24 4.895 24 6L24 10C24 11.105 23.105 12 22 12L18 12C16.895 12 16 11.105 16 10Z" fill="url(#paper)"/>
-    <path d="M6 12H26V24Q26 28 22 28H10Q6 28 6 24Z"/>
-    <path d="M6 12H26V24Q26 28 22 28H10Q6 28 6 24Z" fill="#fff" fill-opacity=".28"/>
-    <path d="M6 12H26V24Q26 28 22 28H10Q6 28 6 24Z" fill="url(#lit)"/>
-    <path d="M4 10C4 8.895 4.895 8 6 8L26 8C27.105 8 28 8.895 28 10L28 10C28 11.105 27.105 12 26 12L6 12C4.895 12 4 11.105 4 10Z"/>
-    <path d="M4 10C4 8.895 4.895 8 6 8L26 8C27.105 8 28 8.895 28 10L28 10C28 11.105 27.105 12 26 12L6 12C4.895 12 4 11.105 4 10Z" fill="#000" fill-opacity=".22"/>
-    <rect x="12" y="16" width="2" height="8" fill="currentColor"/>
-    <rect x="18" y="16" width="2" height="8" fill="currentColor"/>
+    <path d="M8 10L10 2Q10.4 0.4 12 1L16 2Q17.6 2.4 17 4L15 10Z" fill="#000" fill-opacity=".22"/>
+    <path d="M10 10L12 2Q12.4 0.4 14 1L18 2Q19.6 2.4 19 4L17 10Z" fill="#000" fill-opacity=".22"/>
+    <path d="M14 10L15 3Q15.2 1.4 17 2L21 3Q22.6 3.4 23 5L22 10Z" fill="#000" fill-opacity=".22"/>
+    <path d="M16 10L17 3Q17.2 1.4 19 2L23 3Q24.6 3.4 24 5L23 10Z" fill="#000" fill-opacity=".22"/>
+    <path d="M9 10L11 3Q11.4 1.4 13 1L17 2Q18.6 2.4 18 4L16 10Z" fill="url(#paper)"/>
+    <path d="M15 10L16 4Q16.2 2.4 18 2L22 3Q23.6 3.4 23 5L22 10Z" fill="url(#paper)"/>
+    <path d="M6 12H26L24 25Q23.6 30 19 30H13Q8.4 30 8 25Z"/>
+    <path d="M6 12H26L24 25Q23.6 30 19 30H13Q8.4 30 8 25Z" fill="#fff" fill-opacity=".28"/>
+    <path d="M6 12H26L24 25Q23.6 30 19 30H13Q8.4 30 8 25Z" fill="url(#lit)"/>
+    <path d="M4 9.5C4 8.119 5.119 7 6.5 7L25.5 7C26.881 7 28 8.119 28 9.5L28 9.5C28 10.881 26.881 12 25.5 12L6.5 12C5.119 12 4 10.881 4 9.5Z"/>
+    <path d="M4 9.5C4 8.119 5.119 7 6.5 7L25.5 7C26.881 7 28 8.119 28 9.5L28 9.5C28 10.881 26.881 12 25.5 12L6.5 12C5.119 12 4 10.881 4 9.5Z" fill="#000" fill-opacity=".22"/>
+    <path d="M12 17C12 16.448 12.448 16 13 16L13 16C13.552 16 14 16.448 14 17L14 23C14 23.552 13.552 24 13 24L13 24C12.448 24 12 23.552 12 23Z" fill="currentColor"/>
+    <path d="M18 17C18 16.448 18.448 16 19 16L19 16C19.552 16 20 16.448 20 17L20 23C20 23.552 19.552 24 19 24L19 24C18.448 24 18 23.552 18 23Z" fill="currentColor"/>
 </svg>

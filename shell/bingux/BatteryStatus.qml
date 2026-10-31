@@ -7,7 +7,7 @@ IconButton {
     property bool barLayout: false
     label: available ? summary.replace(/^Battery /, "").replace(" percent", "%").replace(/,.*$/, "") : "No battery"
     text: label
-    iconName: "battery-good-symbolic"
+    iconName: "battery-level-100-symbolic"
     barStyle: barLayout
     tooltipEnabled: barLayout
     tooltipText: available ? summary : label

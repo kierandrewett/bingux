@@ -1,5 +1,5 @@
 <svg viewBox="0 0 16 16">
-  <path d="M1.68 6.81A8.5 8.5 0 0 1 14.32 6.81" stroke="black" stroke-width="2"/>
+  <path d="M1.68 6.81A8.5 8.5 0 0 1 14.32 6.81" stroke="black" stroke-width="2" data-dim="yes"/>
   <path d="M4.66 9.49A4.5 4.5 0 0 1 11.34 9.49" stroke="black" stroke-width="2"/>
   <circle cx="8" cy="12.5" r="1.5" fill="black"/>
 </svg>
