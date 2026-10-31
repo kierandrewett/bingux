@@ -131,8 +131,7 @@ local defaults = {
                 mode = "force",
                 radius = 12,
                 smoothing = 0.5,
-                -- The edge hairline follows the colour scheme; see `edge_rule` below.
-                border_width = 1,
+                -- The edge line and the shadows follow the colour scheme; see `edge_rules` below.
                 -- Reconstruct only detected client-drawn rounded corners
                 -- before applying Bingux's outer shape.
                 ["remove-csd"] = true,
@@ -142,26 +141,6 @@ local defaults = {
                 ["keep-fullscreen"] = false,
                 ["keep-tiled"] = true,
                 ["shadow-animation"] = { duration = 180, easing = "ease-out-cubic" },
-                -- macOS draws a 1 px line on both sides of the window edge. The inner one is the
-                -- border above. The outer one is the first shadow layer: no offset, no blur, 1 px
-                -- of spread, so it is an even ring. Two soft layers follow it. The earlier tight
-                -- layers (blur 4 and 6, offset down, opacity 0.22 to 0.32) made a heavy, uneven
-                -- dark ring that showed on a light background.
-                shadow = {
-                    { x = 0, y = 0, blur = 0, spread = 1, opacity = 0.22 },
-                    { x = 0, y = 10, blur = 40, spread = 0, opacity = 0.16 },
-                    { x = 0, y = 3, blur = 12, spread = 0, opacity = 0.10 },
-                },
-            },
-        },
-        {
-            match = { type = "window", focused = true },
-            corners = {
-                shadow = {
-                    { x = 0, y = 0, blur = 0, spread = 1, opacity = 0.30 },
-                    { x = 0, y = 18, blur = 56, spread = 0, opacity = 0.28 },
-                    { x = 0, y = 6, blur = 18, spread = 0, opacity = 0.16 },
-                },
             },
         },
         -- Bingux layer surfaces publish their own ext-background-effect
@@ -230,34 +209,71 @@ for _, rule in ipairs(window_rules) do
     gnoblin.window_rule(rule)
 end
 
--- Window edge, as on macOS: a 1 px line just inside the window's rounded edge,
--- a faint light line on a dark window and a faint dark line on a light one. A
--- fixed mid grey (the earlier "#505050bf") is a heavy outline on a dark window
--- and nearly invisible on a light one. `border_width` above is positive, so
--- Gnoblin draws it inward. The line is replaced when GNOME's colour scheme
--- changes: "prefer-dark" gets the light line, anything else the dark one.
-local edge_colours = { dark = "#ffffff29", light = "#00000029" }
+-- Window edge, as on macOS and as the shell's own menus draw it (Theme.qml): a 1 px line inside the
+-- rounded edge (`Theme.outline`, #505050 at 75%) and a 1 px black ring outside it
+-- (`Theme.panelOuterOutline`, 50%). The inner line is the border. The outer ring is the first
+-- shadow layer: no offset, no blur, 1 px of spread, so it is even all round. Soft layers follow.
+-- Gnoblin replaces a shadow list as a whole, so each scheme states the full list for unfocused and
+-- focused windows. A light window gets a white inner line and a lighter ring and shadow.
+local edges = {
+    dark = {
+        inner = "#505050bf",
+        shadow = {
+            { x = 0, y = 0, blur = 0, spread = 1, opacity = 0.50 },
+            { x = 0, y = 10, blur = 40, spread = 0, opacity = 0.16 },
+            { x = 0, y = 3, blur = 12, spread = 0, opacity = 0.10 },
+        },
+        focused = {
+            { x = 0, y = 0, blur = 0, spread = 1, opacity = 0.50 },
+            { x = 0, y = 18, blur = 56, spread = 0, opacity = 0.28 },
+            { x = 0, y = 6, blur = 18, spread = 0, opacity = 0.16 },
+        },
+    },
+    light = {
+        inner = "#ffffffb3",
+        shadow = {
+            { x = 0, y = 0, blur = 0, spread = 1, opacity = 0.22 },
+            { x = 0, y = 10, blur = 40, spread = 0, opacity = 0.10 },
+            { x = 0, y = 3, blur = 12, spread = 0, opacity = 0.06 },
+        },
+        focused = {
+            { x = 0, y = 0, blur = 0, spread = 1, opacity = 0.28 },
+            { x = 0, y = 18, blur = 56, spread = 0, opacity = 0.20 },
+            { x = 0, y = 6, blur = 18, spread = 0, opacity = 0.12 },
+        },
+    },
+}
 
-local function edge_rule(scheme)
-    local colour = scheme == "prefer-dark" and edge_colours.dark or edge_colours.light
-    return { match = { type = "window" }, corners = { border_width = 1, border_color = colour } }
+local function edge_rules(scheme)
+    local edge = scheme == "prefer-light" and edges.light or scheme == "default" and edges.light or edges.dark
+    return {
+        {
+            match = { type = "window" },
+            corners = { border_width = 1, border_color = edge.inner, shadow = edge.shadow },
+        },
+        { match = { type = "window", focused = true }, corners = { shadow = edge.focused } },
+    }
 end
 
 -- `gnoblin.snapshot().window_rules` is empty inside the event handler, so the list is
 -- rebuilt from this module's own rules. Another file's rules would be dropped by that; the
 -- only one today is the minimal native frame rule of the default init.lua, which the
 -- frame rule above overrides for every window anyway.
-local function apply_edge(scheme)
+local function apply_edges(scheme)
     local rules = {}
     for _, rule in ipairs(window_rules) do
         rules[#rules + 1] = rule
     end
-    rules[#rules + 1] = edge_rule(scheme)
+    for _, rule in ipairs(edge_rules(scheme)) do
+        rules[#rules + 1] = rule
+    end
     gnoblin.configure({ window_rules = rules })
 end
 
--- The first edge is a plain rule; the list is replaced only when the scheme changes.
-gnoblin.window_rule(edge_rule(gnoblin.appearance.color_scheme()))
+-- The first edge rules are plain rules; the list is replaced only when the scheme changes.
+for _, rule in ipairs(edge_rules(gnoblin.appearance.color_scheme())) do
+    gnoblin.window_rule(rule)
+end
 gnoblin.events.on("gnoblin.appearance.color-scheme-changed", function(event)
-    apply_edge(event.color_scheme)
+    apply_edges(event.color_scheme)
 end)
