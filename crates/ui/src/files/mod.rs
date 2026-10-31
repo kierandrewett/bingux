@@ -6,9 +6,9 @@
 //! with its free space), an address bar of crumbs that turns into a text field
 //! with completions, a sortable list or a grid of thumbnails, a file type
 //! filter, a name field for saving, and keyboard control throughout. The
-//! search bar under the toolbar (Ctrl+F) filters the folder as you type or
-//! searches subfolders, Home or everywhere, with filters for type, date and
-//! size (see [`Find`] and `design/files-search.md`).
+//! address bar is also the search (Ctrl+F): the card that grows out of the
+//! field searches this folder and below, Home or everywhere, with chips for
+//! type, date and size (see [`Find`] and `design/files-search.md`).
 //!
 //! ```ignore
 //! use bingux_ui::files::{ChooserRequest, choose};
@@ -58,7 +58,6 @@ mod actions;
 mod address_bar;
 mod address_complete;
 mod address_crumbs;
-mod address_edit;
 mod address_list;
 mod address_target;
 #[cfg(all(test, feature = "testing"))]
@@ -98,6 +97,10 @@ mod hover_tests;
 mod interaction;
 pub mod launch;
 mod named;
+mod omnibox;
+mod omnibox_model;
+#[cfg(all(test, feature = "testing"))]
+mod omnibox_tests;
 mod place_menu;
 #[cfg(all(test, feature = "testing"))]
 mod place_tests;
@@ -122,10 +125,6 @@ mod scroll_memory;
 #[cfg(all(test, feature = "testing"))]
 mod scroll_tests;
 mod search;
-mod search_bar;
-mod search_filters;
-#[cfg(all(test, feature = "testing"))]
-mod search_tests;
 mod skeleton;
 mod states;
 mod status_line;
@@ -164,13 +163,9 @@ pub use file_icon::{
 pub use folder_table::{APP_SCHEME, FOLDER_SCHEME, folder_table, location_of, place_of};
 pub use named::{RECENT_SCHEME, Root, Roots, TRASH_SCHEME, Typed};
 pub use places_view::{PlacesMenu, PlacesSidebar};
-pub use search::{Deep, DeepResults, DeepStatus, Find, Marks, RunKey, SearchView, use_search_run};
-pub use search_bar::{
-    BarStatus, ScopeChoice, SearchBar, place_phrase, scope_choices, scope_key, status_text,
-    token_label,
-};
+pub use search::{Deep, DeepResults, Find, RunKey, use_search_run};
 pub use skeleton::skeleton;
-pub use states::{empty_state, error_state, loading_state, no_results_state};
+pub use states::{empty_state, error_state, loading_state};
 pub use view::FileView;
 pub use view_state::{load as remembered, save as remember};
 pub use zoom::default_zoom_px;

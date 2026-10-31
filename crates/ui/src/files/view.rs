@@ -56,20 +56,23 @@ use bingux_files::{Entry, Listing, Selection, Sort, SortKey};
 use freya::prelude::*;
 
 use super::actions::{self, Capabilities, Command, Env, ViewControls, use_ui};
-use super::drag::FileDrag;
-use super::file_icon::{FileIcon, file_icon_view_floating};
 use super::columns::{ColumnHeaders, ColumnLayout, ColumnSet, plan_in, row_padding};
 use super::context_menu;
 use super::directory::Wants;
+use super::drag::FileDrag;
 use super::file_grid::GridView;
-use super::hover_card::{Hover, HoverCard, HoverFeed, use_hover_feed};
-use super::search::SearchView;
-use super::scroll_memory::{Owner, SearchTop, came_from, measure, measured, recall, register, remember, unregister};
+use super::file_icon::{FileIcon, file_icon_view_floating};
 use super::file_list::ListView;
+use super::hover_card::{Hover, HoverCard, HoverFeed, use_hover_feed};
 use super::interaction::{DRAG_SLOP, Hits, Lattice, Span, reveal_offset};
-use super::status_line::{SearchLine, StatusInfo, status_line};
+use super::scroll_memory::{
+    Owner, came_from, measure, measured, recall, register, remember, unregister,
+};
+use super::status_line::{StatusInfo, status_line};
 use super::view_state;
-use super::zoom::{Pinch, ViewKind, Zoom, cap_for_width, default_zoom_px, kind_of, use_pinch, use_zoom, zoom_hud};
+use super::zoom::{
+    Pinch, ViewKind, Zoom, cap_for_width, default_zoom_px, kind_of, use_pinch, use_zoom, zoom_hud,
+};
 use crate::component::ComponentName;
 use crate::controls::press::{Press, is_touch, point_of, use_press};
 use crate::motion::Focusable;
@@ -215,9 +218,6 @@ pub(super) struct Ctx {
     pub thumbnails: bool,
     /// The Recent place: dates read as how long ago, and a Location column.
     pub recent: bool,
-    /// What a search is doing to the list, for marking names and for the
-    /// Location column of subfolder results.
-    pub search: Option<SearchView>,
     /// A letter typed on the list, or Ctrl+F, starts a search; see
     /// [`FileView::on_search`].
     pub on_search: Option<EventHandler<String>>,
@@ -268,15 +268,9 @@ impl Shared {
 }
 
 impl Ctx {
-    /// The list shows what a search of the subfolders found, not a folder.
-    pub fn in_results(&self) -> bool {
-        self.search.as_ref().is_some_and(|search| search.deep.is_some())
-    }
-
-    /// Rows carry a Location column: the recent files, or search results
-    /// from many folders.
+    /// Rows carry a Location column: the recent files.
     pub fn location_column(&self) -> bool {
-        self.recent || self.in_results()
+        self.recent
     }
 
     /// The columns the list is drawn with: the Trash's in the Trash itself,
@@ -284,22 +278,6 @@ impl Ctx {
     /// search results.
     pub fn column_set(&self) -> ColumnSet {
         trash_columns_or(self.location_column(), &self.env.folder)
-    }
-
-    /// The folder of a search result below the folder searched, as the
-    /// Location column and the detail card tell it. `None` outside results.
-    pub fn result_folder(&self, entry: &Entry) -> Option<String> {
-        let deep = self.search.as_ref()?.deep.as_ref()?;
-        let folder = bingux_files::find::relative_folder(&entry.path, &deep.root);
-        Some(if folder.is_empty() { "This folder".to_string() } else { folder })
-    }
-
-    /// The bytes of `name` the search matched, to draw marked.
-    pub fn marks(&self, name: &str) -> Vec<std::ops::Range<usize>> {
-        self.search
-            .as_ref()
-            .map(|search| search.query.highlight(name))
-            .unwrap_or_default()
     }
 
     pub fn selectable(&self, entry: &Entry) -> bool {
@@ -517,7 +495,9 @@ impl Ctx {
         let Some(lattice) = self.lattice.get() else {
             return;
         };
-        let Some(row) = self.cursor_row().filter(|_| !self.env.selection.peek().is_empty())
+        let Some(row) = self
+            .cursor_row()
+            .filter(|_| !self.env.selection.peek().is_empty())
         else {
             self.empty_menu(
                 PanelTrigger::Keyboard(PanelRect {
@@ -541,7 +521,10 @@ impl Ctx {
             + scroll;
         let rect = PanelRect {
             x,
-            y: y.clamp(area.min_y(), area.max_y() - lattice.item_h.min(area.height())),
+            y: y.clamp(
+                area.min_y(),
+                area.max_y() - lattice.item_h.min(area.height()),
+            ),
             width: lattice.item_w.min(area.width()),
             height: lattice.item_h,
         };
@@ -785,7 +768,11 @@ impl Ctx {
     /// send. `None` outside the viewport and between items.
     pub fn row_at(&self, at: (f32, f32)) -> Option<usize> {
         let area = *self.viewport.peek();
-        if at.0 < area.min_x() || at.0 >= area.max_x() || at.1 < area.min_y() || at.1 >= area.max_y() {
+        if at.0 < area.min_x()
+            || at.0 >= area.max_x()
+            || at.1 < area.min_y()
+            || at.1 >= area.max_y()
+        {
             return None;
         }
         let point = self.to_content(at);
@@ -998,7 +985,6 @@ pub struct FileView {
     /// view paints the window's radius there and is square elsewhere.
     corners: Corners,
     show_hidden: bool,
-    search: Option<SearchView>,
     on_search: Option<EventHandler<String>>,
     caps: Capabilities,
     new_folder: Option<State<u32>>,
@@ -1034,7 +1020,6 @@ impl FileView {
             autofocus: false,
             corners: Corners::None,
             show_hidden: false,
-            search: None,
             on_search: None,
             caps: Capabilities::CHOOSER,
             new_folder: None,
@@ -1104,18 +1089,6 @@ impl FileView {
     /// Hidden files are shown. Only the menu's check mark reads this.
     pub fn show_hidden(mut self, show_hidden: bool) -> Self {
         self.show_hidden = show_hidden;
-        self
-    }
-
-    /// A search is narrowing the list (the entries in `order` are its
-    /// matches) or replacing it with the matches found in the subfolders. The
-    /// view marks the matched letters in names, tells the status line
-    /// "3 of 120 items match", shows a Location column for subfolder results,
-    /// and scrolls to the top when the search changes. Search results are
-    /// not a folder: New folder, Paste and the remembered scroll position
-    /// do not apply to them.
-    pub fn search(mut self, search: Option<SearchView>) -> Self {
-        self.search = search;
         self
     }
 
@@ -1308,15 +1281,8 @@ impl Component for FileView {
         let home = use_hook(super::directory::home_folder);
         let wants = try_consume_context::<Wants>().unwrap_or_default();
         let recent = self.listing.recent;
-        let in_results = self
-            .search
-            .as_ref()
-            .is_some_and(|search| search.deep.is_some());
-        let folder = (!recent && !in_results).then(|| self.listing.path.clone());
-        let column_set = trash_columns_or(recent || in_results, &folder);
-        // The drop of the view reads this, not the first render's value.
-        let results_now = use_hook(|| Rc::new(Cell::new(false)));
-        results_now.set(in_results);
+        let folder = (!recent).then(|| self.listing.path.clone());
+        let column_set = trash_columns_or(recent, &folder);
 
         // Where this folder left off, when the person was here before.
         let key = self.listing.path.clone();
@@ -1338,7 +1304,9 @@ impl Component for FileView {
             let mut selection = selection;
             let listing = &self.listing;
             let has = |path: &Path| listing.entries.iter().any(|entry| entry.path == *path);
-            let wanted: &[PathBuf] = restored.as_ref().map_or(&[], |remembered| &remembered.selection);
+            let wanted: &[PathBuf] = restored
+                .as_ref()
+                .map_or(&[], |remembered| &remembered.selection);
             let from = came_from(owner, &key);
             if !selection.peek().is_empty() || (wanted.is_empty() && from.is_none()) {
                 selection_restored.set(true);
@@ -1367,12 +1335,7 @@ impl Component for FileView {
         // tab to another window asks for while this view is still on show.
         let record: Rc<dyn Fn()> = Rc::new({
             let path = key.clone();
-            let results_now = results_now.clone();
             move || {
-                // A scroll position inside search results is not the folder's.
-                if results_now.get() {
-                    return;
-                }
                 let paths = selection.peek().paths().to_vec();
                 remember(owner, &path, <(i32, i32)>::from(scroll).1, paths);
             }
@@ -1392,12 +1355,7 @@ impl Component for FileView {
         // zoom or a resize lays the rows out again with no pointer event, so
         // the row the card was for is somewhere else: it goes too.
         use_side_effect_with_deps(
-            &(
-                self.order.len(),
-                self.search.as_ref().map(|search| search.query.text().to_string()),
-                zoom.px(),
-                viewport.read().width() as i32,
-            ),
+            &(self.order.len(), zoom.px(), viewport.read().width() as i32),
             move |_| gestures.hover.clear(),
         );
 
@@ -1405,26 +1363,6 @@ impl Component for FileView {
             listing: self.listing.clone(),
             order: self.order.clone(),
         };
-        // A search that changes the rows starts at the top; one that keeps its
-        // text (results streaming in) leaves the scroll alone. Decided here,
-        // from what the view is given, and not in an effect: `scroll_to_y`
-        // reads the controller's bounds, which the scroll view rewrites on
-        // every layout, so an effect calling it ran again after each wheel
-        // notch or key and threw the list back to the top.
-        let search_key = self
-            .search
-            .as_ref()
-            .map(|search| (search.query.text().to_string(), in_results));
-        let search_top = use_hook({
-            let (key, rows) = (search_key.clone(), rows.clone());
-            move || Rc::new(RefCell::new(SearchTop::new(key, rows)))
-        });
-        if search_top.borrow_mut().moves(search_key, &rows) {
-            spawn(async move {
-                let mut scroll = scroll;
-                scroll.scroll_to_y(0);
-            });
-        }
         let on_activate = self.on_activate.clone();
         // Quick Look is opened through the environment, from a menu as well
         // as from the keyboard; the handler reaches the view's context
@@ -1437,12 +1375,15 @@ impl Component for FileView {
         let pane_row = use_state(move || mounted.pane_row);
         let pane_keys = use_state(|| false);
         // What this view measured is what the next one of the tab starts from.
-        use_side_effect_with_deps(&(*viewport.read(), *pane_row.read()), move |&(viewport, pane_row)| {
-            measure(owner, |measured| {
-                measured.viewport = viewport;
-                measured.pane_row = pane_row;
-            });
-        });
+        use_side_effect_with_deps(
+            &(*viewport.read(), *pane_row.read()),
+            move |&(viewport, pane_row)| {
+                measure(owner, |measured| {
+                    measured.viewport = viewport;
+                    measured.pane_row = pane_row;
+                });
+            },
+        );
         let env = Env {
             folder,
             home: home.clone(),
@@ -1507,7 +1448,6 @@ impl Component for FileView {
                 last_click,
                 thumbnails: self.thumbnails,
                 recent,
-                search: self.search.clone(),
                 on_search: self.on_search.clone(),
                 home: home.clone(),
                 wants: wants.clone(),
@@ -1537,7 +1477,6 @@ impl Component for FileView {
             last_click,
             thumbnails: self.thumbnails,
             recent,
-            search: self.search.clone(),
             on_search: self.on_search.clone(),
             home: home.clone(),
             wants: wants.clone(),
@@ -1546,13 +1485,9 @@ impl Component for FileView {
             pane_row,
         });
         *preview_target.borrow_mut() = Some(shared.downgrade());
-        // While searching, the arrows are in the address field: keep the
-        // selected match in view as it moves.
-        let cursor_path = self
-            .search
-            .is_some()
-            .then(|| selection.read().cursor().map(Path::to_path_buf))
-            .flatten();
+        // A file shown in its folder (from a search) is selected, and may be
+        // out of view: keep the selected row in view as it changes.
+        let cursor_path = selection.read().cursor().map(Path::to_path_buf);
         use_side_effect_with_deps(&cursor_path, {
             let shared = shared.clone();
             move |path: &Option<PathBuf>| {
@@ -1570,7 +1505,11 @@ impl Component for FileView {
         });
 
         // A toolbar button asked for a new folder.
-        let seen = use_hook(|| Rc::new(Cell::new(self.new_folder.map_or(0, |trigger| *trigger.peek()))));
+        let seen = use_hook(|| {
+            Rc::new(Cell::new(
+                self.new_folder.map_or(0, |trigger| *trigger.peek()),
+            ))
+        });
         if let Some(trigger) = self.new_folder {
             let wanted = *trigger.read();
             if seen.get() != wanted {
@@ -1587,7 +1526,11 @@ impl Component for FileView {
         // The sidebar's Empty Trash asked: this view does it (and says so in
         // its own status line), unless another view of the window already has.
         let empty_request = try_consume_root_context::<actions::EmptyTrashRequest>();
-        let empty_seen = use_hook(|| Rc::new(Cell::new(empty_request.map_or(0, |request| *request.0.peek()))));
+        let empty_seen = use_hook(|| {
+            Rc::new(Cell::new(
+                empty_request.map_or(0, |request| *request.0.peek()),
+            ))
+        });
         if let Some(request) = empty_request {
             let wanted = *request.0.read();
             if empty_seen.get() != wanted {
@@ -1602,7 +1545,8 @@ impl Component for FileView {
             }
         }
 
-        let focus_seen = use_hook(|| Rc::new(Cell::new(self.focus.map_or(0, |trigger| *trigger.peek()))));
+        let focus_seen =
+            use_hook(|| Rc::new(Cell::new(self.focus.map_or(0, |trigger| *trigger.peek()))));
         if let Some(trigger) = self.focus {
             let wanted = *trigger.read();
             if focus_seen.get() != wanted {
@@ -1624,7 +1568,11 @@ impl Component for FileView {
             }
         };
         use_side_effect_with_deps(
-            &(self.sort.key, self.listing.complete, self.listing.path.clone()),
+            &(
+                self.sort.key,
+                self.listing.complete,
+                self.listing.path.clone(),
+            ),
             move |_| stat_all(),
         );
         let autofocus = self.autofocus;
@@ -1749,9 +1697,7 @@ impl Component for FileView {
             })
             .on_pointer_down({
                 let shared = shared.clone();
-                move |event: Event<PointerEventData>| {
-                    shared.get().background_pointer_down(&event)
-                }
+                move |event: Event<PointerEventData>| shared.get().background_pointer_down(&event)
             })
             .on_global_pointer_move({
                 let shared = shared.clone();
@@ -1848,18 +1794,6 @@ fn status_info(view: &FileView, ctx: &Ctx) -> StatusInfo {
         total_listed: view.listing.entries.len(),
         selected: selected.len(),
         selected_bytes,
-        search: view.search.as_ref().map(|search| match &search.deep {
-            Some(deep) => SearchLine::Subfolders {
-                found: deep.found,
-                folders: deep.folders,
-                running: deep.running,
-                truncated: deep.truncated,
-            },
-            None => SearchLine::Folder {
-                matches: view.order.len(),
-                of: search.of,
-            },
-        }),
         loading: false,
         trash: actions::TrashView::of(
             (!view.listing.recent).then_some(view.listing.path.as_path()),
@@ -1893,11 +1827,7 @@ impl Component for BandOverlay {
         rect()
             .interactive(false)
             .layer(crate::layers::VIEW_CARD)
-            .position(
-                Position::new_absolute()
-                    .left(span.x0)
-                    .top(span.y0 + scroll),
-            )
+            .position(Position::new_absolute().left(span.x0).top(span.y0 + scroll))
             .width(Size::px(span.x1 - span.x0))
             .height(Size::px(span.y1 - span.y0))
             .tw(
@@ -1951,9 +1881,10 @@ impl Component for DragChip {
             .child(
                 rect()
                     .tw_layout(&[flex_row(), items(Align::Center), gap(S1)])
-                    .maybe_child(drag_icon.map(|icon| {
-                        file_icon_view_floating(&tokens, &icon, IconSize::Control)
-                    }))
+                    .maybe_child(
+                        drag_icon
+                            .map(|icon| file_icon_view_floating(&tokens, &icon, IconSize::Control)),
+                    )
                     .child(
                         BODY.in_ink(Ink::OnFloating)
                             .label(&tokens, label)

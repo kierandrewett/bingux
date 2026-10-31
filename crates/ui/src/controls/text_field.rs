@@ -17,9 +17,9 @@ use crate::component::ComponentName;
 use crate::controls::button::icon_button;
 use crate::controls::press::{is_touch, point_of, use_press};
 use crate::controls::text_edit::{self, DOUBLE_TAP};
-use crate::icons::{self, Icon};
 use crate::focus::owner::use_visual_focus;
 use crate::focus::{press_claimed, use_focus_core};
+use crate::icons::{self, Icon};
 use crate::motion::Focusable;
 use crate::shell::menu::{MenuItem, menu_item, menu_separator};
 use crate::shell::overlays::Overlays;
@@ -86,6 +86,8 @@ pub struct TextField {
     on_escape: Option<EventHandler<()>>,
     /// Told which modifiers were held, just before Enter submits.
     on_enter_modifiers: Option<EventHandler<Modifiers>>,
+    /// Alt+1 to Alt+n, taken by the field (see [`TextField::on_alt_digit`]).
+    alt_digit: Option<(usize, EventHandler<usize>)>,
     /// Apps' own entries, appended to the full edit menu after the general ones.
     edit_extra: Vec<MenuItem>,
 }
@@ -125,6 +127,7 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         select_range: None,
         on_escape: None,
         on_enter_modifiers: None,
+        alt_digit: None,
         edit_extra: Vec::new(),
     }
 }
@@ -361,6 +364,14 @@ impl TextField {
     /// pressed, just before the field submits, so the submit handler can tell
     /// Enter from Ctrl+Enter or Shift+Enter. A synthetic key press carries
     /// its modifiers here even where the window system's live state does not.
+    /// Alt+1 to Alt+`most` call `handler` with the digit and are taken by the
+    /// field: they neither type nor reach the window's shortcuts (Alt+digit
+    /// switches tabs) while the field has the keyboard.
+    pub fn on_alt_digit(mut self, most: usize, handler: impl Into<EventHandler<usize>>) -> Self {
+        self.alt_digit = Some((most, handler.into()));
+        self
+    }
+
     pub fn on_enter_modifiers(mut self, handler: impl Into<EventHandler<Modifiers>>) -> Self {
         self.on_enter_modifiers = Some(handler.into());
         self
@@ -400,6 +411,7 @@ impl Component for TextField {
         let escape_change = self.on_change.clone();
         let search = self.search;
         let on_enter_modifiers = self.on_enter_modifiers.clone();
+        let alt_digit = self.alt_digit.clone();
         let multiline = self.multiline;
         let invalid = self.invalid.is_some() || self.danger_outline;
         let own_id = use_a11y();
@@ -557,11 +569,7 @@ impl Component for TextField {
         };
 
         let mut input = Input::new(value)
-            .width(if fills {
-                Size::fill()
-            } else {
-                Size::px(width)
-            })
+            .width(if fills { Size::fill() } else { Size::px(width) })
             .enabled(enabled)
             .theme_colors(colors)
             .theme_layout(layout)
@@ -624,6 +632,24 @@ impl Component for TextField {
                         event.prevent_default();
                         false
                     }
+                    Key::Character(text)
+                        if alt_digit.is_some()
+                            && event.modifiers == Modifiers::ALT
+                            && text.len() == 1 =>
+                    {
+                        let Some((most, handler)) = &alt_digit else {
+                            return true;
+                        };
+                        match text.chars().next().and_then(|c| c.to_digit(10)) {
+                            Some(digit) if (1..=*most as u32).contains(&digit) => {
+                                event.stop_propagation();
+                                event.prevent_default();
+                                handler.call(digit as usize);
+                                false
+                            }
+                            _ => true,
+                        }
+                    }
                     // A single-line Enter bubbles up, so a popup can act on it.
                     Key::Named(NamedKey::Enter) if !multiline => {
                         if let Some(on_enter) = &on_enter_modifiers {
@@ -655,7 +681,10 @@ impl Component for TextField {
                     Key::Character(text)
                         if event.modifiers.intersects(Modifiers::ctrl_or_meta())
                             && !event.modifiers.contains(Modifiers::ALT)
-                            && !matches!(text.to_lowercase().as_str(), "a" | "c" | "x" | "v" | "z" | "y") =>
+                            && !matches!(
+                                text.to_lowercase().as_str(),
+                                "a" | "c" | "x" | "v" | "z" | "y"
+                            ) =>
                     {
                         false
                     }
@@ -766,7 +795,16 @@ impl Component for TextField {
                 .cursor(CursorIcon::default())
                 .tw(&tokens, &[flex_row(), center(), gap(S1)])
                 // ui-lint: allow(the inset is derived from the measured control and button heights)
-                .padding((0.0, if has_button { inset } else { pad_horizontal.px() }, 0.0, 0.0));
+                .padding((
+                    0.0,
+                    if has_button {
+                        inset
+                    } else {
+                        pad_horizontal.px()
+                    },
+                    0.0,
+                    0.0,
+                ));
             if let Some(suffix) = &self.suffix {
                 trailing = trailing.child(
                     BODY.in_ink(Ink::Muted)
@@ -850,7 +888,12 @@ impl Component for TextField {
         let window = crate::surface::window_size();
         let direction = crate::controls::direction::use_direction();
         let bar_hit = text_trigger.zip(*bar_size.read()).map(|(trigger, size)| {
-            text_bar_rect(trigger.anchor(), size, (window.width, window.height), direction)
+            text_bar_rect(
+                trigger.anchor(),
+                size,
+                (window.width, window.height),
+                direction,
+            )
         });
         // A touch on the bar or a handle is not a tap outside the field, which
         // would take its focus.
@@ -870,10 +913,12 @@ impl Component for TextField {
         // field keeps its focus. The shield claims that press with the focus
         // core, or the menu is still up for a quick click.
         let press_core = focus_core.clone();
-        input = input.keep_focus_in(companions).keep_focus_when(move |_: ()| {
-            press_claimed(&press_core)
-                || overlays.is_some_and(|overlays| overlays.menu_owned_by(input_id))
-        });
+        input = input
+            .keep_focus_in(companions)
+            .keep_focus_when(move |_: ()| {
+                press_claimed(&press_core)
+                    || overlays.is_some_and(|overlays| overlays.menu_owned_by(input_id))
+            });
         let cut = edit_item("Cut", copyable && changes_text, move |_| {
             command.set(Some(InputCommand::Cut));
             bar_open.set(false);
@@ -1047,7 +1092,6 @@ impl Component for TextField {
             })
     }
 }
-
 
 #[cfg(all(test, feature = "testing"))]
 #[path = "text_field_focus_tests.rs"]

@@ -31,8 +31,8 @@ use freya::prelude::*;
 
 use super::actions::Ui;
 use super::columns::{
-    CELL_PADDING, Column, ColumnLayout, DateStyle, Plan, cell, cell_text_styled, gutter, name_cell, plan_in,
-    row_padding,
+    CELL_PADDING, Column, ColumnLayout, DateStyle, Plan, cell, cell_text_styled, gutter, name_cell,
+    plan_in, row_padding,
 };
 use super::interaction::Lattice;
 use super::rename_field::RenameField;
@@ -111,7 +111,12 @@ impl Component for ListView {
         let mut viewport = ctx.viewport;
         let width = viewport.read().width();
         let row_width = width - 2.0 * row_padding();
-        let plan = plan_in(&self.layout, f32::from(icon_px), row_width, ctx.column_set());
+        let plan = plan_in(
+            &self.layout,
+            f32::from(icon_px),
+            row_width,
+            ctx.column_set(),
+        );
         ctx.lattice.set(Some(Lattice {
             columns: 1,
             count: self.rows.len(),
@@ -216,7 +221,12 @@ pub(super) fn anchor_zoom(ctx: &Ctx, zoom_px: f32, pitch: f32, columns: usize, s
         0.0
     };
     let next = super::interaction::anchored_offset(
-        offset, pointer, old_pitch, old_columns, pitch, columns,
+        offset,
+        pointer,
+        old_pitch,
+        old_columns,
+        pitch,
+        columns,
     );
     let target = -(next.max(0.0).round() as i32);
     scroll.scroll_to_y(target);
@@ -252,20 +262,8 @@ pub(super) fn name_label(
     name: &str,
     room: f32,
     centre: bool,
-    marks: &[std::ops::Range<usize>],
 ) -> Element {
     if room <= 0.0 || measure_text(name, BODY) <= room {
-        if !marks.is_empty() {
-            let label = crate::search_highlight::highlighted_label(BODY, tokens, name, marks);
-            return if centre {
-                label
-                    .text_align(TextAlign::Center)
-                    .width(Size::fill())
-                    .into()
-            } else {
-                label.into()
-            };
-        }
         let label = BODY.label(tokens, name.to_string()).max_lines(1);
         return if centre {
             label
@@ -276,8 +274,15 @@ pub(super) fn name_label(
             label.into()
         };
     }
-    let cut = path_label(name.to_string()).name().style(BODY).tooltip(false);
-    if centre { cut.centre().into() } else { cut.into() }
+    let cut = path_label(name.to_string())
+        .name()
+        .style(BODY)
+        .tooltip(false);
+    if centre {
+        cut.centre().into()
+    } else {
+        cut.into()
+    }
 }
 
 /// The keys of the list that move the cursor. Returns true when used.
@@ -336,10 +341,7 @@ pub(super) fn widest(ctx: &Ctx, column: Column) -> f32 {
     (first..last)
         .map(|row| {
             let entry = ctx.rows.entry(row);
-            let text = ctx
-                .result_folder(entry)
-                .filter(|_| column == Column::Location)
-                .unwrap_or_else(|| cell_text_styled(column, entry, now, &ctx.home, dates));
+            let text = cell_text_styled(column, entry, now, &ctx.home, dates);
             measure_text(&text, FIGURES)
         })
         .fold(0.0, f32::max)
@@ -373,8 +375,7 @@ impl Component for FileRow {
         };
         let row = self.row;
         if !entry.sized {
-            ctx.wants
-                .want(&self.rows.listing, &[self.rows.order[row]]);
+            ctx.wants.want(&self.rows.listing, &[self.rows.order[row]]);
         }
         let selected = ctx.env.selection.read().contains(&entry.path);
         let renaming = ctx
@@ -403,7 +404,7 @@ impl Component for FileRow {
         let name: Element = if renaming {
             RenameField::new(&ctx.env, entry).list(ctx.focus).into()
         } else {
-            name_label(&tokens, &entry.name, self.name_room, false, &ctx.marks(&entry.name))
+            name_label(&tokens, &entry.name, self.name_room, false)
         };
 
         // The fill is the sidebar's row, inset from the list's sides. The
@@ -460,8 +461,6 @@ impl Component for FileRow {
                 .copied()
                 .collect::<Vec<_>>()
                 .join(" · ");
-            // A search result says where it is, not how big.
-            let detail = ctx.result_folder(entry).unwrap_or(detail);
             line = line.child(
                 // The Name cell of the desktop row: the same padding either side.
                 rect()
@@ -477,10 +476,7 @@ impl Component for FileRow {
         } else {
             line = line.child(name_cell(&self.plan, name));
             for (column, width) in &self.plan.columns {
-                let text = ctx
-                    .result_folder(entry)
-                    .filter(|_| *column == Column::Location)
-                    .unwrap_or_else(|| cell_text_styled(*column, entry, now, &ctx.home, dates));
+                let text = cell_text_styled(*column, entry, now, &ctx.home, dates);
                 let content: Element = match column {
                     Column::Location | Column::OriginalLocation => path_label(text)
                         .style(CAPTION)
@@ -590,7 +586,10 @@ mod tests {
 
     #[test]
     fn the_row_never_shrinks_as_the_icon_grows() {
-        let heights: Vec<f32> = LADDER.iter().map(|px| row_height_for(*px, 40.0, 4.0)).collect();
+        let heights: Vec<f32> = LADDER
+            .iter()
+            .map(|px| row_height_for(*px, 40.0, 4.0))
+            .collect();
         assert!(heights.windows(2).all(|pair| pair[0] <= pair[1]));
     }
 }

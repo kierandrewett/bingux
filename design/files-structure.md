@@ -64,10 +64,30 @@ crates/ui/src/files/           the file views, shared by the Files window and th
     launch.rs                    what a launch of a file manager names
     browser.rs                   TabMemory, FileTab, browse()
     tabs_fuzz.rs                 random walks of tabs and histories
+    omnibox.rs                   the location field: a path completes, words search, chips for scope and filters
+    omnibox_model.rs             what the field offers for a text, as plain data (is it a path, places, chips, status)
+    search.rs                    Find (scope and filters) and use_search_run, the streaming search
+crates/ui/src/controls/omnibox.rs the Omnibox control: a field that grows a card of suggestions out of itself
 apps/files/                    the Files window: titles, icons, menu, window size, snapshot wiring
 ```
 
+## The location field
+
+The address bar's below-the-bar list, the search bar that slid down under the
+toolbar and the Filters button are one field now: `Omnibox` (a control any app
+can use) and, on top of it, the Files provider.
+
+| Was                                                                                                                                                                                                    | Now                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `files/address_edit.rs` (a field with a list under it)                                                                                                                                                 | `files/omnibox.rs` (`LocationField`) over `controls/omnibox.rs`                            |
+| `files/search_bar.rs`, `files/search_filters.rs` (the bar, the Filters panel, its presets)                                                                                                             | scope and filter chips inside the card; presets are `files/omnibox_model.rs`               |
+| `files/search_tests.rs` (the bar's tests)                                                                                                                                                              | `files/omnibox_tests.rs`, `motion_stress/omnibox.rs`, `crates/files/src/location_tests.rs` |
+| the list narrowed by a search: `SearchView`, `DeepStatus`, `Marks`, `SearchTop`, the Location column of results, the status pill's search line, `no_results_state`, `Scope::Folder`, Stop for a search | removed: the card is where a search is made and shown                                      |
+| `Find { open, scope, filters, filters_open, focus }`                                                                                                                                                   | `Find { scope, filters }`                                                                  |
+
 ## Proof that nothing changed
+
+(For Part A, the move of the tab code.)
 
 - Every moved test runs from its new place and passes (`cargo test --lib
 --features testing` in `crates/ui`: `tabs::`, `window::compositor`,

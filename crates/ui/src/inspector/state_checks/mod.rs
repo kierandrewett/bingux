@@ -356,9 +356,9 @@ pub const ALLOW: &[Allow] = &[
     },
     Allow {
         rule: Rule::TabReach,
-        component: "AddressEdit",
+        component: "Omnibox",
         name: "",
-        reason: "In the path field Tab completes the path and then walks the completions (files/address_edit.rs, SF-05); focus leaves the field with Escape or Enter, so a lap that reaches the field does not go on from it.",
+        reason: "In the location field Tab completes the path and then walks the card's rows (controls/omnibox.rs, SF-05); focus leaves the field with Escape or Enter, so a lap that reaches the field does not go on from it.",
     },
     Allow {
         rule: Rule::Hover,
@@ -377,7 +377,9 @@ pub const ALLOW: &[Allow] = &[
 fn allowed_by(rule: Rule, target: &str) -> Option<&'static str> {
     ALLOW
         .iter()
-        .find(|entry| entry.rule == rule && target.contains(entry.component) && target.contains(entry.name))
+        .find(|entry| {
+            entry.rule == rule && target.contains(entry.component) && target.contains(entry.name)
+        })
         .map(|entry| entry.reason)
 }
 
@@ -408,7 +410,13 @@ pub struct Report {
 impl Report {
     pub(super) fn push(&mut self, rule: Rule, target: String, detail: String, area: [f32; 4]) {
         let allowed = allowed_by(rule, &target);
-        self.findings.push(Finding { rule, target, detail, area, allowed });
+        self.findings.push(Finding {
+            rule,
+            target,
+            detail,
+            area,
+            allowed,
+        });
     }
 
     pub(super) fn measure(&mut self, rule: Rule) {
@@ -421,7 +429,9 @@ impl Report {
 
     /// The findings no allowlist entry covers.
     pub fn failures(&self) -> impl Iterator<Item = &Finding> {
-        self.findings.iter().filter(|finding| finding.allowed.is_none())
+        self.findings
+            .iter()
+            .filter(|finding| finding.allowed.is_none())
     }
 
     pub fn json(&self, capture: &str) -> serde_json::Value {
@@ -457,7 +467,16 @@ pub struct Scope {
 }
 
 impl Scope {
-    pub const ALL: Scope = Scope { statics: true, cursor: true, tab: true, sweep: true, menu: true, limit: 160, per_kind: 3, budget: 60 };
+    pub const ALL: Scope = Scope {
+        statics: true,
+        cursor: true,
+        tab: true,
+        sweep: true,
+        menu: true,
+        limit: 160,
+        per_kind: 3,
+        budget: 60,
+    };
 
     pub fn from_env() -> Self {
         let mut scope = Scope::ALL;
@@ -469,7 +488,11 @@ impl Scope {
             scope.sweep = on("sweep");
             scope.menu = on("menu");
         }
-        let number = |name: &str| std::env::var(name).ok().and_then(|value| value.parse().ok());
+        let number = |name: &str| {
+            std::env::var(name)
+                .ok()
+                .and_then(|value| value.parse().ok())
+        };
         scope.limit = number("BINGUX_UI_STATE_LIMIT").unwrap_or(scope.limit);
         scope.per_kind = number("BINGUX_UI_STATE_PER_KIND").unwrap_or(scope.per_kind);
         scope.budget = number("BINGUX_UI_STATE_BUDGET").unwrap_or(scope.budget as usize) as u64;
@@ -484,12 +507,19 @@ impl Snapshot {
     /// with a note).
     pub fn state_report(&mut self, scope: Scope) -> Report {
         let mut report = Report::default();
-        let mut rig = rig::Rig::new(self, std::time::Duration::from_secs(scope.budget), scope.per_kind);
+        let mut rig = rig::Rig::new(
+            self,
+            std::time::Duration::from_secs(scope.budget),
+            scope.per_kind,
+        );
         let tree = rig.tree();
         let targets = view::targets(&tree);
         report.interactive = targets.len();
         for target in &targets {
-            *report.kinds.entry(format!("{} {}", target.role, target.component)).or_default() += 1;
+            *report
+                .kinds
+                .entry(format!("{} {}", target.role, target.component))
+                .or_default() += 1;
         }
         let ids = view::signature(&tree);
         rig.park();
@@ -551,7 +581,11 @@ impl Snapshot {
         };
         let report = self.state_report(Scope::from_env());
         let line = report.json(&shot.to_string_lossy());
-        if let Ok(mut out) = std::fs::OpenOptions::new().create(true).append(true).open(file) {
+        if let Ok(mut out) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(file)
+        {
             let _ = writeln!(out, "{line}");
         }
     }

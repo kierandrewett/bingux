@@ -5,9 +5,6 @@ use std::path::{Path, PathBuf};
 /// The part of the computer a search covers.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum Scope {
-    /// Only what the folder on show holds: the loaded listing is filtered,
-    /// nothing is read.
-    Folder,
     /// The folder on show and every folder below it.
     #[default]
     Subfolders,
@@ -21,16 +18,11 @@ pub enum Scope {
 }
 
 impl Scope {
-    /// The search reads folders (every scope but [`Scope::Folder`]).
-    pub fn walks(&self) -> bool {
-        !matches!(self, Scope::Folder)
-    }
-
     /// The folders to read: `here` is the folder on show, `home` the home
     /// folder, `drives` the mount points of the drives to include.
     pub fn roots(&self, here: &Path, home: &Path, drives: &[PathBuf]) -> Vec<PathBuf> {
         match self {
-            Scope::Folder | Scope::Subfolders => vec![here.to_path_buf()],
+            Scope::Subfolders => vec![here.to_path_buf()],
             Scope::Home => vec![home.to_path_buf()],
             Scope::Place(path) => vec![path.clone()],
             Scope::Everywhere => {
@@ -48,7 +40,7 @@ impl Scope {
     /// The folder results are shown relative to: where the search starts.
     pub fn base(&self, here: &Path, home: &Path) -> PathBuf {
         match self {
-            Scope::Folder | Scope::Subfolders => here.to_path_buf(),
+            Scope::Subfolders => here.to_path_buf(),
             Scope::Home | Scope::Everywhere => home.to_path_buf(),
             Scope::Place(path) => path.clone(),
         }

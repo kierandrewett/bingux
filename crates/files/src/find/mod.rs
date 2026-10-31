@@ -10,7 +10,7 @@
 //! | ------ | ------------- |
 //! | [`query`] | The typed [`Query`]: words, filters, the text they are written as |
 //! | [`matcher`] | A query made ready to test names and entries, and the relevance order |
-//! | [`scope`] | Where to look: this folder, subfolders, home, everywhere, a place |
+//! | [`scope`] | Where to look: the folder and below, home, everywhere, a place |
 //! | [`walk`] | The live walk of folders, streaming, cancellable |
 //! | [`index`] | The names index in the shared search engine, for the home folder |
 //! | [`engine`] | [`run`]: index first, then the walk, merged, nothing sent twice |
@@ -36,9 +36,8 @@ pub use history::Recents;
 pub use index::NameIndex;
 pub use matcher::{Hit, Invalid, Matcher, Rank, Tier, depth_below};
 pub use query::{
-    FilterKey, Filters, Hidden, Kind, Modified, NameMode, Problem, Query, SizeCond, SortBy, Term, format_bytes,
-    split_pending,
-    parse_bytes,
+    FilterKey, Filters, Hidden, Kind, Modified, NameMode, Problem, Query, SizeCond, SortBy, Term,
+    format_bytes, parse_bytes, split_pending,
 };
 pub use scope::Scope;
 pub use walk::{NOISE_FOLDERS, WalkOptions, Walked};

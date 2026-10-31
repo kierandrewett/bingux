@@ -71,6 +71,8 @@ pub mod find;
 pub mod listing;
 pub mod loader;
 pub mod location;
+#[cfg(test)]
+mod location_tests;
 pub mod mime;
 pub mod mounts;
 pub mod ops;
