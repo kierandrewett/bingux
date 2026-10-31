@@ -198,8 +198,8 @@ Expiry pauses while the Control Centre is open. Cards retain their delegates,
 groups, gestures and actions, and overflow scrolls within the reserved area.
 The control layout groups connectivity and display shortcuts, exposes sound
 and session controls, and selects a playing MPRIS player (or the first available
-player) for the shared `MediaControls` widget. The dock's `DockMediaControls`
-and the compact `ControlCentreMedia` are presentation wrappers around that
+player) for the shared `MediaControls` widget. The dock's app menu uses it directly,
+and the compact `ControlCentreMedia` is a presentation wrapper around that
 widget, including artwork caching/transitions, track-title scrolling, transport,
 seek previews and elapsed/remaining time. The seek binding waits for the player
 range to initialise, so a newly opened widget shows the current position.
@@ -277,6 +277,7 @@ mode. `BINGUX_REDUCED_MOTION=1` continues to disable motion independently.
 - Dock actions use `.desktop` entry actions. Gnoblin does not currently export a dynamic application-menu protocol for foreign toplevels. Do not claim that arbitrary in-window menus are available until a separate, versioned Gnoblin interface exists.
 - Running apps that are not pinned sit after the pinned apps, in the order their windows opened. A new window in an app that is already in the dock moves that app to the end of the running section. Closing a window never reorders the others. Dragging an app sets its place until it opens another window. After a restart the dock keeps its saved order.
 - A window with no matching `.desktop` entry gets its own dock item, named by its app ID, or its title when it has no app ID. The item has a stable `window-N` identity, where N counts windows in the order the dock first saw them. The dock does not show the process name, because the foreign-toplevel window list it reads carries no process ID.
+- Dock folders ([dock-folders.md](dock-folders.md)) hold two or more apps and open a card of their apps above the dock. A drag onto a tile only reorders unless the pointer pauses over the middle of the tile, and other tiles slide aside only after a pause at their edge. A folder that falls below two apps is dissolved and the remaining app takes its place.
 - When the last window of an app closes, its dock slot closes with the exit animation. The dock removes a slot that is still present about 400 ms after the animation should have ended, so a stuck animation cannot leave a gap.
 
 ## Search socket protocol v1
