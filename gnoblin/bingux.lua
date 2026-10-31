@@ -131,7 +131,7 @@ local defaults = {
                 mode = "force",
                 radius = 12,
                 smoothing = 0.5,
-                -- The edge line and the shadows follow the colour scheme; see `edge_rules` below.
+                -- The edge ring and the shadows follow the colour scheme; see `edge_rules` below.
                 -- Reconstruct only detected client-drawn rounded corners
                 -- before applying Bingux's outer shape.
                 ["remove-csd"] = true,
@@ -209,35 +209,33 @@ for _, rule in ipairs(window_rules) do
     gnoblin.window_rule(rule)
 end
 
--- Window edge, as on macOS and as the shell's own menus draw it (Theme.qml): a 1 px line inside the
--- rounded edge (`Theme.outline`, #505050 at 75%) and a 1 px black ring outside it
--- (`Theme.panelOuterOutline`, 50%). The inner line is the border. The outer ring is the first
--- shadow layer: no offset, no blur, 1 px of spread, so it is even all round. Soft layers follow.
--- Gnoblin replaces a shadow list as a whole, so each scheme states the full list for unfocused and
--- focused windows. A light window gets a white inner line and a lighter ring and shadow.
+-- Window edge. The shell's menus draw a 1 px line on each side of their edge (Theme.qml:
+-- `Theme.outline` inside, `Theme.panelOuterOutline` outside). A window gets the outside line only,
+-- as the border rule with a negative width, which Gnoblin draws outward from the same bounds it
+-- clips the window to, so it touches the edge all round. Two things were tried and failed on the live
+-- session: a shadow layer with spread 1 as the ring (it sat 2 px away from the window on the left
+-- and top and left a gap of desktop showing between ring and window), and a positive width (an inner
+-- line in the window's own pixels). The soft shadows follow. Gnoblin replaces a shadow list as a
+-- whole, so each scheme states the full list for unfocused and focused windows.
 local edges = {
     dark = {
-        inner = "#505050bf",
+        ring = "#00000080",
         shadow = {
-            { x = 0, y = 0, blur = 0, spread = 1, opacity = 0.50 },
             { x = 0, y = 10, blur = 40, spread = 0, opacity = 0.16 },
             { x = 0, y = 3, blur = 12, spread = 0, opacity = 0.10 },
         },
         focused = {
-            { x = 0, y = 0, blur = 0, spread = 1, opacity = 0.50 },
             { x = 0, y = 18, blur = 56, spread = 0, opacity = 0.28 },
             { x = 0, y = 6, blur = 18, spread = 0, opacity = 0.16 },
         },
     },
     light = {
-        inner = "#ffffffb3",
+        ring = "#00000038",
         shadow = {
-            { x = 0, y = 0, blur = 0, spread = 1, opacity = 0.22 },
             { x = 0, y = 10, blur = 40, spread = 0, opacity = 0.10 },
             { x = 0, y = 3, blur = 12, spread = 0, opacity = 0.06 },
         },
         focused = {
-            { x = 0, y = 0, blur = 0, spread = 1, opacity = 0.28 },
             { x = 0, y = 18, blur = 56, spread = 0, opacity = 0.20 },
             { x = 0, y = 6, blur = 18, spread = 0, opacity = 0.12 },
         },
@@ -249,7 +247,7 @@ local function edge_rules(scheme)
     return {
         {
             match = { type = "window" },
-            corners = { border_width = 1, border_color = edge.inner, shadow = edge.shadow },
+            corners = { border_width = -1, border_color = edge.ring, shadow = edge.shadow },
         },
         { match = { type = "window", focused = true }, corners = { shadow = edge.focused } },
     }
