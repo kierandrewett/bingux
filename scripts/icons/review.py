@@ -406,7 +406,7 @@ h2{margin:28px 0 8px;font-size:18px}
 .real{display:flex;gap:6px;margin-top:8px;align-items:center;font-size:11px;color:var(--muted)}
 .real span{display:inline-flex;padding:8px;border-radius:6px}
 .real .d{background:#121214}.real .l{background:#fafafa;border:1px solid var(--line)}
-.real img{image-rendering:pixelated}
+.real img{image-rendering:pixelated}.inv{filter:invert(1) brightness(1.8)}.miss{color:#b3402f;margin:8px 0}
 .meta h3{margin:0;font-size:15px}.meta code{color:var(--muted);font-size:12px}
 .meta p{margin:4px 0}.k{color:var(--muted)}
 .verdicts{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
@@ -443,10 +443,18 @@ for (const it of ITEMS) {
   }
   const el = document.createElement("section"); el.className = "card"; el.dataset.id = it.id;
   const tile = (k, label, scale) => `<div class="tile"><img src="${png(it.tiles[k])}" width="${it.sizes[k] * scale}" height="${it.sizes[k] * scale}"><div>${label}</div></div>`;
-  el.innerHTML = `<div><div class="tiles">${tile("d16","16 dark",4)}${tile("l16","16 light",4)}${tile("l18","18 light",4)}${tile("l48","48 light",2)}</div>
-    <div class="real"><span class="d"><img src="${png(it.tiles.d16)}" width="16" height="16"></span><span class="l"><img src="${png(it.tiles.l16)}" width="16" height="16"></span><span class="l"><img src="${png(it.tiles.l18)}" width="18" height="18"></span>actual size</div></div>
-    <div class="meta"><h3>${it.variant ? "Icon::" + it.variant : "(shell / QML only)"}</h3><code>${it.id}</code>
-    <p><span class="k">Used:</span> ${it.where}</p><p><span class="k">Metaphor:</span> ${it.metaphor}</p>
+  const vec = (px, label, dark) => `<div class="tile"><img class="${dark && it.symbolic ? "inv" : ""}" style="background:${dark ? "#121214" : "#fafafa"}" src="data:image/svg+xml;base64,${it.svg}" width="${px}" height="${px}"><div>${label}</div></div>`;
+  const vecReal = (px, dark) => `<span class="${dark ? "d" : "l"}"><img class="${dark && it.symbolic ? "inv" : ""}" src="data:image/svg+xml;base64,${it.svg}" width="${px}" height="${px}"></span>`;
+  const shown = it.missing
+    ? `<p class="miss">No icon file. The shell asks for this name, and the theme has nothing to draw.</p>`
+    : it.svg
+    ? `<div class="tiles">${vec(32, "16 dark", true)}${vec(32, "16 light", false)}${vec(48, "24 light", false)}${vec(96, "48 light", false)}</div>
+    <div class="real">${vecReal(16, true)}${vecReal(16, false)}${vecReal(24, false)}${vecReal(48, false)}actual size</div>`
+    : `<div class="tiles">${tile("d16","16 dark",4)}${tile("l16","16 light",4)}${tile("l18","18 light",4)}${tile("l48","48 light",2)}</div>
+    <div class="real"><span class="d"><img src="${png(it.tiles.d16)}" width="16" height="16"></span><span class="l"><img src="${png(it.tiles.l16)}" width="16" height="16"></span><span class="l"><img src="${png(it.tiles.l18)}" width="18" height="18"></span>actual size</div>`;
+  el.innerHTML = `<div>${shown}</div>
+    <div class="meta"><h3>${it.variant ? "Icon::" + it.variant : it.svg ? it.category : "(shell / QML only)"}</h3><code>${it.id}</code>
+    <p><span class="k">Used:</span> ${it.where}</p>${it.metaphor ? `<p><span class="k">Metaphor:</span> ${it.metaphor}</p>` : ""}
     <p><span class="k">Category:</span> ${it.category} &nbsp; <span class="k">Glyph:</span> ${it.glyph}</p>
     <div class="verdicts">${VERDICTS.map(([v, l]) => `<label class="v-${v}"><input type="radio" name="v-${it.id}" value="${v}"><span>${l}</span></label>`).join("")}</div>
     <textarea placeholder="What is wrong, or what it should look like"></textarea></div>`;
@@ -515,6 +523,97 @@ def png_base64(image: Image.Image) -> str:
     return base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
+def extra_items(ours: set[str]) -> list[dict]:
+    """Icons that are not in the generated symbolic set: the colour file and folder icons, the application icons,
+    and the theme icons the shell asks for by name. They are shown as the browser draws the vector file."""
+    import base64
+    import html
+
+    def entry(group, ident, path, where, category, symbolic):
+        return {
+            "id": ident,
+            "group": group,
+            "variant": None,
+            "category": category,
+            "glyph": html.escape(str(path.relative_to(REPO)) if path.is_relative_to(REPO) else str(path)),
+            "where": html.escape(where),
+            "metaphor": "",
+            "symbolic": symbolic,
+            "svg": base64.b64encode(path.read_bytes()).decode("ascii"),
+        }
+
+    items = []
+    for path in sorted((HERE / "colour").glob("*.svg")):
+        kind = "folder" if path.stem.startswith(("folder", "trash")) else "file type"
+        items.append(
+            entry(
+                "files-colour",
+                path.stem,
+                path,
+                f"Files: {kind} icon, drawn in colour",
+                "colour",
+                False,
+            )
+        )
+    apps = [
+        *sorted((REPO / "apps").glob("*/*.svg")),
+        REPO / "distro/packages/bingux-os/bingux-mark.svg",
+    ]
+    for path in apps:
+        if path.exists() and "assets" not in path.parts:
+            items.append(
+                entry(
+                    "bingux-apps",
+                    path.stem,
+                    path,
+                    "Application icon: dock, launcher, window switcher",
+                    "app",
+                    False,
+                )
+            )
+    users: dict[str, set[str]] = {}
+    for qml in sorted((REPO / "shell/bingux").rglob("*.qml")):
+        for name in re.findall(r'"([a-z0-9][a-z0-9.-]*)-symbolic"', qml.read_text()):
+            users.setdefault(name, set()).add(qml.name)
+    theme = Path("/usr/share/icons/Adwaita/symbolic")
+    aliases = dict(
+        re.findall(
+            r'"([^"]+)":\s*"([^"]+)"',
+            (REPO / "shell/bingux/AdwaitaIconIndex.js").read_text().split("var paths")[0],
+        )
+    )
+    for name in sorted(users):
+        if name in ours:
+            continue
+        target = aliases.get(f"{name}-symbolic", aliases.get(name, f"{name}-symbolic"))
+        found = next(iter(sorted(theme.glob(f"*/{target}.svg"))), None)
+        where = "Shell: " + ", ".join(sorted(users[name])[:4]) + (" and more" if len(users[name]) > 4 else "")
+        if target != f"{name}-symbolic":
+            where += f" (the shell maps it to {target})"
+        if found is None:
+            print(
+                f"review: shell icon {name} has no file in the Adwaita theme; added as a missing card",
+                file=sys.stderr,
+            )
+            items.append(
+                {
+                    "id": name,
+                    "group": "shell-theme",
+                    "variant": None,
+                    "category": "no file",
+                    "glyph": "",
+                    "where": html.escape(where),
+                    "metaphor": "",
+                    "symbolic": True,
+                    "svg": None,
+                    "missing": True,
+                }
+            )
+            continue
+        items.append(entry("shell-theme", name, found, where, "Adwaita theme", True))
+    return items
+
+
 def page(out: Path, icons: Path) -> None:
     """The interactive review page. Tiles are the exact rasteriser's pixels, drawn unscaled and magnified by the browser."""
     import html
@@ -558,6 +657,7 @@ def page(out: Path, icons: Path) -> None:
                     "tiles": {key: png_base64(tile) for key, tile in tiles.items()},
                 }
             )
+    items.extend(extra_items({stem for _, files in groups for stem in files} | set(labels.rows)))
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(PAGE_TEMPLATE.replace("__ITEMS__", json.dumps(items).replace("</", "<\\/")))
     print(f"review: wrote {len(items)} icons to {out}")
