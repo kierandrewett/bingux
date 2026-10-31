@@ -188,6 +188,7 @@ rules-check:
 
 check: doctor-build native daemons
 	python3 scripts/ui-lint.py
+	python3 scripts/ui-lint.py --self-test
 	python3 scripts/taxonomy-check.py
 	cd $(BUILD_DIR)/text && $(QMAKE) $(ROOT)/native/text-layout/spacing-test.pro -o Makefile.tests && $(MAKE) -f Makefile.tests
 	QT_QPA_PLATFORM=offscreen $(BUILD_DIR)/text/spacing-test
