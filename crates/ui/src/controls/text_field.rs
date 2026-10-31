@@ -847,7 +847,7 @@ impl Component for TextField {
             _ => None,
         };
         // The bar's window rectangle once measured. A press inside it is the bar's.
-        let window = *Platform::get().current_window().root_size.read();
+        let window = crate::surface::window_size();
         let direction = crate::controls::direction::use_direction();
         let bar_hit = text_trigger.zip(*bar_size.read()).map(|(trigger, size)| {
             text_bar_rect(trigger.anchor(), size, (window.width, window.height), direction)

@@ -376,6 +376,10 @@ pub enum Dim {
     /// track (16 px for a finger) and a 22 px thumb (28 px for a finger).
     SliderTrackLarge,
     SliderThumbLarge,
+    /// The width of a slider row's readout, beside its track: 72 px, 80 px for a finger. It holds
+    /// the longest value a row shows ("Right 100%", "20000 Hz"), so a value that gains a digit
+    /// never resizes the track.
+    SliderValue,
     /// A stepper's square half: 28 px.
     StepperHalf,
     /// A button inside a field or a chip, such as a password's reveal or a
@@ -607,6 +611,7 @@ impl Dim {
             | Dim::SliderThumb
             | Dim::SliderTrackLarge
             | Dim::SliderThumbLarge
+            | Dim::SliderValue
             | Dim::PickerKnob
             | Dim::PickerWidth
             | Dim::Sidebar
@@ -710,6 +715,7 @@ impl Dim {
             Dim::SliderThumb => (16.0, 22.0),
             Dim::SliderTrackLarge => (14.0, 16.0),
             Dim::SliderThumbLarge => (22.0, 28.0),
+            Dim::SliderValue => (72.0, 80.0),
             Dim::StepperHalf => (28.0, TOUCH_MIN),
             Dim::InlineButton => (28.0, TOUCH_MIN),
             Dim::RowButton => (40.0, TOUCH_MIN),

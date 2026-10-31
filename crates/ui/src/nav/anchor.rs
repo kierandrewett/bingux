@@ -125,7 +125,7 @@ pub fn use_anchor(id: &str) -> Anchor {
             let Some(y) = last_y.get() else { return };
             done.set(true);
             if let (Some(mut scroll), Some(origin)) = (scroll, registry.and_then(|r| r.origin())) {
-                let height = Platform::get().current_window().root_size.read().height;
+                let height = crate::surface::window_size().height;
                 let want = (height * 0.3).max(section_top());
                 scroll.scroll_to_y(((want - (y - origin)).round() as i32).min(0));
             }

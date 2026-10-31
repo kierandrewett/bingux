@@ -216,7 +216,9 @@ scripts/state-check.py` (with `--build`; `make state-check` is the same, and `ma
   `crates/ui/src/inspector/state_checks/mod.rs` (a component's doing) or in the
   script's `ALLOWED` (one capture's), each with its reason. See "State checks" in
   `docs/bingux-ui.md`.
-- an animation: `python3 scripts/loop-check.py --all`, `python3 scripts/number-roll-check.py`,
+- an animation or anything that moves: `make ui-motion` (the in-motion suite, frame by frame at
+  scale 1 and 2, both schemes, with spam and interrupted input; "In-motion tests" in
+  `docs/bingux-ui.md`), and for the loops `python3 scripts/loop-check.py --all`, `python3 scripts/number-roll-check.py`,
   `python3 scripts/nav-slide.py` (a close is its open mirrored), `cargo test --lib --features
 testing slide_users_tests` (a new slide must be in its table) and `python3 scripts/frame-gate.py`
   (every page mounts inside its frame budget; `BINGUX_FRAME_GATE=report` on a noisy runner).

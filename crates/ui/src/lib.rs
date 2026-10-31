@@ -53,6 +53,8 @@ mod warm;
 mod mount_tests;
 #[cfg(all(test, feature = "testing"))]
 mod expander_tests;
+#[cfg(all(test, feature = "testing"))]
+mod motion_stress;
 pub mod window;
 
 /// Everything an application window normally needs.

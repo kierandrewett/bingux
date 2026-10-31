@@ -286,7 +286,7 @@ impl PopupEntry {
     /// `size` limited to the popup's minimum and to the window less its
     /// margin. Code-driven and dragged resizes both go through this.
     pub(crate) fn clamp(&self, (width, height): (f32, f32)) -> (f32, f32) {
-        let window = *Platform::get().current_window().root_size.peek();
+        let window = crate::surface::window_size_peek();
         let max_width = (window.width * POPUP_MAX_WIDTH_PERCENT / 100.0).max(self.min.0);
         let max_height = (window.height * POPUP_MAX_HEIGHT_PERCENT / 100.0).max(self.min.1);
         (
@@ -598,7 +598,7 @@ impl Component for PopupFrame {
         } else {
             (POPUP_MAX_WIDTH_PERCENT, POPUP_MAX_HEIGHT_PERCENT)
         };
-        let root = *Platform::get().current_window().root_size.read();
+        let root = crate::surface::window_size();
         // The panel's height: what a drag or the code asked for, else its
         // content's, up to the share of the window it may take.
         let height = panel_height(

@@ -330,7 +330,7 @@ impl Component for FiltersButton {
         // A popover is as tall as its rows; a sheet scrolls, and so does a
         // popover that would not fit under the button in a short window (the
         // panel then caps its height and shows a scrollbar).
-        let root = *Platform::get().current_window().root_size.read();
+        let root = crate::surface::window_size();
         let below = area.read().max_y() + PANEL_GAP + height + 2.0 * S2.px() + PANEL_EDGE;
         if is_compact() || below > root.height {
             panel = panel.scroll(scroll);

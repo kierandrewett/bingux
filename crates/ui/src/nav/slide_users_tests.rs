@@ -76,7 +76,8 @@ fn code_of(path: &Path) -> String {
 }
 
 fn is_test_file(path: &str) -> bool {
-    path.ends_with("_tests.rs") || path.ends_with("/tests.rs") || path == "tests.rs"
+    // `motion_stress/` is test code throughout: it is compiled only under `cfg(test)`.
+    path.ends_with("_tests.rs") || path.ends_with("/tests.rs") || path == "tests.rs" || path.starts_with("motion_stress/")
 }
 
 #[test]

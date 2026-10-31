@@ -485,7 +485,7 @@ impl Component for MenuLayer {
         let window = if crate::popup_windows::backend().is_some() {
             torin::prelude::Size2D::new(0.0, 0.0)
         } else {
-            *Platform::get().current_window().root_size.read()
+            crate::surface::window_size()
         };
         let direction = use_direction();
         let panels = layout(

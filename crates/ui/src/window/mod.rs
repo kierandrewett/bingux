@@ -238,7 +238,7 @@ impl WindowLike for MainWindow {
     }
 
     fn size(self) -> (f32, f32) {
-        let size = *Platform::get().current_window().root_size.read();
+        let size = crate::surface::window_size();
         (size.width, size.height)
     }
 
@@ -480,7 +480,7 @@ impl Component for WindowHost {
         let window = Platform::get().current_window();
         let density = use_hook(|| window_density(window.id));
         use_provide_context(move || density);
-        let narrow = window.root_size.read().width < NARROW_BELOW;
+        let narrow = crate::surface::window_size().width < NARROW_BELOW;
         let touch = density.latched_pointer() == PointerKind::Touch;
         density.set_class(if narrow || touch {
             SizeClass::Compact

@@ -46,6 +46,11 @@ The changes are panic resilience (`freya-core`, `freya-winit`) and scroll feel f
 - `freya-winit/src/bingux_scroll.rs` and `renderer.rs`: the wheel step is 64 px
   per notch (upstream 53) and touchpad movement is 1x (upstream 2x).
   `BINGUX_WHEEL_STEP` and `BINGUX_TOUCHPAD_FACTOR` override them.
+- `freya-core/src/events/emittable.rs`: a wheel event of `WheelSource::Pixel` (a touchpad) is divided
+  by the window's scale factor, as the cursor beside it already is. Its delta is in physical pixels and
+  the scroll offset is logical, so on a display scaled 2x the content moved twice as far as the fingers.
+  A `Line` delta (a wheel notch, `BINGUX_WHEEL_STEP` px) is already a logical distance. Held by
+  `bingux-ui`'s `motion_stress::scroll` at scale 2.
 - `freya-components/src/scrollviews/use_scroll_controller.rs`: wheel and
   keyboard scrolls use an adaptive spring after Firefox's smooth scrolling: a
   motion starts quickly, glides softly while wheel events keep coming and

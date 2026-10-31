@@ -1286,6 +1286,8 @@ The shield is the only input shield; there is no second copy of the shield or gr
 
 ### Sliders, the colour picker and every drag that makes a value
 
+A slider row (`slider_row`, `level_row`) gives its track and readout 55 % of the row on a desktop and the title the rest, so the sliders of one card start at one x and a title is cut only when the rest of the row cannot hold it. The readout (`value_text`) is beside the track in a slot `Dim::SliderValue` wide, so a value that gains a digit moves nothing.
+
 A control that turns a pointer drag into a value (the slider, and the colour picker's saturation square, hue strip and alpha strip) uses one primitive, `controls::capture` (crate-private): `use_capture(handler)` in the component, `capture.bind(rect)` on the element that starts the drag (`capture.handlers(rect)` plus `capture.sized(&event)` from its own `on_sized` when it already has one). Do not write an `on_pointer_down` and `on_capture_global_pointer_move` pair by hand; the primitive fixes what that pair gets wrong:
 
 - **The press owns the drag.** Until the button comes up the moves go to the control wherever the pointer is: outside the small element, past a popup's edge, over a scrim. They are consumed (`prevent_default` on the capture move), so nothing under the pointer shows hover or runs a tooltip. The release is consumed too (`on_capture_global_pointer_up`, not `on_global_pointer_up`, which another capture-up that prevents default, such as a scrollbar thumb, cancels): a drag released over a scrim does not dismiss the popup, one released over a button does not press it.
@@ -2408,6 +2410,7 @@ values are:
 | `Dim::SwitchWidth` x `SwitchHeight` | 36 x 20 px      | 48 x 28 px      |
 | `Dim::SliderThumb`                  | 16 px           | 22 px           |
 | `Dim::SliderThumbLarge`             | 22 px           | 28 px           |
+| `Dim::SliderValue` (readout slot)   | 72 px           | 80 px           |
 | `Dim::SliderTrackLarge`             | 14 px           | 16 px           |
 | `Dim::PickerPlane` (height)         | 168 px          | 200 px          |
 | `Dim::PickerKnob`                   | 20 px           | 24 px           |
@@ -2533,7 +2536,8 @@ load)` loads a `Resource<T>` in the background: it is `Loading`, then
   a `use_hook` or `use_memo` body, or directly in an event handler. Put it in
   `use_resource`, `background` or `optimistic`, and render the previous value
   or `Loading` until it returns.
-- **Controls are the shell's.** The switch is 36 x 20 with a 16 px thumb. The
+- **Controls are the shell's.** The switch is 36 x 20 with a 16 px thumb, white when on
+  (the slider knob's colour, on a soft shadow) and the text colour when off. The
   slider has a 6 px track (8 px while dragging), an accent fill and a 16 px
   white knob on a soft shadow. Buttons are filled with
   `control` and have no idle outline; no control has one. A disabled row
@@ -3440,6 +3444,53 @@ These hold the rules of `design/rules.md` (the IDs are in `design/rules.json`) t
 - **Motion** (`scripts/loop-check.py --all`, `number-roll-check.py`, `nav-slide.py`, `nav/slide_users_tests.rs`, `frame-gate.py`; CK-19, CK-09, CK-08). `loop-check --all` renders every taxonomy page and state twice at two settle times in both motion modes: a bar or a spinner that changed is a loop that runs; anything else that changed is motion on a page that should be still (`ALLOWED_MOTION`). `number-roll-check` walks the Animated number specimens at a tenth of the animation clock and reads the frames: the share of the way to the last picture never goes back by more than 15%, at least 3 looks are between the first and the last, nothing outside the digits' columns changes and what changes stays inside one line. `nav-slide.py` reads p(t) of each push and pop from the pixels and requires the pop to be the push backwards and mirrored within 0.12 and as long within 40%; the Rust test holds what a loaded machine cannot: the shared curve is its own mirror to 1e-5, every file that draws a slide is in its table (a new one fails until added) and no motion has an `_IN_MS` that differs from its `_OUT_MS` (the focus ring's, 160 and 120, is listed). `frame-gate.py` mounts each page N times from the Power page through `BINGUX_SETTINGS_SNAPSHOT_TIMING` and gates the best of the rounds against `scripts/frame-budget.json`: over `warn_ms` (20, about a frame) it warns, over `fail_ms` (50, the blocked-thread limit of `frame-time.py`) or when a page cannot be timed it fails; budgets scale by how slow this machine runs a fixed piece of Python (at most 4x), a median over three times the best is flagged `noisy`, and `BINGUX_FRAME_GATE=report` never fails. It needs no sway session; `frame-time.py` still measures real input and presenting.
 
 First runs (2026-10-29, before fixes), what they found and what became of it. Pixels: 22 texts in the light scheme at under 4.5:1, namely the taxonomy's TOOLTIP recipe specimen (dark ink on the floating surface) and the Files audio and video player's card (dark ink on its black backdrop); fixed in `demos/foundations.rs` and `preview/viewers/card.rs`. A banner's edge was 1.35 to 1.43:1 in the dark scheme at 12% ink; `NOTICE_EDGE_ALPHA` is 0.07. A phone sheet had no hairline (its top edge was the fill against the dimmed page, 1.07:1); `window/popup.rs` draws the outline on the sheet too. Rendering at 2x panicked in two unwraps of the vendored freya-core (an accessibility child and an effect-cascade node that were removed in the same frame); both are guarded. Copy: 17 three-dot ellipses in Settings and 10 trailing full stops in subtitles were written out, the Files undo labels are sentence case, and two taxonomy subtitles that instructed or ran long were cut. Open: the Files preview video specimen draws its loading spinner at the top, over the header's "2 of 5" (seen in the light scheme: the text is under it, so the pixel check cannot judge it), the history menu and tab title still call the file system root "Computer" (TX-09), and `frame-gate.py` has no 1000-item Applications or Fonts fixture (BH-04).
+
+### In-motion tests
+
+`make ui-motion` is the one entry point for everything that moves. It runs the in-motion suite
+(`crates/ui/src/motion_stress`), the older frame-by-frame suites it builds on (page and sheet
+slides, reveal, icon morph, number roll, progress, focus ring, tooltip, sortable, notices), and the
+probes that watch a running app move (`motion-check`, `stability-check`, `focus-ring-check.py`,
+`tooltip-check.py`). `design/ui-motion-coverage.md` has the control-by-control matrix: what is held
+on every frame today, what is not, and the findings the suite made.
+
+**The rig** (`motion_stress/mod.rs`). A headless window steps the animation clock at a fixed speed
+with a wall wait longer than the animation's 34 ms tick cap, so every step moves every animation by
+exactly 16 ms whatever the load of the machine. Every frame is kept as the inspector's tree (boxes,
+fills, text, opacity) and the checks run over the whole run, not over the end: a failing test lists
+every frame that broke an invariant, in every condition. Each test runs at scale 1 and 2, in the
+light and the dark scheme, and where it is a layout matter on a desktop (900 wide) and a phone
+(390 wide) window; the reduced-motion tests run the same four.
+
+**What it holds on every frame:**
+
+- a box the motion does not own does not move (`unmoved`: every node's box, by its path, against the
+  first frame), and no text changes whether it is cut (`elision_flips`);
+- a moving value goes from its start to its end along one path: monotone, never past either end
+  (`monotone_between_ends`, `within`), with no frame that jumps further than the curve's own
+  biggest step (`no_jump`), ending exactly on the target, and colours stay between their two ends
+  (`colour_path`);
+- a motion that is turned round half way continues from the value on screen, never from its start
+  or from the end it was heading for;
+- toggle spam, a pointer coming and going on every frame, keys and the pointer interleaved, and a
+  container resized mid-motion end where the last input says and leave the settled frame a calm run
+  of the same inputs would leave;
+- a motion lasts its specified time at 16 ms a frame (one frame either way for the tail of an
+  ease-out) and begins within a few frames of its input;
+- under reduced motion no frame draws a value between its two ends;
+- a slider's knob is on its track's centre line and inside its travel at every size it grows to; a
+  slider row's label is whole whenever the row has room for it and its value shares the slider's
+  line; the on and off thumbs of a switch are one object (the on thumb is the slider knob's white,
+  never an accent-derived ink); a popover, dialog or toast never leaves the window.
+
+**What it does not prove.** It reads the layout tree and the opacities the elements were given, not
+pixels, so a transform (the chevron's rotation, a presence's scale) and a shadow are invisible to it;
+the page-motion pixel probes cover those. It cannot resize the window mid-run (the harness has no
+resize), so a resize is a container that changes width. Time-based behaviour that runs on the real
+clock (the 500 ms tooltip wait, a toast's 4 s hold) is stepped through, not faked. The animation
+clock is the one the frame counts come from; a machine that drops frames in a real window is the
+business of `frame-time.py` and `frame-gate.py`. Controls that have no test yet are named in the
+matrix under "Gaps".
 
 ## Inspector
 

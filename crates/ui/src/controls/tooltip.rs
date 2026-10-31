@@ -473,7 +473,7 @@ impl Component for HoverTip {
 
         // The hidden copy lays out the text the tooltip is to show. The
         // bubble keeps the last text it measured until this one has a size.
-        let window = *Platform::get().current_window().root_size.read();
+        let window = crate::surface::window_size();
         let room = room(window.width);
         let text = self.text.clone();
         // A one line bubble is the box of one line of caption.

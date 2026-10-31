@@ -868,7 +868,7 @@ impl Component for Panel {
         } else {
             self.open || if sheet { clock > 0.0 } else { presence > 0.0 }
         };
-        let root = *Platform::get().current_window().root_size.read();
+        let root = crate::surface::window_size();
         // A popup window is placed by the compositor, which knows the outputs: the window's
         // size is no limit, and the layout assumes none.
         let window = if native.is_some() { (0.0, 0.0) } else { (root.width, root.height) };
