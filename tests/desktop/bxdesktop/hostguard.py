@@ -5,7 +5,9 @@ real desktop and the user's session variables. After a run `compare` reports
 what changed. The check is deliberately narrow, because a developer machine
 (and a CI runner) has other processes starting and stopping all the time:
 
-* every long-lived host process of the kinds the stack starts (the host's own
+* every host process of the kinds the stack starts that belongs to the user's real session (same PID
+  namespace as the test run, `XDG_RUNTIME_DIR` is `/run/user/UID`; other sessions, such as another
+  developer tool's private Gnoblin, start and stop independently and are not evidence) (the host's own
   compositor, shell, portals, session bus) must still be running, with the same
   start time. A teardown that killed a host Quickshell would show here;
 * no process may remain in the session's PID namespace (`Session.leftover`).
@@ -65,6 +67,8 @@ class HostSnapshot:
     def take(cls) -> HostSnapshot:
         processes = {}
         uid = os.getuid()
+        runtime = f"XDG_RUNTIME_DIR=/run/user/{uid}".encode()
+        own_namespace = os.readlink("/proc/self/ns/pid")
         for entry in Path("/proc").iterdir():
             if not entry.name.isdigit():
                 continue
@@ -74,6 +78,12 @@ class HostSnapshot:
                 stat = (entry / "stat").read_text()
                 comm = stat[stat.index("(") + 1 : stat.rindex(")")]
                 start = int(stat[stat.rindex(")") + 2 :].split()[19])
+                if comm not in WATCHED:
+                    continue
+                if os.readlink(entry / "ns" / "pid") != own_namespace:
+                    continue
+                if runtime not in (entry / "environ").read_bytes().split(b"\0"):
+                    continue
             except (OSError, ValueError, IndexError):
                 continue
             if comm in WATCHED:
