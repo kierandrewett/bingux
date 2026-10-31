@@ -35,6 +35,54 @@ static volatile sig_atomic_t stopped;
 #define SWEEP_MS 5000
 static bool sweeping;
 
+// A record stream whose sink input vanishes while the server is creating it can stay in the
+// CREATING state for good: the server never answers, and libpulse refuses to disconnect a stream
+// in that state (pa_stream_disconnect fails with "Bad state"). The record stream then lives on
+// the server until this client exits. The meter cannot name it, so it asks the server which
+// source outputs it owns and kills those that no live stream accounts for. One that is
+// unaccounted for in two sweeps in a row is not a stream that is merely being created.
+#define ORPHAN_MAX 64
+static uint32_t orphans_before[ORPHAN_MAX], orphans_now[ORPHAN_MAX];
+static unsigned n_orphans_before, n_orphans_now;
+static bool scanning;
+
+static void reap_orphans(pa_context* ctx, const pa_source_output_info* info, int eol,
+                         void* userdata) {
+    (void)userdata;
+    if (eol < 0) {
+        scanning = false;
+        return;
+    }
+    if (eol > 0) {
+        unsigned kept = 0;
+        uint32_t still[ORPHAN_MAX];
+        for (unsigned i = 0; i < n_orphans_now; i++) {
+            bool twice = false;
+            for (unsigned j = 0; j < n_orphans_before; j++)
+                twice = twice || orphans_before[j] == orphans_now[i];
+            if (twice) {
+                pa_operation* kill = pa_context_kill_source_output(ctx, orphans_now[i], NULL, NULL);
+                if (kill)
+                    pa_operation_unref(kill);
+            } else {
+                still[kept++] = orphans_now[i];
+            }
+        }
+        memcpy(orphans_before, still, kept * sizeof(*still));
+        n_orphans_before = kept;
+        n_orphans_now = 0;
+        scanning = false;
+        return;
+    }
+    if (!info || info->client != pa_context_get_index(ctx) || n_orphans_now == ORPHAN_MAX)
+        return;
+    for (Meter* meter = meters; meter; meter = meter->next)
+        if (meter->stream && pa_stream_get_state(meter->stream) == PA_STREAM_READY &&
+            pa_stream_get_index(meter->stream) == info->index)
+            return;
+    orphans_now[n_orphans_now++] = info->index;
+}
+
 static uint64_t now_ms(void) {
     struct timespec time;
     clock_gettime(CLOCK_MONOTONIC, &time);
@@ -50,14 +98,38 @@ static Meter* find(uint32_t id) {
             return meter;
     return NULL;
 }
+// A stream dropped while the server is still creating it cannot be disconnected yet:
+// pa_stream_disconnect only works on a ready stream. Unreferencing it then leaves the record
+// stream alive on the server until this client exits (the leak behind ~200 monitor streams when
+// a sink input vanishes right after it appears). Keep it, and disconnect it once it is ready.
+static void dropped_state(pa_stream* stream, void* userdata) {
+    (void)userdata;
+    switch (pa_stream_get_state(stream)) {
+    case PA_STREAM_READY:
+        pa_stream_disconnect(stream);
+        break;
+    case PA_STREAM_FAILED:
+    case PA_STREAM_TERMINATED:
+        pa_stream_set_state_callback(stream, NULL, NULL);
+        pa_stream_unref(stream);
+        break;
+    default:
+        break;
+    }
+}
 static void drop_stream(Meter* meter) {
     if (!meter->stream)
         return;
-    pa_stream_set_read_callback(meter->stream, NULL, NULL);
-    pa_stream_disconnect(meter->stream);
-    pa_stream_unref(meter->stream);
+    pa_stream* stream = meter->stream;
     meter->stream = NULL;
     meter->peak = 0;
+    pa_stream_set_read_callback(stream, NULL, NULL);
+    if (pa_stream_get_state(stream) == PA_STREAM_CREATING) {
+        pa_stream_set_state_callback(stream, dropped_state, NULL);
+        return;
+    }
+    pa_stream_disconnect(stream);
+    pa_stream_unref(stream);
 }
 static void remove_meter(uint32_t id) {
     for (Meter** slot = &meters; *slot; slot = &(*slot)->next) {
@@ -271,7 +343,7 @@ static void tick(pa_mainloop_api* api, pa_time_event* event, const struct timeva
         if (meter->removed && !meter->active)
             remove_meter(meter->id);
     }
-    static uint64_t swept;
+    static uint64_t swept, scanned;
     if (!sweeping && pa_context_get_state(context) == PA_CONTEXT_READY && now - swept >= SWEEP_MS) {
         swept = now;
         sweeping = true;
@@ -283,6 +355,18 @@ static void tick(pa_mainloop_api* api, pa_time_event* event, const struct timeva
             pa_operation_unref(operation);
         else
             sweeping = false;
+    }
+    if (!scanning && pa_context_get_state(context) == PA_CONTEXT_READY &&
+        now - scanned >= SWEEP_MS) {
+        scanned = now;
+        scanning = true;
+        n_orphans_now = 0;
+        pa_operation* operation =
+            pa_context_get_source_output_info_list(context, reap_orphans, NULL);
+        if (operation)
+            pa_operation_unref(operation);
+        else
+            scanning = false;
     }
     if (dirty) {
         emit();
