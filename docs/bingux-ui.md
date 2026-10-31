@@ -2689,7 +2689,7 @@ how it looks, and is accepted.
 | `detail`    | `bold` or `fill`  | Things recognised by their inner structure: globe, envelope, calendar, phone, tablet, text and document files (`fill`), keyboard shortcuts, eye, touchpad (`bold`) |
 | `section`   | `bold` or `fill`  | The settings sidebar: Network, Bluetooth, Keyboard, Mouse, Desktop, Search, Power and Applications (`DotsNine`: nine round dots) are outlines; Displays, Sound, Appearance, Accessibility, Date and time, Users and About are fills |
 | `action`    | `bold` or `fill`  | Verbs: copy, share, refresh, search, zoom, rotate, full screen (`bold`); delete, filter, grid view, sidebar toggle (`fill`) |
-| `indicator` | `bold` or `fill`  | Levels and states: battery, Bluetooth, wired network, hotspot (`bold`); volume (`fill`)              |
+| `indicator` | `bold` or `fill`  | Levels and states: wired network (`fill`); volume (`fill`); battery, Bluetooth and the hotspot are drawn by hand (`custom`) |
 | `control`   | `bold`            | Chevrons, tick, plus, minus, close, menu, more, drag handle, window controls, outline star, power     |
 | `drawn`     | strokes           | Drawn by hand: the Wi-Fi family (two 2 px arcs and a dot, symmetric about x = 8), the symbolic-link badge, never a fork glyph |
 
@@ -2764,7 +2764,22 @@ After editing `scale`, `dx` or `dy` in `labels.tsv`, run `map-fork.py`, `build.p
 
 Icons that show a state (Wi-Fi signal, battery level, volume) are one drawing per
 state with the same footprint, so the glyph does not jump when the state changes:
-the battery levels share one glyph position (the same fork box), as do the four volume icons.
+the battery levels share one body (the same rectangle), as do the four volume icons.
+
+**Dimmed ink.** A level icon keeps the parts that are "off" in view instead of dropping them: a Wi-Fi
+arc without signal, the empty end of a battery. A source marks such a shape `data-dim="yes"`; `build.py`
+writes it as a second path with `fill-opacity="0.4"` (`DIM_ALPHA`, one value for every icon), never
+overlapping the solid path. The icon is still tinted with one colour at draw time (Freya's `SvgViewer`
+sets `fill` on the root, which a path's own `fill-opacity` keeps; the QML shell's `MultiEffect`
+colorization keeps the alpha too). The pixel rules and `golden.py` judge the whole silhouette, dim part
+included. A cut removes ink from both layers: the charging bolt on a battery is cut out of the filled and the dim part alike. `review.py` draws both layers.
+
+Battery: `battery-level-N` (0 to 100 in tens) is a rounded body filled from the left to N % with the
+rest and the nub dimmed; `-charging` is the same with the bolt, so it shows the level and the charge;
+`-100-charged` is full with a tick; `battery-missing` is a solid body with an exclamation mark. Pick
+one with `Icon::battery_level(percent)` (Rust, nearest ten) or `SystemIndicators.batteryIconName()`
+(the shell, the same rounding). Wi-Fi has two arcs at most (IC-03), so `signal-good` and
+`signal-excellent` are one drawing; none, weak and ok light none, the dot and the dot and inner arc.
 
 ### Choose the icon for where it is used
 
@@ -2778,7 +2793,7 @@ weak, and what was decided:
 | Icon | Was | Problem | Now |
 | ---- | --- | ------- | --- |
 | `input-touchpad` | `HandPointing` regular | 1 px wire, thinner than its neighbours | `HandTap` bold, as in `5d49113` |
-| `network-vpn` | `ShieldCheckered` fill | a different silhouette from every other fill | `Shield` fill, as in `5d49113` |
+| `network-vpn` | `Shield` fill | a plain shield | `ShieldCheckered` fill: the chequer of Material's VPN icon |
 | `preferences-desktop-wallpaper` | `Mountains` regular | 1 px wire, thinner than its neighbours | `ImageSquare` bold, as in `5d49113` |
 | `view-app-grid` | solid nine-dot square | a solid blob | `DotsNine` bold (nine round dots, no mass) |
 | `input-tablet`, `phone` | `regular` outline | 1 px wire beside the filled devices | `DeviceTablet`, `DeviceMobile` fill |
@@ -2787,11 +2802,11 @@ weak, and what was decided:
 | Default applications: Documents | `document-open` (`FolderOpen`) | a folder, not a document | `default-app-documents`: `FileDoc` fill |
 | `help-about` | `Info` regular | 1 px wire in a set of fills and bold outlines | `Info` fill, as in `5d49113` |
 | `audio-volume-low` | `SpeakerNone` | a bare cone can read as mute | kept: 0, 1, 2 waves are monotone and mute has the X |
-| `battery-level-*` | five fork glyphs for eleven levels | levels share a glyph | kept: no finer glyph exists |
-| `battery-level-*-charging` | `BatteryCharging` | the bolt is small at 16 px, level is lost | kept: the fork has no level-and-bolt glyph |
+| `battery-level-*` | five fork glyphs for eleven levels, outlined cells | a line per cell, not filled; the level read badly | drawn: a body filled to the level, the rest dimmed |
+| `battery-level-*-charging` | `BatteryCharging` | the bolt is small at 16 px, level is lost | drawn: the same level fill with the bolt turned inside out on it |
 | `window-restore` | `CopySimple` | close to `edit-copy` | kept: two squares are the convention |
 | `find-location` | `CursorClick` | no "inspect" glyph | kept for the inspector toolbar |
-| `network-wired` | `Network` | a node tree, not a port | kept: the fork has no ethernet port |
+| `network-wired` | `Network` bold | the squares were outlines | `Network` fill |
 
 ### Add or change an icon
 

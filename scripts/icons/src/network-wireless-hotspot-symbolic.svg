@@ -1,3 +1,7 @@
 <svg viewBox="0 0 16 16">
-  <fork name="Broadcast" weight="bold" mode="exact"/>
+  <path d="M3.76 2.75A6.5 6.5 0 0 1 12.24 2.75" stroke="black" stroke-width="2"/>
+  <path d="M5.53 4.55A3.5 3.5 0 0 1 10.47 4.55" stroke="black" stroke-width="2"/>
+  <circle cx="8" cy="7" r="1.5" fill="black"/>
+  <rect x="1" y="10" width="14" height="5" rx="2" fill="black"/>
+  <circle cx="4.5" cy="12.5" r="1" fill="black" data-op="cut"/>
 </svg>

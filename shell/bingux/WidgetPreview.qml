@@ -164,7 +164,7 @@ FocusScope {
             summary: "Battery 84 percent, charging"
             barLayout: root.barLayout
             barWindow: DesktopEditing.editor?.nativeWindow
-            presentation: Object.assign({}, root.controlPresentation(label, "battery-good-symbolic", true, true), {
+            presentation: Object.assign({}, root.controlPresentation(label, "battery-level-80-charging-symbolic", true, true), {
                 custom: true
             })
         }

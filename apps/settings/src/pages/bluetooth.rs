@@ -716,14 +716,6 @@ fn device_kind(name: &str) -> &'static str {
     }
 }
 
-fn battery_icon(level: u8) -> Icon {
-    if level > 50 {
-        Icon::BatteryLevel100
-    } else {
-        Icon::BatteryLevel50
-    }
-}
-
 /// The state of a device in words.
 fn device_word(device: &Device) -> &'static str {
     if device.connected {
@@ -823,7 +815,7 @@ fn device_row(
     if let Some(level) = device.battery {
         glyphs = glyphs
             .child(icons::icon(
-                battery_icon(level),
+                Icon::battery_level(level),
                 IconSize::Control,
                 Paint::Muted.color(&tokens),
             ))
@@ -1062,7 +1054,7 @@ impl Component for BluetoothDevicePage {
         if let Some(level) = device.battery {
             details = details.row(
                 row("Battery")
-                    .leading(battery_icon(level))
+                    .leading(Icon::battery_level(level))
                     .value(format!("{level}%")),
             );
         }

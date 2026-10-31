@@ -1,3 +1,7 @@
 <svg viewBox="0 0 16 16">
-  <fork name="BatteryCharging" weight="bold" mode="exact"/>
+  <rect x="0" y="4" width="14" height="8" rx="2" fill="black"/>
+  <rect x="11" y="0" width="5" height="16" fill="black" data-op="cut"/>
+  <rect x="0" y="4" width="14" height="8" rx="2" fill="black" data-dim="yes"/>
+  <rect x="13" y="6" width="3" height="4" rx="1" fill="black" data-dim="yes"/>
+  <polygon points="9.5,4.5 4.75,8.75 7.5,8.5 6.5,11.5 11.25,7.25 8.5,7.5" fill="black" data-op="cut"/>
 </svg>

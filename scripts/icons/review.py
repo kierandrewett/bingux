@@ -65,14 +65,16 @@ def font(size: int, mono: bool = False) -> ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
-def outline_of_svg(text: str):
-    """The filled outline of one of our icon files (paths with an optional transform)."""
+def outline_of_svg(text: str, dim: bool = False):
+    """The filled outline of one of our icon files (paths with an optional transform).
+
+    `dim=False` is the solid part and `dim=True` the part drawn with a `fill-opacity` (build.py `data-dim`)."""
     import xml.etree.ElementTree as ET
 
     root = ET.fromstring(text)
     acc = build.pathops.Path()
     for node in root.iter():
-        if node.tag.removeprefix(build.SVG_NS) != "path":
+        if node.tag.removeprefix(build.SVG_NS) != "path" or ("fill-opacity" in node.attrib) != dim:
             continue
         sp = SvgPath(node.attrib["d"])
         if node.attrib.get("transform"):
@@ -83,14 +85,25 @@ def outline_of_svg(text: str):
     return build.pathops.simplify(acc)
 
 
+class Polys(list):
+    """The polygons of an icon's solid part, with `dim` the polygons of its dim part (`data-dim`; empty for most icons)."""
+
+    dim: list = []
+
+
 def polys_of_file(path: Path):
-    return build.polygons(outline_of_svg(path.read_text()))
+    text = path.read_text()
+    polys = Polys(build.polygons(outline_of_svg(text)))
+    polys.dim = build.polygons(outline_of_svg(text, dim=True))
+    return polys
 
 
 def cell(polys, size: int, zoom: int, scheme) -> Image.Image:
     """`size` px raster magnified `zoom` times, ink on background."""
     bg, ink = scheme
     cov = raster.coverage(polys, size)[:, :, None]
+    if getattr(polys, "dim", None):
+        cov = np.maximum(cov, build.DIM_ALPHA * raster.coverage(polys.dim, size)[:, :, None])
     rgb = np.array(bg, dtype=np.float64) * (1 - cov) + np.array(ink, dtype=np.float64) * cov
     image = Image.fromarray(np.round(rgb).astype(np.uint8), "RGB")
     return image.resize((size * zoom, size * zoom), Image.NEAREST)

@@ -238,6 +238,21 @@ Item {
         return UPower.onBattery ? "Battery " + percentage + " percent, discharging" : "Battery " + percentage + " percent, charging";
     }
 
+    // The battery-level-N icon: the charge rounded to the nearest ten (the same rounding as Icon::battery_level in
+    // crates/ui), the bolt version while charging, the tick version when full and plugged in.
+    function batteryIconName() {
+        if (!laptopBatteryAvailable) {
+            return "battery-missing-symbolic";
+        }
+
+        if (battery.state === UPowerDeviceState.FullyCharged) {
+            return "battery-level-100-charged-symbolic";
+        }
+
+        const level = Math.min(100, Math.round(Math.round(battery.percentage * 100) / 10) * 10);
+        return "battery-level-" + level + (battery.state === UPowerDeviceState.Charging ? "-charging" : "") + "-symbolic";
+    }
+
     function changeVolume(delta) {
         if (!audioAvailable) {
             return;
@@ -282,7 +297,7 @@ Item {
             objectName: "controlStatus_battery"
             slotSize: root.controlSize
             shown: root.laptopBatteryAvailable
-            iconName: root.laptopBatteryAvailable ? root.battery.iconName : "battery-missing-symbolic"
+            iconName: root.batteryIconName()
             label: root.batteryAccessibleName()
         }
         StatusIndicator {

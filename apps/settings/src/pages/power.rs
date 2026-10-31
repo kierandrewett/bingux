@@ -640,7 +640,7 @@ fn battery_group(battery: &Battery) -> Group {
         None => group
             .row(
                 row("Charge")
-                    .leading(Icon::BatteryLevel50)
+                    .leading(Icon::BatteryLevel0)
                     .value(battery.percentage.clone()),
             )
             .row(row("State").value(battery.state.clone())),
@@ -652,7 +652,7 @@ fn battery_group(battery: &Battery) -> Group {
     match &battery.health {
         Some(health) => group.row(
             row("Battery health")
-                .leading(Icon::BatteryLevel50)
+                .leading(Icon::BatteryLevel100)
                 .value(health.clone()),
         ),
         None => group,

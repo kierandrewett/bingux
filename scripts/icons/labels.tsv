@@ -15,8 +15,8 @@
 #policy status: dialog-error dialog-information dialog-warning edit-clear help-browser media-eject media-playback-pause media-playback-start media-playback-stop network-vpn network-wireless-encrypted security-high security-low starred
 #symmetric: avatar-default network-wireless network-wireless-signal-weak network-wireless-signal-ok network-wireless-signal-good network-wireless-signal-excellent network-wireless-signal-none
 #mark: list-drag-handle go-next go-previous pan-up pan-down pan-end object-select list-add list-remove window-close window-minimize window-maximize window-restore view-more
-#exempt size: network-wireless-signal-none network-wireless-signal-weak
-#exempt centre: audio-volume-low network-wireless-signal-none network-wireless-signal-weak
+#exempt centre: audio-volume-low
+#exempt dots: network-wireless-disabled
 #policy action: system-switch-user view-list-ordered checkbox-checked format-text-bold format-text-italic format-text-strikethrough format-text-plaintext format-code format-quote insert-link
 #policy control: system-log-out system-reboot
 #policy indicator: network-transmit-receive
@@ -30,24 +30,24 @@
 #mirror_rtl: go-next go-previous pan-end sidebar-show send-to view-list help-browser emblem-symbolic-link system-log-out
 
 network-wireless | Wi-Fi (sidebar), top-bar wireless | Wi-Fi fan | custom: two 2 px arcs and a dot
-network-wireless-signal-none | Wi-Fi list row: no signal | dot only | custom: a 3 px dot, centre (8, 12)
-network-wireless-signal-weak | Wi-Fi list row: weak | one arc | custom: one 2 px arc and a dot
-network-wireless-signal-ok | Wi-Fi list row: ok | two arcs | custom: two 2 px arcs and a dot
-network-wireless-signal-good | Wi-Fi list row: good | two arcs | custom: two 2 px arcs and a dot
+network-wireless-signal-none | Wi-Fi list row: no signal | ghost fan | custom: two 2 px arcs and a dot, all dim
+network-wireless-signal-weak | Wi-Fi list row: weak | lit dot | custom: the dot, both arcs dim
+network-wireless-signal-ok | Wi-Fi list row: ok | dot and inner arc | custom: dot and inner arc, the outer arc dim
+network-wireless-signal-good | Wi-Fi list row: good | full fan | custom: two 2 px arcs and a dot (a fan has two arcs at most, so good and excellent are one drawing)
 network-wireless-signal-excellent | Wi-Fi list row, hero, top bar: full | full fan | custom: two 2 px arcs and a dot
-network-wireless-disabled | Wi-Fi off | fan with slash | custom: two 2 px arcs and a dot, plus a slash
-network-wireless-encrypted | Wi-Fi list row: secured network | padlock | LockKey fill
-network-wireless-hotspot | Hotspot | broadcasting dot with arcs | Broadcast bold
-network-offline | top bar: no network | fan with x | custom: two 2 px arcs and an x where the dot is
-network-error | top bar: network problem | network with x | NetworkX bold
-network-wired | Network (sidebar), wired connection row, top-bar wired | wired network | Network bold
+network-wireless-disabled | Wi-Fi off | fan with slash | custom: two 2 px arcs and a dot, a slash with a 1 px gap cut around it
+network-wireless-encrypted | Wi-Fi list row: secured network | padlock | custom: a rounded body, a round shackle and a keyhole
+network-wireless-hotspot | Hotspot | Wi-Fi over a router | custom: two arcs and a dot over a rounded base with a light
+network-offline | top bar: no network | fan with x | custom: two 2 px arcs and a dot, an x at the lower right with a gap cut around it
+network-error | top bar: network problem | network with x | custom: the filled Network glyph, an x at the lower right with a gap cut around it
+network-wired | Network (sidebar), wired connection row, top-bar wired | wired network | Network fill
+network-vpn | VPN (rows, Control Centre) | chequered shield | ShieldCheckered fill
 network-transmit-receive | top bar: connected, kind unknown | arrows up and down | ArrowsDownUp bold
-network-vpn | VPN (rows, Control Centre) | shield | Shield fill
 network-server | Server / share | server stack | HardDrives fill
 network-workgroup | Tailscale: local network access and exit node rows | devices on one network | Devices fill
 airplane-mode | Airplane mode (top bar, Control Centre) | aeroplane | Airplane fill
-bluetooth-active | Bluetooth (sidebar, hero, top bar) | Bluetooth rune | Bluetooth bold scale=1.1
-bluetooth-disabled | Bluetooth off (top bar) | rune with slash | BluetoothSlash bold scale=1.1
+bluetooth-active | Bluetooth (sidebar, hero, top bar) | Bluetooth rune | custom: a 1.5 px rune 9 px wide
+bluetooth-disabled | Bluetooth off (top bar) | rune with slash | custom: the rune, a 1.5 px slash with a 1 px gap cut around it
 audio-volume-high | Sound (sidebar), volume high (top bar) | speaker with two waves | SpeakerHigh fill
 audio-volume-medium | volume medium (top bar) | speaker with one wave | SpeakerLow fill
 audio-volume-low | volume low (top bar) | speaker, no waves | SpeakerNone fill
@@ -70,30 +70,30 @@ system-shutdown | Power (top bar, power menu) | power symbol | Power bold
 system-log-out | Log Out (power menu) | arrow leaving a door | SignOut bold
 system-reboot | Restart (power menu) | circular arrow | ArrowClockwise bold
 system-switch-user | Switch User (power menu) | person with swap arrows | UserSwitch fill scale=0.98
-battery-level-100 | Power (sidebar), battery full | horizontal battery | BatteryFull bold
-battery-level-50 | battery half | horizontal battery | BatteryMedium bold
-battery-level-0 | battery empty (top bar, Power) | empty battery | BatteryEmpty bold
-battery-level-10 | battery 10% | battery low | BatteryLow bold
-battery-level-20 | battery 20% | battery low | BatteryLow bold
-battery-level-30 | battery 30% | battery medium | BatteryMedium bold
-battery-level-40 | battery 40% | battery medium | BatteryMedium bold
-battery-level-60 | battery 60% | battery high | BatteryHigh bold
-battery-level-70 | battery 70% | battery high | BatteryHigh bold
-battery-level-80 | battery 80% | battery high | BatteryHigh bold
-battery-level-90 | battery 90% | battery full | BatteryFull bold
-battery-level-100-charged | battery charged, plugged in | full battery | BatteryFull bold
-battery-level-0-charging | charging (any level) | battery with bolt | BatteryCharging bold
-battery-level-10-charging | charging | battery with bolt | BatteryCharging bold
-battery-level-20-charging | charging | battery with bolt | BatteryCharging bold
-battery-level-30-charging | charging | battery with bolt | BatteryCharging bold
-battery-level-40-charging | charging | battery with bolt | BatteryCharging bold
-battery-level-50-charging | charging | battery with bolt | BatteryCharging bold
-battery-level-60-charging | charging | battery with bolt | BatteryCharging bold
-battery-level-70-charging | charging | battery with bolt | BatteryCharging bold
-battery-level-80-charging | charging | battery with bolt | BatteryCharging bold
-battery-level-90-charging | charging | battery with bolt | BatteryCharging bold
-battery-level-100-charging | charging | battery with bolt | BatteryCharging bold
-battery-missing | no battery found | battery with warning | BatteryWarning bold
+battery-level-100 | Power (sidebar), battery full | battery filled to the top | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-level-50 | battery half | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-level-0 | battery empty (top bar, Power) | empty battery | custom: the body and nub, all dim
+battery-level-10 | battery 10% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-level-20 | battery 20% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-level-30 | battery 30% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-level-40 | battery 40% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-level-60 | battery 60% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-level-70 | battery 70% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-level-80 | battery 80% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-level-90 | battery 90% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-level-100-charged | battery charged, plugged in | full battery with a tick | custom: the full battery with a check cut out of it
+battery-level-0-charging | charging at 0 to 9 % | empty battery with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-level-10-charging | charging at 10 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-level-20-charging | charging at 20 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-level-30-charging | charging at 30 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-level-40-charging | charging at 40 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-level-50-charging | charging at 50 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-level-60-charging | charging at 60 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-level-70-charging | charging at 70 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-level-80-charging | charging at 80 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-level-90-charging | charging at 90 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-level-100-charging | charging at 100 % | full battery with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-missing | no battery found | battery with an exclamation mark | custom: a solid body with an exclamation mark cut out of it
 power-profile-power-saver | Power mode: power saver | leaf | Leaf fill
 power-profile-balanced | Power mode: balanced | speedometer | Speedometer fill
 power-profile-performance | Power mode: performance | lightning bolt | Lightning fill
