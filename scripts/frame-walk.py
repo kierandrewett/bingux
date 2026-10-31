@@ -48,9 +48,7 @@ from app_env import isolated  # noqa: E402
 REPO = Path(__file__).resolve().parent.parent
 SETTINGS = REPO / "apps" / "settings"
 DEFAULT_BINARY = (
-    Path(os.environ.get("CARGO_TARGET_DIR", "/var/tmp/bingux-settings-target"))
-    / "debug"
-    / "bingux-settings"
+    Path(os.environ.get("CARGO_TARGET_DIR", "/var/tmp/bingux-settings-target")) / "debug" / "bingux-settings"
 )
 
 IDLE_MS = 300  # a frame is idle this long after the last input or navigation
@@ -95,7 +93,13 @@ def walk_script(panel: str) -> str:
         steps += ["mark nav", f"address {subpage}", "wait 1000"]
         steps += ["mark nav", f"address {panel}", "wait 1000"]
     if popup:
-        steps += [f"click-text {popup}", "wait 1000", "mark popup", "key escape", "wait 1000"]
+        steps += [
+            f"click-text {popup}",
+            "wait 1000",
+            "mark popup",
+            "key escape",
+            "wait 1000",
+        ]
     steps += ["scroll 620,400,-600", "wait 800", "scroll 620,400,600", "wait 800"]
     steps += ["mark end"]
     return "; ".join(steps)
@@ -231,6 +235,24 @@ def diff_features(before: np.ndarray, after: np.ndarray) -> list[dict]:
     return pairs
 
 
+def appeared(before: np.ndarray, after: np.ndarray) -> list[tuple[int, int, int, int, int]]:
+    """Text bands of `after` with no text band of `before` at the same place: content that was not there.
+
+    `diff_features` pairs edges that moved or resized and drops the rest, so a group of rows that is added
+    below the ones already drawn (a list whose data landed after its first frame) moves nothing and is
+    never reported. This is that gap: a band counts as new when no band of `before` starts within
+    MAX_MOVE px of it vertically and overlaps it horizontally.
+    """
+    new_bands = [tuple(int(v) for v in row) for row in after.tolist() if row[0] == T]
+    old_bands = [tuple(int(v) for v in row) for row in before.tolist() if row[0] == T]
+    found = []
+    for band in new_bands:
+        _, y0, x0, _, x1 = band
+        if not any(abs(y0 - o[1]) <= MAX_MOVE and min(x1, o[4]) - max(x0, o[2]) > 0 for o in old_bands):
+            found.append(band)
+    return found
+
+
 def describe(pair: dict) -> str:
     kind = pair["kind"]
     name = KIND_NAME[kind]
@@ -283,7 +305,11 @@ def write_pair(before: dict, after: dict, pairs: list[dict], path: Path) -> None
     canvas.paste(crop_after, (w + gap, top))
     draw = ImageDraw.Draw(canvas)
     for bx0, by0, bx1, by1 in boxes_before:
-        draw.rectangle([bx0 - x0, by0 - y0 + top, bx1 - x0, by1 - y0 + top], outline=(220, 0, 0), width=2)
+        draw.rectangle(
+            [bx0 - x0, by0 - y0 + top, bx1 - x0, by1 - y0 + top],
+            outline=(220, 0, 0),
+            width=2,
+        )
     for bx0, by0, bx1, by1 in boxes_after:
         offset = w + gap
         draw.rectangle(
@@ -292,7 +318,11 @@ def write_pair(before: dict, after: dict, pairs: list[dict], path: Path) -> None
             width=2,
         )
     draw.text((2, 2), f"before: frame {before['index']}, t={before['t']} ms", fill=(0, 0, 0))
-    draw.text((w + gap + 2, 2), f"after: frame {after['index']}, t={after['t']} ms", fill=(0, 0, 0))
+    draw.text(
+        (w + gap + 2, 2),
+        f"after: frame {after['index']}, t={after['t']} ms",
+        fill=(0, 0, 0),
+    )
     canvas.save(path)
 
 
@@ -306,6 +336,7 @@ def analyse(panel: str, frames: Path, shifts: Path) -> dict:
     groups: list[dict] = []
     frame_count = 0
     idle_pairs = 0
+    popins: list[dict] = []
     prev: dict | None = None
     phase = "load"
     marker = ""
@@ -347,10 +378,28 @@ def analyse(panel: str, frames: Path, shifts: Path) -> dict:
         if prev is not None and idle:
             idle_pairs += 1
             pairs = diff_features(prev["feats"], current["feats"])
+            if phase == "load":
+                new_bands = appeared(prev["feats"], current["feats"])
+                if new_bands:
+                    popins.append(
+                        {
+                            "frame": current["index"],
+                            "t": t,
+                            "bands": len(new_bands),
+                            "y0": min(b[1] for b in new_bands),
+                            "y1": max(b[3] for b in new_bands),
+                            "file": current["file"],
+                        }
+                    )
             if pairs:
                 record(groups, panel, frames, shifts, prev, current, pairs)
         prev = current
-    return {"frames": frame_count, "idle_pairs": idle_pairs, "groups": groups}
+    return {
+        "frames": frame_count,
+        "idle_pairs": idle_pairs,
+        "groups": groups,
+        "popins": popins,
+    }
 
 
 def record(groups, panel, frames, shifts, before, after, pairs) -> None:
@@ -429,9 +478,7 @@ def render(results: dict, binary: Path) -> str:
     for panel, result in results.items():
         walk = sum(1 for g in result["groups"] if g["phase"] == "walk")
         load = sum(1 for g in result["groups"] if g["phase"] == "load")
-        lines.append(
-            f"| {panel} | {result['frames']} | {result['idle_pairs']} | {walk} | {load} | {result['run']} |"
-        )
+        lines.append(f"| {panel} | {result['frames']} | {result['idle_pairs']} | {walk} | {load} | {result['run']} |")
     lines.append("")
     for panel, result in results.items():
         if result["log"]:
@@ -451,11 +498,9 @@ def render(results: dict, binary: Path) -> str:
             )
             since = "no input yet" if group["since_to"] is None else f"{group['since_to']} ms after last input"
             lines += [
-                f"### {index}. {panel}: {span} ({group['phase']}, "
-                f"t={group['t_from']}-{group['t_to']} ms, {since})",
+                f"### {index}. {panel}: {span} ({group['phase']}, t={group['t_from']}-{group['t_to']} ms, {since})",
                 "",
-                f"Marker: `{group['marker']}`. Frame pairs: {group['count']}. "
-                f"Largest step: {group['max_dc']} px.",
+                f"Marker: `{group['marker']}`. Frame pairs: {group['count']}. Largest step: {group['max_dc']} px.",
                 "",
             ]
             tag = translated(group["first_pairs"])
@@ -473,12 +518,14 @@ def render(results: dict, binary: Path) -> str:
                 "",
                 f"![before/after](shifts/{group['crop_first']})",
                 "",
-                f"Full frames: [before](shifts/{group['full_before']}), "
-                f"[after](shifts/{group['full_after']}).",
+                f"Full frames: [before](shifts/{group['full_before']}), [after](shifts/{group['full_after']}).",
                 "",
             ]
         if len(groups) > MAX_GROUPS_IN_REPORT:
-            lines += [f"{len(groups) - MAX_GROUPS_IN_REPORT} more groups in shifts.json.", ""]
+            lines += [
+                f"{len(groups) - MAX_GROUPS_IN_REPORT} more groups in shifts.json.",
+                "",
+            ]
     return "\n".join(lines)
 
 
@@ -511,13 +558,22 @@ def main() -> None:
             # The binary ran but wrote no frames: it is not the build with the
             # frame knobs, or it exited before the walk started. Say so.
             run = f"{run}; no frames recorded"
-            results[panel] = {"run": run, "frames": 0, "idle_pairs": 0, "groups": [], "log": notes(out, panel)}
+            results[panel] = {
+                "run": run,
+                "frames": 0,
+                "idle_pairs": 0,
+                "groups": [],
+                "log": notes(out, panel),
+            }
             continue
         result = analyse(panel, frames, shifts)
         result["run"] = run
         result["log"] = notes(out, panel)
         results[panel] = result
-        print(f"{panel}: {result['frames']} frames, {len(result['groups'])} shift groups", flush=True)
+        print(
+            f"{panel}: {result['frames']} frames, {len(result['groups'])} shift groups",
+            flush=True,
+        )
         if not args.keep_frames:
             shutil.rmtree(frames, ignore_errors=True)
 

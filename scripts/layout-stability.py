@@ -83,7 +83,6 @@ FAKES = {
 EXTRA_FAKES = {"network/mobile": {"BINGUX_SETTINGS_FAKE_NETWORK": "modem"}}
 
 
-
 MIN_MOVE = 4  # px; a horizontal rule that moves less is anti-aliasing, not a shift
 MIN_RULE = 150  # px; row separators and card borders are long, glyph edges are not
 
@@ -108,6 +107,21 @@ def significant(group: dict) -> list[dict]:
     ]
 
 
+POPIN_GRACE_MS = 120  # content that lands within this long of the first content is one paint, not a late arrival
+
+
+def late_popins(popins: list[dict]) -> list[dict]:
+    """Pop-ins after the page's first content. A page draws its final layout on its first frame (docs/settings.md,
+    "Loading"): rows that appear later, below rows already drawn, are layout the reader sees arrive even though
+    no edge moves. The first group of bands is the page's first paint; any band that arrives more than
+    POPIN_GRACE_MS after it is late."""
+    content = [p for p in popins if p["bands"] >= 3]
+    if not content:
+        return []
+    first = content[0]["t"]
+    return [p for p in popins if p["t"] - first > POPIN_GRACE_MS and p["bands"] >= 1]
+
+
 def targets(pages: list[str]) -> list[str]:
     names = pages or frame_walk.panels() + SUBPAGES
     return names
@@ -125,7 +139,10 @@ def run_one(binary: Path, address: str, size: str, out: Path, delay_ms: int, tim
         env["BINGUX_SETTINGS_SNAPSHOT_SIZE"] = size
     log = out / "logs" / size / f"{slug}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="layout-stability-cache-") as cache, log.open("w") as sink:
+    with (
+        tempfile.TemporaryDirectory(prefix="layout-stability-cache-") as cache,
+        log.open("w") as sink,
+    ):
         env["XDG_CACHE_HOME"] = cache
         try:
             proc = subprocess.run(
@@ -150,8 +167,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--binary", type=Path, default=frame_walk.DEFAULT_BINARY)
     parser.add_argument("--out", type=Path, default=Path("/tmp/LayoutStability"))
-    parser.add_argument("--pages", default="", help="comma list of panel names or addresses; default all")
-    parser.add_argument("--sizes", default=f"{DESKTOP},{PHONE}", help="comma list; 'default' is the desktop size")
+    parser.add_argument(
+        "--pages",
+        default="",
+        help="comma list of panel names or addresses; default all",
+    )
+    parser.add_argument(
+        "--sizes",
+        default=f"{DESKTOP},{PHONE}",
+        help="comma list; 'default' is the desktop size",
+    )
     parser.add_argument("--delay-ms", type=int, default=1500)
     parser.add_argument("--timeout", type=int, default=120, help="seconds per run")
     parser.add_argument("--skip-run", action="store_true", help="analyse frames already in OUT/frames")
@@ -175,22 +200,41 @@ def main() -> None:
                 status = run_one(args.binary, address, size, out, args.delay_ms, args.timeout)
             frames = out / "frames" / size / slug
             if not (frames / "frames.jsonl").exists():
-                rows.append({"page": address, "size": size, "run": f"{status}; no frames", "groups": [], "frames": 0})
+                rows.append(
+                    {
+                        "page": address,
+                        "size": size,
+                        "run": f"{status}; no frames",
+                        "groups": [],
+                        "frames": 0,
+                    }
+                )
                 print(f"{size:8} {address:24} {status}; no frames recorded", flush=True)
                 continue
             result = frame_walk.analyse(f"{size}-{slug}", frames, shifts)
             result["groups"] = [group for group in result["groups"] if significant(group)]
+            result["popins"] = late_popins(result["popins"])
             result.update(page=address, size=size, run=status)
             rows.append(result)
-            print(f"{size:8} {address:24} {result['frames']:4} frames, {len(result['groups'])} shifts", flush=True)
+            print(
+                f"{size:8} {address:24} {result['frames']:4} frames, {len(result['groups'])} shifts, "
+                f"{len(result['popins'])} pop-ins",
+                flush=True,
+            )
 
-    lines = ["# Bingux Settings layout stability", "", "| Size | Page | Frames | Shifts | Run |", "|---|---|---|---|---|"]
+    lines = [
+        "# Bingux Settings layout stability",
+        "",
+        "| Size | Page | Frames | Shifts | Pop-ins | Run |",
+        "|---|---|---|---|---|---|",
+    ]
     failed = 0
     for row in rows:
         count = len(row["groups"])
-        broken = count > 0 or "no frames" in row["run"] or row["run"] not in ("ok", "skipped")
+        popins = len(row.get("popins", []))
+        broken = count > 0 or popins > 0 or "no frames" in row["run"] or row["run"] not in ("ok", "skipped")
         failed += broken
-        lines.append(f"| {row['size']} | {row['page']} | {row['frames']} | {count} | {row['run']} |")
+        lines.append(f"| {row['size']} | {row['page']} | {row['frames']} | {count} | {popins} | {row['run']} |")
     lines.append("")
     for row in rows:
         for group in row["groups"]:
@@ -200,7 +244,9 @@ def main() -> None:
                 lines.append(f"- {frame_walk.describe(pair)}")
             lines += ["", f"![shift](shifts/{group['crop_first']})", ""]
     (out / "report.md").write_text("\n".join(lines))
-    (out / "shifts.json").write_text(json.dumps([{k: v for k, v in row.items()} for row in rows], indent=2, default=str))
+    (out / "shifts.json").write_text(
+        json.dumps([{k: v for k, v in row.items()} for row in rows], indent=2, default=str)
+    )
     print(f"report: {out / 'report.md'}", flush=True)
     if failed:
         print(f"{failed} of {len(rows)} runs shifted or failed", file=sys.stderr)
