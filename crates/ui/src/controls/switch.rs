@@ -17,7 +17,7 @@ const TRAVEL_MS: u64 = 100;
 const WIDTH_MS: u64 = 80;
 
 /// A 36 x 20 switch. The thumb is white when on and the text colour when
-/// off.
+/// off ([`thumb_paint`]).
 #[derive(PartialEq)]
 pub struct Switch {
     on: bool,
@@ -40,6 +40,16 @@ impl Switch {
     }
 }
 
+/// The paint of the thumb. Off it is the text colour, the one thing on the neutral track that
+/// reads against it in both schemes. On it is the knob's white, the slider's thumb on the same
+/// accent fill and the one `ControlSwitch.qml` draws: not `OnAccent`, which is an ink for text and
+/// is a different colour for every accent (a dark navy on the blue of the dark scheme, next to an
+/// off thumb that is white), so the thumb looked like two objects as it travelled. A soft knob
+/// shadow (below) keeps it apart from a mid-tone track the white only reaches 2.3:1 on.
+pub(crate) fn thumb_paint(on: bool) -> Paint {
+    if on { Paint::Knob } else { Paint::Text }
+}
+
 impl Component for Switch {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
@@ -57,7 +67,7 @@ impl Component for Switch {
         let press = use_press();
 
         let track = if on { Paint::Accent } else { Paint::Control };
-        let thumb = if on { Paint::OnAccent } else { Paint::Text };
+        let thumb = thumb_paint(on);
         let pressed = enabled && pressing();
         let thumb_width = if pressed {
             Dim::SwitchThumbPressed.px()
@@ -153,6 +163,7 @@ impl Component for Switch {
             ))
             .child(
                 rect()
+                    .component("SwitchThumb")
                     .position(
                         Position::new_absolute()
                             .top((Dim::SwitchHeight.px() - Dim::SwitchThumb.px()) / 2.0)
@@ -161,7 +172,12 @@ impl Component for Switch {
                     .width(Size::px(thumb_w))
                     .tw(
                         &tokens,
-                        &[h(Dim::SwitchThumb), rounded(Radius::Pill), bg(thumb)],
+                        &[
+                            h(Dim::SwitchThumb),
+                            rounded(Radius::Pill),
+                            bg(thumb),
+                            shadow(Elevation::Knob),
+                        ],
                     ),
             )
             // At compact density the painted switch is 28 px tall and a finger
