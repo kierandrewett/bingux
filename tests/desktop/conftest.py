@@ -25,7 +25,7 @@ def pytest_addoption(parser):
         "--require-desktop",
         action="store_true",
         default=os.environ.get("BINGUX_TEST_REQUIRE") == "1",
-        help="fail, instead of skip, when the isolated desktop cannot start (CI sets this)",
+        help="fail, instead of skip, when a piece of the stack is missing (CI sets this)",
     )
 
 
@@ -74,12 +74,9 @@ def host_before() -> HostSnapshot:
 def desktop_session(request, stack, artifact_root, host_before):
     """One isolated desktop for the whole run. Starting it takes a few seconds; every test shares it."""
     session = Session(stack, artifact_root / "desktop", gpu=request.config.getoption("--gpu"))
-    try:
-        session.start()
-    except Exception as error:
-        if request.config.getoption("--require-desktop"):
-            raise
-        pytest.skip(f"the isolated desktop did not start: {error}")
+    # The stack is complete (the `stack` fixture would have skipped otherwise), so a session that does
+    # not start is a failure of the desktop, not a missing prerequisite.
+    session.start()
     # What the desktop looked like the moment it was ready, before any test touched it.
     session.boot = {
         "log": session.log_report(),

@@ -1,0 +1,109 @@
+# Where every existing test script goes. `tests/desktop/fast/test_legacy_map.py` fails when a tracked
+# file under tests/ (outside tests/desktop) or scripts/ matches no entry here, so a new loose script
+# has to be placed in an area, or better, written as a test of the framework.
+#
+# `fate` says what happens to the files of an entry:
+#   keep      stays as it is: a tool, a fixture, a library or a check that is not a desktop test
+#   suite     already runs under tests/desktop
+#   fold      a standalone check with no compositor: to be collected by pytest as a `fast` test
+#   port      drives the real shell in a nested compositor today: to be rewritten as a `needs_gnoblin`
+#             test on `Session`
+#   hardware  needs a VM, a real seat or a device: stays a manual or CI-VM check, marked `needs_hardware`
+#
+# Patterns are matched with fnmatch against the path relative to the repository root, `*` crossing `/`.
+
+[[entry]]
+area = "framework"
+fate = "keep"
+note = "the framework itself"
+patterns = ["tests/desktop/*"]
+
+[[entry]]
+area = "build and install checks"
+fate = "fold"
+note = "packaging, install tree, QML plugin and archive checks; no compositor"
+patterns = [
+  "tests/install-dependencies.py", "tests/standalone-install.py", "tests/rpm-package.py", "tests/shell-archive.py",
+  "tests/pack-shell.test.py", "tests/qmldir-complete.py", "tests/quality-tools.py", "tests/rules-check.test.py",
+  "tests/rules-tests.json", "tests/app-env.test.py", "tests/bingux-config.test.py", "tests/binguxctl.test.py",
+  "tests/os-icons.test.py", "tests/icon-cache*", "tests/bingux-autostart-config.*", "tests/gnoblin-config-loader.py",
+  "tests/installer-gnoblin-config.py", "tests/installer-merged-tree.py", "tests/lib/*", "tests/fixtures/*",
+  "tests/qml/*", "tests/desktop-layout.test.mjs", "tests/control-layout.test.mjs", "tests/popup-placement.test.mjs",
+  "tests/snap-layouts.test.cjs", "tests/live-session.test.py", "tests/session-context.test.py",
+  "tests/session-start-load.test.py", "tests/private-shell.test.py", "tests/private_shell.py", "tests/shell-notify.test.py",
+  "tests/qml-cold-trace.*", "tests/test_*_status.py",
+]
+
+[[entry]]
+area = "shell panels (bar, control centre, calendar, sidebar, tray, metrics)"
+fate = "port"
+note = "QML harnesses and live scripts for the top bar and the panels it opens"
+patterns = [
+  "tests/top-bar-*", "tests/panel-*", "tests/control-*", "tests/copy-panel-effects.sh", "tests/sidebar-*", "tests/metrics-*",
+  "tests/status-bar*", "tests/system-*", "tests/calendar-*", "tests/tray-*", "tests/network-layout.qml",
+  "tests/tailscale-page.qml", "tests/bluetooth-discovery.qml", "tests/battery-percentage.test.mjs", "tests/rolling-number.qml",
+  "tests/data-table.qml", "tests/marquee-*", "tests/privacy-*", "tests/identify.*", "tests/input-source-selector.*",
+  "tests/shell-*", "tests/software-render-mode.*", "tests/desktop-baseline.py", "tests/desktop-menu.*",
+  "tests/device-commands.*", "tests/workspace-change.*", "tests/wallpaper-*", "tests/standard-background.py",
+  "tests/status*", "tests/microphone-lifecycle-live.py", "tests/camera-*", "tests/audio-wheel.qml",
+  "tests/quickshell-no-dumps-live.py", "tests/layershell-focus-live.py", "tests/external-*", "tests/process-*", "tests/notes-*",
+  "tests/media-*", "tests/native-media-idle.*", "tests/steam-applications.test.mjs", "tests/web-suggestions.test.py",
+  "tests/extensions*", "tests/binguxctl-*", "tests/shortcut-reload.py", "tests/gnoblin-menu-focus.py",
+  "tests/launch-*", "tests/direct-app-launch.py", "tests/app-*", "tests/shared-buffer-fades.*",
+]
+
+[[entry]]
+area = "popups, tooltips and popouts"
+fate = "port"
+note = "overlay surfaces: anchoring, fades, shadows, focus"
+patterns = ["tests/popup-*", "tests/popups-*", "tests/popout-*", "tests/tooltip-*", "tests/panel-blur-fade.*", "tests/snap-assist.qml", "tests/window-menu*"]
+
+[[entry]]
+area = "dock"
+fate = "port"
+note = "the dock's icons, pinning, folders, media, launch errors and focus"
+patterns = ["tests/dock-*"]
+
+[[entry]]
+area = "search"
+fate = "port"
+note = "the search overlay and its daemon"
+patterns = ["tests/search-*"]
+
+[[entry]]
+area = "notifications and OSD"
+fate = "port"
+note = "notification centre, toasts, gestures, OSD, tablet pad help"
+patterns = ["tests/notification-*", "tests/osd*", "tests/pad-help*", "tests/audio-*", "tests/emoji-*"]
+
+[[entry]]
+area = "capture"
+fate = "port"
+note = "screenshot and screen recording"
+patterns = ["tests/capture-*", "tests/customise-capture-helper.py", "tests/document-preview.*", "tests/preview-*"]
+
+[[entry]]
+area = "window management"
+fate = "port"
+note = "window switcher, snapping, window menu events"
+patterns = ["tests/window-*", "tests/snap-*"]
+
+[[entry]]
+area = "lock, greeter and bsm (session manager)"
+fate = "hardware"
+note = "the lock and greeter run headless today; bsm boot, helper and QEMU checks need a VM or a real seat"
+patterns = [
+  "tests/bsm-*", "tests/bsm_*", "tests/lock-*", "tests/greeter-*", "tests/session-*", "tests/lock-ui.*",
+]
+
+[[entry]]
+area = "installer and distribution images"
+fate = "hardware"
+note = "installer UI and image boot checks: a VM"
+patterns = ["tests/distro*", "tests/installer-*"]
+
+[[entry]]
+area = "scripts/ (tools and headless probes)"
+fate = "keep"
+note = "build, icon, lint and release tools, and the headless Settings, Files and taxonomy probes; apps/ runs some probes as suites, `make check` runs the rest"
+patterns = ["scripts/*"]
