@@ -40,7 +40,6 @@ PROGRAMS = {
     "bingux-searchd": "bingux-searchd",
     "bingux-statusd": "bingux-statusd",
     "bingux-effects": "bingux-audio-effects",
-    "bingux-dsp": "bingux-dsp",
 }
 
 
@@ -56,7 +55,6 @@ PACKAGE_OF = {
     "bingux-searchd": "bingux",
     "bingux-statusd": "bingux",
     "bingux-effects": "bingux-audio-effects",
-    "bingux-dsp": "bingux-audio-effects",
 }
 OWN = ["GPL-3.0-or-later"]
 EXTRA = {"bingux": ["LGPL-3.0-or-later"]}

@@ -125,6 +125,7 @@ POPUPS = [
     ("about-rename", "about", "click-text Rename"),
     ("users-password", "users", "click-text Change password"),
     ("sound-test", "sound", "click-text Test speakers"),
+    ("sound-effects", "sound", "click-text Effects"),
     ("ethernet-new-profile", "network/ethernet", "click-text Add profile…"),
 ]
 # Popups that a snapshot opens itself (BINGUX_SETTINGS_SNAPSHOT_OPEN).
@@ -198,6 +199,12 @@ RULE_UNMAPPED = {
 # the node's description, and why the box is meant to look like this. An entry
 # that matches nothing is reported, so the list cannot rot.
 ALLOWED: list[dict] = [
+    {
+        "rule": "dead-space",
+        "capture": r"^popup-sound-effects",
+        "where": r'Dialog #\d+ "Effects"',
+        "why": "The effects popup is a fixed-size task (a stack beside a page, each scrolling on its own), so with no effects yet the stack and the page are shorter than the panel; the panel does not shrink to its content.",
+    },
     {
         "rule": "value-ellipsised",
         "capture": r"^(taxonomy:files_|files)",

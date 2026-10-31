@@ -1,5 +1,4 @@
 usr/bin/bingux-effects
-usr/lib/ladspa/libbingux_dsp.so
 usr/lib/systemd/user/bingux-effects@.service
 usr/share/man/man1/bingux-effects.1
 build/licenses/bingux-effects.LICENSE.dependencies usr/share/doc/bingux-audio-effects

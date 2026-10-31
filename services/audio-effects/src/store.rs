@@ -16,7 +16,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::preset::{Band, BandKind, Direction, PluginSlot, Preset, file_stem};
+use crate::eq::{self, Band, BandKind};
+use crate::preset::{Direction, PluginSlot, Preset, file_stem};
 
 fn home_dir(var: &str, fallback: &str) -> PathBuf {
     match std::env::var_os(var).filter(|value| !value.is_empty()) {
@@ -141,7 +142,9 @@ pub fn write_atomic(path: &Path, text: &str) -> Result<(), StoreError> {
     std::fs::create_dir_all(directory)?;
     let temporary = directory.join(format!(
         ".{}.{}.tmp",
-        path.file_name().and_then(|name| name.to_str()).unwrap_or("file"),
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("file"),
         std::process::id()
     ));
     let mut file = std::fs::File::create(&temporary)?;
@@ -177,7 +180,8 @@ impl Store {
     }
 
     pub fn preset_path(&self, direction: Direction, name: &str) -> PathBuf {
-        self.presets_dir(direction).join(format!("{}.json", file_stem(name)))
+        self.presets_dir(direction)
+            .join(format!("{}.json", file_stem(name)))
     }
 
     /// The names of the presets of `direction`, sorted.
@@ -210,13 +214,19 @@ impl Store {
         let text = std::fs::read_to_string(self.preset_path(direction, name))?;
         let preset = Preset::parse(&text)?;
         if preset.direction != direction {
-            return Err(StoreError(format!("\"{name}\" is not an {} preset.", direction.name())));
+            return Err(StoreError(format!(
+                "\"{name}\" is not an {} preset.",
+                direction.name()
+            )));
         }
         Ok(preset)
     }
 
     pub fn save(&self, preset: &Preset) -> Result<(), StoreError> {
-        write_atomic(&self.preset_path(preset.direction, &preset.name), &preset.to_json())
+        write_atomic(
+            &self.preset_path(preset.direction, &preset.name),
+            &preset.to_json(),
+        )
     }
 
     pub fn exists(&self, direction: Direction, name: &str) -> bool {
@@ -249,13 +259,20 @@ impl Store {
     }
 
     /// Give a preset a new name. The new name must be free.
-    pub fn rename(&self, direction: Direction, name: &str, new_name: &str) -> Result<(), StoreError> {
+    pub fn rename(
+        &self,
+        direction: Direction,
+        name: &str,
+        new_name: &str,
+    ) -> Result<(), StoreError> {
         let new_name = new_name.trim();
         if new_name.is_empty() {
             return Err(StoreError("The name is empty.".to_string()));
         }
         if new_name != name && self.exists(direction, new_name) {
-            return Err(StoreError(format!("A preset called \"{new_name}\" already exists.")));
+            return Err(StoreError(format!(
+                "A preset called \"{new_name}\" already exists."
+            )));
         }
         let mut preset = self.load(direction, name)?;
         preset.name = new_name.to_string();
@@ -267,7 +284,12 @@ impl Store {
     }
 
     /// Copy a preset's file to `destination`.
-    pub fn export(&self, direction: Direction, name: &str, destination: &Path) -> Result<(), StoreError> {
+    pub fn export(
+        &self,
+        direction: Direction,
+        name: &str,
+        destination: &Path,
+    ) -> Result<(), StoreError> {
         let preset = self.load(direction, name)?;
         write_atomic(destination, &preset.to_json())
     }
@@ -293,9 +315,60 @@ impl Store {
         Ok(state)
     }
 
+    /// Move every version 1 preset to version 2 (see `legacy`). The original
+    /// file is kept in `presets/legacy/` with a `.notes.txt` beside it that
+    /// says what could not be carried across. Returns the number migrated.
+    pub fn migrate_legacy(&self) -> usize {
+        let mut migrated = 0;
+        for direction in Direction::ALL {
+            let directory = self.presets_dir(direction);
+            let Ok(entries) = std::fs::read_dir(&directory) else {
+                continue;
+            };
+            for entry in entries.filter_map(Result::ok) {
+                let path = entry.path();
+                if path.extension().is_none_or(|ext| ext != "json") {
+                    continue;
+                }
+                let Ok(text) = std::fs::read_to_string(&path) else {
+                    continue;
+                };
+                if !crate::legacy::is_legacy(&text) {
+                    continue;
+                }
+                let Ok(result) = crate::legacy::migrate(&text) else {
+                    continue;
+                };
+                let keep = directory.join("legacy");
+                let Some(file_name) = path.file_name() else {
+                    continue;
+                };
+                if std::fs::create_dir_all(&keep).is_err()
+                    || write_atomic(&keep.join(file_name), &text).is_err()
+                    || write_atomic(&path, &result.preset.to_json()).is_err()
+                {
+                    continue;
+                }
+                if !result.notes.is_empty() {
+                    let _ = write_atomic(
+                        &keep.join(format!(
+                            "{}.notes.txt",
+                            path.file_stem().unwrap_or_default().to_string_lossy()
+                        )),
+                        &(result.notes.join("\n") + "\n"),
+                    );
+                }
+                migrated += 1;
+            }
+        }
+        migrated
+    }
+
     /// Write the factory presets that were never written. One the person has
-    /// since deleted or changed is left alone.
+    /// since deleted or changed is left alone. Presets in the old format
+    /// are migrated first.
     pub fn ensure_factory(&self) -> Result<(), StoreError> {
+        self.migrate_legacy();
         let mut state = self.state();
         let mut changed = false;
         for preset in factory_presets() {
@@ -317,17 +390,20 @@ impl Store {
 }
 
 fn band(kind: BandKind, frequency: f64, gain: f64, q: f64) -> Band {
-    Band {
-        kind,
-        frequency,
-        gain,
-        q,
-        enabled: true,
-    }
+    Band::new(kind, frequency, gain, q)
 }
 
-fn dsp(id: &str, label: &str) -> PluginSlot {
-    PluginSlot::ladspa(id, "bingux_dsp", label)
+fn db(db: f64) -> f64 {
+    10f64.powf(db / 20.0)
+}
+
+fn equalizer(id: &str, input_gain_db: f64, bands: &[Band]) -> PluginSlot {
+    let mut slot = PluginSlot::new(id, "equalizer");
+    slot.controls = eq::controls(bands);
+    if input_gain_db != 0.0 {
+        slot.controls.insert("g_in".to_string(), db(input_gain_db));
+    }
+    slot
 }
 
 /// The presets that ship with Bingux.
@@ -337,76 +413,76 @@ pub fn factory_presets() -> Vec<Preset> {
     vec![
         output("Flat"),
         output("Voice clarity")
-            .with(PluginSlot::equalizer(
+            .with(equalizer(
                 "equalizer-1",
                 -2.0,
-                vec![
+                &[
                     band(BandKind::HighPass, 80.0, 0.0, 0.707),
-                    band(BandKind::Peaking, 250.0, -2.0, 1.2),
-                    band(BandKind::Peaking, 3000.0, 3.0, 1.0),
+                    band(BandKind::Bell, 250.0, -2.0, 1.2),
+                    band(BandKind::Bell, 3000.0, 3.0, 1.0),
                     band(BandKind::HighShelf, 8000.0, 1.5, 0.707),
                 ],
             ))
             .with(
-                dsp("compressor-1", "bingux_compressor")
-                    .control("Threshold", -24.0)
-                    .control("Ratio", 2.5)
-                    .control("Makeup", 3.0),
+                PluginSlot::new("compressor-1", "compressor")
+                    .control("al", db(-24.0))
+                    .control("cr", 2.5)
+                    .control("mk", db(3.0)),
             ),
         output("Night")
             .with(
-                dsp("compressor-1", "bingux_compressor")
-                    .control("Threshold", -32.0)
-                    .control("Ratio", 6.0)
-                    .control("Attack", 5.0)
-                    .control("Release", 250.0)
-                    .control("Knee", 8.0)
-                    .control("Makeup", 8.0),
+                PluginSlot::new("compressor-1", "compressor")
+                    .control("al", db(-32.0))
+                    .control("cr", 6.0)
+                    .control("at", 5.0)
+                    .control("rt", 250.0)
+                    .control("kn", db(-8.0))
+                    .control("mk", db(8.0)),
             )
             .with(
-                dsp("limiter-1", "bingux_limiter")
-                    .control("Threshold", -3.0)
-                    .control("Release", 120.0),
+                PluginSlot::new("limiter-1", "limiter")
+                    .control("th", db(-3.0))
+                    .control("rt", 12.0),
             ),
         output("Bass boost")
-            .with(PluginSlot::equalizer(
+            .with(equalizer(
                 "equalizer-1",
                 -5.0,
-                vec![
+                &[
                     band(BandKind::LowShelf, 100.0, 6.0, 0.707),
-                    band(BandKind::Peaking, 60.0, 2.0, 1.0),
+                    band(BandKind::Bell, 60.0, 2.0, 1.0),
                 ],
             ))
-            .with(dsp("limiter-1", "bingux_limiter").control("Threshold", -1.0)),
+            .with(PluginSlot::new("limiter-1", "limiter").control("th", db(-1.0))),
         output("Loudness")
-            .with(dsp("loudness-1", "bingux_loudness").control("Amount", 60.0))
-            .with(dsp("limiter-1", "bingux_limiter").control("Threshold", -1.0)),
+            .with(PluginSlot::new("loudness-1", "loudness"))
+            .with(PluginSlot::new("limiter-1", "limiter").control("th", db(-1.0))),
         input("Flat"),
         input("Voice")
-            .with(PluginSlot::equalizer(
+            .with(equalizer(
                 "equalizer-1",
                 0.0,
-                vec![
+                &[
                     band(BandKind::HighPass, 90.0, 0.0, 0.707),
-                    band(BandKind::Peaking, 200.0, -2.0, 1.0),
-                    band(BandKind::Peaking, 4000.0, 2.0, 1.0),
+                    band(BandKind::Bell, 200.0, -2.0, 1.0),
+                    band(BandKind::Bell, 4000.0, 2.0, 1.0),
                 ],
             ))
             .with(
-                dsp("gate-1", "bingux_gate")
-                    .control("Threshold", -50.0)
-                    .control("Range", -40.0),
+                PluginSlot::new("gate-1", "gate")
+                    .control("gt", db(-50.0))
+                    .control("gr", db(-40.0)),
             )
             .with(
-                dsp("compressor-1", "bingux_compressor")
-                    .control("Threshold", -22.0)
-                    .control("Ratio", 3.0)
-                    .control("Makeup", 4.0),
+                PluginSlot::new("compressor-1", "compressor")
+                    .control("al", db(-22.0))
+                    .control("cr", 3.0)
+                    .control("mk", db(4.0)),
             )
             .with(
-                dsp("deesser-1", "bingux_deesser")
-                    .control("Threshold", -30.0)
-                    .control("Frequency", 6500.0),
+                PluginSlot::new("deesser-1", "deesser")
+                    .control("threshold", db(-30.0))
+                    .control("f1_freq", 6500.0),
             ),
     ]
 }
@@ -416,7 +492,8 @@ mod tests {
     use super::*;
 
     fn temp(name: &str) -> Store {
-        let root = std::env::temp_dir().join(format!("bingux-effects-test-{name}-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("bingux-effects-test-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         Store::at(root)
     }
@@ -427,7 +504,10 @@ mod tests {
         store.ensure_factory().unwrap();
         let names = store.list(Direction::Output);
         for wanted in ["Flat", "Voice clarity", "Night", "Bass boost", "Loudness"] {
-            assert!(names.iter().any(|name| name == wanted), "{wanted} missing in {names:?}");
+            assert!(
+                names.iter().any(|name| name == wanted),
+                "{wanted} missing in {names:?}"
+            );
         }
         store.delete(Direction::Output, "Night").unwrap();
         store.ensure_factory().unwrap();
@@ -441,12 +521,20 @@ mod tests {
         store.ensure_factory().unwrap();
         let copy = store.duplicate(Direction::Output, "Night").unwrap();
         assert_eq!(copy, "Night copy");
-        assert_eq!(store.duplicate(Direction::Output, "Night").unwrap(), "Night copy 2");
-        store.rename(Direction::Output, "Night copy", "Quiet").unwrap();
+        assert_eq!(
+            store.duplicate(Direction::Output, "Night").unwrap(),
+            "Night copy 2"
+        );
+        store
+            .rename(Direction::Output, "Night copy", "Quiet")
+            .unwrap();
         assert!(store.exists(Direction::Output, "Quiet"));
         assert!(!store.exists(Direction::Output, "Night copy"));
         assert!(store.rename(Direction::Output, "Quiet", "Night").is_err());
-        assert_eq!(store.load(Direction::Output, "Quiet").unwrap().name, "Quiet");
+        assert_eq!(
+            store.load(Direction::Output, "Quiet").unwrap().name,
+            "Quiet"
+        );
         store.delete(Direction::Output, "Quiet").unwrap();
         assert!(store.load(Direction::Output, "Quiet").is_err());
         let _ = std::fs::remove_dir_all(store.root());
@@ -459,7 +547,10 @@ mod tests {
         store
             .update_state(|state| {
                 state.output.enabled = true;
-                state.output.autoload.insert("alsa_output.usb".into(), "Night".into());
+                state
+                    .output
+                    .autoload
+                    .insert("alsa_output.usb".into(), "Night".into());
             })
             .unwrap();
         let state = store.state();
@@ -473,7 +564,9 @@ mod tests {
         let store = temp("export");
         store.ensure_factory().unwrap();
         let destination = store.root().join("out.json");
-        store.export(Direction::Output, "Night", &destination).unwrap();
+        store
+            .export(Direction::Output, "Night", &destination)
+            .unwrap();
         let text = std::fs::read_to_string(&destination).unwrap();
         assert_eq!(Preset::parse(&text).unwrap().name, "Night");
         let _ = std::fs::remove_dir_all(store.root());

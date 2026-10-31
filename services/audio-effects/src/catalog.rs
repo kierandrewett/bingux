@@ -1,10 +1,11 @@
-//! The plugins the engine can put in a chain, and how to find them.
+//! What the installed plugins are, read from their own metadata.
 //!
-//! A plugin's controls come from its own port metadata (LADSPA range hints:
-//! bounds, default, logarithmic, integer, toggled), so every plugin found on
-//! the system has controls with no hand-written description. Libraries are
-//! scanned in the background and the result is cached by file modification
-//! time, so a normal start reads one small JSON file.
+//! [`effects`](crate::effects) says which plugins Bingux offers; this module
+//! finds each one on the system and describes its ports: the audio ports and
+//! every control with its range, default, scale, unit and the choices of an
+//! enumeration. A page for a plugin is drawn from that, so a plugin needs no
+//! hand-written description. The scan is cached by the modification time of
+//! the plugin bundles, so a normal start reads one small JSON file.
 
 use std::ffi::{CStr, CString, c_char, c_int, c_ulong, c_void};
 use std::path::{Path, PathBuf};
@@ -12,7 +13,7 @@ use std::time::UNIX_EPOCH;
 
 use serde::{Deserialize, Serialize};
 
-use crate::preset::{CONVOLVER, DELAY, EQUALIZER, GAIN};
+use crate::effects::{self, Source};
 
 /// The sample rate that LADSPA bounds given "per sample rate" are scaled by.
 const SAMPLE_RATE: f64 = 48_000.0;
@@ -21,34 +22,55 @@ const SAMPLE_RATE: f64 = 48_000.0;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Unit {
     None,
+    /// A value in decibels.
     Db,
+    /// A linear gain (1.0 is unity) that people read in decibels: LSP ports
+    /// declare it as `G`.
+    Gain,
     Hz,
     Ms,
+    Seconds,
     Percent,
-    Ratio,
+    Semitone,
+    Octave,
+    Degree,
 }
 
 impl Unit {
-    /// The unit of a control, guessed from its name, since LADSPA has no units.
-    pub fn of(name: &str) -> Self {
-        let name = name.to_lowercase();
-        let has = |words: &[&str]| words.iter().any(|word| name.contains(word));
-        if name == "feed" || has(&["(db)", "threshold", "makeup", "knee", "range", "level", "reduction", "target", "preamp", "gain"]) {
-            Unit::Db
-        } else if has(&["(hz)", "freq", "cutoff", "tone"]) {
-            Unit::Hz
-        } else if has(&["(ms)", "attack", "release", "hold", "delay", "lookahead"]) {
-            Unit::Ms
-        } else if has(&["ratio"]) {
-            Unit::Ratio
-        } else if has(&["(%)", "mix", "width", "balance", "amount", "damping", "feedback", "room", "wet", "dry"]) {
-            Unit::Percent
-        } else {
-            Unit::None
+    /// The unit an LV2 `units:` term (`db`, `hz`, `G`, ...) names.
+    pub fn from_symbol(symbol: &str) -> Self {
+        match symbol {
+            "db" | "dB" => Unit::Db,
+            "G" => Unit::Gain,
+            "hz" | "Hz" => Unit::Hz,
+            "ms" => Unit::Ms,
+            "s" => Unit::Seconds,
+            "pc" | "%" => Unit::Percent,
+            "semitone" | "st" => Unit::Semitone,
+            "oct" => Unit::Octave,
+            "degree" => Unit::Degree,
+            _ => Unit::None,
         }
     }
 
-    /// `value` with its unit: "-18 dB", "6 kHz", "4:1".
+    /// The decibels a stored value is shown as: itself for a `Db` control, the
+    /// linear gain's level for a `Gain` one.
+    pub fn shown(self, stored: f64) -> f64 {
+        match self {
+            Unit::Gain => 20.0 * stored.max(1e-6).log10(),
+            _ => stored,
+        }
+    }
+
+    /// The stored value for what is shown (the inverse of [`Unit::shown`]).
+    pub fn stored(self, shown: f64) -> f64 {
+        match self {
+            Unit::Gain => 10f64.powf(shown / 20.0),
+            _ => shown,
+        }
+    }
+
+    /// `value` (as stored) with its unit: "-18 dB", "6 kHz", "100 ms".
     pub fn format(self, value: f64) -> String {
         let number = |value: f64| {
             let text = if value.abs() >= 100.0 {
@@ -67,19 +89,35 @@ impl Unit {
         match self {
             Unit::None => number(value),
             Unit::Db => format!("{} dB", number(value)),
+            Unit::Gain if value <= 1e-4 => "-inf dB".to_string(),
+            Unit::Gain => format!("{} dB", number(self.shown(value))),
             Unit::Hz if value >= 1000.0 => format!("{} kHz", number(value / 1000.0)),
             Unit::Hz => format!("{} Hz", number(value)),
             Unit::Ms if value >= 1000.0 => format!("{} s", number(value / 1000.0)),
             Unit::Ms => format!("{} ms", number(value)),
+            Unit::Seconds => format!("{} s", number(value)),
             Unit::Percent => format!("{}%", number(value)),
-            Unit::Ratio => format!("{}:1", number(value)),
+            Unit::Semitone => format!("{} st", number(value)),
+            Unit::Octave => format!("{} oct", number(value)),
+            Unit::Degree => format!("{}°", number(value)),
         }
     }
+}
+
+/// One choice of an enumerated control.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Choice {
+    pub value: f64,
+    pub label: String,
 }
 
 /// One setting of a plugin.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Control {
+    /// The port's own name (an LV2 symbol, a LADSPA port name): the key a
+    /// preset stores the value under.
+    pub symbol: String,
+    /// The name to show.
     pub name: String,
     pub min: f64,
     pub max: f64,
@@ -89,7 +127,13 @@ pub struct Control {
     pub integer: bool,
     /// An on or off switch.
     pub toggle: bool,
+    /// The named values of an enumeration, in order; empty for any other control.
+    #[serde(default)]
+    pub choices: Vec<Choice>,
     pub unit: Unit,
+    /// The plugin's own interface leaves it out (`notOnGUI`).
+    #[serde(default)]
+    pub hidden: bool,
 }
 
 impl Control {
@@ -115,343 +159,304 @@ impl Control {
             (value - self.min) / (self.max - self.min)
         }
     }
-}
 
-/// Where a plugin is listed.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
-pub enum Category {
-    Dynamics,
-    Equalizer,
-    Filter,
-    Space,
-    Enhance,
-    Stereo,
-    Voice,
-    Utility,
-    Other,
-}
-
-impl Category {
-    pub const ALL: [Category; 9] = [
-        Category::Dynamics,
-        Category::Equalizer,
-        Category::Filter,
-        Category::Space,
-        Category::Enhance,
-        Category::Stereo,
-        Category::Voice,
-        Category::Utility,
-        Category::Other,
-    ];
-
-    pub fn title(self) -> &'static str {
-        match self {
-            Category::Dynamics => "Dynamics",
-            Category::Equalizer => "Equalizers",
-            Category::Filter => "Filters",
-            Category::Space => "Space and delay",
-            Category::Enhance => "Enhancement",
-            Category::Stereo => "Stereo",
-            Category::Voice => "Voice",
-            Category::Utility => "Utility",
-            Category::Other => "Other",
+    /// The value as a person reads it: a choice's label, "On" or "Off", or
+    /// the number with its unit.
+    pub fn display(&self, value: f64) -> String {
+        if let Some(choice) = self
+            .choices
+            .iter()
+            .find(|choice| (choice.value - value).abs() < 1e-6)
+        {
+            return choice.label.clone();
         }
-    }
-
-    /// The category a plugin falls in, from its label and name.
-    pub fn of(label: &str, name: &str) -> Self {
-        let text = format!("{label} {name}").to_lowercase();
-        let has = |words: &[&str]| words.iter().any(|word| text.contains(word));
-        if has(&["compressor", "limiter", "gate", "expander", "de-esser", "deesser", "auto gain", "autogain", "dynamics", "maximizer", "leveler", "normaliz"]) {
-            Category::Dynamics
-        } else if has(&["equalizer", "equaliser", " eq", "_eq", "graphic", "parametric"]) {
-            Category::Equalizer
-        } else if has(&["denoise", "noise", "rnnoise", "speech", "voice", "echo cancel", "dereverb"]) {
-            Category::Voice
-        } else if has(&["reverb", "echo", "delay", "chorus", "flanger", "phaser", "room"]) {
-            Category::Space
-        } else if has(&["stereo", "crossfeed", "width", "panner", "pan", "balance", "mid/side", "mid-side", "ms "]) {
-            Category::Stereo
-        } else if has(&["exciter", "enhancer", "crystal", "saturat", "distort", "overdrive", "bass", "loudness", "harmonic", "tube"]) {
-            Category::Enhance
-        } else if has(&["filter", "lowpass", "highpass", "low-pass", "high-pass", "bandpass", "crossover", "shelf", "notch"]) {
-            Category::Filter
-        } else if has(&["gain", "amplifier", "mixer", "invert", "dc ", "dcblock", "meter", "analy", "spectrum", "sine", "noise generator"]) {
-            Category::Utility
-        } else {
-            Category::Other
+        if self.toggle {
+            return if value >= 0.5 { "On" } else { "Off" }.to_string();
         }
+        if self.integer && self.unit == Unit::None {
+            return format!("{value:.0}");
+        }
+        self.unit.format(value)
     }
 }
 
-/// One plugin that can be put in a chain.
+/// An audio port of a plugin.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AudioPort {
+    pub symbol: String,
+    pub name: String,
+    /// The plugin works with the port unconnected.
+    #[serde(default)]
+    pub optional: bool,
+    /// A side-chain input.
+    #[serde(default)]
+    pub side_chain: bool,
+}
+
+/// How a plugin is hosted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Backend {
+    Lv2,
+    Ladspa,
+    /// One of PipeWire's own filters.
+    Builtin,
+}
+
+/// One plugin found on the system.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PluginInfo {
-    /// What a preset's `type` says: `equalizer`, `gain`, `delay`, `convolver` or
-    /// `ladspa:<library>:<label>`.
+    /// The LV2 URI, `ladspa:<library>:<label>` or `builtin:<label>`.
     pub id: String,
     pub name: String,
     pub maker: String,
-    pub category: Category,
+    pub backend: Backend,
     /// The library file, for a LADSPA plugin.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub library: Option<PathBuf>,
-    /// The LADSPA label.
+    /// The LADSPA label or PipeWire filter label.
     #[serde(default)]
     pub label: String,
-    /// Audio inputs and outputs. The engine runs a plugin with one of each on
-    /// both channels, and one with two of each as a stereo plugin.
-    pub inputs: usize,
-    pub outputs: usize,
-    /// The names of the audio ports, in port order.
-    #[serde(default)]
-    pub input_ports: Vec<String>,
-    #[serde(default)]
-    pub output_ports: Vec<String>,
+    pub inputs: Vec<AudioPort>,
+    pub outputs: Vec<AudioPort>,
     pub controls: Vec<Control>,
-    /// Output control ports: readings such as gain reduction.
+    /// Output control ports: readings such as gain reduction and latency.
     #[serde(default)]
-    pub meters: Vec<String>,
+    pub meters: Vec<Control>,
+    /// The output port that reports the plugin's latency in samples.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latency: Option<String>,
 }
 
 impl PluginInfo {
-    /// Whether the engine can run this plugin, or why not.
-    pub fn unusable(&self) -> Option<String> {
-        match (self.inputs, self.outputs) {
-            (1, 1) | (2, 2) => None,
-            (0, _) => Some("It makes sound and takes none in.".to_string()),
-            (inputs, _) if inputs > 2 => Some("It needs a side-chain input, which chains do not have yet.".to_string()),
-            _ => Some("Its audio ports do not match one or two channels.".to_string()),
-        }
+    pub fn control(&self, symbol: &str) -> Option<&Control> {
+        self.controls
+            .iter()
+            .find(|control| control.symbol == symbol)
     }
 
-    pub fn control(&self, name: &str) -> Option<&Control> {
-        self.controls.iter().find(|control| control.name == name)
+    /// The audio inputs a chain feeds: the side-chain and optional ones left out.
+    pub fn main_inputs(&self) -> Vec<&AudioPort> {
+        self.inputs
+            .iter()
+            .filter(|port| !port.side_chain && !port.optional)
+            .collect()
     }
 
-    /// Whether the plugin publishes its meters in the meter file (see
-    /// `bingux_dsp::meters`).
-    pub fn publishes_meters(&self) -> bool {
-        self.control("Meter slot").is_some()
+    pub fn main_outputs(&self) -> Vec<&AudioPort> {
+        self.outputs.iter().filter(|port| !port.optional).collect()
     }
 
-    /// The controls to show a person: all but the engine's own "Meter slot".
+    /// The controls to show: all but the ones the plugin's own interface hides.
     pub fn visible_controls(&self) -> impl Iterator<Item = &Control> {
-        self.controls.iter().filter(|control| control.name != "Meter slot")
-    }
-
-    /// The plugin's library file name without `.so` or `lib`, such as `bingux_dsp`.
-    pub fn library_stem(&self) -> Option<&str> {
-        self.id.strip_prefix("ladspa:")?.split(':').next()
+        self.controls.iter().filter(|control| !control.hidden)
     }
 }
 
-/// Every plugin the engine knows of.
+/// The plugins found for the effects Bingux offers.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Catalog {
     pub plugins: Vec<PluginInfo>,
 }
 
-fn builtin(id: &str, name: &str, category: Category, controls: Vec<Control>) -> PluginInfo {
-    PluginInfo {
-        id: id.to_string(),
-        name: name.to_string(),
-        maker: "PipeWire".to_string(),
-        category,
-        library: None,
-        label: String::new(),
-        inputs: 2,
-        outputs: 2,
-        input_ports: Vec::new(),
-        output_ports: Vec::new(),
-        controls,
-        meters: Vec::new(),
-    }
-}
-
-fn control(name: &str, min: f64, max: f64, default: f64, unit: Unit) -> Control {
-    Control {
-        name: name.to_string(),
-        min,
-        max,
-        default,
-        log: false,
-        integer: false,
-        toggle: false,
-        unit,
-    }
-}
-
 impl Catalog {
-    /// The plugins PipeWire provides itself.
-    pub fn builtin() -> Self {
-        Self {
-            plugins: vec![
-                builtin(EQUALIZER, "Parametric equalizer", Category::Equalizer, Vec::new()),
-                builtin(
-                    GAIN,
-                    "Gain",
-                    Category::Utility,
-                    vec![control("Gain", -40.0, 40.0, 0.0, Unit::Db)],
-                ),
-                builtin(
-                    DELAY,
-                    "Delay",
-                    Category::Space,
-                    vec![control("Delay", 0.0, 1000.0, 0.0, Unit::Ms)],
-                ),
-                builtin(
-                    CONVOLVER,
-                    "Convolver",
-                    Category::Space,
-                    vec![control("Gain", -40.0, 20.0, 0.0, Unit::Db)],
-                ),
-            ],
-        }
-    }
-
     pub fn find(&self, id: &str) -> Option<&PluginInfo> {
         self.plugins.iter().find(|plugin| plugin.id == id)
     }
 
-    /// The plugins of `category`, by name.
-    pub fn in_category(&self, category: Category) -> Vec<&PluginInfo> {
-        let mut found: Vec<&PluginInfo> = self
-            .plugins
-            .iter()
-            .filter(|plugin| plugin.category == category)
-            .collect();
-        found.sort_by_key(|plugin| plugin.name.to_lowercase());
-        found
+    /// The plugin that implements `effect`, when it is installed.
+    pub fn plugin_of(&self, effect: &effects::Effect) -> Option<&PluginInfo> {
+        self.find(&effect.source.plugin_id())
     }
 
-    /// Scan the LADSPA directories, using the cache where a library has not
-    /// changed, and save the cache again when anything did.
+    /// Scan for the plugins of every effect, using the cache while the plugin
+    /// bundles have not changed, and write the cache when they did.
     pub fn load() -> Self {
         let cache_path = crate::store::cache_dir().join("plugins.json");
-        let cached: Vec<Library> = std::fs::read_to_string(&cache_path)
+        let fingerprint = fingerprint();
+        let cached: Option<Cache> = std::fs::read_to_string(&cache_path)
             .ok()
-            .and_then(|text| serde_json::from_str(&text).ok())
-            .unwrap_or_default();
-        let (libraries, changed) = scan_with_cache(&ladspa_paths(), cached);
-        if changed {
-            let _ = std::fs::create_dir_all(cache_path.parent().unwrap_or(Path::new(".")));
-            if let Ok(text) = serde_json::to_string(&libraries) {
-                let _ = std::fs::write(&cache_path, text);
-            }
+            .and_then(|text| serde_json::from_str(&text).ok());
+        if let Some(cache) = cached.filter(|cache| cache.fingerprint == fingerprint) {
+            return cache.catalog;
         }
-        Self::from_libraries(libraries)
+        let catalog = Self::scan();
+        let cache = Cache {
+            fingerprint,
+            catalog,
+        };
+        let _ = std::fs::create_dir_all(cache_path.parent().unwrap_or(Path::new(".")));
+        if let Ok(text) = serde_json::to_string(&cache) {
+            let _ = std::fs::write(&cache_path, text);
+        }
+        cache.catalog
     }
 
-    /// Scan `directories` with no cache.
-    pub fn scan(directories: &[PathBuf]) -> Self {
-        Self::from_libraries(scan_with_cache(directories, Vec::new()).0)
-    }
-
-    fn from_libraries(libraries: Vec<Library>) -> Self {
-        let mut catalog = Self::builtin();
-        for library in libraries {
-            for plugin in library.plugins {
-                if catalog.find(&plugin.id).is_none() {
-                    catalog.plugins.push(plugin);
+    /// Scan with no cache.
+    pub fn scan() -> Self {
+        let mut catalog = Self::default();
+        let lv2 = crate::lv2::Scan::new();
+        let ladspa = ladspa_paths();
+        for effect in effects::ALL {
+            let found = match effect.source {
+                Source::Lv2(uri) => lv2.as_ref().and_then(|scan| scan.plugin(uri)),
+                Source::Ladspa { library, label } => read_ladspa(&ladspa, library, label),
+                Source::Convolver => Some(convolver()),
+            };
+            if let Some(mut plugin) = found
+                && catalog.find(&plugin.id).is_none()
+            {
+                for control in &mut plugin.controls {
+                    if effect.linear_gains().contains(&control.symbol.as_str()) {
+                        control.unit = Unit::Gain;
+                    }
                 }
+                catalog.plugins.push(plugin);
             }
         }
         catalog
     }
 }
 
-/// A scanned library and when it was scanned.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct Library {
-    path: PathBuf,
-    modified: u64,
-    plugins: Vec<PluginInfo>,
+/// PipeWire's convolver: one gain, and the impulse response file chosen in the preset.
+fn convolver() -> PluginInfo {
+    PluginInfo {
+        id: effects::Source::Convolver.plugin_id(),
+        name: "Convolver".to_string(),
+        maker: "PipeWire".to_string(),
+        backend: Backend::Builtin,
+        library: None,
+        label: "convolver".to_string(),
+        inputs: vec![AudioPort {
+            symbol: "In".into(),
+            name: "Input".into(),
+            optional: false,
+            side_chain: false,
+        }],
+        outputs: vec![AudioPort {
+            symbol: "Out".into(),
+            name: "Output".into(),
+            optional: false,
+            side_chain: false,
+        }],
+        controls: vec![Control {
+            symbol: "gain".to_string(),
+            name: "Gain".to_string(),
+            min: 0.0,
+            max: 4.0,
+            default: 1.0,
+            log: false,
+            integer: false,
+            toggle: false,
+            choices: Vec::new(),
+            unit: Unit::Gain,
+            hidden: false,
+        }],
+        meters: Vec::new(),
+        latency: None,
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct Cache {
+    fingerprint: String,
+    catalog: Catalog,
+}
+
+/// A line that changes when a plugin bundle or library is added, removed or
+/// replaced, or when this scan's format changes.
+fn fingerprint() -> String {
+    let mut parts = vec![
+        format!("v{}", env!("CARGO_PKG_VERSION")),
+        "format-3".to_string(),
+    ];
+    for directory in lv2_paths().into_iter().chain(ladspa_paths()) {
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            continue;
+        };
+        let mut names: Vec<String> = entries
+            .filter_map(Result::ok)
+            .map(|entry| {
+                let path = entry.path();
+                let manifest = if path.is_dir() {
+                    path.join("manifest.ttl")
+                } else {
+                    path.clone()
+                };
+                let modified = std::fs::metadata(&manifest)
+                    .and_then(|meta| meta.modified())
+                    .ok()
+                    .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+                    .map_or(0, |duration| duration.as_secs());
+                format!("{}:{modified}", path.display())
+            })
+            .collect();
+        names.sort();
+        parts.extend(names);
+    }
+    parts.join("\n")
+}
+
+fn split(value: std::ffi::OsString) -> Vec<PathBuf> {
+    std::env::split_paths(&value).collect()
+}
+
+/// The directories LV2 bundles are looked for in: `LV2_PATH` when set, else
+/// the usual user and system directories (what `lilv` itself searches).
+pub fn lv2_paths() -> Vec<PathBuf> {
+    if let Some(value) = std::env::var_os("LV2_PATH").filter(|value| !value.is_empty()) {
+        return split(value);
+    }
+    let mut paths = Vec::new();
+    if let Some(home) = std::env::var_os("HOME") {
+        paths.push(Path::new(&home).join(".lv2"));
+    }
+    for dir in [
+        "/usr/local/lib64/lv2",
+        "/usr/local/lib/lv2",
+        "/usr/lib64/lv2",
+        "/usr/lib/lv2",
+        "/usr/lib/x86_64-linux-gnu/lv2",
+    ] {
+        paths.push(PathBuf::from(dir));
+    }
+    paths
 }
 
 /// The directories LADSPA plugins are looked for in: `LADSPA_PATH` when set,
-/// otherwise the usual system and user directories, and always the Bingux
-/// directories (`BINGUX_LADSPA_PATH`, the user's data dir, and `lib/ladspa`
-/// beside the installed program).
+/// otherwise the usual system and user directories.
 pub fn ladspa_paths() -> Vec<PathBuf> {
-    let mut paths: Vec<PathBuf> = Vec::new();
-    let split = |value: std::ffi::OsString| std::env::split_paths(&value).collect::<Vec<_>>();
-    if let Some(value) = std::env::var_os("LADSPA_PATH") {
-        paths.extend(split(value));
-    } else {
-        if let Some(home) = std::env::var_os("HOME") {
-            paths.push(Path::new(&home).join(".ladspa"));
-        }
-        for dir in [
-            "/usr/local/lib64/ladspa",
-            "/usr/local/lib/ladspa",
-            "/usr/lib64/ladspa",
-            "/usr/lib/ladspa",
-            "/usr/lib/x86_64-linux-gnu/ladspa",
-        ] {
-            paths.push(PathBuf::from(dir));
-        }
+    if let Some(value) = std::env::var_os("LADSPA_PATH").filter(|value| !value.is_empty()) {
+        return split(value);
     }
-    if let Some(value) = std::env::var_os("BINGUX_LADSPA_PATH") {
-        paths.extend(split(value));
+    let mut paths = Vec::new();
+    if let Some(home) = std::env::var_os("HOME") {
+        paths.push(Path::new(&home).join(".ladspa"));
     }
-    paths.push(crate::store::data_dir().join("ladspa"));
-    if let Ok(exe) = std::env::current_exe()
-        && let Some(prefix) = exe.parent().and_then(Path::parent)
-    {
-        paths.push(prefix.join("lib/ladspa"));
-        paths.push(prefix.join("lib64/ladspa"));
+    for dir in [
+        "/usr/local/lib64/ladspa",
+        "/usr/local/lib/ladspa",
+        "/usr/lib64/ladspa",
+        "/usr/lib/ladspa",
+        "/usr/lib/x86_64-linux-gnu/ladspa",
+    ] {
+        paths.push(PathBuf::from(dir));
     }
-    let mut unique: Vec<PathBuf> = Vec::new();
-    for path in paths {
-        if !unique.contains(&path) {
-            unique.push(path);
-        }
-    }
-    unique
+    paths
 }
 
-fn scan_with_cache(directories: &[PathBuf], cached: Vec<Library>) -> (Vec<Library>, bool) {
-    let mut libraries: Vec<Library> = Vec::new();
-    let mut changed = false;
-    let mut files: Vec<PathBuf> = Vec::new();
+/// The plugin `label` of the LADSPA library `library` (a file name without `.so`).
+fn read_ladspa(directories: &[PathBuf], library: &str, label: &str) -> Option<PluginInfo> {
     for directory in directories {
-        let Ok(entries) = std::fs::read_dir(directory) else {
-            continue;
-        };
-        let mut found: Vec<PathBuf> = entries
-            .filter_map(Result::ok)
-            .map(|entry| entry.path())
-            .filter(|path| path.extension().is_some_and(|ext| ext == "so"))
-            .collect();
-        found.sort();
-        files.extend(found);
-    }
-    for path in files {
-        let modified = std::fs::metadata(&path)
-            .and_then(|meta| meta.modified())
-            .ok()
-            .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
-            .map_or(0, |duration| duration.as_secs());
-        if libraries.iter().any(|library| library.path == path) {
-            continue;
-        }
-        match cached.iter().find(|library| library.path == path && library.modified == modified) {
-            Some(library) => libraries.push(library.clone()),
-            None => {
-                changed = true;
-                libraries.push(Library {
-                    plugins: read_library(&path),
-                    path,
-                    modified,
-                });
-            }
+        let path = directory.join(format!("{library}.so"));
+        if path.is_file()
+            && let Some(found) = read_library(&path, library)
+                .into_iter()
+                .find(|plugin| plugin.label == label)
+        {
+            return Some(found);
         }
     }
-    if cached.len() != libraries.len() {
-        changed = true;
-    }
-    (libraries, changed)
+    None
 }
 
 #[repr(C)]
@@ -490,11 +495,10 @@ const INTEGER: c_int = 0x20;
 const DEFAULT_MASK: c_int = 0x3C0;
 
 /// The plugins in one LADSPA library, or none when it cannot be loaded.
-fn read_library(path: &Path) -> Vec<PluginInfo> {
+fn read_library(path: &Path, stem: &str) -> Vec<PluginInfo> {
     let Ok(c_path) = CString::new(path.as_os_str().as_encoded_bytes()) else {
         return Vec::new();
     };
-    let stem = library_stem(path);
     let mut plugins = Vec::new();
     // SAFETY: a LADSPA library exports `ladspa_descriptor`, whose results are
     // plain data owned by the library, valid while it stays loaded. The
@@ -506,13 +510,14 @@ fn read_library(path: &Path) -> Vec<PluginInfo> {
         }
         let symbol = libc::dlsym(handle, c"ladspa_descriptor".as_ptr());
         if !symbol.is_null() {
-            let entry: unsafe extern "C" fn(c_ulong) -> *const Descriptor = std::mem::transmute(symbol);
+            let entry: unsafe extern "C" fn(c_ulong) -> *const Descriptor =
+                std::mem::transmute(symbol);
             for index in 0.. {
                 let descriptor = entry(index);
                 if descriptor.is_null() {
                     break;
                 }
-                plugins.extend(read_descriptor(&*descriptor, path, &stem));
+                plugins.extend(read_descriptor(&*descriptor, path, stem));
             }
         }
         libc::dlclose(handle);
@@ -520,16 +525,13 @@ fn read_library(path: &Path) -> Vec<PluginInfo> {
     plugins
 }
 
-fn library_stem(path: &Path) -> String {
-    let stem = path.file_stem().and_then(|stem| stem.to_str()).unwrap_or("plugin");
-    stem.strip_prefix("lib").unwrap_or(stem).to_string()
-}
-
 unsafe fn text(pointer: *const c_char) -> String {
     if pointer.is_null() {
         String::new()
     } else {
-        unsafe { CStr::from_ptr(pointer) }.to_string_lossy().into_owned()
+        unsafe { CStr::from_ptr(pointer) }
+            .to_string_lossy()
+            .into_owned()
     }
 }
 
@@ -540,7 +542,7 @@ unsafe fn read_descriptor(descriptor: &Descriptor, path: &Path, stem: &str) -> O
         return None;
     }
     let name = unsafe { text(descriptor.name) };
-    let (mut input_ports, mut output_ports) = (Vec::new(), Vec::new());
+    let (mut inputs, mut outputs) = (Vec::new(), Vec::new());
     let mut controls = Vec::new();
     let mut meters = Vec::new();
     for port in 0..descriptor.port_count as usize {
@@ -548,40 +550,48 @@ unsafe fn read_descriptor(descriptor: &Descriptor, path: &Path, stem: &str) -> O
         let port_name = unsafe { text(*descriptor.port_names.add(port)) };
         let hint = unsafe { &*descriptor.port_range_hints.add(port) };
         if kind & PORT_AUDIO != 0 {
+            let audio = AudioPort {
+                symbol: port_name.clone(),
+                name: port_name,
+                optional: false,
+                side_chain: false,
+            };
             if kind & PORT_INPUT != 0 {
-                input_ports.push(port_name);
+                inputs.push(audio);
             } else if kind & PORT_OUTPUT != 0 {
-                output_ports.push(port_name);
+                outputs.push(audio);
             }
         } else if kind & PORT_CONTROL != 0 {
             if kind & PORT_OUTPUT != 0 {
-                meters.push(port_name);
+                meters.push(read_control(port_name, hint));
             } else {
                 controls.push(read_control(port_name, hint));
             }
         }
     }
-    let maker = unsafe { text(descriptor.maker) };
     Some(PluginInfo {
         id: format!("ladspa:{stem}:{label}"),
-        category: Category::of(&label, &name),
         name: if name.is_empty() { label.clone() } else { name },
-        maker,
+        maker: unsafe { text(descriptor.maker) },
+        backend: Backend::Ladspa,
         library: Some(path.to_path_buf()),
         label,
-        inputs: input_ports.len(),
-        outputs: output_ports.len(),
-        input_ports,
-        output_ports,
+        inputs,
+        outputs,
         controls,
         meters,
+        latency: None,
     })
 }
 
 /// A control's range, default and scale from its LADSPA range hint.
 fn read_control(name: String, hint: &RangeHint) -> Control {
     let flags = hint.descriptor;
-    let scale = if flags & SAMPLE_RATE_HINT != 0 { SAMPLE_RATE } else { 1.0 };
+    let scale = if flags & SAMPLE_RATE_HINT != 0 {
+        SAMPLE_RATE
+    } else {
+        1.0
+    };
     let below = flags & BOUNDED_BELOW != 0;
     let above = flags & BOUNDED_ABOVE != 0;
     let log = flags & LOGARITHMIC != 0;
@@ -589,8 +599,14 @@ fn read_control(name: String, hint: &RangeHint) -> Control {
     let integer = flags & INTEGER != 0;
     let (mut min, mut max) = match (below, above) {
         (true, true) => (f64::from(hint.lower) * scale, f64::from(hint.upper) * scale),
-        (true, false) => (f64::from(hint.lower) * scale, f64::from(hint.lower) * scale + 100.0),
-        (false, true) => (f64::from(hint.upper) * scale - 100.0, f64::from(hint.upper) * scale),
+        (true, false) => (
+            f64::from(hint.lower) * scale,
+            f64::from(hint.lower) * scale + 100.0,
+        ),
+        (false, true) => (
+            f64::from(hint.upper) * scale - 100.0,
+            f64::from(hint.upper) * scale,
+        ),
         (false, false) => (0.0, 1.0),
     };
     if toggle {
@@ -620,8 +636,9 @@ fn read_control(name: String, hint: &RangeHint) -> Control {
         _ => min,
     }
     .clamp(min, max);
+    let unit = unit_of_name(&name);
     Control {
-        unit: Unit::of(&name),
+        symbol: name.clone(),
         name,
         min,
         max,
@@ -629,6 +646,27 @@ fn read_control(name: String, hint: &RangeHint) -> Control {
         log: log && min > 0.0,
         integer,
         toggle,
+        choices: Vec::new(),
+        unit,
+        hidden: false,
+    }
+}
+
+/// The unit of a LADSPA control, guessed from its name: LADSPA has none.
+fn unit_of_name(name: &str) -> Unit {
+    let name = name.to_lowercase();
+    if name.contains("semitone") {
+        Unit::Semitone
+    } else if name.contains("cent") {
+        Unit::None
+    } else if name.contains("(hz)") || name.contains("freq") {
+        Unit::Hz
+    } else if name.contains("(ms)") {
+        Unit::Ms
+    } else if name.contains("(db)") || name.contains("gain") {
+        Unit::Db
+    } else {
+        Unit::None
     }
 }
 
@@ -637,30 +675,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn units_are_guessed_from_names() {
-        assert_eq!(Unit::of("Threshold"), Unit::Db);
-        assert_eq!(Unit::of("Frequency"), Unit::Hz);
-        assert_eq!(Unit::of("Attack time (ms)"), Unit::Ms);
-        assert_eq!(Unit::of("Ratio"), Unit::Ratio);
-        assert_eq!(Unit::of("Mix"), Unit::Percent);
-        assert_eq!(Unit::of("Drive"), Unit::None);
+    fn units_come_from_lv2_terms_and_format_for_people() {
+        assert_eq!(Unit::from_symbol("hz"), Unit::Hz);
+        assert_eq!(Unit::from_symbol("G"), Unit::Gain);
+        assert_eq!(Unit::from_symbol("pc"), Unit::Percent);
         assert_eq!(Unit::Hz.format(6000.0), "6 kHz");
         assert_eq!(Unit::Db.format(-18.0), "-18 dB");
-        assert_eq!(Unit::Ratio.format(4.0), "4:1");
         assert_eq!(Unit::Ms.format(150.0), "150 ms");
-    }
-
-    #[test]
-    fn categories_group_plugins() {
-        assert_eq!(Category::of("sc_compressor_stereo", "Sidechain Compressor Stereo"), Category::Dynamics);
-        assert_eq!(Category::of("para_equalizer_x16_lr", "Parametric Equalizer x16 LeftRight"), Category::Equalizer);
-        assert_eq!(Category::of("bingux_reverb", "Bingux Reverb"), Category::Space);
-        assert_eq!(Category::of("bingux_stereo_tools", "Bingux Stereo Tools"), Category::Stereo);
+        assert_eq!(Unit::Gain.format(1.0), "0 dB");
+        assert_eq!(Unit::Gain.format(0.5), "-6.02 dB");
+        assert!((Unit::Gain.stored(Unit::Gain.shown(0.25)) - 0.25).abs() < 1e-9);
     }
 
     #[test]
     fn a_log_control_maps_positions_to_values_and_back() {
         let control = Control {
+            symbol: "freq".into(),
             name: "Frequency".into(),
             min: 20.0,
             max: 20_000.0,
@@ -668,14 +698,47 @@ mod tests {
             log: true,
             integer: false,
             toggle: false,
+            choices: Vec::new(),
             unit: Unit::Hz,
+            hidden: false,
         };
         assert!((control.value_at(0.5) - 632.5).abs() < 1.0);
         assert!((control.position_of(control.value_at(0.3)) - 0.3).abs() < 1e-9);
     }
 
     #[test]
-    fn hints_give_bounds_and_defaults() {
+    fn controls_display_choices_toggles_and_units() {
+        let mut control = Control {
+            symbol: "mode".into(),
+            name: "Mode".into(),
+            min: 0.0,
+            max: 2.0,
+            default: 0.0,
+            log: false,
+            integer: true,
+            toggle: false,
+            choices: vec![
+                Choice {
+                    value: 0.0,
+                    label: "Down".into(),
+                },
+                Choice {
+                    value: 1.0,
+                    label: "Up".into(),
+                },
+            ],
+            unit: Unit::None,
+            hidden: false,
+        };
+        assert_eq!(control.display(1.0), "Up");
+        assert_eq!(control.display(2.0), "2");
+        control.choices.clear();
+        control.toggle = true;
+        assert_eq!(control.display(1.0), "On");
+    }
+
+    #[test]
+    fn ladspa_hints_give_bounds_and_defaults() {
         let hint = RangeHint {
             descriptor: BOUNDED_BELOW | BOUNDED_ABOVE | LOGARITHMIC | 0xC0,
             lower: 10.0,
@@ -685,7 +748,14 @@ mod tests {
         assert_eq!((control.min, control.max), (10.0, 1000.0));
         assert!((control.default - 100.0).abs() < 1e-6);
         assert!(control.log);
-        let toggled = read_control("Mono".into(), &RangeHint { descriptor: TOGGLED, lower: 0.0, upper: 0.0 });
+        let toggled = read_control(
+            "Mono".into(),
+            &RangeHint {
+                descriptor: TOGGLED,
+                lower: 0.0,
+                upper: 0.0,
+            },
+        );
         assert!(toggled.toggle);
         assert_eq!((toggled.min, toggled.max), (0.0, 1.0));
     }

@@ -1,69 +1,129 @@
-//! A preset as a PipeWire `filter-chain` configuration.
+//! One stage of the chain as a PipeWire `filter-chain` configuration.
 //!
-//! The chain becomes one filter graph with the plugins linked in order, left
-//! and right channel each. A plugin with one audio input and one output is
-//! run twice, once per channel; a plugin with two of each runs once as a
-//! stereo plugin. The parametric equalizer is one PipeWire biquad per band,
-//! so every band's frequency, gain and Q can be changed while sound plays.
+//! Every effect runs in a `pipewire` process of its own, with one
+//! `filter-chain` module: a capture stream that takes the sound in, the
+//! plugin, and a playback stream that sends it out. The engine joins the
+//! stages with links (see `chain`), so putting an effect in, taking it out or
+//! changing the order is a matter of links, and the other effects keep
+//! running with their state. A plugin that crashes takes only its own stage
+//! with it.
+//!
+//! The two ends of the chain are stages too: the head takes the sound in
+//! (a virtual sink the applications play to, or the microphone) and the tail
+//! sends it on (the speakers, or a virtual microphone for the applications).
+//! They are plain `copy` stages that stay up while effects come and go, so
+//! the device applications see never disappears.
+//!
+//! A stereo plugin is one filter node; a mono plugin runs once for each
+//! side. Plugin controls are set from the preset when the stage starts and
+//! live afterwards (see `service::set_params`).
 
 use std::fmt::Write;
 use std::path::Path;
 
-use crate::catalog::{Catalog, PluginInfo};
-use crate::preset::{CONVOLVER, DELAY, Direction, EQUALIZER, GAIN, PluginSlot, Preset};
+use crate::catalog::{Backend, PluginInfo};
+use crate::effects::{Channels, Effect, Source};
+use crate::preset::{Direction, PluginSlot};
 
 /// The node name of the virtual output device (a sink applications play to).
 pub const OUTPUT_NODE: &str = "bingux_effects_output";
 /// The node name of the virtual input device (a source applications record from).
 pub const INPUT_NODE: &str = "bingux_effects_input";
-/// The catalog id of the analyser plugin the engine taps the chain's end with.
-pub const ANALYSER: &str = "ladspa:bingux_dsp:bingux_analyser";
 
-/// Where the chain's sound comes from and goes to.
-#[derive(Clone, Debug, Default)]
-pub struct Target {
-    /// The `node.name` of the real device: the speakers the output chain plays
-    /// to, or the microphone the input chain records.
-    pub device: Option<String>,
-    /// A shown name for the virtual device.
-    pub description: Option<String>,
+/// What a stage is in the chain.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Role {
+    /// Where the sound enters: the virtual sink (output) or the microphone (input).
+    Head,
+    /// Where it leaves: the speakers (output) or the virtual microphone (input).
+    Tail,
+    /// An effect, by the id of its slot in the preset.
+    Effect(String),
 }
 
-/// A plugin the chain could not include, and why.
+/// The real device the chain works on.
+#[derive(Clone, Debug, Default)]
+pub struct Target {
+    /// The `node.name` of the speakers the output chain plays to, or the
+    /// microphone the input chain records.
+    pub device: Option<String>,
+}
+
+/// A stage's nodes and the ports the chain links to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Names {
+    /// The capture node: `bingux_fx.<direction>.<id>`, or the virtual sink's own name.
+    pub capture: String,
+    /// The playback node: the capture name and `.out`, or the virtual source's own name.
+    pub playback: String,
+}
+
+/// The names of a stage's nodes.
+pub fn names(direction: Direction, role: &Role) -> Names {
+    let plain = |tail: &str| {
+        let capture = format!("bingux_fx.{}.{tail}", direction.name());
+        Names {
+            playback: format!("{capture}.out"),
+            capture,
+        }
+    };
+    match (direction, role) {
+        (Direction::Output, Role::Head) => Names {
+            capture: OUTPUT_NODE.to_string(),
+            playback: format!("{OUTPUT_NODE}.out"),
+        },
+        (Direction::Input, Role::Tail) => Names {
+            capture: format!("bingux_fx.{}.tail", direction.name()),
+            playback: INPUT_NODE.to_string(),
+        },
+        (_, Role::Head) => plain("head"),
+        (_, Role::Tail) => plain("tail"),
+        (_, Role::Effect(id)) => plain(id),
+    }
+}
+
+/// The `node.name` of the virtual device a direction's chain creates.
+pub fn node_name(direction: Direction) -> &'static str {
+    match direction {
+        Direction::Output => OUTPUT_NODE,
+        Direction::Input => INPUT_NODE,
+    }
+}
+
+/// Whether the stage's capture node is a sink, so its ports are `playback_*`
+/// rather than `input_*`.
+fn capture_is_sink(direction: Direction, role: &Role) -> bool {
+    matches!((direction, role), (Direction::Output, Role::Head))
+}
+
+/// The two ports sound enters a stage by, left then right, as `node:port`.
+pub fn input_ports(direction: Direction, role: &Role) -> [String; 2] {
+    let node = names(direction, role).capture;
+    let prefix = if capture_is_sink(direction, role) {
+        "playback"
+    } else {
+        "input"
+    };
+    [format!("{node}:{prefix}_FL"), format!("{node}:{prefix}_FR")]
+}
+
+/// The two ports sound leaves a stage by.
+pub fn output_ports(direction: Direction, role: &Role) -> [String; 2] {
+    let node = names(direction, role).playback;
+    // A virtual microphone is a source, whose ports are named for capturing.
+    let prefix = if matches!((direction, role), (Direction::Input, Role::Tail)) {
+        "capture"
+    } else {
+        "output"
+    };
+    [format!("{node}:{prefix}_FL"), format!("{node}:{prefix}_FR")]
+}
+
+/// Why an effect has no stage.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Skipped {
     pub id: String,
     pub reason: String,
-}
-
-/// The configuration and what became of each plugin.
-#[derive(Clone, Debug)]
-pub struct Rendered {
-    pub config: String,
-    pub skipped: Vec<Skipped>,
-}
-
-/// The meter slot (see `bingux_dsp::meters`) of every plugin that publishes
-/// one, in chain order. Slots start at 1.
-pub fn meter_slots(preset: &Preset, catalog: &Catalog) -> Vec<(String, u32)> {
-    let mut slots = Vec::new();
-    for slot in &preset.plugins {
-        if let Some(info) = usable(slot, catalog)
-            && info.publishes_meters()
-            && slots.len() < bingux_dsp::meters::SLOTS - 1
-        {
-            slots.push((slot.id.clone(), slots.len() as u32 + 1));
-        }
-    }
-    slots
-}
-
-/// The plugin of `slot` when it is on and can run.
-fn usable<'a>(slot: &PluginSlot, catalog: &'a Catalog) -> Option<&'a PluginInfo> {
-    if !slot.enabled {
-        return None;
-    }
-    catalog.find(&slot.kind).filter(|info| info.unusable().is_none())
 }
 
 /// A number in the form the configuration parser reads as a float.
@@ -80,83 +140,26 @@ fn quote(text: &str) -> String {
     format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
-/// `db` as the linear gain a mixer takes.
-fn linear(db: f64) -> f64 {
-    10f64.powf(db / 20.0)
-}
-
-/// The left and right ports sound enters and leaves a stage by.
-#[derive(Clone)]
-struct Stage {
-    inputs: [String; 2],
-    outputs: [String; 2],
-}
-
-#[derive(Default)]
-struct Graph {
-    nodes: Vec<String>,
-    links: Vec<String>,
-    last: Option<Stage>,
-    first_inputs: Option<[String; 2]>,
-}
-
-impl Graph {
-    fn node(&mut self, text: String) {
-        self.nodes.push(text);
+fn node_text(
+    kind: &str,
+    name: &str,
+    plugin: Option<&str>,
+    label: Option<&str>,
+    controls: &str,
+    config: &str,
+) -> String {
+    let mut text = format!("{{ type = {kind} name = {}", quote(name));
+    if let Some(plugin) = plugin {
+        let _ = write!(text, " plugin = {}", quote(plugin));
     }
-
-    /// Put `stage` after the last one.
-    fn chain(&mut self, stage: Stage) {
-        match self.last.take() {
-            None => self.first_inputs = Some(stage.inputs.clone()),
-            Some(previous) => {
-                for channel in 0..2 {
-                    self.links.push(format!(
-                        "{{ output = {} input = {} }}",
-                        quote(&previous.outputs[channel]),
-                        quote(&stage.inputs[channel])
-                    ));
-                }
-            }
-        }
-        self.last = Some(stage);
-    }
-
-    /// A built-in plugin once for each channel.
-    fn builtin_pair(&mut self, name: &str, label: &str, controls: &[(&str, f64)], config: &str) -> Stage {
-        let mut stage = Stage {
-            inputs: [String::new(), String::new()],
-            outputs: [String::new(), String::new()],
-        };
-        for (channel, side) in ["l", "r"].into_iter().enumerate() {
-            let node = format!("{name}_{side}");
-            self.node(node_text("builtin", &node, label, None, controls, config));
-            stage.inputs[channel] = format!("{node}:{}", input_port(label));
-            stage.outputs[channel] = format!("{node}:Out");
-        }
-        stage
-    }
-}
-
-/// The audio input port of a built-in plugin.
-fn input_port(label: &str) -> &'static str {
-    if label == "mixer" { "In 1" } else { "In" }
-}
-
-fn node_text(kind: &str, name: &str, label: &str, plugin: Option<&Path>, controls: &[(&str, f64)], config: &str) -> String {
-    let mut text = format!("{{ type = {kind} name = {} label = {label}", quote(name));
-    if let Some(path) = plugin {
-        let _ = write!(text, " plugin = {}", quote(&path.to_string_lossy()));
+    if let Some(label) = label {
+        let _ = write!(text, " label = {label}");
     }
     if !config.is_empty() {
         let _ = write!(text, " config = {{ {config} }}");
     }
     if !controls.is_empty() {
-        text.push_str(" control = {");
-        for (control, value) in controls {
-            let _ = write!(text, " {} = {}", quote(control), number(*value));
-        }
-        text.push_str(" }");
+        let _ = write!(text, " control = {{{controls} }}");
     }
     text.push_str(" }");
     text
@@ -168,160 +171,64 @@ fn wav_channels(path: &str) -> usize {
         return 1;
     };
     let mut header = [0u8; 24];
-    if std::io::Read::read_exact(&mut file, &mut header).is_err() || &header[..4] != b"RIFF" || &header[8..12] != b"WAVE" {
+    if std::io::Read::read_exact(&mut file, &mut header).is_err()
+        || &header[..4] != b"RIFF"
+        || &header[8..12] != b"WAVE"
+    {
         return 1;
     }
     usize::from(u16::from_le_bytes([header[22], header[23]])).max(1)
 }
 
-/// The equalizer's nodes: a gain for the preamp, then a biquad per enabled band.
-fn equalizer(graph: &mut Graph, slot: &PluginSlot) {
-    let id = &slot.id;
-    let preamp = slot.preamp.unwrap_or(0.0);
-    if preamp != 0.0 {
-        let stage = graph.builtin_pair(&format!("{id}_pre"), "mixer", &[("Gain 1", linear(preamp))], "");
-        graph.chain(stage);
-    }
-    for (index, band) in slot.bands.iter().enumerate().filter(|(_, band)| band.enabled) {
-        let gain = if band.kind.has_gain() { band.gain } else { 0.0 };
-        let stage = graph.builtin_pair(
-            &format!("{id}_b{index}"),
-            band.kind.label(),
-            &[("Freq", band.frequency), ("Q", band.q), ("Gain", gain)],
-            "",
+/// The `control = { ... }` body for `slot`: its stored values that the plugin
+/// has a control for, kept inside the control's range.
+fn control_values(slot: &PluginSlot, plugin: &PluginInfo) -> String {
+    let mut text = String::new();
+    for (symbol, value) in &slot.controls {
+        let Some(control) = plugin.control(symbol) else {
+            continue;
+        };
+        let value = if control.integer {
+            value.round()
+        } else {
+            *value
+        };
+        let _ = write!(
+            text,
+            " {} = {}",
+            quote(symbol),
+            number(value.clamp(control.min, control.max))
         );
-        graph.chain(stage);
     }
+    text
 }
 
-/// Render `preset` for `target`. A plugin that cannot run is left out and
-/// listed in `skipped`; the rest of the chain still plays.
-pub fn render(preset: &Preset, catalog: &Catalog, target: &Target) -> Rendered {
-    let mut graph = Graph::default();
-    let mut skipped = Vec::new();
-    let slots = meter_slots(preset, catalog);
-    for slot in preset.plugins.iter().filter(|slot| slot.enabled) {
-        let id = slot.id.as_str();
-        let Some(info) = catalog.find(&slot.kind) else {
-            skipped.push(Skipped {
-                id: slot.id.clone(),
-                reason: "The plugin is not installed.".to_string(),
-            });
-            continue;
-        };
-        if let Some(reason) = info.unusable() {
-            skipped.push(Skipped { id: slot.id.clone(), reason });
-            continue;
-        }
-        let value = |name: &str| {
-            slot.controls
-                .get(name)
-                .copied()
-                .or_else(|| info.control(name).map(|control| control.default))
-                .unwrap_or(0.0)
-        };
-        match slot.kind.as_str() {
-            EQUALIZER => equalizer(&mut graph, slot),
-            GAIN => {
-                let stage = graph.builtin_pair(id, "mixer", &[("Gain 1", linear(value("Gain")))], "");
-                graph.chain(stage);
-            }
-            DELAY => {
-                let seconds = value("Delay") / 1000.0;
-                let stage = graph.builtin_pair(id, "delay", &[("Delay (s)", seconds)], "max-delay = 1.0");
-                graph.chain(stage);
-            }
-            CONVOLVER => {
-                let Some(path) = slot.path.as_deref().filter(|path| Path::new(path).is_file()) else {
-                    skipped.push(Skipped {
-                        id: slot.id.clone(),
-                        reason: "There is no impulse response file.".to_string(),
-                    });
-                    continue;
-                };
-                let stereo = wav_channels(path) >= 2;
-                let gain = linear(value("Gain"));
-                let mut stage = Stage {
-                    inputs: [String::new(), String::new()],
-                    outputs: [String::new(), String::new()],
-                };
-                for (channel, side) in ["l", "r"].into_iter().enumerate() {
-                    let node = format!("{id}_{side}");
-                    let config = format!(
-                        "filename = {} channel = {} gain = {}",
-                        quote(path),
-                        if stereo { channel } else { 0 },
-                        number(gain)
-                    );
-                    graph.node(node_text("builtin", &node, "convolver", None, &[], &config));
-                    stage.inputs[channel] = format!("{node}:In");
-                    stage.outputs[channel] = format!("{node}:Out");
-                }
-                graph.chain(stage);
-            }
-            _ => {
-                let Some(library) = info.library.as_deref() else {
-                    continue;
-                };
-                let mut controls: Vec<(&str, f64)> = info
-                    .controls
-                    .iter()
-                    .map(|control| (control.name.as_str(), value(&control.name).clamp(control.min, control.max)))
-                    .collect();
-                if let Some(at) = controls.iter().position(|(name, _)| *name == "Meter slot") {
-                    controls[at].1 = slots.iter().find(|(slot_id, _)| slot_id == id).map_or(0.0, |(_, slot)| f64::from(*slot));
-                }
-                let ladspa_inputs = audio_ports(info, true);
-                let ladspa_outputs = audio_ports(info, false);
-                if info.inputs == 2 {
-                    graph.node(node_text("ladspa", id, &info.label, Some(library), &controls, ""));
-                    graph.chain(Stage {
-                        inputs: [format!("{id}:{}", ladspa_inputs[0]), format!("{id}:{}", ladspa_inputs[1])],
-                        outputs: [format!("{id}:{}", ladspa_outputs[0]), format!("{id}:{}", ladspa_outputs[1])],
-                    });
-                } else {
-                    let mut stage = Stage {
-                        inputs: [String::new(), String::new()],
-                        outputs: [String::new(), String::new()],
-                    };
-                    for (channel, side) in ["l", "r"].into_iter().enumerate() {
-                        let node = format!("{id}_{side}");
-                        graph.node(node_text("ladspa", &node, &info.label, Some(library), &controls, ""));
-                        stage.inputs[channel] = format!("{node}:{}", ladspa_inputs[0]);
-                        stage.outputs[channel] = format!("{node}:{}", ladspa_outputs[0]);
-                    }
-                    graph.chain(stage);
-                }
-            }
-        }
-    }
-    if graph.last.is_none() {
-        let stage = graph.builtin_pair("bypass", "copy", &[], "");
-        graph.chain(stage);
-    }
-    // The analyser is a pass-through tap on the end of the chain.
-    if let Some(info) = catalog.find(ANALYSER)
-        && let Some(library) = info.library.as_deref()
-        && info.input_ports.len() == 2
-        && info.output_ports.len() == 2
-    {
-        graph.node(node_text("ladspa", "analyser", &info.label, Some(library), &[("Publish", 1.0)], ""));
-        graph.chain(Stage {
-            inputs: [format!("analyser:{}", info.input_ports[0]), format!("analyser:{}", info.input_ports[1])],
-            outputs: [format!("analyser:{}", info.output_ports[0]), format!("analyser:{}", info.output_ports[1])],
-        });
-    }
-    let first = graph.first_inputs.clone().unwrap_or_default();
-    let last = graph.last.clone().unwrap_or(Stage {
-        inputs: [String::new(), String::new()],
-        outputs: [String::new(), String::new()],
-    });
+/// What `render_effect` makes: the file and the two ports of the graph.
+#[derive(Clone, Debug)]
+pub struct Rendered {
+    pub config: String,
+}
+
+fn config_text(
+    direction: Direction,
+    role: &Role,
+    description: &str,
+    nodes: &[String],
+    inputs: &[String],
+    outputs: &[String],
+    capture: &str,
+    playback: &str,
+) -> String {
+    let id = match role {
+        Role::Head => "head".to_string(),
+        Role::Tail => "tail".to_string(),
+        Role::Effect(id) => id.clone(),
+    };
     let mut config = String::new();
-    let (capture, playback) = properties(preset.direction, target);
     let _ = write!(
         config,
-        "# Written by Bingux Settings from the preset \"{}\". Edit the preset, not this file.\n\
-         context.properties = {{ core.name = bingux-effects-{} }}\n\
+        "# Written by the Bingux effects engine. Edit the preset in Settings, not this file.\n\
+         context.properties = {{ core.name = bingux-effects-{direction}-{id} }}\n\
          context.spa-libs = {{\n  audio.convert.* = audioconvert/libspa-audioconvert\n  support.* = support/libspa-support\n}}\n\
          context.modules = [\n\
          \x20 {{ name = libpipewire-module-rt flags = [ ifexists nofail ] }}\n\
@@ -329,268 +236,443 @@ pub fn render(preset: &Preset, catalog: &Catalog, target: &Target) -> Rendered {
          \x20 {{ name = libpipewire-module-client-node }}\n\
          \x20 {{ name = libpipewire-module-adapter }}\n\
          \x20 {{ name = libpipewire-module-filter-chain\n    args = {{\n      node.description = {}\n      media.name = {}\n      filter.graph = {{\n        nodes = [\n",
-        preset.name.replace('\n', " "),
-        preset.direction.name(),
-        quote(target.description.as_deref().unwrap_or(default_description(preset.direction))),
-        quote(target.description.as_deref().unwrap_or(default_description(preset.direction))),
+        quote(description),
+        quote(description),
+        direction = direction.name(),
     );
-    for node in &graph.nodes {
+    for node in nodes {
         let _ = writeln!(config, "          {node}");
     }
-    config.push_str("        ]\n        links = [\n");
-    for link in &graph.links {
-        let _ = writeln!(config, "          {link}");
-    }
+    config.push_str("        ]\n");
     let _ = write!(
         config,
-        "        ]\n        inputs = [ {} {} ]\n        outputs = [ {} {} ]\n      }}\n      audio.channels = 2\n      audio.position = [ FL FR ]\n      capture.props = {capture}\n      playback.props = {playback}\n    }}\n  }}\n]\n",
-        quote(&first[0]),
-        quote(&first[1]),
-        quote(&last.outputs[0]),
-        quote(&last.outputs[1]),
+        "        inputs = [ {} ]\n        outputs = [ {} ]\n      }}\n      audio.channels = 2\n      audio.position = [ FL FR ]\n      capture.props = {capture}\n      playback.props = {playback}\n    }}\n  }}\n]\n",
+        inputs
+            .iter()
+            .map(|port| quote(port))
+            .collect::<Vec<_>>()
+            .join(" "),
+        outputs
+            .iter()
+            .map(|port| quote(port))
+            .collect::<Vec<_>>()
+            .join(" "),
     );
-    Rendered { config, skipped }
+    config
 }
 
-fn default_description(direction: Direction) -> &'static str {
-    match direction {
-        Direction::Output => "Effects (Output)",
-        Direction::Input => "Effects (Input)",
-    }
-}
-
-/// The names of a plugin's audio input or output ports, in port order.
-fn audio_ports(info: &PluginInfo, inputs: bool) -> Vec<String> {
-    if inputs { info.input_ports.clone() } else { info.output_ports.clone() }
-}
-
-/// The capture and playback properties of the filter-chain stream.
-fn properties(direction: Direction, target: &Target) -> (String, String) {
-    let device = target
-        .device
-        .as_deref()
-        .map(|device| format!(" target.object = {}", quote(device)))
-        .unwrap_or_default();
-    match direction {
-        Direction::Output => (
+/// The stream properties of the two ends of a stage.
+fn stream_properties(direction: Direction, role: &Role, target: &Target) -> (String, String) {
+    let device = |_: ()| {
+        target
+            .device
+            .as_deref()
+            .map(|device| format!(" target.object = {}", quote(device)))
+            .unwrap_or_default()
+    };
+    let free = "node.autoconnect = false node.dont-reconnect = true";
+    let own = names(direction, role);
+    let capture = match (direction, role) {
+        (Direction::Output, Role::Head) => {
             format!(
                 "{{ node.name = {} media.class = Audio/Sink audio.position = [ FL FR ] }}",
-                quote(OUTPUT_NODE)
-            ),
-            format!(
-                "{{ node.name = {} node.passive = true audio.position = [ FL FR ]{device} }}",
-                quote(&format!("{OUTPUT_NODE}.out"))
-            ),
+                quote(&own.capture)
+            )
+        }
+        (Direction::Input, Role::Head) => format!(
+            "{{ node.name = {} node.passive = true audio.position = [ FL FR ]{} }}",
+            quote(&own.capture),
+            device(())
         ),
-        Direction::Input => (
-            format!(
-                "{{ node.name = {} node.passive = true audio.position = [ FL FR ]{device} }}",
-                quote(&format!("{INPUT_NODE}.in"))
-            ),
+        _ => format!(
+            "{{ node.name = {} media.class = Stream/Input/Audio audio.position = [ FL FR ] {free} }}",
+            quote(&own.capture)
+        ),
+    };
+    let playback = match (direction, role) {
+        (Direction::Output, Role::Tail) => format!(
+            "{{ node.name = {} node.passive = true audio.position = [ FL FR ]{} }}",
+            quote(&own.playback),
+            device(())
+        ),
+        (Direction::Input, Role::Tail) => {
             format!(
                 "{{ node.name = {} media.class = Audio/Source audio.position = [ FL FR ] }}",
-                quote(INPUT_NODE)
-            ),
+                quote(&own.playback)
+            )
+        }
+        _ => format!(
+            "{{ node.name = {} node.passive = true audio.position = [ FL FR ] {free} }}",
+            quote(&own.playback)
+        ),
+    };
+    (capture, playback)
+}
+
+fn copy_nodes() -> Vec<String> {
+    ["l", "r"]
+        .iter()
+        .map(|side| {
+            node_text(
+                "builtin",
+                &format!("copy_{side}"),
+                None,
+                Some("copy"),
+                "",
+                "",
+            )
+        })
+        .collect()
+}
+
+/// The configuration of the head or the tail: a plain copy of both channels.
+pub fn render_end(direction: Direction, role: &Role, target: &Target) -> Rendered {
+    let description = match (direction, role) {
+        (Direction::Output, Role::Head) => "Effects (Output)",
+        (Direction::Input, Role::Tail) => "Effects (Input)",
+        (Direction::Output, _) => "Effects (Output) tail",
+        (Direction::Input, _) => "Effects (Input) head",
+    };
+    let (capture, playback) = stream_properties(direction, role, target);
+    Rendered {
+        config: config_text(
+            direction,
+            role,
+            description,
+            &copy_nodes(),
+            &["copy_l:In".to_string(), "copy_r:In".to_string()],
+            &["copy_l:Out".to_string(), "copy_r:Out".to_string()],
+            &capture,
+            &playback,
         ),
     }
 }
 
-/// The `node.name` of the virtual device a direction's chain creates.
-pub fn node_name(direction: Direction) -> &'static str {
-    match direction {
-        Direction::Output => OUTPUT_NODE,
-        Direction::Input => INPUT_NODE,
+/// The configuration of an effect's stage, or why it cannot run.
+pub fn render_effect(
+    direction: Direction,
+    slot: &PluginSlot,
+    effect: &Effect,
+    plugin: Option<&PluginInfo>,
+) -> Result<Rendered, Skipped> {
+    let skip = |reason: &str| Skipped {
+        id: slot.id.clone(),
+        reason: reason.to_string(),
+    };
+    let Some(plugin) = plugin else {
+        return Err(skip(&format!(
+            "{} is not installed. It comes with {} ({}).",
+            effect.name,
+            effect.package.project(),
+            effect.package.fedora()
+        )));
+    };
+    let role = Role::Effect(slot.id.clone());
+    let controls = control_values(slot, plugin);
+    let mut nodes = Vec::new();
+    let (inputs, outputs): (Vec<String>, Vec<String>);
+    match (effect.source, effect.channels) {
+        (Source::Convolver, _) => {
+            let path = slot
+                .path
+                .as_deref()
+                .filter(|path| Path::new(path).is_file())
+                .ok_or_else(|| skip("Choose an impulse response file."))?;
+            let stereo = wav_channels(path) >= 2;
+            let gain = slot.value("gain", 1.0).clamp(0.0, 4.0);
+            let mut ins = Vec::new();
+            let mut outs = Vec::new();
+            for (channel, side) in ["l", "r"].into_iter().enumerate() {
+                let config = format!(
+                    "filename = {} channel = {} gain = {}",
+                    quote(path),
+                    if stereo { channel } else { 0 },
+                    number(gain)
+                );
+                nodes.push(node_text(
+                    "builtin",
+                    &format!("fx_{side}"),
+                    None,
+                    Some("convolver"),
+                    "",
+                    &config,
+                ));
+                ins.push(format!("fx_{side}:In"));
+                outs.push(format!("fx_{side}:Out"));
+            }
+            (inputs, outputs) = (ins, outs);
+        }
+        (_, Channels::Stereo) => {
+            let ports_in = plugin.main_inputs();
+            let ports_out = plugin.main_outputs();
+            if ports_in.len() < 2 || ports_out.len() < 2 {
+                return Err(skip(
+                    "The plugin does not have a left and a right audio port.",
+                ));
+            }
+            nodes.push(plugin_node(plugin, effect, "fx", &controls));
+            inputs = ports_in
+                .iter()
+                .take(2)
+                .map(|port| format!("fx:{}", port.symbol))
+                .collect();
+            outputs = ports_out
+                .iter()
+                .take(2)
+                .map(|port| format!("fx:{}", port.symbol))
+                .collect();
+        }
+        (_, Channels::Mono) => {
+            let (Some(port_in), Some(port_out)) = (
+                plugin.main_inputs().first().copied(),
+                plugin.main_outputs().first().copied(),
+            ) else {
+                return Err(skip("The plugin has no audio port."));
+            };
+            let (mut ins, mut outs) = (Vec::new(), Vec::new());
+            for side in ["l", "r"] {
+                let name = format!("fx_{side}");
+                nodes.push(plugin_node(plugin, effect, &name, &controls));
+                ins.push(format!("{name}:{}", port_in.symbol));
+                outs.push(format!("{name}:{}", port_out.symbol));
+            }
+            (inputs, outputs) = (ins, outs);
+        }
+    }
+    let (capture, playback) = stream_properties(direction, &role, &Target::default());
+    Ok(Rendered {
+        config: config_text(
+            direction,
+            &role,
+            effect.name,
+            &nodes,
+            &inputs,
+            &outputs,
+            &capture,
+            &playback,
+        ),
+    })
+}
+
+fn plugin_node(plugin: &PluginInfo, effect: &Effect, name: &str, controls: &str) -> String {
+    match plugin.backend {
+        Backend::Lv2 => node_text("lv2", name, Some(&plugin.id), None, controls, ""),
+        Backend::Ladspa => {
+            let library = match effect.source {
+                Source::Ladspa { library, .. } => library,
+                _ => "",
+            };
+            node_text(
+                "ladspa",
+                name,
+                Some(library),
+                Some(&plugin.label),
+                controls,
+                "",
+            )
+        }
+        Backend::Builtin => node_text("builtin", name, None, Some(&plugin.label), controls, ""),
     }
 }
 
-/// A control changed while the chain runs.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Live {
-    /// A plugin's control by name.
-    Control { slot: String, name: String, value: f64 },
-    /// One field of an equalizer band (`frequency`, `gain` or `q`).
-    Band { slot: String, index: usize, field: BandField, value: f64 },
-    /// The equalizer's preamp, in dB.
-    Preamp { slot: String, db: f64 },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BandField {
-    Frequency,
-    Gain,
-    Q,
-}
-
-/// The node parameters (`node:Control`, value) that set `change` in a running
-/// chain, or none when the chain has no node for it (a plugin that is off, a
-/// disabled band, an equalizer without a preamp stage).
-pub fn live_params(preset: &Preset, catalog: &Catalog, change: &Live) -> Vec<(String, f64)> {
-    match change {
-        Live::Preamp { slot, db } => match preset.slot(slot) {
-            Some(plugin) if plugin.enabled && plugin.preamp.unwrap_or(0.0) != 0.0 => ["l", "r"]
-                .iter()
-                .map(|side| (format!("{slot}_pre_{side}:Gain 1"), linear(*db)))
-                .collect(),
-            _ => Vec::new(),
-        },
-        Live::Band { slot, index, field, value } => {
-            let Some(plugin) = preset.slot(slot).filter(|plugin| plugin.enabled) else {
-                return Vec::new();
-            };
-            let Some(band) = plugin.bands.get(*index).filter(|band| band.enabled) else {
-                return Vec::new();
-            };
-            let control = match field {
-                BandField::Frequency => "Freq",
-                BandField::Q => "Q",
-                BandField::Gain if band.kind.has_gain() => "Gain",
-                BandField::Gain => return Vec::new(),
-            };
-            ["l", "r"]
-                .iter()
-                .map(|side| (format!("{slot}_b{index}_{side}:{control}"), *value))
-                .collect()
-        }
-        Live::Control { slot, name, value } => {
-            let Some(plugin) = preset.slot(slot).filter(|plugin| plugin.enabled) else {
-                return Vec::new();
-            };
-            let Some(info) = usable(plugin, catalog) else {
-                return Vec::new();
-            };
-            let (port, value) = match plugin.kind.as_str() {
-                GAIN => ("Gain 1".to_string(), linear(*value)),
-                DELAY => ("Delay (s)".to_string(), value / 1000.0),
-                CONVOLVER | EQUALIZER => return Vec::new(),
-                _ => (name.clone(), *value),
-            };
-            if info.library.is_some() && info.control(name).is_none() {
-                return Vec::new();
-            }
-            if info.inputs == 2 && info.library.is_some() {
-                vec![(format!("{slot}:{port}"), value)]
-            } else {
-                ["l", "r"]
-                    .iter()
-                    .map(|side| (format!("{slot}_{side}:{port}"), value))
-                    .collect()
-            }
-        }
+/// The filter-graph node names an effect's controls live under: `fx` for a
+/// stereo plugin, `fx_l` and `fx_r` for a mono one.
+pub fn control_nodes(effect: &Effect) -> &'static [&'static str] {
+    match (effect.source, effect.channels) {
+        (Source::Convolver, _) | (_, Channels::Mono) => &["fx_l", "fx_r"],
+        _ => &["fx"],
     }
+}
+
+/// The node parameters (`node:symbol` and a value) that set `symbol` to
+/// `value` in a running stage.
+pub fn live_params(effect: &Effect, symbol: &str, value: f64) -> Vec<(String, f64)> {
+    control_nodes(effect)
+        .iter()
+        .map(|node| (format!("{node}:{symbol}"), value))
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::preset::{Band, Direction};
+    use crate::catalog::{AudioPort, Control, Unit};
+    use crate::effects;
 
-    fn catalog_with_dsp() -> Catalog {
-        let mut catalog = Catalog::builtin();
-        let control = |name: &str, min, max, default| crate::catalog::Control {
-            name: name.to_string(),
+    fn port(symbol: &str) -> AudioPort {
+        AudioPort {
+            symbol: symbol.into(),
+            name: symbol.into(),
+            optional: false,
+            side_chain: false,
+        }
+    }
+
+    fn control(symbol: &str, min: f64, max: f64, default: f64) -> Control {
+        Control {
+            symbol: symbol.into(),
+            name: symbol.into(),
             min,
             max,
             default,
             log: false,
             integer: false,
             toggle: false,
-            unit: crate::catalog::Unit::of(name),
+            choices: Vec::new(),
+            unit: Unit::None,
+            hidden: false,
+        }
+    }
+
+    fn compressor() -> (PluginInfo, &'static Effect) {
+        let effect = effects::find("compressor").unwrap();
+        let plugin = PluginInfo {
+            id: effect.source.plugin_id(),
+            name: "LSP Compressor Stereo".into(),
+            maker: "LSP".into(),
+            backend: Backend::Lv2,
+            library: None,
+            label: String::new(),
+            inputs: vec![port("in_l"), port("in_r")],
+            outputs: vec![port("out_l"), port("out_r")],
+            controls: vec![
+                control("cr", 1.0, 100.0, 4.0),
+                control("al", 0.001, 1.0, 0.25),
+            ],
+            meters: Vec::new(),
+            latency: None,
         };
-        catalog.plugins.push(PluginInfo {
-            id: "ladspa:bingux_dsp:bingux_compressor".into(),
-            name: "Bingux Compressor".into(),
-            maker: "Bingux".into(),
-            category: crate::catalog::Category::Dynamics,
-            library: Some("/usr/lib64/ladspa/bingux_dsp.so".into()),
-            label: "bingux_compressor".into(),
-            inputs: 2,
-            outputs: 2,
-            input_ports: vec!["Input L".into(), "Input R".into()],
-            output_ports: vec!["Output L".into(), "Output R".into()],
-            controls: vec![control("Threshold", -60.0, 0.0, -18.0), control("Meter slot", 0.0, 63.0, 0.0)],
-            meters: vec!["Gain reduction".into()],
-        });
-        catalog
+        (plugin, effect)
     }
 
     #[test]
-    fn a_stereo_ladspa_plugin_is_one_node_with_its_controls_and_meter_slot() {
-        let preset = Preset::new("Night", Direction::Output)
-            .with(PluginSlot::ladspa("comp-1", "bingux_dsp", "bingux_compressor").control("Threshold", -30.0));
-        let catalog = catalog_with_dsp();
-        let rendered = render(&preset, &catalog, &Target::default());
-        assert!(rendered.config.contains("type = ladspa name = \"comp-1\" label = bingux_compressor plugin = \"/usr/lib64/ladspa/bingux_dsp.so\""));
-        assert!(rendered.config.contains("\"Threshold\" = -30.0"));
-        assert!(rendered.config.contains("\"Meter slot\" = 1.0"));
-        assert!(rendered.config.contains("inputs = [ \"comp-1:Input L\" \"comp-1:Input R\" ]"));
-        let live = live_params(&preset, &catalog, &Live::Control { slot: "comp-1".into(), name: "Threshold".into(), value: -20.0 });
-        assert_eq!(live, vec![("comp-1:Threshold".to_string(), -20.0)]);
-    }
-
-    #[test]
-    fn an_empty_chain_is_a_pass_through() {
-        let preset = Preset::new("Flat", Direction::Output);
-        let rendered = render(&preset, &Catalog::builtin(), &Target::default());
-        assert!(rendered.config.contains("label = copy"));
-        assert!(rendered.config.contains("bingux_effects_output"));
-        assert!(rendered.skipped.is_empty());
-    }
-
-    #[test]
-    fn each_enabled_band_is_a_biquad_pair_and_a_disabled_one_is_left_out() {
-        let mut off = Band::peaking(500.0, 2.0, 1.0);
-        off.enabled = false;
-        let preset = Preset::new("EQ", Direction::Output).with(PluginSlot::equalizer(
-            "eq-1",
-            -3.0,
-            vec![Band::peaking(1000.0, 6.0, 1.0), off],
-        ));
-        let rendered = render(&preset, &Catalog::builtin(), &Target::default());
-        assert!(rendered.config.contains("name = \"eq-1_b0_l\" label = bq_peaking"));
-        assert!(rendered.config.contains("name = \"eq-1_b0_r\""));
-        assert!(!rendered.config.contains("eq-1_b1"));
-        assert!(rendered.config.contains("eq-1_pre_l"));
-        // preamp -> band, left and right.
-        assert!(rendered.config.contains("\"eq-1_pre_l:Out\" input = \"eq-1_b0_l:In\""));
-    }
-
-    #[test]
-    fn the_input_chain_records_the_device_and_offers_a_source() {
-        let preset = Preset::new("Mic", Direction::Input);
-        let target = Target {
-            device: Some("alsa_input.usb-mic".into()),
-            description: None,
-        };
-        let rendered = render(&preset, &Catalog::builtin(), &target);
-        assert!(rendered.config.contains("media.class = Audio/Source"));
-        assert!(rendered.config.contains("target.object = \"alsa_input.usb-mic\""));
-    }
-
-    #[test]
-    fn missing_plugins_are_skipped_with_a_reason() {
-        let preset = Preset::new("x", Direction::Output).with(PluginSlot::new("a-1", "ladspa:nothing:here"));
-        let rendered = render(&preset, &Catalog::builtin(), &Target::default());
-        assert_eq!(rendered.skipped.len(), 1);
-        assert!(rendered.skipped[0].reason.contains("not installed"));
-    }
-
-    #[test]
-    fn live_changes_name_the_nodes_the_graph_has() {
-        let preset = Preset::new("EQ", Direction::Output).with(PluginSlot::equalizer(
-            "eq-1",
-            -3.0,
-            vec![Band::peaking(1000.0, 6.0, 1.0)],
-        ));
-        let catalog = Catalog::builtin();
-        let params = live_params(
-            &preset,
-            &catalog,
-            &Live::Band { slot: "eq-1".into(), index: 0, field: BandField::Gain, value: 3.0 },
+    fn stage_names_and_ports_follow_the_role() {
+        let head = names(Direction::Output, &Role::Head);
+        assert_eq!(
+            (head.capture.as_str(), head.playback.as_str()),
+            (OUTPUT_NODE, "bingux_effects_output.out")
         );
-        assert_eq!(params[0].0, "eq-1_b0_l:Gain");
-        assert_eq!(params.len(), 2);
-        let preamp = live_params(&preset, &catalog, &Live::Preamp { slot: "eq-1".into(), db: -6.0 });
-        assert_eq!(preamp[0].0, "eq-1_pre_l:Gain 1");
-        let _ = catalog_with_dsp();
+        assert_eq!(
+            input_ports(Direction::Output, &Role::Head)[0],
+            "bingux_effects_output:playback_FL"
+        );
+        assert_eq!(
+            output_ports(Direction::Output, &Role::Head)[1],
+            "bingux_effects_output.out:output_FR"
+        );
+        let effect = Role::Effect("compressor-1".into());
+        assert_eq!(
+            input_ports(Direction::Output, &effect)[0],
+            "bingux_fx.output.compressor-1:input_FL"
+        );
+        assert_eq!(names(Direction::Input, &Role::Tail).playback, INPUT_NODE);
+        assert_eq!(
+            output_ports(Direction::Input, &Role::Tail)[0],
+            "bingux_effects_input:capture_FL"
+        );
+        assert_eq!(
+            input_ports(Direction::Input, &Role::Tail)[1],
+            "bingux_fx.input.tail:input_FR"
+        );
+    }
+
+    #[test]
+    fn a_stereo_lv2_effect_is_one_node_with_its_controls_in_range() {
+        let (plugin, effect) = compressor();
+        let slot = PluginSlot::new("compressor-1", "compressor")
+            .control("cr", 500.0)
+            .control("al", 0.1)
+            .control("unknown", 3.0);
+        let rendered = render_effect(Direction::Output, &slot, effect, Some(&plugin)).unwrap();
+        let text = &rendered.config;
+        assert!(text.contains("type = lv2 name = \"fx\" plugin = \"http://lsp-plug.in/plugins/lv2/compressor_stereo\""), "{text}");
+        assert!(
+            text.contains("\"cr\" = 100.0"),
+            "a control is clamped to its range: {text}"
+        );
+        assert!(text.contains("\"al\" = 0.1"));
+        assert!(
+            !text.contains("unknown"),
+            "a control the plugin lacks is not written"
+        );
+        assert!(text.contains("inputs = [ \"fx:in_l\" \"fx:in_r\" ]"));
+        assert!(text.contains("outputs = [ \"fx:out_l\" \"fx:out_r\" ]"));
+        assert!(text.contains(
+            "node.name = \"bingux_fx.output.compressor-1\" media.class = Stream/Input/Audio"
+        ));
+        assert!(
+            text.contains("node.autoconnect = false"),
+            "the engine links effects itself"
+        );
+    }
+
+    #[test]
+    fn a_missing_plugin_is_skipped_with_the_package_that_has_it() {
+        let effect = effects::find("compressor").unwrap();
+        let slot = PluginSlot::new("compressor-1", "compressor");
+        let skipped = render_effect(Direction::Output, &slot, effect, None).unwrap_err();
+        assert!(
+            skipped.reason.contains("lsp-plugins-lv2"),
+            "{}",
+            skipped.reason
+        );
+    }
+
+    #[test]
+    fn a_mono_plugin_runs_once_for_each_side() {
+        let effect = effects::find("autotune").unwrap();
+        let plugin = PluginInfo {
+            id: effect.source.plugin_id(),
+            name: "x42-Autotune".into(),
+            maker: "x42".into(),
+            backend: Backend::Lv2,
+            library: None,
+            label: String::new(),
+            inputs: vec![port("in")],
+            outputs: vec![port("out")],
+            controls: vec![control("tuning", 400.0, 480.0, 440.0)],
+            meters: Vec::new(),
+            latency: None,
+        };
+        let slot = PluginSlot::new("autotune-1", "autotune").control("tuning", 432.0);
+        let text = render_effect(Direction::Input, &slot, effect, Some(&plugin))
+            .unwrap()
+            .config;
+        assert!(text.contains("name = \"fx_l\"") && text.contains("name = \"fx_r\""));
+        assert!(text.contains("inputs = [ \"fx_l:in\" \"fx_r:in\" ]"));
+        assert_eq!(
+            live_params(effect, "tuning", 432.0),
+            [
+                ("fx_l:tuning".to_string(), 432.0),
+                ("fx_r:tuning".to_string(), 432.0)
+            ]
+        );
+    }
+
+    #[test]
+    fn the_ends_are_copies_and_the_devices_are_targets() {
+        let target = Target {
+            device: Some("alsa_output.usb-dac".into()),
+        };
+        let head = render_end(Direction::Output, &Role::Head, &target).config;
+        assert!(head.contains("media.class = Audio/Sink"));
+        assert!(head.contains("label = copy"));
+        assert!(
+            !head.contains("target.object"),
+            "the head is linked, not routed"
+        );
+        let tail = render_end(Direction::Output, &Role::Tail, &target).config;
+        assert!(tail.contains("target.object = \"alsa_output.usb-dac\""));
+        let mic = render_end(
+            Direction::Input,
+            &Role::Head,
+            &Target {
+                device: Some("alsa_input.usb-mic".into()),
+            },
+        )
+        .config;
+        assert!(mic.contains("target.object = \"alsa_input.usb-mic\""));
+        let virtual_mic = render_end(Direction::Input, &Role::Tail, &Target::default()).config;
+        assert!(virtual_mic.contains("media.class = Audio/Source"));
     }
 }

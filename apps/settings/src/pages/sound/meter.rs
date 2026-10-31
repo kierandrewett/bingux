@@ -19,8 +19,6 @@ use std::time::{Duration, Instant};
 
 use freya::prelude::*;
 
-use bingux_audio_effects as effects;
-use bingux_audio_effects::Direction;
 use bingux_ui::style::*;
 use bingux_ui::typography::CAPTION;
 
@@ -146,7 +144,6 @@ impl Feed {
         self.kill();
     }
 
-
     /// Stop the capture. Killing closes the pipe, which ends the reader
     /// thread; the process is reaped on its own thread.
     fn stop(&self) {
@@ -240,19 +237,6 @@ async fn follow(node: u32, source: Source, level: State<f32>, window: PlatformWi
     pace(move || fraction_of(capture.0.take_peak()), level, window).await;
 }
 
-/// Follow a reading in the effects engine's meter file.
-async fn follow_reading(direction: Direction, slot: u32, index: usize, range_db: f32, level: State<f32>, window: PlatformWindow) {
-    pace(
-        move || {
-            let db = effects::service::read_meters(direction, slot).map_or(0.0, |values| values[index]);
-            (-db / range_db).clamp(0.0, 1.0)
-        },
-        level,
-        window,
-    )
-    .await;
-}
-
 /// The level a meter shows, as a 0 to 1 fraction. `make` starts the task
 /// that feeds it. The task runs only while the window has focus and `active`
 /// is true; when focus goes it is cancelled, and the bar empties.
@@ -290,83 +274,6 @@ fn use_following<F: Future<Output = ()> + 'static>(
     level
 }
 
-/// How often a page with no spectrum yet looks for one.
-const SPECTRUM_IDLE: Duration = Duration::from_millis(600);
-
-/// Follow the engine's analyser: the spectrum is read from the meter file on
-/// each rendered frame, at most 30 times a second. While the analyser has
-/// published nothing the task wakes twice a second to look.
-async fn follow_spectrum(direction: Direction, mut spectrum: State<Option<Vec<f32>>>, window: PlatformWindow) {
-    let ticker = RenderingTicker::get();
-    let mut last = Instant::now();
-    let mut previous: Vec<f32> = Vec::new();
-    let mut still = 0u32;
-    loop {
-        let read = effects::service::read_spectrum(direction).map(|bands| bands.to_vec());
-        let has_reading = read.is_some();
-        match read {
-            Some(bands) => {
-                still = if bands == previous { still + 1 } else { 0 };
-                if still == 0 {
-                    previous = bands.clone();
-                    spectrum.set(Some(bands));
-                }
-            }
-            None => {
-                if spectrum.peek().is_some() {
-                    spectrum.set(None);
-                }
-            }
-        }
-        // A spectrum that has stopped changing (nothing is playing) is read
-        // twice a second until it moves again.
-        if !has_reading || still > 5 {
-            timer(SPECTRUM_IDLE).await;
-        } else {
-            window.request_redraw();
-            ticker.tick().await;
-            let wait = FRAME.saturating_sub(last.elapsed());
-            if !wait.is_zero() {
-                timer(wait).await;
-            }
-        }
-        last = Instant::now();
-    }
-}
-
-/// The analyser's spectrum of `direction`, in dBFS, while the window has
-/// focus. `None` while the analyser has published nothing.
-pub fn use_spectrum(direction: Direction) -> State<Option<Vec<f32>>> {
-    let mut spectrum = use_state(|| None::<Vec<f32>>);
-    let focus = system::window_focus();
-    let scope = current_scope_id();
-    let window = Platform::get().current_window();
-    let task = use_hook(|| Rc::new(RefCell::new(None::<TaskHandle>)));
-    use_side_effect({
-        let task = Rc::clone(&task);
-        move || {
-            let focused = *focus.read();
-            if let Some(running) = task.borrow_mut().take() {
-                running.cancel();
-            }
-            if focused {
-                *task.borrow_mut() = Some(spawn_in_scope(follow_spectrum(direction, spectrum, window.clone()), scope));
-            } else if spectrum.peek().is_some() {
-                spectrum.set(None);
-            }
-        }
-    });
-    use_drop({
-        let task = Rc::clone(&task);
-        move || {
-            if let Some(running) = task.borrow_mut().take() {
-                running.try_cancel();
-            }
-        }
-    });
-    spectrum
-}
-
 /// A level meter for one node. Place it under a key of the node so another
 /// device or stream starts a new capture. It records only while it is on
 /// screen and its window has focus.
@@ -392,70 +299,17 @@ impl Component for LevelMeter {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let (node, source) = (self.node, self.source);
-        let level = use_following(self.live, move |level, window| follow(node, source, level, window));
+        let level = use_following(self.live, move |level, window| {
+            follow(node, source, level, window)
+        });
         let fill = *level.read();
         // A compact bar is a short pill for a heading. Otherwise the bar spans
         // its row, as under an application's slider.
-        let width = if self.compact { w(Dim::Button) } else { w_full() };
-        rect()
-            .tw(
-                &tokens,
-                &[
-                    width,
-                    h(Dim::SliderTrack),
-                    rounded(Radius::Pill),
-                    bg(Paint::Control),
-                ],
-            )
-            .child(rect().width(Size::percent(fill * 100.0)).tw(
-                &tokens,
-                &[h_full(), rounded(Radius::Pill), bg(Paint::Accent)],
-            ))
-    }
-}
-
-/// How much gain a plugin is taking off, from its meter slot in the effects
-/// engine's meter file. The bar grows from the left as the reduction deepens
-/// and the figure beside it names the reduction in dB. `range_db` is the
-/// reduction that fills the bar.
-#[derive(Clone, PartialEq)]
-pub struct ReductionMeter {
-    pub direction: Direction,
-    pub slot: u32,
-    /// Which of the plugin's meters to show.
-    pub index: usize,
-    pub range_db: f32,
-}
-
-impl Component for ReductionMeter {
-    fn render_key(&self) -> DiffKey {
-        DiffKey::U64(u64::from(self.slot) << 8 | self.index as u64)
-    }
-
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let (direction, slot, index, range_db) = (self.direction, self.slot, self.index, self.range_db);
-        let level = use_following(true, move |level, window| {
-            follow_reading(direction, slot, index, range_db, level, window)
-        });
-        let fill = *level.read();
-        // A fixed-width figure, so the bar does not change length as it counts.
-        let text = format!("-{:.1} dB", fill * range_db);
-        rect()
-            .tw(&tokens, &[w_full(), flex_row(), items(Align::Center), gap(S3)])
-            .child(
-                rect()
-                    .width(Size::flex(1.0))
-                    .tw(&tokens, &[h(Dim::SliderTrack), rounded(Radius::Pill), bg(Paint::Control), clip()])
-                    .child(rect().width(Size::percent(fill * 100.0)).tw(
-                        &tokens,
-                        &[h_full(), rounded(Radius::Pill), bg(Paint::Warning)],
-                    )),
-            )
-            .child(
-                rect()
-                    .tw(&tokens, &[w(Dim::Field), flex_row(), justify(Align::End)])
-                    .child(CAPTION.label(&tokens, text).max_lines(1)),
-            )
+        let bar = bingux_ui::prelude::level_meter(fill).label("Level");
+        if self.compact {
+            rect().tw(&tokens, &[w(Dim::Button)]).child(bar)
+        } else {
+            rect().tw(&tokens, &[w_full()]).child(bar)
+        }
     }
 }

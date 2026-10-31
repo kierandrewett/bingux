@@ -1000,6 +1000,14 @@ sortable(
 
 Rows may have their own controls (a `switch`, a delete button): the grip is a separate target to their right, and a drag never presses the row it started on. The taxonomy shows a four-row list, a list with switches and a twelve-row list with the drop line under "Sortable list".
 
+### Fader, level meter and master-detail
+
+`fader(percent, on_moved)` is a slider that runs up and down, for a bank of levels side by side (equalizer bands, mixer channels): a thin track filled from the bottom and a knob. `step(percent)`, `label(text)` and `enabled(bool)`. Up and Down move it, Shift moves ten steps, Page Up and Page Down ten percent, Home and End go to the ends.
+
+`level_meter(level)` is a bar for a sound level from 0 to 1 that turns to the warning colour above `LEVEL_WARN`. The caller measures the level (Settings reads a peak from `pw-record`); the component only draws it.
+
+`master_detail(master, detail, show_detail, on_back)` is the vertical tab stack: on a wide window the list stands at the left (`MASTER_WIDTH`) with the page at the right, both always shown; on a phone one at a time, the page pushed over the list with a Back button. Use it inside a popup or sheet; the navigation split of a whole window is `NavigationSplitView`. Sound > Effects uses all three with `sortable` rows. `master_detail_tests.rs` plays the stack one frame at a time: a toggle, a selection, a delete and a drag never move the page, and a dragged row starts where it is drawn.
+
 ### Info rows: a value is never cut
 
 A row with a read-only value (`value`, `mono_value`, `path_value`,

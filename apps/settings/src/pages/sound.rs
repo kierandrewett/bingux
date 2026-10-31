@@ -39,7 +39,6 @@ mod effects;
 mod meter;
 
 pub use self::applications::ApplicationsPage;
-pub use self::effects::{EffectPage, EffectsPage};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const POLL: Duration = Duration::from_secs(5);
@@ -2137,7 +2136,7 @@ impl Component for SoundPage {
                     row("Effects")
                         .value(preset.clone().unwrap_or_else(|| "Off".to_string()))
                         .navigates()
-                        .on_press(move |_| router.open(routes::sound_effects())),
+                        .on_press(move |_| effects::open(ctx.window)),
                 )
                 .row(switch_row(
                     "Output effects",

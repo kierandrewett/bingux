@@ -1,16 +1,16 @@
 # Packaging
 
-| Path | What it holds |
-| --- | --- |
-| `rpm/bingux.spec` | One source package, six RPMs (`rpm/README.md`) |
-| `arch/PKGBUILD`, `arch/bingux.install` | The same six packages for Arch Linux and Bingux OS (`arch/README.md`) |
-| `debian/` | The same packages as a Debian source package, built by `scripts/build-debs.sh` (`make deb-package`) |
-| `pkgrepo.ref` | The commit of the Gnoblin repository whose `scripts/pkgrepo` builds the signed package repositories |
-| `metainfo/` | AppStream files of Settings, Files and Taxonomy |
-| `man/` | Man pages: `bingux-settings`, `bingux-files`, `bingux-config`, `bingux-effects`, `bingux-taxonomy` |
-| `systemd/` | User units, `bingux.target`, `bingux-effects@.service` and the preset `90-bingux.preset` |
-| `search-apps/` | Search-app manifests that `bingux-searchd` reads |
-| `gnoblin/`, `pam/` | The Gnoblin drop-in and the lock screen PAM service |
+| Path                                   | What it holds                                                                                       |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `rpm/bingux.spec`                      | One source package, six RPMs (`rpm/README.md`)                                                      |
+| `arch/PKGBUILD`, `arch/bingux.install` | The same six packages for Arch Linux and Bingux OS (`arch/README.md`)                               |
+| `debian/`                              | The same packages as a Debian source package, built by `scripts/build-debs.sh` (`make deb-package`) |
+| `pkgrepo.ref`                          | The commit of the Gnoblin repository whose `scripts/pkgrepo` builds the signed package repositories |
+| `metainfo/`                            | AppStream files of Settings, Files and Taxonomy                                                     |
+| `man/`                                 | Man pages: `bingux-settings`, `bingux-files`, `bingux-config`, `bingux-effects`, `bingux-taxonomy`  |
+| `systemd/`                             | User units, `bingux.target`, `bingux-effects@.service` and the preset `90-bingux.preset`            |
+| `search-apps/`                         | Search-app manifests that `bingux-searchd` reads                                                    |
+| `gnoblin/`, `pam/`                     | The Gnoblin drop-in and the lock screen PAM service                                                 |
 
 `scripts/install-shell.py` (`make install`) is the single list of what gets
 installed; the spec and the PKGBUILD only split it into packages. The contents,
@@ -29,11 +29,6 @@ make deb-package    # all Debian packages, into /var/tmp/BinguxPkg/deb/out
 
 ## Build notes
 
-- `bingux-dsp` is built with `panic = "abort"`, the programs with `unwind`.
-  Building both in one Cargo target directory fails the link of
-  `bingux-settings` ("the crate `libc` requires panic strategy `abort`"), so the
-  Makefile builds the plugin library in `$(DSP_TARGET)` and copies it next to
-  the other programs.
 - The Rust flags of the spec use line-table debug info so the debuginfo
   packages of the statically linked Freya programs stay a usable size.
 - `make` passes `CFLAGS` and `LDFLAGS` to the C helpers, so distribution
@@ -62,8 +57,8 @@ bingux-settings   /usr/bin/bingux-settings  /usr/share/applications/bingux-setti
 bingux-files      /usr/bin/bingux-files  /usr/share/applications/bingux-files.desktop  icon, metainfo, man page
 bingux-taxonomy   /usr/bin/bingux-taxonomy  desktop entry, icon, metainfo, man page
 bingux-config     /usr/bin/bingux-config  /usr/share/man/man1/bingux-config.1.gz
-bingux-audio-effects  /usr/bin/bingux-effects  /usr/lib64/ladspa/libbingux_dsp.so
-                  /usr/lib/systemd/user/bingux-effects@.service  man page
+bingux-audio-effects  /usr/bin/bingux-effects  /usr/lib/systemd/user/bingux-effects@.service  man page
+                  (no plugins of its own: it requires lsp-plugins and PipeWire's LV2 loader, see below)
 bingux            /usr/bin/bingux*  /usr/lib64/bingux/qml  /usr/libexec/bingux  /usr/share/bingux/{shell,icons,gnoblin}
                   /usr/lib/systemd/user/bingux*.service, bingux.target  /usr/lib/systemd/user-preset/90-bingux.preset
                   /usr/share/gnoblin/conf.d/bingux.lua  /etc/pam.d/bingux-lock
@@ -98,7 +93,6 @@ shell's `%post` reported exit 127 because the empty root has no `/bin/sh`.)
 file triggers wrote `inode/directory=bingux-files.desktop` and the three
 `x-scheme-handler/bingux-*` entries into `mimeinfo.cache`; `gio mime` listed
 them; `appstreamcli get dev.drewett.bingux.Settings` found the component;
-`bingux-effects scan` listed the `bingux_dsp` plugins from `/usr/lib64/ladspa`;
 `rpm -V` was clean. Settings (`bingux-settings network`), Files
 (`bingux-files ~/Documents`) and Taxonomy opened in the Gnoblin session with
 empty logs (screenshots: `/var/tmp/BinguxPkg/shots/`), and `xdg-open` on a folder

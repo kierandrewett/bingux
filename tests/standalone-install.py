@@ -31,7 +31,6 @@ BUILD_OUTPUTS = (
     "cargo/release/bingux-taxonomy",
     "cargo/release/bingux-preview-host",
     "cargo/release/bingux-effects",
-    "cargo/release/libbingux_dsp.so",
     "cargo/release/xdg-desktop-portal-bingux",
     "cargo/release/bingux-global-shortcuts",
 )
@@ -257,7 +256,6 @@ class InstallTest(unittest.TestCase):
                 "usr/bin/bingux-preview-host",
                 "usr/bin/bingux-effects",
                 "usr/bin/bingux-config",
-                "usr/lib/ladspa/libbingux_dsp.so",
                 "usr/lib/systemd/user/bingux-effects@.service",
                 "usr/lib/systemd/user-preset/90-bingux.preset",
                 "usr/share/man/man1/bingux-settings.1",
@@ -272,7 +270,7 @@ class InstallTest(unittest.TestCase):
                 "usr/share/icons/hicolor/scalable/apps/bingux-files.svg",
             ):
                 self.assertTrue((stage / path).is_file(), path)
-            self.assertTrue((stage / "usr/lib/ladspa/libbingux_dsp.so").stat().st_mode & 0o111)
+            self.assertFalse((stage / "usr/lib/ladspa").exists(), "no plugin of Bingux's own is installed")
             effects_unit = (stage / "usr/lib/systemd/user/bingux-effects@.service").read_text()
             self.assertIn("ExecStart=/usr/bin/bingux-effects run %i", effects_unit)
             self.assertIn(
@@ -568,7 +566,7 @@ class InstallTest(unittest.TestCase):
                 "bingux-effects",
             ):
                 self.assertTrue(os.access(prefix / "bin" / program, os.X_OK), program)
-            self.assertTrue((prefix / "lib/ladspa/libbingux_dsp.so").is_file())
+            self.assertFalse((prefix / "lib/ladspa").exists(), "no plugin of Bingux's own is installed")
             for app, mime in (
                 ("bingux-settings", "x-scheme-handler/bingux-settings;"),
                 ("bingux-files", "inode/directory;x-scheme-handler/bingux-files;"),

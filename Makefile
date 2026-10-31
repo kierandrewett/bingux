@@ -6,14 +6,8 @@ QMAKE ?= qmake6
 CARGO ?= cargo
 PKG_CONFIG ?= pkg-config
 QMLDIR ?= $(PREFIX)/lib/bingux/qml
-LADSPADIR ?= $(PREFIX)/lib/ladspa
 # Where Cargo puts its output; package builders can point this at a shared target.
 CARGO_TARGET ?= $(abspath $(BUILD_DIR))/cargo
-# bingux-dsp is built with panic=abort (a plugin must not unwind into its host)
-# while the programs unwind. Cargo does not keep the two builds of a shared
-# dependency such as libc apart in one target directory ("the crate `libc`
-# requires panic strategy `abort`"), so the plugin library builds in its own.
-DSP_TARGET ?= $(CARGO_TARGET)-dsp
 # Work and results of `make rpm-package`, `make arch-package` and `make deb-package`.
 PACKAGE_DIR ?= /var/tmp/BinguxPkg
 # lib or lib64: where the shell archive and QML plugins live under PREFIX.
@@ -60,15 +54,13 @@ $(BUILD_DIR)/bingux-frame: native/frame/paint-gtk.c native/frame/build.sh native
 # bingux-settings, bingux-files and bingux-taxonomy are the Freya applications;
 # bingux-preview-host is the helper process Files runs to play films and songs and
 # render PDFs (GStreamer and poppler stay out of the application);
-# bingux-effects and libbingux_dsp.so are the sound-effects engine and its LADSPA plugins.
+# bingux-effects is the sound-effects engine; it hosts published LV2 and LADSPA plugins and ships none of its own.
 # `apps` builds the applications and what Settings runs (bingux-config, the effects
 # engine); `daemons` adds the search and status daemons, the privileged helper, the
 # session manager and the portal backend.
 apps:
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path crates/config/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path services/audio-effects/Cargo.toml --target-dir $(CARGO_TARGET)
-	$(CARGO) build --locked --release -j $(JOBS) --manifest-path crates/dsp/Cargo.toml --target-dir $(DSP_TARGET)
-	install -Dm755 $(DSP_TARGET)/release/libbingux_dsp.so $(CARGO_TARGET)/release/libbingux_dsp.so
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/settings/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/files/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path services/preview-host/Cargo.toml --target-dir $(CARGO_TARGET)
@@ -271,7 +263,7 @@ check-session: native daemons shell
 	python3 tests/shell-archive.py --build-dir $(BUILD_DIR)
 
 install:
-	python3 scripts/install-shell.py --prefix '$(PREFIX)' --destdir '$(DESTDIR)' --build-dir '$(BUILD_DIR)' --qml-dir '$(QMLDIR)' --cargo-dir '$(CARGO_TARGET)' --ladspa-dir '$(LADSPADIR)'
+	python3 scripts/install-shell.py --prefix '$(PREFIX)' --destdir '$(DESTDIR)' --build-dir '$(BUILD_DIR)' --qml-dir '$(QMLDIR)' --cargo-dir '$(CARGO_TARGET)'
 
 install-user: doctor all
 	python3 scripts/install-shell.py --user --prefix '$(USER_PREFIX)' --build-dir '$(BUILD_DIR)' --qml-dir '$(USER_PREFIX)/lib/bingux/qml' --cargo-dir '$(CARGO_TARGET)'

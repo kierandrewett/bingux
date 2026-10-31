@@ -1,53 +1,45 @@
-//! Sound > Effects: the chain of plugins between the applications and the
+//! Sound > Effects: the stack of effects between the applications and the
 //! speakers (output) or between the microphone and the applications (input).
 //!
-//! The page is a front end for the `bingux-audio-effects` engine. It edits
-//! the active preset, a plain JSON file, and the engine plays it:
+//! It opens as a large popup (a bottom sheet on a phone) from the Sound page:
+//! a popup is a task with its own dismissal, it has the room an equalizer
+//! needs where a subpage column does not, and the stack beside the effect's
+//! page does not have to fight the Settings sidebar for width. On a phone the
+//! stack is a list and an effect's page is pushed over it (`master_detail`).
 //!
-//! - a control moved on a slider is set in the running chain at once (`pw-cli`),
-//!   so the change is heard while the slider moves;
-//! - adding, removing, reordering or switching off a plugin restarts the
-//!   engine, a gap of a fraction of a second, a moment after the last change;
-//! - every change is also written to the preset file, a moment after the last.
-//!
-//! Nothing here polls. The meters run only while their rows are on screen in
-//! a focused window (see `meter.rs`).
+//! The page edits the active preset, a plain JSON file, and tells the engine to
+//! read it (`bingux-effects reload`); the engine works out what changed and
+//! touches only that (see `docs/audio-effects.md`). Every edit is shown at
+//! once, then written and signalled 40 ms after the last one, so a slider
+//! drag is heard while it moves and costs one file write per pause.
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{LazyLock, Mutex};
+use std::collections::HashMap;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use freya::prelude::*;
 
-use bingux_audio_effects::graph::{self, Live};
+use bingux_audio_effects::service::{self, StageState};
 use bingux_audio_effects::store::{State as Saved, Store};
-use bingux_audio_effects::{Catalog, Direction, Preset, service};
-use bingux_ui::prelude::{PageHead, Window, segmented, use_window};
-use bingux_ui::style::*;
+use bingux_audio_effects::{Catalog, Direction, Preset, graph};
+use bingux_ui::prelude::{Window, popup, use_window};
+use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 
-use crate::pages::loading::veiled;
 use crate::system::background_then;
-use crate::ui::{Overlays, page_column, use_overlays, use_tokens};
+use crate::ui::{Overlays, use_overlays};
 
-mod chain;
-mod equalizer;
-mod pane;
+mod body;
+mod eq_page;
+mod page;
 mod picker;
 mod presets;
-mod spectrum;
+mod stack;
 
-/// How long after the last edit the preset file is written.
-const SAVE_DELAY: Duration = Duration::from_millis(250);
-/// How long after the last structural edit the engine restarts.
-const RESTART_DELAY: Duration = Duration::from_millis(400);
-/// How long a live control change waits for a later one to replace it.
-const LIVE_DELAY: Duration = Duration::from_millis(30);
+/// How long after the last edit the preset is written and the engine told.
+const COMMIT_DELAY: Duration = Duration::from_millis(40);
 
-static SAVE_VERSION: AtomicU64 = AtomicU64::new(0);
-static RESTART_VERSION: AtomicU64 = AtomicU64::new(0);
-static LIVE_BUSY: AtomicBool = AtomicBool::new(false);
-/// Control changes waiting to be sent: the newest value of each parameter.
-static LIVE_PENDING: LazyLock<Mutex<Vec<(String, f64)>>> = LazyLock::new(|| Mutex::new(Vec::new()));
+static COMMIT_VERSION: AtomicU64 = AtomicU64::new(0);
 
 /// What the page shows of the store: the settings and the active preset.
 #[derive(Clone, PartialEq)]
@@ -61,27 +53,28 @@ pub(super) struct Loaded {
 }
 
 thread_local! {
-    /// The last store contents read for each direction, so a page opens with
+    /// The last store contents read for each direction, so the popup opens with
     /// them at once. UI thread only.
-    static LAST: std::cell::RefCell<std::collections::HashMap<Direction, Loaded>> =
-        std::cell::RefCell::new(std::collections::HashMap::new());
+    static LAST: std::cell::RefCell<HashMap<Direction, Loaded>> = std::cell::RefCell::new(HashMap::new());
+    /// The last catalog, for the same reason.
+    static CATALOG: std::cell::RefCell<Option<Catalog>> = const { std::cell::RefCell::new(None) };
 }
 
-/// What the page shows before the store has been read: the last contents when
-/// the page has been open before, else a flat, empty chain. A lookup, never a
-/// file read.
+/// What the popup shows before the store has been read: the last contents when
+/// it has been open before, else a flat, empty stack. A lookup, never a file read.
 fn cached(direction: Direction) -> Loaded {
-    LAST.with(|last| last.borrow().get(&direction).cloned()).unwrap_or_else(|| Loaded {
-        direction,
-        saved: Saved::default(),
-        presets: Vec::new(),
-        preset: Preset::new("Flat", direction),
-        ready: false,
-    })
+    LAST.with(|last| last.borrow().get(&direction).cloned())
+        .unwrap_or_else(|| Loaded {
+            direction,
+            saved: Saved::default(),
+            presets: Vec::new(),
+            preset: Preset::new("Flat", direction),
+            ready: false,
+        })
 }
 
 /// Read the store for `direction`: a few small files, and the factory presets
-/// are written when they are missing. Runs on a worker.
+/// (and the migration of old ones) are done when they are missing. Runs on a worker.
 fn load(direction: Direction) -> Loaded {
     let store = Store::default();
     let _ = store.ensure_factory();
@@ -98,8 +91,8 @@ fn load(direction: Direction) -> Loaded {
     }
 }
 
-/// What the running system has: whether the engine runs, and the nodes the
-/// meters and live changes need. Read in the background.
+/// What the running system has: whether the engine runs, the nodes the meters
+/// need and what each effect's stage reports. Read in the background.
 #[derive(Clone, Default, PartialEq)]
 pub(super) struct Runtime {
     pub running: bool,
@@ -109,12 +102,31 @@ pub(super) struct Runtime {
     pub device: Option<String>,
     /// Its name for a person.
     pub device_label: Option<String>,
+    /// Why an effect is not in the sound, by its id.
+    pub failures: HashMap<String, String>,
 }
 
 fn probe(direction: Direction, saved_device: Option<String>) -> Runtime {
     let nodes = service::list_nodes().unwrap_or_default();
     let device = saved_device.or_else(|| service::default_device(direction));
     let found = |name: &str| nodes.iter().find(|node| node.name == name);
+    let failures = service::read_status(direction)
+        .map(|status| {
+            status
+                .stages
+                .into_iter()
+                .filter(|stage| stage.state == StageState::Failed)
+                .map(|stage| {
+                    (
+                        stage.id,
+                        stage
+                            .reason
+                            .unwrap_or_else(|| "It is not running.".to_string()),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     Runtime {
         running: service::is_running(direction),
         virtual_node: found(graph::node_name(direction)).map(|node| node.id),
@@ -124,29 +136,20 @@ fn probe(direction: Direction, saved_device: Option<String>) -> Runtime {
             .and_then(found)
             .map(|node| node.description.clone()),
         device,
+        failures,
     }
 }
 
-/// What an edit does to the sound.
-pub(super) enum Effect {
-    /// Only the saved preset changes (a name, a path).
-    Nothing,
-    /// The change is sent to the running chain.
-    Live(Vec<Live>),
-    /// The chain changed shape: the engine restarts.
-    Restart,
-}
-
-/// Everything the parts of the page share. Copy it into closures.
+/// Everything the parts of the popup share. Copy it into closures.
 #[derive(Clone, Copy, PartialEq)]
 pub(super) struct Fx {
     pub data: State<Loaded>,
     pub runtime: State<Runtime>,
     pub catalog: State<Option<Catalog>>,
-    /// The effect whose controls are shown, by plugin id.
+    /// The effect whose page is shown, by its id.
     pub selected: State<Option<String>>,
-    /// Whether the list of effects is shown beside the controls.
-    pub list_shown: State<bool>,
+    /// On a phone: whether the effect's page is pushed over the stack.
+    pub page_open: State<bool>,
     pub overlays: Overlays,
     pub window: Window,
 }
@@ -173,143 +176,86 @@ impl Fx {
         let direction = self.active_direction();
         let device = self.data.peek().saved.of(direction).device.clone();
         let mut runtime = self.runtime;
-        background_then(move || probe(direction, device), move |found| {
-            if found.running || found != *runtime.peek() {
-                runtime.set(found);
-            }
-        });
+        background_then(
+            move || probe(direction, device),
+            move |found| {
+                if found.running || found != *runtime.peek() {
+                    runtime.set(found);
+                }
+            },
+        );
     }
 
     /// Show the settings and preset the store holds now, read in the background.
     pub fn reload(self) {
         let direction = self.active_direction();
         let mut data = self.data;
-        background_then(move || load(direction), move |loaded| {
-            LAST.with(|last| last.borrow_mut().insert(direction, loaded.clone()));
-            // A direction chosen since this read began has its own read.
-            if data.peek().direction == direction {
-                data.set(loaded);
-            }
-        });
-    }
-
-    /// Change the active preset. The change is shown at once, saved a moment
-    /// later and, as `effect` says, played.
-    pub fn edit(mut self, change: impl FnOnce(&mut Preset), effect: Effect) {
-        let mut preset = self.data.peek().preset.clone();
-        change(&mut preset);
-        self.data.write().preset = preset.clone();
-        self.save_soon(preset.clone());
-        match effect {
-            Effect::Nothing => {}
-            Effect::Restart => self.restart_soon(),
-            Effect::Live(changes) => {
-                let catalog = self.catalog.peek().clone().unwrap_or_else(Catalog::builtin);
-                let params: Vec<(String, f64)> = changes
-                    .iter()
-                    .flat_map(|change| graph::live_params(&preset, &catalog, change))
-                    .collect();
-                self.send_live(params);
-            }
-        }
-    }
-
-    fn save_soon(self, preset: Preset) {
-        let version = SAVE_VERSION.fetch_add(1, Ordering::SeqCst) + 1;
-        let overlays = self.overlays;
-        spawn(async move {
-            timer(SAVE_DELAY).await;
-            if SAVE_VERSION.load(Ordering::SeqCst) != version {
-                return;
-            }
-            let shown = preset.clone();
-            background_then(
-                move || Store::default().save(&preset),
-                move |result| match result {
-                    Ok(_) => LAST.with(|last| {
-                        if let Some(entry) = last.borrow_mut().get_mut(&shown.direction) {
-                            entry.preset = shown;
-                        }
-                    }),
-                    Err(e) => overlays.toast(format!("Could not save the preset. {}", e.0)),
-                },
-            );
-        });
-    }
-
-    /// Restart the engine after the changes stop, when it is running.
-    pub fn restart_soon(self) {
-        let version = RESTART_VERSION.fetch_add(1, Ordering::SeqCst) + 1;
-        let direction = self.active_direction();
-        spawn(async move {
-            timer(RESTART_DELAY).await;
-            if RESTART_VERSION.load(Ordering::SeqCst) != version {
-                return;
-            }
-            self.restart_now(direction);
-        });
-    }
-
-    /// Write the preset and restart the engine, if the effects are on.
-    pub fn restart_now(self, direction: Direction) {
-        let overlays = self.overlays;
-        let preset = self.data.peek().preset.clone();
-        let enabled = self.data.peek().saved.of(direction).enabled;
         background_then(
-            move || {
-                Store::default().save(&preset).map_err(|e| e.0)?;
-                if enabled { service::start(direction) } else { Ok(()) }
-            },
-            move |result: Result<(), String>| {
-                if let Err(message) = result {
-                    overlays.toast(message);
+            move || load(direction),
+            move |loaded| {
+                LAST.with(|last| last.borrow_mut().insert(direction, loaded.clone()));
+                // A direction chosen since this read began has its own read.
+                if data.peek().direction == direction {
+                    data.set(loaded);
                 }
-                // The engine needs a moment to make its device.
-                spawn(async move {
-                    timer(Duration::from_millis(1200)).await;
-                    self.refresh();
-                });
             },
         );
     }
 
-    /// Set parameters in the running chain, newest value of each only.
-    fn send_live(self, params: Vec<(String, f64)>) {
-        let Some(node) = self.runtime.peek().virtual_node else {
-            return;
-        };
-        if params.is_empty() {
-            return;
-        }
-        {
-            let mut pending = LIVE_PENDING.lock().unwrap_or_else(|e| e.into_inner());
-            for (name, value) in params {
-                match pending.iter_mut().find(|(waiting, _)| *waiting == name) {
-                    Some(entry) => entry.1 = value,
-                    None => pending.push((name, value)),
-                }
-            }
-        }
-        if LIVE_BUSY.swap(true, Ordering::SeqCst) {
+    /// Change the active preset. The change is shown at once, then written and
+    /// sent to the engine a moment after the last one.
+    pub fn edit(mut self, change: impl FnOnce(&mut Preset)) {
+        let mut preset = self.data.peek().preset.clone();
+        change(&mut preset);
+        if preset == self.data.peek().preset {
             return;
         }
-        std::thread::spawn(move || {
-            loop {
-                std::thread::sleep(LIVE_DELAY);
-                let batch = std::mem::take(&mut *LIVE_PENDING.lock().unwrap_or_else(|e| e.into_inner()));
-                if batch.is_empty() {
-                    LIVE_BUSY.store(false, Ordering::SeqCst);
-                    // A change that arrived after the check starts another pass.
-                    if LIVE_PENDING.lock().unwrap_or_else(|e| e.into_inner()).is_empty()
-                        || LIVE_BUSY.swap(true, Ordering::SeqCst)
-                    {
-                        return;
-                    }
-                    continue;
-                }
-                let _ = service::set_params(node, &batch);
+        self.data.write().preset = preset;
+        self.commit_soon();
+    }
+
+    fn commit_soon(self) {
+        let version = COMMIT_VERSION.fetch_add(1, Ordering::SeqCst) + 1;
+        let direction = self.active_direction();
+        spawn(async move {
+            timer(COMMIT_DELAY).await;
+            if COMMIT_VERSION.load(Ordering::SeqCst) == version {
+                self.commit_now(direction);
             }
         });
+    }
+
+    /// Write the preset and tell the engine, if the effects are on.
+    pub fn commit_now(self, direction: Direction) {
+        let overlays = self.overlays;
+        let preset = self.data.peek().preset.clone();
+        let enabled = self.data.peek().saved.of(direction).enabled;
+        let shown = preset.clone();
+        background_then(
+            move || {
+                Store::default().save(&preset).map_err(|e| e.0)?;
+                if enabled {
+                    service::reload(direction)
+                } else {
+                    Ok(())
+                }
+            },
+            move |result: Result<(), String>| {
+                match result {
+                    Ok(()) => LAST.with(|last| {
+                        if let Some(entry) = last.borrow_mut().get_mut(&shown.direction) {
+                            entry.preset = shown;
+                        }
+                    }),
+                    Err(message) => overlays.toast(message),
+                }
+                // A new effect needs a moment to start before its state is known.
+                spawn(async move {
+                    timer(Duration::from_millis(900)).await;
+                    self.refresh();
+                });
+            },
+        );
     }
 
     /// Turn the effects of the current direction on or off.
@@ -337,132 +283,45 @@ impl Fx {
     }
 }
 
-/// The page's state, loaded once.
-fn use_fx(direction: Direction, selected: Option<String>) -> Fx {
+/// The popup's state, loaded once.
+fn use_fx(direction: Direction) -> Fx {
     let overlays = use_overlays();
     let window = use_window();
     let data = use_state(move || cached(direction));
     let runtime = use_state(Runtime::default);
-    let catalog = use_state(|| None::<Catalog>);
-    let selected = use_state(move || selected);
-    let list_shown = use_state(|| true);
+    let catalog = use_state(|| CATALOG.with(|cached| cached.borrow().clone()));
+    let selected = use_state(|| None::<String>);
+    let page_open = use_state(|| false);
     let fx = Fx {
         data,
         runtime,
         catalog,
         selected,
-        list_shown,
+        page_open,
         overlays,
         window,
     };
     use_hook(move || {
         let mut catalog = catalog;
-        // Scanning libraries can take a while, so it is done in the background
-        // and the result is cached by file date.
-        background_then(Catalog::load, move |found| catalog.set(Some(found)));
+        // Scanning the plugins can take a while, so it is done in the background
+        // and the result is cached by the date of the plugin bundles.
+        background_then(Catalog::load, move |found| {
+            CATALOG.with(|cached| *cached.borrow_mut() = Some(found.clone()));
+            catalog.set(Some(found));
+        });
         fx.reload();
         fx.refresh();
     });
     fx
 }
 
-/// The token a route names an effect by: `output.equalizer-1`.
-pub fn token(direction: Direction, id: &str) -> String {
-    format!("{}.{id}", direction.name())
-}
-
-fn parse_token(token: &str) -> Option<(Direction, String)> {
-    let (direction, id) = token.split_once('.')?;
-    Some((Direction::parse(direction)?, id.to_string()))
-}
-
-/// The effects page: the master switch, the Output and Input tabs, the
-/// spectrum, and the chain next to the selected effect. On a phone the chain
-/// is the page and a selected effect is its own page (`sound/effects/:effect`).
-#[derive(PartialEq)]
-pub struct EffectsPage;
-
-impl Component for EffectsPage {
-    fn render(&self) -> impl IntoElement {
-        let fx = use_fx(Direction::Output, None);
-        let tokens = use_tokens();
-        let data = fx.data.read().clone();
-        let runtime = fx.runtime.read().clone();
-        let direction = data.direction;
-        let enabled = data.saved.of(direction).enabled;
-        let compact = is_compact();
-
-        let tabs = segmented(
-            vec![
-                ("output".to_string(), "Output".to_string()),
-                ("input".to_string(), "Input".to_string()),
-            ],
-            direction.name(),
-            move |name: String| {
-                if let Some(next) = Direction::parse(&name) {
-                    let mut data = fx.data;
-                    data.set(cached(next));
-                    let mut selected = fx.selected;
-                    selected.set(None);
-                    fx.reload();
-                    fx.refresh();
-                }
-            },
-        )
-        .tabs();
-
-        let mut page = page_column()
-            .child(PageHead::new().switch("Effects", enabled, move |on: bool| fx.set_enabled(on)))
-            .child(tabs)
-            .child(spectrum::SpectrumStrip { direction })
-            .child(presets::group(fx, &data, &runtime));
-
-        let list = chain::list(fx, &data, &runtime);
-        if compact {
-            return veiled(page.child(list), !data.ready);
-        }
-        let shown = *fx.list_shown.read();
-        let selected = fx.selected_id(&data);
-        let pane = pane::PaneView {
-            fx,
-            data: data.clone(),
-            runtime: runtime.clone(),
-            selected: selected.clone(),
-        };
-        let mut row = rect().tw(&tokens, &[flex_row(), grow_children(), w_full(), gap(S4), items(Align::Start)]);
-        if shown {
-            row = row.child(rect().tw(&tokens, &[w(Dim::MenuWide)]).child(list));
-        }
-        row = row.child(rect().width(Size::flex(1.0)).child(pane));
-        page = page.child(row);
-        veiled(page, !data.ready)
-    }
-}
-
-/// One effect on its own page, for a phone: `sound/effects/:effect`.
-#[derive(PartialEq)]
-pub struct EffectPage {
-    pub token: String,
-}
-
-impl Component for EffectPage {
-    fn render(&self) -> impl IntoElement {
-        let (direction, id) = parse_token(&self.token).unwrap_or((Direction::Output, String::new()));
-        let fx = use_fx(direction, Some(id.clone()));
-        let data = fx.data.read().clone();
-        let runtime = fx.runtime.read().clone();
-        veiled(
-            page_column()
-                .child(PageHead::new())
-                .child(pane::PaneView {
-                    fx,
-                    data: data.clone(),
-                    runtime: runtime.clone(),
-                    selected: Some(id.clone()),
-                }),
-            !data.ready,
-        )
-    }
+/// Open the effects popup. A bottom sheet on a phone.
+pub fn open(window: Window) {
+    window.open(
+        popup("Effects", body::EffectsBody)
+            .size(1040.0, 760.0)
+            .flags(PopupFlags::OK | PopupFlags::GRABBER | PopupFlags::FILL),
+    );
 }
 
 /// What [`summary`] last found: `None` until it has run.
@@ -485,12 +344,15 @@ pub fn summary(direction: Direction) -> Option<String> {
 /// What [`summary`] found the last time it ran for the output, or `None`
 /// before it has. A lookup, never a file read.
 pub fn summary_cached() -> Option<String> {
-    SUMMARY.lock().unwrap_or_else(|e| e.into_inner()).clone().flatten()
+    SUMMARY
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .flatten()
 }
 
 /// The preset that applies when `direction`'s effects are on, from what the
-/// effects page last read. A lookup, never a file read.
+/// popup last read. A lookup, never a file read.
 pub fn active_preset_cached(direction: Direction) -> String {
     cached(direction).saved.of(direction).preset.clone()
 }
-

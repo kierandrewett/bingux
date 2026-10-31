@@ -534,7 +534,6 @@ dependencies = [
 name = "bingux-audio-effects"
 version = "0.1.0"
 dependencies = [
- "bingux-dsp",
  "libc",
  "serde",
  "serde_json",
@@ -549,13 +548,6 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "bingux-dsp"
-version = "0.1.0"
-dependencies = [
- "libc",
 ]
 
 [[package]]

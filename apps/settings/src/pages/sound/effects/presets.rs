@@ -10,85 +10,57 @@ use bingux_audio_effects::preset::{Direction, Preset};
 use bingux_audio_effects::store::Store;
 use freya::prelude::*;
 
-use bingux_ui::prelude::{CANCEL_ID, ResponseKind, dialog, dropdown, menu_button, menu_item, menu_separator, text_field};
+use bingux_ui::prelude::{
+    CANCEL_ID, ResponseKind, dialog, dropdown, menu_button, menu_item, menu_separator, text_field,
+};
 use bingux_ui::style::*;
 
-use super::{Fx, Loaded, Runtime};
+use super::{Fx, Loaded};
 use crate::system::background_then;
 use crate::ui::files::{ChooserRequest, choose};
-use crate::ui::{Group, Icon, hstack, row, switch_row};
 
-/// The preset rows: the preset in use with its menu, and whether it follows the device.
-pub(super) fn group(fx: Fx, data: &Loaded, runtime: &Runtime) -> Group {
-    let direction = data.direction;
+/// The presets menu of the top bar: the presets of the direction to pick from,
+/// and the actions on the one in use.
+pub(super) fn menu(fx: Fx, data: &Loaded) -> Element {
     let current = data.preset.name.clone();
-    let options: Vec<(String, String)> = data
+    let mut items: Vec<_> = data
         .presets
         .iter()
-        .map(|name| (name.clone(), name.clone()))
+        .map(|name| {
+            let picked = name.clone();
+            menu_item(name.clone(), move |_| select(fx, picked.clone())).checked(*name == current)
+        })
         .collect();
-    let picker = dropdown(options, current.clone(), move |name: String| select(fx, name)).min_width(Dim::Field);
-
-    let menu = menu_button(
-        "Preset actions",
-        vec![
-            menu_item("New preset…", move |_| new_preset(fx)),
-            menu_item("Duplicate", {
-                let current = current.clone();
-                move |_| duplicate(fx, current.clone())
-            }),
-            menu_item("Rename…", {
-                let current = current.clone();
-                move |_| rename(fx, current.clone())
-            }),
-            menu_separator(),
-            menu_item("Import…", move |_| import_file(fx)),
-            menu_item("Export…", {
-                let current = current.clone();
-                move |_| export_file(fx, current.clone())
-            }),
-            menu_separator(),
-            menu_item("Delete", {
-                let current = current.clone();
-                move |_| confirm_delete(fx, current.clone())
-            }),
-        ],
+    items.push(menu_separator());
+    items.push(menu_item("New preset…", move |_| new_preset(fx)));
+    items.push(menu_item("Duplicate", {
+        let current = current.clone();
+        move |_| duplicate(fx, current.clone())
+    }));
+    items.push(menu_item("Rename…", {
+        let current = current.clone();
+        move |_| rename(fx, current.clone())
+    }));
+    items.push(menu_separator());
+    items.push(menu_item("Import…", move |_| import_file(fx)));
+    items.push(menu_item("Export…", {
+        let current = current.clone();
+        move |_| export_file(fx, current.clone())
+    }));
+    items.push(menu_separator());
+    items.push(menu_item("Delete", {
+        let current = current.clone();
+        move |_| confirm_delete(fx, current.clone())
+    }));
+    menu_button(
+        if is_compact() {
+            "Presets".to_string()
+        } else {
+            format!("Preset: {current}")
+        },
+        items,
     )
-    .icon(Icon::ViewMore);
-
-    let mut group = Group::titled("Preset").row(row("Preset").trailing(hstack(S2).child(picker).child(menu)));
-    if let (Some(device), Some(label)) = (runtime.device.clone(), runtime.device_label.clone()) {
-        let follows = data.saved.of(direction).autoload.get(&device).is_some_and(|name| *name == data.preset.name);
-        let name = data.preset.name.clone();
-        group = group.row(switch_row(format!("Use for {label}"), follows, move |on: bool| {
-            let (device, name) = (device.clone(), name.clone());
-            let overlays = fx.overlays;
-            let mut data = fx.data;
-            if on {
-                data.write().saved.of_mut(direction).autoload.insert(device.clone(), name.clone());
-            } else {
-                data.write().saved.of_mut(direction).autoload.remove(&device);
-            }
-            background_then(
-                move || {
-                    Store::default().update_state(|state| {
-                        let autoload = &mut state.of_mut(direction).autoload;
-                        if on {
-                            autoload.insert(device, name);
-                        } else {
-                            autoload.remove(&device);
-                        }
-                    })
-                },
-                move |result| {
-                    if let Err(e) = result {
-                        overlays.toast(e.0);
-                    }
-                },
-            );
-        }));
-    }
-    group
+    .into()
 }
 
 /// Make `name` the preset in use and play it.
@@ -109,7 +81,7 @@ fn select(fx: Fx, name: String) {
                 fx.reload();
                 let mut data = fx.data;
                 data.write().preset = preset;
-                fx.restart_now(direction);
+                fx.commit_now(direction);
             }
             Err(message) => overlays.toast(message),
         },
@@ -143,28 +115,37 @@ impl Component for NameEntry {
 }
 
 /// Ask for a name, then call `accept` with it.
-fn ask_name(fx: Fx, title: &str, initial: &str, accept_label: &str, accept: impl Fn(String) + 'static) {
+fn ask_name(
+    fx: Fx,
+    title: &str,
+    initial: &str,
+    accept_label: &str,
+    accept: impl Fn(String) + 'static,
+) {
     let text = Rc::new(RefCell::new(initial.to_string()));
     let entry = NameEntry {
         initial: initial.to_string(),
         text: Rc::clone(&text),
     };
-    fx.overlays.show_dialog(
-        dialog(title, "")
-            .content(entry)
-            .cancel("Cancel")
-            .response(accept_label, ResponseKind::Suggested, move |_| {
+    fx.overlays
+        .show_dialog(dialog(title, "").content(entry).cancel("Cancel").response(
+            accept_label,
+            ResponseKind::Suggested,
+            move |_| {
                 let name = text.borrow().trim().to_string();
                 if !name.is_empty() {
                     accept(name);
                 }
-            }),
-    );
+            },
+        ));
 }
 
 /// Run a store change in the background, then show the result, and select
 /// `chosen` when it names the preset to play next.
-fn change(fx: Fx, work: impl FnOnce(&Store, Direction) -> Result<Option<String>, String> + Send + 'static) {
+fn change(
+    fx: Fx,
+    work: impl FnOnce(&Store, Direction) -> Result<Option<String>, String> + Send + 'static,
+) {
     let direction = fx.active_direction();
     let overlays = fx.overlays;
     background_then(
@@ -183,7 +164,9 @@ fn new_preset(fx: Fx) {
             if store.exists(direction, &name) {
                 return Err(format!("A preset called \"{name}\" already exists."));
             }
-            store.save(&Preset::new(name.clone(), direction)).map_err(|e| e.0)?;
+            store
+                .save(&Preset::new(name.clone(), direction))
+                .map_err(|e| e.0)?;
             Ok(Some(name))
         });
     });
@@ -226,7 +209,9 @@ fn confirm_delete(fx: Fx, name: String) {
                 match next {
                     Some(next) => Ok(Some(next)),
                     None => {
-                        store.save(&Preset::new("Flat", direction)).map_err(|e| e.0)?;
+                        store
+                            .save(&Preset::new("Flat", direction))
+                            .map_err(|e| e.0)?;
                         Ok(Some("Flat".to_string()))
                     }
                 }
@@ -256,12 +241,20 @@ fn import_path(fx: Fx, path: PathBuf) {
     let overlays = fx.overlays;
     background_then(
         move || -> Result<(Option<String>, Vec<String>, String), String> {
-            let text = bingux_ui::runtime::read_to_string(&path).map_err(|e| format!("Could not read the file. {e}"))?;
-            let stem = path
-                .file_stem()
-                .map_or_else(|| "Imported".to_string(), |stem| stem.to_string_lossy().into_owned());
+            let text = bingux_ui::runtime::read_to_string(&path)
+                .map_err(|e| format!("Could not read the file. {e}"))?;
+            let stem = path.file_stem().map_or_else(
+                || "Imported".to_string(),
+                |stem| stem.to_string_lossy().into_owned(),
+            );
             let store = Store::default();
-            let imported = import::read(&text, &stem, direction).map_err(|e| e.0)?;
+            let imported = import::read(
+                &text,
+                &stem,
+                direction,
+                &bingux_audio_effects::Catalog::load(),
+            )
+            .map_err(|e| e.0)?;
             let mut chosen = None;
             let mut unmapped = Vec::new();
             for item in imported {
@@ -278,7 +271,8 @@ fn import_path(fx: Fx, path: PathBuf) {
         move |result| match result {
             Ok((chosen, unmapped, stem)) => {
                 if !unmapped.is_empty() {
-                    let lines: Vec<String> = unmapped.iter().map(|line| format!("- {line}")).collect();
+                    let lines: Vec<String> =
+                        unmapped.iter().map(|line| format!("- {line}")).collect();
                     fx.overlays.show_dialog(
                         dialog(
                             format!("Imported \"{stem}\""),
@@ -310,7 +304,11 @@ fn export_file(fx: Fx, name: String) {
             };
             let name = name.clone();
             background_then(
-                move || Store::default().export(direction, &name, &path).map_err(|e| e.0),
+                move || {
+                    Store::default()
+                        .export(direction, &name, &path)
+                        .map_err(|e| e.0)
+                },
                 move |result| match result {
                     Ok(()) => overlays.toast("Preset exported."),
                     Err(message) => overlays.toast(message),

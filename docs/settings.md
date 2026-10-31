@@ -37,39 +37,39 @@ connection's Advanced page, and a wired profile that is the one in use opens
 the device's page. The scheme and the
 `bingux-settings://` prefix may be left off on the command line:
 
-| Address                       | Opens                                                                |
-| ----------------------------- | -------------------------------------------------------------------- |
-| `network`                     | The Network page (Wi-Fi, Ethernet, mobile, VPN)                      |
-| `network/wifi`                | Wi-Fi networks                                                       |
-| `network/wifi/saved`          | Saved networks                                                       |
-| `network/wifi/saved/<name>`   | A saved network's page, with Back returning to Saved networks        |
-| `network/wifi/network/<ssid>` | A Wi-Fi network's page                                               |
-| `network/hotspot`             | Wi-Fi hotspot                                                        |
-| `network/ethernet/<device>`   | A wired device: the page of the profile it uses                      |
-| `network/ethernet/<device>/profile` | The profiles of a wired device                                 |
-| `network/ethernet/<device>/profile/<name>` | A wired profile that is not in use                      |
-| `network/vpn/<name>`          | A VPN's page                                                         |
-| `network/add-vpn`             | Add a VPN (`/wireguard`, `/openvpn`, `/import`, or a plugin's name)  |
-| `network/mobile`              | Mobile network (also `mobile`, `wwan`, `cellular`)                   |
-| `network/mobile/advanced`     | Mobile carrier, access points (`/apn`, `/apn/<name>`, `/apn-add`), SIM and modem |
-| `network/mobile/usage`        | The mobile network's data usage                                      |
-| `network/proxy`               | System proxy                                                         |
-| `network/usage`               | Data usage (`/interface/<name>`, `/connection/<name>`)              |
-| `<connection page>/advanced`  | A connection's Advanced page: its editors and technical details. For example `network/ethernet/enp42s0/advanced` |
-| `<connection page>/advanced/<editor>` | One editor: `ipv4`, `ipv6`, `dns`, `security`, `identity`, `proxy` or `options`, for example `network/wifi/network/Home/advanced/ipv4` |
-| `<connection page>/usage`     | That connection's data usage                                         |
-| `<vpn page>/tunnel`           | A VPN's tunnel, and `tunnel/peer/<n>` for one WireGuard peer        |
-| `network/details/<connection>` | Opens that connection's Advanced page (old address)                 |
-| `bluetooth/<mac>`             | A Bluetooth device's details                                         |
-| `applications/default`        | Default applications                                                 |
-| `applications/default/<kind>` | One default application kind, such as `applications/default/browser` |
-| `applications/<desktop-id>`   | An application, for example `applications/org.gnome.Nautilus`        |
-| `display/<index>`             | A display's details                                                  |
-| `keyboard/shortcuts`          | Shortcuts                                                            |
-| `keyboard/input/<kind>/<id>`  | An input source's subpage                                            |
-| `datetime/timezone`           | Time zone                                                            |
-| `background/font`             | Font                                                                 |
-| `users/<path>`                | A user account                                                       |
+| Address                                    | Opens                                                                                                                                  |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `network`                                  | The Network page (Wi-Fi, Ethernet, mobile, VPN)                                                                                        |
+| `network/wifi`                             | Wi-Fi networks                                                                                                                         |
+| `network/wifi/saved`                       | Saved networks                                                                                                                         |
+| `network/wifi/saved/<name>`                | A saved network's page, with Back returning to Saved networks                                                                          |
+| `network/wifi/network/<ssid>`              | A Wi-Fi network's page                                                                                                                 |
+| `network/hotspot`                          | Wi-Fi hotspot                                                                                                                          |
+| `network/ethernet/<device>`                | A wired device: the page of the profile it uses                                                                                        |
+| `network/ethernet/<device>/profile`        | The profiles of a wired device                                                                                                         |
+| `network/ethernet/<device>/profile/<name>` | A wired profile that is not in use                                                                                                     |
+| `network/vpn/<name>`                       | A VPN's page                                                                                                                           |
+| `network/add-vpn`                          | Add a VPN (`/wireguard`, `/openvpn`, `/import`, or a plugin's name)                                                                    |
+| `network/mobile`                           | Mobile network (also `mobile`, `wwan`, `cellular`)                                                                                     |
+| `network/mobile/advanced`                  | Mobile carrier, access points (`/apn`, `/apn/<name>`, `/apn-add`), SIM and modem                                                       |
+| `network/mobile/usage`                     | The mobile network's data usage                                                                                                        |
+| `network/proxy`                            | System proxy                                                                                                                           |
+| `network/usage`                            | Data usage (`/interface/<name>`, `/connection/<name>`)                                                                                 |
+| `<connection page>/advanced`               | A connection's Advanced page: its editors and technical details. For example `network/ethernet/enp42s0/advanced`                       |
+| `<connection page>/advanced/<editor>`      | One editor: `ipv4`, `ipv6`, `dns`, `security`, `identity`, `proxy` or `options`, for example `network/wifi/network/Home/advanced/ipv4` |
+| `<connection page>/usage`                  | That connection's data usage                                                                                                           |
+| `<vpn page>/tunnel`                        | A VPN's tunnel, and `tunnel/peer/<n>` for one WireGuard peer                                                                           |
+| `network/details/<connection>`             | Opens that connection's Advanced page (old address)                                                                                    |
+| `bluetooth/<mac>`                          | A Bluetooth device's details                                                                                                           |
+| `applications/default`                     | Default applications                                                                                                                   |
+| `applications/default/<kind>`              | One default application kind, such as `applications/default/browser`                                                                   |
+| `applications/<desktop-id>`                | An application, for example `applications/org.gnome.Nautilus`                                                                          |
+| `display/<index>`                          | A display's details                                                                                                                    |
+| `keyboard/shortcuts`                       | Shortcuts                                                                                                                              |
+| `keyboard/input/<kind>/<id>`               | An input source's subpage                                                                                                              |
+| `datetime/timezone`                        | Time zone                                                                                                                              |
+| `background/font`                          | Font                                                                                                                                   |
+| `users/<path>`                             | A user account                                                                                                                         |
 
 Only one Settings window runs at a time. A second `bingux-settings` with an
 address sends that address to the running window over
@@ -243,14 +243,14 @@ way round.
 | Desktop, Search | `bingux-config` (`~/.config/bingux/bingux.toml`)                                                                                                                                          | Same validation as `bingux-config set`. See [configuration](configuration.md).                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Displays        | `org.gnome.Mutter.DisplayConfig` over D-Bus, GSettings night light                                                                                                                        | Drag a display to place it; right-click it for Make main, Rotate, Disable or Settings. Apply appears under the arrangement, and on a display's own page, only once the layout has changed. It tries the layout for 15 seconds and reverts unless kept; Keep writes a persistent layout (`~/.config/monitors.xml`). Each display is a row that opens its own page. With several displays, Identify sits on the Displays header and numbers each one. Night light can follow a schedule.                                                                   |
 | Sound           | `wpctl` (WirePlumber)                                                                                                                                                                     | Default devices (inline list, or a subpage with three or more), device kind icons from device properties, volumes, mute, and a row for each application.                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Network         | `nmcli` (NetworkManager), `mmcli` (ModemManager), GSettings `org.gnome.system.proxy`, `bingux-data-usage` | See [Network](#network). |
+| Network         | `nmcli` (NetworkManager), `mmcli` (ModemManager), GSettings `org.gnome.system.proxy`, `bingux-data-usage`                                                                                 | See [Network](#network).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Bluetooth       | `bluetoothctl` (BlueZ)                                                                                                                                                                    | Power, visibility, scan, pair, connect, auto-connect, forget. Each device is a row that opens its Device details subpage.                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Power           | `powerprofilesctl`, `upower`, GSettings session and screensaver                                                                                                                           | Blank screen and lock delays. The power mode cards apply at once and go back if the change is refused.                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Keyboard, Mouse | GSettings `org.gnome.desktop.peripherals.*`, `gnoblinctl input`                                                                                                                           | See the note below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | Date and Time   | `timedatectl`, GSettings clock format, `bingux-config desktop.clock_seconds`                                                                                                              | Time zone and manual time may ask for authorisation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Users           | AccountsService over D-Bus                                                                                                                                                                | Full name changes may ask for authorisation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Applications    | Desktop entries in `XDG_DATA_DIRS`, `gio mime`, `wpctl`                                                                                                                                   | Installed applications with their icons, a page for each, and the default application for each kind of file.                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Privacy         | `~/.config/bingux/portal-permissions.toml` (`bingux-portal` store) | Rules that allow, ask or deny portal requests. Read and written atomically. See [Privacy](#privacy). |
+| Privacy         | `~/.config/bingux/portal-permissions.toml` (`bingux-portal` store)                                                                                                                        | Rules that allow, ask or deny portal requests. Read and written atomically. See [Privacy](#privacy).                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | About           | `/etc/os-release`, DMI (`/sys/devices/virtual/dmi/id`), `/proc/cpuinfo`, `/proc/meminfo`, `lspci`, `/sys/class/drm`, `/proc/uptime`, `df`, `uname`, `gnoblinctl --version`, `hostnamectl` | Facts load in the background. The device card holds the name, system and model; System details lists the operating system, version, kernel, processor, memory, graphics, display, uptime, desktop and settings version as one-line rows, and Storage shows the space used on the root file system with its capacity. The rows keep their height and show blank values until each one arrives. The device card renames the device through `hostnamectl`, which may ask for authorisation, and copies a summary of every fact. Values copy on right-click. |
 
 On Search, the Search subfolders row under File search is Nautilus's GSettings key `org.gnome.nautilus.preferences recursive-search` (Always, Local folders only, Never). It is hidden when that key cannot be read. Each change applies at once and returns to the old value with a toast if the write fails.
@@ -371,25 +371,25 @@ profile is in Advanced, and in the list.
 
 A connection's Advanced page holds, in order:
 
-| Group      | Holds                                                                                   |
-| ---------- | --------------------------------------------------------------------------------------- |
-| Addressing | IPv4, IPv6 and DNS, each a row with its value that opens its editor                     |
-| (untitled) | Security (Wi-Fi key type, 802.1X), Identity (MAC, MTU, Wake on LAN) and Proxy           |
-| Behaviour  | Priority, Available to other users, and Other options                                  |
-| Wired only | Add profile                                                                             |
+| Group             | Holds                                                                                                                                                                                                                                                                                   |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Addressing        | IPv4, IPv6 and DNS, each a row with its value that opens its editor                                                                                                                                                                                                                     |
+| (untitled)        | Security (Wi-Fi key type, 802.1X), Identity (MAC, MTU, Wake on LAN) and Proxy                                                                                                                                                                                                           |
+| Behaviour         | Priority, Available to other users, and Other options                                                                                                                                                                                                                                   |
+| Wired only        | Add profile                                                                                                                                                                                                                                                                             |
 | Technical details | Read-only and selectable: device, type, UUID, MAC address, MTU, Wi-Fi band, channel, access point and security, then the gateway, DNS servers, search domains and routes of IPv4 and IPv6, with the saved configuration when the connection is not active. Read again every few seconds |
 
 The editors:
 
-| Editor   | Holds                                                                                   |
-| -------- | --------------------------------------------------------------------------------------- |
-| IPv4     | Automatic (DHCP) first; Manual shows addresses, gateway and routes; Link-local, Shared, Disabled |
-| IPv6     | The same, plus Ignore and privacy extensions                                            |
-| DNS      | Automatic DNS switch, a list of servers, search domains (the DNS override)              |
-| Security | Wi-Fi key type and password; 802.1X (EAP method, identity, certificates) for wired and Wi-Fi Enterprise |
-| Identity | Name, MAC address (preserve, random, stable, custom), MTU, Wake on LAN                  |
-| Proxy    | The connection's own proxy: none or a PAC URL                                           |
-| Other options | DHCP hostname and client ID, route metric, may-fail, mDNS and LLMNR, retries       |
+| Editor        | Holds                                                                                                   |
+| ------------- | ------------------------------------------------------------------------------------------------------- |
+| IPv4          | Automatic (DHCP) first; Manual shows addresses, gateway and routes; Link-local, Shared, Disabled        |
+| IPv6          | The same, plus Ignore and privacy extensions                                                            |
+| DNS           | Automatic DNS switch, a list of servers, search domains (the DNS override)                              |
+| Security      | Wi-Fi key type and password; 802.1X (EAP method, identity, certificates) for wired and Wi-Fi Enterprise |
+| Identity      | Name, MAC address (preserve, random, stable, custom), MTU, Wake on LAN                                  |
+| Proxy         | The connection's own proxy: none or a PAC URL                                                           |
+| Other options | DHCP hostname and client ID, route metric, may-fail, mDNS and LLMNR, retries                            |
 
 Switches and dropdowns write with `nmcli connection modify` as you change
 them and go back with a toast if that fails. Fields that must apply together
@@ -570,7 +570,7 @@ Under the devices, three rows open or switch more:
   device. Rows keep their place while the page is open: a new application is
   added at the end, and one that stops stays dimmed as "Stopped" for about 15
   seconds, so nothing above a changing row moves.
-- **Effects** opens `bingux-settings://sound/effects`; see
+- **Effects** opens a large popup (a bottom sheet on a phone); see
   [Sound effects](audio-effects.md). Its value is the preset in use, or Off.
 - **Output effects** switches the output effects on or off. While the effects
   are on they are the default device, and the Output device list shows and

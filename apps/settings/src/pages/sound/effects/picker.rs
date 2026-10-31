@@ -1,40 +1,26 @@
-//! The "Add plugin" popup: every plugin found on the system, grouped by
-//! category, with a search field.
+//! The "Add effect" popup: every effect Bingux offers, grouped by what it does,
+//! each with a one-line description and a search field. An effect whose plugin
+//! is not installed is listed with the package that has it and cannot be added.
 
-use bingux_audio_effects::catalog::PluginInfo;
-use bingux_audio_effects::preset::{Band, EQUALIZER, PluginSlot};
-use bingux_audio_effects::{Catalog, Category};
+use bingux_audio_effects::effects::{self, Category};
 use freya::prelude::*;
 
 use bingux_ui::prelude::{PageHead, popup, search_field, use_window};
 use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 
-use super::{Effect, Fx};
+use super::Fx;
 use crate::ui::{Group, Status, page_column, row, status};
 
 pub(super) fn open(fx: Fx) {
-    fx.window.open(popup("Add plugin", Picker { fx }).flags(PopupFlags::CANCEL | PopupFlags::GRABBER));
+    fx.window
+        .open(popup("Add effect", Picker { fx }).flags(PopupFlags::CANCEL | PopupFlags::GRABBER));
 }
 
-/// A new plugin of the kind `info` describes, with its default controls.
-fn new_slot(id: String, info: &PluginInfo) -> PluginSlot {
-    let mut slot = PluginSlot::new(id, info.id.clone());
-    if info.id == EQUALIZER {
-        slot.preamp = Some(0.0);
-        slot.bands = [60.0, 250.0, 1000.0, 4000.0, 12000.0]
-            .into_iter()
-            .map(|frequency| Band::peaking(frequency, 0.0, 1.0))
-            .collect();
-    }
-    slot
-}
-
-fn matches(info: &PluginInfo, query: &str) -> bool {
-    info.id != bingux_audio_effects::graph::ANALYSER
-        && (query.is_empty()
-            || info.name.to_lowercase().contains(query)
-            || info.maker.to_lowercase().contains(query)
-            || info.label.to_lowercase().contains(query))
+fn matches(effect: &effects::Effect, query: &str) -> bool {
+    query.is_empty()
+        || effect.name.to_lowercase().contains(query)
+        || effect.summary.to_lowercase().contains(query)
+        || effect.package.project().to_lowercase().contains(query)
 }
 
 #[derive(PartialEq)]
@@ -48,37 +34,44 @@ impl Component for Picker {
         let window = use_window();
         let query = use_state(String::new);
         let needle = query.read().trim().to_lowercase();
-        let catalog: Option<Catalog> = fx.catalog.read().clone();
+        let catalog = fx.catalog.read().clone();
 
-        let mut page = page_column()
-            .child(PageHead::new())
-            .child(search_field(query, |_| {}).placeholder("Search plugins").fill_width());
+        let mut page = page_column().child(PageHead::new()).child(
+            search_field(query, |_| {})
+                .placeholder("Search effects")
+                .fill_width(),
+        );
         let Some(catalog) = catalog else {
-            return page
-                .child(Group::new(None::<String>).row(status(Status::Loading("Looking for plugins.".to_string()))));
+            return page.child(
+                Group::new(None::<String>)
+                    .row(status(Status::Loading("Looking for plugins.".to_string()))),
+            );
         };
         let mut any = false;
         for category in Category::ALL {
-            let found: Vec<&PluginInfo> = catalog
-                .in_category(category)
-                .into_iter()
-                .filter(|info| matches(info, &needle))
+            let found: Vec<&effects::Effect> = effects::in_category(category)
+                .filter(|effect| matches(effect, &needle))
                 .collect();
             if found.is_empty() {
                 continue;
             }
             any = true;
-            let rows = found.into_iter().map(|info| {
-                let problem = info.unusable();
-                let kind = info.clone();
-                let mut item = row(info.name.clone()).subtitle(problem.clone().unwrap_or_else(|| info.maker.clone()));
-                if problem.is_none() {
+            let rows = found.into_iter().map(|effect| {
+                let installed = catalog.plugin_of(effect).is_some();
+                let kind = effect.key;
+                let subtitle = if installed {
+                    effect.summary.to_string()
+                } else {
+                    format!("Not installed. Install {}.", effect.package.fedora())
+                };
+                let mut item = row(effect.name).subtitle(subtitle);
+                if installed {
                     item = item.on_press(move |_| {
-                        let stem = if kind.label.is_empty() { kind.id.clone() } else { kind.label.clone() };
-                        let id = fx.data.peek().preset.fresh_id(&stem);
-                        let slot = new_slot(id.clone(), &kind);
-                        fx.edit(move |preset| preset.plugins.push(slot), Effect::Restart);
-                        fx.select(&id);
+                        let mut added = None;
+                        fx.edit(|preset| added = preset.add(kind));
+                        if let Some(id) = added {
+                            fx.select(&id);
+                        }
                         window.close();
                     });
                 } else {
@@ -89,7 +82,10 @@ impl Component for Picker {
             page = page.child(Group::titled(category.title()).rows(rows));
         }
         if !any {
-            page = page.child(Group::new(None::<String>).row(status(Status::Empty("No plugins match.".to_string()))));
+            page = page.child(
+                Group::new(None::<String>)
+                    .row(status(Status::Empty("No effects match.".to_string()))),
+            );
         }
         page
     }

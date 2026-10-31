@@ -132,7 +132,6 @@ fn usage() -> String {
          \x20 datetime/timezone                time zone list\n\
          \x20 background/font                  installed fonts\n\
          \x20 sound/applications               volume of each application\n\
-         \x20 sound/effects                    sound effects\n\
          \x20 users/<path>                     one user account\n\
          \x20 applications/default             default applications\n\
          \x20 applications/default/<kind>      one kind of file or link\n\

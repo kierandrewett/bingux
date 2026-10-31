@@ -17,7 +17,6 @@ CRATE_DIRS = {
     "bingux-search": "crates/search",
     "bingux-data-usage": "crates/data-usage",
     "bingux-config": "crates/config",
-    "bingux-dsp": "crates/dsp",
     "bingux-searchd": "services/searchd",
     "bingux-statusd": "services/statusd",
     "bingux-session": "services/session",

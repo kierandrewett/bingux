@@ -197,10 +197,12 @@ pub const DONUT: &[Spec] = &[
         column(
             320.0,
             donut(
-                ["Apps", "System", "Cache", "Photos", "Music", "Video", "Other"]
-                    .into_iter()
-                    .zip([210.0, 90.0, 45.0, 30.0, 22.0, 18.0, 5.0])
-                    .map(|(name, value)| Segment::new(name, gib(value))),
+                [
+                    "Apps", "System", "Cache", "Photos", "Music", "Video", "Other",
+                ]
+                .into_iter()
+                .zip([210.0, 90.0, 45.0, 30.0, 22.0, 18.0, 5.0])
+                .map(|(name, value)| Segment::new(name, gib(value))),
             )
             .unit(Unit::Bytes)
             .caption("Used")
@@ -312,7 +314,9 @@ fn tree_nodes() -> Vec<TreeNode> {
 fn deep_nodes(levels: u64) -> Vec<TreeNode> {
     let mut node = TreeNode::new(levels, "Label").detail("name");
     for id in (0..levels).rev() {
-        node = TreeNode::new(id, "Box").detail(format!("level {id}")).children(vec![node]);
+        node = TreeNode::new(id, "Box")
+            .detail(format!("level {id}"))
+            .children(vec![node]);
     }
     vec![node]
 }
@@ -413,3 +417,34 @@ pub const ROW_ACTION: &[Spec] = &[
         ])
     }),
 ];
+
+pub const FADER: &[Spec] = &[Spec::forced("Faders: empty, half, full, disabled", || {
+    let low = use_state(|| 0.0_f64);
+    let mid = use_state(|| 50.0_f64);
+    let high = use_state(|| 100.0_f64);
+    let off = use_state(|| 30.0_f64);
+    let bank = |state: State<f64>, label: &'static str, enabled: bool| {
+        let mut state = state;
+        fader(*state.read(), move |value: f64| state.set(value))
+            .label(label)
+            .enabled(enabled)
+    };
+    hstack(S6)
+        .child(bank(low, "Low", true))
+        .child(bank(mid, "Middle", true))
+        .child(bank(high, "High", true))
+        .child(bank(off, "Disabled", false))
+        .into_element()
+})];
+
+pub const LEVEL_METER: &[Spec] = &[Spec::forced(
+    "Level meter: silent, quiet, loud, clipping",
+    || {
+        vstack(S3)
+            .child(level_meter(0.0).label("Silent"))
+            .child(level_meter(0.35).label("Quiet"))
+            .child(level_meter(0.8).label("Loud"))
+            .child(level_meter(0.97).label("Clipping"))
+            .into_element()
+    },
+)];

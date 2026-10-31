@@ -25,10 +25,11 @@ puts a chain of audio plugins between applications and the speakers
 .RB ( output )
 or between a microphone and applications
 .RB ( input ).
-It turns the active preset into a PipeWire
+It runs each effect of the active preset as a PipeWire
 .B filter-chain
-configuration and runs it as its own PipeWire client, one process for each
-direction.
+in a PipeWire client process of its own and joins them with links, so an effect
+can be added, removed, switched off or moved without the others stopping.
+There is one such stack for each direction.
 It creates a virtual device (\(lqEffects (Output)\(rq or \(lqEffects (Input)\(rq),
 makes it the default device and sends the result to the real device.
 When it stops, the real device is the default again.
@@ -46,33 +47,46 @@ does this.
 Start each direction that Settings has turned on. Run it at login.
 .TP
 .BI "render " DIRECTION
-Print the filter-chain configuration for the active preset.
+Print the filter-chain configuration of every stage of the active preset.
+.TP
+.BI "reload " DIRECTION
+Tell the running engine to read the preset again and change only what differs.
+Settings does this after every edit; it starts the engine if it is not running.
+.TP
+.BI "status " DIRECTION
+Print what the running engine reports for each effect, as JSON.
 .TP
 .BI "presets " DIRECTION
 List the presets.
 .TP
 .B scan
-List the plugins found, as JSON.
+List the plugins found for the effects Bingux offers, as JSON.
 .TP
 .BI "import " "FILE DIRECTION " [ NAME ]
 Read an EasyEffects, Equalizer APO or AutoEq preset and save it as a Bingux preset.
 .SH PLUGINS
-Plugins come from PipeWire's built-in filters (equaliser, gain, delay, convolver),
-from
-.B libbingux_dsp.so
-(compressor, limiter, gate, reverb and others), and from any LADSPA library found
-in
-.BR LADSPA_PATH ,
-.IR ~/.ladspa ,
-.I /usr/lib/ladspa
-and the other usual directories.
+The effects are the published plugins that Easy Effects hosts: Linux Studio
+Plugins (equalizer, compressor, limiter, gate, expander, multiband compressor
+and gate, filter, delay, loudness, auto gain), Calf Studio Gear (bass
+enhancer, exciter, crusher, de-esser, reverb, stereo tools), ZamAudio
+(maximizer), MDA (bass loudness), x42 (autotune), Rubber Band (pitch) and
+PipeWire's own convolver.
+LV2 plugins need PipeWire's LV2 loader and are looked for in
+.BR LV2_PATH ,
+.I ~/.lv2
+and the usual system directories; Rubber Band is a LADSPA plugin and is looked
+for in
+.BR LADSPA_PATH
+and the usual directories.
+The package of each plugin is named by the effect's page in Settings when it is
+missing.
 .SH ENVIRONMENT
+.TP
+.B LV2_PATH
+Where to look for LV2 plugins, instead of the usual directories.
 .TP
 .B LADSPA_PATH
 Where to look for LADSPA libraries, instead of the usual directories.
-.TP
-.B BINGUX_LADSPA_PATH
-More directories to look in.
 .TP
 .B BINGUX_EFFECTS_BIN
 The

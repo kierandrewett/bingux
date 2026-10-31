@@ -6,14 +6,14 @@ kernel, host, Flatpak policy or secret store.
 
 ## The packages
 
-| Package | What it installs | Install it when |
-| --- | --- | --- |
-| `bingux` | The shell, the search and status helper services, `binguxctl`, the user units | You want the Bingux desktop |
-| `bingux-config` | The `bingux-config` command | Pulled in by the shell and Settings |
-| `bingux-settings` | Settings | You want to change Bingux and system settings in one place |
-| `bingux-files` | Files, the file manager | You want a file manager that matches the shell |
-| `bingux-audio-effects` | The sound effects engine and its LADSPA plugins | You want equaliser, compressor and other effects under Settings > Sound |
-| `bingux-taxonomy` | A window that shows every Bingux UI component | You build Bingux apps. Ordinary desktops do not need it |
+| Package                | What it installs                                                                                                                                | Install it when                                                                       |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `bingux`               | The shell, the search and status helper services, `binguxctl`, the user units                                                                   | You want the Bingux desktop                                                           |
+| `bingux-config`        | The `bingux-config` command                                                                                                                     | Pulled in by the shell and Settings                                                   |
+| `bingux-settings`      | Settings                                                                                                                                        | You want to change Bingux and system settings in one place                            |
+| `bingux-files`         | Files, the file manager                                                                                                                         | You want a file manager that matches the shell                                        |
+| `bingux-audio-effects` | The sound effects engine. It hosts published plugins (Linux Studio Plugins, Calf, ZamAudio, MDA, x42, Rubber Band) and installs none of its own | You want an effects stack (equaliser, compressor and the rest) under Settings > Sound |
+| `bingux-taxonomy`      | A window that shows every Bingux UI component                                                                                                   | You build Bingux apps. Ordinary desktops do not need it                               |
 
 All six have the same version. Settings, Files and Taxonomy each have a desktop
 entry, an icon in the `hicolor` theme and AppStream metadata, so they show up in
@@ -25,10 +25,10 @@ Signed repositories for Fedora 43, Debian 13 and Arch Linux carry every Bingux
 package. Add one and your package manager installs and updates Bingux. Each
 repository has two channels. Add the one you want:
 
-| Channel   | What it carries                                 | Repository name   |
-| --------- | ----------------------------------------------- | ----------------- |
-| `stable`  | Released versions, such as 0.2.0                | `bingux-stable`   |
-| `nightly` | The newest build of the main branch, once a day | `bingux-nightly`  |
+| Channel   | What it carries                                 | Repository name  |
+| --------- | ----------------------------------------------- | ---------------- |
+| `stable`  | Released versions, such as 0.2.0                | `bingux-stable`  |
+| `nightly` | The newest build of the main branch, once a day | `bingux-nightly` |
 
 A nightly build is numbered between two releases:
 `0.1.1~nightly.20261031.5.gabc1234` is newer than release 0.1.0 and older than
@@ -213,11 +213,12 @@ Settings pages you use.
 - Files: search for "Files", or run `bingux-files [FOLDER]`. To open folders in
   Files from every application:
 
-  ```sh
-  xdg-mime default bingux-files.desktop inode/directory
-  ```
+    ```sh
+    xdg-mime default bingux-files.desktop inode/directory
+    ```
 
-  You can also choose it under **Settings > Applications > Default applications**.
+    You can also choose it under **Settings > Applications > Default applications**.
+
 - Sound effects: turn them on in **Settings > Sound > Effects**. Settings enables
   the user services `bingux-effects@output.service` and
   `bingux-effects@input.service`. Check them with

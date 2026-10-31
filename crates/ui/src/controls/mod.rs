@@ -20,6 +20,9 @@ pub mod focus_stop;
 pub mod form;
 #[cfg(all(test, feature = "testing"))]
 pub(crate) mod hit_area_tests;
+pub mod fader;
+pub mod level_meter;
+pub mod master_detail;
 pub mod meter;
 pub mod omnibox;
 pub mod path_label;
@@ -76,6 +79,9 @@ pub use focus_stop::{
     StopRing, focus_stop, focus_stop_menu, focus_stop_press, focus_stop_pressed, focus_stop_with,
 };
 pub use form::{FormField, form_field, live_state, pending_bar};
+pub use fader::{Fader, fader};
+pub use level_meter::{LEVEL_WARN, LevelMeter, level_meter};
+pub use master_detail::{MASTER_WIDTH, MasterDetail, master_detail};
 pub use meter::{UsageMeter, usage_meter};
 pub use path_label::{
     ElideStep, Measure, PathLabel, elide_middle, elide_name, elide_path, elide_path_traced,

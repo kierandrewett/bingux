@@ -5,7 +5,7 @@
 #   bingux-settings      Settings
 #   bingux-files         Files
 #   bingux-preview-host  the helper Files runs to play media and render PDFs
-#   bingux-audio-effects the sound effects engine and its LADSPA plugins
+#   bingux-audio-effects the sound effects engine (it hosts published LV2 and LADSPA plugins)
 #   bingux-taxonomy      the Bingux UI reference window (development tool)
 #
 # `make install` stages everything below the build root; each files list picks
@@ -239,18 +239,27 @@ neither library. Files finds it beside its own program or on the PATH.
 %package audio-effects
 Summary:        Sound effects for the Bingux desktop
 License:        GPL-3.0-or-later AND MIT AND Unicode-3.0
-Requires:       pipewire >= 1.0
+Requires:       pipewire >= 1.4
+# PipeWire's LV2 loader (Fedora splits it out of pipewire) and the plugin set
+# Easy Effects uses. lilv-libs is what the engine reads plugin metadata with.
+Requires:       pipewire-module-filter-chain-lv2
+Requires:       lilv-libs
+Requires:       lsp-plugins-lv2
 Requires:       systemd
 Recommends:     pipewire-utils
 Recommends:     wireplumber
-Suggests:       lsp-plugins-ladspa
+Recommends:     lv2-calf-plugins
+Recommends:     lv2-zam-plugins
+Recommends:     lv2-mdala-plugins
+Recommends:     lv2-x42-plugins
+Recommends:     ladspa-rubberband-plugins
 
 %description audio-effects
-bingux-effects puts a chain of plugins between applications and the speakers,
+bingux-effects puts a stack of effects between applications and the speakers,
 or between a microphone and applications, using PipeWire's filter-chain. The
-package includes the Bingux DSP plugin library (compressor, limiter, gate,
-reverb, bass enhancer and more) in LADSPA format, which any LADSPA host can
-also load. Settings edits the presets and turns the effects on.
+effects are the published plugins Easy Effects uses (Linux Studio Plugins,
+Calf Studio Gear, ZamAudio, MDA, x42 and Rubber Band); the package contains
+none of its own. Settings edits the presets and turns the effects on.
 
 %package taxonomy
 Summary:        Reference window for the Bingux UI components
@@ -278,7 +287,7 @@ export RUSTFLAGS="%{bingux_rustflags}"
 %make_build licenses BUILD_DIR=build
 
 %install
-%make_install PREFIX=%{_prefix} DESTDIR=%{buildroot} BUILD_DIR=build QMLDIR=%{_libdir}/bingux/qml LADSPADIR=%{_libdir}/ladspa
+%make_install PREFIX=%{_prefix} DESTDIR=%{buildroot} BUILD_DIR=build QMLDIR=%{_libdir}/bingux/qml
 # The scripts name /usr/bin/env; Fedora wants the interpreter itself.
 %py3_shebang_fix %{buildroot}%{_libexecdir}/bingux/shell %{buildroot}%{_libexecdir}/bingux/binguxctl.py
 
@@ -416,8 +425,6 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/dev.drewett.bingux.Ta
 %license build/licenses/bingux-effects.LICENSE.dependencies
 %doc docs/audio-effects.md
 %{_bindir}/bingux-effects
-%dir %{_libdir}/ladspa
-%{_libdir}/ladspa/libbingux_dsp.so
 %{_userunitdir}/bingux-effects@.service
 %{_mandir}/man1/bingux-effects.1*
 
