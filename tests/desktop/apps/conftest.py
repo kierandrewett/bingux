@@ -13,29 +13,16 @@ REPO = Path(__file__).resolve().parents[3]
 SCRIPTS = REPO / "scripts"
 
 
-def has_snapshot_mode(binary: Path, workdir: Path) -> bool:
-    env = {k: v for k, v in os.environ.items() if k not in ("WAYLAND_DISPLAY", "DISPLAY")}
-    env.update(
-        GSETTINGS_BACKEND="memory", BINGUX_SETTINGS_SNAPSHOT_SETTLE_MS="300", XDG_CACHE_HOME=str(workdir / "cache")
-    )
-    done = subprocess.run(
-        [str(binary), "--snapshot", str(workdir), "mouse"], env=env, capture_output=True, text=True, timeout=120
-    )
-    return done.returncode == 0 and bool(list(workdir.glob("*.png")))
-
-
 @pytest.fixture(scope="session")
 def settings_binary(stack, tmp_path_factory) -> Path:
     """A bingux-settings built with `--features snapshot`, or a skip that says how to build it."""
-    builds = stack.binaries("bingux-settings")
-    if not builds:
-        pytest.skip("bingux-settings is not built: `cargo build --features snapshot` in apps/settings")
-    for index, binary in enumerate(builds):
-        if has_snapshot_mode(binary, tmp_path_factory.mktemp(f"snapshot-probe-{index}")):
-            return binary
-    pytest.skip(
-        f"none of {[str(b) for b in builds]} has a --snapshot mode: build apps/settings with --features snapshot"
-    )
+    binary = stack.snapshot_binary("bingux-settings", tmp_path_factory.mktemp("snapshot-probe"))
+    if binary is None:
+        pytest.skip(
+            f"no build of bingux-settings with a --snapshot mode among {stack.binaries('bingux-settings')}: "
+            "`cargo build --features snapshot` in apps/settings"
+        )
+    return binary
 
 
 @pytest.fixture(scope="session")

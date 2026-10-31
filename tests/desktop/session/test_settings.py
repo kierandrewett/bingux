@@ -18,10 +18,13 @@ FAKES = {
 
 
 @pytest.fixture
-def settings(desktop, stack):
-    binary = stack.binary("bingux-settings")
+def settings(desktop, stack, tmp_path_factory):
+    # The fakes below are honoured only by a build made with `--features snapshot`.
+    binary = stack.snapshot_binary("bingux-settings", tmp_path_factory.mktemp("settings-build"))
     if binary is None:
-        pytest.skip("bingux-settings is not built: run `make apps`, or set BINGUX_SETTINGS_BIN")
+        pytest.skip(
+            "no bingux-settings built with --features snapshot: `cargo build --features snapshot` in apps/settings"
+        )
     if not ocr_available():
         pytest.skip("tesseract is not installed: these checks read the page text")
     client = desktop.launch([str(binary), "network"], env=FAKES, title="Settings", timeout=60)

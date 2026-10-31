@@ -170,6 +170,24 @@ class Stack:
         builds = self.binaries(name)
         return builds[0] if builds else None
 
+    def snapshot_binary(self, name: str, workdir: Path) -> Path | None:
+        """The first build of `name` made with `--features snapshot`, or None.
+
+        Only that build honours the BINGUX_SETTINGS_FAKE_* variables that replace the machine's network,
+        displays and devices with fixed data, so a desktop test that needs them must use it too.
+        """
+        for binary in self.binaries(name):
+            workdir.mkdir(parents=True, exist_ok=True)
+            env = {"PATH": "/usr/bin:/bin", "GSETTINGS_BACKEND": "memory", "XDG_CACHE_HOME": str(workdir / "cache")}
+            env["BINGUX_SETTINGS_SNAPSHOT_SETTLE_MS"] = "300"
+            done = subprocess.run(
+                [str(binary), "--snapshot", str(workdir), "mouse"], env=env, capture_output=True, text=True, timeout=120
+            )
+            if done.returncode == 0 and list(workdir.glob("*.png")):
+                return binary
+            workdir = workdir.with_name(workdir.name + "x")
+        return None
+
     def describe(self) -> dict[str, str]:
         """What this run used, for the artefact directory and for a bug report."""
         return {
