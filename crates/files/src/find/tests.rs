@@ -916,7 +916,15 @@ fn the_walk_applies_every_filter_before_it_counts() {
         ..WalkOptions::default()
     };
     let (found, summary) = walked(&root, "", &only_png);
-    assert_eq!(found, ["sub|find-folder", "|b.png", "|sub"]);
+    // Which three of the four accepted entries come first depends on the filesystem's directory
+    // order (tmpfs and btrfs differ), so the test pins what must hold on any order: the limit is
+    // reached with accepted entries only, and the rejected .txt files never count.
+    let accepted = ["sub|c.png", "sub|find-folder", "|b.png", "|sub"];
+    assert_eq!(found.len(), 3, "{found:?}");
+    assert!(
+        found.iter().all(|hit| accepted.contains(&hit.as_str())),
+        "{found:?}"
+    );
     assert!(summary.truncated, "{summary:?}");
     let _ = fs::remove_dir_all(&root);
 }
