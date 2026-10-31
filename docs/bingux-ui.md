@@ -2852,7 +2852,7 @@ weak, and what was decided:
    16 px dark and light, 18 px, 48 px) and `icons.txt`, the same table as plain text.
    `review.py compare BEFORE_DIR AFTER_DIR --group sidebar` shows a set before and
    after. `scripts/icons/sheets.py --out /tmp/icons` renders the same at 12 to 48 px
-   with Freya's own rasteriser, beside the Adwaita originals, plus a top-bar mock.
+   with Freya's own rasteriser, plus a top-bar mock.
    The taxonomy's Icons / Icon set page is one grid of every file in `icons/`, sorted by
    file name: the glyph (16 to 48 px, 24 by default) with its name under it, a name
    filter, the name in a tooltip, a press copies it. It carries no per-icon detail; that

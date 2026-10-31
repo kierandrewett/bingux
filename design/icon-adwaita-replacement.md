@@ -1,10 +1,9 @@
 # Adwaita names replaced by Bingux icons: the controls family
 
-The shell asks the Adwaita theme for these names today. Each now has a Bingux source in
-`scripts/icons/src` (generated into `shell/bingux/icons` and listed in
-`shell/bingux/BinguxIconIndex.js`), or its callers were moved to a Bingux icon that already
-existed. Names marked "new" have no Adwaita file at all, so the shell's name check
-(`scripts/generate-adwaita-icon-index.py`) has to accept names in `BinguxIconIndex.js`.
+The shell used to take these names from the Adwaita theme, which it no longer installs or reads.
+Each now has a Bingux source in `scripts/icons/src` (generated into `shell/bingux/icons` and
+listed in `shell/bingux/BinguxIconIndex.js`), or its callers were moved to a Bingux icon that
+already existed. `scripts/ui-lint.py` fails on any name the shell asks for that is neither.
 
 | Adwaita name | Now | Callers (shell) |
 | ------------ | --- | --------------- |
