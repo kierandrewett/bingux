@@ -23,7 +23,7 @@ Name:           bingux
 Version:        0.1.0
 Release:        1%{?dist}
 Summary:        Wayland desktop shell for Gnoblin and other layer-shell compositors
-License:        Apache-2.0 AND BSD-3-Clause AND CC-BY-SA-3.0 AND CDLA-Permissive-2.0 AND GPL-3.0-or-later AND ISC AND LGPL-3.0-or-later AND MIT AND Unicode-3.0 AND Zlib
+License:        Apache-2.0 AND BSD-3-Clause AND CDLA-Permissive-2.0 AND GPL-3.0-or-later AND ISC AND LGPL-3.0-or-later AND MIT AND Unicode-3.0 AND Zlib
 URL:            https://github.com/kierandrewett/bingux
 Source0:        %{name}-%{version}.tar.xz
 
@@ -281,8 +281,6 @@ export RUSTFLAGS="%{bingux_rustflags}"
 %make_install PREFIX=%{_prefix} DESTDIR=%{buildroot} BUILD_DIR=build QMLDIR=%{_libdir}/bingux/qml LADSPADIR=%{_libdir}/ladspa
 # The scripts name /usr/bin/env; Fedora wants the interpreter itself.
 %py3_shebang_fix %{buildroot}%{_libexecdir}/bingux/shell %{buildroot}%{_libexecdir}/bingux/binguxctl.py
-# The bundled Adwaita set holds many identical icons; store each once.
-hardlink -c %{buildroot}%{_datadir}/bingux/icons
 
 for unit in bingux.target bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service bingux-lock.service bingux-greeter-export.service bingux-greeter-export.path bingux-bsm-publish.service bingux-bsm-publish.path xdg-desktop-portal-bingux.service bingux-global-shortcuts.service; do
     sed -e 's|/usr/lib64|%{_libdir}|g' packaging/systemd/$unit > %{buildroot}%{_userunitdir}/$unit
@@ -321,9 +319,7 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/dev.drewett.bingux.Ta
 
 %files
 %license COPYING
-%license %{_datadir}/licenses/bingux/adwaita-icon-theme/COPYING
-%license %{_datadir}/licenses/bingux/adwaita-icon-theme/COPYING_CCBYSA3
-%license %{_datadir}/licenses/bingux/adwaita-icon-theme/COPYING_LGPL
+%license %{_datadir}/licenses/bingux/icons/COPYING
 %license shell/runtime/quickshell/LICENSE
 %license build/licenses/bingux-searchd.LICENSE.dependencies
 %license build/licenses/bingux-statusd.LICENSE.dependencies
@@ -353,7 +349,6 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/dev.drewett.bingux.Ta
 %dir %{_datadir}/bingux
 %dir %{_datadir}/bingux/search-apps
 %{_datadir}/bingux/greeter/
-%{_datadir}/bingux/icons/
 %{_datadir}/bingux/search.json
 %{_datadir}/xdg-desktop-portal/portals/bingux.portal
 %{_datadir}/dbus-1/services/org.freedesktop.impl.portal.desktop.bingux.service
@@ -444,6 +439,6 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/dev.drewett.bingux.Ta
   configuration command and the Taxonomy reference window are their own
   packages, each with desktop entry, AppStream metainfo, icon and man page.
 - Enable bingux.target through a user preset.
-- Keep the bundled Adwaita icons under %%{_datadir}/bingux so they no longer
-  collide with adwaita-icon-theme.
+- The shell draws its icons only from the Bingux icon set inside the shell
+  archive; no icon theme is installed beside it.
 - Add the first native shell package layout.

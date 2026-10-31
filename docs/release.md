@@ -45,7 +45,7 @@ every package: `bingux`, `bingux-config`, `bingux-settings`, `bingux-files`,
    ```
 
    The archive is reproducible: the same commit gives the same bytes. It holds
-   the tracked tree and the pinned `adwaita-icon-theme` submodule, which
+   the tracked tree and the pinned Quickshell submodule, which
    `git archive` does not follow.
 6. Build and check the packages, below.
 7. Publish the packages and attach the archive, checksums, the source RPM and

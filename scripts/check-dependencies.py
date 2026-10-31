@@ -105,9 +105,9 @@ def main():
         if qt_failure:
             failures.append(qt_failure)
 
-    for submodule in ("shell/runtime/quickshell", "subprojects/adwaita-icon-theme"):
-        if not (source / submodule / "CMakeLists.txt").is_file() and not (source / submodule / "index.theme").is_file():
-            failures.append(f"submodule missing: {submodule}; run git submodule update --init")
+    submodule = "shell/runtime/quickshell"
+    if not (source / submodule / "CMakeLists.txt").is_file():
+        failures.append(f"submodule missing: {submodule}; run git submodule update --init")
 
     if args.install_user and not available("systemctl"):
         failures.append("systemctl not found: user services cannot be managed")

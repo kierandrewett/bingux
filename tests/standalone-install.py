@@ -188,10 +188,8 @@ class InstallTest(unittest.TestCase):
             self.assertTrue(
                 (stage / "usr/libexec/bingux/shell/bingux_runtime.py").is_file()
             )
-            # The bundled icons are private; /usr/share/icons/Adwaita belongs to the distribution.
-            self.assertTrue(
-                (stage / "usr/share/bingux/icons/Adwaita/symbolic").is_dir()
-            )
+            # The shell's icons ship in the archive; no theme is installed beside it.
+            self.assertFalse((stage / "usr/share/bingux/icons").exists())
             self.assertFalse((stage / "usr/share/icons/Adwaita").exists())
             self.assertTrue((stage / "usr/share/gnoblin/conf.d/bingux.lua").is_file())
             integration = (stage / "usr/share/gnoblin/conf.d/bingux.lua").read_text()
@@ -326,20 +324,17 @@ class InstallTest(unittest.TestCase):
                 "enable bingux.target",
                 (stage / "usr/lib/systemd/user-preset/90-bingux.preset").read_text(),
             )
-            # The bundled Adwaita icons stay private to Bingux and never overlap
-            # the distribution's adwaita-icon-theme.
-            self.assertTrue(
-                (stage / "usr/share/bingux/icons/Adwaita/index.theme").is_file()
-            )
+            # The shell draws only Bingux icons: no copy of the Adwaita theme is installed,
+            # and the licence of the Bingux icons sits beside the other licences.
+            self.assertFalse((stage / "usr/share/bingux/icons").exists())
             self.assertFalse((stage / "usr/share/icons/Adwaita").exists())
             self.assertTrue(
-                (
-                    stage / "usr/share/licenses/bingux/adwaita-icon-theme/COPYING"
-                ).is_file()
+                (stage / "usr/share/licenses/bingux/icons/COPYING").is_file()
             )
             self.assertFalse((stage / "usr/share/licenses/adwaita-icon-theme").exists())
-            # The shell binary derives the bundled icon folder from its own prefix
-            # (shell/runtime/src/main.cpp), so no launcher script names it.
+            self.assertFalse(
+                (stage / "usr/share/licenses/bingux/adwaita-icon-theme").exists()
+            )
             manifest = json.loads(
                 (
                     stage / "usr/share/bingux/search-apps/bingux-settings.json"

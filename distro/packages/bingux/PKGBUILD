@@ -8,7 +8,7 @@ pkgrel=1
 pkgdesc='Wayland desktop shell, lock screen and login greeter for Gnoblin'
 arch=('x86_64')
 url='https://github.com/kierandrewett/bingux'
-license=('GPL-3.0-or-later' 'LGPL-3.0-or-later' 'CC-BY-SA-3.0')
+license=('GPL-3.0-or-later' 'LGPL-3.0-or-later')
 # bingux-shell is Quickshell 0.2.1 (vendored, Bingux patches applied) built
 # into one binary by CMake; the Hyprland and i3 modules are off. bingux-settings
 # is a Freya (Skia on wgpu) application: it needs the Vulkan loader, fontconfig

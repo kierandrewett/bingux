@@ -44,8 +44,8 @@ PROGRAMS = {
 
 
 # The RPM package that ships each program, and the licences that package adds
-# for files that are not Rust crates (the bundled Adwaita icons are LGPL and
-# CC-BY-SA; the project's own code is GPL).
+# for files that are not Rust crates (Quickshell, which the shell binary embeds, is
+# LGPL; the project's own code is GPL).
 PACKAGE_OF = {
     "bingux-settings": "bingux-settings",
     "bingux-files": "bingux-files",
@@ -58,7 +58,7 @@ PACKAGE_OF = {
     "bingux-dsp": "bingux-audio-effects",
 }
 OWN = ["GPL-3.0-or-later"]
-EXTRA = {"bingux": ["LGPL-3.0-or-later", "CC-BY-SA-3.0"]}
+EXTRA = {"bingux": ["LGPL-3.0-or-later"]}
 
 
 def normalise(expression):

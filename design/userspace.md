@@ -123,7 +123,6 @@ names them explicitly (section 5).
 | Private programs | `/usr/libexec/bingux/` (`bingux-frame`, `bingux-image-clipboard`, `search-service`, `binguxctl.py`) | `bingux` |
 | QML plugins | `/usr/lib64/bingux/qml` (Fedora), `/usr/lib/bingux/qml` (Arch) | `bingux` |
 | Shell files | `/usr/share/bingux/shell`, `/usr/share/bingux/search.json` | `bingux` |
-| Bundled Adwaita symbolic icons | `/usr/share/bingux/icons/Adwaita` (private; never `/usr/share/icons/Adwaita`, which `adwaita-icon-theme` owns) | `bingux` |
 | Desktop entries | `/usr/share/applications/bingux-{settings,files,taxonomy}.desktop` | each app |
 | Icons | `/usr/share/icons/hicolor/scalable/apps/bingux-{settings,files,taxonomy}.svg` | each app |
 | AppStream | `/usr/share/metainfo/dev.drewett.bingux.{Settings,Files,Taxonomy}.metainfo.xml` | each app |
@@ -201,8 +200,9 @@ there.)
   crate already shares with another when a crate offers a choice) and writes
   `<program>.LICENSE.dependencies`, which each package installs as `%license`.
   `tests/rpm-package.py` fails when a spec `License:` tag is out of date. The
-  bundled Adwaita icons are LGPL-3.0-or-later and CC-BY-SA-3.0; the shell package
-  carries their texts. Skia's own licence (BSD-3-Clause) is already in the set;
+  Quickshell (embedded in the shell package) is LGPL-3.0-or-later; the package
+  carries its text. The Bingux icons are MIT-licensed Phosphor work, whose text sits in
+  `share/licenses/bingux/icons/COPYING`. Skia's own licence (BSD-3-Clause) is already in the set;
   the third-party libraries inside Skia's prebuilt archive are not itemised
   `[INFERENCE: the archive's licence file is not in the crate]`.
 

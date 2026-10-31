@@ -92,8 +92,8 @@ archive has a new content id; old directories can be deleted at any time.
 The binary sets the environment the shell expects when it is not already set:
 `QML_IMPORT_PATH` (the Bingux QML plugins), `PATH` and `XDG_DATA_DIRS` (the
 install prefix), `BINGUX_HELPER_DIR` (the Python helpers under
-`libexec/bingux/shell`), `BINGUX_CONFIG_BIN`, `BINGUX_SETTINGS_BIN`,
-`BINGUX_AUDIO_METER` and `BINGUX_ADWAITA_ICON_DIR`. Values already in the
+`libexec/bingux/shell`), `BINGUX_CONFIG_BIN`, `BINGUX_SETTINGS_BIN` and
+`BINGUX_AUDIO_METER`. Values already in the
 environment win, so a developer can point an installed binary at a checkout.
 
 ## Install for your user
@@ -145,7 +145,7 @@ That stops an old session target from starting a second desktop shell. Search an
 status helpers remain attached to `bingux.target`, which follows
 `gnoblin-session.target`.
 
-Bingux bundles its symbolic Adwaita icons. Launch it through the installed
+Bingux draws its own icons. Launch it through the installed
 `bingux` command so its asset paths and QML plugins are available. Application
 icons use the system theme; an unavailable icon uses a bundled generic icon.
 
@@ -246,8 +246,6 @@ The package-oriented installer writes only below `DESTDIR`. It installs:
   `bin`, with their desktop entries, `hicolor` icons, AppStream metainfo
   (`share/metainfo`) and man pages (`share/man/man1`).
 - The Bingux DSP LADSPA library in `lib/ladspa` (`LADSPADIR` changes it).
-- The bundled Adwaita symbolic icons in `share/bingux/icons/Adwaita`. They are
-  private to Bingux and never overlap the distribution's icon theme.
 - The Gnoblin module in `share/gnoblin/conf.d/bingux.lua`.
 - User systemd units in `lib/systemd/user` and the preset in
   `lib/systemd/user-preset`.
