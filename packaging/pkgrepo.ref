@@ -1,4 +1,4 @@
 # The commit of the Gnoblin repository that holds scripts/pkgrepo, the tool that builds, signs and publishes the
 # package repositories. CI fetches exactly this commit. One line: <GitHub repository> <full commit>. Raise it when
 # the tool changes; design/package-repositories.md says why the tool lives there.
-kierandrewett/gnoblin c0d941dc1e71f20d6514db87a66b821570ee3688
+kierandrewett/gnoblin fd295105c74cf633326713163af0cdaec083217d
