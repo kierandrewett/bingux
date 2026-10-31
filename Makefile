@@ -28,7 +28,7 @@ OUTPUT ?= dist/bingux-$(VERSION).tar.xz
 SHELL := /bin/bash
 ROOT := $(abspath .)
 
-.PHONY: all native shell shell-archive daemons apps icons icons-check doctor doctor-build check check-session layout-check overflow-check copy-check pixel-check stability-check motion-check state-check rules-check install install-user uninstall-user install-apps uninstall-apps rpm-package rpm-check arch-package licenses source-archive
+.PHONY: all native shell shell-archive daemons apps icons icons-check doctor doctor-build check check-session layout-check overflow-check copy-check pixel-check stability-check motion-check ui-motion state-check rules-check install install-user uninstall-user install-apps uninstall-apps rpm-package rpm-check arch-package licenses source-archive
 all: native shell daemons
 
 native: $(BUILD_DIR)/bingux-image-clipboard $(BUILD_DIR)/bingux-frame
@@ -173,6 +173,20 @@ motion-check:
 	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/number-roll-check.py
 	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/nav-slide.py
 	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/frame-gate.py
+
+# In-motion: every control of bingux-ui that moves, stepped one 16 ms frame at a time, at scale 1
+# and 2, in both schemes, under toggle spam, interrupted and interleaved input and reduced motion
+# (crates/ui/src/motion_stress, the older frame-by-frame suites it builds on), then the probes that
+# watch a running app move. What it proves and what it cannot see: docs/bingux-ui.md, "In-motion
+# tests"; the control-by-control matrix: design/ui-motion-coverage.md.
+UI_MOTION_TESTS = motion_stress page_motion_tests sheet_motion_frame_tests reveal_frames \
+	icon_morph_tests animated_number_tests progress_tests ring_anim_tests tooltip_tests \
+	sortable_tests slide_users_tests menu_first_frame_tests notice_tests expander_tests
+ui-motion:
+	$(CARGO) test --locked --manifest-path crates/ui/Cargo.toml --features testing --target-dir '$(CARGO_TARGET)' --lib -- $(UI_MOTION_TESTS)
+	$(MAKE) motion-check stability-check
+	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/focus-ring-check.py --build --jobs $(LINT_JOBS)
+	CARGO_TARGET_DIR='$(CARGO_TARGET)' python3 scripts/tooltip-check.py --build --jobs $(LINT_JOBS)
 
 # The report on top of the checks above: it calls the same scripts (one at a time, through
 # scripts/app_env.py), reads from the checks which rule IDs each one holds, and writes the state of

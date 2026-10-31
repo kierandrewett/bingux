@@ -336,6 +336,7 @@ impl Component for Slider {
             .map(|stops| track_gradient(stops, width, thumb_size));
 
         let row = rect()
+            .component("SliderBox")
             .a11y_id(a11y_id)
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)
@@ -370,6 +371,7 @@ impl Component for Slider {
             .child(match &gradient {
                 Some(paint) => {
                     let track = rect()
+                        .component("SliderTrack")
                         .position(
                             Position::new_absolute()
                                 .top(centre - track_height / 2.0)
@@ -396,6 +398,7 @@ impl Component for Slider {
                     ))
                 }
                 None => rect()
+                    .component("SliderTrack")
                     .position(
                         Position::new_absolute()
                             .top(centre - track_height / 2.0)
@@ -407,6 +410,7 @@ impl Component for Slider {
             })
             .maybe_child(gradient.is_none().then(|| {
                 rect()
+                    .component("SliderFill")
                     .layer(Layer::Relative(1))
                     .position(
                         Position::new_absolute()
@@ -497,6 +501,7 @@ impl Component for Slider {
             }))
             .child({
                 let knob = rect()
+                    .component("SliderKnob")
                     .layer(Layer::Relative(3))
                     .position(
                         Position::new_absolute()
