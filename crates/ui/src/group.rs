@@ -193,7 +193,11 @@ impl Component for Group {
             searching,
         };
         let (mounted, whole) = crate::stage::use_staged_rows(self.rows.len(), query.is_some());
-        let children = card_rows(self.rows.iter().take(mounted).cloned().collect(), lit, filter);
+        let children = card_rows(
+            self.rows.iter().take(mounted).cloned().collect(),
+            lit,
+            filter,
+        );
         let heading = (self.title.is_some() || self.description.is_some()).then(|| {
             rect()
                 .tw(&tokens, GROUP_HEAD)
@@ -618,8 +622,29 @@ fn skeleton_title(tokens: &Tokens, description: Option<&str>) -> Element {
         .child(
             rect()
                 .position(Position::new_absolute().top(0.0).left(0.0))
-                .tw(tokens, &[w_full(), h_full(), flex_col(), justify(Align::Center)])
+                .tw(
+                    tokens,
+                    &[w_full(), h_full(), flex_col(), justify(Align::Center)],
+                )
                 .child(skeleton_bar(tokens, Dim::SkeletonTitle)),
+        )
+        .into()
+}
+
+/// `text` laid out invisibly to give a box its line height, with `bar` drawn
+/// over it, centred on the line.
+fn ghost(tokens: &Tokens, text: Element, bar: Element) -> Element {
+    rect()
+        .tw(tokens, &[w_full()])
+        .child(rect().opacity(0.0).child(text))
+        .child(
+            rect()
+                .position(Position::new_absolute().top(0.0).left(0.0))
+                .tw(
+                    tokens,
+                    &[w_full(), h_full(), flex_col(), justify(Align::Center)],
+                )
+                .child(bar),
         )
         .into()
 }
@@ -628,22 +653,39 @@ fn skeleton_line(tokens: &Tokens, kind: char) -> Element {
     let bar = |width: Dim| skeleton_bar(tokens, width);
     match kind {
         '#' => rect()
-            .tw(tokens, &[w_full(), h(Dim::ArrangementHeight), bg(Paint::Control)])
+            .tw(
+                tokens,
+                &[w_full(), h(Dim::ArrangementHeight), bg(Paint::Control)],
+            )
             .into(),
+        // The height of a row with a second line is its text's, not a number:
+        // the title and the caption are laid out invisibly, as the real row lays
+        // them out, and the bars are drawn over them.
         '=' => rect()
-            .tw(tokens, ROW)
-            .tw(tokens, &[h(Dim::RowSubtitle)])
+            .tw(tokens, ROW_TALL)
             .child(
                 rect()
-                    .tw(tokens, &[flex_col(), gap(S1), w_flex()])
-                    .child(bar(Dim::SkeletonLabel))
-                    .child(bar(Dim::SkeletonValue)),
+                    .tw(tokens, &[flex_col(), gap(S0_5), w_flex()])
+                    .child(ghost(
+                        tokens,
+                        BODY.label(tokens, "Mg").into(),
+                        bar(Dim::SkeletonLabel).into_element(),
+                    ))
+                    .child(ghost(
+                        tokens,
+                        CAPTION.label(tokens, "Mg").into(),
+                        bar(Dim::SkeletonValue).into_element(),
+                    )),
             )
             .child(bar(Dim::SkeletonValue))
             .into(),
         _ => rect()
             .tw(tokens, ROW)
-            .child(rect().tw(tokens, &[w_flex()]).child(bar(Dim::SkeletonLabel)))
+            .child(
+                rect()
+                    .tw(tokens, &[w_flex()])
+                    .child(bar(Dim::SkeletonLabel)),
+            )
             .child(bar(Dim::SkeletonValue))
             .into(),
     }
@@ -651,16 +693,21 @@ fn skeleton_line(tokens: &Tokens, kind: char) -> Element {
 
 impl Component for Skeleton {
     fn render(&self) -> impl IntoElement {
+        crate::stage::use_provisional(true);
         let tokens = use_tokens();
         let sections: Vec<Element> = self
             .sections
             .iter()
             .map(|rows| {
-                let (description, rows) = match rows.strip_prefix('~').and_then(|rest| rest.split_once('|')) {
-                    Some((text, rows)) => (Some(text), rows),
-                    None => (None, rows.as_str()),
-                };
-                let lines: Vec<Element> = rows.chars().map(|kind| skeleton_line(&tokens, kind)).collect();
+                let (description, rows) =
+                    match rows.strip_prefix('~').and_then(|rest| rest.split_once('|')) {
+                        Some((text, rows)) => (Some(text), rows),
+                        None => (None, rows.as_str()),
+                    };
+                let lines: Vec<Element> = rows
+                    .chars()
+                    .map(|kind| skeleton_line(&tokens, kind))
+                    .collect();
                 Element::from(
                     rect()
                         .tw(&tokens, GROUP)
@@ -676,23 +723,53 @@ impl Component for Skeleton {
 /// One row-sized placeholder for a group whose rows are not known yet, so the
 /// group keeps its place while its data loads.
 pub fn skeleton_row() -> Element {
-    SkeletonRow.into()
+    SkeletonRow { subtitle: false }.into()
+}
+
+/// As [`skeleton_row`], as tall as a row with a second line of text, for a list
+/// whose rows have a subtitle (a chosen zone's offset, a font's sample).
+pub fn skeleton_row_subtitled() -> Element {
+    SkeletonRow { subtitle: true }.into()
 }
 
 #[derive(PartialEq)]
-struct SkeletonRow;
+struct SkeletonRow {
+    subtitle: bool,
+}
 
 impl Component for SkeletonRow {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        crate::stage::use_provisional(true);
+        skeleton_line(&tokens, if self.subtitle { '=' } else { '-' })
+    }
+}
+
+/// A bar standing in for a caption line (a count, a hint under a list), in a
+/// box as tall as the real caption, so what follows it keeps its place.
+pub fn skeleton_caption() -> Element {
+    SkeletonCaption.into()
+}
+
+#[derive(PartialEq)]
+struct SkeletonCaption;
+
+impl Component for SkeletonCaption {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        crate::stage::use_provisional(true);
         rect()
-            .tw(&tokens, ROW)
+            .tw(&tokens, &[w_full()])
+            .child(rect().opacity(0.0).child(caption("Mg")))
             .child(
                 rect()
-                    .tw(&tokens, &[w_flex()])
-                    .child(skeleton_bar(&tokens, Dim::SkeletonLabel)),
+                    .position(Position::new_absolute().top(0.0).left(0.0))
+                    .tw(
+                        &tokens,
+                        &[w_full(), h_full(), flex_col(), justify(Align::Center)],
+                    )
+                    .child(skeleton_bar(&tokens, Dim::SkeletonTitle)),
             )
-            .child(skeleton_bar(&tokens, Dim::SkeletonValue))
     }
 }
 

@@ -13,12 +13,12 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use super::{Loaded, reload, set_font};
-use bingux_ui::prelude::use_router;
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
     Group, Overlays, PageHead, Status, dropdown, menu_item, page_column, row, search_field,
-    skeleton_row, status, use_overlays, use_tokens,
+    skeleton_row, skeleton_row_subtitled, status, use_overlays, use_tokens,
 };
+use bingux_ui::prelude::use_router;
 use bingux_ui::style::*;
 
 const FILTER_ALL: &str = "all";
@@ -27,8 +27,9 @@ const FILTER_SERIF: &str = "serif";
 const FILTER_MONOSPACED: &str = "monospaced";
 const FILTER_OTHER: &str = "other";
 const SAMPLE: &str = "The quick brown fox jumps over the lazy dog";
-/// Placeholder rows shown while the font list loads.
-const PLACEHOLDER_ROWS: usize = 6;
+/// Placeholder font rows shown while the list loads: enough to fill a tall
+/// window (a font row is 56 px), so the list does not end short of the page.
+const PLACEHOLDER_ROWS: usize = 24;
 
 /// The search text the page starts with. Snapshots set
 /// `BINGUX_SETTINGS_SNAPSHOT_FONT_SEARCH` so the search can be captured
@@ -370,11 +371,12 @@ impl Component for FontPage {
             names.insert(0, name);
         }
 
-        // The list keeps its shape while the fonts load: placeholder rows, and a
-        // caption of the same height that is blank rather than a count.
+        // The list keeps its shape while the fonts load: the System default row,
+        // then rows with a sample line under the name, as the loaded list has.
         let mut rows: Vec<Element> = Vec::new();
         if !loaded {
-            rows.extend((0..PLACEHOLDER_ROWS).map(|_| skeleton_row()));
+            rows.push(skeleton_row());
+            rows.extend((0..PLACEHOLDER_ROWS).map(|_| skeleton_row_subtitled()));
         }
         if loaded && !searching && filter_key == FILTER_ALL {
             let pick = on_pick.clone();

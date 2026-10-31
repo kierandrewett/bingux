@@ -13,14 +13,15 @@ use crate::icons::Icon;
 use crate::pages::gnoblin::{self, Json};
 use crate::pages::loading::veiled;
 use crate::routes;
-use bingux_ui::prelude::{Router, use_router};
 use crate::system::{
     self, CommandError, CommandResult, background, background_then, optimistic_then,
 };
 use crate::ui::{
     Group, Overlays, PageHead, Status, caption, choice_row, page_column, popup_column, row,
-    row_button, search_field, skeleton, skeleton_shape, slider_row, status, switch_row, text_field, use_overlays,
+    row_button, search_field, skeleton, skeleton_shape, slider_row, status, switch_row, text_field,
+    use_overlays,
 };
+use bingux_ui::prelude::{Router, use_router};
 use bingux_ui::prelude::{Window, popup, use_window};
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
@@ -201,14 +202,16 @@ fn load() -> Result<Model, CommandError> {
     })
 }
 
-/// The page as it shows before its first read lands: the values this machine
-/// reads, so the rows keep their places when the real values arrive.
+/// The page as it shows before its first read lands: the schema defaults, which
+/// is what a machine with no changes reads, so the rows keep their places when
+/// the real values arrive. Remembering Num Lock is on by default, which hides
+/// the sign-in row nested under it.
 fn placeholder() -> Model {
     Model {
         repeat: true,
         delay_ms: 500.0,
         interval_ms: 30.0,
-        remember_numlock: false,
+        remember_numlock: true,
         numlock_on: false,
         xkb_options: Vec::new(),
         overrides: Json::Null,
@@ -707,9 +710,7 @@ impl Component for KeyboardPage {
                 .value_text(format!("{} ms", model.interval_ms))
                 .into(),
             };
-            let try_it: Element = row("Try it")
-                .trailing(text_field(try_text, |_| {}))
-                .into();
+            let try_it: Element = row("Try it").trailing(text_field(try_text, |_| {})).into();
             vec![delay, interval, try_it]
         } else {
             Vec::new()
@@ -1028,14 +1029,11 @@ impl Component for ShortcutsPage {
             )));
         }
         if let Some(path) = list.config_path.clone() {
-            page = page.child(
-                Group::titled("Configuration").row(
-                    row("Configuration file")
-                        .trailing(row_button("Open file", move |_| {
-                            open_config(path.clone(), overlays)
-                        })),
-                ),
-            );
+            page = page.child(Group::titled("Configuration").row(
+                row("Configuration file").trailing(row_button("Open file", move |_| {
+                    open_config(path.clone(), overlays)
+                })),
+            ));
         }
         page
     }

@@ -35,8 +35,9 @@ pub fn veiled(page: Rect, loading: bool) -> Rect {
 /// paired, which speakers a sound card has) cannot place its rows before the
 /// read lands, so it does not pretend to. While `loading` the page is hidden
 /// and takes every press; when the data lands it fades in, already at its
-/// final layout. Nothing moves, because nothing was on screen to move. With a
-/// saved value the page is not loading and shows at once.
+/// final layout. Nothing moves, because nothing was on screen to move, and what
+/// goes under the page waits for it (`bingux_ui::stage::use_provisional`). With
+/// a saved value the page is not loading and shows at once.
 pub fn revealed(page: Rect, loading: bool) -> Rect {
     rect().width(Size::fill()).child(Revealed {
         page: page.into(),
@@ -53,6 +54,9 @@ struct Revealed {
 impl Component for Revealed {
     fn render(&self) -> impl IntoElement {
         let tokens = bingux_ui::surface::tokens_now();
+        // Nothing is on screen to move, but what goes under the page (the Related
+        // group) would sit just below the title and be pushed down by the page.
+        bingux_ui::stage::use_provisional(self.loading);
         let shown = bingux_ui::motion::use_tween(
             if self.loading { 0.0 } else { 1.0 },
             tokens.motion(bingux_ui::motion::MOVE_MS),
@@ -82,6 +86,8 @@ static POWER_PROFILES: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 pub fn warm_hints() {
     std::thread::spawn(|| {
         let _ = BATTERY.set(read_battery());
+    });
+    std::thread::spawn(|| {
         let _ = TOUCHPAD.set(read_touchpad());
     });
     std::thread::spawn(|| {
@@ -95,9 +101,9 @@ pub fn has_battery_hint() -> bool {
     BATTERY.get().copied().unwrap_or(false)
 }
 
-/// Whether a touchpad is attached, from the kernel's device list. This is the
-/// fallback `gnoblin::has_touchpad` uses, and it agrees with it on a running
-/// session, so the Touchpad group is placed before Gnoblin has answered.
+/// Whether a touchpad is attached, asked the way the page asks (see
+/// `read_touchpad`), so the Touchpad group is placed before Gnoblin has
+/// answered.
 pub fn has_touchpad_hint() -> bool {
     TOUCHPAD.get().copied().unwrap_or(false)
 }
@@ -127,10 +133,10 @@ fn read_battery() -> bool {
     })
 }
 
+/// The page's own question, asked once early: Gnoblin's device list when it
+/// answers, the kernel's when it does not. A hint that asked the kernel alone
+/// disagreed with the page wherever Gnoblin reports a touchpad that the kernel
+/// does not name one, and the Touchpad group then arrived after the first frame.
 fn read_touchpad() -> bool {
-    crate::system::read_to_string("/proc/bus/input/devices").is_ok_and(|text| {
-        text.lines().any(|line| {
-            line.starts_with("N: Name=") && line.to_ascii_lowercase().contains("touchpad")
-        })
-    })
+    super::gnoblin::has_touchpad()
 }

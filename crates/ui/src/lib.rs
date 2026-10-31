@@ -11,29 +11,35 @@
 
 pub mod about;
 pub mod app;
-pub mod nav;
-pub mod preview;
 pub mod app_icon;
 pub mod charts;
+#[cfg(feature = "chat-icons")]
+pub mod chat_icons;
+pub mod component;
 pub mod contrast;
 pub mod contrast_matrix;
 pub mod controls;
+pub mod drag;
 pub mod elide;
+#[cfg(all(test, feature = "testing"))]
+mod expander_tests;
 pub mod files;
 pub mod focus;
 pub mod group;
 pub mod icons;
-#[cfg(feature = "chat-icons")]
-pub mod chat_icons;
 pub(crate) mod inspector;
-pub mod component;
-pub mod layout;
-pub mod drag;
-pub mod motion;
-pub mod resilience;
-pub(crate) mod popup_windows;
 pub mod layers;
+pub mod layout;
+#[cfg(all(test, feature = "testing"))]
+mod loading_shape_tests;
+pub mod motion;
+#[cfg(all(test, feature = "testing"))]
+mod mount_tests;
+pub mod nav;
+pub(crate) mod popup_windows;
+pub mod preview;
 pub mod reorder;
+pub mod resilience;
 pub mod rows;
 pub mod runtime;
 pub mod search;
@@ -49,21 +55,12 @@ pub mod task;
 pub mod theme;
 pub mod typography;
 mod warm;
-#[cfg(all(test, feature = "testing"))]
-mod mount_tests;
-#[cfg(all(test, feature = "testing"))]
-mod expander_tests;
 pub mod window;
 
 /// Everything an application window normally needs.
 pub mod prelude {
     pub use crate::about::{AppInfo, app_menu};
     pub use crate::app::Application;
-    pub use crate::nav::{
-        Confirmation, Location, Mode, ModalKind, NavModel, Params, PopGuard, RouteKind, RouteTable,
-        Router, Target, Transition, navigate, use_location, use_page_title, use_pop_guard,
-        use_retained_state, use_router,
-    };
     pub use crate::app_icon::{AppChoice, AppIcon, app_icon};
     pub use crate::charts::{
         Curve, Segment, Series, Unit, bar_chart, donut, line_chart, ring, sparkline,
@@ -71,32 +68,39 @@ pub mod prelude {
     pub use crate::controls::*;
     pub use crate::files::{self, ChooserRequest, Chosen};
     pub use crate::group::{
-        Group, Status, StatusBlock, action_row, caption, centered_caption, form_row, group_head, heading,
-        section_label, skeleton, skeleton_row, skeleton_rows, skeleton_shape, status,
+        Group, Status, StatusBlock, action_row, caption, centered_caption, form_row, group_head,
+        heading, section_label, skeleton, skeleton_caption, skeleton_row, skeleton_row_subtitled,
+        skeleton_rows, skeleton_shape, status,
     };
     pub use crate::icons::{Icon, icon};
     pub use crate::layout::{
         boxed, clamp, divider, hstack, page_column, popup_column, spacer, tile_rows, vstack,
     };
     pub use crate::motion::{
-        AnimatedNumber, Crossfade, NumberFormat, Presence, Reveal, RevealBlock, animated_number, crossfade, presence, reveal,
-        reveal_block,
-        use_presence, use_tween,
+        AnimatedNumber, Crossfade, NumberFormat, Presence, Reveal, RevealBlock, animated_number,
+        crossfade, presence, reveal, reveal_block, use_presence, use_tween,
     };
-    pub use crate::resilience::{ErrorBoundary, Look as BoundaryLook, error_boundary, error_boundary_with};
+    pub use crate::nav::{
+        Confirmation, Location, ModalKind, Mode, NavModel, Params, PopGuard, RouteKind, RouteTable,
+        Router, Target, Transition, navigate, use_location, use_page_title, use_pop_guard,
+        use_retained_state, use_router,
+    };
+    pub use crate::resilience::{
+        ErrorBoundary, Look as BoundaryLook, error_boundary, error_boundary_with,
+    };
     pub use crate::rows::{
         ChoiceList, EntryRow, ExpanderRow, LevelRow, Row, choice_list, choice_row, entry_row,
         expander_row, level_row, property_row, radio_row, radio_rows, row, slider_row, switch_row,
         text_row,
     };
+    pub use crate::search::{SearchState, use_search};
     pub use crate::shell::{
         BackButton, Banner, BannerKind, CANCEL_ID, Dialog, DialogIcon, ForwardButton, HeaderBar,
-        MenuButton, MenuItem, app_menu_item, app_menu_items,
-        NavigationSplitView, OverlayHost, Overlays, PageAction, PageHead, Profile, ResponseKind,
-        StatusPage, Toast, WindowControls, banner, dialog, framed_dialog, history_menu,
-        menu_button, menu_item, menu_separator, status_page, submenu, use_overlays, use_page_busy,
+        MenuButton, MenuItem, NavigationSplitView, OverlayHost, Overlays, PageAction, PageHead,
+        Profile, ResponseKind, StatusPage, Toast, WindowControls, app_menu_item, app_menu_items,
+        banner, dialog, framed_dialog, history_menu, menu_button, menu_item, menu_separator,
+        status_page, submenu, use_overlays, use_page_busy,
     };
-    pub use crate::search::{SearchState, use_search};
     pub use crate::style::*;
     pub use crate::surface::use_tokens;
     pub use crate::theme::{Scheme, SharedTokens, Tokens, provide_tokens};

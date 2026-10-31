@@ -9,12 +9,12 @@ mod timezone_map;
 
 use std::time::Duration;
 
+use bingux_ui::motion::reveal_block_if;
 use bingux_ui::prelude::{
     PageHead, PopupAction, PopupActions, Window, popup, use_popup_actions, use_window,
 };
 use bingux_ui::runtime::optimistic_then;
 use bingux_ui::shell::MenuItem;
-use bingux_ui::motion::reveal_block_if;
 use bingux_ui::style::*;
 use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 use freya::prelude::*;
@@ -23,21 +23,19 @@ use timezone_map::TimeZoneMap;
 use super::loading::veiled;
 use crate::pages::bingux_config;
 use crate::routes;
-use bingux_ui::prelude::use_router;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
     Group, Overlays, Status, caption, choice_row, dropdown, form_row, menu_item, page_column,
-    popup_column, row, search_field, skeleton_row, status, stepper, styled_label, switch_row,
-    typography, use_overlays, use_page_busy,
+    popup_column, row, search_field, skeleton_caption, skeleton_row, skeleton_row_subtitled,
+    status, stepper, styled_label, switch_row, typography, use_overlays, use_page_busy,
 };
+use bingux_ui::prelude::use_router;
 
 const INTERFACE: &str = "org.gnome.desktop.interface";
 const DATETIME: &str = "org.gnome.desktop.datetime";
 const CALENDAR: &str = "org.gnome.desktop.calendar";
 /// The most zones drawn at once. Typing narrows a longer list.
 const ZONE_LIMIT: usize = 60;
-/// The placeholder rows drawn while the zone list loads.
-const PLACEHOLDER_ROWS: usize = 8;
 
 /// Every zone name, as `timedatectl` lists them. Saved between runs, since the
 /// list rarely changes.
@@ -669,7 +667,9 @@ impl Component for DateTimePage {
             .enabled(!auto_zone_on)
             .on_press(move |_| router.open(routes::time_zone()))
             .context_menu(vec![
-                menu_item("Change time zone", move |_| router.open(routes::time_zone())),
+                menu_item("Change time zone", move |_| {
+                    router.open(routes::time_zone())
+                }),
                 menu_item("Copy time zone name", move |_| {
                     copy_text(overlays, zone.clone(), "Time zone name copied.")
                 }),
@@ -779,6 +779,9 @@ impl Component for TimeZonePage {
         let ctx = context(overlays);
         let query = use_state(String::new);
         let zones = system::use_cached_persistent("timezones", list_zones);
+        // Starts the read of the clock model when this page is opened directly.
+        let clock = system::use_cached_persistent("datetime", load);
+        let model_ready = clock.read().is_some();
         let zone_list = zones.read().clone();
         let list: &[String] = match &zone_list {
             Some(Ok(list)) => list,
@@ -829,21 +832,34 @@ impl Component for TimeZonePage {
                     .context_menu(vec![set_item, copy_item]),
             )
         });
+        // The list is drawn only when both reads are in. The first row is the
+        // chosen zone and carries its UTC offset under the name, so the zone list
+        // alone would draw it one row short and move the rows under it.
         let mut group = Group::new(None::<String>);
+        let mut page_tail: Option<Element> = None;
         match &zone_list {
-            None => group = group.rows((0..PLACEHOLDER_ROWS).map(|_| skeleton_row())),
             Some(Err(failure)) => {
                 group = group.row(status(Status::Error(failure.0.clone())));
             }
-            Some(Ok(_)) => {
+            Some(Ok(_)) if model_ready => {
                 group = group.rows(rows);
                 if matching.is_empty() {
                     group = group.row(status(Status::Empty("Nothing matches.".to_string())));
                 }
+                if hidden > 0 {
+                    page_tail = Some(caption(format!(
+                        "{hidden} more. Keep typing to narrow the list."
+                    )));
+                }
+            }
+            _ => {
+                group = group.row(skeleton_row_subtitled());
+                group = group.rows((1..ZONE_LIMIT).map(|_| skeleton_row()));
+                page_tail = Some(skeleton_caption());
             }
         }
 
-        let mut page = page_column()
+        page_column()
             .child(PageHead::new())
             .child(TimeZoneMap::new(current.clone(), ctx))
             .child(
@@ -851,13 +867,8 @@ impl Component for TimeZonePage {
                     .placeholder("Search for a city")
                     .fill_width(),
             )
-            .child(group);
-        if hidden > 0 {
-            page = page.child(caption(format!(
-                "{hidden} more. Keep typing to narrow the list."
-            )));
-        }
-        page
+            .child(group)
+            .maybe_child(page_tail)
     }
 }
 

@@ -10,6 +10,7 @@ use bingux_portal::policy::{Capability, Device, Level, Rule};
 use bingux_portal::store::{self, Store};
 use freya::prelude::*;
 
+use super::loading::revealed;
 use crate::icons::Icon;
 use crate::system::{CommandError, background, background_then};
 use crate::ui::{
@@ -415,13 +416,11 @@ impl Component for PrivacyPage {
 
         use_hook(move || reload(ctx));
 
+        // How many rules the file holds, and whether it exists, is not known before
+        // the read lands, so the groups are not drawn from a guess: the page fades
+        // in at its final layout when they are (see `loading::revealed`).
         let Some(loaded) = model.read().clone() else {
-            return page_column()
-                .child(PageHead::new())
-                .child(status(Status::Loading(
-                    "Reading the permission rules.".into(),
-                )))
-                .into_element();
+            return revealed(page_column().child(PageHead::new()), true).into_element();
         };
 
         let data = match loaded {
@@ -445,9 +444,12 @@ impl Component for PrivacyPage {
             page = page.child(status(Status::Error(message)));
         }
 
-        page.child(defaults_group(&data, ctx))
-            .child(rules_group(&data, ctx))
-            .into_element()
+        revealed(
+            page.child(defaults_group(&data, ctx))
+                .child(rules_group(&data, ctx)),
+            false,
+        )
+        .into_element()
     }
 }
 

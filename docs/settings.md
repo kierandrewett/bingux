@@ -771,14 +771,34 @@ stop or another hook is a `Component` of its own, because the placeholder and
 the loaded page often differ in how many of them they draw.
 
 `scripts/layout-stability.py` holds the pages to this. It opens each page and a
-few subpages at desktop and 390x800 size with no saved values and every
-background result held back 1.5 seconds (`BINGUX_UI_RESULT_DELAY_MS`, testing
-builds), records every frame and fails when a row separator or card border
-moves by 4 px or more between frames, or when a page shows its error card
-because of a hook mismatch. Data that comes from the machine is replaced by
-fakes (`BINGUX_SETTINGS_FAKE_NETWORK`, `_MODEM`, `_DISPLAYS`, `_BLUETOOTH`,
-`_INPUT`; snapshot builds only), so a run says the same on every computer.
-Build with `--features snapshot` first.
+few subpages at desktop and 390x800 size with no saved values, the colour
+scheme pinned from the first frame, and every background result held back 1.5
+seconds (`BINGUX_UI_RESULT_DELAY_MS`, testing builds), records every frame and
+fails on three things: a row separator or card border that moves by 4 px or
+more between two frames of the load (every frame pair of a shift counts, not
+only its first and last, and a block of rules that jumps farther than the
+matcher's 160 px window is followed too), text that appears after the page's
+first paint with nothing at its place before (a pop-in), and a page that shows
+its error card because of a hook mismatch. Data that comes from the machine is
+replaced by fakes (`BINGUX_SETTINGS_FAKE_NETWORK`, `_MODEM`, `_DISPLAYS`,
+`_BLUETOOTH`, `_INPUT`; snapshot builds only), so a run says the same on every
+computer. Build with `--features snapshot` first.
+
+A placeholder must be what the machine reads when nothing has been changed
+(the schema default), not a guess: the Keyboard page drew a Num Lock sign-in
+row from a guess that the loaded page hid, and the page moved by 50 px when the
+read landed. A list's placeholder rows are as tall as the rows that replace
+them (`skeleton_row`, `skeleton_row_subtitled`, `skeleton_caption`), and a list
+that needs two reads (the time zones and the clock model) draws its rows only
+when both are in.
+
+What sits under a page (the Related group) waits while a stand-in holds the
+page's place: a skeleton mounts `stage::use_provisional`, and a page hidden
+behind `loading::revealed` announces itself the same way, so the group is
+placed once, under the page that replaces the stand-in, and is not pushed down.
+`crates/ui/src/loading_shape_tests.rs` holds this at component level: the
+boxes of a placeholder list and of the loaded list are the same, and the
+Related group is absent while a stand-in is on screen.
 
 ## Profiling
 

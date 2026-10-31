@@ -93,13 +93,49 @@ struct PageFill {
     mounted: Rc<Cell<bool>>,
     /// Groups of the column that are still adding rows.
     pending: Rc<Cell<usize>>,
+    /// Skeletons mounted under the host: stand-ins for a page whose shape is
+    /// not known yet (see [`use_provisional`]).
+    provisional: Rc<Cell<usize>>,
 }
 
 impl PageFill {
-    /// Nothing under the host is still filling in.
+    /// Nothing under the host is still filling in, and no skeleton stands in for
+    /// what will be there.
     fn whole(&self) -> bool {
-        self.columns.get() == 0 || (self.mounted.get() && self.pending.get() == 0)
+        self.provisional.get() == 0
+            && (self.columns.get() == 0 || (self.mounted.get() && self.pending.get() == 0))
     }
+}
+
+/// Call from a stand-in for a page whose shape is not known yet (a skeleton, a
+/// page hidden until its data lands): while `active`, what goes under the page
+/// ([`after_page`]) waits, until the stand-in is gone or inactive and the page
+/// that replaces it is whole. A stand-in is not the shape of the loaded page, so
+/// a Related group placed under it would be pushed down when the data lands.
+/// Does nothing outside a host that called [`provide_page`]. Call it on every
+/// render, whatever `active` is: it is a hook.
+pub fn use_provisional(active: bool) {
+    let fill = use_hook(try_consume_context::<PageFill>);
+    let counted = use_hook(|| Rc::new(Cell::new(false)));
+    if let Some(fill) = &fill {
+        if active && !counted.get() {
+            fill.provisional.set(fill.provisional.get() + 1);
+            counted.set(true);
+        } else if !active && counted.get() {
+            fill.provisional
+                .set(fill.provisional.get().saturating_sub(1));
+            counted.set(false);
+        }
+    }
+    use_drop({
+        let counted = counted.clone();
+        move || {
+            if let (true, Some(fill)) = (counted.get(), &fill) {
+                fill.provisional
+                    .set(fill.provisional.get().saturating_sub(1));
+            }
+        }
+    });
 }
 
 /// Call in the component that hosts a page and puts something under it, before
@@ -114,7 +150,9 @@ pub fn provide_page() {
 /// [`provide_page`] with no staged page in it, and anywhere else, it is
 /// mounted at once. Once mounted it stays.
 pub fn after_page(child: impl Into<Element>) -> Element {
-    Element::from(AfterPage { child: child.into() })
+    Element::from(AfterPage {
+        child: child.into(),
+    })
 }
 
 #[derive(PartialEq)]
@@ -267,7 +305,11 @@ impl Component for Staged {
         let reserved = key
             .as_ref()
             .and_then(|key| HEIGHTS.with_borrow(|heights| heights.get(key).copied()));
-        let visible = if done.get() { total } else { shown().min(total) };
+        let visible = if done.get() {
+            total
+        } else {
+            shown().min(total)
+        };
         let whole = done.get();
         page_column()
             .maybe(!whole && reserved.is_some(), |column| {
