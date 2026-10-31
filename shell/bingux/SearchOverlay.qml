@@ -971,7 +971,7 @@ PanelWindow {
                             anchors.verticalCenter: parent.verticalCenter
                             implicitSize: 20
                             color: Theme.muted
-                            source: AdwaitaIcons.source("system-search-symbolic")
+                            source: BinguxIcons.source("system-search-symbolic")
                         }
 
                         Text {
@@ -1120,7 +1120,7 @@ PanelWindow {
                             SymbolicIcon {
                                 anchors.centerIn: parent
                                 implicitSize: 16
-                                source: AdwaitaIcons.source("edit-clear-symbolic", "window-close-symbolic")
+                                source: BinguxIcons.source("edit-clear-symbolic", "window-close-symbolic")
                                 color: clearQueryMouse.containsMouse ? Theme.text : Theme.muted
                             }
                             MouseArea {

@@ -59,7 +59,7 @@ AbstractButton {
                 SymbolicIcon {
                     anchors.centerIn: parent
                     implicitSize: 12
-                    source: root.iconName !== "" ? AdwaitaIcons.source(root.iconName) : ""
+                    source: root.iconName !== "" ? BinguxIcons.source(root.iconName) : ""
                     color: "#ffffff"
                 }
             }
@@ -89,7 +89,7 @@ AbstractButton {
             anchors.rightMargin: 10
             anchors.verticalCenter: parent.verticalCenter
             implicitSize: 12
-            source: AdwaitaIcons.source("object-select-symbolic")
+            source: BinguxIcons.source("object-select-symbolic")
             color: "#ffffff"
         }
     }

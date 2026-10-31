@@ -81,7 +81,7 @@ Item {
             SymbolicIcon {
                 anchors.centerIn: parent
                 implicitSize: 16
-                source: AdwaitaIcons.source(button.iconName)
+                source: BinguxIcons.source(button.iconName)
                 color: Theme.muted
             }
         }
@@ -144,7 +144,7 @@ Item {
                 anchors.centerIn: parent
                 visible: root.details !== null && root.details.kind === "audio"
                 implicitSize: 64
-                source: AdwaitaIcons.source("audio-x-generic-symbolic")
+                source: BinguxIcons.source("audio-x-generic-symbolic")
                 color: Theme.muted
             }
             TapHandler {

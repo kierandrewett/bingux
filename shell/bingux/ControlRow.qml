@@ -98,7 +98,7 @@ AbstractButton {
             SymbolicIcon {
                 anchors.centerIn: parent
                 implicitSize: 18
-                source: root.displayedIcon ? AdwaitaIcons.source(root.displayedIcon) : ""
+                source: root.displayedIcon ? BinguxIcons.source(root.displayedIcon) : ""
                 color: root.selected ? Theme.accent : Theme.muted
             }
         }
@@ -187,7 +187,7 @@ AbstractButton {
                     }
                 }
                 color: root.navigation ? Theme.muted : Theme.accent
-                source: AdwaitaIcons.source(root.navigation ? "go-next-symbolic" : "object-select-symbolic")
+                source: BinguxIcons.source(root.navigation ? "go-next-symbolic" : "object-select-symbolic")
             }
             IconButton {
                 objectName: root.objectName + "Navigation"

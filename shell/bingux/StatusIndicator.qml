@@ -44,7 +44,7 @@ Item {
             objectName: "statusIcon"
             anchors.centerIn: parent
             implicitSize: Theme.iconSize
-            source: root.retainedIcon ? AdwaitaIcons.source(root.retainedIcon) : ""
+            source: root.retainedIcon ? BinguxIcons.source(root.retainedIcon) : ""
             color: Theme.text
         }
     }

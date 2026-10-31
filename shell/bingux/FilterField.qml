@@ -25,7 +25,7 @@ TextField {
         x: 10
         anchors.verticalCenter: parent.verticalCenter
         implicitSize: 14
-        source: AdwaitaIcons.source("system-search-symbolic")
+        source: BinguxIcons.source("system-search-symbolic")
         color: Theme.muted
     }
     IconButton {

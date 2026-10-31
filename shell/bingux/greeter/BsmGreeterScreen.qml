@@ -233,7 +233,7 @@ Item {
                             SymbolicIcon {
                                 anchors.verticalCenter: parent.verticalCenter
                                 implicitSize: 12
-                                source: AdwaitaIcons.source("pan-up-symbolic")
+                                source: BinguxIcons.source("pan-up-symbolic")
                                 color: authTheme.ink
                             }
                             Text {

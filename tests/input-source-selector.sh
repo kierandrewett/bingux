@@ -4,7 +4,8 @@ repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 fixture="$(mktemp -d /tmp/bingux-keyboard-test.XXXXXX)"
 trap 'rm -rf "$fixture"' EXIT
 cp "$repo_dir"/shell/bingux/{AnimatedCount,InputSourceSelector,Theme,ShellPopup,PanelOutline,MenuNavigator,ShortcutSession,BarControlSurface,BarTooltip,ShellTooltip,TooltipBubble,SymbolicIcon,WidgetFace}.qml "$fixture/"
-cp "$repo_dir"/shell/bingux/{AdwaitaIcons.qml,AdwaitaIconIndex.js} "$fixture/"
+cp "$repo_dir"/shell/bingux/{BinguxIcons.qml,BinguxIconIndex.js,BinguxIconAliases.js} "$fixture/"
+cp -r "$repo_dir/shell/bingux/icons" "$fixture/icons"
 cat >"$fixture/BackgroundEffect.qml" <<'EOF'
 import QtQuick
 
@@ -38,7 +39,7 @@ QtObject {
     function fadesIn(namespace) { return false; }
 }
 EOF
-printf '%s\n' 'singleton Theme 1.0 Theme.qml' 'singleton DesktopEditing 1.0 DesktopEditing.qml' 'singleton CompositorEnvironment 1.0 CompositorEnvironment.qml' 'singleton PopupTransitions 1.0 PopupTransitions.qml' 'singleton AdwaitaIcons 1.0 AdwaitaIcons.qml' >"$fixture/qmldir"
+printf '%s\n' 'singleton Theme 1.0 Theme.qml' 'singleton DesktopEditing 1.0 DesktopEditing.qml' 'singleton CompositorEnvironment 1.0 CompositorEnvironment.qml' 'singleton PopupTransitions 1.0 PopupTransitions.qml' 'singleton BinguxIcons 1.0 BinguxIcons.qml' >"$fixture/qmldir"
 for component in AnimatedCount InputSourceSelector ShellPopup PanelOutline MenuNavigator ShortcutSession BarControlSurface BarTooltip ShellTooltip TooltipBubble SymbolicIcon WidgetFace; do
     printf '%s 1.0 %s.qml\n' "$component" "$component" >>"$fixture/qmldir"
 done
@@ -50,7 +51,6 @@ chmod +x "$fixture/source-cli"
 export BINGUX_KEYBOARD_TEST_CLI="$fixture/source-cli"
 export BINGUX_KEYBOARD_TEST_RESULTS="$fixture/result.txt"
 export BINGUX_KEYBOARD_TEST_SELECTION="$fixture/selection.txt"
-export BINGUX_ADWAITA_ICON_DIR="$repo_dir/subprojects/adwaita-icon-theme/Adwaita"
 timeout 15s "${BINGUX_QUICKSHELL:-quickshell}" -p "$fixture" --no-color >"$fixture/runtime.log" 2>&1 || true
 cat "$fixture/runtime.log"
 cat "$fixture/result.txt"

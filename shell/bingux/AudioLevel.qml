@@ -18,7 +18,7 @@ Item {
     property real wheelStep: 0.05
     signal devicesRequested(var trigger)
     readonly property bool available: node !== null && node.ready && node.audio !== null
-    readonly property string muteIconName: available && node.audio.muted ? (label === "Microphone" ? "microphone-sensitivity-muted-symbolic" : "audio-volume-muted-symbolic") : iconName
+    readonly property string muteIconName: available && node.audio.muted ? (label === "Microphone" ? "audio-input-microphone-muted-symbolic" : "audio-volume-muted-symbolic") : iconName
     Layout.fillWidth: true
     implicitWidth: audioRow.implicitWidth
     implicitHeight: audioRow.implicitHeight

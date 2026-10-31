@@ -55,7 +55,7 @@ Item {
             barWindow: root.barWindow
             filled: true
             iconName: "screen-shared-symbolic"
-            trailingIcon: "screencast-stop-symbolic"
+            trailingIcon: "media-playback-stop-symbolic"
             interactive: root.screenSharing && root.privacyState.available
             tooltip: root.screenSharing ? "Stop screen sharing" : "Screen sharing ended"
             tooltipDetails: root.screenSharing ? root.privacyState.screenSharingDetails : []
@@ -75,7 +75,7 @@ Item {
             objectName: "microphoneIndicator"
             visible: root.privacyState.microphoneInUse
             barWindow: root.barWindow
-            iconName: "microphone-sensitivity-high-symbolic"
+            iconName: "audio-input-microphone-symbolic"
             tooltip: root.privacyState.microphoneTooltip
             tooltipDetails: root.privacyState.microphoneDetails
         }

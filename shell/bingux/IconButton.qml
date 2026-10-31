@@ -47,7 +47,7 @@ AbstractButton {
             visible: !root.customPresentation && avatar.status !== Image.Ready
             anchors.centerIn: parent
             implicitSize: 16
-            source: AdwaitaIcons.source(root.iconName)
+            source: BinguxIcons.source(root.iconName)
             color: root.enabled ? Theme.text : Theme.muted
         }
         WidgetFace {

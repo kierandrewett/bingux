@@ -46,7 +46,7 @@ const widgets = [
     {
         id: "privacy",
         label: "Privacy",
-        icon: "microphone-sensitivity-high-symbolic",
+        icon: "audio-input-microphone-symbolic",
         contexts: ["desktop", "locked"],
     },
     { id: "capture", label: "Recording", icon: "media-record-symbolic", contexts: ["desktop"] },

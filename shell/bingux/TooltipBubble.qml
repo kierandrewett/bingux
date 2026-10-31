@@ -144,7 +144,7 @@ Rectangle {
                     visible: iconName !== ""
                     Layout.preferredWidth: visible ? Theme.tooltipIconSize : 0
                     Layout.preferredHeight: visible ? Theme.tooltipIconSize : 0
-                    source: visible ? AdwaitaIcons.source(iconName, "application-x-executable") : ""
+                    source: visible ? BinguxIcons.source(iconName, "application-x-executable") : ""
                     sourceSize: Qt.size(Theme.tooltipIconSize, Theme.tooltipIconSize)
                     fillMode: Image.PreserveAspectFit
                 }
@@ -193,7 +193,7 @@ Rectangle {
                     visible: iconName !== ""
                     Layout.preferredWidth: visible ? Theme.tooltipIconSize : 0
                     Layout.preferredHeight: visible ? Theme.tooltipIconSize : 0
-                    source: visible ? AdwaitaIcons.source(iconName, "application-x-executable") : ""
+                    source: visible ? BinguxIcons.source(iconName, "application-x-executable") : ""
                     sourceSize: Qt.size(Theme.tooltipIconSize, Theme.tooltipIconSize)
                     fillMode: Image.PreserveAspectFit
                     Layout.alignment: Qt.AlignTop

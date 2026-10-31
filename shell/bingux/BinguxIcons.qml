@@ -2,8 +2,15 @@ pragma Singleton
 
 import QtQuick
 import Quickshell
-import "AdwaitaIconIndex.js" as IconIndex
+import "BinguxIconAliases.js" as External
+import "BinguxIconIndex.js" as Index
 
+// Resolves an icon name to a file. Every symbolic name the shell asks for is a file of
+// shell/bingux/icons (written by scripts/icons/build.py, listed in BinguxIconIndex.js);
+// scripts/ui-lint.py fails when the shell asks for one that is not. Names that other
+// programs send (gnome-settings-daemon's on-screen display, Bluetooth devices) go through
+// BinguxIconAliases.js first. Only what no Bingux file covers is left to the system icon
+// theme: the icons of other programs' applications, notifications and tray items.
 QtObject {
     function source(iconSource, fallback) {
         const original = String(iconSource || "");
@@ -27,15 +34,9 @@ QtObject {
         for (const candidate of candidates) {
             if (!candidate)
                 continue;
-            const canonical = IconIndex.aliases[candidate] || candidate;
-            const relativePath = IconIndex.paths[canonical];
-            if (!relativePath)
-                continue;
-
-            const themeDirectory = Quickshell.env("BINGUX_ADWAITA_ICON_DIR");
-            if (themeDirectory)
-                return "file://" + themeDirectory + "/symbolic/" + relativePath;
-            return Qt.resolvedUrl("../../subprojects/adwaita-icon-theme/Adwaita/symbolic/" + relativePath);
+            const canonical = External.names[candidate] || candidate;
+            if (Index.names[canonical])
+                return Qt.resolvedUrl("icons/" + canonical + ".svg");
         }
 
         const themed = original.startsWith(imageThemePrefix) ? original : fallback === undefined ? Quickshell.iconPath(original) : Quickshell.iconPath(original, fallback);

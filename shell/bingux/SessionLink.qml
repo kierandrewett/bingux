@@ -31,7 +31,7 @@ AbstractButton {
                 visible: root.iconName !== ""
                 anchors.verticalCenter: parent.verticalCenter
                 implicitSize: Theme.iconSize
-                source: root.iconName !== "" ? AdwaitaIcons.source(root.iconName) : ""
+                source: root.iconName !== "" ? BinguxIcons.source(root.iconName) : ""
                 color: "#ffffff"
                 opacity: root.dimmed ? 0.7 : 1
             }
@@ -49,7 +49,7 @@ AbstractButton {
                 visible: root.trailingIconName !== ""
                 anchors.verticalCenter: parent.verticalCenter
                 implicitSize: 12
-                source: root.trailingIconName !== "" ? AdwaitaIcons.source(root.trailingIconName) : ""
+                source: root.trailingIconName !== "" ? BinguxIcons.source(root.trailingIconName) : ""
                 color: "#ffffff"
                 opacity: 0.8
             }
