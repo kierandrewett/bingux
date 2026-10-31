@@ -13,7 +13,11 @@ loading state are on record before the data lands. Every 16 ms frame of the run 
 saved, and consecutive frames are compared by their edges (horizontal rules,
 vertical rules, text bands) with the matcher in scripts/frame-walk.py. An edge
 that moves or changes extent between the loading frames and the loaded frames
-is a shift, and the script exits 1 if there is any.
+is a shift. Text that lands on the bare page after the first paint, where nothing was
+drawn, is a pop-in. The script exits 1 on either. What counts as an edge, a shift and a
+pop-in, and what does not (a slider track, a picture inside the column, a scrollbar
+thumb, text on a skeleton bar), is in docs/settings.md "Loading contract" and held by
+tests/frame-walk.test.py.
 
 It runs each page at the desktop size and at the 390x800 phone size, and a few
 subpages that load their own data. Network, modem and display data are fakes
@@ -78,32 +82,46 @@ FAKES = {
     "BINGUX_SETTINGS_FAKE_DISPLAYS": "1",
     "BINGUX_SETTINGS_FAKE_BLUETOOTH": "1",
     "BINGUX_SETTINGS_FAKE_INPUT": "1",
+    # The colour scheme is pinned, and applies from the first frame. Unpinned, the
+    # window starts dark and recolours itself when the scheme read lands (held back
+    # like every other result), and the frame matcher then pairs rules across two
+    # palettes. The light palette is the one the matcher sees best: a dark card is
+    # only a few luminance steps off its page, below the matcher's edge threshold.
+    "BINGUX_SETTINGS_SNAPSHOT_SCHEME": "prefer-light",
 }
 # Subpages that need more than the default fakes.
 EXTRA_FAKES = {"network/mobile": {"BINGUX_SETTINGS_FAKE_NETWORK": "modem"}}
 
 
 MIN_MOVE = 4  # px; a horizontal rule that moves less is anti-aliasing, not a shift
+COLUMN_SHARE = 0.9  # of the widest rule of the shift; see significant()
 MIN_RULE = 150  # px; row separators and card borders are long, glyph edges are not
 
 
 def significant(group: dict) -> list[dict]:
     """The pairs of a shifting group that are real layout moves.
 
-    Row separators and card borders are horizontal rules. One that moves by
-    MIN_MOVE px or more between two frames means a row or group changed height
-    or appeared. Text bands and vertical rules are not used: the veil dims the
-    loading frames, which changes how wide a text band is and where a scrollbar
-    thumb ends, without moving anything.
+    Row separators and card borders are horizontal rules as wide as the page's column. One that moves
+    by MIN_MOVE px or more between two frames means a row or group changed height or appeared. Every
+    pair of frames of the group counts, not only its first and last: the biggest move of a shift that
+    takes several frames is in the middle. Text bands and vertical rules are not used: the veil dims
+    the loading frames, which changes how wide a text band is and where a scrollbar thumb ends,
+    without moving anything.
+
+    A rule narrower than COLUMN_SHARE of the widest rule in the frames of the group is not a separator or a card
+    border but part of a picture or a control drawn inside the column (the miniature desktop of the
+    Desktop page, whose windows are redrawn as its data lands; a segmented control's selection bar,
+    which glides). They are 40 to 90% of the column; a card edge or a separator is all of it.
     """
-    pairs = group["first_pairs"] + group["last_pairs"]
+    pairs = group["pairs"]
+    column = group["column"]
     return [
         pair
         for pair in pairs
         if pair["kind"] == frame_walk.H
         and pair["change"] == "moved"
         and abs(pair["dc"]) >= MIN_MOVE
-        and pair["b"][4] - pair["b"][2] >= MIN_RULE
+        and pair["b"][4] - pair["b"][2] >= max(MIN_RULE, COLUMN_SHARE * column)
     ]
 
 
@@ -240,9 +258,9 @@ def main() -> None:
         for group in row["groups"]:
             lines.append(f"## {row['size']} {row['page']}: frames {group['frame_from']}-{group['frame_to']}")
             lines.append("")
-            for pair in significant(group)[:10]:
+            for pair in sorted(significant(group), key=lambda pair: -abs(pair["dc"]))[:10]:
                 lines.append(f"- {frame_walk.describe(pair)}")
-            lines += ["", f"![shift](shifts/{group['crop_first']})", ""]
+            lines += ["", f"![shift](shifts/{group['crop_worst']})", ""]
     (out / "report.md").write_text("\n".join(lines))
     (out / "shifts.json").write_text(
         json.dumps([{k: v for k, v in row.items()} for row in rows], indent=2, default=str)

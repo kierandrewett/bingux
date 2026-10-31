@@ -25,8 +25,8 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use crate::component::{ComponentName, Prop, Published};
-use crate::controls::{action_button, search_field};
 use crate::controls::press::{is_touch, use_press};
+use crate::controls::{action_button, search_field};
 use crate::focus::{RegionKind, claim_press, use_focus_core, use_region};
 use crate::icons::{self, Icon};
 use crate::motion::{Focusable, crossfade};
@@ -34,7 +34,9 @@ use crate::nav::gesture::{
     BackGesture, DRAG_SHARE, Pose, Release, SLIDE_MS, Update, release_curve, release_slope, slide,
 };
 use crate::nav::router::EntryContext;
-use crate::nav::{Change, Entry, Location, NavModel, RouteKind, RouteTable, Transition, use_router};
+use crate::nav::{
+    Change, Entry, Location, NavModel, RouteKind, RouteTable, Transition, use_router,
+};
 use crate::shell::back_button::BackButton;
 use crate::shell::sections::{self, SearchHit};
 use crate::shell::window::{HeaderBar, WindowControls};
@@ -182,7 +184,8 @@ impl Component for SidebarRow {
                 BODY.label(&tokens, self.label.clone())
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
-            ).focusable(focus())
+            )
+            .focusable(focus())
             .tw(&tokens, &[w_full()])
     }
 }
@@ -339,6 +342,8 @@ struct CurrentPage {
 #[derive(Clone, PartialEq)]
 struct PageFrame {
     entry: u64,
+    /// The page's own location, as text.
+    place: String,
     title: String,
     content: Element,
     scroll: ScrollController,
@@ -348,6 +353,7 @@ struct PageFrame {
 impl Component for PageFrame {
     fn render(&self) -> impl IntoElement {
         provide_context(EntryContext { id: self.entry });
+        provide_context(crate::stage::PageLocation(self.place.clone()));
         provide_context(CurrentPage {
             title: self.title.clone(),
         });
@@ -513,7 +519,6 @@ fn card_amount(x: f32) -> f32 {
     const EDGE: f32 = 0.15;
     (x / EDGE).clamp(0.0, 1.0)
 }
-
 
 /// The page's scroll and size class, provided by the frame. A compact
 /// [`PageHead`] reads the scroll to shrink and fade its large title.
@@ -724,7 +729,11 @@ fn warm_chrome(tokens: &Tokens, sidebar: &[Icon]) {
     ] {
         icons::warm(icon, IconSize::Control, text);
     }
-    icons::warm(Icon::WindowClose, IconSize::Control, Paint::OnDanger.color(tokens));
+    icons::warm(
+        Icon::WindowClose,
+        IconSize::Control,
+        Paint::OnDanger.color(tokens),
+    );
 }
 
 /// A compact screen: its header over its content.
@@ -808,6 +817,20 @@ fn back_shield() -> Rect {
         .layer(Layer::Relative(BACK_SHIELD_LAYER))
         .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
         .on_press(|event: Event<PressEventData>| event.stop_propagation())
+        .on_wheel(|event: Event<WheelEventData>| event.stop_propagation())
+}
+
+/// A clear layer over the pages while one slides in or out: it takes the wheel,
+/// and nothing else. Both pages are mounted while a slide runs and each has a
+/// scroll view of its own, so a notch that reached them would move the page that
+/// is leaving, or the page below that the slide reveals, which the person did not
+/// aim at: the page keeps the offset it had until the slide is over.
+fn slide_shield() -> Rect {
+    rect()
+        .position(Position::new_absolute().top(0.0).left(0.0))
+        .width(Size::fill())
+        .height(Size::fill())
+        .layer(Layer::Relative(BACK_SHIELD_LAYER))
         .on_wheel(|event: Event<WheelEventData>| event.stop_propagation())
 }
 
@@ -985,7 +1008,10 @@ impl Component for NavigationSplitView {
             move || warm_chrome(&tokens, &sidebar)
         });
         let selected_root = model.selected_root();
-        let shown_location = match table.default_root().and_then(|root| table.pattern_location(root)) {
+        let shown_location = match table
+            .default_root()
+            .and_then(|root| table.pattern_location(root))
+        {
             Some(first) if at_index && !narrow => first,
             _ => current.location.clone(),
         };
@@ -1047,7 +1073,12 @@ impl Component for NavigationSplitView {
         // head reads that name, and a page sliding out keeps its own frame.
         let body: Element = PageFrame {
             entry: current.id,
-            title: if searching { "Search results".to_string() } else { title.clone() },
+            place: shown_location.path_text(),
+            title: if searching {
+                "Search results".to_string()
+            } else {
+                title.clone()
+            },
             content: shown,
             scroll,
             compact: narrow,
@@ -1152,8 +1183,10 @@ impl Component for NavigationSplitView {
         let now = clock.elapsed();
         {
             let mut gesture = gesture.borrow_mut();
-            if matches!(gesture.phase(), crate::nav::gesture::Phase::Settling { commit: true, .. })
-                && active.is_none()
+            if matches!(
+                gesture.phase(),
+                crate::nav::gesture::Phase::Settling { commit: true, .. }
+            ) && active.is_none()
             {
                 gesture.finish();
             }
@@ -1176,20 +1209,21 @@ impl Component for NavigationSplitView {
         crate::task::set_sliding(active.is_some() || swiping);
 
         // ---- the desktop page ------------------------------------------------
-        let page_scroll = |scroll: ScrollController, content: Element, origin: bool, inset: bool| {
-            ScrollView::new_controlled(scroll)
-                .scrollbar_inset_top(if inset { Dim::Header.px() } else { 0.0 })
-                .scrollbar_inset_bottom(Radius::Window.px() + 3.0)
-                .drag_scrolling(false)
-                .child(
-                    rect()
-                        .width(Size::fill())
-                        .maybe(origin, |wrapper| {
-                            wrapper.on_sized(sections::origin_handler(section_registry))
-                        })
-                        .child(page_column(content, side, page_width, inset)),
-                )
-        };
+        let page_scroll =
+            |scroll: ScrollController, content: Element, origin: bool, inset: bool| {
+                ScrollView::new_controlled(scroll)
+                    .scrollbar_inset_top(if inset { Dim::Header.px() } else { 0.0 })
+                    .scrollbar_inset_bottom(Radius::Window.px() + 3.0)
+                    .drag_scrolling(false)
+                    .child(
+                        rect()
+                            .width(Size::fill())
+                            .maybe(origin, |wrapper| {
+                                wrapper.on_sized(sections::origin_handler(section_registry))
+                            })
+                            .child(page_column(content, side, page_width, inset)),
+                    )
+            };
 
         let (page_offset, page_opacity, page_sheet, page_header, outgoing) = match active.clone() {
             Some(slide) if !narrow => {
@@ -1204,7 +1238,14 @@ impl Component for NavigationSplitView {
                         progress,
                         None,
                         None,
-                        Some((0.0, 1.0 - progress, slide.outgoing, None, None, slide.scroll)),
+                        Some((
+                            0.0,
+                            1.0 - progress,
+                            slide.outgoing,
+                            None,
+                            None,
+                            slide.scroll,
+                        )),
                     ),
                     Motion::Push => {
                         memory.borrow_mut().shown = Some((slide.motion, x));
@@ -1264,6 +1305,7 @@ impl Component for NavigationSplitView {
             .child(content_region.sentinel())
             .child(wide_page)
             .maybe_child(wide_outgoing)
+            .maybe_child(active.is_some().then(slide_shield))
             .child(ScrollEdge {
                 scroll,
                 top: edge_top,
@@ -1287,19 +1329,28 @@ impl Component for NavigationSplitView {
 
         // ---- the compact screens ----------------------------------------------
         let trailing = self.header_trailing.clone();
-        let page_header_bar = |back: bool, busy: bool, title_slot: Option<Element>, controls: bool| {
-            let header = HeaderBar::new(String::new()).busy(busy).fill(Paint::Bg);
-            let header = if back { header.leading(BackButton) } else { header };
-            let header = match &trailing {
-                Some(trailing) => header.trailing(trailing.clone()),
-                None => header,
+        let page_header_bar =
+            |back: bool, busy: bool, title_slot: Option<Element>, controls: bool| {
+                let header = HeaderBar::new(String::new()).busy(busy).fill(Paint::Bg);
+                let header = if back {
+                    header.leading(BackButton)
+                } else {
+                    header
+                };
+                let header = match &trailing {
+                    Some(trailing) => header.trailing(trailing.clone()),
+                    None => header,
+                };
+                let header = if controls {
+                    header.trailing(WindowControls)
+                } else {
+                    header
+                };
+                match title_slot {
+                    Some(slot) => header.title_slot(slot),
+                    None => header,
+                }
             };
-            let header = if controls { header.trailing(WindowControls) } else { header };
-            match title_slot {
-                Some(slot) => header.title_slot(slot),
-                None => header,
-            }
-        };
         // One page's area under its header: the page and the hairline.
         let compact_area = |scroll: ScrollController, content: Element, current: bool| -> Element {
             let area = rect()
@@ -1333,6 +1384,7 @@ impl Component for NavigationSplitView {
             let entry_title = model.title(entry);
             let content: Element = PageFrame {
                 entry: entry.id,
+                place: entry.location.path_text(),
                 title: entry_title.clone(),
                 content: table.render(&entry.location),
                 scroll: entry_scroll,
@@ -1351,7 +1403,11 @@ impl Component for NavigationSplitView {
                 ),
                 false,
             );
-            compact_screen(&tokens, header.into(), compact_area(entry_scroll, content, false))
+            compact_screen(
+                &tokens,
+                header.into(),
+                compact_area(entry_scroll, content, false),
+            )
         };
 
         let current_screen: Option<Element> = narrow.then(|| {
@@ -1361,7 +1417,11 @@ impl Component for NavigationSplitView {
                     Some(trailing) => header.trailing(trailing.clone()),
                     None => header,
                 };
-                let header = if show_controls { header.trailing(WindowControls) } else { header };
+                let header = if show_controls {
+                    header.trailing(WindowControls)
+                } else {
+                    header
+                };
                 let list: Element = if searching {
                     sidebar(true, Some(compact_area(scroll, body.clone(), true))).into()
                 } else {
@@ -1375,26 +1435,51 @@ impl Component for NavigationSplitView {
                     Some(
                         ScrolledTitle {
                             scroll,
-                            title: if searching { "Search results".to_string() } else { title.clone() },
+                            title: if searching {
+                                "Search results".to_string()
+                            } else {
+                                title.clone()
+                            },
                         }
                         .into(),
                     ),
                     show_controls,
                 );
-                compact_screen(&tokens, header.into(), compact_area(scroll, body.clone(), true))
+                compact_screen(
+                    &tokens,
+                    header.into(),
+                    compact_area(scroll, body.clone(), true),
+                )
             }
         });
 
         // The stage: what the compact window draws under the window edge.
         let stage: Option<Element> = current_screen.clone().map(|screen| {
-            let at_rest = |screen: Element| -> Rect { slide_frame(0.0, 1.0, None, &tokens, rect().width(Size::fill()).height(Size::fill()).child(screen)) };
+            let at_rest = |screen: Element| -> Rect {
+                slide_frame(
+                    0.0,
+                    1.0,
+                    None,
+                    &tokens,
+                    rect()
+                        .width(Size::fill())
+                        .height(Size::fill())
+                        .child(screen),
+                )
+            };
             let stage = rect()
                 .width(Size::fill())
                 .height(Size::flex(1.0))
                 .tw(&tokens, &[clip(), bg(Paint::Bg)]);
             let width = width.max(1.0);
             let pose_of = |d: f32, k: f32| {
-                if reduced { Pose::cross_fade(d, k) } else if k > 0.0 { Pose::committing(d, k) } else { Pose::at(d, 0.0) }
+                if reduced {
+                    Pose::cross_fade(d, k)
+                } else if k > 0.0 {
+                    Pose::committing(d, k)
+                } else {
+                    Pose::at(d, 0.0)
+                }
             };
             let built: Rect = match &active {
                 Some(slide) if slide.motion == Motion::Predictive => {
@@ -1415,13 +1500,19 @@ impl Component for NavigationSplitView {
                     let moved = x * width;
                     let card = card_amount(x);
                     memory.borrow_mut().shown = Some((slide.motion, x));
-                    let outgoing = slide.outgoing_screen.clone().unwrap_or_else(|| rect().into());
+                    let outgoing = slide
+                        .outgoing_screen
+                        .clone()
+                        .unwrap_or_else(|| rect().into());
                     stage.child(at_rest(outgoing)).child(slide_frame(
                         moved,
                         1.0,
                         Some(card),
                         &tokens,
-                        rect().width(Size::fill()).height(Size::fill()).child(screen),
+                        rect()
+                            .width(Size::fill())
+                            .height(Size::fill())
+                            .child(screen),
                     ))
                 }
                 Some(slide) if slide.motion == Motion::Pop => {
@@ -1439,10 +1530,31 @@ impl Component for NavigationSplitView {
                     ))
                 }
                 Some(slide) => {
-                    let outgoing = slide.outgoing_screen.clone().unwrap_or_else(|| rect().into());
+                    let outgoing = slide
+                        .outgoing_screen
+                        .clone()
+                        .unwrap_or_else(|| rect().into());
                     stage
-                        .child(slide_frame(0.0, 1.0 - slide.eased(time), None, &tokens, rect().width(Size::fill()).height(Size::fill()).child(outgoing)))
-                        .child(slide_frame(0.0, slide.eased(time), None, &tokens, rect().width(Size::fill()).height(Size::fill()).child(screen)))
+                        .child(slide_frame(
+                            0.0,
+                            1.0 - slide.eased(time),
+                            None,
+                            &tokens,
+                            rect()
+                                .width(Size::fill())
+                                .height(Size::fill())
+                                .child(outgoing),
+                        ))
+                        .child(slide_frame(
+                            0.0,
+                            slide.eased(time),
+                            None,
+                            &tokens,
+                            rect()
+                                .width(Size::fill())
+                                .height(Size::fill())
+                                .child(screen),
+                        ))
                 }
                 None if swiping => {
                     let previous = model.previous().cloned();
@@ -1460,7 +1572,11 @@ impl Component for NavigationSplitView {
                                 memory.borrow_mut().preview = Some((previous.id, element.clone()));
                                 element
                             });
-                            let pose = if reduced { Pose::cross_fade(drag_value, 0.0) } else { Pose::at(drag_value, 0.0) };
+                            let pose = if reduced {
+                                Pose::cross_fade(drag_value, 0.0)
+                            } else {
+                                Pose::at(drag_value, 0.0)
+                            };
                             stage
                                 .child(back_veil(&tokens, &pose))
                                 .child(receding_screen(preview, &pose))
@@ -1472,6 +1588,7 @@ impl Component for NavigationSplitView {
                 }
                 None => stage.child(at_rest(screen)),
             };
+            let built = built.maybe_child(active.is_some().then(slide_shield));
             built.into()
         });
         if narrow {
@@ -1484,10 +1601,16 @@ impl Component for NavigationSplitView {
         }
 
         // ---- the window --------------------------------------------------------
-        let header = HeaderBar::new(String::new())
-            .busy(busy)
-            .fill(if overlay { Paint::Frosted } else { Paint::Bg });
-        let header = if show_back { header.leading(BackButton) } else { header };
+        let header = HeaderBar::new(String::new()).busy(busy).fill(if overlay {
+            Paint::Frosted
+        } else {
+            Paint::Bg
+        });
+        let header = if show_back {
+            header.leading(BackButton)
+        } else {
+            header
+        };
         let header = match &self.header_trailing {
             Some(trailing) => header.trailing(trailing.clone()),
             None => header,
@@ -1500,7 +1623,11 @@ impl Component for NavigationSplitView {
         let header = header.title_slot(crossfade(PageTitle {
             entry: current.id,
             scroll,
-            title: if searching { "Search results".to_string() } else { title.clone() },
+            title: if searching {
+                "Search results".to_string()
+            } else {
+                title.clone()
+            },
         }));
 
         let back_router = router;
@@ -1546,7 +1673,9 @@ impl Component for NavigationSplitView {
                 let towards = direction.reading_key(&event.key);
                 if event.modifiers == Modifiers::ALT && towards == Key::Named(NamedKey::ArrowLeft) {
                     router.back();
-                } else if event.modifiers == Modifiers::ALT && towards == Key::Named(NamedKey::ArrowRight) {
+                } else if event.modifiers == Modifiers::ALT
+                    && towards == Key::Named(NamedKey::ArrowRight)
+                {
                     router.forward();
                 } else if control && letter == "f" {
                     // Focus the search. A narrow window shows the list first.
@@ -1584,7 +1713,8 @@ impl Component for NavigationSplitView {
                     return;
                 }
                 let at = event.global_location();
-                let allowed = back_router.model().can_go_back() && back_memory.borrow().active.is_none();
+                let allowed =
+                    back_router.model().can_go_back() && back_memory.borrow().active.is_none();
                 back_gesture.borrow_mut().down(
                     clock.elapsed(),
                     (swipe_x(at.x as f32, width, direction), at.y as f32),
@@ -1599,7 +1729,10 @@ impl Component for NavigationSplitView {
                     if !gesture.is_pressed() {
                         return;
                     }
-                    gesture.moved(clock.elapsed(), (swipe_x(at.x as f32, width, direction), at.y as f32))
+                    gesture.moved(
+                        clock.elapsed(),
+                        (swipe_x(at.x as f32, width, direction), at.y as f32),
+                    )
                 };
                 match update {
                     Update::Started | Update::Progress(_) => *redraw.write() += 1,
@@ -1667,7 +1800,6 @@ impl Component for NavigationSplitView {
             )
     }
 }
-
 
 /// How much the content behind a floating header bar is blurred.
 const HEADER_BLUR: f32 = 20.0;
@@ -1894,7 +2026,9 @@ impl Component for NavEntry {
             on_key: Some(
                 (move |event: Event<KeyboardEventData>| {
                     // Walk from the selected item, the page on screen.
-                    let position = siblings.iter().position(|other| Some(other.route) == selected);
+                    let position = siblings
+                        .iter()
+                        .position(|other| Some(other.route) == selected);
                     let target = match &event.key {
                         Key::Named(NamedKey::ArrowDown) => {
                             position.and_then(|index| siblings.get(index + 1))
@@ -2044,7 +2178,10 @@ mod tests {
             let time = step as f32 / 320.0;
             let opening = page_at(Motion::Push, 1.0 - time);
             let closing = page_at(Motion::Pop, time);
-            assert!((opening - closing).abs() < 1e-5, "{step} ms: {opening} against {closing}");
+            assert!(
+                (opening - closing).abs() < 1e-5,
+                "{step} ms: {opening} against {closing}"
+            );
         }
         assert_eq!(page_at(Motion::Push, 0.0), 1.0);
         assert_eq!(page_at(Motion::Push, 1.0), 0.0);
@@ -2065,7 +2202,10 @@ mod tests {
         for share in [0.05, 0.25, 0.5, 0.9] {
             let open_in = within(Motion::Push, share);
             let close_in = within(Motion::Pop, share);
-            assert!((open_in - close_in).abs() < 1e-3, "{share}: {open_in} against {close_in}");
+            assert!(
+                (open_in - close_in).abs() < 1e-3,
+                "{share}: {open_in} against {close_in}"
+            );
         }
     }
 
@@ -2089,7 +2229,10 @@ mod tests {
             let time = step as f32 / 100.0;
             // A press, and a swipe let go at rest, are the same curve as every slide.
             assert_eq!(curve(Motion::Predictive, None, time), slide(time));
-            assert_eq!(curve(Motion::Predictive, None, time), curve(Motion::Pop, None, time));
+            assert_eq!(
+                curve(Motion::Predictive, None, time),
+                curve(Motion::Pop, None, time)
+            );
             assert_eq!(curve(Motion::Push, None, time), slide(time));
         }
         // A swipe let go going faster starts faster, and every one ends at 1.
@@ -2099,7 +2242,10 @@ mod tests {
         // finishes over the first 40 % of the commit, so the commit starts at
         // 0.4 * 2.5 * 0.32 / 0.5 times its average speed.
         let slope = swipe_slope(0.5, 2.5).unwrap();
-        assert!((slope - DRAG_SHARE * 2.5 * 0.32 / 0.5).abs() < 1e-6, "{slope}");
+        assert!(
+            (slope - DRAG_SHARE * 2.5 * 0.32 / 0.5).abs() < 1e-6,
+            "{slope}"
+        );
         // The drag then moves at 2.5 widths a second as the finger did: no stall.
         let dt = 0.001;
         let k_speed = curve(Motion::Predictive, Some(slope), dt / 0.32) / dt;

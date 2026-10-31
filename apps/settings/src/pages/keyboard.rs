@@ -202,14 +202,16 @@ fn load() -> Result<Model, CommandError> {
     })
 }
 
-/// The page as it shows before its first read lands: the values this machine
-/// reads, so the rows keep their places when the real values arrive.
+/// The page as it shows before its first read lands: the schema defaults, which
+/// is what a machine with no changes reads, so the rows keep their places when
+/// the real values arrive. Remembering Num Lock is on by default, which hides
+/// the sign-in row nested under it.
 fn placeholder() -> Model {
     Model {
         repeat: true,
         delay_ms: 500.0,
         interval_ms: 30.0,
-        remember_numlock: false,
+        remember_numlock: true,
         numlock_on: false,
         xkb_options: Vec::new(),
         overrides: Json::Null,

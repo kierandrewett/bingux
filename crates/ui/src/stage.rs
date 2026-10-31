@@ -52,8 +52,19 @@ pub(crate) const FIRST_ROWS: usize = 24;
 pub(crate) const MORE_ROWS: usize = 12;
 
 thread_local! {
+    /// The pages (by location) that had a stand-in on screen and have not been mounted since: the
+    /// next page that mounts there replaces the stand-in with its data landing, not a page that
+    /// slides in. See [`use_provisional`].
+    static STAND_INS: RefCell<std::collections::HashSet<String>> = RefCell::new(std::collections::HashSet::new());
     /// The height of each page, by location, the last time it was whole.
     static HEIGHTS: RefCell<HashMap<String, f32>> = RefCell::new(HashMap::new());
+}
+
+/// The page's own place: what [`PageLocation`] says, else where the router is.
+fn page_key() -> Option<String> {
+    try_consume_context::<PageLocation>()
+        .map(|place| place.0)
+        .or_else(|| crate::nav::router::try_router().map(|router| router.location().path_text()))
 }
 
 /// Whether staging is off (`BINGUX_NO_STAGE` is set).
@@ -75,6 +86,12 @@ pub fn staged(mut column: Rect) -> Rect {
     column.child(Staged { children })
 }
 
+/// The location of the page that is drawn, provided by whoever draws it (the
+/// split view gives each page its own, including one that slides out), so what a
+/// page remembers about itself is kept under its own place.
+#[derive(Clone, PartialEq)]
+pub struct PageLocation(pub String);
+
 /// What a page being staged shares with the groups under it: how many of
 /// them are still adding rows. The page waits for them before it adds the next
 /// child.
@@ -93,13 +110,57 @@ struct PageFill {
     mounted: Rc<Cell<bool>>,
     /// Groups of the column that are still adding rows.
     pending: Rc<Cell<usize>>,
+    /// Skeletons mounted under the host: stand-ins for a page whose shape is
+    /// not known yet (see [`use_provisional`]).
+    provisional: Rc<Cell<usize>>,
 }
 
 impl PageFill {
-    /// Nothing under the host is still filling in.
+    /// Nothing under the host is still filling in, and no skeleton stands in for
+    /// what will be there.
     fn whole(&self) -> bool {
-        self.columns.get() == 0 || (self.mounted.get() && self.pending.get() == 0)
+        self.provisional.get() == 0
+            && (self.columns.get() == 0 || (self.mounted.get() && self.pending.get() == 0))
     }
+}
+
+/// Call from a stand-in for a page whose shape is not known yet (a skeleton, a
+/// page hidden until its data lands): while `active`, what goes under the page
+/// ([`after_page`]) waits, until the stand-in is gone or inactive and the page
+/// that replaces it is whole. A stand-in is not the shape of the loaded page, so
+/// a Related group placed under it would be pushed down when the data lands.
+/// Does nothing outside a host that called [`provide_page`]. Call it on every
+/// render, whatever `active` is: it is a hook.
+pub fn use_provisional(active: bool) {
+    let fill = use_hook(try_consume_context::<PageFill>);
+    let counted = use_hook(|| Rc::new(Cell::new(false)));
+    // A page that replaces this stand-in is the data landing in a page that is already on
+    // screen. It is mounted whole: staged a group a frame it would show the page's first
+    // groups under blank space where the stand-in was, and the rest popping in one by one.
+    use_hook(|| {
+        if active && let Some(key) = page_key() {
+            STAND_INS.with_borrow_mut(|marks| marks.insert(key));
+        }
+    });
+    if let Some(fill) = &fill {
+        if active && !counted.get() {
+            fill.provisional.set(fill.provisional.get() + 1);
+            counted.set(true);
+        } else if !active && counted.get() {
+            fill.provisional
+                .set(fill.provisional.get().saturating_sub(1));
+            counted.set(false);
+        }
+    }
+    use_drop({
+        let counted = counted.clone();
+        move || {
+            if let (true, Some(fill)) = (counted.get(), &fill) {
+                fill.provisional
+                    .set(fill.provisional.get().saturating_sub(1));
+            }
+        }
+    });
 }
 
 /// Call in the component that hosts a page and puts something under it, before
@@ -114,7 +175,9 @@ pub fn provide_page() {
 /// [`provide_page`] with no staged page in it, and anywhere else, it is
 /// mounted at once. Once mounted it stays.
 pub fn after_page(child: impl Into<Element>) -> Element {
-    Element::from(AfterPage { child: child.into() })
+    Element::from(AfterPage {
+        child: child.into(),
+    })
 }
 
 #[derive(PartialEq)]
@@ -144,10 +207,22 @@ impl Component for AfterPage {
                 })
             }
         });
+        // A page that was hidden or drawn as a skeleton fades its data in; what sits under it
+        // fades in with it, or it would stand on the screen first, with nothing above it.
+        let held = use_hook(|| Rc::new(Cell::new(false)));
+        if fill.as_ref().is_some_and(|fill| fill.provisional.get() > 0) {
+            held.set(true);
+        }
+        let tokens = crate::surface::tokens_now();
+        let fade = crate::motion::use_tween_from(
+            if held.get() { 0.0 } else { 1.0 },
+            1.0,
+            tokens.motion(crate::motion::MOVE_MS),
+        );
         if shown() {
-            self.child.clone()
+            Element::from(rect().opacity(fade).child(self.child.clone()))
         } else {
-            rect().into()
+            Element::from(rect())
         }
     }
 }
@@ -217,7 +292,22 @@ impl Component for Staged {
     fn render(&self) -> impl IntoElement {
         let total = self.children.len();
         let mut shown = use_state(|| FIRST);
-        let done = use_hook(|| Rc::new(Cell::new(false)));
+        let place = use_hook(page_key);
+        let replaces_stand_in = use_hook({
+            let place = place.clone();
+            move || place.is_some_and(|key| STAND_INS.with_borrow_mut(|marks| marks.remove(&key)))
+        });
+        // Marks left by stand-ins inside this page (a skeleton row in one of its groups) are not for
+        // the next page that mounts here.
+        use_drop({
+            let place = place.clone();
+            move || {
+                if let Some(key) = &place {
+                    STAND_INS.with_borrow_mut(|marks| marks.remove(key));
+                }
+            }
+        });
+        let done = use_hook(|| Rc::new(Cell::new(replaces_stand_in)));
         let known = use_hook(|| Rc::new(Cell::new(total)));
         known.set(total);
         // What the host of the page, if there is one, is told (see `provide_page`):
@@ -263,11 +353,26 @@ impl Component for Staged {
                 })
             }
         });
-        let key = crate::nav::router::try_router().map(|router| router.location().path_text());
+        // The page's own place, not the router's: a page that slides out is built again
+        // while the router already points at the page that replaced it, and a page
+        // that Back reveals is built again before the router points at it for the
+        // frame. Keyed by the router, either one found no height kept for it, drew
+        // shorter than its scroll offset, and the scroll view cut the offset to fit
+        // (the offset it keeps on the page's controller, so Back found the page at
+        // the top).
+        let key = try_consume_context::<PageLocation>()
+            .map(|place| place.0)
+            .or_else(|| {
+                crate::nav::router::try_router().map(|router| router.location().path_text())
+            });
         let reserved = key
             .as_ref()
             .and_then(|key| HEIGHTS.with_borrow(|heights| heights.get(key).copied()));
-        let visible = if done.get() { total } else { shown().min(total) };
+        let visible = if done.get() {
+            total
+        } else {
+            shown().min(total)
+        };
         let whole = done.get();
         page_column()
             .maybe(!whole && reserved.is_some(), |column| {
