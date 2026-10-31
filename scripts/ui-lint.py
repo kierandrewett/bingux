@@ -37,6 +37,7 @@ that check on a small tree and fails unless a bogus name is reported.
 import re
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from crate_dirs import crate_dir  # noqa: E402
 
@@ -191,9 +192,7 @@ def check(path: Path) -> list[str]:
             f"{match.group(0).rstrip('(')}(..) styles a box directly; use .tw(&tokens, ..)",
         )
     for match in COLOUR_FIELD.finditer(text):
-        report(
-            match.start(), f"{match.group(0)} is a raw colour; use Paint::.. or Ink::.."
-        )
+        report(match.start(), f"{match.group(0)} is a raw colour; use Paint::.. or Ink::..")
     for match in RAW_VALUE.finditer(text):
         if match.group(0) in ("Color::TRANSPARENT",):
             report(match.start(), "Color::TRANSPARENT; use Paint::Transparent")
@@ -214,9 +213,7 @@ def check(path: Path) -> list[str]:
         args = args_of(text, match.end() - 1)
         if args.strip().startswith(("Size::percent(", "Size::flex(")):
             continue
-        numbers = [
-            m.group(1) for m in LITERAL.finditer(args) if m.group(1) not in ("0", "0.0")
-        ]
+        numbers = [m.group(1) for m in LITERAL.finditer(args) if m.group(1) not in ("0", "0.0")]
         if numbers or ".px()" in args:
             report(
                 match.start(),
@@ -232,9 +229,7 @@ def check(path: Path) -> list[str]:
             )
     for match in ICON.finditer(text):
         parts = [part.strip() for part in args_of(text, match.end() - 1).split(",")]
-        if len(parts) > 1 and not parts[1].startswith(
-            ("IconSize::", "size", "self.size")
-        ):
+        if len(parts) > 1 and not parts[1].startswith(("IconSize::", "size", "self.size")):
             if LITERAL.search(parts[1]):
                 report(match.start(), f"icon size {parts[1]} is not an IconSize")
     # `// ui-lint: allow(reason)` on a line, or the line above it, exempts that
@@ -403,11 +398,7 @@ def check_blocking(path: Path) -> list[str]:
     text = strip_comments(path.read_text())
     # Unit tests may touch the disk.
     cut = min(
-        (
-            i
-            for i in (text.find("#[cfg(test)]"), text.find("#[cfg(all(test"))
-            if i != -1
-        ),
+        (i for i in (text.find("#[cfg(test)]"), text.find("#[cfg(all(test")) if i != -1),
         default=-1,
     )
     if cut != -1:
@@ -475,19 +466,11 @@ def panic_problems() -> list[str]:
         text = manifest.read_text()
         rel = manifest.relative_to(ROOT)
         if re.search(r'^\s*panic\s*=\s*"abort"', text, re.MULTILINE):
-            found.append(
-                f'{rel}: panic = "abort" makes every panic fatal; the error boundaries need unwinding'
-            )
+            found.append(f'{rel}: panic = "abort" makes every panic fatal; the error boundaries need unwinding')
         for table in ("profile.dev", "profile.release"):
-            section = re.search(
-                rf"^\[{re.escape(table)}\]\n((?:(?!\[).*\n?)*)", text, re.MULTILINE
-            )
-            if not section or not re.search(
-                r'^\s*panic\s*=\s*"unwind"', section.group(1), re.MULTILINE
-            ):
-                found.append(
-                    f'{rel}: [{table}] must say panic = "unwind" (the error boundaries catch panics)'
-                )
+            section = re.search(rf"^\[{re.escape(table)}\]\n((?:(?!\[).*\n?)*)", text, re.MULTILINE)
+            if not section or not re.search(r'^\s*panic\s*=\s*"unwind"', section.group(1), re.MULTILINE):
+                found.append(f'{rel}: [{table}] must say panic = "unwind" (the error boundaries catch panics)')
         if 'freya-core = { path = "../../vendor/freya-core" }' not in text:
             found.append(
                 f"{rel}: [patch.crates-io] must patch freya-core with ../../vendor/freya-core (see vendor/README.md)"
@@ -671,7 +654,9 @@ def shell_icon_problems(root: Path = ROOT, dynamic=SHELL_ICONS_DYNAMIC) -> list[
     files = [
         path
         for path in sorted(shell.rglob("*"))
-        if path.suffix in (".qml", ".js", ".py") and path.name not in SHELL_ICON_FILES and "icons" not in path.relative_to(shell).parts
+        if path.suffix in (".qml", ".js", ".py")
+        and path.name not in SHELL_ICON_FILES
+        and "icons" not in path.relative_to(shell).parts
     ]
     for path in files:
         text = path.read_text(errors="replace")
@@ -697,7 +682,9 @@ def shell_icon_problems(root: Path = ROOT, dynamic=SHELL_ICONS_DYNAMIC) -> list[
     if model.is_file():
         body = re.search(r"function bluetoothIcon\(.*?const devices = \[(.*?)\];", model.read_text(), re.S)
         if body is None:
-            found.append(f"{SHELL_DIR}/ControlCentreModel.js: bluetoothIcon no longer has a `const devices = [..]` list")
+            found.append(
+                f"{SHELL_DIR}/ControlCentreModel.js: bluetoothIcon no longer has a `const devices = [..]` list"
+            )
         else:
             for device in re.findall(r'"([^"]+)"', body.group(1)):
                 check_name(f"{SHELL_DIR}/ControlCentreModel.js (bluetoothIcon)", device + "-symbolic")
@@ -715,13 +702,18 @@ def shell_icon_self_test() -> list[str]:
         (shell / "icons").mkdir(parents=True)
         (shell / "icons" / "go-next-symbolic.svg").write_text("<svg/>")
         (shell / "BinguxIconIndex.js").write_text('var names = {\n    "go-next-symbolic": true,\n};\n')
-        (shell / "BinguxIconAliases.js").write_text('var names = {\n    "go-forward-symbolic": "go-next-symbolic",\n};\n')
+        (shell / "BinguxIconAliases.js").write_text(
+            'var names = {\n    "go-forward-symbolic": "go-next-symbolic",\n};\n'
+        )
         (shell / "Row.qml").write_text(
             'Item {\n    // "commented-symbolic" is prose\n    source: BinguxIcons.source("go-next-symbolic")\n'
             '    other: BinguxIcons.source("go-forward-symbolic")\n}\n'
         )
         if shell_icon_problems(root, dynamic=()):
-            failures.append("a tree whose names the set has or maps was reported: " + "; ".join(shell_icon_problems(root, dynamic=())))
+            failures.append(
+                "a tree whose names the set has or maps was reported: "
+                + "; ".join(shell_icon_problems(root, dynamic=()))
+            )
         (shell / "Row.qml").write_text('Item { source: BinguxIcons.source("bogus-icon-symbolic") }\n')
         if not any("bogus-icon-symbolic" in problem for problem in shell_icon_problems(root, dynamic=())):
             failures.append("a QML file that asks for bogus-icon-symbolic was not reported")
@@ -730,7 +722,9 @@ def shell_icon_self_test() -> list[str]:
         if not any("bogus-helper-symbolic" in problem for problem in shell_icon_problems(root, dynamic=())):
             failures.append("a Python helper that asks for bogus-helper-symbolic was not reported")
         (shell / "Helper.py").unlink()
-        (shell / "BinguxIconAliases.js").write_text('var names = {\n    "go-forward-symbolic": "go-nowhere-symbolic",\n};\n')
+        (shell / "BinguxIconAliases.js").write_text(
+            'var names = {\n    "go-forward-symbolic": "go-nowhere-symbolic",\n};\n'
+        )
         if not any("go-nowhere-symbolic" in problem for problem in shell_icon_problems(root, dynamic=())):
             failures.append("an alias to an icon the set lacks was not reported")
     return failures
@@ -758,9 +752,7 @@ def main() -> int:
     ):
         text = (ROOT / "crates/ui/src" / name).read_text()
         if required not in text or "Dim::Button" in strip_comments(text):
-            problems.append(
-                f"{name}: height must come from {required} (the header button height), not Dim::Button"
-            )
+            problems.append(f"{name}: height must come from {required} (the header button height), not Dim::Button")
     launches = []
     for path in own_rust_files("**/*.rs"):
         if path in LAUNCH_ALLOWED:

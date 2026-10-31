@@ -224,7 +224,9 @@ def rect_d(x: float, y: float, w: float, h: float, rx: float, smoothing: float =
         parts.append(f"L{f(round(start[0], 6))} {f(round(start[1], 6))}")
         parts.append(f"C{at(start, u, v, a, 0)} {at(start, u, v, a + b, 0)} {at(start, u, v, a + b + c, d)}")
         parts.append(f"A{f(rx)} {f(rx)} 0 0 1 {at(start, u, v, a + b + c + arc_len, d + arc_len)}")
-        parts.append(f"C{at(start, u, v, p, d + arc_len + c)} {at(start, u, v, p, d + arc_len + b + c)} {at(start, u, v, p, p)}")
+        parts.append(
+            f"C{at(start, u, v, p, d + arc_len + c)} {at(start, u, v, p, d + arc_len + b + c)} {at(start, u, v, p, p)}"
+        )
     return "".join(parts) + "Z"
 
 
@@ -394,9 +396,7 @@ def segments_of(path: pathops.Path) -> list[tuple[str, list[tuple[float, float]]
                     end = _mid(ctrl, ctrls[(i + 1) % n])
                     result.append(("qCurveTo", [ctrl, end]))
             else:
-                for ctrl, end in pathops.decompose_quadratic_segment(
-                    (*ctrls, start)
-                ):
+                for ctrl, end in pathops.decompose_quadratic_segment((*ctrls, start)):
                     result.append(("qCurveTo", [ctrl, end]))
         elif verb == "qCurveTo":
             for ctrl, end in pathops.decompose_quadratic_segment(pts):
@@ -487,8 +487,6 @@ def scaled_path(ds: list[str], scale: float) -> pathops.Path:
         out.addPath(d_to_path(sp.d()))
     out.convertConicsToQuads(0.02)
     return pathops.simplify(out)
-
-
 
 
 def contours_of(path: pathops.Path) -> list[list[tuple[str, list[tuple[float, float]]]]]:
@@ -605,7 +603,9 @@ def box_path(left: float, top: float, right: float, bottom: float) -> pathops.Pa
 
 def mirrored(path: pathops.Path, keep: str) -> pathops.Path:
     """The `keep` half of `path` (about x = 8) and its mirror image."""
-    half = box_path(-GRID, -GRID, GRID / 2, 2 * GRID) if keep == "left" else box_path(GRID / 2, -GRID, 2 * GRID, 2 * GRID)
+    half = (
+        box_path(-GRID, -GRID, GRID / 2, 2 * GRID) if keep == "left" else box_path(GRID / 2, -GRID, 2 * GRID, 2 * GRID)
+    )
     kept = pathops.simplify(pathops.op(path, half, pathops.PathOp.INTERSECTION))
     flipped = affine(kept, -1.0, 1.0, GRID, 0.0)
     return pathops.simplify(pathops.op(kept, flipped, pathops.PathOp.UNION))
@@ -756,7 +756,7 @@ def compile_source(src: Path) -> Compiled:
     except ET.ParseError as exc:
         raise BuildError(f"{src.name}: cannot parse: {exc}") from exc
     if root.tag.removeprefix(SVG_NS) != "svg" or root.attrib.get("viewBox", "").split() != ["0", "0", "16", "16"]:
-        raise BuildError(f"{src.name}: root must be <svg viewBox=\"0 0 16 16\">")
+        raise BuildError(f'{src.name}: root must be <svg viewBox="0 0 16 16">')
 
     shapes: list[tuple[str, dict[str, str], dict[str, str]]] = []
     walk(root, [], shapes)
@@ -791,7 +791,7 @@ def compile_source(src: Path) -> Compiled:
             continue
         try:
             d = shape_d(tag, own)
-            base = d_to_path(d)
+            d_to_path(d)  # rejects a path that does not parse
         except (BuildError, ValueError, IndexError) as exc:
             errors.append(f"{where}: {exc}")
             continue
@@ -1031,7 +1031,9 @@ def judge(m: Measure, labels: Labels) -> list[str]:
         problems.append(f"{short}: ink centre is off the box centre by {cx:+.2f}, {cy:+.2f} px; move it with dx/dy")
     for size, limit in SOFT_LIMIT.items():
         if not exempt("soft") and m.soft[size] > limit:
-            problems.append(f"{short}: {m.soft[size]} soft edge pixels at {size} px (limit {limit}); the glyph is placed badly")
+            problems.append(
+                f"{short}: {m.soft[size]} soft edge pixels at {size} px (limit {limit}); the glyph is placed badly"
+            )
     allowed = SOFT_SLACK[0] * m.soft_best + SOFT_SLACK[1]
     if not exempt("soft") and m.soft[DESIGN_SIZE] > allowed:
         problems.append(
@@ -1078,7 +1080,9 @@ def label_problems(compiled: dict[str, Compiled], labels: Labels) -> list[str]:
     for short in sorted(named - shorts):
         problems.append(f"{short}: named in a labels.tsv directive but has no source")
     for short in sorted(labels.mirror_rtl & labels.symmetric):
-        problems.append(f"{short}: is left-right symmetric, so mirroring it in a right to left interface changes nothing; drop it from `#mirror_rtl`")
+        problems.append(
+            f"{short}: is left-right symmetric, so mirroring it in a right to left interface changes nothing; drop it from `#mirror_rtl`"
+        )
     return problems
 
 
@@ -1093,7 +1097,9 @@ def counter_problems(compiled: dict[str, Compiled], labels: Labels) -> list[str]
         natural = fork_outline({"name": row.fork, "weight": row.weight, "align": "none"}, name).path
         before, after = len(contours_of(natural)), len(contours_of(item.path))
         if after < before:
-            problems.append(f"{short}: fitting closed {before - after} of the {row.fork} glyph's {before} holes or parts (mirror or scale)")
+            problems.append(
+                f"{short}: fitting closed {before - after} of the {row.fork} glyph's {before} holes or parts (mirror or scale)"
+            )
     return problems
 
 
@@ -1122,7 +1128,10 @@ def distortion_problems(compiled: dict[str, Compiled], labels: Labels) -> list[s
     return problems
 
 
-SIDEBAR_DENSITY = (0.10, 0.55)  # ink as a share of the 16 x 16 box: the set mixes fills (40 to 50 %) and outlines (20 to 40 %) but has no solid slab
+SIDEBAR_DENSITY = (
+    0.10,
+    0.55,
+)  # ink as a share of the 16 x 16 box: the set mixes fills (40 to 50 %) and outlines (20 to 40 %) but has no solid slab
 
 
 def sidebar_problems(measures: list[Measure], labels: Labels) -> list[str]:
@@ -1138,7 +1147,7 @@ def sidebar_problems(measures: list[Measure], labels: Labels) -> list[str]:
     by_name = {short_name(m.name): m for m in measures}
     problems: list[str] = []
     for short in names:
-        m, row = by_name.get(short), labels.rows.get(short)
+        m = by_name.get(short)
         if m is None:
             continue
         if not SIDEBAR_DENSITY[0] <= m.density <= SIDEBAR_DENSITY[1]:
@@ -1153,8 +1162,10 @@ def lint_pixels(compiled: dict[str, Compiled], labels: Labels, whole_set: bool) 
     """Judge every icon by its pixels. `whole_set` also checks labels.tsv covers the sources."""
     measures = [measure_icon(item, labels) for item in compiled.values()]
     problems = (
-        label_problems(compiled, labels) + counter_problems(compiled, labels) + distortion_problems(compiled, labels)
-    ) if whole_set else []
+        (label_problems(compiled, labels) + counter_problems(compiled, labels) + distortion_problems(compiled, labels))
+        if whole_set
+        else []
+    )
     for m in measures:
         problems += judge(m, labels)
     if whole_set:
@@ -1188,15 +1199,13 @@ def suggest_fit(short: str, row, labels: Labels) -> dict[str, str]:
     where = f"{short}-symbolic.svg"
 
     def long_side(zoom: float) -> float:
-        l, t, r, b = fork_outline(dict(base, scale=repr(zoom), align="none"), where).path.bounds
-        return max(r - l, b - t)
+        left, top, right, bottom = fork_outline(dict(base, scale=repr(zoom), align="none"), where).path.bounds
+        return max(right - left, bottom - top)
 
     cls = classify(short, labels)
     lo, hi = RULES[cls]
     valid = [
-        zoom
-        for zoom in (round(step * 0.01, 2) for step in range(60, 171))
-        if lo - 0.05 <= long_side(zoom) <= hi + 0.05
+        zoom for zoom in (round(step * 0.01, 2) for step in range(60, 171)) if lo - 0.05 <= long_side(zoom) <= hi + 0.05
     ]
     if not valid:
         raise BuildError(f"{short}: no scale puts the long side in {lo:g} to {hi:g} px")
@@ -1240,7 +1249,9 @@ def read_copying() -> str:
 def shell_files(compiled: dict[str, Compiled]) -> dict[str, str]:
     """The QML shell's copy: Adwaita's dark fill on the path (the shell recolours it)
     and an index of the names it can serve, in `BinguxIconIndex.js`."""
-    files = {f"{name}.svg": item.svg.replace('<path d=', f'<path fill="{SHELL_FILL}" d=') for name, item in compiled.items()}
+    files = {
+        f"{name}.svg": item.svg.replace("<path d=", f'<path fill="{SHELL_FILL}" d=') for name, item in compiled.items()
+    }
     names = "".join(f'    "{name}": true,\n' for name in sorted(compiled))
     files["BinguxIconIndex.js"] = (
         "// Generated by scripts/icons/build.py; do not edit.\n"
@@ -1354,7 +1365,9 @@ def check(out_dir: Path) -> str:
 
 
 def measure_table(measures: list[Measure]) -> str:
-    lines = [f"{'icon':42s} {'class':9s} {'w':>6s} {'h':>6s} {'cx':>6s} {'cy':>6s} {'soft16':>6s} {'soft18':>6s} {'ink%':>5s}"]
+    lines = [
+        f"{'icon':42s} {'class':9s} {'w':>6s} {'h':>6s} {'cx':>6s} {'cy':>6s} {'soft16':>6s} {'soft18':>6s} {'ink%':>5s}"
+    ]
     for m in sorted(measures, key=lambda m: m.name):
         cx, cy = m.centre
         lines.append(
@@ -1379,7 +1392,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUT, help="output directory")
     parser.add_argument("--check", action="store_true", help="validate instead of writing")
-    parser.add_argument("--lint", action="store_true", help="only judge the sources' pixels (size, centre, crispness, symmetry)")
+    parser.add_argument(
+        "--lint", action="store_true", help="only judge the sources' pixels (size, centre, crispness, symmetry)"
+    )
     parser.add_argument("--measure", action="store_true", help="print the measurements of every icon")
     parser.add_argument(
         "--suggest", nargs="*", metavar="ICON", help="propose the scale for fork icons (all, or the ones named)"
@@ -1406,12 +1421,16 @@ def main(argv: list[str] | None = None) -> int:
             if args.measure:
                 print(measure_table(measures))
             if problems:
-                raise BuildError("\n".join(problems) + "\n\nsoft edge pixels, worst icons first:\n" + soft_table(measures))
+                raise BuildError(
+                    "\n".join(problems) + "\n\nsoft edge pixels, worst icons first:\n" + soft_table(measures)
+                )
             print(f"icons: pixel rules ok for {len(measures)} icons")
         elif args.check:
             table = check(out_dir)
             print("soft edge pixels, worst icons first:\n" + table)
-            print(f"icons: ok ({len(referenced_icons())} referenced, all sources valid, output matches, pixel rules hold)")
+            print(
+                f"icons: ok ({len(referenced_icons())} referenced, all sources valid, output matches, pixel rules hold)"
+            )
         else:
             only = {n for n in args.only.split(",") if n} if args.only else None
             if only is not None and out_dir.resolve() == DEFAULT_OUT.resolve():

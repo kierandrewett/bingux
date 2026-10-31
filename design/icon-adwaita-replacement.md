@@ -5,19 +5,19 @@ Each now has a Bingux source in `scripts/icons/src` (generated into `shell/bingu
 listed in `shell/bingux/BinguxIconIndex.js`), or its callers were moved to a Bingux icon that
 already existed. `scripts/ui-lint.py` fails on any name the shell asks for that is neither.
 
-| Adwaita name | Now | Callers (shell) |
-| ------------ | --- | --------------- |
-| `go-down` | callers use `pan-down` (the Adwaita name was only a fallback) | `NotificationStack.qml` |
-| `process-stop` | new Bingux source `process-stop` (`StopCircle` fill) | `HardwareDetails.qml` Force quit, `ControlCentreDetails.qml` Stop searching |
-| `view-pin` | new Bingux source `view-pin` (a drawn thumbtack) | `Dock.qml` pin badge |
-| `system-run` | new Bingux source `system-run` (`PlayCircle` fill); the process table's service rows use `preferences-system` instead | `SearchResult.qml` (action results), `ProcessTable.qml` |
-| `utilities-terminal` | new Bingux source (`Terminal` bold) | `DesktopLayout.js`, `TerminalSidebar.qml` |
-| `accessories-text-editor` | new Bingux source (`Notepad` fill) | `DesktopLayout.js`, `TerminalSidebar.qml` |
-| `action-unavailable` | new Bingux source (`Prohibit` bold) | `OsdCard.qml` |
-| `dialog-question` | callers use `help-browser` (circled `?`, already Bingux) | `SearchResult.qml` and `searchd`'s quick chat result (chat results) |
-| `document-open-recent` | new Bingux source (`ClockCounterClockwise` bold) | `EmojiPicker.qml` |
-| `document-save` | new Bingux source (`FloppyDisk` bold) | `RecordingIndicator.qml`, `NotificationStack.qml` (save action) |
-| `document-save-as` | callers use `document-save` | `NotificationStack.qml` |
+| Adwaita name              | Now                                                                                                                   | Callers (shell)                                                             |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `go-down`                 | callers use `pan-down` (the Adwaita name was only a fallback)                                                         | `NotificationStack.qml`                                                     |
+| `process-stop`            | new Bingux source `process-stop` (`StopCircle` fill)                                                                  | `HardwareDetails.qml` Force quit, `ControlCentreDetails.qml` Stop searching |
+| `view-pin`                | new Bingux source `view-pin` (a drawn thumbtack)                                                                      | `Dock.qml` pin badge                                                        |
+| `system-run`              | new Bingux source `system-run` (`PlayCircle` fill); the process table's service rows use `preferences-system` instead | `SearchResult.qml` (action results), `ProcessTable.qml`                     |
+| `utilities-terminal`      | new Bingux source (`Terminal` bold)                                                                                   | `DesktopLayout.js`, `TerminalSidebar.qml`                                   |
+| `accessories-text-editor` | new Bingux source (`Notepad` fill)                                                                                    | `DesktopLayout.js`, `TerminalSidebar.qml`                                   |
+| `action-unavailable`      | new Bingux source (`Prohibit` bold)                                                                                   | `OsdCard.qml`                                                               |
+| `dialog-question`         | callers use `help-browser` (circled `?`, already Bingux)                                                              | `SearchResult.qml` and `searchd`'s quick chat result (chat results)         |
+| `document-open-recent`    | new Bingux source (`ClockCounterClockwise` bold)                                                                      | `EmojiPicker.qml`                                                           |
+| `document-save`           | new Bingux source (`FloppyDisk` bold)                                                                                 | `RecordingIndicator.qml`, `NotificationStack.qml` (save action)             |
+| `document-save-as`        | callers use `document-save`                                                                                           | `NotificationStack.qml`                                                     |
 
 Also changed in this family, so the shell does not name them any more:
 

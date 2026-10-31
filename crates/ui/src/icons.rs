@@ -547,7 +547,9 @@ impl Icon {
             Self::Starred => include_bytes!("../icons/starred-symbolic.svg"),
             Self::NonStarred => include_bytes!("../icons/non-starred-symbolic.svg"),
             Self::ObjectRotateRight => include_bytes!("../icons/object-rotate-right-symbolic.svg"),
-            Self::MediaPlaybackStart => include_bytes!("../icons/media-playback-start-symbolic.svg"),
+            Self::MediaPlaybackStart => {
+                include_bytes!("../icons/media-playback-start-symbolic.svg")
+            }
             Self::MediaPlaybackStop => include_bytes!("../icons/media-playback-stop-symbolic.svg"),
             Self::ViewFullscreen => include_bytes!("../icons/view-fullscreen-symbolic.svg"),
             Self::ViewRestore => include_bytes!("../icons/view-restore-symbolic.svg"),
@@ -555,7 +557,9 @@ impl Icon {
             Self::ZoomOut => include_bytes!("../icons/zoom-out-symbolic.svg"),
             Self::ZoomFitBest => include_bytes!("../icons/zoom-fit-best-symbolic.svg"),
             Self::ObjectRotateLeft => include_bytes!("../icons/object-rotate-left-symbolic.svg"),
-            Self::MediaViewSubtitles => include_bytes!("../icons/media-view-subtitles-symbolic.svg"),
+            Self::MediaViewSubtitles => {
+                include_bytes!("../icons/media-view-subtitles-symbolic.svg")
+            }
             Self::DialogPassword => include_bytes!("../icons/dialog-password-symbolic.svg"),
             Self::SendTo => include_bytes!("../icons/send-to-symbolic.svg"),
             Self::FolderDownload => include_bytes!("../icons/folder-download-symbolic.svg"),
@@ -605,15 +609,21 @@ impl Icon {
             Self::FolderDesktop => include_bytes!("../icons/folder-desktop-symbolic.svg"),
             Self::WindowNew => include_bytes!("../icons/window-new-symbolic.svg"),
             Self::DefaultAppText => include_bytes!("../icons/default-app-text-symbolic.svg"),
-            Self::DefaultAppDocuments => include_bytes!("../icons/default-app-documents-symbolic.svg"),
+            Self::DefaultAppDocuments => {
+                include_bytes!("../icons/default-app-documents-symbolic.svg")
+            }
             Self::DragHandle => include_bytes!("../icons/list-drag-handle-symbolic.svg"),
             Self::ApplicationPdf => include_bytes!("../icons/application-pdf-symbolic.svg"),
             Self::Table => include_bytes!("../icons/table-symbolic.svg"),
             Self::Presentation => include_bytes!("../icons/presentation-symbolic.svg"),
             Self::FontXGeneric => include_bytes!("../icons/font-x-generic-symbolic.svg"),
             Self::TextXScript => include_bytes!("../icons/text-x-script-symbolic.svg"),
-            Self::ApplicationXGeneric => include_bytes!("../icons/application-x-generic-symbolic.svg"),
-            Self::EmblemSymbolicLink => include_bytes!("../icons/emblem-symbolic-link-symbolic.svg"),
+            Self::ApplicationXGeneric => {
+                include_bytes!("../icons/application-x-generic-symbolic.svg")
+            }
+            Self::EmblemSymbolicLink => {
+                include_bytes!("../icons/emblem-symbolic-link-symbolic.svg")
+            }
             Self::MediaRecord => include_bytes!("../icons/media-record-symbolic.svg"),
             Self::MediaSkipBackward => include_bytes!("../icons/media-skip-backward-symbolic.svg"),
             Self::MediaSkipForward => include_bytes!("../icons/media-skip-forward-symbolic.svg"),
@@ -704,7 +714,12 @@ pub fn icon(icon: Icon, size: crate::style::IconSize, color: Color) -> SvgViewer
 
 /// [`icon`] with its size scaled by `scale` and rounded to whole pixels, so a
 /// zooming view keeps its glyph edges sharp. The size is never below 1 px.
-pub fn icon_scaled(icon: Icon, size: crate::style::IconSize, scale: f32, color: Color) -> SvgViewer {
+pub fn icon_scaled(
+    icon: Icon,
+    size: crate::style::IconSize,
+    scale: f32,
+    color: Color,
+) -> SvgViewer {
     glyph(icon, (size.px() * scale).round().max(1.0), color)
 }
 
@@ -799,7 +814,9 @@ mod tests {
         }
         for file in labelled {
             assert!(
-                Icon::ALL.iter().any(|icon| files_of(*icon).iter().any(|name| name == file)),
+                Icon::ALL
+                    .iter()
+                    .any(|icon| files_of(*icon).iter().any(|name| name == file)),
                 "`#mirror_rtl` names {file}, which no Icon draws"
             );
         }

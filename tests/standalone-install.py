@@ -96,9 +96,7 @@ class InstallTest(unittest.TestCase):
             )
             self.assertEqual(migrated["commands"]["fileOpener"], ["/custom/open"])
             self.assertEqual(migrated["commands"]["clipboard"], ["/custom/copy"])
-            self.assertEqual(
-                migrated["providerManifestPaths"], ["/custom/provider.json"]
-            )
+            self.assertEqual(migrated["providerManifestPaths"], ["/custom/provider.json"])
             migrated["commands"]["applicationLauncher"] = ["/custom/launch"]
             search_config.write_text(json.dumps(migrated) + "\n")
             subprocess.run(
@@ -116,9 +114,7 @@ class InstallTest(unittest.TestCase):
                 check=True,
             )
             self.assertEqual(
-                json.loads(search_config.read_text())["commands"][
-                    "applicationLauncher"
-                ],
+                json.loads(search_config.read_text())["commands"]["applicationLauncher"],
                 ["/custom/launch"],
             )
 
@@ -162,9 +158,7 @@ class InstallTest(unittest.TestCase):
                 (stage / "usr/bin/binguxctl").read_text(),
             )
             config = json.loads((stage / "usr/share/bingux/search.json").read_text())
-            self.assertEqual(
-                config["commands"]["applicationLauncher"][0], sys.executable
-            )
+            self.assertEqual(config["commands"]["applicationLauncher"][0], sys.executable)
             self.assertEqual(
                 config["commands"]["applicationLauncher"][1],
                 "/usr/libexec/bingux/shell/launch-application.py",
@@ -185,9 +179,7 @@ class InstallTest(unittest.TestCase):
             # QML and assets ship in the archive beside the QML plugins, not as loose files.
             self.assertTrue((stage / "usr/lib/bingux/bingux-shell.sxa").is_file())
             self.assertFalse((stage / "usr/share/bingux/shell").exists())
-            self.assertTrue(
-                (stage / "usr/libexec/bingux/shell/bingux_runtime.py").is_file()
-            )
+            self.assertTrue((stage / "usr/libexec/bingux/shell/bingux_runtime.py").is_file())
             # The shell's icons ship in the archive; no theme is installed beside it.
             self.assertFalse((stage / "usr/share/bingux/icons").exists())
             self.assertFalse((stage / "usr/share/icons/Adwaita").exists())
@@ -203,41 +195,25 @@ class InstallTest(unittest.TestCase):
             self.assertIn('mode = "auto"', integration)
             self.assertIn('["remove-csd"] = true', integration)
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Text/qmldir").is_file())
-            self.assertTrue(
-                (
-                    stage / "usr/lib/bingux/qml/Bingux/Effects/libbinguxeffects.so"
-                ).is_file()
-            )
-            self.assertTrue(
-                (
-                    stage / "usr/lib/bingux/qml/Bingux/Wayland/libbinguxwaylandsync.so"
-                ).is_file()
-            )
+            self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Effects/libbinguxeffects.so").is_file())
+            self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Wayland/libbinguxwaylandsync.so").is_file())
             self.assertFalse((stage / "home").exists())
             self.assertFalse((stage / "usr/libexec/bingux/shell/__pycache__").exists())
             unit = (stage / "usr/lib/systemd/user/bingux.service").read_text()
             self.assertIn("LimitCORE=0", unit)
             self.assertIn("ExecStart=/usr/bin/bingux --no-color", unit)
-            search_unit = (
-                stage / "usr/lib/systemd/user/bingux-search-ui.service"
-            ).read_text()
-            switcher_unit = (
-                stage / "usr/lib/systemd/user/bingux-switcher-ui.service"
-            ).read_text()
+            search_unit = (stage / "usr/lib/systemd/user/bingux-search-ui.service").read_text()
+            switcher_unit = (stage / "usr/lib/systemd/user/bingux-switcher-ui.service").read_text()
             self.assertIn("ExecStart=/usr/bin/bingux-search-ui", search_unit)
             self.assertIn("ExecStart=/usr/bin/bingux-switcher-ui", switcher_unit)
             for name in ("capture", "emoji"):
-                unit = (
-                    stage / f"usr/lib/systemd/user/bingux-{name}-ui.service"
-                ).read_text()
+                unit = (stage / f"usr/lib/systemd/user/bingux-{name}-ui.service").read_text()
                 self.assertIn(f"ExecStart=/usr/bin/bingux-{name}-ui", unit)
                 self.assertTrue((stage / f"usr/bin/bingux-{name}-ui").is_symlink())
             lock_unit = (stage / "usr/lib/systemd/user/bingux-lock.service").read_text()
             self.assertIn("ExecStart=/usr/bin/bingux-lock", lock_unit)
             self.assertNotIn("WantedBy=", lock_unit)
-            searchd_unit = (
-                stage / "usr/lib/systemd/user/bingux-searchd.service"
-            ).read_text()
+            searchd_unit = (stage / "usr/lib/systemd/user/bingux-searchd.service").read_text()
             self.assertIn("ExecStart=/usr/libexec/bingux/search-service", searchd_unit)
             target_unit = (stage / "usr/lib/systemd/user/bingux.target").read_text()
             self.assertIn("WantedBy=gnoblin-session.target", target_unit)
@@ -246,9 +222,7 @@ class InstallTest(unittest.TestCase):
             # Only the helper daemons and the greeter wallpaper export are pulled in. The
             # shell and its surfaces come from Gnoblin's Lua autostart, so wanting them
             # here would start a second copy.
-            wants = next(
-                line for line in target_unit.splitlines() if line.startswith("Wants=")
-            )
+            wants = next(line for line in target_unit.splitlines() if line.startswith("Wants="))
             self.assertEqual(
                 set(wants[len("Wants=") :].split()),
                 {
@@ -262,29 +236,14 @@ class InstallTest(unittest.TestCase):
                     "bingux-bsm-publish.path",
                 },
             )
-            self.assertTrue(
-                (stage / "usr/lib/systemd/user/bingux-greeter-export.path").is_file()
-            )
-            self.assertTrue(
-                (stage / "usr/lib/systemd/user/bingux-bsm-publish.path").is_file()
-            )
-            self.assertTrue(
-                (stage / "usr/lib/systemd/user/bingux-bsm-publish.service").is_file()
-            )
-            self.assertTrue(
-                (stage / "usr/lib/tmpfiles.d/bingux-greeter.conf").is_file()
-            )
-            portal_unit = (
-                stage / "usr/lib/systemd/user/xdg-desktop-portal-bingux.service"
-            ).read_text()
-            self.assertIn(
-                "ExecStart=/usr/libexec/bingux/xdg-desktop-portal-bingux", portal_unit
-            )
+            self.assertTrue((stage / "usr/lib/systemd/user/bingux-greeter-export.path").is_file())
+            self.assertTrue((stage / "usr/lib/systemd/user/bingux-bsm-publish.path").is_file())
+            self.assertTrue((stage / "usr/lib/systemd/user/bingux-bsm-publish.service").is_file())
+            self.assertTrue((stage / "usr/lib/tmpfiles.d/bingux-greeter.conf").is_file())
+            portal_unit = (stage / "usr/lib/systemd/user/xdg-desktop-portal-bingux.service").read_text()
+            self.assertIn("ExecStart=/usr/libexec/bingux/xdg-desktop-portal-bingux", portal_unit)
             self.assertIn("Environment=BINGUXCTL=/usr/bin/binguxctl", portal_unit)
-            portal_dbus = (
-                stage
-                / "usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.bingux.service"
-            )
+            portal_dbus = stage / "usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.bingux.service"
             self.assertIn(
                 "Exec=/usr/libexec/bingux/xdg-desktop-portal-bingux",
                 portal_dbus.read_text(),
@@ -313,12 +272,8 @@ class InstallTest(unittest.TestCase):
                 "usr/share/icons/hicolor/scalable/apps/bingux-files.svg",
             ):
                 self.assertTrue((stage / path).is_file(), path)
-            self.assertTrue(
-                (stage / "usr/lib/ladspa/libbingux_dsp.so").stat().st_mode & 0o111
-            )
-            effects_unit = (
-                stage / "usr/lib/systemd/user/bingux-effects@.service"
-            ).read_text()
+            self.assertTrue((stage / "usr/lib/ladspa/libbingux_dsp.so").stat().st_mode & 0o111)
+            effects_unit = (stage / "usr/lib/systemd/user/bingux-effects@.service").read_text()
             self.assertIn("ExecStart=/usr/bin/bingux-effects run %i", effects_unit)
             self.assertIn(
                 "enable bingux.target",
@@ -328,18 +283,10 @@ class InstallTest(unittest.TestCase):
             # and the licence of the Bingux icons sits beside the other licences.
             self.assertFalse((stage / "usr/share/bingux/icons").exists())
             self.assertFalse((stage / "usr/share/icons/Adwaita").exists())
-            self.assertTrue(
-                (stage / "usr/share/licenses/bingux/icons/COPYING").is_file()
-            )
+            self.assertTrue((stage / "usr/share/licenses/bingux/icons/COPYING").is_file())
             self.assertFalse((stage / "usr/share/licenses/adwaita-icon-theme").exists())
-            self.assertFalse(
-                (stage / "usr/share/licenses/bingux/adwaita-icon-theme").exists()
-            )
-            manifest = json.loads(
-                (
-                    stage / "usr/share/bingux/search-apps/bingux-settings.json"
-                ).read_text()
-            )
+            self.assertFalse((stage / "usr/share/licenses/bingux/adwaita-icon-theme").exists())
+            manifest = json.loads((stage / "usr/share/bingux/search-apps/bingux-settings.json").read_text())
             self.assertEqual(manifest["command"], ["/usr/bin/bingux-settings"])
             # A package builder stages below a build root; no installed file may name it
             # (rpm's check-buildroot rejects the build when one does).
@@ -366,20 +313,11 @@ class InstallTest(unittest.TestCase):
                 check=True,
             )
             prefix = stage / "opt/bingux"
-            dbus = (
-                prefix
-                / "share/dbus-1/services/org.freedesktop.impl.portal.desktop.bingux.service"
-            ).read_text()
-            self.assertIn(
-                "Exec=/opt/bingux/libexec/bingux/xdg-desktop-portal-bingux", dbus
-            )
+            dbus = (prefix / "share/dbus-1/services/org.freedesktop.impl.portal.desktop.bingux.service").read_text()
+            self.assertIn("Exec=/opt/bingux/libexec/bingux/xdg-desktop-portal-bingux", dbus)
             self.assertNotIn("/usr/libexec", dbus)
-            unit = (
-                prefix / "lib/systemd/user/xdg-desktop-portal-bingux.service"
-            ).read_text()
-            self.assertIn(
-                "ExecStart=/opt/bingux/libexec/bingux/xdg-desktop-portal-bingux", unit
-            )
+            unit = (prefix / "lib/systemd/user/xdg-desktop-portal-bingux.service").read_text()
+            self.assertIn("ExecStart=/opt/bingux/libexec/bingux/xdg-desktop-portal-bingux", unit)
             self.assertIn("Environment=BINGUXCTL=/opt/bingux/bin/binguxctl", unit)
 
     def test_missing_build_fails_before_install(self):
@@ -439,17 +377,13 @@ class InstallTest(unittest.TestCase):
             self.assertTrue(init.is_file())
             self.assertIn('gnoblin.load("conf.d/**/*.lua")', init.read_text())
             self.assertTrue(dropin.is_symlink())
-            self.assertEqual(
-                dropin.resolve(), (prefix / "share/gnoblin/conf.d/bingux.lua").resolve()
-            )
+            self.assertEqual(dropin.resolve(), (prefix / "share/gnoblin/conf.d/bingux.lua").resolve())
             launcher = home / ".local/bin/bingux"
             self.assertTrue(launcher.is_symlink())
             self.assertEqual(launcher.resolve(), (prefix / "bin/bingux").resolve())
             frame_command = home / ".local/bin/bingux-frame"
             self.assertTrue(frame_command.is_symlink())
-            self.assertEqual(
-                frame_command.resolve(), (prefix / "bin/bingux-frame").resolve()
-            )
+            self.assertEqual(frame_command.resolve(), (prefix / "bin/bingux-frame").resolve())
             self.assertTrue((home / ".local/bin/bingux-uninstall").is_symlink())
             unit = config / "systemd/user/bingux.service"
             self.assertTrue(unit.is_symlink())
@@ -535,9 +469,7 @@ class InstallTest(unittest.TestCase):
             bin_dir.mkdir()
             log = base / "systemctl.log"
             fake_systemctl = bin_dir / "systemctl"
-            fake_systemctl.write_text(
-                '#!/bin/sh\nprintf \'%s\\n\' "$*" >> "$BINGUX_SYSTEMCTL_LOG"\n'
-            )
+            fake_systemctl.write_text('#!/bin/sh\nprintf \'%s\\n\' "$*" >> "$BINGUX_SYSTEMCTL_LOG"\n')
             fake_systemctl.chmod(0o755)
             environment = {
                 **os.environ,
@@ -568,9 +500,7 @@ class InstallTest(unittest.TestCase):
             wants.mkdir(parents=True)
             enabled_target = wants / "bingux.target"
             enabled_target.symlink_to(prefix / "lib/systemd/user/bingux.target")
-            subprocess.run(
-                [str(home / ".local/bin/bingux-uninstall")], env=environment, check=True
-            )
+            subprocess.run([str(home / ".local/bin/bingux-uninstall")], env=environment, check=True)
             calls = log.read_text()
             self.assertIn("disable --now bingux.target", calls)
             self.assertFalse(enabled_target.exists())
@@ -598,9 +528,7 @@ class InstallTest(unittest.TestCase):
                 env=environment,
                 check=True,
             )
-            subprocess.run(
-                [str(home / ".local/bin/bingux-uninstall")], env=environment, check=True
-            )
+            subprocess.run([str(home / ".local/bin/bingux-uninstall")], env=environment, check=True)
             self.assertFalse(prefix.exists())
 
     def test_apps_install_has_no_shell_and_uninstall_restores_everything(self):
@@ -629,12 +557,8 @@ class InstallTest(unittest.TestCase):
                 "--build-dir",
                 str(build),
             ]
-            for _ in range(
-                2
-            ):  # the second run is an upgrade and must not displace its own files
-                subprocess.run(
-                    command, env=environment, check=True, capture_output=True
-                )
+            for _ in range(2):  # the second run is an upgrade and must not displace its own files
+                subprocess.run(command, env=environment, check=True, capture_output=True)
             for program in (
                 "bingux-config",
                 "bingux-settings",
@@ -650,35 +574,20 @@ class InstallTest(unittest.TestCase):
                 ("bingux-files", "inode/directory;x-scheme-handler/bingux-files;"),
                 ("bingux-taxonomy", "x-scheme-handler/bingux-taxonomy;"),
             ):
-                desktop = (
-                    prefix / "share/applications" / (app + ".desktop")
-                ).read_text()
+                desktop = (prefix / "share/applications" / (app + ".desktop")).read_text()
                 self.assertIn(f"Exec={prefix}/bin/{app} ", desktop)
-                self.assertIn(
-                    f"Exec={prefix}/bin/{app} ", desktop.split("[Desktop Action", 1)[1]
-                )
+                self.assertIn(f"Exec={prefix}/bin/{app} ", desktop.split("[Desktop Action", 1)[1])
                 self.assertIn("MimeType=" + mime, desktop)
-                self.assertTrue(
-                    (
-                        prefix / "share/icons/hicolor/scalable/apps" / (app + ".svg")
-                    ).is_file()
-                )
+                self.assertTrue((prefix / "share/icons/hicolor/scalable/apps" / (app + ".svg")).is_file())
             self.assertFalse((prefix / "share/metainfo").exists())
             self.assertTrue((prefix / "share/man/man1/bingux-settings.1").is_file())
-            search = json.loads(
-                (prefix / "share/bingux/search-apps/bingux-settings.json").read_text()
-            )
+            search = json.loads((prefix / "share/bingux/search-apps/bingux-settings.json").read_text())
             self.assertEqual(search["command"], [f"{prefix}/bin/bingux-settings"])
             unit = (prefix / "share/systemd/user/bingux-effects@.service").read_text()
             self.assertIn(f"ExecStart={prefix}/bin/bingux-effects run %i", unit)
             # What the user had stays reachable beside the install.
-            self.assertTrue(
-                (prefix / "bin/bingux-settings.pre-bingux-apps.bak").is_symlink()
-            )
-            backup = (
-                prefix
-                / "share/applications/bingux-settings.desktop.pre-bingux-apps.bak"
-            )
+            self.assertTrue((prefix / "bin/bingux-settings.pre-bingux-apps.bak").is_symlink())
+            backup = prefix / "share/applications/bingux-settings.desktop.pre-bingux-apps.bak"
             self.assertIn("Name=Mine", backup.read_text())
             # The shell is not part of this install, and the session is untouched.
             for shell_path in (
@@ -693,9 +602,7 @@ class InstallTest(unittest.TestCase):
             self.assertFalse((home / ".config").exists())
             uninstall = [str(prefix / "bin/bingux-apps-uninstall"), "--no-cache-update"]
             subprocess.run(uninstall, env=environment, check=True)
-            self.assertEqual(
-                sorted(str(p.relative_to(prefix)) for p in prefix.rglob("*")), before
-            )
+            self.assertEqual(sorted(str(p.relative_to(prefix)) for p in prefix.rglob("*")), before)
             self.assertEqual(os.readlink(older), "/nonexistent/older-bingux-settings")
             self.assertEqual(entry.read_text(), "[Desktop Entry]\nName=Mine\n")
 

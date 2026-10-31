@@ -34,14 +34,20 @@ use super::folder_table::{folder_table, location_of, place_of};
 use super::history;
 use super::places_view::{PlacesMenu, PlacesSidebar};
 use super::reload_button::reload_button;
-use super::search::{Deep, DeepResults, DeepStatus, Find, Marks, RunKey, SearchView, step_selection, use_search_run};
-use super::search_bar::{BarStatus, SearchBar, place_phrase, recents_file, scope_choices, token_label};
 use super::scroll_memory::measured;
+use super::search::{
+    Deep, DeepResults, DeepStatus, Find, Marks, RunKey, SearchView, step_selection, use_search_run,
+};
+use super::search_bar::{
+    BarStatus, SearchBar, place_phrase, recents_file, scope_choices, token_label,
+};
 use super::skeleton::skeleton;
 use super::states::{empty_state, error_state, no_results_state, stopped_state};
 use super::view::FileView;
 use super::view_state;
-use super::zoom::{REQUESTED_GRID_PX, ViewKind, default_zoom_px, kind_of, nearest_level, switch_kind};
+use super::zoom::{
+    REQUESTED_GRID_PX, ViewKind, default_zoom_px, kind_of, nearest_level, switch_kind,
+};
 use crate::component::ComponentName;
 use crate::controls::{SplitButton, checkbox, dropdown, icon_button, text_field};
 use crate::group::{Status, status};
@@ -50,8 +56,8 @@ use crate::layout::divider;
 use crate::motion::{Dwell, use_dwell};
 use crate::nav::{HistoryItem, NavModel, Outcome};
 use crate::shell::{
-    CANCEL_ID, MenuItem, Overlays, ResponseKind, dialog, history_menu_with, menu_item, menu_separator,
-    use_overlays,
+    CANCEL_ID, MenuItem, Overlays, ResponseKind, dialog, history_menu_with, menu_item,
+    menu_separator, use_overlays,
 };
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -90,8 +96,8 @@ pub fn choose(
                 host: Host::Dialog(done),
             },
         )
-            .size(Dim::ChooserWidth.px(), height)
-            .flags(PopupFlags::FORM | PopupFlags::FILL | PopupFlags::NO_DISMISS_OUTSIDE),
+        .size(Dim::ChooserWidth.px(), height)
+        .flags(PopupFlags::FORM | PopupFlags::FILL | PopupFlags::NO_DISMISS_OUTSIDE),
     )
 }
 
@@ -390,7 +396,12 @@ impl Session {
         };
         let cursor = self.nav.selection.peek().cursor().map(PathBuf::from);
         let at = cursor
-            .and_then(|path| order.iter().copied().find(|index| listing.entries[*index].path == path))
+            .and_then(|path| {
+                order
+                    .iter()
+                    .copied()
+                    .find(|index| listing.entries[*index].path == path)
+            })
             .unwrap_or(first);
         self.activate(at);
     }
@@ -402,10 +413,11 @@ impl Session {
             return;
         };
         let mut selection = self.nav.selection;
-        let on_a_result = selection
-            .peek()
-            .cursor()
-            .is_some_and(|path| order.iter().any(|index| listing.entries[*index].path == path));
+        let on_a_result = selection.peek().cursor().is_some_and(|path| {
+            order
+                .iter()
+                .any(|index| listing.entries[*index].path == path)
+        });
         if on_a_result {
             self.step_match(listing, order, 1);
         } else {
@@ -512,15 +524,14 @@ impl Session {
             }
             _ => existing,
         };
-        self.overlays
-            .show_dialog(
-                dialog(title, body)
-                    .cancel("Cancel")
-                    .default_action(CANCEL_ID)
-                    .response("Replace", ResponseKind::Destructive, move |_: ()| {
-                        session.finish(paths.clone())
-                    }),
-            );
+        self.overlays.show_dialog(
+            dialog(title, body)
+                .cancel("Cancel")
+                .default_action(CANCEL_ID)
+                .response("Replace", ResponseKind::Destructive, move |_: ()| {
+                    session.finish(paths.clone())
+                }),
+        );
     }
 
     /// A row was opened by double click, tap or Enter.
@@ -649,7 +660,12 @@ impl TabStates {
     /// the icon size its folder was last shown with, or `fallback`; or as the
     /// window the tab came from left them, when there is a `carried` snapshot.
     /// A `select`ed file (one named on the command line) starts selected.
-    fn new(history: NavModel, fallback: u16, carried: Option<Carried>, select: Option<PathBuf>) -> Self {
+    fn new(
+        history: NavModel,
+        fallback: u16,
+        carried: Option<Carried>,
+        select: Option<PathBuf>,
+    ) -> Self {
         if let Some(carried) = carried {
             return TabStates {
                 model: State::create(history),
@@ -677,7 +693,9 @@ impl TabStates {
             model: State::create(history),
             selection: State::create(selection),
             sort: State::create(remembered.map_or_else(Sort::default, |view| view.sort.into())),
-            level: State::create(remembered.map_or(fallback, |view| nearest_level(f32::from(view.icon_px)))),
+            level: State::create(
+                remembered.map_or(fallback, |view| nearest_level(f32::from(view.icon_px))),
+            ),
             show_hidden: State::create(false),
             preview_pane: State::create(false),
             editing: State::create(false),
@@ -706,8 +724,13 @@ impl TabStates {
 
     /// Let go of what a closed tab selected and searched for.
     fn clear(self) {
-        let (mut selection, mut find, mut draft, mut words, mut problem) =
-            (self.selection, self.find, self.draft, self.words, self.problem);
+        let (mut selection, mut find, mut draft, mut words, mut problem) = (
+            self.selection,
+            self.find,
+            self.draft,
+            self.words,
+            self.problem,
+        );
         selection.set(Selection::new());
         find.set(Find::default());
         draft.set(String::new());
@@ -752,7 +775,9 @@ impl<T: Copy> TabBank<T> {
     pub(super) fn closed(&mut self) -> Vec<T> {
         let mut closed = Vec::new();
         self.tabs.retain(|(_, states, alive)| {
-            let gone = alive.as_ref().is_some_and(|alive| alive.strong_count() == 0);
+            let gone = alive
+                .as_ref()
+                .is_some_and(|alive| alive.strong_count() == 0);
             if gone {
                 closed.push(*states);
             }
@@ -824,23 +849,30 @@ fn select_shown(
         // Results: arrival order while the search runs, so no row moves, then
         // the order asked for.
         let running = results.as_ref().is_some_and(|results| results.running);
-        let shown_matcher = matcher.as_ref().and_then(|matcher| matcher.as_ref().ok()).cloned();
+        let shown_matcher = matcher
+            .as_ref()
+            .and_then(|matcher| matcher.as_ref().ok())
+            .cloned();
         let identity: Vec<usize> = (0..listing.entries.len()).collect();
         let order = if running {
             identity
         } else {
             match (results_sort(by), &shown_matcher) {
-                (Some(sort), _) => listing
-                    .select_counted(&View {
-                        show_hidden: true,
-                        filter: None,
-                        directories_only: false,
-                        sort,
-                    })
-                    .order,
+                (Some(sort), _) => {
+                    listing
+                        .select_counted(&View {
+                            show_hidden: true,
+                            filter: None,
+                            directories_only: false,
+                            sort,
+                        })
+                        .order
+                }
                 (None, Some(matcher)) => {
                     let mut order = identity;
-                    order.sort_by_cached_key(|index| matcher.rank(&listing.entries[*index], &listing.path));
+                    order.sort_by_cached_key(|index| {
+                        matcher.rank(&listing.entries[*index], &listing.path)
+                    });
                     order
                 }
                 (None, None) => identity,
@@ -866,7 +898,8 @@ fn select_shown(
         // `.bashrc` is an item to restore, not a hidden one.
         show_hidden: hidden
             || (!listing.recent
-                && bingux_files::ops::trash_place(&listing.path).is_some_and(|place| place.is_root())),
+                && bingux_files::ops::trash_place(&listing.path)
+                    .is_some_and(|place| place.is_root())),
         filter,
         directories_only: false,
         sort: results_sort(by).unwrap_or(sort),
@@ -884,7 +917,9 @@ fn select_shown(
                 .collect();
             if by == SortBy::Relevance {
                 // Stable: inside a rank the folder's own sort stands.
-                order.sort_by_cached_key(|index| matcher.rank(&listing.entries[*index], &listing.path));
+                order.sort_by_cached_key(|index| {
+                    matcher.rank(&listing.entries[*index], &listing.path)
+                });
             }
             (order, Some(Arc::new(matcher)), None)
         }
@@ -973,7 +1008,8 @@ fn search_drives(home: &std::path::Path, scope: &Scope) -> Vec<PathBuf> {
             mount.mount_point != std::path::Path::new("/")
                 && !matches!(
                     mount.kind,
-                    bingux_files::mounts::MountKind::Network | bingux_files::mounts::MountKind::Optical
+                    bingux_files::mounts::MountKind::Network
+                        | bingux_files::mounts::MountKind::Optical
                 )
                 && !home.starts_with(&mount.mount_point)
                 && !mount.mount_point.starts_with(home)
@@ -1128,7 +1164,9 @@ impl Component for ChooserBody {
             (*filter.read()).and_then(|index| filters.get(index).cloned())
         };
         let walk_key = query.clone().filter(|_| walking).map(|query| RunKey {
-            roots: find_now.scope.roots(&here, &home, &search_drives(&home, &find_now.scope)),
+            roots: find_now
+                .scope
+                .roots(&here, &home, &search_drives(&home, &find_now.scope)),
             home: home.clone(),
             query,
             view_hidden: *show_hidden.read(),
@@ -1173,7 +1211,11 @@ impl Component for ChooserBody {
                 (false, _, Load::Ready(listing)) => Some(listing.clone()),
                 _ => None,
             };
-            let active = if folder_mode { None } else { chooser_filter.as_ref() };
+            let active = if folder_mode {
+                None
+            } else {
+                chooser_filter.as_ref()
+            };
             match listing {
                 None => None,
                 Some(listing) => {
@@ -1287,9 +1329,10 @@ impl Component for ChooserBody {
             (other, _) => other.clone(),
         };
         let folder_name = match &current {
-            Where::Folder(path) => path
-                .file_name()
-                .map_or_else(|| path.display().to_string(), |name| name.to_string_lossy().into_owned()),
+            Where::Folder(path) => path.file_name().map_or_else(
+                || path.display().to_string(),
+                |name| name.to_string_lossy().into_owned(),
+            ),
             Where::Recent => "Recent".to_string(),
         };
         let choices = scope_choices(
@@ -1298,32 +1341,40 @@ impl Component for ChooserBody {
             &find_now.scope,
         );
         let place = place_phrase(&find_now.scope, &folder_name, &choices);
-        let search_view = query.as_ref().zip(shown.as_ref()).map(|(query, shown)| SearchView {
-            query: Marks::new(shown.matcher.clone(), query.to_string()),
-            of: shown.of,
-            deep: walking.then(|| match &shown.results {
-                Some(results) => DeepStatus {
-                    // What the list shows: the file type filter has already
-                    // taken its share out of what the search found.
-                    found: shown.order.len(),
-                    ..results.status()
-                },
-                None => DeepStatus {
-                    root: find_now.scope.base(&here, &home),
-                    running: deep.running_now(),
-                    ..DeepStatus::default()
-                },
-            }),
-            place: place.clone(),
-            invalid: shown.invalid.clone(),
-            sort: query.filters.sort,
-            words: query.plain_text(),
-        });
+        let search_view = query
+            .as_ref()
+            .zip(shown.as_ref())
+            .map(|(query, shown)| SearchView {
+                query: Marks::new(shown.matcher.clone(), query.to_string()),
+                of: shown.of,
+                deep: walking.then(|| match &shown.results {
+                    Some(results) => DeepStatus {
+                        // What the list shows: the file type filter has already
+                        // taken its share out of what the search found.
+                        found: shown.order.len(),
+                        ..results.status()
+                    },
+                    None => DeepStatus {
+                        root: find_now.scope.base(&here, &home),
+                        running: deep.running_now(),
+                        ..DeepStatus::default()
+                    },
+                }),
+                place: place.clone(),
+                invalid: shown.invalid.clone(),
+                sort: query.filters.sort,
+                words: query.plain_text(),
+            });
         // A new search selects its best match, so Enter opens it; with no
         // match nothing stays selected that the list does not show. A search
         // that is still running selects the first row that arrives, and the
         // best one once it ends, unless the person has moved the selection.
-        let selected_for = use_hook(|| Rc::new(RefCell::new((None::<(String, bool, bool, bool)>, None::<PathBuf>))));
+        let selected_for = use_hook(|| {
+            Rc::new(RefCell::new((
+                None::<(String, bool, bool, bool)>,
+                None::<PathBuf>,
+            )))
+        });
         {
             let running = deep.running();
             let key = query
@@ -1360,7 +1411,10 @@ impl Component for ChooserBody {
             }
         }
         let bar = find_now.open.then(|| {
-            let (listing, order) = (shown.as_ref().map(|shown| shown.listing.clone()), order.clone());
+            let (listing, order) = (
+                shown.as_ref().map(|shown| shown.listing.clone()),
+                order.clone(),
+            );
             let on_open = {
                 let (session, listing, order) = (session.clone(), listing.clone(), order.clone());
                 move |_: ()| {
@@ -1402,10 +1456,19 @@ impl Component for ChooserBody {
                 folders: results.map_or(0, |results| results.folders),
                 truncated: results.is_some_and(|results| results.truncated),
                 stopped: results.is_some_and(|results| results.stopped),
-                matches: (!walking && query.is_some()).then(|| (order.len(), shown.as_ref().map_or(0, |shown| shown.of))),
-                invalid: shown.as_ref().and_then(|shown| shown.invalid.clone()).or_else(|| {
-                    results.and_then(|results| results.invalid.as_ref().map(|invalid| invalid.reason.clone()))
-                }),
+                matches: (!walking && query.is_some())
+                    .then(|| (order.len(), shown.as_ref().map_or(0, |shown| shown.of))),
+                invalid: shown
+                    .as_ref()
+                    .and_then(|shown| shown.invalid.clone())
+                    .or_else(|| {
+                        results.and_then(|results| {
+                            results
+                                .invalid
+                                .as_ref()
+                                .map(|invalid| invalid.reason.clone())
+                        })
+                    }),
                 missing: results.and_then(|results| results.missing.clone()),
                 problem,
             };
@@ -1478,7 +1541,9 @@ impl Component for ChooserBody {
                     }
                     // Escape stops a read that the toolbar offers to stop,
                     // as it stops a page loading in a browser.
-                    Key::Named(NamedKey::Escape) if session.stopping && session.reload.loading_now() => {
+                    Key::Named(NamedKey::Escape)
+                        if session.stopping && session.reload.loading_now() =>
+                    {
                         event.stop_propagation();
                         session.reload.stop();
                     }
@@ -1487,12 +1552,16 @@ impl Component for ChooserBody {
                     // The Filters panel hears the same Escape and closes: it
                     // must not end the search as well, so a panel that was open
                     // when this render was made leaves the search alone.
-                    Key::Named(NamedKey::Escape) if session.find.peek().open && !filters_open_now => {
+                    Key::Named(NamedKey::Escape)
+                        if session.find.peek().open && !filters_open_now =>
+                    {
                         event.stop_propagation();
                         session.clear_search();
                     }
                     // Ctrl+Shift+F opens or closes the Filters panel.
-                    Key::Character(text) if ctrl && shift && !alt && text.eq_ignore_ascii_case("f") => {
+                    Key::Character(text)
+                        if ctrl && shift && !alt && text.eq_ignore_ascii_case("f") =>
+                    {
                         event.stop_propagation();
                         session.start_search("");
                         let mut find = session.find;
@@ -1611,33 +1680,29 @@ impl Component for ChooserBody {
                         let nav = nav;
                         rect()
                             .tw(&tokens, &[flex_row(), h_full(), w(Dim::PlacesColumn)])
-                            .child(
-                                rect().tw(&tokens, &[w_flex(), h_full()]).child(
-                                    {
-                                        let sidebar = PlacesSidebar::new(
-                                            places,
-                                            current.clone(),
-                                            move |to: Where| nav.go(to),
-                                        )
-                                        .recent(request.action == Action::Open)
-                                        .reload(places_rev)
-                                        .on_empty_trash(move |_: ()| {
-                                            super::actions::request_empty_trash(empty_trash)
-                                        });
-                                        match &self.host {
-                                            Host::Browser(browse) => {
-                                                let on_new_tab = browse.on_new_tab.clone();
-                                                sidebar.on_open_new_tab(move |to: Where| {
-                                                    if let Where::Folder(path) = to {
-                                                        on_new_tab.call(path);
-                                                    }
-                                                })
+                            .child(rect().tw(&tokens, &[w_flex(), h_full()]).child({
+                                let sidebar = PlacesSidebar::new(
+                                    places,
+                                    current.clone(),
+                                    move |to: Where| nav.go(to),
+                                )
+                                .recent(request.action == Action::Open)
+                                .reload(places_rev)
+                                .on_empty_trash(move |_: ()| {
+                                    super::actions::request_empty_trash(empty_trash)
+                                });
+                                match &self.host {
+                                    Host::Browser(browse) => {
+                                        let on_new_tab = browse.on_new_tab.clone();
+                                        sidebar.on_open_new_tab(move |to: Where| {
+                                            if let Where::Folder(path) = to {
+                                                on_new_tab.call(path);
                                             }
-                                            Host::Dialog(_) => sidebar,
-                                        }
-                                    },
-                                ),
-                            )
+                                        })
+                                    }
+                                    Host::Dialog(_) => sidebar,
+                                }
+                            }))
                             .child(rect().tw(&tokens, SPLIT_HAIRLINE))
                     }))
                     .child(
@@ -1721,7 +1786,9 @@ fn main_area(
                 if listing.stopped {
                     return stopped_state();
                 }
-                if bingux_files::ops::trash_place(&listing.path).is_some_and(|place| place.is_root()) {
+                if bingux_files::ops::trash_place(&listing.path)
+                    .is_some_and(|place| place.is_root())
+                {
                     return super::states::trash_empty_state();
                 }
                 let hidden_items =
@@ -1760,9 +1827,7 @@ fn main_area(
         })
         .multiple(session.request.multiple)
         .folders_only(folder_mode)
-        .autofocus(
-            !matches!(session.request.action, Action::Save) && !session.find.peek().open,
-        )
+        .autofocus(!matches!(session.request.action, Action::Save) && !session.find.peek().open)
         .search(search)
         .on_search({
             let session = session.clone();
@@ -1874,8 +1939,16 @@ fn toolbar(
         (
             model.can_go_back(),
             model.can_forward(),
-            history_menu_with(back, move |entry| nav.back_to(entry), middle_click(new_tab.clone())),
-            history_menu_with(forward, move |entry| nav.forward_to(entry), middle_click(new_tab)),
+            history_menu_with(
+                back,
+                move |entry| nav.back_to(entry),
+                middle_click(new_tab.clone()),
+            ),
+            history_menu_with(
+                forward,
+                move |entry| nav.forward_to(entry),
+                middle_click(new_tab),
+            ),
         )
     };
     let path_bar = AddressBar::new(
@@ -1934,15 +2007,21 @@ fn toolbar(
         new_folder.set(next);
     })
     .size(Dim::Control)
-    .tooltip(if in_trash { "Nothing can be made in the Trash" } else { "New folder" })
+    .tooltip(if in_trash {
+        "Nothing can be made in the Trash"
+    } else {
+        "New folder"
+    })
     .enabled(can_create);
     let empty_trash = (roots.root_of(&current) == Some(super::named::Root::Trash))
         .then(|| try_consume_root_context::<super::actions::EmptyTrashRequest>())
         .flatten()
         .map(|request| {
-            icon_button(Icon::UserTrash, move |_: ()| super::actions::request_empty_trash(request))
-                .size(Dim::Control)
-                .tooltip("Empty Trash")
+            icon_button(Icon::UserTrash, move |_: ()| {
+                super::actions::request_empty_trash(request)
+            })
+            .size(Dim::Control)
+            .tooltip("Empty Trash")
         });
     // The switch between a list and a grid, and the menu of the view's other
     // choices (sort, hidden files), in one control.
@@ -1960,7 +2039,11 @@ fn toolbar(
     .on_press(move |_: ()| {
         let next = switch_kind(
             *level.peek(),
-            if use_grid { ViewKind::List } else { ViewKind::Grid },
+            if use_grid {
+                ViewKind::List
+            } else {
+                ViewKind::Grid
+            },
         );
         level.set(next);
         nav.remember_level(next);
@@ -2022,7 +2105,13 @@ fn toolbar(
         let second = rect()
             .tw(
                 tokens,
-                &[flex_row(), grow_children(), items(Align::Center), w_full(), gap(S2)],
+                &[
+                    flex_row(),
+                    grow_children(),
+                    items(Align::Center),
+                    w_full(),
+                    gap(S2),
+                ],
             )
             .child(parent)
             .child(rect().tw(tokens, &[w_flex()]).child(path_bar));
@@ -2060,11 +2149,7 @@ fn toolbar(
 
 /// The sort and hidden-file choices of the view menu. (What a search looks
 /// in is the Filters panel's.)
-fn view_items(
-    nav: Nav,
-    mut sort: State<Sort>,
-    mut show_hidden: State<bool>,
-) -> Vec<MenuItem> {
+fn view_items(nav: Nav, mut sort: State<Sort>, mut show_hidden: State<bool>) -> Vec<MenuItem> {
     let now = *sort.read();
     let by = |label: &str, key: SortKey| {
         menu_item(label, move |_: ()| {
@@ -2237,7 +2322,9 @@ mod search_order_tests {
 
     fn entry(path: &str, size: u64) -> Entry {
         let path = PathBuf::from(path);
-        let name = path.file_name().map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+        let name = path
+            .file_name()
+            .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
         let mut entry = Entry::named(path, name, Kind::File, false, false);
         entry.size = size;
         entry.sized = true;
@@ -2246,7 +2333,10 @@ mod search_order_tests {
 
     fn results(names: &[(&str, u64)], running: bool) -> (Arc<Listing>, Arc<DeepResults>) {
         let mut listing = Listing::new(PathBuf::from("/r"));
-        listing.entries = names.iter().map(|(path, size)| entry(path, *size)).collect();
+        listing.entries = names
+            .iter()
+            .map(|(path, size)| entry(path, *size))
+            .collect();
         listing.complete = !running;
         let listing = Arc::new(listing);
         let results = Arc::new(DeepResults {
@@ -2265,7 +2355,11 @@ mod search_order_tests {
     }
 
     fn names(shown: &Shown) -> Vec<String> {
-        shown.order.iter().map(|index| shown.listing.entries[*index].name.clone()).collect()
+        shown
+            .order
+            .iter()
+            .map(|index| shown.listing.entries[*index].name.clone())
+            .collect()
     }
 
     const FOUND: &[(&str, u64)] = &[
@@ -2279,21 +2373,58 @@ mod search_order_tests {
     fn rows_keep_their_places_while_the_search_runs_and_settle_once_when_it_ends() {
         let query = Query::parse("notes");
         let (listing, running) = results(FOUND, true);
-        let shown = select_shown(listing, Some(running), Some(&query), true, None, false, Sort::default());
+        let shown = select_shown(
+            listing,
+            Some(running),
+            Some(&query),
+            true,
+            None,
+            false,
+            Sort::default(),
+        );
         assert_eq!(
             names(&shown),
             ["notes-old.txt", "zz notes.txt", "notes.txt", "notes"],
             "arrival order: nothing that is on show moves"
         );
         // More arrive: the rows already there keep their places.
-        let more: Vec<(&str, u64)> = FOUND.iter().copied().chain([("/r/c/best notes", 1)]).collect();
+        let more: Vec<(&str, u64)> = FOUND
+            .iter()
+            .copied()
+            .chain([("/r/c/best notes", 1)])
+            .collect();
         let (listing, running) = results(&more, true);
-        let grown = select_shown(listing, Some(running), Some(&query), true, None, false, Sort::default());
+        let grown = select_shown(
+            listing,
+            Some(running),
+            Some(&query),
+            true,
+            None,
+            false,
+            Sort::default(),
+        );
         assert_eq!(names(&grown)[..4], names(&shown)[..]);
         // It ends: relevance order once, shallow before deep inside a tier.
         let (listing, done) = results(&more, false);
-        let settled = select_shown(listing, Some(done), Some(&query), true, None, false, Sort::default());
-        assert_eq!(names(&settled), ["notes", "notes.txt", "notes-old.txt", "zz notes.txt", "best notes"]);
+        let settled = select_shown(
+            listing,
+            Some(done),
+            Some(&query),
+            true,
+            None,
+            false,
+            Sort::default(),
+        );
+        assert_eq!(
+            names(&settled),
+            [
+                "notes",
+                "notes.txt",
+                "notes-old.txt",
+                "zz notes.txt",
+                "best notes"
+            ]
+        );
     }
 
     #[test]
@@ -2301,28 +2432,66 @@ mod search_order_tests {
         let (listing, done) = results(FOUND, false);
         let by = |text: &str| {
             let query = Query::parse(text);
-            names(&select_shown(listing.clone(), Some(done.clone()), Some(&query), true, None, false, Sort::default()))
+            names(&select_shown(
+                listing.clone(),
+                Some(done.clone()),
+                Some(&query),
+                true,
+                None,
+                false,
+                Sort::default(),
+            ))
         };
-        assert_eq!(by("notes sort:size"), ["notes", "notes.txt", "zz notes.txt", "notes-old.txt"], "largest first");
-        assert_eq!(by("notes sort:name"), ["notes", "notes-old.txt", "notes.txt", "zz notes.txt"]);
+        assert_eq!(
+            by("notes sort:size"),
+            ["notes", "notes.txt", "zz notes.txt", "notes-old.txt"],
+            "largest first"
+        );
+        assert_eq!(
+            by("notes sort:name"),
+            ["notes", "notes-old.txt", "notes.txt", "zz notes.txt"]
+        );
     }
 
     #[test]
     fn the_folder_on_show_is_narrowed_in_memory_by_the_whole_query() {
         let mut listing = Listing::new(PathBuf::from("/r"));
-        listing.entries = vec![entry("/r/report.pdf", 3_000_000), entry("/r/report.txt", 5), entry("/r/photo.png", 10)];
+        listing.entries = vec![
+            entry("/r/report.pdf", 3_000_000),
+            entry("/r/report.txt", 5),
+            entry("/r/photo.png", 10),
+        ];
         let listing = Arc::new(listing);
         let run = |text: &str| {
             let query = Query::parse(text);
-            let shown = select_shown(listing.clone(), None, Some(&query), false, None, false, Sort::default());
+            let shown = select_shown(
+                listing.clone(),
+                None,
+                Some(&query),
+                false,
+                None,
+                false,
+                Sort::default(),
+            );
             (names(&shown), shown.of)
         };
-        assert_eq!(run("report"), (vec!["report.pdf".to_string(), "report.txt".into()], 3));
+        assert_eq!(
+            run("report"),
+            (vec!["report.pdf".to_string(), "report.txt".into()], 3)
+        );
         assert_eq!(run("report size:>1MB").0, ["report.pdf"]);
         assert_eq!(run("ext:png").0, ["photo.png"]);
         assert_eq!(run("-report").0, ["photo.png"]);
         // A pattern that cannot run lists nothing and says why.
-        let bad = select_shown(listing.clone(), None, Some(&Query::parse("( match:regex")), false, None, false, Sort::default());
+        let bad = select_shown(
+            listing.clone(),
+            None,
+            Some(&Query::parse("( match:regex")),
+            false,
+            None,
+            false,
+            Sort::default(),
+        );
         assert!(bad.order.is_empty() && bad.invalid.is_some());
         // Hidden files follow the view unless the query says.
         let mut with_hidden = Listing::new(PathBuf::from("/r"));
@@ -2331,10 +2500,25 @@ mod search_order_tests {
         with_hidden.entries = vec![dot, entry("/r/report", 1)];
         let with_hidden = Arc::new(with_hidden);
         let count = |text: &str, show: bool| {
-            names(&select_shown(with_hidden.clone(), None, Some(&Query::parse(text)), false, None, show, Sort::default())).len()
+            names(&select_shown(
+                with_hidden.clone(),
+                None,
+                Some(&Query::parse(text)),
+                false,
+                None,
+                show,
+                Sort::default(),
+            ))
+            .len()
         };
         assert_eq!((count("report", false), count("report", true)), (1, 2));
-        assert_eq!((count("report hidden:yes", false), count("report hidden:no", true)), (2, 1));
+        assert_eq!(
+            (
+                count("report hidden:yes", false),
+                count("report hidden:no", true)
+            ),
+            (2, 1)
+        );
         assert_eq!(count("report hidden:only", false), 1);
     }
 }

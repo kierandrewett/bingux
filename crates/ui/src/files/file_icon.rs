@@ -175,9 +175,11 @@ impl FileKind {
             FileKind::Document | FileKind::Page | FileKind::Ebook => Icon::TextXGeneric,
             FileKind::Font => Icon::FontXGeneric,
             FileKind::Executable => Icon::Application,
-            FileKind::Model3d | FileKind::Database | FileKind::Certificate | FileKind::Torrent | FileKind::Unknown => {
-                Icon::ApplicationXGeneric
-            }
+            FileKind::Model3d
+            | FileKind::Database
+            | FileKind::Certificate
+            | FileKind::Torrent
+            | FileKind::Unknown => Icon::ApplicationXGeneric,
         }
     }
 
@@ -292,7 +294,9 @@ fn kind_of_mime(mime: &str) -> Option<FileKind> {
     ]) {
         return Some(FileKind::Database);
     }
-    if has(&["x509", "pkcs", "pgp", "pkix", "pem-key", "ssh-key", "x-gnupg"]) {
+    if has(&[
+        "x509", "pkcs", "pgp", "pkix", "pem-key", "ssh-key", "x-gnupg",
+    ]) {
         return Some(FileKind::Certificate);
     }
     if has(&["blender", "x-3d", "x-3ds", "x-fbx", "x-stl"]) {
@@ -309,13 +313,34 @@ fn kind_of_mime(mime: &str) -> Option<FileKind> {
     ]) {
         return Some(FileKind::DiskImage);
     }
-    if has(&["epub", "mobipocket", "fictionbook", "amazon.ebook", "comicbook", "x-cbz", "x-cbr"]) {
+    if has(&[
+        "epub",
+        "mobipocket",
+        "fictionbook",
+        "amazon.ebook",
+        "comicbook",
+        "x-cbz",
+        "x-cbr",
+    ]) {
         return Some(FileKind::Ebook);
     }
-    if has(&["msword", "wordprocessingml", "rtf", "abiword", "oasis.opendocument.text"]) {
+    if has(&[
+        "msword",
+        "wordprocessingml",
+        "rtf",
+        "abiword",
+        "oasis.opendocument.text",
+    ]) {
         return Some(FileKind::Document);
     }
-    if has(&["postscript", "djvu", "calendar", "openxmlformats", "oasis.opendocument", "vnd.ms-"]) {
+    if has(&[
+        "postscript",
+        "djvu",
+        "calendar",
+        "openxmlformats",
+        "oasis.opendocument",
+        "vnd.ms-",
+    ]) {
         return Some(FileKind::Page);
     }
     if has(&[
@@ -428,7 +453,10 @@ impl FileIcon {
 
     /// An icon drawn as `colour`, with `glyph` as its symbolic stand-in.
     fn coloured(glyph: Icon, kind: FileKind, colour: ColourIcon) -> FileIcon {
-        FileIcon { colour: Some(colour), ..FileIcon::plain(glyph, kind) }
+        FileIcon {
+            colour: Some(colour),
+            ..FileIcon::plain(glyph, kind)
+        }
     }
 
     /// The icon of a kind of file.
@@ -466,7 +494,10 @@ impl FileIcon {
             SpecialFolder::Trash => (Icon::UserTrash, Some(ColourIcon::TrashEmpty)),
             SpecialFolder::Root => (Icon::DriveHarddisk, None),
         };
-        FileIcon { colour, ..FileIcon::plain(glyph, FileKind::Folder) }
+        FileIcon {
+            colour,
+            ..FileIcon::plain(glyph, FileKind::Folder)
+        }
     }
 
     /// The icon of the item at `path`, which is a `kind`. A folder is decided
@@ -557,7 +588,10 @@ impl FileIcon {
     pub fn for_trash(full: bool) -> FileIcon {
         let icon = FileIcon::for_special(SpecialFolder::Trash);
         if full {
-            FileIcon { colour: Some(ColourIcon::TrashFull), ..icon }
+            FileIcon {
+                colour: Some(ColourIcon::TrashFull),
+                ..icon
+            }
         } else {
             icon.dimmed()
         }
@@ -688,7 +722,14 @@ pub fn file_icon_view(
     match spec.colour {
         Some(icon) => {
             let dim = spec.tint == Tint::Dim && !selected;
-            drawn(spec, size.into(), Ink::Colour(icon, colour::colour_tone(icon, tokens)), mark, badge, dim)
+            drawn(
+                spec,
+                size.into(),
+                Ink::Colour(icon, colour::colour_tone(icon, tokens)),
+                mark,
+                badge,
+                dim,
+            )
         }
         None => drawn(spec, size.into(), Ink::Mono(mark), mark, badge, false),
     }
@@ -702,13 +743,27 @@ pub fn file_icon_view_floating(
     size: impl Into<FileIconSize>,
 ) -> Element {
     let ink = Paint::OnFloating.color(tokens);
-    drawn(spec, size.into(), Ink::Mono(ink), ink, Paint::Floating.color(tokens), false)
+    drawn(
+        spec,
+        size.into(),
+        Ink::Mono(ink),
+        ink,
+        Paint::Floating.color(tokens),
+        false,
+    )
 }
 
 /// The emblem is a small disc in `mark` with its arrow cut out, over the
 /// folder's lower right corner, ringed by the page colour (`badge`) so it reads
 /// on any fill. Glyphs under [`EMBLEM_MIN_PX`] have none.
-fn drawn(spec: &FileIcon, size: FileIconSize, ink: Ink, mark: Color, badge: Color, dim: bool) -> Element {
+fn drawn(
+    spec: &FileIcon,
+    size: FileIconSize,
+    ink: Ink,
+    mark: Color,
+    badge: Color,
+    dim: bool,
+) -> Element {
     let edge = size.px();
     let glyph = spec.glyph;
     let picture: Element = match ink {
@@ -795,13 +850,22 @@ mod tests {
             ("application/pdf", FileKind::Pdf),
             ("application/zip", FileKind::Archive),
             ("application/x-tar", FileKind::Archive),
-            ("application/vnd.oasis.opendocument.spreadsheet", FileKind::Spreadsheet),
+            (
+                "application/vnd.oasis.opendocument.spreadsheet",
+                FileKind::Spreadsheet,
+            ),
             ("application/vnd.ms-excel", FileKind::Spreadsheet),
             ("text/csv", FileKind::Spreadsheet),
-            ("application/vnd.oasis.opendocument.presentation", FileKind::Presentation),
+            (
+                "application/vnd.oasis.opendocument.presentation",
+                FileKind::Presentation,
+            ),
             ("application/vnd.ms-powerpoint", FileKind::Presentation),
             ("application/msword", FileKind::Document),
-            ("application/vnd.oasis.opendocument.text", FileKind::Document),
+            (
+                "application/vnd.oasis.opendocument.text",
+                FileKind::Document,
+            ),
             ("application/epub+zip", FileKind::Ebook),
             ("font/ttf", FileKind::Font),
             ("application/x-font-ttf", FileKind::Font),
@@ -827,13 +891,18 @@ mod tests {
             ("a.zip", "application/zip"),
             ("a.txt", "text/plain"),
         ] {
-            assert_eq!(FileIcon::for_name(name).glyph, FileIcon::for_mime(mime).glyph, "{name}");
+            assert_eq!(
+                FileIcon::for_name(name).glyph,
+                FileIcon::for_mime(mime).glyph,
+                "{name}"
+            );
         }
     }
 
     #[test]
     fn images_decode_documents_and_videos_only_use_the_cache() {
-        let thumb = |name: &str| FileIcon::for_entry(&entry(&format!("/x/{name}"), Kind::File)).thumbnail;
+        let thumb =
+            |name: &str| FileIcon::for_entry(&entry(&format!("/x/{name}"), Kind::File)).thumbnail;
         assert_eq!(thumb("a.png"), Some(Source::Decode));
         assert_eq!(thumb("a.jpg"), Some(Source::Decode));
         assert_eq!(thumb("a.pdf"), Some(Source::Cache));
@@ -848,9 +917,18 @@ mod tests {
         let folder = FileIcon::for_entry(&entry("/x/d", Kind::Directory));
         assert_eq!(folder.thumbnail, None);
         assert_eq!(folder.glyph, Icon::Folder);
-        assert_eq!(FileIcon::for_entry(&entry("/x/a.pdf", Kind::File)).glyph, Icon::ApplicationPdf);
-        assert_eq!(FileIcon::for_entry(&entry("/x/a.weird", Kind::File)).glyph, Icon::ApplicationXGeneric);
-        assert_eq!(FileIcon::for_entry(&entry("/x/socket", Kind::Other)).glyph, Icon::ApplicationXGeneric);
+        assert_eq!(
+            FileIcon::for_entry(&entry("/x/a.pdf", Kind::File)).glyph,
+            Icon::ApplicationPdf
+        );
+        assert_eq!(
+            FileIcon::for_entry(&entry("/x/a.weird", Kind::File)).glyph,
+            Icon::ApplicationXGeneric
+        );
+        assert_eq!(
+            FileIcon::for_entry(&entry("/x/socket", Kind::Other)).glyph,
+            Icon::ApplicationXGeneric
+        );
     }
 
     #[test]
@@ -872,8 +950,14 @@ mod tests {
         let icon = FileIcon::for_entry(&link);
         assert_eq!(icon.glyph, Icon::Folder);
         assert_eq!(icon.emblem, Some(Emblem::Link));
-        assert_eq!(FileIcon::for_entry(&entry("/x/d", Kind::Directory)).emblem, None);
-        assert_eq!(FileIcon::folder_at(Path::new("/x/d")).linked(true).glyph, Icon::Folder);
+        assert_eq!(
+            FileIcon::for_entry(&entry("/x/d", Kind::Directory)).emblem,
+            None
+        );
+        assert_eq!(
+            FileIcon::folder_at(Path::new("/x/d")).linked(true).glyph,
+            Icon::Folder
+        );
     }
 
     #[test]
@@ -884,7 +968,10 @@ mod tests {
         assert_eq!(icon.tint, Tint::Dim);
         assert_eq!(icon.paint(false), Paint::MutedFaint);
         assert_eq!(icon.paint(true), Paint::Accent);
-        assert_eq!(FileIcon::for_path(Path::new("/x/.cache"), Kind::Directory).tint, Tint::Dim);
+        assert_eq!(
+            FileIcon::for_path(Path::new("/x/.cache"), Kind::Directory).tint,
+            Tint::Dim
+        );
         assert_eq!(FileIcon::for_name(".bashrc").tint, Tint::Dim);
         let plain = FileIcon::for_entry(&entry("/x/d", Kind::Directory));
         assert_eq!(plain.paint(false), Paint::Muted);
@@ -901,14 +988,39 @@ mod tests {
 
     #[test]
     fn places_have_their_own_icons() {
-        let place = |kind, path: Option<&str>| Place { kind, name: String::new(), path: path.map(PathBuf::from) };
-        assert_eq!(FileIcon::for_place(&place(PlaceKind::Trash, None)).glyph, Icon::UserTrash);
-        assert_eq!(FileIcon::for_place(&place(PlaceKind::Recent, None)).glyph, Icon::Clock);
-        assert_eq!(FileIcon::for_place(&place(PlaceKind::Home, None)).glyph, Icon::UserHome);
-        assert_eq!(FileIcon::for_place(&place(PlaceKind::Computer, None)).glyph, Icon::DriveHarddisk);
-        assert_eq!(FileIcon::for_mount(MountKind::Network).glyph, Icon::NetworkServer);
-        assert_eq!(FileIcon::for_mount(MountKind::Removable).glyph, Icon::MediaRemovable);
-        assert_eq!(FileIcon::for_mount(MountKind::Optical).glyph, Icon::MediaOptical);
+        let place = |kind, path: Option<&str>| Place {
+            kind,
+            name: String::new(),
+            path: path.map(PathBuf::from),
+        };
+        assert_eq!(
+            FileIcon::for_place(&place(PlaceKind::Trash, None)).glyph,
+            Icon::UserTrash
+        );
+        assert_eq!(
+            FileIcon::for_place(&place(PlaceKind::Recent, None)).glyph,
+            Icon::Clock
+        );
+        assert_eq!(
+            FileIcon::for_place(&place(PlaceKind::Home, None)).glyph,
+            Icon::UserHome
+        );
+        assert_eq!(
+            FileIcon::for_place(&place(PlaceKind::Computer, None)).glyph,
+            Icon::DriveHarddisk
+        );
+        assert_eq!(
+            FileIcon::for_mount(MountKind::Network).glyph,
+            Icon::NetworkServer
+        );
+        assert_eq!(
+            FileIcon::for_mount(MountKind::Removable).glyph,
+            Icon::MediaRemovable
+        );
+        assert_eq!(
+            FileIcon::for_mount(MountKind::Optical).glyph,
+            Icon::MediaOptical
+        );
     }
 
     /// The path decisions, against a fake `user-dirs.dirs`, without the
@@ -925,7 +1037,9 @@ mod tests {
         std::os::unix::fs::symlink(&share, home.join("Downloads")).unwrap();
         // The file the user has: every key but Desktop disabled with `$HOME/`.
         let dirs = UserDirs::parse(
-            Some("XDG_DESKTOP_DIR=\"$HOME/Desktop\"\nXDG_DOWNLOAD_DIR=\"$HOME/\"\nXDG_DOCUMENTS_DIR=\"$HOME/\"\nXDG_VIDEOS_DIR=\"$HOME/Clips\"\n"),
+            Some(
+                "XDG_DESKTOP_DIR=\"$HOME/Desktop\"\nXDG_DOWNLOAD_DIR=\"$HOME/\"\nXDG_DOCUMENTS_DIR=\"$HOME/\"\nXDG_VIDEOS_DIR=\"$HOME/Clips\"\n",
+            ),
             &home,
         );
         let glyph = |path: &Path| match dirs.special(path) {

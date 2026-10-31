@@ -26,8 +26,19 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 SCRATCH_BASE = Path.home() / ".cache" / "bingux-InstallerUI"
 EXPECTED = [
-    "welcome", "keyboard", "network", "timezone", "hostname", "disk", "partitions", "storage",
-    "account", "summary", "progress", "finished", "error",
+    "welcome",
+    "keyboard",
+    "network",
+    "timezone",
+    "hostname",
+    "disk",
+    "partitions",
+    "storage",
+    "account",
+    "summary",
+    "progress",
+    "finished",
+    "error",
 ]
 
 

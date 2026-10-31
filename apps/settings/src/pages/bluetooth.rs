@@ -13,15 +13,15 @@ use freya::prelude::*;
 use crate::icons::{self, Icon};
 use crate::pages::loading::revealed;
 use crate::routes;
-use bingux_ui::prelude::{Router, use_router};
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
-    CANCEL_ID, Group, Overlays, PageHead, ResponseKind, Row, SpinnerSize, Status, Tokens, action_strip,
-    caption, centered_caption, dialog, entry_row, heading, page_column, row, skeleton_shape,
-    spinner, status, status_page, strip_action, switch_row, use_overlays, use_page_busy,
-    use_tokens,
+    CANCEL_ID, Group, Overlays, PageHead, ResponseKind, Row, SpinnerSize, Status, Tokens,
+    action_strip, caption, centered_caption, dialog, entry_row, heading, page_column, row,
+    skeleton_shape, spinner, status, status_page, strip_action, switch_row, use_overlays,
+    use_page_busy, use_tokens,
 };
 use bingux_ui::layout::{hstack, vstack};
+use bingux_ui::prelude::{Router, use_router};
 use bingux_ui::shell::{MenuItem, menu_item};
 use bingux_ui::style::*;
 
@@ -161,7 +161,8 @@ fn battery(value: &str) -> Option<u8> {
 /// Whether the kernel has a Bluetooth controller. Without one, and without
 /// bluetoothd, `bluetoothctl` waits for its whole timeout, so check first.
 fn has_controller() -> bool {
-    crate::system::read_dir("/sys/class/bluetooth").is_ok_and(|mut entries| entries.next().is_some())
+    crate::system::read_dir("/sys/class/bluetooth")
+        .is_ok_and(|mut entries| entries.next().is_some())
 }
 
 /// Bluetooth blocked by a switch or by a system setting, from the radio
@@ -173,8 +174,9 @@ fn radio_block() -> Option<Block> {
         if kind.trim() != "bluetooth" {
             continue;
         }
-        let set =
-            |name: &str| crate::system::read_to_string(path.join(name)).is_ok_and(|v| v.trim() == "1");
+        let set = |name: &str| {
+            crate::system::read_to_string(path.join(name)).is_ok_and(|v| v.trim() == "1")
+        };
         if set("hard") {
             return Some(Block::Hardware);
         }

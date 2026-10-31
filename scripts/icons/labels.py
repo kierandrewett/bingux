@@ -86,7 +86,9 @@ def load(path: Path = LABELS) -> Labels:
         if not parts[3].startswith("custom"):
             match = FORK_SPEC.match(parts[3])
             if not match:
-                raise SystemExit(f"labels.tsv:{number}: glyph must be `custom: ..` or `Name weight [k=v ..]`: {parts[3]}")
+                raise SystemExit(
+                    f"labels.tsv:{number}: glyph must be `custom: ..` or `Name weight [k=v ..]`: {parts[3]}"
+                )
             row.fork, row.weight = match.group(1), match.group(2)
             for item in match.group(3).split():
                 key, value = item.split("=", 1)

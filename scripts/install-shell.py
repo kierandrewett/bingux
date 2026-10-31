@@ -182,26 +182,19 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
         # (bingux_dsp) with the compressor, limiter, reverb and the rest.
         cargo / "release/bingux-effects": prefix / "bin/bingux-effects",
         cargo / "release/libbingux_dsp.so": ladspa / "libbingux_dsp.so",
-        source / "apps/settings/bingux-settings.desktop": prefix
-        / "share/applications/bingux-settings.desktop",
-        source / "apps/settings/bingux-settings.svg": prefix
-        / "share/icons/hicolor/scalable/apps/bingux-settings.svg",
+        source / "apps/settings/bingux-settings.desktop": prefix / "share/applications/bingux-settings.desktop",
+        source / "apps/settings/bingux-settings.svg": prefix / "share/icons/hicolor/scalable/apps/bingux-settings.svg",
         cargo / "release/bingux-files": prefix / "bin/bingux-files",
-        source / "apps/files/bingux-files.desktop": prefix
-        / "share/applications/bingux-files.desktop",
-        source / "apps/files/bingux-files.svg": prefix
-        / "share/icons/hicolor/scalable/apps/bingux-files.svg",
+        source / "apps/files/bingux-files.desktop": prefix / "share/applications/bingux-files.desktop",
+        source / "apps/files/bingux-files.svg": prefix / "share/icons/hicolor/scalable/apps/bingux-files.svg",
         cargo / "release/bingux-taxonomy": prefix / "bin/bingux-taxonomy",
         # The helper Files runs for films, songs and PDFs; found beside bingux-files.
         cargo / "release/bingux-preview-host": prefix / "bin/bingux-preview-host",
-        source / "apps/taxonomy/bingux-taxonomy.desktop": prefix
-        / "share/applications/bingux-taxonomy.desktop",
-        source / "apps/taxonomy/bingux-taxonomy.svg": prefix
-        / "share/icons/hicolor/scalable/apps/bingux-taxonomy.svg",
+        source / "apps/taxonomy/bingux-taxonomy.desktop": prefix / "share/applications/bingux-taxonomy.desktop",
+        source / "apps/taxonomy/bingux-taxonomy.svg": prefix / "share/icons/hicolor/scalable/apps/bingux-taxonomy.svg",
         # Tells bingux-searchd that Settings exposes search: its program (opens a
         # hit's address) and its id. See design/search.md section 8.
-        source / "packaging/search-apps/bingux-settings.json": prefix
-        / "share/bingux/search-apps/bingux-settings.json",
+        source / "packaging/search-apps/bingux-settings.json": prefix / "share/bingux/search-apps/bingux-settings.json",
         source / "scripts/bingux-greeter-session": prefix / "bin/bingux-greeter-session",
         source / "scripts/bingux-bsm-greeter": prefix / "bin/bingux-bsm-greeter",
         source / "gnoblin/bingux.lua": prefix / "share/gnoblin/conf.d/bingux.lua",
@@ -699,7 +692,14 @@ def uninstall_user(prefix, no_systemd):
 # Gnoblin module, no session or user-service changes. A manifest records every
 # file, its checksum, the file it displaced and the folders it created, so
 # --uninstall removes exactly that and puts the displaced files back.
-APPS_PROGRAMS = ("bingux-config", "bingux-settings", "bingux-files", "bingux-preview-host", "bingux-taxonomy", "bingux-effects")
+APPS_PROGRAMS = (
+    "bingux-config",
+    "bingux-settings",
+    "bingux-files",
+    "bingux-preview-host",
+    "bingux-taxonomy",
+    "bingux-effects",
+)
 APPS_MANIFEST = Path("share/bingux-apps/manifest.json")
 APPS_HELPER = Path("share/bingux-apps/install-shell.py")
 APPS_BACKUP_SUFFIX = ".pre-bingux-apps.bak"

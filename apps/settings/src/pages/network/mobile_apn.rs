@@ -13,9 +13,9 @@ use crate::pages::network::model::{CONNECT, NetCtx, QUICK, nmcli, split_terse, u
 use crate::routes;
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
-    CANCEL_ID, Group, PageHead, ResponseKind, Status, action_row, choice_row, dialog, form_field, icon_button,
-    page_column, pending_bar, primary_button, radio_row, radio_rows, row, status, switch_row,
-    use_page_busy,
+    CANCEL_ID, Group, PageHead, ResponseKind, Status, action_row, choice_row, dialog, form_field,
+    icon_button, page_column, pending_bar, primary_button, radio_row, radio_rows, row, status,
+    switch_row, use_page_busy,
 };
 
 /// The properties one profile is read with.
@@ -630,9 +630,7 @@ impl Component for ApnListPage {
             .unwrap_or(false);
         let current = selected(&list).map(|profile| profile.uuid.clone());
 
-        let mut page =
-            page_column()
-                .child(PageHead::new());
+        let mut page = page_column().child(PageHead::new());
         if list.is_empty() {
             page = page.child(Group::new(None::<String>).row(Element::from(status(
                 Status::Empty("No access point names yet.".into()),
@@ -870,26 +868,19 @@ impl Component for ApnForm {
         // that has it. A profile with its own settings cannot go back: see
         // `Draft::properties`.
         if !existing || self.initial.auto_config {
-            general = general.row(
-                switch_row(
-                    "Detect settings automatically",
-                    draft.auto_config,
-                    move |on: bool| {
-                        let mut auto_config = auto_config;
-                        auto_config.set(on);
-                    },
-                ),
-            );
+            general = general.row(switch_row(
+                "Detect settings automatically",
+                draft.auto_config,
+                move |on: bool| {
+                    let mut auto_config = auto_config;
+                    auto_config.set(on);
+                },
+            ));
         }
 
         let mut page = page_column()
             .child(PageHead::new())
-            .child(pending_bar(
-                existing && dirty,
-                valid,
-                apply.clone(),
-                revert,
-            ))
+            .child(pending_bar(existing && dirty, valid, apply.clone(), revert))
             .child(general);
 
         if !draft.auto_config {

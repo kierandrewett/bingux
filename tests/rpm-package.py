@@ -110,7 +110,12 @@ class AppStreamTest(unittest.TestCase):
     def test_metainfo_validates(self):
         for _, component in APPLICATIONS.values():
             result = subprocess.run(
-                ["appstreamcli", "validate", "--no-net", str(ROOT / "packaging/metainfo" / f"{component}.metainfo.xml")],
+                [
+                    "appstreamcli",
+                    "validate",
+                    "--no-net",
+                    str(ROOT / "packaging/metainfo" / f"{component}.metainfo.xml"),
+                ],
                 capture_output=True,
                 text=True,
                 check=False,
@@ -229,7 +234,12 @@ class RpmPackageTest(unittest.TestCase):
 
     def test_no_scriptlet_hand_updates_desktop_caches(self):
         code = "\n".join(line for line in self.spec.splitlines() if not line.lstrip().startswith("#"))
-        for command in ("update-desktop-database", "gtk-update-icon-cache", "update-mime-database", "glib-compile-schemas"):
+        for command in (
+            "update-desktop-database",
+            "gtk-update-icon-cache",
+            "update-mime-database",
+            "glib-compile-schemas",
+        ):
             self.assertNotIn(command, code)
 
     @unittest.skipUnless(shutil.which("cargo"), "cargo is not installed")

@@ -77,8 +77,8 @@ Item {
             power: "power"
         };
         return rows.map(row => Object.assign({}, row, {
-            available: SessionServices.permits(capabilities[row.key] || row.key)
-        }));
+                available: SessionServices.permits(capabilities[row.key] || row.key)
+            }));
     }
     readonly property string extraStatusDescription: extraIndicators.filter(indicator => indicator.active && indicator.available).map(indicator => indicator.label).join("\n")
     readonly property var audioSink: Pipewire.defaultAudioSink

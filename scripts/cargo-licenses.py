@@ -24,6 +24,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from crate_dirs import crate_dir  # noqa: E402
 
@@ -167,9 +168,7 @@ def expression(licences):
     atoms = {term for licence in licences for term in terms(licence)}
     plain = {atom for atom in atoms if " OR " not in atom}
     kept = {
-        atom
-        for atom in atoms
-        if atom in plain or not any(option.strip() in plain for option in atom.split(" OR "))
+        atom for atom in atoms if atom in plain or not any(option.strip() in plain for option in atom.split(" OR "))
     }
     wrap = len(kept) > 1
     return " AND ".join(f"({atom})" if wrap and " OR " in atom else atom for atom in sorted(kept))

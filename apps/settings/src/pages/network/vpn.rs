@@ -25,8 +25,8 @@ use crate::pages::loading::veiled;
 use crate::routes;
 use crate::system::{self, CommandError};
 use crate::ui::{
-    CANCEL_ID, Group, ResponseKind, SpinnerSize, Status, action_strip, dialog, page_column, row, spinner,
-    status, strip_action, switch, use_tokens,
+    CANCEL_ID, Group, ResponseKind, SpinnerSize, Status, action_strip, dialog, page_column, row,
+    spinner, status, strip_action, switch, use_tokens,
 };
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 use bingux_ui::style::*;

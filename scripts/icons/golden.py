@@ -278,11 +278,19 @@ def absolute_problems(measures: dict[str, dict], labels) -> list[str]:
                         f"[IC-05] {name}: a dot {w:.2f} x {h:.2f} grid units fills {fill:.2f} of its box; "
                         f"a dot is a circle ({ROUND_FILL[0]} to {ROUND_FILL[1]}, near square)"
                     )
-        if short.startswith("network-wireless") and short in ("network-wireless",) or short.startswith("network-wireless-signal-"):
+        if (
+            short.startswith("network-wireless")
+            and short in ("network-wireless",)
+            or short.startswith("network-wireless-signal-")
+        ):
             if record["runs"] > 3:
-                problems.append(f"[IC-03] {name}: {record['runs']} marks along its middle; a Wi-Fi icon has two arcs and a dot at most")
+                problems.append(
+                    f"[IC-03] {name}: {record['runs']} marks along its middle; a Wi-Fi icon has two arcs and a dot at most"
+                )
         if short in labels.symmetric and (record["asym"][0] > 0.15 or record["asym"][1] > 0.03):
-            problems.append(f"[AL-15] {name}: not its own mirror image (worst pixel {record['asym'][0]:.2f}, mean {record['asym'][1]:.3f})")
+            problems.append(
+                f"[AL-15] {name}: not its own mirror image (worst pixel {record['asym'][0]:.2f}, mean {record['asym'][1]:.3f})"
+            )
     return problems
 
 
@@ -297,7 +305,11 @@ def compare(now: dict, then: dict, name: str) -> tuple[list[str], int]:
         out.append(f"[IC-05] {name}: stroke weight {then['stroke']:.2f} -> {now['stroke']:.2f} grid units")
     if [d[:2] for d in now["dots"]] != [d[:2] for d in then["dots"]] and (
         len(now["dots"]) != len(then["dots"])
-        or any(abs(a[i] - b[i]) > (DOT_GRID if i < 2 else DOT_FILL) for a, b in zip(now["dots"], then["dots"]) for i in range(3))
+        or any(
+            abs(a[i] - b[i]) > (DOT_GRID if i < 2 else DOT_FILL)
+            for a, b in zip(now["dots"], then["dots"])
+            for i in range(3)
+        )
     ):
         out.append(f"[IC-05] {name}: dots {then['dots']} -> {now['dots']} (width, height, fill of its box)")
     elif any(abs(a[2] - b[2]) > DOT_FILL for a, b in zip(now["dots"], then["dots"])):
@@ -311,9 +323,13 @@ def compare(now: dict, then: dict, name: str) -> tuple[list[str], int]:
         names = ("left", "top", "right", "bottom")
         for i, edge in enumerate(names):
             if abs(rendition[i] - before[i]) > EDGE_PX * scale:
-                out.append(f"[IC-01] {name} at {key}: the ink's {edge} edge moved {before[i]:.2f} -> {rendition[i]:.2f} px")
+                out.append(
+                    f"[IC-01] {name} at {key}: the ink's {edge} edge moved {before[i]:.2f} -> {rendition[i]:.2f} px"
+                )
         if abs(rendition[4] - before[4]) > COVERAGE_REL * max(before[4], 1e-9):
-            out.append(f"[IC-05] {name} at {key}: coverage {before[4]:.3f} -> {rendition[4]:.3f} ({(rendition[4] / max(before[4], 1e-9) - 1) * 100:+.1f}%)")
+            out.append(
+                f"[IC-05] {name} at {key}: coverage {before[4]:.3f} -> {rendition[4]:.3f} ({(rendition[4] / max(before[4], 1e-9) - 1) * 100:+.1f}%)"
+            )
         if abs(rendition[5] - before[5]) > 4 + 0.2 * before[5]:
             out.append(f"[IC-01] {name} at {key}: {before[5]} -> {rendition[5]} soft edge pixels")
         if rendition[6] != before[6]:
@@ -322,7 +338,11 @@ def compare(now: dict, then: dict, name: str) -> tuple[list[str], int]:
     levels = [abs(int(x, 16) - int(y, 16)) for x, y in zip(a, b)]
     inked = max(1, sum(1 for x, y in zip(a, b) if x != "0" or y != "0"))
     if levels and (sum(levels) / 15 / inked > PIXELS_MEAN or max(levels) / 15 > PIXELS_MAX):
-        spots = [(i % int(math.sqrt(len(a))), i // int(math.sqrt(len(a)))) for i, v in enumerate(levels) if v / 15 > PIXELS_MAX][:3]
+        spots = [
+            (i % int(math.sqrt(len(a))), i // int(math.sqrt(len(a))))
+            for i, v in enumerate(levels)
+            if v / 15 > PIXELS_MAX
+        ][:3]
         out.append(
             f"[IC-05] {name}: the 16 px picture differs: {sum(levels) / 15 / inked:.1%} of its ink, worst pixel {max(levels)}/15"
             + (f" at {spots}" if spots else "")
@@ -335,10 +355,19 @@ def load_golden() -> dict:
 
 
 def write_golden(measures: dict[str, dict]) -> None:
-    lines = ["{", '"version": 1,', f'"sizes": {json.dumps(list(SIZES))},', f'"scales": {json.dumps(list(SCALES))},', '"icons": {']
+    lines = [
+        "{",
+        '"version": 1,',
+        f'"sizes": {json.dumps(list(SIZES))},',
+        f'"scales": {json.dumps(list(SCALES))},',
+        '"icons": {',
+    ]
     names = sorted(measures)
     for i, name in enumerate(names):
-        lines.append(f"{json.dumps(name)}: {json.dumps(measures[name], separators=(',', ':'), sort_keys=True)}" + ("," if i + 1 < len(names) else ""))
+        lines.append(
+            f"{json.dumps(name)}: {json.dumps(measures[name], separators=(',', ':'), sort_keys=True)}"
+            + ("," if i + 1 < len(names) else "")
+        )
     lines += ["}", "}"]
     GOLDEN.write_text("\n".join(lines) + "\n")
 
@@ -358,7 +387,9 @@ def sheet(path: Path, size: int, scale: int) -> None:
     draw = ImageDraw.Draw(image)
     for i, name in enumerate(names):
         cov = Drawing(ICONS / name).coverage(px)
-        tile = (cov[..., None] * np.array([235, 235, 240]) + (1 - cov[..., None]) * np.array([30, 30, 34])).astype(np.uint8)
+        tile = (cov[..., None] * np.array([235, 235, 240]) + (1 - cov[..., None]) * np.array([30, 30, 34])).astype(
+            np.uint8
+        )
         x, y = (i % columns) * cell + 6 * scale, (i // columns) * cell + 6 * scale
         image.paste(Image.fromarray(tile), (x, y))
     draw.text((4, 2), f"{len(names)} icons at {size} px x{scale}", fill=(150, 150, 160))
@@ -427,7 +458,9 @@ def main() -> int:
     parser.add_argument("--scale", type=int, default=2)
     parser.add_argument("--fixtures", action="store_true", help="only check the checks on their own drawings")
     parser.add_argument("--explain", help="every number of one icon beside its golden")
-    parser.add_argument("--verbose", action="store_true", help="also list icons whose pixels changed within the tolerances")
+    parser.add_argument(
+        "--verbose", action="store_true", help="also list icons whose pixels changed within the tolerances"
+    )
     args = parser.parse_args()
 
     problems = run_fixtures()
@@ -466,10 +499,14 @@ def main() -> int:
     drift = 0
     for name in sorted(set(measures) | set(golden)):
         if name not in golden:
-            failures.append(f"[IC-05] {name}: new icon, not in golden.json: look at it, then `scripts/icons/golden.py --update`")
+            failures.append(
+                f"[IC-05] {name}: new icon, not in golden.json: look at it, then `scripts/icons/golden.py --update`"
+            )
             continue
         if name not in measures:
-            failures.append(f"[IC-05] {name}: in golden.json but not in the set any more: `scripts/icons/golden.py --update`")
+            failures.append(
+                f"[IC-05] {name}: in golden.json but not in the set any more: `scripts/icons/golden.py --update`"
+            )
             continue
         found, changed = compare(measures[name], golden[name], name)
         failures += found
@@ -484,7 +521,9 @@ def main() -> int:
         f"{len(failures)} findings, {drift} icons with pixels that differ inside the tolerances"
     )
     if failures:
-        print("If the change is meant: look at the sheet (`golden.py --sheet /tmp/icons.png`), then `scripts/icons/golden.py --update`.")
+        print(
+            "If the change is meant: look at the sheet (`golden.py --sheet /tmp/icons.png`), then `scripts/icons/golden.py --update`."
+        )
     return 1 if failures else 0
 
 

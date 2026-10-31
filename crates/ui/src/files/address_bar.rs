@@ -27,11 +27,11 @@ use freya::prelude::*;
 use super::address_crumbs::{CompactTrail, Crumbs};
 use super::address_edit::Edit;
 use super::directory::Where;
-use super::named::Roots;
 use super::file_icon::FileKind;
+use super::named::Roots;
 use crate::component::ComponentName;
-use crate::style::*;
 use crate::icons::{self, Icon};
+use crate::style::*;
 use crate::surface::use_tokens;
 
 /// The text a person edits for `location`: its path with a trailing slash,
