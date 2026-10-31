@@ -98,7 +98,7 @@ const widgets = [
     { id: "control-customise", label: "Customise button", group: true },
     { id: "control-account", action: true, label: "User account", icon: "avatar-default-symbolic" },
     { id: "control-header-space", label: "Header space", group: true },
-    { id: "control-battery", label: "Battery", icon: "battery-good-symbolic", group: true },
+    { id: "control-battery", label: "Battery", icon: "battery-level-100-symbolic", group: true },
     { id: "control-settings", action: true, label: "Settings", icon: "preferences-system-symbolic" },
     { id: "control-session", action: true, label: "Power options", icon: "system-shutdown-symbolic" },
     { id: "control-lock", action: true, label: "Lock", icon: "system-lock-screen-symbolic" },

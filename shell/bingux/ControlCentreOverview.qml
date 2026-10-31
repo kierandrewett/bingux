@@ -264,7 +264,7 @@ GridLayout {
             visible: (placed || root.groupPosition("controls-header", widgetId) >= 0) && (available || DesktopEditing.active)
             available: root.indicators.laptopBatteryAvailable
             summary: root.indicators.batteryAccessibleName()
-            iconName: root.indicators.laptopBatteryAvailable ? root.indicators.battery.iconName : "battery-missing-symbolic"
+            iconName: root.indicators.batteryIconName()
             onClicked: root.openDetail("power", batteryControl)
             presentation: Object.assign({}, DesktopLayout.presentation(root.desktop, widgetId, container || "controls-header", label, batteryControl.iconName, true, true, placed ? "" : headerControls.container || "control-centre"), {
                 custom: true

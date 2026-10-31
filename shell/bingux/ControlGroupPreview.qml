@@ -47,6 +47,9 @@ ControlCentreOverview {
         function batteryAccessibleName() {
             return "Battery 84 percent, charging";
         }
+        function batteryIconName() {
+            return "battery-level-80-charging-symbolic";
+        }
         function audioIconName() {
             return "audio-volume-high-symbolic";
         }

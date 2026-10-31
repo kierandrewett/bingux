@@ -18,3 +18,21 @@ test("battery summary converts Quickshell charge fractions and follows updates",
     context.laptopBatteryAvailable = false;
     assert.equal(context.batteryAccessibleName(), "Battery status unavailable");
 });
+
+test("battery icon is the battery-level-N file for the charge, its state and presence", () => {
+    const state = { Unknown: 0, Charging: 1, Discharging: 2, Empty: 3, FullyCharged: 4 };
+    const context = vm.createContext({ laptopBatteryAvailable: true, battery: { percentage: 0.8, state: state.Discharging }, UPowerDeviceState: state });
+    vm.runInContext(method, context);
+    for (const [fraction, level] of [[0, 0], [0.04, 0], [0.05, 10], [0.426, 40], [0.45, 50], [0.84, 80], [0.85, 90], [0.995, 100], [1, 100]]) {
+        context.battery.percentage = fraction;
+        context.battery.state = state.Discharging;
+        assert.equal(context.batteryIconName(), `battery-level-${level}-symbolic`, `${fraction} discharging`);
+        context.battery.state = state.Charging;
+        assert.equal(context.batteryIconName(), `battery-level-${level}-charging-symbolic`, `${fraction} charging`);
+    }
+    context.battery.percentage = 1;
+    context.battery.state = state.FullyCharged;
+    assert.equal(context.batteryIconName(), "battery-level-100-charged-symbolic");
+    context.laptopBatteryAvailable = false;
+    assert.equal(context.batteryIconName(), "battery-missing-symbolic");
+});
