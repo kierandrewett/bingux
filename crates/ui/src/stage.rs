@@ -207,10 +207,22 @@ impl Component for AfterPage {
                 })
             }
         });
+        // A page that was hidden or drawn as a skeleton fades its data in; what sits under it
+        // fades in with it, or it would stand on the screen first, with nothing above it.
+        let held = use_hook(|| Rc::new(Cell::new(false)));
+        if fill.as_ref().is_some_and(|fill| fill.provisional.get() > 0) {
+            held.set(true);
+        }
+        let tokens = crate::surface::tokens_now();
+        let fade = crate::motion::use_tween_from(
+            if held.get() { 0.0 } else { 1.0 },
+            1.0,
+            tokens.motion(crate::motion::MOVE_MS),
+        );
         if shown() {
-            self.child.clone()
+            Element::from(rect().opacity(fade).child(self.child.clone()))
         } else {
-            rect().into()
+            Element::from(rect())
         }
     }
 }

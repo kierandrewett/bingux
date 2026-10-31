@@ -563,7 +563,9 @@ impl Component for ClockFace {
                 date_text(&reading),
             ),
             Some(Err(message)) => (message, String::new()),
-            None => ("Reading the clock.".to_string(), String::new()),
+            // Blank lines of the same two sizes: a sentence here wrapped to two lines of the
+            // hero size on a phone and the card grew by 40 px when the time arrived.
+            None => ("\u{a0}".to_string(), "\u{a0}".to_string()),
         };
         // Free content in the card: the card body's 16 px on every side.
         rect()
