@@ -514,13 +514,17 @@ fn trash_folder() -> PathBuf {
 }
 
 fn address(at: Where, editing: bool, draft: &str) -> Element {
+    address_with(at, editing, draft, Find::default())
+}
+
+fn address_with(at: Where, editing: bool, draft: &str, asked: Find) -> Element {
     let editing = use_state(|| editing);
     let draft = use_hook(|| {
         let mut value = OmniDraft::create();
         value.set_in_place(draft);
         value
     });
-    let find = use_state(Find::default);
+    let find = use_state(move || asked.clone());
     AddressBar::new(
         at,
         fixture().to_path_buf(),
@@ -533,7 +537,8 @@ fn address(at: Where, editing: bool, draft: &str) -> Element {
     .into_element()
 }
 
-/// The location field in a folder of the fixture, with `text` typed by the walk.
+/// The location field in a folder of the fixture, edited, with `typed` already in it: the card
+/// shows for text that is not the text the field rests with.
 fn omnibox(at: &str, typed: &str) -> Element {
     address(Where::Folder(fixture().join(at)), true, typed)
 }
@@ -547,33 +552,33 @@ pub const OMNIBOX: &[Spec] = &[
         "Editing: a plain field, no card until something is typed",
         || omnibox("Documents", ""),
     )
-    .wide()
-    .script("wait 300; save {out}"),
+    .wide(),
     Spec::forced(
         "A path: the folders that complete it grow out of the field",
-        || omnibox("Documents", ""),
+        || omnibox("Documents", "Photos/"),
     )
-    .wide()
-    .script("type Photos/; wait 900; save {out}"),
+    .page(320.0),
     Spec::forced(
-        "Words: this folder, places and a search with chips for scope and filters",
-        || omnibox("Documents", ""),
+        "Words: this folder, places and a search, with chips for scope and filters",
+        || omnibox("Documents", "re"),
     )
-    .wide()
-    .script("type re; wait 1500; save {out}"),
-    Spec::forced("A filter typed as an operator becomes a chip", || {
-        omnibox("Documents", "")
-    })
-    .wide()
-    .script("type re type:image ; wait 1500; save {out}"),
-    Spec::forced("Nothing found", || omnibox("Documents", ""))
-        .wide()
-        .script("type zzzzqqq; wait 1500; save {out}"),
-    Spec::forced("A path that cannot be opened says why", || {
-        omnibox("Documents", "")
-    })
-    .wide()
-    .script("type /nowhere/at/all; key return; wait 900; save {out}"),
+    .page(520.0),
+    Spec::forced(
+        "A filter chip is on (typed as `type:image`, or pressed), and keeps what it names",
+        || {
+            let mut asked = Find::default();
+            asked.filters.kinds = vec![bingux_ui::files::model::find::Kind::Image];
+            asked.filters.exts = vec!["png".to_string()];
+            address_with(
+                Where::Folder(fixture().join("Documents")),
+                true,
+                "re",
+                asked,
+            )
+        },
+    )
+    .page(520.0),
+    Spec::forced("Nothing found", || omnibox("Documents", "zzzzqqq")).page(300.0),
 ];
 
 pub const ADDRESS_BAR: &[Spec] = &[
