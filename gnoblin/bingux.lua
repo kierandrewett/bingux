@@ -80,7 +80,7 @@ local defaults = {
             command = {
                 "sh",
                 "-c",
-                'if [ -n "$BSM_SESSION_ID" ]; then exec bsmctl lock; fi; exec bingux-lock',
+                "if [ -n \"$BSM_SESSION_ID\" ]; then exec bsmctl lock; fi; exec bingux-lock",
             },
         },
     },
@@ -131,8 +131,8 @@ local defaults = {
                 mode = "force",
                 radius = 12,
                 smoothing = 0.5,
+                -- The edge hairline follows the colour scheme; see `edge_rule` below.
                 border_width = 1,
-                border_color = "#505050bf",
                 -- Reconstruct only detected client-drawn rounded corners
                 -- before applying Bingux's outer shape.
                 ["remove-csd"] = true,
@@ -142,10 +142,11 @@ local defaults = {
                 ["keep-fullscreen"] = false,
                 ["keep-tiled"] = true,
                 ["shadow-animation"] = { duration = 180, easing = "ease-out-cubic" },
+                -- Two soft layers and no tight one: a 4 to 6 px shadow with opacity 0.22 to 0.32
+                -- draws a dark ring just outside the window, which shows on a light background.
                 shadow = {
-                    { x = 0, y = 8, blur = 42, spread = 4, opacity = 0.22 },
-                    { x = 0, y = 3, blur = 14, spread = 1, opacity = 0.18 },
-                    { x = 0, y = 1, blur = 4, spread = 0, opacity = 0.22 },
+                    { x = 0, y = 10, blur = 40, spread = 0, opacity = 0.16 },
+                    { x = 0, y = 3, blur = 12, spread = 0, opacity = 0.10 },
                 },
             },
         },
@@ -153,9 +154,8 @@ local defaults = {
             match = { type = "window", focused = true },
             corners = {
                 shadow = {
-                    { x = 0, y = 18, blur = 64, spread = 8, opacity = 0.38 },
-                    { x = 0, y = 8, blur = 24, spread = 2, opacity = 0.26 },
-                    { x = 0, y = 2, blur = 6, spread = 0, opacity = 0.32 },
+                    { x = 0, y = 18, blur = 56, spread = 0, opacity = 0.28 },
+                    { x = 0, y = 6, blur = 18, spread = 0, opacity = 0.16 },
                 },
             },
         },
@@ -224,3 +224,35 @@ end
 for _, rule in ipairs(window_rules) do
     gnoblin.window_rule(rule)
 end
+
+-- Window edge, as on macOS: a 1 px line just inside the window's rounded edge,
+-- a faint light line on a dark window and a faint dark line on a light one. A
+-- fixed mid grey (the earlier "#505050bf") is a heavy outline on a dark window
+-- and nearly invisible on a light one. `border_width` above is positive, so
+-- Gnoblin draws it inward. The line is replaced when GNOME's colour scheme
+-- changes: "prefer-dark" gets the light line, anything else the dark one.
+local edge_colours = { dark = "#ffffff29", light = "#00000029" }
+
+local function edge_rule(scheme)
+    local colour = scheme == "prefer-dark" and edge_colours.dark or edge_colours.light
+    return { match = { type = "window" }, corners = { border_width = 1, border_color = colour } }
+end
+
+-- `gnoblin.snapshot().window_rules` is empty inside the event handler, so the list is
+-- rebuilt from this module's own rules. Another file's rules would be dropped by that; the
+-- only one today is the minimal native frame rule of the default init.lua, which the
+-- frame rule above overrides for every window anyway.
+local function apply_edge(scheme)
+    local rules = {}
+    for _, rule in ipairs(window_rules) do
+        rules[#rules + 1] = rule
+    end
+    rules[#rules + 1] = edge_rule(scheme)
+    gnoblin.configure({ window_rules = rules })
+end
+
+-- The first edge is a plain rule; the list is replaced only when the scheme changes.
+gnoblin.window_rule(edge_rule(gnoblin.appearance.color_scheme()))
+gnoblin.events.on("gnoblin.appearance.color-scheme-changed", function(event)
+    apply_edge(event.color_scheme)
+end)
