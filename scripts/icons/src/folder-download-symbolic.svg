@@ -1,6 +1,4 @@
 <svg viewBox="0 0 16 16">
   <fork name="Folder" weight="fill" mode="exact"/>
-  <polyline points="5.5,8.5 8,11 10.5,8.5" stroke="black" stroke-width="1" data-op="cut"/>
-  <line x1="7.5" y1="6" x2="7.5" y2="10.5" stroke="black" stroke-width="1" stroke-linecap="butt" data-op="cut"/>
-  <line x1="8.5" y1="6" x2="8.5" y2="10.5" stroke="black" stroke-width="1" stroke-linecap="butt" data-op="cut"/>
+  <path d="M7 5H9V8H11L8 11L5 8H7Z" fill="black" data-op="cut"/>
 </svg>

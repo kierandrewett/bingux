@@ -222,7 +222,7 @@ fn vpn_menu(ctx: NetCtx, name: &str, up: bool) -> Vec<MenuItem> {
     };
     vec![
         toggle,
-        menu_item("Edit", move |_| ctx.router.open(edit.clone())).icon(Icon::PreferencesSystem),
+        menu_item("Edit", move |_| ctx.router.open(edit.clone())).icon(Icon::Pencil),
         menu_separator(),
         menu_item("Delete", move |_| confirm_delete(ctx, delete.clone()))
             .icon(Icon::UserTrash)

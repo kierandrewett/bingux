@@ -943,7 +943,7 @@ impl Component for KeyboardPage {
             _ => None,
         };
         let mut shortcuts_row = row("View and customise shortcuts")
-            .leading(Icon::PreferencesDesktopKeyboardShortcuts)
+            .leading(Icon::Keyboard)
             .navigates()
             .on_press(move |_| router.open(routes::shortcuts()));
         if let Some(count) = shortcut_count {

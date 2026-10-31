@@ -1,3 +1,11 @@
-<svg viewBox="0 0 16 16">
-  <fork name="Sun" weight="fill" mode="exact"/>
+<svg viewBox="0 0 16 16" fill="none">
+  <circle cx="8" cy="8" r="3" fill="black"/>
+  <line x1="8" y1="2.7" x2="8" y2="1" stroke="black" stroke-width="1.5"/>
+  <line x1="11.748" y1="4.252" x2="12.95" y2="3.05" stroke="black" stroke-width="1.5"/>
+  <line x1="13.3" y1="8" x2="15" y2="8" stroke="black" stroke-width="1.5"/>
+  <line x1="11.748" y1="11.748" x2="12.95" y2="12.95" stroke="black" stroke-width="1.5"/>
+  <line x1="8" y1="13.3" x2="8" y2="15" stroke="black" stroke-width="1.5"/>
+  <line x1="4.252" y1="11.748" x2="3.05" y2="12.95" stroke="black" stroke-width="1.5"/>
+  <line x1="2.7" y1="8" x2="1" y2="8" stroke="black" stroke-width="1.5"/>
+  <line x1="4.252" y1="4.252" x2="3.05" y2="3.05" stroke="black" stroke-width="1.5"/>
 </svg>

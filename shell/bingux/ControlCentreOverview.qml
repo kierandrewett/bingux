@@ -290,7 +290,7 @@ GridLayout {
             id: lockControl
             widgetId: "control-lock"
             objectName: "controlLock"
-            iconName: "system-lock-screen-symbolic"
+            iconName: "network-wireless-encrypted-symbolic"
             label: "Lock"
             onClicked: root.lockRequested()
         }
@@ -508,7 +508,7 @@ GridLayout {
         implicitHeight: barLayout ? Theme.barHeight : 28
         flat: true
         text: "Customise controls..."
-        iconName: "document-edit-symbolic"
+        iconName: "pencil-symbolic"
         presentation: DesktopLayout.presentation(root.desktop, widgetId, container || "control-centre", text, iconName, barLayout, !barLayout)
         BarTooltip {
             anchorItem: customiseControl

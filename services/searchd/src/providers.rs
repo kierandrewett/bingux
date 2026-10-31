@@ -1160,9 +1160,9 @@ fn file_icon(path: &Path) -> &'static str {
         .to_ascii_lowercase();
     match extension.as_str() {
         "pdf" => "application-pdf",
-        "doc" | "docx" | "odt" | "rtf" | "pages" => "x-office-document",
-        "xls" | "xlsx" | "ods" | "csv" | "tsv" | "numbers" => "x-office-spreadsheet",
-        "ppt" | "pptx" | "odp" | "key" => "x-office-presentation",
+        "doc" | "docx" | "odt" | "rtf" | "pages" => "text-x-generic",
+        "xls" | "xlsx" | "ods" | "csv" | "tsv" | "numbers" => "table",
+        "ppt" | "pptx" | "odp" | "key" => "presentation",
         "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "avif" | "heic" | "bmp" | "tif"
         | "tiff" | "ico" => "image-x-generic",
         "mp3" | "flac" | "wav" | "ogg" | "opus" | "m4a" | "aac" | "aiff" | "mid" | "midi" => {
@@ -1867,7 +1867,7 @@ mod tests {
     fn file_types_use_distinct_theme_icons_and_unknown_types_fall_back() {
         for (name, icon) in [
             ("report.PDF", "application-pdf"),
-            ("budget.xlsx", "x-office-spreadsheet"),
+            ("budget.xlsx", "table"),
             ("photo.heic", "image-x-generic"),
             ("recording.flac", "audio-x-generic"),
             ("movie.mkv", "video-x-generic"),

@@ -7,12 +7,15 @@
 
 #policy action: document-edit edit-copy edit-delete find-location object-rotate-left object-rotate-right send-to sidebar-show view-filter view-fullscreen view-grid view-list view-refresh view-restore zoom-fit-best zoom-in zoom-out
 #policy control: list-drag-handle go-next go-previous list-add list-remove non-starred object-select open-menu pan-down pan-end pan-up system-shutdown view-more window-close window-maximize window-minimize window-new window-restore
-#policy detail: default-app-documents default-app-text focus-top-bar input-tablet input-touchpad mail-unread media-view-subtitles phone preferences-desktop-keyboard-shortcuts preferences-other view-conceal view-reveal web-browser x-office-calendar
+#policy detail: default-app-documents default-app-text focus-top-bar input-tablet input-touchpad mail-unread media-view-subtitles phone preferences-other view-conceal view-reveal web-browser x-office-calendar
 #policy drawn: network-offline network-wireless network-wireless-disabled network-wireless-signal-excellent network-wireless-signal-good network-wireless-signal-none network-wireless-signal-ok network-wireless-signal-weak emblem-symbolic-link
 #policy indicator: audio-card audio-volume-high audio-volume-low audio-volume-medium audio-volume-muted battery-level-0 battery-level-0-charging battery-level-10 battery-level-10-charging battery-level-100 battery-level-100-charged battery-level-100-charging battery-level-20 battery-level-20-charging battery-level-30 battery-level-30-charging battery-level-40 battery-level-40-charging battery-level-50 battery-level-50-charging battery-level-60 battery-level-60-charging battery-level-70 battery-level-70-charging battery-level-80 battery-level-80-charging battery-level-90 battery-level-90-charging battery-missing bluetooth-active bluetooth-disabled network-error network-wired network-wireless-hotspot
-#policy object: accessories-calculator addon airplane-mode application-x-executable applications-multimedia audio-headphones audio-input-microphone audio-speakers audio-x-generic avatar-default bookmarks camera-web changes-prevent computer dialog-password display-brightness document-open drive-harddisk emblem-system folder folder-desktop folder-documents folder-download folder-music folder-new folder-pictures folder-publicshare folder-templates folder-videos go-up image-generic input-gaming media-optical media-removable network-server night-light notifications-disabled package-x-generic power-profile-balanced power-profile-performance power-profile-power-saver preferences-system preferences-system-notifications printer system-lock-screen text-x-generic user-home user-info user-trash video-generic weather-clear-night application-pdf x-office-document x-office-spreadsheet x-office-presentation font-x-generic text-x-script application-x-generic
-#policy section: applications-graphics help-about input-keyboard input-mouse preferences-desktop-accessibility preferences-desktop-wallpaper preferences-system-time system-search system-users video-display view-app-grid
-#policy status: dialog-error dialog-information dialog-warning edit-clear help-browser media-eject media-playback-pause media-playback-start media-playback-stop network-vpn network-wireless-encrypted security-high security-low starred
+#policy object: accessories-calculator addon airplane-mode application-x-executable applications-multimedia audio-headphones audio-input-microphone audio-speakers audio-x-generic avatar-default bookmarks camera-web changes-prevent computer dialog-password display-brightness document-open drive-harddisk emblem-system folder folder-desktop folder-documents folder-download folder-music folder-new folder-pictures folder-publicshare folder-templates folder-videos image-generic input-gaming media-optical media-removable network-server night-light notifications-disabled package-x-generic power-profile-balanced power-profile-performance power-profile-power-saver preferences-system preferences-system-notifications printer text-x-generic user-home user-info user-trash video-generic weather-clear-night application-pdf font-x-generic text-x-script application-x-generic
+#policy section: applications-graphics help-about input-keyboard input-mouse preferences-desktop-accessibility preferences-desktop preferences-system-time system-search system-users video-display view-app-grid
+#policy status: process-stop system-run dialog-error dialog-information dialog-warning edit-clear help-browser media-eject media-playback-pause media-playback-start media-playback-stop network-vpn network-wireless-encrypted starred
+#policy action: pencil view-pin document-open-recent document-save
+#policy detail: utilities-terminal accessories-text-editor action-unavailable
+#policy object: table presentation
 #symmetric: avatar-default network-wireless network-wireless-signal-weak network-wireless-signal-ok network-wireless-signal-good network-wireless-signal-excellent network-wireless-signal-none
 #mark: list-drag-handle go-next go-previous pan-up pan-down pan-end object-select list-add list-remove window-close window-minimize window-maximize window-restore view-more
 #exempt size: network-wireless-signal-none network-wireless-signal-weak
@@ -48,12 +51,12 @@ audio-volume-muted | volume muted (top bar) | speaker with x | SpeakerX fill
 audio-input-microphone | Microphone device, Sound page | microphone | Microphone fill
 audio-headphones | Headphones device (Sound, Bluetooth) | headphones | Headphones fill
 audio-speakers | Speakers device (Sound, Bluetooth) | box speaker | SpeakerHifi fill
-audio-card | Sound card device (Sound page) | audio device / waveform | Waveform bold
+audio-card | Generic Bluetooth audio device (shell; BlueZ's own icon name) | audio device / waveform | Waveform bold
 media-playback-pause | Pause (inspector toolbar) | two bars | Pause fill
 preferences-system-notifications | Notifications (top bar) | bell | Bell fill
 notifications-disabled | Do not disturb (top bar, Control Centre) | bell with slash | BellSlash fill
 view-app-grid | Applications (sidebar), top-bar launcher | grid of nine dots | DotsNine bold
-system-shutdown | Power (top bar, power menu) | power symbol | Power bold
+system-shutdown | Power (top bar, power menu) | power symbol | custom: a 2 px circle (r 5, centre (8, 9)) open at the top, a 2 px bar from y 2 to 8
 battery-level-100 | Power (sidebar), battery full | horizontal battery | BatteryFull bold
 battery-level-50 | battery half | horizontal battery | BatteryMedium bold
 battery-level-0 | battery empty (top bar, Power) | empty battery | BatteryEmpty bold
@@ -79,40 +82,39 @@ battery-level-90-charging | charging | battery with bolt | BatteryCharging bold
 battery-level-100-charging | charging | battery with bolt | BatteryCharging bold
 battery-missing | no battery found | battery with warning | BatteryWarning bold
 power-profile-power-saver | Power mode: power saver | leaf | Leaf fill
-power-profile-balanced | Power mode: balanced | speedometer | Speedometer fill
+power-profile-balanced | Power mode: balanced | speedometer | custom: a dome (r 7) with a hub and a needle cut out, both inside the body
 power-profile-performance | Power mode: performance | lightning bolt | Lightning fill
-display-brightness | Brightness | sun | Sun fill
+display-brightness | Brightness | sun | custom: a true circle (r 3) and eight 1.5 px rays
 night-light | Night light | moon and stars | MoonStars fill
 weather-clear-night | Dark style | moon | Moon fill
 preferences-desktop-accessibility | Accessibility (sidebar) | person in circle | PersonSimpleCircle fill
 applications-graphics | Appearance (sidebar) | palette | Palette fill
-preferences-desktop-wallpaper | Desktop (sidebar), wallpaper | landscape picture | ImageSquare bold
+preferences-desktop | Desktop (sidebar) | monitor with a dock | custom: a 2 px monitor outline on a stand, a dock pill inside it
 video-display | Displays (sidebar), display device | monitor | Monitor fill
 system-search | Search (sidebar, search fields) | magnifier | MagnifyingGlass bold
-input-keyboard | Keyboard (sidebar, device) | keyboard | Keyboard bold
-preferences-desktop-keyboard-shortcuts | Keyboard shortcuts row | keyboard | Keyboard bold
-input-mouse | Mouse (sidebar, device) | mouse | Mouse bold
+input-keyboard | Keyboard (sidebar, device, shortcuts row) | keyboard | custom: a solid 14 x 10 body with the keys cut out on the pixel grid
+input-mouse | Mouse (sidebar, device) | mouse | Mouse fill
 preferences-system-time | Date & time (sidebar) | clock | Clock fill
 system-users | Users (sidebar) | two people | Users fill
 help-about | About (sidebar) | circled i | Info fill
 computer | Computer (device, About hero) | laptop | Laptop fill
-preferences-system | Details button, Control Centre | gear | Gear fill
-emblem-system | Settings action | gear | Gear fill
+preferences-system | Details button, Control Centre | cog | custom: a ring (r 5.2) with eight tapered teeth (r 7) and a round hole (r 2.2)
+emblem-system | Settings action | cog | custom: the same cog as preferences-system
 avatar-default | Account avatar placeholder | person | User fill mirror=left
 user-info | Account details | ID card | IdentificationCard fill
 preferences-other | Other settings | sliders | SlidersHorizontal bold
 object-select | Checkbox, selected row/option | tick | Check bold
-go-next | Row chevron, breadcrumb | chevron right | CaretRight bold
-go-previous | Back button | chevron left | CaretLeft bold
-pan-up | Move up, expanders | chevron up | CaretUp bold
-pan-down | Dropdown arrow, expanders | chevron down | CaretDown bold
-pan-end | Submenu arrow, tree branch | chevron right | CaretRight bold
+go-next | Row chevron, breadcrumb | chevron right | custom: a 1.5 px polyline with a mitred (sharp) point
+go-previous | Back button | chevron left | custom: a 1.5 px polyline with a mitred (sharp) point
+pan-up | Move up, expanders, parent folder | chevron up | custom: a 1.5 px polyline with a mitred (sharp) point
+pan-down | Dropdown arrow, expanders | chevron down | custom: a 1.5 px polyline with a mitred (sharp) point
+pan-end | Submenu arrow, tree branch | chevron right | custom: a 1.5 px polyline with a mitred (sharp) point
 edit-clear | Clear text in a search field | circled x | XCircle fill
 list-add | Add, stepper plus | plus | Plus bold
 list-drag-handle | Reorder grip of sortable lists | six dots | DotsSixVertical bold
 list-remove | Stepper minus | minus | Minus bold
-view-reveal | Show password | eye | Eye bold
-view-conceal | Hide password | eye with slash | EyeSlash bold
+view-reveal | Show password | eye | Eye fill
+view-conceal | Hide password | eye with slash | EyeSlash fill
 starred | Preferred display mode | filled star | Star fill
 non-starred | Favourite (off) | outline star | Star bold
 window-close | Window close, dialogs | x | X bold
@@ -125,45 +127,42 @@ view-refresh | Refresh | circular arrow | ArrowClockwise bold
 object-rotate-right | Rotate | circular arrow | ArrowClockwise bold
 sidebar-show | Show sidebar | window with side pane | SidebarSimple fill
 focus-top-bar | Top bar | window with title bar | AppWindow fill
-edit-copy | Copy | two sheets | Copy bold
+edit-copy | Copy | two sheets | custom: two 1.5 px rounded squares of one radius, the back one cut away where the front one is
 edit-delete | Delete | trash can | Trash fill
 user-trash | Forget, Trash | trash can | Trash fill
 view-filter | Filter | funnel | Funnel fill
 find-location | Inspect element (inspector toolbar) | cursor clicking | CursorClick bold
-document-edit | Text editor (Applications) | pencil on page | NotePencil fill
+document-edit | Edit a document (text editor, notes) | pencil on page | custom: a 1.5 px frame open at the top right and the pencil across the opening
+pencil | Edit (a path, a connection, an access point, controls) | pencil | custom: a solid pencil at 45 degrees: tip, body and eraser, cut apart by 1 px seams
 document-open | Open | open folder | FolderOpen fill
 send-to | Share | square with arrow up | Export bold
-view-list | List view | bulleted list | ListBullets bold
-view-grid | Grid view | four squares | SquaresFour fill
+view-list | List view | bulleted list | custom: three 2 px dots and three 2 px bars on whole pixel rows 2 to 4, 7 to 9 and 12 to 14
+view-grid | Grid view | four squares | custom: four 5 x 5 squares on whole pixels
 folder | Folder, Files | folder | Folder fill
-go-up | Parent folder (file chooser toolbar: Up) | folder with an arrow out of it | custom: Folder fill with an up arrow cut out
-folder-download | Downloads folder (file chooser list, sidebar, address bar) | folder with a down arrow | custom: Folder fill with a down arrow cut out
+folder-download | Downloads folder (file chooser list, sidebar, address bar) | folder with a down arrow | custom: Folder fill with a solid down arrow (2 px shaft, 6 x 3 head) cut out
 bookmarks | Website shortcuts | bookmark | BookmarkSimple fill
 dialog-error | Error status | circled x | XCircle fill
 dialog-information | Information status, notes | circled i | Info fill
 dialog-warning | Warning status | triangle with ! | Warning fill
 help-browser | Help | circled ? | Question fill
-security-high | Secure | shield with tick | ShieldCheck fill
-security-low | Insecure | shield with ! | ShieldWarning fill
-system-lock-screen | Lock | padlock | Lock fill
 dialog-password | Password | key | Key fill
 changes-prevent | Keep awake | coffee cup | Coffee fill
 input-gaming | Game controller (Bluetooth) | game pad | GameController fill
-input-tablet | Tablet (Bluetooth) | tablet | DeviceTablet fill
+input-tablet | Tablet (Bluetooth) | tablet | custom: a landscape 14 x 10 body with a screen and a home button cut out
 input-touchpad | Touchpad | finger tapping | HandTap bold
-phone | Phone (Bluetooth), phone preview | phone | DeviceMobile fill
+phone | Phone (Bluetooth, phone preview) | phone | custom: a tall 6 x 14 body with a screen and a home button cut out
 camera-web | Webcam (Sound page, Bluetooth) | webcam | Webcam fill
 media-removable | USB drive | USB symbol | Usb fill
 printer | Printer (Bluetooth) | printer | Printer fill
-web-browser | Web (Applications, search) | globe | Globe fill
-x-office-calendar | Calendar (Applications) | calendar | CalendarBlank fill
+web-browser | Web (Applications, search) | globe | Globe bold
+x-office-calendar | Calendar (Applications, clock) | calendar with dates | CalendarDots fill
 mail-unread | Mail (Applications) | envelope | EnvelopeSimple fill
 image-generic | Image viewer (Applications), wallpapers | picture | Image fill
 video-generic | Video (Applications) | video camera | VideoCamera fill
 applications-multimedia | Music (Applications) | music note | MusicNotesSimple fill
 accessories-calculator | Calculation (search) | calculator | Calculator fill
 addon | Add-on sources (search) | plug-in | Plugs fill
-application-x-executable | Generic application tile | box | Cube fill
+application-x-executable | Generic application tile | box | custom: a mitred hexagon, the left face solid, the top and right faces open
 user-home | Home (file chooser) | house | House fill
 folder-documents | Documents folder (file chooser list, sidebar, address bar) | folder with a page of text | custom: Folder fill with a page of text lines cut out
 folder-music | Music folder (file chooser list, sidebar, address bar) | folder with a music note | custom: Folder fill with a music note cut out
@@ -179,21 +178,28 @@ media-optical | Optical disc (file chooser sidebar) | disc | Disc fill
 folder-templates | Templates folder (file chooser list, sidebar, address bar) | folder with a blank page | custom: Folder fill with a page with a folded corner cut out
 folder-publicshare | Public folder (file chooser list, sidebar, address bar) | folder with a person | custom: Folder fill with a person cut out
 folder-desktop | Desktop folder (file chooser list, sidebar, address bar) | folder with a screen | custom: Folder fill with a monitor cut out
-window-new | Open in new window (menus) | window with arrow | ArrowSquareOut bold
+window-new | Open in new window (menus) | window with arrow | custom: a rounded box open at the top right with an arrow whose arms line up with the box's top and right edges
 default-app-text | Default applications: Text (plain text files) | page with lines | FileText fill
 default-app-documents | Default applications: Documents (PDF, office documents) | document file, DOC | FileDoc fill
 application-pdf | PDF file (file list, grid, properties) | page marked PDF | FilePdf fill
-x-office-document | Word-processor document (file list, grid, properties) | page marked DOC | FileDoc fill
-x-office-spreadsheet | Spreadsheet (file list, grid, properties) | page marked XLS | FileXls fill
-x-office-presentation | Presentation (file list, grid, properties) | page marked PPT | FilePpt fill
-font-x-generic | Font file (file list, grid, properties) | letters Aa | TextAa fill
+font-x-generic | Font file (file list, grid, properties), text label | letters Aa | TextAa fill
+table | Spreadsheet (file list, grid, properties, tab titles) | table | Table fill
+presentation | Presentation (file list, grid, properties, tab titles) | slide on an easel | PresentationChart fill
+process-stop | Force quit, stop searching (shell) | circled stop | StopCircle fill
+system-run | Run an action (search result, shell) | circled play | PlayCircle fill
+view-pin | Pin to the dock (shell) | push pin | custom: a solid thumbtack: cap, shaft, flange and needle on whole pixel columns
+utilities-terminal | Terminal (shell sidebar, desktop widget) | terminal prompt | Terminal bold
+accessories-text-editor | Notes (shell sidebar, desktop widget) | notepad | Notepad fill
+action-unavailable | Action not available (on-screen display) | prohibited | Prohibit bold
+document-open-recent | Recent (emoji picker) | clock with a counter-clockwise arrow | ClockCounterClockwise bold
+document-save | Save, saving a recording (shell) | floppy disk | FloppyDisk bold
 text-x-script | Source code and script (file list, grid, properties) | page with angle brackets | FileCode fill
 application-x-generic | Unknown file (file list, grid, properties) | blank page | File fill
 emblem-symbolic-link | Symbolic link badge on a file or folder icon | arrow in a disc | custom: disc with an up-right arrow cut out
 media-playback-start | Play (preview player, media controls) | right-pointing triangle | Play fill
 media-playback-stop | Stop (Files toolbar while a folder loads or a search runs) | filled rounded square | Stop fill
-view-fullscreen | Full screen (preview viewer, player) | arrows pointing out | ArrowsOut bold
-view-restore | Leave full screen (preview viewer, player) | arrows pointing in | ArrowsIn bold
+view-fullscreen | Full screen (preview viewer, player) | four corner brackets | custom: four 1.5 px corner brackets with round corners, as lucide's maximize
+view-restore | Leave full screen (preview viewer, player) | four corner brackets pointing in | custom: four 1.5 px corner brackets turned in, as lucide's minimize
 zoom-in | Zoom in (image viewer) | magnifier with plus | MagnifyingGlassPlus bold
 zoom-out | Zoom out (image viewer) | magnifier with minus | MagnifyingGlassMinus bold
 zoom-fit-best | Fit to window (image viewer) | corner brackets | FrameCorners bold

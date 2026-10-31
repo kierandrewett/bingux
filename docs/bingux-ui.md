@@ -1384,7 +1384,7 @@ What the dialog has:
 
 | Part | Behaviour |
 | ---- | --------- |
-| Toolbar | Back, Forward, Parent folder (a folder with an arrow out of it), Refresh, the address bar, the file type dropdown, New folder, a list or thumbnails switch and the view menu (sort, hidden files). Every button follows the `Control` radius like any other button, and the view menu opens against its own button, not at the pointer. Refresh (also F5 and Ctrl+R) reads the folder again even when no change was seen, as a network or removable drive sends none; the selection, scroll position and filter stay. While a folder is being read (a first load, the check of a cached listing, a read F5 asked for, a subfolder search) the same button turns into Stop: `icon_button(Icon::Refresh, f).morph(Icon::MediaPlaybackStop, stopping)`, so its box, hover, pressed and focus state carry through, and its tooltip and name are `Refresh (F5)` and `Stop (Esc)`. Stop shows after 150 ms of reading and stays at least 300 ms (`Dwell::LOADING`); pressing it, or Escape while it shows, stops the read (`Reload::stop`) and keeps the listing. See "Reload and Stop" in `docs/files.md`. |
+| Toolbar | Back, Forward, Parent folder (a chevron up), Refresh, the address bar, the file type dropdown, New folder, a list or thumbnails switch and the view menu (sort, hidden files). Every button follows the `Control` radius like any other button, and the view menu opens against its own button, not at the pointer. Refresh (also F5 and Ctrl+R) reads the folder again even when no change was seen, as a network or removable drive sends none; the selection, scroll position and filter stay. While a folder is being read (a first load, the check of a cached listing, a read F5 asked for, a subfolder search) the same button turns into Stop: `icon_button(Icon::Refresh, f).morph(Icon::MediaPlaybackStop, stopping)`, so its box, hover, pressed and focus state carry through, and its tooltip and name are `Refresh (F5)` and `Stop (Esc)`. Stop shows after 150 ms of reading and stays at least 300 ms (`Dwell::LOADING`); pressing it, or Escape while it shows, stops the read (`Reload::stop`) and keeps the listing. See "Reload and Stop" in `docs/files.md`. |
 | Address bar (`AddressBar`) | The path as crumbs (search is the bar under the toolbar, see [Search](#search-in-the-file-views)). The field takes the `Control` radius and a 4 px padding, so each crumb inside it takes the `Inner` radius (12 less 4). Each crumb has a chevron that lists that folder's subfolders. A trail that does not fit keeps its first and last crumb and hides the middle behind one `…` menu. Click the empty end, press Ctrl+L, or type `/` or `~` to edit the path as text. Typing shows completions (folders first); Tab completes, Up and Down choose, Enter opens, Escape closes. Errors show inline: not found, not a folder, no permission, not responding. `~`, relative paths and `file://` work. A **named place** shows its icon and name, never a path: Home, **Trash** (field `trash:///`, and `trash:///Old folder/` inside it, completed from the bin) and **Recent** (`recent:///`); typing any spelling of one (`trash://`, `~/.local/share/Trash/files`, `Trash`) opens it. See [File views](#file-views). |
 | Sidebar (`PlacesSidebar`) | Recent, Home and the user folders (with their own icons by path), Bookmarks, then Drives: Computer and every mount, each with a usage bar and "X free of Y". A drive that does not answer says "Not responding". There are no buttons on the rows: every row has a context menu (right click, long press, the Menu key or Shift+F10) of text items, built in `files/place_menu.rs` from `PlaceFacts` by a pure `place_plan` that the tests read, in the list menu's grouping: open (Open or, for a drive that is not mounted, Mount; Open in new tab where the window has tabs), what changes the place (Rename… for a bookmark, Eject and Unmount or Unmount for a drive, Empty Trash on the Trash, grey while it is empty), the path and bookmark (Copy path, Add to or Remove from bookmarks), then Properties. Properties opens the list's Properties dialog for the place's folder (`properties::show_folder_properties`; the Trash shows its item count and size, a drive its free space bar); Recent and a drive that is not mounted have none. The menu's shortcut hints are keys the focused row answers to through the same command handler: Enter, Alt+Enter, F2, Delete, Ctrl+Shift+C. The folders have their own icons: a folder with a page for Documents, a down arrow for Downloads, and so on. A phone gets `PlacesMenu`, a sheet with the same rows that closes before Properties opens. |
 | File type filter | A dropdown in the toolbar on a desktop; on a phone a "File type" row at the bottom. The sidebar runs the dialog's full height: there is no footer under it, and the name field of Save, the request's choices and any problem sit in a strip at the bottom of the content pane. With no filters in the request it offers All files, Images, Audio, Video, Documents, Archives and Text. `presets(true)` adds those after the request's own. The list shows only matching files (folders always stay) and the empty state says when the filter hides everything. The status pill floats over the bottom-right corner of the list on an opaque floating surface and takes no row. It says `95 items`, `1 of 95 selected (19 kB)` when something is selected, `3 of 120 match` while a search is on, and what a running operation is doing; it does not report hidden files or what the filter hides. It follows the pointer over the whole window: when the pointer comes within a small margin it slides to the other bottom corner, and it returns when the pointer leaves the list. |
@@ -2686,17 +2686,29 @@ how it looks, and is accepted.
 | ----------- | ----------------- | --------------------------------------------------------------------------------------------------- |
 | `object`    | `fill`            | Things: devices (laptop, printer, webcam, headphones), places (folders, home, trash), tools, lock, bell, sun/moon |
 | `status`    | `fill`            | Badges whose meaning is the mass: error, info, warning, help, secure/insecure, VPN, play, pause, eject, starred |
-| `detail`    | `bold` or `fill`  | Things recognised by their inner structure: globe, envelope, calendar, phone, tablet, text and document files (`fill`), keyboard shortcuts, eye, touchpad (`bold`) |
-| `section`   | `bold` or `fill`  | The settings sidebar: Network, Bluetooth, Keyboard, Mouse, Desktop, Search, Power and Applications (`DotsNine`: nine round dots) are outlines; Displays, Sound, Appearance, Accessibility, Date and time, Users and About are fills |
-| `action`    | `bold` or `fill`  | Verbs: copy, share, refresh, search, zoom, rotate, full screen (`bold`); delete, filter, grid view, sidebar toggle (`fill`) |
+| `detail`    | `bold` or `fill`  | Things recognised by their inner structure: globe (`bold`), envelope, calendar with dates, text and document files, eye (`fill`), touchpad (`bold`); the phone and the tablet are drawn |
+| `section`   | `bold` or `fill`  | The settings sidebar: Network, Bluetooth, Search, Power and Applications (`DotsNine`: nine round dots) are outlines; Displays, Sound, Appearance, Accessibility, Date and time, Users, Mouse and About are fills; the Keyboard and the Desktop (a monitor with a dock) are drawn |
+| `action`    | `bold` or `fill`  | Verbs: share, refresh, search, zoom, rotate (`bold`); delete, filter, sidebar toggle (`fill`); copy, edit, full screen, list and grid views are drawn |
 | `indicator` | `bold` or `fill`  | Levels and states: battery, Bluetooth, wired network, hotspot (`bold`); volume (`fill`)              |
-| `control`   | `bold`            | Chevrons, tick, plus, minus, close, menu, more, drag handle, window controls, outline star, power     |
+| `control`   | `bold`            | Tick, plus, minus, close, menu, more, drag handle, window controls, outline star; the chevrons, power and window-new are drawn |
 | `drawn`     | strokes           | Drawn by hand: the Wi-Fi family (two 2 px arcs and a dot, symmetric about x = 8), the symbolic-link badge, never a fork glyph |
 
 Default applications: Web, Mail, Calendar, Text and Documents are fills, like Files,
 Photos, Music and Video; Text and Documents have their own icons (`default-app-text`,
 `default-app-documents`) so changing them never changes `document-edit` or
-`document-open`.
+`document-open`. `document-edit` is only for editing a document (a text editor, a
+note); every other edit (a path, a connection, an access point, a rule) is `pencil`.
+
+The controls family is drawn by hand where a fork glyph cannot be placed on whole
+pixels or is the wrong picture: the chevrons (`go-next`, `go-previous`, `pan-*`) are
+1.5 px polylines with a mitred point and a sharp inner angle; `view-list` and
+`view-grid` sit on whole pixels (2 px bars and dots on rows 2-4, 7-9, 12-14; four 5 px
+squares); `edit-copy` draws both sheets with one radius; `view-fullscreen` and
+`view-restore` are four corner brackets, out and in, as lucide's maximize and
+minimize; `preferences-system` and `emblem-system` are one cog (a ring, eight tapered
+teeth, a round hole); `display-brightness` is a true circle with eight rays;
+`system-shutdown` is a true circle (r 5, centre (8, 9)) open at the top, with the bar
+above it; `power-profile-balanced` keeps its needle inside the dial.
 
 ### Fitting: the pixel rules
 
@@ -2779,10 +2791,10 @@ weak, and what was decided:
 | ---- | --- | ------- | --- |
 | `input-touchpad` | `HandPointing` regular | 1 px wire, thinner than its neighbours | `HandTap` bold, as in `5d49113` |
 | `network-vpn` | `ShieldCheckered` fill | a different silhouette from every other fill | `Shield` fill, as in `5d49113` |
-| `preferences-desktop-wallpaper` | `Mountains` regular | 1 px wire, thinner than its neighbours | `ImageSquare` bold, as in `5d49113` |
+| `preferences-desktop-wallpaper` (now `preferences-desktop`) | `ImageSquare` bold | a picture is the wallpaper, not the Desktop page | drawn: a monitor on a stand with a dock pill inside |
 | `view-app-grid` | solid nine-dot square | a solid blob | `DotsNine` bold (nine round dots, no mass) |
-| `input-tablet`, `phone` | `regular` outline | 1 px wire beside the filled devices | `DeviceTablet`, `DeviceMobile` fill |
-| `web-browser`, `mail-unread`, `x-office-calendar` | `regular` outline | 1 px wire beside the filled applications | `Globe`, `EnvelopeSimple`, `CalendarBlank` fill |
+| `input-tablet`, `phone` | `DeviceTablet`, `DeviceMobile` fill | two plain rounded rectangles, neither read as a tablet or a phone | drawn: a landscape 14 x 10 body and a tall 6 x 14 body, each with a screen and a home button cut out |
+| `web-browser`, `mail-unread`, `x-office-calendar` | `Globe`, `EnvelopeSimple`, `CalendarBlank` fill | the globe's filled disc hid its meridians; the calendar had no dates | `Globe` bold, `EnvelopeSimple` fill, `CalendarDots` fill |
 | Default applications: Text | `document-edit` (`NotePencil` fill) | an editor, not a text file | `default-app-text`: `FileText` fill |
 | Default applications: Documents | `document-open` (`FolderOpen`) | a folder, not a document | `default-app-documents`: `FileDoc` fill |
 | `help-about` | `Info` regular | 1 px wire in a set of fills and bold outlines | `Info` fill, as in `5d49113` |
@@ -2792,6 +2804,12 @@ weak, and what was decided:
 | `window-restore` | `CopySimple` | close to `edit-copy` | kept: two squares are the convention |
 | `find-location` | `CursorClick` | no "inspect" glyph | kept for the inspector toolbar |
 | `network-wired` | `Network` | a node tree, not a port | kept: the fork has no ethernet port |
+| `go-up` | a folder with an arrow out of it | a second, heavier "up" beside the chevrons | removed: the parent-folder button is `pan-up` |
+| `security-high`, `security-low`, `system-lock-screen` | shields and a padlock | three more padlock-like icons | removed: the shell uses the padlock (`network-wireless-encrypted`) |
+| `preferences-desktop-keyboard-shortcuts` | `Keyboard` bold | the same drawing as `input-keyboard` | removed: the shortcuts row uses `Icon::Keyboard` |
+| `x-office-document`, `x-office-spreadsheet`, `x-office-presentation` | a page marked DOC, XLS, PPT | a file extension is not a picture, and DOC is `default-app-documents` | removed: documents are `text-x-generic`, spreadsheets `table`, presentations `presentation` |
+| `audio-card` | `Waveform` bold | the Sound page's fallback device is not a sound card | the Sound page uses `Icon::Sound`; the file stays for the shell's Bluetooth devices (BlueZ names it) |
+| `document-edit` | `NotePencil` fill | used for every edit, and a pencil that looked odd | drawn pencil; `pencil` is the general edit icon |
 
 ### Add or change an icon
 

@@ -125,7 +125,7 @@ impl Form {
             Form::Webcam => Icon::CameraWeb,
             Form::Display => Icon::Display,
             Form::Bluetooth => Icon::Bluetooth,
-            Form::Card => Icon::AudioCard,
+            Form::Card => Icon::Sound,
         }
     }
 }

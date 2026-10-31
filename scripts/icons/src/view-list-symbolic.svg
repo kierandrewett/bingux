@@ -1,3 +1,8 @@
-<svg viewBox="0 0 16 16">
-  <fork name="ListBullets" weight="bold" mode="exact"/>
+<svg viewBox="0 0 16 16" fill="none">
+  <circle cx="3" cy="3" r="1" fill="black"/>
+  <circle cx="3" cy="8" r="1" fill="black"/>
+  <circle cx="3" cy="13" r="1" fill="black"/>
+  <line x1="7" y1="3" x2="13" y2="3" stroke="black"/>
+  <line x1="7" y1="8" x2="13" y2="8" stroke="black"/>
+  <line x1="7" y1="13" x2="13" y2="13" stroke="black"/>
 </svg>

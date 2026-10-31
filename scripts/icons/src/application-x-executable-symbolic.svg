@@ -1,3 +1,5 @@
-<svg viewBox="0 0 16 16">
-  <fork name="Cube" weight="fill" mode="exact"/>
+<svg viewBox="0 0 16 16" fill="none">
+  <polygon points="2.752,4.97 8,8 8,14.06 2.752,11.03" fill="black" stroke="black" stroke-width="1.5" stroke-linejoin="miter"/>
+  <polygon points="8,1.94 13.248,4.97 13.248,11.03 8,14.06 2.752,11.03 2.752,4.97" stroke="black" stroke-width="1.5" stroke-linejoin="miter"/>
+  <polyline points="13.248,4.97 8,8" stroke="black" stroke-width="1.5" stroke-linejoin="miter"/>
 </svg>

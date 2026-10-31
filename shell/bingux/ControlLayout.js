@@ -101,7 +101,7 @@ const widgets = [
     { id: "control-battery", label: "Battery", icon: "battery-good-symbolic", group: true },
     { id: "control-settings", action: true, label: "Settings", icon: "preferences-system-symbolic" },
     { id: "control-session", action: true, label: "Power options", icon: "system-shutdown-symbolic" },
-    { id: "control-lock", action: true, label: "Lock", icon: "system-lock-screen-symbolic" },
+    { id: "control-lock", action: true, label: "Lock", icon: "network-wireless-encrypted-symbolic" },
     { id: "control-volume", label: "Volume", icon: "audio-volume-high-symbolic", group: true },
     { id: "control-microphone", label: "Microphone", icon: "audio-input-microphone-symbolic", group: true },
 ];

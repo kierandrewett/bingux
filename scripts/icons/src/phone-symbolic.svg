@@ -1,3 +1,5 @@
-<svg viewBox="0 0 16 16">
-  <fork name="DeviceMobile" weight="fill" mode="exact"/>
+<svg viewBox="0 0 16 16" fill="none">
+  <rect x="5" y="1" width="6" height="14" rx="1.5" fill="black"/>
+  <rect x="6" y="3" width="4" height="8" fill="black" data-op="cut"/>
+  <rect x="7" y="12" width="2" height="2" rx="0.5" fill="black" data-op="cut"/>
 </svg>

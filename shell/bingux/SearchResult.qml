@@ -56,7 +56,7 @@ Item {
         if (themed)
             return themed;
         if (result.kind === "file")
-            return AdwaitaIcons.source(icon === "application-pdf" ? "x-office-document-symbolic" : "text-x-generic-symbolic");
+            return AdwaitaIcons.source(icon === "application-pdf" ? "application-pdf-symbolic" : "text-x-generic-symbolic");
         return AdwaitaIcons.source(defaultIcon().replace(/-symbolic$/, "") + "-symbolic", "system-search-symbolic");
     }
     readonly property string providerLabel: {
@@ -257,7 +257,7 @@ Item {
         if (result.kind === "weather")
             return "weather-clear";
         if (result.kind === "chat")
-            return "dialog-question-symbolic";
+            return "help-browser-symbolic";
         if (result.kind === "action")
             return "system-run-symbolic";
         return "system-search-symbolic";

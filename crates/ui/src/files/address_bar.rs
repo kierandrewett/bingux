@@ -143,7 +143,7 @@ impl Component for AddressBar {
         let text = Paint::Text.color(&tokens);
         let muted = Paint::Muted.color(&tokens);
         icons::warm(FileKind::Folder.glyph(), IconSize::Control, muted);
-        for icon in [Icon::WindowClose, Icon::DocumentEdit] {
+        for icon in [Icon::WindowClose, Icon::Pencil] {
             icons::warm(icon, IconSize::Control, text);
         }
         let content: Element = if *editing.read() {

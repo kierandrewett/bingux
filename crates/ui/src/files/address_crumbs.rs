@@ -870,7 +870,7 @@ impl Component for CompactTrail {
         };
         rows.push(
             ListRow {
-                icon: Lead::Action(Icon::DocumentEdit),
+                icon: Lead::Action(Icon::Pencil),
                 parts: vec![Part::plain("Type a path")],
                 current: false,
                 highlighted: false,
@@ -971,7 +971,7 @@ impl Component for CompactTrail {
             .child(
                 rect()
                     .tw(&tokens, &[flex_row(), items(Align::Center), h_full(), pr(FIELD_INSET)])
-                    .child(field_action(Icon::DocumentEdit, move |_: ()| on_edit.call(())).tooltip("Type a path")),
+                    .child(field_action(Icon::Pencil, move |_: ()| on_edit.call(())).tooltip("Type a path")),
             )
             .child(Element::from(panel))
     }
