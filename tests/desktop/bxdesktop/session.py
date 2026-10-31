@@ -45,7 +45,11 @@ from .sandbox import SandboxSpec, bwrap_argv, nsenter_argv
 from .stack import Stack
 
 DISPLAY_NAME = "bx-0"
+# A slow or busy machine (a CI runner, a developer machine under a build) needs longer waits, not
+# different tests: BINGUX_TEST_TIMEOUT_SCALE=3 triples every `wait_until`.
+TIMEOUT_SCALE = float(os.environ.get("BINGUX_TEST_TIMEOUT_SCALE", "1"))
 MONITOR = (1280, 720)
+REST_POINTER = (1100, 450)
 
 # Services of the real session that a test sandbox may activate on the bus.
 # Anything else on the host's /usr/share/dbus-1/services (mail, calendar and
@@ -82,6 +86,20 @@ def scratch_parent() -> Path:
         if candidate and Path(candidate).is_dir() and os.access(candidate, os.W_OK):
             return Path(candidate)
     raise SessionError("no writable directory for the session root; set BINGUX_TEST_TMP")
+
+
+def sweep_stale_roots(parent: Path) -> list[Path]:
+    """Remove session roots whose harness process is gone (it was killed before `stop` could run)."""
+    removed = []
+    for candidate in parent.glob("bingux-desktop-*"):
+        try:
+            owner = int((candidate / ".owner").read_text())
+        except (OSError, ValueError):
+            continue
+        if not process_alive(owner):
+            shutil.rmtree(candidate, ignore_errors=True)
+            removed.append(candidate)
+    return removed
 
 
 def descendants(pid: int) -> set[int]:
@@ -275,7 +293,10 @@ class Session:
             raise SessionError("session already started")
         self.started_at = time.monotonic()
         self.artefacts.mkdir(parents=True, exist_ok=True)
-        self.root = Path(tempfile.mkdtemp(prefix="bingux-desktop-", dir=scratch_parent()))
+        parent = scratch_parent()
+        sweep_stale_roots(parent)
+        self.root = Path(tempfile.mkdtemp(prefix="bingux-desktop-", dir=parent))
+        (self.root / ".owner").write_text(str(os.getpid()))
         for sub in ("run", "tmp", "home", "logs", "tmp/bin"):
             (self.root / sub).mkdir(mode=0o700)
         try:
@@ -436,6 +457,12 @@ class Session:
         ready = self._input.stdout.readline()
         if not ready or not json.loads(ready).get("ready"):
             raise SessionError("the input helper did not start; see inputd.log (it needs PyGObject)")
+        # Observed: Mutter drops the first two or three key events of a new RemoteDesktop session
+        # (the virtual keyboard is not yet known to the seat). Shift taps are harmless to every client.
+        for _ in range(4):
+            self._send(op="key", keysym=keysyms.keysym("Shift_L"), down=True)
+            self._send(op="key", keysym=keysyms.keysym("Shift_L"), down=False)
+            time.sleep(0.1)
 
     def stop(self) -> None:
         """Stop everything in the session, collect its logs, remove its root. Safe to call twice."""
@@ -474,9 +501,15 @@ class Session:
                 except ProcessLookupError:
                     pass
             self._bwrap.wait()
-        self.leftover = sorted(
-            {pid for pid in tree if process_alive(pid)} | set(processes_in_namespace(self.namespaces.get("pid")))
-        )
+        # The kernel kills the rest of the PID namespace when its init dies; that is asynchronous.
+        deadline = time.monotonic() + 5
+        while True:
+            self.leftover = sorted(
+                {pid for pid in tree if process_alive(pid)} | set(processes_in_namespace(self.namespaces.get("pid")))
+            )
+            if not self.leftover or time.monotonic() > deadline:
+                break
+            time.sleep(0.1)
         self._collect_logs()
         shutil.rmtree(self.root, ignore_errors=True)
         self.root = None  # type: ignore[assignment]
@@ -576,7 +609,7 @@ class Session:
 
     def wait_until(self, check, timeout: float = 20.0, what: str = "the condition", interval: float = 0.25):
         """Poll `check()` until it returns something truthy; return that. Raises with `what` on timeout."""
-        deadline = time.monotonic() + timeout
+        deadline = time.monotonic() + timeout * TIMEOUT_SCALE
         last: object = None
         while time.monotonic() < deadline:
             if not self.alive:
@@ -608,6 +641,19 @@ class Session:
 
         client.window = self.wait_until(found, timeout, f"a window from {' '.join(argv[:2])}")
         return client
+
+    def wait_focused(self, client: Client, timeout: float = 10.0, settle: float = 0.6) -> None:
+        """Wait until Gnoblin reports the client's window focused, then give the client time to see it.
+
+        The compositor flag is set when focus is granted; the client learns of it a moment later,
+        and keys sent in between are dropped.
+        """
+        self.wait_until(
+            lambda: next((w["focused"] for w in self.windows() if w["id"] == client.window["id"]), False),
+            timeout,
+            f"{client.argv[0]} to take focus",
+        )
+        time.sleep(settle)
 
     # -- input ---------------------------------------------------------------
 
@@ -652,6 +698,23 @@ class Session:
         time.sleep(hold)  # toolkits that handle press and release on separate frames drop a zero-length click
         self._send(op="button", button=code, down=False)
         time.sleep(settle)
+
+    def settled(
+        self, region: imaging.Box | None = None, timeout: float = 20.0, quiet: float = 0.7
+    ) -> imaging.Screenshot:
+        """A screenshot taken once `region` has stopped changing for `quiet` seconds (animations, loading)."""
+        deadline = time.monotonic() + timeout
+        last = self.capture()
+        steady_since = time.monotonic()
+        while time.monotonic() < deadline:
+            time.sleep(0.2)
+            now = self.capture()
+            if now.changed_fraction(last, region, tolerance=2) > 0.0005:
+                steady_since = time.monotonic()
+            elif time.monotonic() - steady_since >= quiet:
+                return now
+            last = now
+        raise TimeoutError(f"the screen did not settle in {timeout:.0f}s")
 
     def hover(self, x: int, y: int, region: imaging.Box, timeout: float = 20.0, minimum: float = 0.01) -> None:
         """Point at (x, y) and wait until `region` of the screen changes: the program under the pointer reacted.
@@ -749,4 +812,5 @@ class Session:
             self.gnoblinctl("window", "close", str(window["id"]), check=False)
         for panel in ("search", "calendar", "controls", "notifications", "metrics"):
             self.shell_ipc("shell", "panel", panel, "close")
+        self.move(*REST_POINTER, settle=0.2)  # over bare wallpaper: nothing is hovered when a test starts
         self.wait_until(lambda: not self.windows(), 10, "every client window to close")

@@ -43,6 +43,7 @@ def test_settings_opens_on_the_requested_page_in_a_framed_window(desktop, settin
 
 
 def test_a_row_opens_a_subpage_and_back_returns_to_the_page(desktop, settings):
+    desktop.settled(CONTENT)
     page = desktop.screenshot("before")
     sidebar = (0, 40, 280, 610)
 
@@ -59,7 +60,8 @@ def test_a_row_opens_a_subpage_and_back_returns_to_the_page(desktop, settings):
     assert sub.changed_fraction(page, sidebar) < 0.02, "the sidebar changed while a subpage opened"
 
     desktop.hover(307, 56, region=(290, 40, 330, 75))
-    desktop.click(307, 56, settle=2.0)  # the back arrow in the header
+    desktop.click(307, 56, settle=1.0)  # the back arrow in the header
+    desktop.settled(CONTENT)
     back = desktop.screenshot("back")
     assert back.find_text("Connections") and not back.find_text("Available networks")
     assert back.changed_fraction(page, (0, 40, 1000, 610)) < 0.03, "Back did not restore the page"
