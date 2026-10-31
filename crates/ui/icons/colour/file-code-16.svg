@@ -6,6 +6,7 @@
     <path d="M10.424 1.424C10.19 1.19 10 1.269 10 1.6L10 5L13.4 5C13.731 5 13.81 4.81 13.576 4.576Z" fill="#000" fill-opacity=".22"/>
     <clipPath id="page"><path d="M2 3C2 1.895 2.895 1 4 1L9.4 1C9.731 1 10.19 1.19 10.424 1.424L13.576 4.576C13.81 4.81 14 5.269 14 5.6L14 13C14 14.105 13.105 15 12 15L4 15C2.895 15 2 14.105 2 13Z"/></clipPath>
     <path d="M2 3C2 1.895 2.895 1 4 1L9.4 1C9.731 1 10.19 1.19 10.424 1.424L13.576 4.576C13.81 4.81 14 5.269 14 5.6L14 13C14 14.105 13.105 15 12 15L4 15C2.895 15 2 14.105 2 13Z" fill="none" stroke="#000" stroke-opacity="0.26" stroke-width="2" clip-path="url(#page)"/>
-    <polyline points="6,7 4,10 6,13" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="miter" stroke-linecap="butt"/>
-    <polyline points="10,7 12,10 10,13" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="miter" stroke-linecap="butt"/>
+    <polyline points="6,8 4,10 6,13" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <polyline points="10,8 13,10 10,13" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <line x1="8.5" y1="6.5" x2="7.5" y2="13.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="miter" stroke-linecap="round"/>
 </svg>

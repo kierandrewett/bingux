@@ -10,5 +10,7 @@
     <path d="M3 15C3 12.791 4.791 11 7 11L25 11C27.209 11 29 12.791 29 15L29 24C29 26.209 27.209 28 25 28L7 28C4.791 28 3 26.209 3 24Z" fill="#fff" fill-opacity=".28"/>
     <path d="M3 15C3 12.791 4.791 11 7 11L25 11C27.209 11 29 12.791 29 15L29 24C29 26.209 27.209 28 25 28L7 28C4.791 28 3 26.209 3 24Z" fill="url(#lit)"/>
     <path d="M4.8 11L24.2 11L24.2 12L4.8 12Z" fill="#fff" fill-opacity=".6"/>
-    <rect x="13" y="15" width="6" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="miter" stroke-linecap="butt"/>
+    <path d="M7 15C7 13.895 7.895 13 9 13L23 13C24.105 13 25 13.895 25 15L25 23C25 24.105 24.105 25 23 25L9 25C7.895 25 7 24.105 7 23Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="miter" stroke-linecap="butt"/>
+    <rect x="6" y="12" width="20" height="4" fill="currentColor"/>
+    <rect x="12" y="16" width="2" height="10" fill="currentColor"/>
 </svg>

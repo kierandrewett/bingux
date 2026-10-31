@@ -5,8 +5,7 @@
     <path d="M1 8.5C1 7.119 2.119 6 3.5 6L16.5 6C17.881 6 19 7.119 19 8.5L19 14.5C19 15.881 17.881 17 16.5 17L3.5 17C2.119 17 1 15.881 1 14.5Z"/>
     <path d="M1 8.5C1 7.119 2.119 6 3.5 6L16.5 6C17.881 6 19 7.119 19 8.5L19 14.5C19 15.881 17.881 17 16.5 17L3.5 17C2.119 17 1 15.881 1 14.5Z" fill="#fff" fill-opacity=".28"/>
     <path d="M1 8.5C1 7.119 2.119 6 3.5 6L16.5 6C17.881 6 19 7.119 19 8.5L19 14.5C19 15.881 17.881 17 16.5 17L3.5 17C2.119 17 1 15.881 1 14.5Z" fill="url(#lit)"/>
-    <rect x="9" y="9" width="2" height="4" fill="currentColor"/>
-    <rect x="6" y="13" width="8" height="1" fill="currentColor"/>
-    <rect x="8" y="14" width="5" height="1" fill="currentColor"/>
-    <rect x="9" y="15" width="2" height="1" fill="currentColor"/>
+    <polyline points="10,8 10,13" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="miter" stroke-linecap="round"/>
+    <polyline points="7,10 10,14 13,10" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <line x1="6" y1="16" x2="14" y2="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="miter" stroke-linecap="round"/>
 </svg>

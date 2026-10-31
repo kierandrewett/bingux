@@ -461,10 +461,10 @@ for (const it of ITEMS) {
   const shown = it.svg
     ? `<div class="tiles">${vec(32, "16 dark", true)}${vec(32, "16 light", false)}${vec(48, "24 light", false)}${vec(96, "48 light", false)}</div>
     <div class="real">${vecReal(16, true)}${vecReal(16, false)}${vecReal(24, false)}${vecReal(48, false)}actual size</div>`
-    : `<div class="tiles">${tile("d16","16 dark",4)}${tile("l16","16 light",4)}${tile("l18","18 light",4)}${tile("l48","48 light",2)}</div>
-    <div class="real"><span class="d"><img src="${png(it.tiles.d16)}" width="16" height="16"></span><span class="l"><img src="${png(it.tiles.l16)}" width="16" height="16"></span><span class="l"><img src="${png(it.tiles.l18)}" width="18" height="18"></span>actual size</div>`;
+    : `<div class="tiles">${(it.tilelist || [["d16","16 dark",4],["l16","16 light",4],["l18","18 light",4],["l48","48 light",2]]).map(([k, l, s]) => tile(k, l, s)).join("")}</div>
+    <div class="real">${(it.reals || [["d16",1,1],["l16",0,1],["l18",0,1]]).map(([k, dark, div]) => `<span class="${dark ? "d" : "l"}"><img src="${png(it.tiles[k])}" width="${it.sizes[k] / div}" height="${it.sizes[k] / div}"></span>`).join("")}actual size</div>`;
   el.innerHTML = `<div>${shown}</div>
-    <div class="meta"><h3>${it.variant ? "Icon::" + it.variant : it.svg ? it.category : "(shell / QML only)"}</h3><code>${it.id}</code>
+    <div class="meta"><h3>${it.variant ? "Icon::" + it.variant : it.svg ? it.category : it.tilelist ? "Colour icon" : "(shell / QML only)"}</h3><code>${it.id}</code>
     <p><span class="k">Used:</span> ${it.where}</p>${it.metaphor ? `<p><span class="k">Metaphor:</span> ${it.metaphor}</p>` : ""}
     <p><span class="k">Category:</span> ${it.category} &nbsp; <span class="k">Glyph:</span> ${it.glyph}</p>
     <div class="verdicts">${VERDICTS.map(([v, l]) => `<label class="v-${v}"><input type="radio" name="v-${it.id}" value="${v}"><span>${l}</span></label>`).join("")}</div>
@@ -554,17 +554,64 @@ def extra_items() -> list[dict]:
         }
 
     items = []
+    import io
+    import subprocess
+
+    import colour as colourmod
+
+    def colour_tile(name: str, size: int, scale: int, dark: bool) -> Image.Image:
+        """The compiled icon as the app draws it: the grid colour_grid picks for `size`, rasterised at
+        `size * scale` px, in a stand-in palette (the family's hue, the scheme's lightness)."""
+        scheme = "dark" if dark else "light"
+        hue, chroma = colourmod.SHEET_BODY[colourmod.family_of(name)]
+        body_l, ink_l = colourmod.SHEET_L[scheme]
+        body = colourmod.oklch_hex(body_l, chroma, hue)
+        ink = colourmod.oklch_hex(ink_l, min(chroma, 0.05), hue)
+        svg = (colourmod.OUT / f"{name}-{colourmod.pick_grid(size)}.svg").read_text()
+        svg = svg.replace("<svg ", f'<svg fill="{body}" color="{ink}" ', 1)
+        px = str(size * scale)
+        png = subprocess.run(
+            ["rsvg-convert", "-w", px, "-h", px], input=svg.encode(), capture_output=True, check=True
+        ).stdout
+        shot = Image.open(io.BytesIO(png)).convert("RGBA")
+        ground = Image.new("RGBA", shot.size, (0x12, 0x12, 0x14, 255) if dark else (0xFA, 0xFA, 0xFA, 255))
+        return Image.alpha_composite(ground, shot)
+
     for path in sorted((HERE / "colour").glob("*.svg")):
         kind = "folder" if path.stem.startswith(("folder", "trash")) else "file type"
+        shots = {
+            "d16": (16, 1, True),
+            "l16": (16, 1, False),
+            "d32": (32, 1, True),
+            "l32": (32, 1, False),
+            "l48": (48, 1, False),
+            "l16x2": (16, 2, False),
+        }
+        tiles = {key: colour_tile(path.stem, *args) for key, args in shots.items()}
         items.append(
-            entry(
-                "files-colour",
-                path.stem,
-                path,
-                f"Files: {kind} icon, drawn in colour",
-                "colour",
-                False,
-            )
+            {
+                "id": path.stem,
+                "group": "files-colour",
+                "variant": None,
+                "category": "colour",
+                "glyph": html.escape(str(path.relative_to(REPO))),
+                "where": html.escape(
+                    f"Files: {kind} icon, drawn in colour. Rendered from the compiled icons in a stand-in palette (the app takes its colours from the theme)."
+                ),
+                "metaphor": "",
+                "symbolic": False,
+                "svg": None,
+                "sizes": {key: tile.width for key, tile in tiles.items()},
+                "tiles": {key: png_base64(tile) for key, tile in tiles.items()},
+                "tilelist": [
+                    ["d16", "16 dark", 3],
+                    ["l16", "16 light", 3],
+                    ["d32", "32 dark", 2],
+                    ["l32", "32 light", 2],
+                    ["l48", "48 (vector)", 1],
+                ],
+                "reals": [["d16", 1, 1], ["l16", 0, 1], ["l32", 0, 1], ["l16x2", 0, 2], ["l48", 0, 1]],
+            }
         )
     apps = [
         *sorted((REPO / "apps").glob("*/*.svg")),

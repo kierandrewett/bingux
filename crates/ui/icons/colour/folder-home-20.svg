@@ -5,6 +5,5 @@
     <path d="M1 8.5C1 7.119 2.119 6 3.5 6L16.5 6C17.881 6 19 7.119 19 8.5L19 14.5C19 15.881 17.881 17 16.5 17L3.5 17C2.119 17 1 15.881 1 14.5Z"/>
     <path d="M1 8.5C1 7.119 2.119 6 3.5 6L16.5 6C17.881 6 19 7.119 19 8.5L19 14.5C19 15.881 17.881 17 16.5 17L3.5 17C2.119 17 1 15.881 1 14.5Z" fill="#fff" fill-opacity=".28"/>
     <path d="M1 8.5C1 7.119 2.119 6 3.5 6L16.5 6C17.881 6 19 7.119 19 8.5L19 14.5C19 15.881 17.881 17 16.5 17L3.5 17C2.119 17 1 15.881 1 14.5Z" fill="url(#lit)"/>
-    <polygon points="5,13 10,9 15,13" fill="currentColor"/>
-    <path d="M6 13H14V16H6ZM9 14H11V16H9Z" fill="currentColor" fill-rule="evenodd"/>
+    <path d="M10.5 6.5L16.5 12.5H15.5V16.5H11.5V13.5H8.5V16.5H5.5V12.5H3.5Z" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round" stroke-linecap="butt"/>
 </svg>

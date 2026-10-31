@@ -1,13 +1,16 @@
 <svg height="128px" viewBox="0 0 128 128" width="128px" xmlns="http://www.w3.org/2000/svg">
     <defs><linearGradient id="lit" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.32"/><stop offset="0.55" stop-color="#fff" stop-opacity="0"/></linearGradient><linearGradient id="paper" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#ebeae8"/></linearGradient></defs>
-    <rect x="29" y="0" width="36" height="52" rx="8" fill="#000" fill-opacity=".22" transform="rotate(-10 47 26)"/>
-    <rect x="61" y="5" width="38" height="46" rx="8" fill="#000" fill-opacity=".22" transform="rotate(9 80 28)"/>
-    <rect x="32" y="2" width="30" height="46" rx="6" fill="url(#paper)" transform="rotate(-10 47 25)"/>
-    <rect x="64" y="8" width="32" height="40" rx="6" fill="url(#paper)" transform="rotate(9 80 28)"/>
-    <path d="M26 54H102L97 104Q96 116 84 116H44Q32 116 31 104Z"/>
-    <path d="M26 54H102L97 104Q96 116 84 116H44Q32 116 31 104Z" fill="#fff" fill-opacity=".28"/>
-    <path d="M26 54H102L97 104Q96 116 84 116H44Q32 116 31 104Z" fill="url(#lit)"/>
-    <rect x="14" y="32" width="100" height="22" rx="11"/>
-    <rect x="14" y="32" width="100" height="22" rx="11" fill="#000" fill-opacity=".22"/>
-    <path d="M52 72V98M64 72V98M76 72V98" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M32.4 38.4L38.8 9.6Q40.4 3.2 46.8 4L62.8 6.4Q69.2 8 67.6 14.4L60.4 38.4Z" fill="#000" fill-opacity=".22"/>
+    <path d="M39.6 38.4L46 9.6Q47.6 3.2 54 4L70 6.4Q76.4 8 74.8 14.4L67.6 38.4Z" fill="#000" fill-opacity=".22"/>
+    <path d="M56.4 38.4L59.6 12.8Q60.4 6.4 66.8 7.2L84.4 10.4Q90.8 12 90 18.4L86 38.4Z" fill="#000" fill-opacity=".22"/>
+    <path d="M63.6 38.4L66.8 12.8Q67.6 6.4 74 7.2L91.6 10.4Q98 12 97.2 18.4L93.2 38.4Z" fill="#000" fill-opacity=".22"/>
+    <path d="M36 40L42.4 11.2Q44 4.8 50.4 5.6L66.4 8Q72.8 9.6 71.2 16L64 40Z" fill="url(#paper)"/>
+    <path d="M60 40L63.2 14.4Q64 8 70.4 8.8L88 12Q94.4 13.6 93.6 20L89.6 40Z" fill="url(#paper)"/>
+    <path d="M24 48H104L96 100Q94.4 120 76 120H52Q33.6 120 32 100Z"/>
+    <path d="M24 48H104L96 100Q94.4 120 76 120H52Q33.6 120 32 100Z" fill="#fff" fill-opacity=".28"/>
+    <path d="M24 48H104L96 100Q94.4 120 76 120H52Q33.6 120 32 100Z" fill="url(#lit)"/>
+    <path d="M16 38C16 32.477 20.477 28 26 28L102 28C107.523 28 112 32.477 112 38L112 38C112 43.523 107.523 48 102 48L26 48C20.477 48 16 43.523 16 38Z"/>
+    <path d="M16 38C16 32.477 20.477 28 26 28L102 28C107.523 28 112 32.477 112 38L112 38C112 43.523 107.523 48 102 48L26 48C20.477 48 16 43.523 16 38Z" fill="#000" fill-opacity=".22"/>
+    <path d="M48 68C48 65.791 49.791 64 52 64L52 64C54.209 64 56 65.791 56 68L56 92C56 94.209 54.209 96 52 96L52 96C49.791 96 48 94.209 48 92Z" fill="currentColor"/>
+    <path d="M72 68C72 65.791 73.791 64 76 64L76 64C78.209 64 80 65.791 80 68L80 92C80 94.209 78.209 96 76 96L76 96C73.791 96 72 94.209 72 92Z" fill="currentColor"/>
 </svg>

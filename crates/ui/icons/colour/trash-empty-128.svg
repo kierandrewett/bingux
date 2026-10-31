@@ -1,11 +1,12 @@
 <svg height="128px" viewBox="0 0 128 128" width="128px" xmlns="http://www.w3.org/2000/svg">
     <defs><linearGradient id="lit" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.32"/><stop offset="0.55" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
-    <rect x="46" y="14" width="36" height="26" rx="9"/>
-    <rect x="46" y="14" width="36" height="26" rx="9" fill="#000" fill-opacity=".22"/>
-    <path d="M26 54H102L97 104Q96 116 84 116H44Q32 116 31 104Z"/>
-    <path d="M26 54H102L97 104Q96 116 84 116H44Q32 116 31 104Z" fill="#fff" fill-opacity=".28"/>
-    <path d="M26 54H102L97 104Q96 116 84 116H44Q32 116 31 104Z" fill="url(#lit)"/>
-    <rect x="14" y="32" width="100" height="22" rx="11"/>
-    <rect x="14" y="32" width="100" height="22" rx="11" fill="#000" fill-opacity=".22"/>
-    <path d="M52 72V98M64 72V98M76 72V98" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M48 22C48 16.477 52.477 12 58 12L70 12C75.523 12 80 16.477 80 22L80 26C80 31.523 75.523 36 70 36L58 36C52.477 36 48 31.523 48 26Z"/>
+    <path d="M48 22C48 16.477 52.477 12 58 12L70 12C75.523 12 80 16.477 80 22L80 26C80 31.523 75.523 36 70 36L58 36C52.477 36 48 31.523 48 26Z" fill="#000" fill-opacity=".22"/>
+    <path d="M24 48H104L96 100Q94.4 120 76 120H52Q33.6 120 32 100Z"/>
+    <path d="M24 48H104L96 100Q94.4 120 76 120H52Q33.6 120 32 100Z" fill="#fff" fill-opacity=".28"/>
+    <path d="M24 48H104L96 100Q94.4 120 76 120H52Q33.6 120 32 100Z" fill="url(#lit)"/>
+    <path d="M16 38C16 32.477 20.477 28 26 28L102 28C107.523 28 112 32.477 112 38L112 38C112 43.523 107.523 48 102 48L26 48C20.477 48 16 43.523 16 38Z"/>
+    <path d="M16 38C16 32.477 20.477 28 26 28L102 28C107.523 28 112 32.477 112 38L112 38C112 43.523 107.523 48 102 48L26 48C20.477 48 16 43.523 16 38Z" fill="#000" fill-opacity=".22"/>
+    <path d="M48 68C48 65.791 49.791 64 52 64L52 64C54.209 64 56 65.791 56 68L56 92C56 94.209 54.209 96 52 96L52 96C49.791 96 48 94.209 48 92Z" fill="currentColor"/>
+    <path d="M72 68C72 65.791 73.791 64 76 64L76 64C78.209 64 80 65.791 80 68L80 92C80 94.209 78.209 96 76 96L76 96C73.791 96 72 94.209 72 92Z" fill="currentColor"/>
 </svg>

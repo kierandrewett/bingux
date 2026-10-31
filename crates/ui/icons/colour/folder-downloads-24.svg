@@ -6,6 +6,7 @@
     <path d="M2 11C2 9.343 3.343 8 5 8L19 8C20.657 8 22 9.343 22 11L22 18C22 19.657 20.657 21 19 21L5 21C3.343 21 2 19.657 2 18Z" fill="#fff" fill-opacity=".28"/>
     <path d="M2 11C2 9.343 3.343 8 5 8L19 8C20.657 8 22 9.343 22 11L22 18C22 19.657 20.657 21 19 21L5 21C3.343 21 2 19.657 2 18Z" fill="url(#lit)"/>
     <path d="M3.35 8L18.65 8L18.65 9L3.35 9Z" fill="#fff" fill-opacity=".6"/>
-    <rect x="11" y="11" width="3" height="4" fill="currentColor"/>
-    <polygon points="8,15 17,15 12,20" fill="currentColor"/>
+    <polyline points="12,9 12,16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="miter" stroke-linecap="round"/>
+    <polyline points="8,12 12,16 16,12" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <line x1="7" y1="19" x2="17" y2="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="miter" stroke-linecap="round"/>
 </svg>

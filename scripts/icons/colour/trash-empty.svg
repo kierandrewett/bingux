@@ -1,21 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" data-chrome="none">
-  <rect x="6" y="2" width="4" height="3" rx="1" fill="body"/>
-  <rect x="6" y="2" width="4" height="3" rx="1" fill="shade"/>
-  <path d="M3 6H13V12Q13 14 11 14H5Q3 14 3 12Z" fill="body"/>
-  <path d="M3 6H13V12Q13 14 11 14H5Q3 14 3 12Z" fill="light"/>
-  <path d="M3 6H13V12Q13 14 11 14H5Q3 14 3 12Z" fill="lit"/>
-  <rect x="2" y="4" width="12" height="2" rx="1" fill="body"/>
-  <rect x="2" y="4" width="12" height="2" rx="1" fill="shade"/>
-  <rect x="6" y="8" width="1" height="4" fill="ink"/>
-  <rect x="9" y="8" width="1" height="4" fill="ink"/>
-  <g data-grid="128">
-    <rect x="46" y="14" width="36" height="26" rx="9" fill="body"/>
-    <rect x="46" y="14" width="36" height="26" rx="9" fill="shade"/>
-    <path d="M26 54H102L97 104Q96 116 84 116H44Q32 116 31 104Z" fill="body"/>
-    <path d="M26 54H102L97 104Q96 116 84 116H44Q32 116 31 104Z" fill="light"/>
-    <path d="M26 54H102L97 104Q96 116 84 116H44Q32 116 31 104Z" fill="lit"/>
-    <rect x="14" y="32" width="100" height="22" rx="11" fill="body"/>
-    <rect x="14" y="32" width="100" height="22" rx="11" fill="shade"/>
-    <path d="M52 72V98M64 72V98M76 72V98" fill="none" stroke="ink" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-  </g>
+  <rect x="6" y="1.5" width="4" height="3" rx="1.25" fill="body"/>
+  <rect x="6" y="1.5" width="4" height="3" rx="1.25" fill="shade"/>
+  <path d="M3 6H13L12 12.5Q11.8 15 9.5 15H6.5Q4.2 15 4 12.5Z" fill="body"/>
+  <path d="M3 6H13L12 12.5Q11.8 15 9.5 15H6.5Q4.2 15 4 12.5Z" fill="light"/>
+  <path d="M3 6H13L12 12.5Q11.8 15 9.5 15H6.5Q4.2 15 4 12.5Z" fill="lit"/>
+  <rect x="2" y="3.5" width="12" height="2.5" rx="1.25" fill="body"/>
+  <rect x="2" y="3.5" width="12" height="2.5" rx="1.25" fill="shade"/>
+  <rect x="6" y="8" width="1" height="4" rx="0.5" fill="ink"/>
+  <rect x="9" y="8" width="1" height="4" rx="0.5" fill="ink"/>
 </svg>

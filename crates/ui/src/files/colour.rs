@@ -2,18 +2,18 @@
 //! Files app icon: rounded shapes of one radius ratio, light falling from above
 //! (a pale sheen on the top, a soft shade at the foot), a darker back layer, a
 //! thin highlight on the top edge. A file is a rounded page with a rounded
-//! folded corner and a glyph or a short label; a folder has a tab, a back, the
+//! folded corner and a picture of what it holds; a folder has a tab, a back, the
 //! paper standing in it and a lighter front panel.
 //!
 //! They are a second set beside the symbolic one (`icons.rs`): the sources are
 //! `scripts/icons/colour/*.svg`, compiled by `scripts/icons/colour.py` into
 //! `icons/colour/<name>-<grid>.svg` for five grids: 16, 20, 24 and 32 are pixel
-//! grids (straight edges on whole pixels, only the corners turn), 128 is a
-//! vector. An icon of 40 px or less is drawn from the pixel grid whose whole
-//! multiple is nearest the size asked for ([`colour_grid`]), so 16, 20, 24 and
-//! 32 px, and their 2x, land on whole pixels; a larger one (48, 64, 96, 128,
-//! 192, ...) is drawn from the vector at any scale. Labels (`XLS`, `PDF`) are
-//! drawn from 24 px up; below it the page carries a glyph.
+//! grids (straight edges on whole pixels; curves and diagonals smooth, and the
+//! corners turn), 128 is the same drawing as a vector. An icon of 40 px or less
+//! is drawn from the pixel grid whose whole multiple is nearest the size asked
+//! for ([`colour_grid`]), so 16, 20, 24 and 32 px, and their 2x, land on whole
+//! pixels; a larger one (48, 64, 96, 128, 192, ...) is drawn from the vector at
+//! any scale. No icon spells its extension: the glyph is a picture at every size.
 //!
 //! # Colour
 //!

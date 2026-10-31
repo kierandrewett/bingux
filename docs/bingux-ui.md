@@ -1601,10 +1601,11 @@ foot), so an icon reads as a lit surface and not a flat tile; a **back layer**
 is darker than the **front layer** (the folder's tab and back behind its panel;
 a bin's lid over its can); a thin white highlight runs along the top edge of a
 front panel, and a 1 px lip under it; a sheet of paper stands in the folder
-(from 32 px) with a line of text on it; glyphs have round caps and joins on the
-vector and sit set into the face. A pixel grid keeps its straight edges on whole
-pixels and turns only its corners, so a 16 px icon stays crisp and is still
-clearly a folder or a page; from 40 px up the vector draws every curve.
+(from 32 px) with a line of text on it; glyphs have round caps and joins and sit
+set into the face. A pixel grid keeps its straight edges on whole pixels, turns the
+corners, and draws every curve and diagonal of a glyph anti-aliased, so a 16 px
+icon stays crisp and is still clearly a folder or a page; from 40 px up the vector
+draws the same picture at any scale.
 
 - A **folder** (the plain folder, the user folders, the home folder, the Trash)
   is the user's **accent colour** (`Tokens::accent`), always: resting, selected
@@ -1618,10 +1619,10 @@ clearly a folder or a page; from 40 px up the vector draws every curve.
   the accent set into that panel, moved until it reads 4.5:1 on it. The Trash
   is a bin: closed and faint while empty, paper over its rim when it has items.
 - A **file** is a rounded page with a rounded folded corner in the colour of its
-  family, one hue per family (`ColourIcon::hue`), and a glyph; from 24 px up the
-  glyph of text, spreadsheets, presentations, PDFs, documents, archives and disk
-  images is a label of two to four letters (`TXT`, `XLS`, `PPT`, `PDF`, `DOC`,
-  `ZIP`, `ISO`): a pixel font at 24 and 32, rounded strokes on the vector.
+  family, one hue per family (`ColourIcon::hue`), and a glyph, a picture of what
+  the file holds at every size and never its extension in letters (a pie for a
+  presentation, a table for a spreadsheet, a drawer box for an archive, a rosette
+  for a certificate, `</>` for source, a prompt for a program).
   The page is OKLCH lightness 0.76 on the dark scheme (a deep ink of its own hue)
   and 0.52 on the light one (white ink; the yellows, hue 70 to 128, start 0.28
   lighter and 1.3 times as saturated there and take a deep ink: darkened to
@@ -1658,15 +1659,15 @@ clearly a folder or a page; from 40 px up the vector draws every curve.
   and both schemes. One viewer, one raster, cached by (icon, size, colours).
 
 **The colour set.** The sources are plain SVGs in `scripts/icons/colour/` (34:
-22 file families, 10 folders, the Trash empty and full): the pixel art on a 16
-grid, plus a `<g data-grid="128">` with the same glyph drawn smoothly on a 128
-grid for large sizes. `scripts/icons/colour.py` compiles each for five grids,
-16, 20, 24, 32 and 128, into `crates/ui/icons/colour/<name>-<grid>.svg`.
+22 file families, 10 folders, the Trash empty and full): one drawing on a 16
+grid, curves and diagonals allowed, compiled for five grids, 16, 20, 24, 32 and
+128, into `crates/ui/icons/colour/<name>-<grid>.svg`; the 128 grid is the same
+drawing at 8 times its size, unsnapped, with round caps and joins.
 The chrome (the page, the folder, its paper and lip) is drawn by the compiler
 from per-grid tables (`PAGE`, `FOLDER`, `RADIUS`); on the pixel grids
 rectangles are on whole pixels, strokes on the pixel centre (odd widths) or the
-pixel edge (even), nothing warped or thickened, and a label is in a 3 x 5 (24
-grid) or 5 x 7 (32 grid) pixel font; the 128 grid is copied as authored. An icon
+pixel edge (even), the anchors of paths and polygons on whole pixels while a
+curve keeps its handles, nothing warped or thickened. An icon
 of 40 px or less is drawn from the pixel grid whose whole multiple is its size
 (`colour_grid(px)`): 16, 20, 24 and 32 px and their 2x are on the lattice, 40 is
 2 x the 20 grid; a larger one (48, 64, 96, 128, 192, 256) is the vector, drawn at
