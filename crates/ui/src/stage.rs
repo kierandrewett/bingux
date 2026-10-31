@@ -75,6 +75,12 @@ pub fn staged(mut column: Rect) -> Rect {
     column.child(Staged { children })
 }
 
+/// The location of the page that is drawn, provided by whoever draws it (the
+/// split view gives each page its own, including one that slides out), so what a
+/// page remembers about itself is kept under its own place.
+#[derive(Clone, PartialEq)]
+pub struct PageLocation(pub String);
+
 /// What a page being staged shares with the groups under it: how many of
 /// them are still adding rows. The page waits for them before it adds the next
 /// child.
@@ -301,7 +307,18 @@ impl Component for Staged {
                 })
             }
         });
-        let key = crate::nav::router::try_router().map(|router| router.location().path_text());
+        // The page's own place, not the router's: a page that slides out is built again
+        // while the router already points at the page that replaced it, and a page
+        // that Back reveals is built again before the router points at it for the
+        // frame. Keyed by the router, either one found no height kept for it, drew
+        // shorter than its scroll offset, and the scroll view cut the offset to fit
+        // (the offset it keeps on the page's controller, so Back found the page at
+        // the top).
+        let key = try_consume_context::<PageLocation>()
+            .map(|place| place.0)
+            .or_else(|| {
+                crate::nav::router::try_router().map(|router| router.location().path_text())
+            });
         let reserved = key
             .as_ref()
             .and_then(|key| HEIGHTS.with_borrow(|heights| heights.get(key).copied()));
