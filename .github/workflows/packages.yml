@@ -208,7 +208,7 @@ jobs:
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           cp -r packaging/debian debian
-          apt-get build-dep -y ./
+          bash scripts/debian-build-deps.sh
           rm -rf debian
       - name: Build the Debian packages
         env:

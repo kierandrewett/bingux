@@ -1,0 +1,3 @@
+usr/bin/bingux-config
+usr/share/man/man1/bingux-config.1
+build/licenses/bingux-config.LICENSE.dependencies usr/share/doc/bingux-config

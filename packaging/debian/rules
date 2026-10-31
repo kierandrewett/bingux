@@ -1,0 +1,48 @@
+#!/usr/bin/make -f
+# One source package, seven binary packages, built from `make install` like the RPM and the Arch packages.
+# `make install` stages everything once in debian/tmp; the six small packages take their files out of it
+# (override_dh_install), and bingux, the shell, keeps whatever is left, so no installed file is dropped.
+# scripts/build-debs.sh copies this directory to debian/ in the unpacked source archive and sets the version.
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+# The same Rust flags as the RPM: line-table debug info keeps the debug packages of the statically linked Freya
+# programs to a size they can hold.
+export RUSTFLAGS = -Copt-level=3 -Cdebuginfo=line-tables-only -Cstrip=none -Cforce-frame-pointers=yes --cap-lints=warn
+# The Skia and Cargo downloads of the Rust build need the network, as they do for the RPM.
+JOBS = $(or $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS))),2)
+SMALL = bingux-config bingux-settings bingux-files bingux-preview-host bingux-audio-effects bingux-taxonomy
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+
+override_dh_auto_build:
+	$(MAKE) BUILD_DIR=build JOBS=$(JOBS) LIBDIR_NAME=lib
+	$(MAKE) licenses BUILD_DIR=build
+
+override_dh_auto_test:
+	# The program checks run in CI (make check); desktop entries and AppStream files are validated after the install.
+
+override_dh_auto_install:
+	$(MAKE) install PREFIX=/usr DESTDIR=$(CURDIR)/debian/tmp BUILD_DIR=build QMLDIR=/usr/lib/bingux/qml LADSPADIR=/usr/lib/ladspa
+	desktop-file-validate debian/tmp/usr/share/applications/bingux-*.desktop
+	appstreamcli validate --no-net debian/tmp/usr/share/metainfo/*.metainfo.xml
+	# The scripts name /usr/bin/env; Debian wants the interpreter itself.
+	find debian/tmp/usr/libexec/bingux -type f -exec sed -i '1s|^#!/usr/bin/env python3|#!/usr/bin/python3|' {} +
+
+override_dh_install:
+	dh_install $(addprefix -p,$(SMALL))
+	# Move, not copy: a file listed by a small package must not be left for bingux.
+	for package in $(SMALL); do \
+	    sed -n 's|^\(usr/[^ ]*\)$$|\1|p' debian/$$package.install | while read -r path; do rm -f "debian/tmp/$$path"; done; \
+	done
+	dh_install -pbingux
+	dh_missing --fail-missing
+
+# dwz fails on the large statically linked Rust programs; the RPM and Arch packages do not use it either.
+override_dh_dwz:
+
+# No -dbgsym packages: the repositories do not publish debug packages.
+override_dh_strip:
+	dh_strip --no-automatic-dbgsym

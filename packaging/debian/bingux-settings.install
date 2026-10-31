@@ -1,0 +1,7 @@
+usr/bin/bingux-settings
+usr/share/applications/bingux-settings.desktop
+usr/share/icons/hicolor/scalable/apps/bingux-settings.svg
+usr/share/metainfo/dev.drewett.bingux.Settings.metainfo.xml
+usr/share/man/man1/bingux-settings.1
+usr/share/bingux/search-apps/bingux-settings.json
+build/licenses/bingux-settings.LICENSE.dependencies usr/share/doc/bingux-settings

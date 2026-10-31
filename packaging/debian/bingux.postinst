@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+# The preset file enables bingux.target for every user; the RPM does the same with %systemd_user_post.
+if [ "$1" = configure ] && [ -d /run/systemd/system ]; then
+    systemctl --global preset bingux.target >/dev/null 2>&1 || true
+fi
+#DEBHELPER#
