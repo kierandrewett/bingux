@@ -12,7 +12,7 @@ review sheets need:
   #policy <category>: file file ...      fill/outline category of those icons
   #symmetric: file file ...              must be left-right symmetric about x = 8
   #mark: file file ...                   a small control mark (chevron, tick, plus)
-  #exempt <rule>: file file ...          rule is one of size, centre, soft
+  #exempt <rule>: file file ...          rule is one of size, centre, soft, dots (golden.py)
   #mirror_rtl: file file ...             drawn with a direction (an arrow, a chevron, a panel
                                          at one side): flipped left to right when the interface
                                          reads right to left (`Icon::mirrors_in_rtl`, design/rtl.md)

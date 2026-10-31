@@ -130,10 +130,17 @@ class Drawing:
             self.shapes.append((polys, rule, alpha * (fill.opacity if fill.opacity is not None else 1.0)))
         self.polys = [poly for polys, _, _ in self.shapes for poly in polys]
 
-    def coverage(self, size: int) -> np.ndarray:
-        """Coverage in 0..1 at `size` px, the shapes laid over each other."""
+    def coverage(self, size: int, flat: bool = False) -> np.ndarray:
+        """Coverage in 0..1 at `size` px, the shapes laid over each other.
+
+        `flat` draws every shape at full opacity: the silhouette, which is what the size, centre, dot and
+        symmetry rules judge. A dimmed part (build.py `data-dim`, a path with `fill-opacity`) is part of the
+        silhouette: it is what makes a Wi-Fi arc without signal still an arc. Without `flat` the dim part is
+        as faint as it is drawn, which is what the raster hash and `pixels` record."""
         out = np.zeros((size, size))
         for polys, rule, alpha in self.shapes:
+            if flat:
+                alpha = 1.0
             if "evenodd" in rule:
                 total = sum(raster.coverage([poly], size, self.grid) for poly in polys)
                 cov = 1.0 - np.abs(1.0 - np.mod(total, 2.0))
@@ -182,7 +189,7 @@ def components(mask: np.ndarray) -> list[tuple[int, int, int, int, int]]:
 def measure(drawing: Drawing, file: Path) -> dict:
     """Every number of one icon: the golden record and what the rules read."""
     record: dict = {"grid": drawing.grid}
-    fine = drawing.coverage(FINE)
+    fine = drawing.coverage(FINE, flat=True)
     k = drawing.grid / FINE
     mask = fine > 0.5
     dots = []
@@ -192,13 +199,13 @@ def measure(drawing: Drawing, file: Path) -> dict:
             dots.append([round(w, 2), round(h, 2), round(area * k * k / (w * h), 2) if w * h else 0.0])
     record["dots"] = sorted(dots)
     record["components"] = len(components(mask))
-    area = float(drawing.coverage(FINE).sum()) * k * k
+    area = float(fine.sum()) * k * k
     perimeter = drawing.perimeter()
     record["stroke"] = round(2 * area / perimeter, 3) if perimeter else 0.0
     # The number of separate inked runs along the vertical through the middle: a Wi-Fi icon is its arcs and a dot.
     column = mask[:, FINE // 2 - 1 : FINE // 2 + 1].any(axis=1)
     record["runs"] = int(np.count_nonzero(column[1:] & ~column[:-1]) + int(column[0]))
-    asym = raster.asymmetry(drawing.coverage(drawing.grid and int(drawing.grid)))
+    asym = raster.asymmetry(drawing.coverage(drawing.grid and int(drawing.grid), flat=True))
     record["asym"] = [round(asym[0], 3), round(asym[1], 4)]
     native = int(drawing.grid)
     renditions = {}
@@ -206,9 +213,9 @@ def measure(drawing: Drawing, file: Path) -> dict:
         sizes = SIZES if drawing.grid == 16 else (native,)
         for size in sizes:
             px = size * scale
-            cov = drawing.coverage(px)
+            cov = drawing.coverage(px, flat=True)
             ink = raster.ink_extents(cov, grid=float(px))
-            gray = np.round(cov * 255).astype(np.uint8)
+            gray = np.round(drawing.coverage(px) * 255).astype(np.uint8)
             soft = raster.soft_edge_pixels(cov)
             renditions[f"{size}@{scale}"] = [
                 round(ink[0], 2),
@@ -220,7 +227,7 @@ def measure(drawing: Drawing, file: Path) -> dict:
                 hashlib.sha1(gray.tobytes()).hexdigest()[:10],
             ]
     record["r"] = renditions
-    cov16 = drawing.coverage(native)
+    cov16 = drawing.coverage(native)  # as drawn, dim parts faint: the record shows where a change is
     record["pixels"] = "".join("0123456789abcdef"[int(round(v * 15))] for v in cov16.reshape(-1))
     return record
 
@@ -258,7 +265,12 @@ def absolute_problems(measures: dict[str, dict], labels) -> list[str]:
             problems.append(f"[IC-01] {name}: the ink leaves its box ({ink})")
         row = labels.rows.get(short)
         glyph = row.glyph if row else ""
-        if name.endswith("-symbolic.svg") and (labels.policy.get(short) == "drawn" or " dot" in glyph):
+        # An icon whose arcs are cut by a slash has small arc ends that look like dots to this measure (`#exempt dots`).
+        if (
+            name.endswith("-symbolic.svg")
+            and short not in labels.exempt.get("dots", set())
+            and (labels.policy.get(short) == "drawn" or " dot" in glyph)
+        ):
             for w, h, fill in record["dots"]:
                 aspect = abs(w / h - 1.0) if h else 1.0
                 if not ROUND_FILL[0] <= fill <= ROUND_FILL[1] or aspect > ROUND_ASPECT:

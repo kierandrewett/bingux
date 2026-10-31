@@ -24,10 +24,17 @@ Custom icons are written in a small dialect of plain SVG shapes, which may also 
   stroked (outline of the centreline). Colours are ignored: the output is tinted
   by bingux-ui at draw time.
 - `data-op="cut"` subtracts the shape from everything painted before it.
+- `data-dim="yes"` paints the shape dimmed: the icon file gets a second path with
+  `fill-opacity="0.4"` (`DIM_ALPHA`) for everything dim, and nothing in it overlaps the solid
+  path. It is how a level icon keeps the parts that are "off" (a Wi-Fi arc without signal, the
+  empty end of a battery) in view. The icon is still tinted with one colour at draw time; the
+  dimming is only the path's own alpha. The pixel rules judge the whole silhouette, dim part
+  included, and a cut removes ink from both layers.
 - `data-round="r"` on polyline/polygon rounds each corner with radius r.
 - Shapes: rect (rx), circle, ellipse, line, polyline, polygon, path.
 
-Output is SVG, one file per source (a single fill path for custom icons), with the
+Output is SVG, one file per source (one fill path for custom icons, plus one with `fill-opacity` when the
+source has `data-dim` shapes), with the
 same header as the Adwaita files it replaces. Output is deterministic: the same sources always give
 byte-identical files.
 
@@ -109,6 +116,9 @@ JOINS = {
     "bevel": pathops.LineJoin.BEVEL_JOIN,
 }
 EPS = 1e-6
+# The alpha of everything a source marks `data-dim`: low enough to read as "off", high enough to be
+# seen on the black top bar and on a light page (a missing Wi-Fi arc, the empty end of a battery).
+DIM_ALPHA = 0.4
 
 
 class BuildError(Exception):
@@ -118,8 +128,9 @@ class BuildError(Exception):
 @dataclass
 class Painted:
     path: pathops.Path
-    cut: bool
+    op: str  # "union" or "cut"
     where: str
+    dim: bool = False
 
 
 @dataclass
@@ -127,8 +138,9 @@ class Compiled:
     name: str
     svg: str
     ink: tuple[float, float, float, float]
-    path: pathops.Path
+    path: pathops.Path  # the whole silhouette: the solid part and the dim part
     notes: list[str] = field(default_factory=list)
+    dim: pathops.Path | None = None  # the part drawn at DIM_ALPHA, never overlapping the solid part
 
 
 # ---------------------------------------------------------------- geometry text
@@ -758,12 +770,17 @@ def compile_source(src: Path) -> Compiled:
     painted: list[Painted] = []
     for index, (tag, own, eff) in enumerate(shapes):
         where = f"{src.name}#{index}<{tag}>"
-        cut = own.get("data-op") == "cut"
-        if own.get("data-op", "union") not in ("union", "cut"):
+        op = own.get("data-op", "union")
+        if op not in ("union", "cut"):
             errors.append(f"{where}: data-op must be union or cut")
+        dim = "data-dim" in own
+        if dim and own["data-dim"] != "yes":
+            errors.append(f"{where}: data-dim must be yes (the alpha is DIM_ALPHA, one for every icon)")
+        if dim and op != "union":
+            errors.append(f"{where}: a {op} cannot be dim")
         if tag == "fork":
             try:
-                painted.append(Painted(fork_outline(own, where).path, cut, where))
+                painted.append(Painted(fork_outline(own, where).path, op, where, dim))
             except (BuildError, ValueError, IndexError, KeyError) as exc:
                 errors.append(str(exc))
             continue
@@ -795,7 +812,7 @@ def compile_source(src: Path) -> Compiled:
             fill_path.close()
             if own.get("fill-rule", "nonzero") == "evenodd":
                 fill_path.fillType = pathops.FillType.EVEN_ODD
-            painted.append(Painted(pathops.simplify(fill_path), cut, where))
+            painted.append(Painted(pathops.simplify(fill_path), op, where, dim))
         if stroke_on:
             stroke_path = d_to_path(d)
             cap = CAPS.get(eff["stroke-linecap"])
@@ -805,39 +822,55 @@ def compile_source(src: Path) -> Compiled:
                 continue
             stroke_path.stroke(stroke_width, cap, join, 4.0)
             stroke_path.convertConicsToQuads(0.02)
-            painted.append(Painted(pathops.simplify(stroke_path), cut, where))
+            painted.append(Painted(pathops.simplify(stroke_path), op, where, dim))
 
     if errors:
         raise BuildError("\n".join(errors))
 
-    acc = pathops.Path()
-    started = False
+    solid, faint = pathops.Path(), pathops.Path()
+    has_solid = has_dim = False
     for item in painted:
-        if item.cut:
-            if started:
-                acc = pathops.op(acc, item.path, pathops.PathOp.DIFFERENCE)
-            continue
-        if started:
-            acc = pathops.op(acc, item.path, pathops.PathOp.UNION)
+        if item.op == "cut":
+            if has_solid:
+                solid = pathops.op(solid, item.path, pathops.PathOp.DIFFERENCE)
+            if has_dim:
+                faint = pathops.op(faint, item.path, pathops.PathOp.DIFFERENCE)
+        elif item.dim:
+            faint = pathops.op(faint, item.path, pathops.PathOp.UNION) if has_dim else item.path
+            has_dim = True
         else:
-            acc = item.path
-            started = True
-    acc.convertConicsToQuads(0.02)
-    if not started or not list(acc.segments):
+            solid = pathops.op(solid, item.path, pathops.PathOp.UNION) if has_solid else item.path
+            has_solid = True
+    if not has_solid and not has_dim:
         raise BuildError(f"{src.name}: nothing is painted")
-    acc = pathops.simplify(acc)
+    solid.convertConicsToQuads(0.02)
+    solid = pathops.simplify(solid) if has_solid else None
+    # The solid part wins where the two overlap: the dim part is only what the solid part does not cover.
+    if has_dim and solid is not None:
+        faint = pathops.op(faint, solid, pathops.PathOp.DIFFERENCE)
+    faint = pathops.simplify(faint) if has_dim else None
+    if faint is not None and not list(faint.segments):
+        faint = None  # all of it is under the solid part, or a cut took it
+    if solid is not None and not list(solid.segments):
+        solid = None
+    if solid is None and faint is None:
+        raise BuildError(f"{src.name}: nothing is left of the icon after its cuts")
+    if solid is None:
+        acc = faint
+    elif faint is None:
+        acc = solid
+    else:
+        acc = pathops.simplify(pathops.op(solid, faint, pathops.PathOp.UNION))
     left, top, right, bottom = acc.bounds
     if left < -EPS or top < -EPS or right > GRID + EPS or bottom > GRID + EPS:
         raise BuildError(f"{src.name}: ink {fmt(left)},{fmt(top)} to {fmt(right)},{fmt(bottom)} leaves the 16 x 16 box")
 
     soft = soft_edges(acc)
-    d = path_d(acc)
-    svg = (
-        '<svg height="16px" viewBox="0 0 16 16" width="16px" xmlns="http://www.w3.org/2000/svg">\n'
-        f'    <path d="{d}"/>\n'
-        "</svg>\n"
-    )
-    return Compiled(name=name, svg=svg, ink=(left, top, right, bottom), notes=soft, path=acc)
+    body = f'    <path d="{path_d(solid)}"/>\n' if solid is not None else ""
+    if faint is not None:
+        body += f'    <path d="{path_d(faint)}" fill-opacity="{fmt_scale(DIM_ALPHA)}"/>\n'
+    svg = f'<svg height="16px" viewBox="0 0 16 16" width="16px" xmlns="http://www.w3.org/2000/svg">\n{body}</svg>\n'
+    return Compiled(name=name, svg=svg, ink=(left, top, right, bottom), notes=soft, path=acc, dim=faint)
 
 
 def soft_edges(path: pathops.Path) -> list[str]:
