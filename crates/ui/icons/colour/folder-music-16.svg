@@ -5,7 +5,9 @@
     <path d="M1 7C1 5.895 1.895 5 3 5L13 5C14.105 5 15 5.895 15 7L15 12C15 13.105 14.105 14 13 14L3 14C1.895 14 1 13.105 1 12Z"/>
     <path d="M1 7C1 5.895 1.895 5 3 5L13 5C14.105 5 15 5.895 15 7L15 12C15 13.105 14.105 14 13 14L3 14C1.895 14 1 13.105 1 12Z" fill="#fff" fill-opacity=".28"/>
     <path d="M1 7C1 5.895 1.895 5 3 5L13 5C14.105 5 15 5.895 15 7L15 12C15 13.105 14.105 14 13 14L3 14C1.895 14 1 13.105 1 12Z" fill="url(#lit)"/>
-    <circle cx="7" cy="11.5" r="1.5" fill="currentColor"/>
-    <rect x="8" y="7" width="1" height="5" fill="currentColor"/>
-    <polygon points="9,7 11,8 11,10 9,9" fill="currentColor"/>
+    <rect x="6" y="7" width="1" height="5" fill="currentColor"/>
+    <rect x="11" y="6" width="1" height="5" fill="currentColor"/>
+    <line x1="7" y1="7" x2="12" y2="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="miter" stroke-linecap="butt"/>
+    <circle cx="5.5" cy="12" r="1.5" fill="currentColor"/>
+    <circle cx="10.5" cy="11" r="1.5" fill="currentColor"/>
 </svg>

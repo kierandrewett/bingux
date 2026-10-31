@@ -6,5 +6,6 @@
     <path d="M15.707 1.707C15.317 1.317 15 1.448 15 2L15 6.2C15 6.642 15.358 7 15.8 7L20 7C20.552 7 20.683 6.683 20.293 6.293Z" fill="#000" fill-opacity=".22"/>
     <clipPath id="page"><path d="M3 4C3 2.343 4.343 1 6 1L14 1C14.552 1 15.317 1.317 15.707 1.707L20.293 6.293C20.683 6.683 21 7.448 21 8L21 20C21 21.657 19.657 23 18 23L6 23C4.343 23 3 21.657 3 20Z"/></clipPath>
     <path d="M3 4C3 2.343 4.343 1 6 1L14 1C14.552 1 15.317 1.317 15.707 1.707L20.293 6.293C20.683 6.683 21 7.448 21 8L21 20C21 21.657 19.657 23 18 23L6 23C4.343 23 3 21.657 3 20Z" fill="none" stroke="#000" stroke-opacity="0.26" stroke-width="2" clip-path="url(#page)"/>
-    <path d="M6 14h2v1h-2zM6 15h1v1h-1zM8 15h1v1h-1zM6 16h2v1h-2zM6 17h1v1h-1zM6 18h1v1h-1zM10 14h2v1h-2zM10 15h1v1h-1zM12 15h1v1h-1zM10 16h2v1h-2zM10 17h1v1h-1zM10 18h1v1h-1zM14 14h3v1h-3zM15 15h1v1h-1zM15 16h1v1h-1zM15 17h1v1h-1zM15 18h1v1h-1z" fill="currentColor"/>
+    <path d="M11 15L11 10A5.25 5.25 0 1 0 17 15Z" fill="currentColor"/>
+    <path d="M14 14L14 8A5.25 5.25 0 0 1 19 14Z" fill="currentColor" fill-opacity=".7"/>
 </svg>

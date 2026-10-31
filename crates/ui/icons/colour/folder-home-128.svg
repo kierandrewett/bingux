@@ -11,5 +11,5 @@
     <path d="M12 58C12 50.268 18.268 44 26 44L102 44C109.732 44 116 50.268 116 58L116 100C116 107.732 109.732 114 102 114L26 114C18.268 114 12 107.732 12 100Z" fill="#fff" fill-opacity=".28"/>
     <path d="M12 58C12 50.268 18.268 44 26 44L102 44C109.732 44 116 50.268 116 58L116 100C116 107.732 109.732 114 102 114L26 114C18.268 114 12 107.732 12 100Z" fill="url(#lit)"/>
     <path d="M18.3 45.25C18.3 44.836 18.636 44.5 19.05 44.5L96.95 44.5C97.364 44.5 97.7 44.836 97.7 45.25L97.7 45.25C97.7 45.664 97.364 46 96.95 46L19.05 46C18.636 46 18.3 45.664 18.3 45.25Z" fill="#fff" fill-opacity=".6"/>
-    <path d="M34 80L64 54L94 80V100Q94 104 90 104H38Q34 104 34 100Z M57 104V88Q57 85 60 85H68Q71 85 71 88V104Z" fill="currentColor" stroke="currentColor" fill-rule="evenodd" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M64 44L104 78.4H96V104H76V84H52V104H32V78.4H24Z" fill="currentColor" stroke="currentColor" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
 </svg>

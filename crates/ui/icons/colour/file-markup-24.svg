@@ -6,8 +6,8 @@
     <path d="M15.707 1.707C15.317 1.317 15 1.448 15 2L15 6.2C15 6.642 15.358 7 15.8 7L20 7C20.552 7 20.683 6.683 20.293 6.293Z" fill="#000" fill-opacity=".22"/>
     <clipPath id="page"><path d="M3 4C3 2.343 4.343 1 6 1L14 1C14.552 1 15.317 1.317 15.707 1.707L20.293 6.293C20.683 6.683 21 7.448 21 8L21 20C21 21.657 19.657 23 18 23L6 23C4.343 23 3 21.657 3 20Z"/></clipPath>
     <path d="M3 4C3 2.343 4.343 1 6 1L14 1C14.552 1 15.317 1.317 15.707 1.707L20.293 6.293C20.683 6.683 21 7.448 21 8L21 20C21 21.657 19.657 23 18 23L6 23C4.343 23 3 21.657 3 20Z" fill="none" stroke="#000" stroke-opacity="0.26" stroke-width="2" clip-path="url(#page)"/>
-    <rect x="9" y="11" width="2" height="9" fill="currentColor"/>
-    <rect x="14" y="11" width="2" height="9" fill="currentColor"/>
-    <rect x="6" y="12" width="12" height="2" fill="currentColor"/>
-    <rect x="6" y="17" width="12" height="2" fill="currentColor"/>
+    <line x1="11" y1="9" x2="9" y2="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="miter" stroke-linecap="round"/>
+    <line x1="15" y1="9" x2="14" y2="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="miter" stroke-linecap="round"/>
+    <line x1="7" y1="13" x2="17" y2="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="miter" stroke-linecap="round"/>
+    <line x1="6" y1="17" x2="17" y2="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="miter" stroke-linecap="round"/>
 </svg>

@@ -6,5 +6,5 @@
     <path d="M2 11C2 9.343 3.343 8 5 8L19 8C20.657 8 22 9.343 22 11L22 18C22 19.657 20.657 21 19 21L5 21C3.343 21 2 19.657 2 18Z" fill="#fff" fill-opacity=".28"/>
     <path d="M2 11C2 9.343 3.343 8 5 8L19 8C20.657 8 22 9.343 22 11L22 18C22 19.657 20.657 21 19 21L5 21C3.343 21 2 19.657 2 18Z" fill="url(#lit)"/>
     <path d="M3.35 8L18.65 8L18.65 9L3.35 9Z" fill="#fff" fill-opacity=".6"/>
-    <path d="M9 11H15V20H9ZM11 14H14V15H11ZM11 17H14V18H11Z" fill="currentColor" fill-rule="evenodd"/>
+    <path d="M8 9H14L17 12V20H8ZM9 14H14V16H9ZM9 17H14V19H9Z" fill="currentColor" fill-rule="evenodd"/>
 </svg>

@@ -6,6 +6,6 @@
     <path d="M84.243 12.243C81.899 9.899 80 10.686 80 14L80 35C80 37.761 82.239 40 85 40L106 40C109.314 40 110.101 38.101 107.757 35.757Z" fill="#000" fill-opacity=".22"/>
     <clipPath id="page"><path d="M16 22C16 14.268 22.268 8 30 8L74 8C77.314 8 81.899 9.899 84.243 12.243L107.757 35.757C110.101 38.101 112 42.686 112 46L112 106C112 113.732 105.732 120 98 120L30 120C22.268 120 16 113.732 16 106Z"/></clipPath>
     <path d="M16 22C16 14.268 22.268 8 30 8L74 8C77.314 8 81.899 9.899 84.243 12.243L107.757 35.757C110.101 38.101 112 42.686 112 46L112 106C112 113.732 105.732 120 98 120L30 120C22.268 120 16 113.732 16 106Z" fill="none" stroke="#000" stroke-opacity="0.26" stroke-width="6" clip-path="url(#page)"/>
-    <path d="M62 62Q48 54 32 58V100Q48 96 62 104Z" fill="currentColor" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
-    <path d="M66 62Q80 54 96 58V100Q80 96 66 104Z" fill="currentColor" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M64 57.6Q48 44.8 28 49.6V97.6Q48 92.8 64 105.6Q80 92.8 100 97.6V49.6Q80 44.8 64 57.6Z" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
+    <line x1="64" y1="60" x2="64" y2="104" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
 </svg>

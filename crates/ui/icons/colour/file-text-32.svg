@@ -6,5 +6,8 @@
     <path d="M20.99 2.99C20.443 2.443 20 2.627 20 3.4L20 8.8C20 9.463 20.537 10 21.2 10L26.6 10C27.373 10 27.557 9.557 27.01 9.01Z" fill="#000" fill-opacity=".22"/>
     <clipPath id="page"><path d="M4 6C4 3.791 5.791 2 8 2L18.6 2C19.373 2 20.443 2.443 20.99 2.99L27.01 9.01C27.557 9.557 28 10.627 28 11.4L28 26C28 28.209 26.209 30 24 30L8 30C5.791 30 4 28.209 4 26Z"/></clipPath>
     <path d="M4 6C4 3.791 5.791 2 8 2L18.6 2C19.373 2 20.443 2.443 20.99 2.99L27.01 9.01C27.557 9.557 28 10.627 28 11.4L28 26C28 28.209 26.209 30 24 30L8 30C5.791 30 4 28.209 4 26Z" fill="none" stroke="#000" stroke-opacity="0.26" stroke-width="2" clip-path="url(#page)"/>
-    <path d="M6 17h5v1h-5zM8 18h1v1h-1zM8 19h1v1h-1zM8 20h1v1h-1zM8 21h1v1h-1zM8 22h1v1h-1zM8 23h1v1h-1zM13 17h1v1h-1zM17 17h1v1h-1zM13 18h1v1h-1zM17 18h1v1h-1zM14 19h1v1h-1zM16 19h1v1h-1zM15 20h1v1h-1zM14 21h1v1h-1zM16 21h1v1h-1zM13 22h1v1h-1zM17 22h1v1h-1zM13 23h1v1h-1zM17 23h1v1h-1zM20 17h5v1h-5zM22 18h1v1h-1zM22 19h1v1h-1zM22 20h1v1h-1zM22 21h1v1h-1zM22 22h1v1h-1zM22 23h1v1h-1z" fill="currentColor"/>
+    <rect x="8" y="12" width="16" height="2" fill="currentColor"/>
+    <rect x="8" y="16" width="16" height="2" fill="currentColor"/>
+    <rect x="8" y="20" width="16" height="2" fill="currentColor"/>
+    <rect x="8" y="24" width="10" height="2" fill="currentColor"/>
 </svg>

@@ -258,24 +258,16 @@ fn an_icon_is_drawn_from_the_grid_whose_multiple_is_its_size() {
     }
 }
 
+/// A glyph is a picture on every grid, never letters: each icon but the blank page and the
+/// plain folder draws its glyph in the ink on all five, and none spells its extension.
 #[test]
-fn a_label_is_drawn_from_24_px_and_a_glyph_below() {
-    // The labelled families carry their letters only on the big grids.
-    for icon in [
-        ColourIcon::FileText,
-        ColourIcon::FileSpreadsheet,
-        ColourIcon::FilePresentation,
-        ColourIcon::FilePdf,
-        ColourIcon::FileDocument,
-        ColourIcon::FileArchive,
-        ColourIcon::FileDiskImage,
-    ] {
-        let small = icon.bytes(16);
-        let large = icon.bytes(32);
-        let vector = std::str::from_utf8(icon.bytes(VECTOR_GRID)).expect("an SVG is text");
-        assert!(!small.windows(2).any(|pair| pair == b"h1"), "{} has a label at 16 px", icon.name());
-        assert!(large.windows(2).any(|pair| pair == b"h1"), "{} has no label at 32 px", icon.name());
-        assert!(vector.contains("stroke=\"currentColor\""), "{} has no label on the vector", icon.name());
+fn every_icon_draws_its_glyph_on_every_grid() {
+    for icon in ColourIcon::ALL.iter().filter(|icon| !matches!(icon, ColourIcon::FilePage | ColourIcon::Folder)) {
+        for grid in COLOUR_GRIDS {
+            let text = std::str::from_utf8(icon.bytes(grid)).expect("an SVG is text");
+            assert!(text.contains("currentColor"), "{} has no glyph at {grid}", icon.name());
+            assert!(!text.contains("<text"), "{} spells its glyph at {grid}", icon.name());
+        }
     }
 }
 

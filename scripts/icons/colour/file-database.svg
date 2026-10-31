@@ -1,6 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" data-chrome="page">
-  <path d="M4 7Q4 6 8 6Q12 6 12 7V12Q12 13 8 13Q4 13 4 12Z M4 8.5Q8 10 12 8.5V9.5Q8 11 4 9.5Z" fill="ink" fill-rule="evenodd"/>
-  <g data-grid="128">
-    <path d="M36 62Q36 52 64 52Q92 52 92 62V98Q92 108 64 108Q36 108 36 98Z M36 72Q64 86 92 72V80Q64 94 36 80Z" fill="ink" fill-rule="evenodd"/>
-  </g>
+  <path d="M4 7.5A4 1.9 0 1 1 12 7.5A4 1.9 0 1 1 4 7.5Z" fill="ink"/>
+  <path d="M4 9.2A4 1.9 0 0 0 12 9.2V10.4A4 1.9 0 0 1 4 10.4Z" fill="ink"/>
+  <path d="M4 11.6A4 1.9 0 0 0 12 11.6V12.8A4 1.9 0 0 1 4 12.8Z" fill="ink"/>
 </svg>

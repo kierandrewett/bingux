@@ -6,5 +6,7 @@
     <path d="M84.243 12.243C81.899 9.899 80 10.686 80 14L80 35C80 37.761 82.239 40 85 40L106 40C109.314 40 110.101 38.101 107.757 35.757Z" fill="#000" fill-opacity=".22"/>
     <clipPath id="page"><path d="M16 22C16 14.268 22.268 8 30 8L74 8C77.314 8 81.899 9.899 84.243 12.243L107.757 35.757C110.101 38.101 112 42.686 112 46L112 106C112 113.732 105.732 120 98 120L30 120C22.268 120 16 113.732 16 106Z"/></clipPath>
     <path d="M16 22C16 14.268 22.268 8 30 8L74 8C77.314 8 81.899 9.899 84.243 12.243L107.757 35.757C110.101 38.101 112 42.686 112 46L112 106C112 113.732 105.732 120 98 120L30 120C22.268 120 16 113.732 16 106Z" fill="none" stroke="#000" stroke-opacity="0.26" stroke-width="6" clip-path="url(#page)"/>
-    <path d="M52 60L34 80L52 100M76 60L94 80L76 100" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="48,60 28,80 48,100" fill="none" stroke="currentColor" stroke-width="12" stroke-linejoin="round" stroke-linecap="round"/>
+    <polyline points="80,60 100,80 80,100" fill="none" stroke="currentColor" stroke-width="12" stroke-linejoin="round" stroke-linecap="round"/>
+    <line x1="70.4" y1="54.4" x2="57.6" y2="105.6" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
 </svg>
