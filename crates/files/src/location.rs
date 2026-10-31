@@ -582,7 +582,10 @@ pub fn subfolders(dir: &Path, limit: usize, cancel: &Cancel) -> Vec<Candidate> {
             true
         };
         if is_dir {
-            out.push(Candidate { name: name.text.clone(), is_dir: true });
+            out.push(Candidate {
+                name: name.text.clone(),
+                is_dir: true,
+            });
             if out.len() == limit {
                 break;
             }
@@ -622,7 +625,9 @@ impl std::fmt::Display for CreateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CreateError::Exists => f.write_str("Something with that name already exists."),
-            CreateError::Permission => f.write_str("You do not have permission to create a folder here."),
+            CreateError::Permission => {
+                f.write_str("You do not have permission to create a folder here.")
+            }
             CreateError::Invalid(error) => error.fmt(f),
             CreateError::Other(detail) => write!(f, "The folder could not be created: {detail}"),
         }
@@ -722,7 +727,11 @@ mod tests {
     }
 
     fn names(completion: &Completion) -> Vec<&str> {
-        completion.candidates.iter().map(|c| c.name.as_str()).collect()
+        completion
+            .candidates
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect()
     }
 
     #[test]
@@ -730,28 +739,66 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("bingux-files-rank-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        for name in ["report10.txt", "report2.txt", "Report1.txt", "my-report.txt", "other.txt", ".report-hidden"] {
+        for name in [
+            "report10.txt",
+            "report2.txt",
+            "Report1.txt",
+            "my-report.txt",
+            "other.txt",
+            ".report-hidden",
+        ] {
             fs::write(dir.join(name), b"").unwrap();
         }
         let mut completer = Completer::new();
-        let found = completer.complete("report", &dir, &dir, CompleteOptions::default(), &Cancel::new());
-        assert_eq!(names(&found), ["report2.txt", "report10.txt", "Report1.txt", "my-report.txt"]);
+        let found = completer.complete(
+            "report",
+            &dir,
+            &dir,
+            CompleteOptions::default(),
+            &Cancel::new(),
+        );
+        assert_eq!(
+            names(&found),
+            [
+                "report2.txt",
+                "report10.txt",
+                "Report1.txt",
+                "my-report.txt"
+            ]
+        );
         assert_eq!(found.prefix_matches, 3);
         assert_eq!(found.common, "report");
         assert!(!found.truncated && !found.incomplete);
-        let limited = completer.complete("report", &dir, &dir, CompleteOptions { limit: 2, ..Default::default() }, &Cancel::new());
+        let limited = completer.complete(
+            "report",
+            &dir,
+            &dir,
+            CompleteOptions {
+                limit: 2,
+                ..Default::default()
+            },
+            &Cancel::new(),
+        );
         assert_eq!(names(&limited), ["report2.txt", "report10.txt"]);
         assert!(limited.truncated);
-        let dotted = completer.complete(".rep", &dir, &dir, CompleteOptions::default(), &Cancel::new());
+        let dotted = completer.complete(
+            ".rep",
+            &dir,
+            &dir,
+            CompleteOptions::default(),
+            &Cancel::new(),
+        );
         assert_eq!(names(&dotted), [".report-hidden"]);
-        let nothing = completer.complete("zz", &dir, &dir, CompleteOptions::default(), &Cancel::new());
+        let nothing =
+            completer.complete("zz", &dir, &dir, CompleteOptions::default(), &Cancel::new());
         assert!(nothing.candidates.is_empty());
         let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn only_folders_includes_links_to_folders() {
-        let dir = std::env::temp_dir().join(format!("bingux-files-dirsonly-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("bingux-files-dirsonly-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("alpha")).unwrap();
         fs::write(dir.join("alpine.txt"), b"").unwrap();
@@ -760,7 +807,10 @@ mod tests {
         let found = complete(&format!("{}/al", dir.display()), &dir, &dir, true);
         assert_eq!(names(&found), ["al-link", "alpha"]);
         let subs = subfolders(&dir, 10, &Cancel::new());
-        assert_eq!(subs.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["al-link", "alpha"]);
+        assert_eq!(
+            subs.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+            ["al-link", "alpha"]
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -771,10 +821,18 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         assert_eq!(create_dir(&dir, " New ").unwrap(), dir.join("New"));
         assert_eq!(create_dir(&dir, "New"), Err(CreateError::Exists));
-        assert_eq!(create_dir(&dir, ""), Err(CreateError::Invalid(NameError::Empty)));
-        assert_eq!(create_dir(&dir, "a/b"), Err(CreateError::Invalid(NameError::Invalid)));
-        assert_eq!(create_dir(&dir, ".."), Err(CreateError::Invalid(NameError::Reserved)));
+        assert_eq!(
+            create_dir(&dir, ""),
+            Err(CreateError::Invalid(NameError::Empty))
+        );
+        assert_eq!(
+            create_dir(&dir, "a/b"),
+            Err(CreateError::Invalid(NameError::Invalid))
+        );
+        assert_eq!(
+            create_dir(&dir, ".."),
+            Err(CreateError::Invalid(NameError::Reserved))
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 }
-

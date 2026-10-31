@@ -159,11 +159,15 @@ pub enum Event {
     Kind(MountKind),
     /// The cache's entries, shown at once. They may be out of date until
     /// [`Event::Done`]. Replaces whatever the listing held.
-    Cached { entries: Vec<Entry> },
+    Cached {
+        entries: Vec<Entry>,
+    },
     /// More entries, appended. Only sent when no cache was shown.
     Batch(Vec<Entry>),
     /// The folder has been read (or confirmed unchanged).
-    Done { total: usize },
+    Done {
+        total: usize,
+    },
     /// The folder differs from what was shown: patch, do not rebuild.
     Diff(Diff),
     /// Sizes and times for entries.
@@ -245,7 +249,10 @@ impl Load {
     /// [`Event::Kind`] event, about a millisecond away) it is the careful
     /// one for [`MountKind::Other`]: no thumbnails, no reading of content.
     pub fn policy(&self) -> Policy {
-        self.policy.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
+        self.policy
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
     }
 
     /// Ask for sizes and times of these entries (indices into `listing`):
@@ -318,11 +325,21 @@ pub fn open(
     on_event: impl FnMut(Event) + Send + 'static,
 ) -> Load {
     let policy = Arc::new(Mutex::new(
-        options.policy.clone().unwrap_or_else(|| Policy::for_kind(MountKind::Other)),
+        options
+            .policy
+            .clone()
+            .unwrap_or_else(|| Policy::for_kind(MountKind::Other)),
     ));
     let (tx, rx) = mpsc::channel();
     let cancel = Cancel::new();
-    let state = Loader::new(path.to_path_buf(), options, policy.clone(), tx.clone(), cancel.clone(), Box::new(on_event));
+    let state = Loader::new(
+        path.to_path_buf(),
+        options,
+        policy.clone(),
+        tx.clone(),
+        cancel.clone(),
+        Box::new(on_event),
+    );
     let spawned = thread::Builder::new()
         .name("bingux-files-load".into())
         .spawn(move || state.run(rx));
@@ -359,7 +376,10 @@ struct StatQueue {
 
 impl StatQueue {
     fn push(&self, job: Job, urgent: bool) {
-        let mut queues = self.queues.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut queues = self
+            .queues
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if urgent {
             queues.high.push_back(job);
         } else {
@@ -369,7 +389,10 @@ impl StatQueue {
     }
 
     fn close(&self) {
-        let mut queues = self.queues.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut queues = self
+            .queues
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         queues.closed = true;
         queues.high.clear();
         queues.low.clear();
@@ -379,7 +402,10 @@ impl StatQueue {
     /// The newest urgent job, else the oldest background one. `None` once
     /// closed.
     fn pop(&self) -> Option<Job> {
-        let mut queues = self.queues.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut queues = self
+            .queues
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         loop {
             if queues.closed {
                 return None;
@@ -484,7 +510,10 @@ impl Loader {
         cancel: Cancel,
         on_event: Box<dyn FnMut(Event) + Send>,
     ) -> Loader {
-        let policy = shared_policy.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
+        let policy = shared_policy
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
         // A bin's own listing carries what its info files say, which the cache
         // does not keep, so it is always read.
         let cache = (options.use_cache && crate::ops::BinFolder::of(&path).is_none())
@@ -539,13 +568,19 @@ impl Loader {
     }
 
     fn total(&self) -> usize {
-        if self.lazy.is_some() { self.cached_len } else { self.master.entries.len() }
+        if self.lazy.is_some() {
+            self.cached_len
+        } else {
+            self.master.entries.len()
+        }
     }
 
     /// Decode the cached entries into the loader's own copy. Done after the
     /// view has been given its copy, and only when something needs it.
     fn ensure_master(&mut self) {
-        let Some(bytes) = self.lazy.take() else { return };
+        let Some(bytes) = self.lazy.take() else {
+            return;
+        };
         let Some(cache) = &self.cache else { return };
         if let Some(cached) = cache.decode(&bytes, &self.path) {
             self.verified = vec![false; cached.entries.len()];
@@ -560,7 +595,9 @@ impl Loader {
         let hint = if self.options.force_refresh {
             None
         } else {
-            self.cache.as_ref().and_then(|cache| cache.peek_stamp(&self.path))
+            self.cache
+                .as_ref()
+                .and_then(|cache| cache.peek_stamp(&self.path))
         };
         self.start_read(hint);
         if let Some(cache) = self.cache.clone()
@@ -576,7 +613,9 @@ impl Loader {
                     // decodes its own copy later, off the way to first paint.
                     self.master.revision += 1;
                     self.master.from_cache = true;
-                    (self.on_event)(Event::Cached { entries: cached.entries });
+                    (self.on_event)(Event::Cached {
+                        entries: cached.entries,
+                    });
                     self.lazy = Some(bytes);
                 }
                 None => cache.discard_if_damaged(&self.path, &bytes),
@@ -615,8 +654,15 @@ impl Loader {
             Msg::Kind(generation, kind) => {
                 if generation == self.generation && (!self.kind_sent || kind != self.master.mount) {
                     self.kind_sent = true;
-                    self.policy = self.options.policy.clone().unwrap_or_else(|| Policy::for_kind(kind));
-                    *self.shared_policy.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = self.policy.clone();
+                    self.policy = self
+                        .options
+                        .policy
+                        .clone()
+                        .unwrap_or_else(|| Policy::for_kind(kind));
+                    *self
+                        .shared_policy
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner()) = self.policy.clone();
                     self.emit(Event::Kind(kind));
                 }
             }
@@ -634,7 +680,12 @@ impl Loader {
                     Mode::Diff => self.fresh.extend(batch),
                 }
             }
-            Msg::ReadDone { generation, stamp, unchanged, result } => {
+            Msg::ReadDone {
+                generation,
+                stamp,
+                unchanged,
+                result,
+            } => {
                 if generation != self.generation {
                     return;
                 }
@@ -694,7 +745,10 @@ impl Loader {
 
     fn tick(&mut self) {
         let busy = self.reading || self.stats_in_flight > 0;
-        if busy && !self.unresponsive_sent && self.last_activity.elapsed() > self.policy.unresponsive_after {
+        if busy
+            && !self.unresponsive_sent
+            && self.last_activity.elapsed() > self.policy.unresponsive_after
+        {
             self.unresponsive_sent = true;
             self.emit(Event::Unresponsive);
         }
@@ -706,7 +760,10 @@ impl Loader {
             self.gave_up = true;
             self.emit(Event::Failed(ListError::Unresponsive));
         }
-        if self.dirty && self.last_stat.elapsed() > Duration::from_millis(750) && self.stats_in_flight == 0 {
+        if self.dirty
+            && self.last_stat.elapsed() > Duration::from_millis(750)
+            && self.stats_in_flight == 0
+        {
             self.save_if_dirty();
         }
         if self.options.watch
@@ -720,9 +777,11 @@ impl Loader {
             self.polling = true;
             let path = self.path.clone();
             let tx = self.tx.clone();
-            let _ = thread::Builder::new().name("bingux-files-poll".into()).spawn(move || {
-                let _ = tx.send(Msg::Polled(stat::dir_stamp(&path)));
-            });
+            let _ = thread::Builder::new()
+                .name("bingux-files-poll".into())
+                .spawn(move || {
+                    let _ = tx.send(Msg::Polled(stat::dir_stamp(&path)));
+                });
         }
     }
 
@@ -744,12 +803,16 @@ impl Loader {
         let cancel = self.read_cancel.clone();
         let guess = self.policy.kind;
         let forced = self.options.policy.clone();
-        let spawned = thread::Builder::new().name("bingux-files-read".into()).spawn(move || {
-            read_job(&path, generation, cached_stamp, guess, forced, &cancel, &tx);
-        });
+        let spawned = thread::Builder::new()
+            .name("bingux-files-read".into())
+            .spawn(move || {
+                read_job(&path, generation, cached_stamp, guess, forced, &cancel, &tx);
+            });
         if spawned.is_err() {
             self.reading = false;
-            self.emit(Event::Failed(ListError::Other("no thread to read the folder".into())));
+            self.emit(Event::Failed(ListError::Other(
+                "no thread to read the folder".into(),
+            )));
         }
     }
 
@@ -776,7 +839,12 @@ impl Loader {
         self.emit(Event::Stopped);
     }
 
-    fn read_done(&mut self, stamp: Option<DirStamp>, unchanged: bool, result: Result<(), ListError>) {
+    fn read_done(
+        &mut self,
+        stamp: Option<DirStamp>,
+        unchanged: bool,
+        result: Result<(), ListError>,
+    ) {
         if let Err(error) = result {
             if error != ListError::Cancelled {
                 self.emit(Event::Failed(error));
@@ -831,7 +899,11 @@ impl Loader {
         };
         let had_removals = !diff.removed.is_empty();
         let added: Vec<bool> = diff.added.iter().map(|entry| entry.sized).collect();
-        let changed_names: HashSet<String> = diff.changed.iter().map(|entry| entry.name.clone()).collect();
+        let changed_names: HashSet<String> = diff
+            .changed
+            .iter()
+            .map(|entry| entry.name.clone())
+            .collect();
         self.emit(Event::Diff(diff));
         if had_removals {
             self.verified = self
@@ -997,7 +1069,10 @@ fn whole_seconds(time: Option<std::time::SystemTime>) -> Option<i64> {
 
 /// What `new` has that `old` does not, and the reverse.
 pub(crate) fn diff_entries(old: &[Entry], new: Vec<Entry>) -> Diff {
-    let at: HashMap<&str, &Entry> = old.iter().map(|entry| (entry.name.as_str(), entry)).collect();
+    let at: HashMap<&str, &Entry> = old
+        .iter()
+        .map(|entry| (entry.name.as_str(), entry))
+        .collect();
     let mut seen: HashSet<&str> = HashSet::with_capacity(new.len());
     let mut diff = Diff::default();
     for entry in &new {
@@ -1026,7 +1101,10 @@ pub(crate) fn diff_entries(old: &[Entry], new: Vec<Entry>) -> Diff {
                     let mut replacement = entry.clone();
                     if !replacement.sized && known.sized && !kind_differs {
                         let keep = (*known).clone();
-                        replacement = Entry { hidden: entry.hidden, ..keep };
+                        replacement = Entry {
+                            hidden: entry.hidden,
+                            ..keep
+                        };
                     }
                     diff.changed.push(replacement);
                 }
@@ -1068,7 +1146,11 @@ fn read_job(
     // table has no such device (btrfs gives each subvolume its own), the
     // path's text is the best left.
     let kind = mounts::kind_for_device(stamp.dev).unwrap_or_else(|| {
-        if guess == MountKind::Other { mounts::kind_of(path) } else { guess }
+        if guess == MountKind::Other {
+            mounts::kind_of(path)
+        } else {
+            guess
+        }
     });
     let _ = tx.send(Msg::Kind(generation, kind));
     if cached_stamp == Some(stamp) {
@@ -1081,9 +1163,13 @@ fn read_job(
         return;
     }
     let policy = forced.unwrap_or_else(|| Policy::for_kind(kind));
-    let result = read_folder(path, policy.stat_all, policy.workers, cancel, &mut |batch| {
-        !cancel.is_cancelled() && tx.send(Msg::Entries(generation, batch)).is_ok()
-    });
+    let result = read_folder(
+        path,
+        policy.stat_all,
+        policy.workers,
+        cancel,
+        &mut |batch| !cancel.is_cancelled() && tx.send(Msg::Entries(generation, batch)).is_ok(),
+    );
     let _ = tx.send(Msg::ReadDone {
         generation,
         stamp: Some(stamp),
@@ -1099,7 +1185,8 @@ mod tests {
     use std::fs;
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("bingux-files-loader-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("bingux-files-loader-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -1117,7 +1204,9 @@ mod tests {
     fn until_done(receiver: &Receiver<Event>, listing: &mut Listing) -> Vec<Event> {
         let mut seen = Vec::new();
         loop {
-            let event = receiver.recv_timeout(Duration::from_secs(10)).expect("no event");
+            let event = receiver
+                .recv_timeout(Duration::from_secs(10))
+                .expect("no event");
             listing.apply(&event);
             let end = matches!(event, Event::Done { .. } | Event::Failed(_));
             seen.push(event);
@@ -1170,7 +1259,11 @@ mod tests {
         assert!(!seen.iter().any(|e| matches!(e, Event::Cached { .. })));
         assert_eq!(listing.entries.len(), 301);
         assert!(listing.complete && !listing.from_cache);
-        let file = listing.entries.iter().find(|e| e.name == "file007.txt").unwrap();
+        let file = listing
+            .entries
+            .iter()
+            .find(|e| e.name == "file007.txt")
+            .unwrap();
         assert_eq!((file.size, file.sized, file.kind), (7, true, Kind::File));
 
         // Second open: cached entries first, then confirmed unchanged.
@@ -1179,7 +1272,11 @@ mod tests {
         let mut again = Listing::new(&dir);
         let seen = until_done(&events, &mut again);
         assert!(seen.iter().any(|e| matches!(e, Event::Cached { .. })));
-        assert!(!seen.iter().any(|e| matches!(e, Event::Batch(_) | Event::Diff(_))));
+        assert!(
+            !seen
+                .iter()
+                .any(|e| matches!(e, Event::Batch(_) | Event::Diff(_)))
+        );
         assert_eq!(names(&again), names(&listing));
         assert!(again.complete && !again.from_cache);
         let _ = fs::remove_dir_all(&root);
@@ -1214,10 +1311,30 @@ mod tests {
             })
             .expect("a diff");
         assert_eq!(diff.removed, ["b.txt"]);
-        assert_eq!(diff.added.iter().map(|e| e.name.as_str()).collect::<Vec<_>>(), ["d.txt"]);
-        assert_eq!(diff.changed.iter().map(|e| (e.name.as_str(), e.size)).collect::<Vec<_>>(), [("a.txt", 10)]);
+        assert_eq!(
+            diff.added
+                .iter()
+                .map(|e| e.name.as_str())
+                .collect::<Vec<_>>(),
+            ["d.txt"]
+        );
+        assert_eq!(
+            diff.changed
+                .iter()
+                .map(|e| (e.name.as_str(), e.size))
+                .collect::<Vec<_>>(),
+            [("a.txt", 10)]
+        );
         assert_eq!(names(&second), ["a.txt", "c.txt", "d.txt"]);
-        assert_eq!(second.entries.iter().find(|e| e.name == "a.txt").unwrap().size, 10);
+        assert_eq!(
+            second
+                .entries
+                .iter()
+                .find(|e| e.name == "a.txt")
+                .unwrap()
+                .size,
+            10
+        );
         assert_eq!(second.revision, 2);
         let _ = fs::remove_dir_all(&root);
     }
@@ -1241,7 +1358,12 @@ mod tests {
         until_done(&events, &mut listing);
         // The mount table says local for a temp dir, but the policy was forced.
         assert_eq!(listing.entries.len(), 40);
-        assert!(listing.entries.iter().all(|entry| entry.sized || entry.mode == 0));
+        assert!(
+            listing
+                .entries
+                .iter()
+                .all(|entry| entry.sized || entry.mode == 0)
+        );
         load.want_stats(&listing, &[3, 4, 5]);
         load.want_stats(&listing, &[3, 4, 5]);
         let mut sized = 0;
@@ -1254,7 +1376,15 @@ mod tests {
         }
         // Only the asked-for rows were read, each once.
         assert_eq!(sized, 3);
-        assert_eq!(listing.entries.iter().filter(|e| e.sized && e.mode != 0).count() >= 3, true);
+        assert_eq!(
+            listing
+                .entries
+                .iter()
+                .filter(|e| e.sized && e.mode != 0)
+                .count()
+                >= 3,
+            true
+        );
         load.stat_all();
         let mut all = 0;
         while all < 37 {
@@ -1296,7 +1426,10 @@ mod tests {
         let (_load, events) = collect(&root.join("nope"), options(&root.join("cache")));
         let mut listing = Listing::new(root.join("nope"));
         let seen = until_done(&events, &mut listing);
-        assert!(matches!(seen.last(), Some(Event::Failed(ListError::NotFound))));
+        assert!(matches!(
+            seen.last(),
+            Some(Event::Failed(ListError::NotFound))
+        ));
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -1314,7 +1447,9 @@ mod tests {
         std::thread::sleep(Duration::from_millis(100));
         fs::write(dir.join("two"), b"22").unwrap();
         loop {
-            let event = events.recv_timeout(Duration::from_secs(10)).expect("a diff");
+            let event = events
+                .recv_timeout(Duration::from_secs(10))
+                .expect("a diff");
             listing.apply(&event);
             if matches!(event, Event::Diff(_)) {
                 break;
@@ -1348,7 +1483,9 @@ mod tests {
         let mut saw_unresponsive = false;
         let started = Instant::now();
         while !saw_unresponsive {
-            let event = events.recv_timeout(Duration::from_secs(5)).expect("no Unresponsive event");
+            let event = events
+                .recv_timeout(Duration::from_secs(5))
+                .expect("no Unresponsive event");
             saw_unresponsive = event == Event::Unresponsive;
             listing.apply_event(event);
         }
@@ -1422,14 +1559,23 @@ mod tests {
         while let Ok(message) = rx.recv_timeout(Duration::from_millis(300)) {
             loader.handle(message);
         }
-        assert_eq!(*seen.lock().unwrap(), [Event::Stopped], "no batch and no Done after the stop");
+        assert_eq!(
+            *seen.lock().unwrap(),
+            [Event::Stopped],
+            "no batch and no Done after the stop"
+        );
         assert!(loader.master.entries.is_empty());
 
         // Reading again, as F5 does, works: the whole folder arrives.
         loader.restart_read();
         let mut listing = Listing::new(&dir);
         let deadline = Instant::now() + Duration::from_secs(10);
-        while !seen.lock().unwrap().iter().any(|event| matches!(event, Event::Done { .. })) {
+        while !seen
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| matches!(event, Event::Done { .. }))
+        {
             assert!(Instant::now() < deadline, "no Done after the second read");
             if let Ok(message) = rx.recv_timeout(Duration::from_millis(50)) {
                 loader.handle(message);
@@ -1462,14 +1608,19 @@ mod tests {
         load.stop_read();
         let mut listing = Listing::new(&dir);
         loop {
-            let event = events.recv_timeout(Duration::from_secs(3)).expect("a Stopped event");
+            let event = events
+                .recv_timeout(Duration::from_secs(3))
+                .expect("a Stopped event");
             let stopped = event == Event::Stopped;
             listing.apply_event(event);
             if stopped {
                 break;
             }
         }
-        assert!(asked.elapsed() < Duration::from_secs(1), "it does not wait for the stuck read");
+        assert!(
+            asked.elapsed() < Duration::from_secs(1),
+            "it does not wait for the stuck read"
+        );
         assert!(listing.stopped && !listing.complete && listing.entries.is_empty());
         // Let the stuck read go: its answers must not come through.
         drop(fs::OpenOptions::new().write(true).open(&pipe).unwrap());

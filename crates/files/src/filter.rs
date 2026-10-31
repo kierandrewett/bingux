@@ -121,10 +121,7 @@ impl Filter {
     }
 
     pub fn archives() -> Self {
-        Filter::parse(
-            "Archives",
-            "zip tar tar.gz tgz gz xz bz2 zst 7z rar iso",
-        )
+        Filter::parse("Archives", "zip tar tar.gz tgz gz xz bz2 zst 7z rar iso")
     }
 
     pub fn text() -> Self {
@@ -263,13 +260,17 @@ impl Matcher {
         }
         let bytes = name.as_bytes();
         if self.suffixes.iter().any(|suffix| {
-            bytes.len() >= suffix.len() && bytes[bytes.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
+            bytes.len() >= suffix.len()
+                && bytes[bytes.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
         }) {
             return true;
         }
         if !self.groups.is_empty()
             && let Some((kind, _)) = mime.split_once('/')
-            && self.groups.iter().any(|group| kind.eq_ignore_ascii_case(group))
+            && self
+                .groups
+                .iter()
+                .any(|group| kind.eq_ignore_ascii_case(group))
         {
             return true;
         }
@@ -458,7 +459,10 @@ mod tests {
                 Rule::Glob("report-??.txt".into()),
             ]
         );
-        assert_eq!(filter.patterns_text(), "*.png, *.JPG, image/webp, *.gif, report-??.txt");
+        assert_eq!(
+            filter.patterns_text(),
+            "*.png, *.JPG, image/webp, *.gif, report-??.txt"
+        );
         assert!(Filter::parse("none", " , ; ").is_all());
     }
 
@@ -474,7 +478,9 @@ mod tests {
 
     #[test]
     fn presets_pick_the_right_files() {
-        let names = ["a.PNG", "b.mp3", "c.mkv", "d.pdf", "e.tar.gz", "f.rs", "g.txt", "h"];
+        let names = [
+            "a.PNG", "b.mp3", "c.mkv", "d.pdf", "e.tar.gz", "f.rs", "g.txt", "h",
+        ];
         let shown = |filter: &Filter| -> Vec<&str> {
             let matcher = filter.matcher();
             names
@@ -502,7 +508,15 @@ mod tests {
             Filter::new("empty"),
         ];
         let names = [
-            "A.PNG", "photo.jpg", "beta.txt", "report-12.md", "x.ä", "x.Äö", ".png", "png", "d.pdf",
+            "A.PNG",
+            "photo.jpg",
+            "beta.txt",
+            "report-12.md",
+            "x.ä",
+            "x.Äö",
+            ".png",
+            "png",
+            "d.pdf",
             "a very long name that goes on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on.txt",
         ];
         for filter in &filters {

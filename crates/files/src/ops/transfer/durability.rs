@@ -86,7 +86,10 @@ fn a_move_on_one_drive_is_one_rename() {
     assert_eq!(fs::metadata(dest.join("a.txt")).unwrap().ino(), file_inode);
     assert_eq!(fs::metadata(dest.join("d")).unwrap().ino(), dir_inode);
     assert!(part_files(temp.path()).is_empty());
-    assert!(recorder.calls().is_empty(), "an internal disk is not flushed");
+    assert!(
+        recorder.calls().is_empty(),
+        "an internal disk is not flushed"
+    );
 }
 
 #[test]
@@ -106,9 +109,18 @@ fn a_move_on_a_device_writes_out_both_folders_it_changed() {
     )
     .unwrap();
     let calls = recorder.calls();
-    assert!(calls.contains(&Call::Dir(temp.path().join("stick/a"))), "{calls:?}");
-    assert!(calls.contains(&Call::Dir(temp.path().join("stick/b"))), "{calls:?}");
-    assert_eq!(calls.last(), Some(&Call::Filesystem(temp.path().join("stick"))));
+    assert!(
+        calls.contains(&Call::Dir(temp.path().join("stick/a"))),
+        "{calls:?}"
+    );
+    assert!(
+        calls.contains(&Call::Dir(temp.path().join("stick/b"))),
+        "{calls:?}"
+    );
+    assert_eq!(
+        calls.last(),
+        Some(&Call::Filesystem(temp.path().join("stick")))
+    );
     assert!(
         !calls.iter().any(|call| matches!(call, Call::File(_))),
         "no data was written, so no file is synced"
@@ -196,7 +208,10 @@ fn a_move_between_drives_flushes_then_checks_then_removes_the_source() {
         assert_eq!(seen.last(), Some(&false));
     }
     let calls = recorder.calls();
-    let first_dir = calls.iter().position(|c| matches!(c, Call::Dir(_))).unwrap();
+    let first_dir = calls
+        .iter()
+        .position(|c| matches!(c, Call::Dir(_)))
+        .unwrap();
     let last_file_before_sync = calls
         .iter()
         .position(|c| matches!(c, Call::Filesystem(_)))
@@ -295,7 +310,10 @@ fn a_short_copy_is_caught_before_the_source_is_removed() {
         &ConflictPolicy::Skip,
     )
     .unwrap_err();
-    assert!(error.to_string().contains("did not arrive complete"), "{error}");
+    assert!(
+        error.to_string().contains("did not arrive complete"),
+        "{error}"
+    );
     assert_eq!(read(case.temp.path().join("src/f.txt")), "ffff");
 }
 
@@ -343,7 +361,14 @@ fn a_move_between_drives_keeps_what_was_skipped() {
         }
     }));
     let recorder = Recorder::default();
-    run(&engine(&recorder, &lazy, 1, true), true, &[src.clone()], &dest, &policy).unwrap();
+    run(
+        &engine(&recorder, &lazy, 1, true),
+        true,
+        &[src.clone()],
+        &dest,
+        &policy,
+    )
+    .unwrap();
     assert_eq!(read(dest.join("d/fresh.txt")), "fresh");
     assert_eq!(read(dest.join("d/clash.txt")), "dest clash");
     assert!(!src.join("fresh.txt").exists());
@@ -379,8 +404,14 @@ fn a_file_has_no_real_name_until_it_is_whole() {
     let seen = seen.lock().unwrap();
     assert_eq!(seen.len(), 1);
     let (name, real_name_existed) = &seen[0];
-    assert!(name.starts_with(".bingux-") && name.ends_with(".part"), "{name}");
-    assert!(!real_name_existed, "the real name must not exist while it is written");
+    assert!(
+        name.starts_with(".bingux-") && name.ends_with(".part"),
+        "{name}"
+    );
+    assert!(
+        !real_name_existed,
+        "the real name must not exist while it is written"
+    );
     assert_eq!(read(dest.join("a.txt")), "alpha");
     assert!(part_files(&dest).is_empty());
 }
@@ -401,7 +432,9 @@ fn replacing_a_file_swaps_it_in_whole() {
     recorder.on_call(move |call| {
         if matches!(call, Call::File(_)) {
             // While the new data is being made durable the old file is intact.
-            sink.lock().unwrap().push(fs::read_to_string(&watched).unwrap());
+            sink.lock()
+                .unwrap()
+                .push(fs::read_to_string(&watched).unwrap());
         }
         Ok(())
     });
@@ -444,9 +477,18 @@ fn copying_to_a_device_writes_files_then_folders_then_the_drive() {
     let calls = recorder.calls();
     let files = calls.iter().filter(|c| matches!(c, Call::File(_))).count();
     assert_eq!(files, 6, "every file is fsynced: {calls:?}");
-    let last_file = calls.iter().rposition(|c| matches!(c, Call::File(_))).unwrap();
-    let first_dir = calls.iter().position(|c| matches!(c, Call::Dir(_))).unwrap();
-    assert!(last_file < first_dir, "folders after their files: {calls:?}");
+    let last_file = calls
+        .iter()
+        .rposition(|c| matches!(c, Call::File(_)))
+        .unwrap();
+    let first_dir = calls
+        .iter()
+        .position(|c| matches!(c, Call::Dir(_)))
+        .unwrap();
+    assert!(
+        last_file < first_dir,
+        "folders after their files: {calls:?}"
+    );
     assert_eq!(
         calls.last(),
         Some(&Call::Filesystem(dest.clone())),
@@ -506,7 +548,14 @@ fn copying_on_an_internal_disk_does_not_wait_for_the_disk() {
     let a = temp.write("src/a.txt", "a");
     let dest = temp.dir("dest");
     let recorder = Recorder::default();
-    run(&engine(&recorder, &lazy, 2, false), false, &[a], &dest, &ConflictPolicy::Skip).unwrap();
+    run(
+        &engine(&recorder, &lazy, 2, false),
+        false,
+        &[a],
+        &dest,
+        &ConflictPolicy::Skip,
+    )
+    .unwrap();
     assert!(recorder.calls().is_empty());
     assert_eq!(read(dest.join("a.txt")), "a");
 }
@@ -676,7 +725,14 @@ fn a_sparse_file_stays_sparse_when_copied() {
     }
     let dest = temp.dir("dest");
     let progress = Progress::new();
-    copy(&[image], &dest, &ConflictPolicy::Skip, &progress, &Cancel::new()).unwrap();
+    copy(
+        &[image],
+        &dest,
+        &ConflictPolicy::Skip,
+        &progress,
+        &Cancel::new(),
+    )
+    .unwrap();
     let copy = fs::metadata(dest.join("disk.img")).unwrap();
     assert_eq!(copy.len(), length);
     assert!(
@@ -705,7 +761,13 @@ fn delete_on_a_device_writes_out_the_folders() {
     .unwrap();
     assert!(!doomed.exists());
     let calls = recorder.calls();
-    assert!(calls.contains(&Call::Dir(temp.path().join("stick"))), "{calls:?}");
-    assert_eq!(calls.last(), Some(&Call::Filesystem(temp.path().join("stick"))));
+    assert!(
+        calls.contains(&Call::Dir(temp.path().join("stick"))),
+        "{calls:?}"
+    );
+    assert_eq!(
+        calls.last(),
+        Some(&Call::Filesystem(temp.path().join("stick")))
+    );
     assert_eq!(progress.flushed_to(), Some("STICK".to_owned()));
 }

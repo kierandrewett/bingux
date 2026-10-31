@@ -327,7 +327,10 @@ pub(super) fn copy_xattrs(input: &File, output: &File) {
         return;
     }
     names.truncate(size as usize);
-    for name in names.split(|byte| *byte == 0).filter(|name| !name.is_empty()) {
+    for name in names
+        .split(|byte| *byte == 0)
+        .filter(|name| !name.is_empty())
+    {
         if name.starts_with(b"security.selinux") {
             continue;
         }
@@ -366,8 +369,21 @@ mod tests {
         let meta = input.metadata().unwrap();
         let progress = Progress::new();
         // A small chunk makes the loops run more than once.
-        let hints = if kernel { Hints::new() } else { Hints::memory_only() };
-        copy_data(&input, &output, &meta, 64 << 10, &progress, &|| Ok(()), &hints).unwrap();
+        let hints = if kernel {
+            Hints::new()
+        } else {
+            Hints::memory_only()
+        };
+        copy_data(
+            &input,
+            &output,
+            &meta,
+            64 << 10,
+            &progress,
+            &|| Ok(()),
+            &hints,
+        )
+        .unwrap();
         progress
     }
 
@@ -456,7 +472,15 @@ mod tests {
             }
         };
         let progress = Progress::new();
-        let result = copy_data(&input, &output, &meta, 4096, &progress, &check, &Hints::memory_only());
+        let result = copy_data(
+            &input,
+            &output,
+            &meta,
+            4096,
+            &progress,
+            &check,
+            &Hints::memory_only(),
+        );
         assert_eq!(result, Err(OpError::Cancelled));
         assert_eq!(progress.bytes_done(), 2 * 4096);
     }
@@ -470,7 +494,15 @@ mod tests {
         let output = File::open(&target).unwrap();
         let name = CString::new("user.bingux.test").unwrap();
         // SAFETY: open descriptor, live buffers.
-        let set = unsafe { libc::fsetxattr(input.as_raw_fd(), name.as_ptr(), b"tag".as_ptr().cast(), 3, 0) };
+        let set = unsafe {
+            libc::fsetxattr(
+                input.as_raw_fd(),
+                name.as_ptr(),
+                b"tag".as_ptr().cast(),
+                3,
+                0,
+            )
+        };
         if set != 0 {
             eprintln!("skipped: this file system has no user xattrs");
             return;
@@ -479,7 +511,12 @@ mod tests {
         let mut value = [0u8; 8];
         // SAFETY: as above.
         let got = unsafe {
-            libc::fgetxattr(output.as_raw_fd(), name.as_ptr(), value.as_mut_ptr().cast(), value.len())
+            libc::fgetxattr(
+                output.as_raw_fd(),
+                name.as_ptr(),
+                value.as_mut_ptr().cast(),
+                value.len(),
+            )
         };
         assert_eq!(&value[..got.max(0) as usize], b"tag");
     }

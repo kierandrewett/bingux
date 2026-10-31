@@ -81,8 +81,9 @@ fn kind_of(archive: &Path) -> Result<(Kind, String, usize), OpError> {
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| OpError::Other("That is not an archive.".into()))?;
-    let (kind, ending) = classify(name)
-        .ok_or_else(|| OpError::Unsupported("This kind of archive cannot be opened here.".into()))?;
+    let (kind, ending) = classify(name).ok_or_else(|| {
+        OpError::Unsupported("This kind of archive cannot be opened here.".into())
+    })?;
     Ok((kind, name.to_string(), ending))
 }
 
@@ -163,7 +164,11 @@ fn looks_locked(text: &str) -> bool {
 fn single_top(names: &[String]) -> Option<String> {
     let mut top: Option<&str> = None;
     for name in names {
-        let first = name.trim_start_matches("./").split('/').next().unwrap_or("");
+        let first = name
+            .trim_start_matches("./")
+            .split('/')
+            .next()
+            .unwrap_or("");
         if first.is_empty() {
             continue;
         }
@@ -182,19 +187,29 @@ fn single_top(names: &[String]) -> Option<String> {
 }
 
 fn refuse_unsafe() -> OpError {
-    OpError::Other("The archive has files that would be put outside its folder, so it was not extracted.".into())
+    OpError::Other(
+        "The archive has files that would be put outside its folder, so it was not extracted."
+            .into(),
+    )
 }
 
 /// Look inside `archive` without extracting it. With a `password`, a locked
 /// archive is listed too.
-pub fn inspect(archive: &Path, password: Option<&Password>, cancel: &Cancel) -> Result<Inspection, OpError> {
+pub fn inspect(
+    archive: &Path,
+    password: Option<&Password>,
+    cancel: &Cancel,
+) -> Result<Inspection, OpError> {
     let (kind, name, ending) = kind_of(archive)?;
     let stem = folder_name(&name, ending);
     fs::metadata(archive)?;
     match kind {
         Kind::Tar => {
             let tar = tool::find("tar").ok_or_else(|| missing("tar"))?;
-            let verbose = Spec::new(&tar).nice(true).args(["-t", "-v", "--quoting-style=literal", "-f"]).arg(archive);
+            let verbose = Spec::new(&tar)
+                .nice(true)
+                .args(["-t", "-v", "--quoting-style=literal", "-f"])
+                .arg(archive);
             let (finished, out) = tool::capture(&verbose, cancel, 64 * 1024 * 1024)?;
             if !finished.success() {
                 return Err(finished.sentence("The archive could not be read"));
@@ -203,9 +218,15 @@ pub fn inspect(archive: &Path, password: Option<&Password>, cancel: &Cancel) -> 
             if !tar_links_are_safe(&listing) {
                 return Err(refuse_unsafe());
             }
-            let plain = Spec::new(&tar).nice(true).args(["-t", "--quoting-style=literal", "-f"]).arg(archive);
+            let plain = Spec::new(&tar)
+                .nice(true)
+                .args(["-t", "--quoting-style=literal", "-f"])
+                .arg(archive);
             let (_, names) = tool::capture(&plain, cancel, 64 * 1024 * 1024)?;
-            let names: Vec<String> = String::from_utf8_lossy(&names).lines().map(str::to_string).collect();
+            let names: Vec<String> = String::from_utf8_lossy(&names)
+                .lines()
+                .map(str::to_string)
+                .collect();
             if !names.iter().all(|name| entry_is_safe(name)) {
                 return Err(refuse_unsafe());
             }
@@ -238,7 +259,13 @@ pub fn inspect(archive: &Path, password: Option<&Password>, cancel: &Cancel) -> 
             let entries = parse_seven_listing(&text);
             let names: Vec<String> = entries
                 .iter()
-                .map(|entry| if entry.folder { format!("{}/", entry.path) } else { entry.path.clone() })
+                .map(|entry| {
+                    if entry.folder {
+                        format!("{}/", entry.path)
+                    } else {
+                        entry.path.clone()
+                    }
+                })
                 .collect();
             if !names.iter().all(|name| entry_is_safe(name)) {
                 return Err(refuse_unsafe());
@@ -246,11 +273,16 @@ pub fn inspect(archive: &Path, password: Option<&Password>, cancel: &Cancel) -> 
             // 7-Zip does not say where a link points, so the links are checked
             // after extraction (see `settle`); here, nothing may be written
             // through one.
-            let links: Vec<&str> = entries.iter().filter(|e| e.is_link).map(|e| e.path.as_str()).collect();
-            if entries
+            let links: Vec<&str> = entries
                 .iter()
-                .any(|entry| links.iter().any(|link| entry.path.starts_with(&format!("{link}/"))))
-            {
+                .filter(|e| e.is_link)
+                .map(|e| e.path.as_str())
+                .collect();
+            if entries.iter().any(|entry| {
+                links
+                    .iter()
+                    .any(|link| entry.path.starts_with(&format!("{link}/")))
+            }) {
                 return Err(refuse_unsafe());
             }
             Ok(Inspection {
@@ -264,18 +296,28 @@ pub fn inspect(archive: &Path, password: Option<&Password>, cancel: &Cancel) -> 
         }
         Kind::Zip | Kind::Seven => {
             let unzip = tool::find("unzip").ok_or_else(|| missing("unzip"))?;
-            let list = Spec::new(&unzip).nice(true).args(["-Z1", "--"]).arg(archive);
+            let list = Spec::new(&unzip)
+                .nice(true)
+                .args(["-Z1", "--"])
+                .arg(archive);
             let (finished, out) = tool::capture(&list, cancel, 64 * 1024 * 1024)?;
             if !finished.success() {
                 return Err(finished.sentence("The archive could not be read"));
             }
-            let names: Vec<String> = String::from_utf8_lossy(&out).lines().map(str::to_string).collect();
+            let names: Vec<String> = String::from_utf8_lossy(&out)
+                .lines()
+                .map(str::to_string)
+                .collect();
             if !names.iter().all(|name| entry_is_safe(name)) {
                 return Err(refuse_unsafe());
             }
-            let detail = Spec::new(&unzip).nice(true).args(["-Zv", "--"]).arg(archive);
+            let detail = Spec::new(&unzip)
+                .nice(true)
+                .args(["-Zv", "--"])
+                .arg(archive);
             let (_, text) = tool::capture(&detail, cancel, 64 * 1024 * 1024)?;
-            let locked = String::from_utf8_lossy(&text).contains("file security status:                   encrypted");
+            let locked = String::from_utf8_lossy(&text)
+                .contains("file security status:                   encrypted");
             Ok(Inspection {
                 entries: names.len() as u64,
                 bytes: 0,
@@ -291,7 +333,11 @@ pub fn inspect(archive: &Path, password: Option<&Password>, cancel: &Cancel) -> 
 /// Is `password` right for `archive`? Reads every byte of the locked
 /// entries, so it takes as long as the archive is big. `Ok(false)` is a wrong
 /// password; an error is anything else.
-pub fn check_password(archive: &Path, password: &Password, cancel: &Cancel) -> Result<bool, OpError> {
+pub fn check_password(
+    archive: &Path,
+    password: &Password,
+    cancel: &Cancel,
+) -> Result<bool, OpError> {
     let (kind, ..) = kind_of(archive)?;
     if kind == Kind::Tar {
         return Ok(true);
@@ -412,23 +458,44 @@ fn run_extractor(
 ) -> Result<(), OpError> {
     let mut reported = 0u64;
     let total = info.bytes;
-    let seven_run = kind == Kind::Seven || (kind == Kind::Zip && (options.password.is_some() || info.locked));
+    let seven_run =
+        kind == Kind::Seven || (kind == Kind::Zip && (options.password.is_some() || info.locked));
     let spec = if seven_run {
-        let mut spec = seven_spec(&["x", "-y", "-bsp1", "-bb1"], archive, options.password.as_ref())?;
+        let mut spec = seven_spec(
+            &["x", "-y", "-bsp1", "-bb1"],
+            archive,
+            options.password.as_ref(),
+        )?;
         // `-o` takes its folder joined to it, before the `--`.
         let mut out = std::ffi::OsString::from("-o");
         out.push(scratch.as_os_str());
-        let at = spec.args.iter().position(|arg| arg == "--").unwrap_or(spec.args.len());
+        let at = spec
+            .args
+            .iter()
+            .position(|arg| arg == "--")
+            .unwrap_or(spec.args.len());
         spec.args.insert(at, out);
         spec
     } else if kind == Kind::Zip {
         let unzip = tool::find("unzip").ok_or_else(|| missing("unzip"))?;
-        Spec::new(unzip).nice(true).arg("-n").arg("--").arg(archive).arg("-d").arg(scratch)
+        Spec::new(unzip)
+            .nice(true)
+            .arg("-n")
+            .arg("--")
+            .arg(archive)
+            .arg("-d")
+            .arg(scratch)
     } else {
         let tar = tool::find("tar").ok_or_else(|| missing("tar"))?;
         Spec::new(tar)
             .nice(true)
-            .args(["-x", "-v", "--no-same-owner", "--quoting-style=literal", "-f"])
+            .args([
+                "-x",
+                "-v",
+                "--no-same-owner",
+                "--quoting-style=literal",
+                "-f",
+            ])
             .arg(archive)
             .arg("-C")
             .arg(scratch)
@@ -454,10 +521,15 @@ fn run_extractor(
             }
         } else {
             let text = String::from_utf8_lossy(line);
-            let name = ["  inflating: ", " extracting: ", "   creating: ", "  linking: "]
-                .iter()
-                .find_map(|prefix| text.strip_prefix(prefix))
-                .map(str::trim);
+            let name = [
+                "  inflating: ",
+                " extracting: ",
+                "   creating: ",
+                "  linking: ",
+            ]
+            .iter()
+            .find_map(|prefix| text.strip_prefix(prefix))
+            .map(str::trim);
             match (kind, name) {
                 (Kind::Zip, Some(name)) => {
                     progress.add_files(1);
@@ -521,19 +593,34 @@ fn settle(scratch: &Path, info: &Inspection, options: &UnpackOptions) -> Result<
         };
         let (from, name) = match only_folder {
             Some(path) => {
-                let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
                 (path, name)
             }
             None => (scratch.to_path_buf(), info.stem.clone()),
         };
-        match place(&from, &options.dest_dir, &name, options.overwrite, &mut replaced)? {
+        match place(
+            &from,
+            &options.dest_dir,
+            &name,
+            options.overwrite,
+            &mut replaced,
+        )? {
             Placed::Put(path) => items.push(path),
             Placed::Skipped => skipped += 1,
         }
     } else {
         for entry in top {
             let name = entry.file_name().to_string_lossy().into_owned();
-            match place(&entry.path(), &options.dest_dir, &name, options.overwrite, &mut replaced)? {
+            match place(
+                &entry.path(),
+                &options.dest_dir,
+                &name,
+                options.overwrite,
+                &mut replaced,
+            )? {
                 Placed::Put(path) => items.push(path),
                 Placed::Skipped => skipped += 1,
             }
@@ -572,7 +659,12 @@ mod tests {
     use super::super::testing::{Temp, with_data_home};
     use super::*;
 
-    fn make(temp: &Temp, format: Format, password: Option<&str>, hide: bool) -> Option<(PathBuf, PathBuf)> {
+    fn make(
+        temp: &Temp,
+        format: Format,
+        password: Option<&str>,
+        hide: bool,
+    ) -> Option<(PathBuf, PathBuf)> {
         if !format.is_available() {
             return None;
         }
@@ -599,7 +691,12 @@ mod tests {
         Some((root, packed.archive))
     }
 
-    fn options(dir: &Path, create_folder: bool, overwrite: Overwrite, password: Option<&str>) -> UnpackOptions {
+    fn options(
+        dir: &Path,
+        create_folder: bool,
+        overwrite: Overwrite,
+        password: Option<&str>,
+    ) -> UnpackOptions {
         UnpackOptions {
             dest_dir: dir.to_path_buf(),
             create_folder,
@@ -619,15 +716,23 @@ mod tests {
         assert_eq!(entries.len(), 3);
         assert!(entries[0].folder && entries[1].encrypted && entries[1].size == 5);
         assert!(entries[2].is_link && !entries[1].is_link);
-        assert!(looks_locked("ERROR: Cannot open encrypted archive. Wrong password?"));
+        assert!(looks_locked(
+            "ERROR: Cannot open encrypted archive. Wrong password?"
+        ));
         assert!(!looks_locked("ERROR: no such file"));
     }
 
     #[test]
     fn one_folder_at_the_top_is_found() {
         let names = |list: &[&str]| list.iter().map(|n| n.to_string()).collect::<Vec<_>>();
-        assert_eq!(single_top(&names(&["proj/", "proj/a", "proj/b/c"])).as_deref(), Some("proj"));
-        assert_eq!(single_top(&names(&["proj/a", "proj/b"])).as_deref(), Some("proj"));
+        assert_eq!(
+            single_top(&names(&["proj/", "proj/a", "proj/b/c"])).as_deref(),
+            Some("proj")
+        );
+        assert_eq!(
+            single_top(&names(&["proj/a", "proj/b"])).as_deref(),
+            Some("proj")
+        );
         assert_eq!(single_top(&names(&["a", "proj/b"])), None);
         assert_eq!(single_top(&names(&["proj/a", "other/b"])), None);
         assert_eq!(single_top(&names(&["file"])), None);
@@ -635,20 +740,51 @@ mod tests {
 
     #[test]
     fn every_format_unpacks_into_a_folder_and_back_to_the_same_files() {
-        for format in [Format::Zip, Format::TarGz, Format::TarXz, Format::TarZst, Format::SevenZip, Format::Tar] {
+        for format in [
+            Format::Zip,
+            Format::TarGz,
+            Format::TarXz,
+            Format::TarZst,
+            Format::SevenZip,
+            Format::Tar,
+        ] {
             let temp = Temp::new("unpack-folder");
-            let Some((_, archive)) = make(&temp, format, None, false) else { continue };
+            let Some((_, archive)) = make(&temp, format, None, false) else {
+                continue;
+            };
             let inspection = inspect(&archive, None, &Cancel::new()).unwrap();
-            assert_eq!(inspection.single_folder.as_deref(), Some("proj"), "{format:?}");
-            assert!(!inspection.locked && inspection.entries >= 5, "{format:?}: {inspection:?}");
+            assert_eq!(
+                inspection.single_folder.as_deref(),
+                Some("proj"),
+                "{format:?}"
+            );
+            assert!(
+                !inspection.locked && inspection.entries >= 5,
+                "{format:?}: {inspection:?}"
+            );
             let dest = temp.dir("dest");
-            let done = go(&archive, &options(&dest, true, Overwrite::KeepBoth, None)).unwrap_or_else(|e| panic!("{format:?}: {e}"));
+            let done = go(&archive, &options(&dest, true, Overwrite::KeepBoth, None))
+                .unwrap_or_else(|e| panic!("{format:?}: {e}"));
             assert_eq!(done.items, [dest.join("proj")], "{format:?}");
-            assert_eq!(fs::read_to_string(dest.join("proj/sub/b.txt")).unwrap(), "beta");
-            assert_eq!(fs::read_link(dest.join("proj/link")).unwrap(), Path::new("a.txt"));
+            assert_eq!(
+                fs::read_to_string(dest.join("proj/sub/b.txt")).unwrap(),
+                "beta"
+            );
+            assert_eq!(
+                fs::read_link(dest.join("proj/link")).unwrap(),
+                Path::new("a.txt")
+            );
             assert!(dest.join("proj/.hidden").exists());
-            let left: Vec<_> = fs::read_dir(&dest).unwrap().flatten().map(|e| e.file_name()).collect();
-            assert_eq!(left.len(), 1, "{format:?}: no scratch folder is left: {left:?}");
+            let left: Vec<_> = fs::read_dir(&dest)
+                .unwrap()
+                .flatten()
+                .map(|e| e.file_name())
+                .collect();
+            assert_eq!(
+                left.len(),
+                1,
+                "{format:?}: no scratch folder is left: {left:?}"
+            );
         }
     }
 
@@ -658,7 +794,9 @@ mod tests {
             return;
         }
         let temp = Temp::new("unpack-loose");
-        let Some((_, archive)) = make(&temp, Format::Zip, None, false) else { return };
+        let Some((_, archive)) = make(&temp, Format::Zip, None, false) else {
+            return;
+        };
         let dest = temp.dir("dest");
         fs::create_dir(dest.join("proj")).unwrap();
         fs::write(dest.join("proj/mine.txt"), "mine").unwrap();
@@ -672,10 +810,16 @@ mod tests {
         assert!(dest.join("proj/mine.txt").exists());
         // Replace sends the old one to the Trash.
         let data = temp.dir("data");
-        let replaced = with_data_home(&data, || go(&archive, &options(&dest, false, Overwrite::Replace, None))).unwrap();
+        let replaced = with_data_home(&data, || {
+            go(&archive, &options(&dest, false, Overwrite::Replace, None))
+        })
+        .unwrap();
         assert_eq!(replaced.items, [dest.join("proj")]);
         assert_eq!(replaced.replaced.len(), 1);
-        assert!(replaced.replaced[0].in_trash.join("mine.txt").exists(), "the old folder is whole in the Trash");
+        assert!(
+            replaced.replaced[0].in_trash.join("mine.txt").exists(),
+            "the old folder is whole in the Trash"
+        );
         assert!(dest.join("proj/a.txt").exists() && !dest.join("proj/mine.txt").exists());
     }
 
@@ -684,22 +828,49 @@ mod tests {
         if tool::seven_zip().is_none() {
             return;
         }
-        for (format, hide) in [(Format::Zip, false), (Format::SevenZip, false), (Format::SevenZip, true)] {
+        for (format, hide) in [
+            (Format::Zip, false),
+            (Format::SevenZip, false),
+            (Format::SevenZip, true),
+        ] {
             let temp = Temp::new("unpack-locked");
-            let Some((_, archive)) = make(&temp, format, Some("correct horse"), hide) else { continue };
+            let Some((_, archive)) = make(&temp, format, Some("correct horse"), hide) else {
+                continue;
+            };
             let inspection = inspect(&archive, None, &Cancel::new()).unwrap();
             assert!(inspection.locked, "{format:?} hide={hide}");
             assert_eq!(inspection.names_hidden, hide);
             let dest = temp.dir("dest");
             let none = go(&archive, &options(&dest, true, Overwrite::KeepBoth, None)).unwrap_err();
             assert!(none.to_string().contains("password"), "{none}");
-            assert!(!check_password(&archive, &Password::new("wrong"), &Cancel::new()).unwrap(), "{format:?}");
-            assert!(check_password(&archive, &Password::new("correct horse"), &Cancel::new()).unwrap(), "{format:?}");
-            let bad = go(&archive, &options(&dest, true, Overwrite::KeepBoth, Some("wrong"))).unwrap_err();
+            assert!(
+                !check_password(&archive, &Password::new("wrong"), &Cancel::new()).unwrap(),
+                "{format:?}"
+            );
+            assert!(
+                check_password(&archive, &Password::new("correct horse"), &Cancel::new()).unwrap(),
+                "{format:?}"
+            );
+            let bad = go(
+                &archive,
+                &options(&dest, true, Overwrite::KeepBoth, Some("wrong")),
+            )
+            .unwrap_err();
             assert!(bad.to_string().contains("password"), "{format:?}: {bad}");
-            assert_eq!(fs::read_dir(&dest).unwrap().count(), 0, "a wrong password leaves nothing");
-            let done = go(&archive, &options(&dest, true, Overwrite::KeepBoth, Some("correct horse"))).unwrap();
-            assert_eq!(fs::read_to_string(done.items[0].join("a.txt")).unwrap(), "alpha");
+            assert_eq!(
+                fs::read_dir(&dest).unwrap().count(),
+                0,
+                "a wrong password leaves nothing"
+            );
+            let done = go(
+                &archive,
+                &options(&dest, true, Overwrite::KeepBoth, Some("correct horse")),
+            )
+            .unwrap();
+            assert_eq!(
+                fs::read_to_string(done.items[0].join("a.txt")).unwrap(),
+                "alpha"
+            );
         }
     }
 
@@ -712,7 +883,14 @@ mod tests {
         temp.write("inner/ok.txt", "ok");
         let sub = temp.dir("inner/deep");
         let archive = temp.path().join("slip.tar");
-        let made = std::process::Command::new("tar").arg("-cPf").arg(&archive).arg("-C").arg(&sub).arg("../ok.txt").status().unwrap();
+        let made = std::process::Command::new("tar")
+            .arg("-cPf")
+            .arg(&archive)
+            .arg("-C")
+            .arg(&sub)
+            .arg("../ok.txt")
+            .status()
+            .unwrap();
         assert!(made.success());
         let dest = temp.dir("dest");
         let error = go(&archive, &options(&dest, true, Overwrite::KeepBoth, None)).unwrap_err();
@@ -721,13 +899,25 @@ mod tests {
         let work = temp.dir("work");
         symlink("/etc", work.join("etc-link")).unwrap();
         let links = temp.path().join("links.tar");
-        assert!(std::process::Command::new("tar").arg("-cf").arg(&links).arg("-C").arg(&work).arg("etc-link").status().unwrap().success());
+        assert!(
+            std::process::Command::new("tar")
+                .arg("-cf")
+                .arg(&links)
+                .arg("-C")
+                .arg(&work)
+                .arg("etc-link")
+                .status()
+                .unwrap()
+                .success()
+        );
         assert!(go(&links, &options(&dest, true, Overwrite::KeepBoth, None)).is_err());
     }
 
     #[test]
     fn a_seven_zip_with_an_escaping_link_is_refused() {
-        let Some(seven) = tool::seven_zip() else { return };
+        let Some(seven) = tool::seven_zip() else {
+            return;
+        };
         let temp = Temp::new("unpack-seven-link");
         let work = temp.dir("work");
         symlink("/etc", work.join("etc-link")).unwrap();
@@ -739,7 +929,11 @@ mod tests {
             .arg("etc-link")
             .output()
             .unwrap();
-        assert!(made.status.success(), "{}", String::from_utf8_lossy(&made.stdout));
+        assert!(
+            made.status.success(),
+            "{}",
+            String::from_utf8_lossy(&made.stdout)
+        );
         let dest = temp.dir("dest");
         let error = go(&archive, &options(&dest, true, Overwrite::KeepBoth, None)).unwrap_err();
         assert!(error.to_string().contains("outside"), "{error}");
@@ -766,10 +960,15 @@ mod tests {
             roots: vec![root],
             dest_dir: dest.clone(),
             base: "big".into(),
-            options: PackOptions { format: Format::TarGz, ..PackOptions::default() },
+            options: PackOptions {
+                format: Format::TarGz,
+                ..PackOptions::default()
+            },
             on_conflict: OnConflict::KeepBoth,
         };
-        let archive = pack(&job, &Progress::new(), &Cancel::new()).unwrap().archive;
+        let archive = pack(&job, &Progress::new(), &Cancel::new())
+            .unwrap()
+            .archive;
         let target = temp.dir("target");
         let cancel = Cancel::new();
         let stopper = cancel.clone();
@@ -777,7 +976,12 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(30));
             stopper.cancel();
         });
-        let outcome = unpack(&archive, &options(&target, true, Overwrite::KeepBoth, None), &Progress::new(), &cancel);
+        let outcome = unpack(
+            &archive,
+            &options(&target, true, Overwrite::KeepBoth, None),
+            &Progress::new(),
+            &cancel,
+        );
         watcher.join().unwrap();
         if outcome.is_ok() {
             // The extraction beat the cancel: nothing to check.
@@ -793,7 +997,9 @@ mod tests {
             return;
         }
         let temp = Temp::new("unpack-extract");
-        let Some((_, archive)) = make(&temp, Format::Zip, None, false) else { return };
+        let Some((_, archive)) = make(&temp, Format::Zip, None, false) else {
+            return;
+        };
         let dest = temp.dir("dest");
         assert_eq!(extract(&archive, &dest).unwrap(), dest.join("proj"));
         assert_eq!(extract(&archive, &dest).unwrap(), dest.join("proj (copy)"));

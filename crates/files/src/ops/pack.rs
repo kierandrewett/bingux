@@ -33,8 +33,7 @@ use crate::Cancel;
 use super::durable::{sync_dirs, sync_written};
 use super::pack_plan::{
     Built, Format, Heard, PackOptions, Steps, build, check_specs, file_name, free_base, hear,
-    is_listing_row,
-    is_hidden_name,
+    is_hidden_name, is_listing_row,
 };
 use super::tool::{self, Stream};
 use super::trash::{Trashed, trash};
@@ -128,7 +127,9 @@ pub fn scan(roots: &[PathBuf], options: &PackOptions, cancel: &Cancel) -> Result
             .strip_prefix(&parent)
             .map_err(|_| OpError::Other("The paths have nothing in common.".into()))?;
         if rel.as_os_str().is_empty() {
-            return Err(OpError::Other("The root folder cannot be compressed.".into()));
+            return Err(OpError::Other(
+                "The root folder cannot be compressed.".into(),
+            ));
         }
         let mut ancestry = Vec::new();
         visit(root, rel, options, cancel, &mut scan, &mut ancestry)?;
@@ -412,10 +413,7 @@ pub fn pack(job: &PackJob, progress: &Progress, cancel: &Cancel) -> Result<Packe
             "The originals cannot be removed when the archive is saved inside them.".into(),
         ));
     }
-    progress.add_total(
-        scanned.bytes,
-        scanned.items.len() as u64,
-    );
+    progress.add_total(scanned.bytes, scanned.items.len() as u64);
 
     // The name.
     let wanted = file_name(&job.base, options.format);
@@ -428,10 +426,9 @@ pub fn pack(job: &PackJob, progress: &Progress, cancel: &Cancel) -> Result<Packe
                 replace = true;
                 wanted
             }
-            OnConflict::KeepBoth => file_name(
-                &free_base(&job.base, options.format, taken),
-                options.format,
-            ),
+            OnConflict::KeepBoth => {
+                file_name(&free_base(&job.base, options.format, taken), options.format)
+            }
         }
     } else {
         wanted
@@ -499,7 +496,9 @@ pub fn pack(job: &PackJob, progress: &Progress, cancel: &Cancel) -> Result<Packe
     };
     let archive_in_work = work.0.join(&first_name);
     if !archive_in_work.exists() {
-        return Err(OpError::Other("The archive could not be made: the program wrote nothing.".into()));
+        return Err(OpError::Other(
+            "The archive could not be made: the program wrote nothing.".into(),
+        ));
     }
 
     // Read it back before it gets its name.
@@ -520,7 +519,9 @@ pub fn pack(job: &PackJob, progress: &Progress, cancel: &Cancel) -> Result<Packe
             listed += 1;
         }
     })?;
-    let has_line_breaks = names.iter().any(|name| tool::bytes_of(name).contains(&b'\n'));
+    let has_line_breaks = names
+        .iter()
+        .any(|name| tool::bytes_of(name).contains(&b'\n'));
     if !listing.success() {
         return Err(listing.sentence("The new archive could not be listed"));
     }
@@ -552,15 +553,17 @@ pub fn pack(job: &PackJob, progress: &Progress, cancel: &Cancel) -> Result<Packe
     // The old files, if they are to be replaced, go to the Trash first.
     let replaced = if replace {
         let old = existing(&job.dest_dir, &name);
-        if old.is_empty() { Vec::new() } else { trash(&old)? }
+        if old.is_empty() {
+            Vec::new()
+        } else {
+            trash(&old)?
+        }
     } else {
         Vec::new()
     };
     let mut placed: Vec<PathBuf> = Vec::new();
     for file in &made {
-        let to = job
-            .dest_dir
-            .join(file.file_name().unwrap_or_default());
+        let to = job.dest_dir.join(file.file_name().unwrap_or_default());
         match rename_noreplace(file, &to) {
             Ok(()) => placed.push(to),
             Err(error) => {
@@ -639,7 +642,10 @@ mod tests {
             roots: vec![root.to_path_buf()],
             dest_dir: dest.to_path_buf(),
             base: "out".into(),
-            options: PackOptions { format, ..PackOptions::default() },
+            options: PackOptions {
+                format,
+                ..PackOptions::default()
+            },
             on_conflict: OnConflict::KeepBoth,
         }
     }
@@ -652,23 +658,48 @@ mod tests {
         fs::create_dir_all(into).unwrap();
         let name = archive.to_string_lossy().into_owned();
         let status = if name.ends_with(".zip") && password.is_none() {
-            Command::new("unzip").arg("-q").arg(archive).arg("-d").arg(into).status().unwrap()
+            Command::new("unzip")
+                .arg("-q")
+                .arg(archive)
+                .arg("-d")
+                .arg(into)
+                .status()
+                .unwrap()
         } else if name.ends_with(".zip") || name.ends_with(".7z") || name.contains(".7z.") {
             let mut command = Command::new(tool::seven_zip().unwrap());
-            command.arg("x").arg("-y").arg(format!("-o{}", into.display()));
+            command
+                .arg("x")
+                .arg("-y")
+                .arg(format!("-o{}", into.display()));
             if let Some(password) = password {
                 // 7-Zip asks for the password on standard input when the archive
                 // is locked; `-p` with nothing after it would mean an empty one.
                 command.stdin(std::process::Stdio::piped());
                 command.arg(archive);
                 let mut child = command.stdout(std::process::Stdio::null()).spawn().unwrap();
-                child.stdin.take().unwrap().write_all(format!("{password}\n").as_bytes()).unwrap();
+                child
+                    .stdin
+                    .take()
+                    .unwrap()
+                    .write_all(format!("{password}\n").as_bytes())
+                    .unwrap();
                 assert!(child.wait().unwrap().success(), "7z could not open {name}");
                 return;
             }
-            command.arg(archive).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).status().unwrap()
+            command
+                .arg(archive)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .status()
+                .unwrap()
         } else {
-            Command::new("tar").arg("-xf").arg(archive).arg("-C").arg(into).status().unwrap()
+            Command::new("tar")
+                .arg("-xf")
+                .arg(archive)
+                .arg("-C")
+                .arg(into)
+                .status()
+                .unwrap()
         };
         assert!(status.success(), "could not open {name}");
     }
@@ -680,15 +711,25 @@ mod tests {
             entries.sort_by_key(|entry| entry.file_name());
             for entry in entries {
                 let path = entry.path();
-                let rel = path.strip_prefix(base).unwrap().to_string_lossy().into_owned();
+                let rel = path
+                    .strip_prefix(base)
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned();
                 let meta = path.symlink_metadata().unwrap();
                 if meta.file_type().is_symlink() {
-                    out.push(format!("{rel} -> {}", fs::read_link(&path).unwrap().display()));
+                    out.push(format!(
+                        "{rel} -> {}",
+                        fs::read_link(&path).unwrap().display()
+                    ));
                 } else if meta.is_dir() {
                     out.push(format!("{rel}/"));
                     walk(&path, base, out);
                 } else {
-                    out.push(format!("{rel} = {}", String::from_utf8_lossy(&fs::read(&path).unwrap()).len()));
+                    out.push(format!(
+                        "{rel} = {}",
+                        String::from_utf8_lossy(&fs::read(&path).unwrap()).len()
+                    ));
                 }
             }
         }
@@ -703,7 +744,10 @@ mod tests {
         let root = tree(&temp);
         let scanned = scan(&[root], &PackOptions::default(), &Cancel::new()).unwrap();
         assert_eq!(scanned.folders, 4, "src, empty, sub and sub/.cache");
-        assert_eq!(scanned.files, 11, "eight files in src, three below it; the link counts");
+        assert_eq!(
+            scanned.files, 11,
+            "eight files in src, three below it; the link counts"
+        );
         assert!(scanned.bytes > 0 && scanned.skipped == 0);
     }
 
@@ -722,8 +766,14 @@ mod tests {
         let all = names(&PackOptions::default());
         assert!(all.contains(&"src/.hidden".to_string()));
         assert!(all.contains(&"src/sub/.cache/c".to_string()));
-        assert!(all.contains(&"src/empty".to_string()), "an empty folder is kept");
-        let plain = names(&PackOptions { include_hidden: false, ..PackOptions::default() });
+        assert!(
+            all.contains(&"src/empty".to_string()),
+            "an empty folder is kept"
+        );
+        let plain = names(&PackOptions {
+            include_hidden: false,
+            ..PackOptions::default()
+        });
         assert!(!plain.iter().any(|name| name.contains("/.")), "{plain:?}");
         assert!(plain.contains(&"src/sub/b.txt".to_string()));
         let excluded = names(&PackOptions {
@@ -745,25 +795,55 @@ mod tests {
         std::os::unix::fs::symlink("..", root.join("real/loop")).unwrap();
         let kept = scan(&[root.clone()], &PackOptions::default(), &Cancel::new()).unwrap();
         let kinds = |scan: &Scan, name: &str| {
-            scan.items.iter().find(|item| item.rel.ends_with(name)).map(|item| item.kind)
+            scan.items
+                .iter()
+                .find(|item| item.rel.ends_with(name))
+                .map(|item| item.kind)
         };
         assert_eq!(kinds(&kept, "dirlink"), Some(ItemKind::Link));
-        assert!(!kept.items.iter().any(|item| item.rel.ends_with("dirlink/f")));
+        assert!(
+            !kept
+                .items
+                .iter()
+                .any(|item| item.rel.ends_with("dirlink/f"))
+        );
         let followed = scan(
             &[root],
-            &PackOptions { follow_links: true, ..PackOptions::default() },
+            &PackOptions {
+                follow_links: true,
+                ..PackOptions::default()
+            },
             &Cancel::new(),
         )
         .unwrap();
         assert_eq!(kinds(&followed, "dirlink"), Some(ItemKind::Folder));
-        assert!(followed.items.iter().any(|item| item.rel.ends_with("dirlink/f")));
+        assert!(
+            followed
+                .items
+                .iter()
+                .any(|item| item.rel.ends_with("dirlink/f"))
+        );
     }
 
     #[test]
     fn scan_refuses_nonsense() {
         assert!(scan(&[], &PackOptions::default(), &Cancel::new()).is_err());
-        assert!(scan(&[PathBuf::from("rel")], &PackOptions::default(), &Cancel::new()).is_err());
-        assert!(scan(&[PathBuf::from("/")], &PackOptions::default(), &Cancel::new()).is_err());
+        assert!(
+            scan(
+                &[PathBuf::from("rel")],
+                &PackOptions::default(),
+                &Cancel::new()
+            )
+            .is_err()
+        );
+        assert!(
+            scan(
+                &[PathBuf::from("/")],
+                &PackOptions::default(),
+                &Cancel::new()
+            )
+            .is_err()
+        );
     }
 
     /// Every format this machine can make: build it, read it back with the
@@ -782,8 +862,12 @@ mod tests {
             if format != Format::SevenZip {
                 with_bad_name(&root);
             }
-            let packed = run(&job(&root, &dest, format)).unwrap_or_else(|error| panic!("{format:?}: {error}"));
-            assert_eq!(packed.archive, dest.join(format!("out{}", format.extension())));
+            let packed = run(&job(&root, &dest, format))
+                .unwrap_or_else(|error| panic!("{format:?}: {error}"));
+            assert_eq!(
+                packed.archive,
+                dest.join(format!("out{}", format.extension()))
+            );
             assert!(packed.bytes > 0);
             let opened = temp.dir("opened");
             unpack(&packed.archive, &opened, None);
@@ -798,7 +882,11 @@ mod tests {
             }
             assert_eq!(found, expected, "{format:?}");
             // No work folder is left.
-            let left: Vec<_> = fs::read_dir(&dest).unwrap().flatten().map(|e| e.file_name()).collect();
+            let left: Vec<_> = fs::read_dir(&dest)
+                .unwrap()
+                .flatten()
+                .map(|e| e.file_name())
+                .collect();
             assert_eq!(left.len(), 1, "{format:?}: {left:?}");
         }
     }
@@ -815,7 +903,11 @@ mod tests {
         let error = run(&job(&root, &dest, Format::SevenZip)).unwrap_err();
         assert!(error.to_string().contains("bad-"), "{error}");
         assert!(error.to_string().contains(".7z"), "{error}");
-        assert_eq!(fs::read_dir(&dest).unwrap().count(), 0, "nothing is left behind");
+        assert_eq!(
+            fs::read_dir(&dest).unwrap().count(),
+            0,
+            "nothing is left behind"
+        );
     }
 
     #[test]
@@ -827,11 +919,15 @@ mod tests {
         let root = temp.dir("src");
         // Text built from a small vocabulary in a scrambled order, so a bigger
         // dictionary finds more to squeeze than a small one.
-        let words = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel"];
+        let words = [
+            "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel",
+        ];
         let mut seed = 7u64;
         let mut text = String::new();
         while text.len() < 3_000_000 {
-            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             text.push_str(words[(seed >> 61) as usize]);
             text.push(' ');
         }
@@ -861,8 +957,18 @@ mod tests {
         let opened = temp.dir("opened");
         unpack(&packed.archive, &opened, None);
         let found = contents(&opened.join("src"));
-        assert!(!found.iter().any(|line| line.contains("/.") || line.starts_with('.')), "{found:?}");
-        assert!(!found.iter().any(|line| line.contains("a.log") || line.starts_with("empty")), "{found:?}");
+        assert!(
+            !found
+                .iter()
+                .any(|line| line.contains("/.") || line.starts_with('.')),
+            "{found:?}"
+        );
+        assert!(
+            !found
+                .iter()
+                .any(|line| line.contains("a.log") || line.starts_with("empty")),
+            "{found:?}"
+        );
         assert!(found.iter().any(|line| line.starts_with("sub/b.txt")));
     }
 
@@ -892,7 +998,11 @@ mod tests {
         if tool::seven_zip().is_none() {
             return;
         }
-        for (format, hide) in [(Format::Zip, false), (Format::SevenZip, false), (Format::SevenZip, true)] {
+        for (format, hide) in [
+            (Format::Zip, false),
+            (Format::SevenZip, false),
+            (Format::SevenZip, true),
+        ] {
             let temp = Temp::new("locked");
             let root = tree(&temp);
             let dest = temp.dir("out");
@@ -902,12 +1012,19 @@ mod tests {
             let packed = run(&job).unwrap_or_else(|error| panic!("{format:?}: {error}"));
             let opened = temp.dir("opened");
             unpack(&packed.archive, &opened, Some("correct horse"));
-            assert_eq!(contents(&opened.join("src")), contents(&root), "{format:?} hide={hide}");
+            assert_eq!(
+                contents(&opened.join("src")),
+                contents(&root),
+                "{format:?} hide={hide}"
+            );
             // The password is not in the file, and a wrong one fails.
             let raw = fs::read(&packed.archive).unwrap();
             assert!(!raw.windows(13).any(|window| window == b"correct horse"));
             if hide {
-                assert!(!raw.windows(8).any(|window| window == b"plain.tx"), "names are hidden");
+                assert!(
+                    !raw.windows(8).any(|window| window == b"plain.tx"),
+                    "names are hidden"
+                );
             }
             let wrong = Command::new(tool::seven_zip().unwrap())
                 .args(["t", "-pnot the password"])
@@ -915,7 +1032,10 @@ mod tests {
                 .stdin(std::process::Stdio::null())
                 .output()
                 .unwrap();
-            assert!(!wrong.status.success(), "{format:?}: a wrong password must fail");
+            assert!(
+                !wrong.status.success(),
+                "{format:?}: a wrong password must fail"
+            );
         }
     }
 
@@ -931,7 +1051,9 @@ mod tests {
             let mut seed = 12345u64;
             let noise: Vec<u8> = (0..3_200_000)
                 .map(|_| {
-                    seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                    seed = seed
+                        .wrapping_mul(6364136223846793005)
+                        .wrapping_add(1442695040888963407);
                     (seed >> 33) as u8
                 })
                 .collect();
@@ -945,7 +1067,11 @@ mod tests {
             let packed = run(&job).unwrap_or_else(|error| panic!("{format:?}: {error}"));
             assert!(packed.files.len() >= 3, "{format:?}: {:?}", packed.files);
             let opened = temp.dir("opened");
-            let first = if format == Format::SevenZip { dest.join("out.7z.001") } else { packed.archive.clone() };
+            let first = if format == Format::SevenZip {
+                dest.join("out.7z.001")
+            } else {
+                packed.archive.clone()
+            };
             let status = Command::new(tool::seven_zip().unwrap())
                 .args(["x", "-y"])
                 .arg(format!("-o{}", opened.display()))
@@ -985,7 +1111,11 @@ mod tests {
         let outcome = pack(&job, &Progress::new(), &cancel);
         watcher.join().unwrap();
         assert_eq!(outcome.unwrap_err(), OpError::Cancelled);
-        assert_eq!(fs::read_dir(&dest).unwrap().count(), 0, "no archive, no part, no work folder");
+        assert_eq!(
+            fs::read_dir(&dest).unwrap().count(),
+            0,
+            "no archive, no part, no work folder"
+        );
     }
 
     #[test]
@@ -1004,7 +1134,11 @@ mod tests {
         refuse.on_conflict = OnConflict::Refuse;
         assert_eq!(run(&refuse).unwrap_err(), OpError::Exists);
         assert_eq!(fs::read(dest.join("out.zip")).unwrap(), b"old");
-        assert_eq!(fs::read_dir(&dest).unwrap().count(), 2, "nothing else was left");
+        assert_eq!(
+            fs::read_dir(&dest).unwrap().count(),
+            2,
+            "nothing else was left"
+        );
     }
 
     #[test]
@@ -1054,9 +1188,18 @@ mod tests {
         let mut gone = job(&file, &dest, Format::Zip);
         gone.dest_dir = dest.join("missing");
         assert!(run(&gone).is_err());
-        let mut inside = job(&temp.path().join("out"), &temp.path().join("out"), Format::Zip);
+        let mut inside = job(
+            &temp.path().join("out"),
+            &temp.path().join("out"),
+            Format::Zip,
+        );
         inside.options.delete_originals = true;
-        assert!(run(&inside).unwrap_err().to_string().contains("saved inside"));
+        assert!(
+            run(&inside)
+                .unwrap_err()
+                .to_string()
+                .contains("saved inside")
+        );
     }
 
     #[test]

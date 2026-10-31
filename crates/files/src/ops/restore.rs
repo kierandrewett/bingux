@@ -23,8 +23,8 @@ use crate::listing::Cancel;
 
 use super::durable::sync_dirs;
 use super::names::keep_both_name;
-use super::trash::{Context, Copying, Trashed, trash_in};
 use super::transfer::{Conflict, ConflictPolicy, Resolution, move_to};
+use super::trash::{Context, Copying, Trashed, trash_in};
 use super::trash_info::{TrashItem, forget_sizes, item_in, split_extension_bytes};
 use super::{OpError, Progress, rename_noreplace};
 
@@ -50,7 +50,10 @@ pub struct RestorePlan {
 impl RestorePlan {
     /// The entries that cannot be restored to their place: no record of it.
     pub fn unknown(&self) -> Vec<&RestoreEntry> {
-        self.entries.iter().filter(|entry| entry.target.is_none()).collect()
+        self.entries
+            .iter()
+            .filter(|entry| entry.target.is_none())
+            .collect()
     }
 
     /// Every folder that has to be made, once, outermost first.
@@ -148,7 +151,9 @@ fn missing_folders(target: &Path) -> Vec<PathBuf> {
     let mut at = target.parent();
     while let Some(dir) = at {
         match fs::metadata(dir) {
-            Err(error) if error.kind() == io::ErrorKind::NotFound => missing.push(dir.to_path_buf()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                missing.push(dir.to_path_buf())
+            }
             _ => break,
         }
         at = dir.parent();
@@ -174,7 +179,14 @@ pub fn restore(
     cancel: &Cancel,
 ) -> Result<Vec<Restored>, RestoreFailure> {
     let ctx = Context::system();
-    restore_in(ctx.as_ref(), plan, create_missing, conflicts, progress, cancel)
+    restore_in(
+        ctx.as_ref(),
+        plan,
+        create_missing,
+        conflicts,
+        progress,
+        cancel,
+    )
 }
 
 pub(super) fn restore_in(
@@ -257,16 +269,17 @@ fn restore_one(
                 target = parent.join(name);
             }
             Resolution::Replace => {
-                let ctx = ctx.ok_or_else(|| {
-                    OpError::Other("Your home folder could not be found.".into())
-                })?;
+                let ctx = ctx
+                    .ok_or_else(|| OpError::Other("Your home folder could not be found.".into()))?;
                 // What is there goes to the Trash, so Replace can be undone.
-                let moved = trash_in(ctx, std::slice::from_ref(&target), Copying::Small).map_err(|error| {
-                    OpError::Other(format!(
-                        "{} could not be moved to the Trash to make room: {error}",
-                        quoted(&target)
-                    ))
-                })?;
+                let moved = trash_in(ctx, std::slice::from_ref(&target), Copying::Small).map_err(
+                    |error| {
+                        OpError::Other(format!(
+                            "{} could not be moved to the Trash to make room: {error}",
+                            quoted(&target)
+                        ))
+                    },
+                )?;
                 displaced = moved.into_iter().next();
             }
         }
@@ -275,7 +288,10 @@ fn restore_one(
     progress.set_current(&item.original_name().to_string_lossy());
     place(&item.in_trash, &target, progress, cancel)?;
     let _ = fs::remove_file(&item.info);
-    if let (Some(bin), Some(name)) = (item.info.parent().and_then(Path::parent), item.in_trash.file_name()) {
+    if let (Some(bin), Some(name)) = (
+        item.info.parent().and_then(Path::parent),
+        item.in_trash.file_name(),
+    ) {
         forget_sizes(bin, &[name]);
     }
     let mut synced: Vec<&Path> = vec![&parent];
@@ -331,7 +347,12 @@ fn place(from: &Path, to: &Path, progress: &Progress, cancel: &Cancel) -> Result
     }
 }
 
-fn across_drives(from: &Path, to: &Path, progress: &Progress, cancel: &Cancel) -> Result<(), OpError> {
+fn across_drives(
+    from: &Path,
+    to: &Path,
+    progress: &Progress,
+    cancel: &Cancel,
+) -> Result<(), OpError> {
     let parent = to.parent().ok_or(OpError::NotFound)?;
     let landed = move_to(
         &[from.to_path_buf()],
@@ -349,9 +370,10 @@ fn across_drives(from: &Path, to: &Path, progress: &Progress, cancel: &Cancel) -
 
 /// What a failed move back means, in words that name the item and the folder.
 fn restore_io_error(error: io::Error, target: &Path) -> OpError {
-    let parent = target
-        .parent()
-        .map_or_else(|| "its folder".to_owned(), |parent| parent.display().to_string());
+    let parent = target.parent().map_or_else(
+        || "its folder".to_owned(),
+        |parent| parent.display().to_string(),
+    );
     let name = quoted(target);
     match error.raw_os_error() {
         Some(libc::EACCES | libc::EPERM) => OpError::Other(format!(
@@ -375,7 +397,9 @@ fn restore_io_error(error: io::Error, target: &Path) -> OpError {
 fn keep_both_target(parent: &Path, name: &OsStr) -> OsString {
     let taken = |candidate: &OsStr| parent.join(candidate).symlink_metadata().is_ok();
     if let Some(text) = name.to_str() {
-        return OsString::from(keep_both_name(text, |candidate| taken(OsStr::new(candidate))));
+        return OsString::from(keep_both_name(text, |candidate| {
+            taken(OsStr::new(candidate))
+        }));
     }
     let (stem, extension) = split_extension_bytes(name.as_bytes());
     let mut count = 1u32;
@@ -423,7 +447,14 @@ mod tests {
         create: bool,
         policy: &ConflictPolicy,
     ) -> Result<Vec<Restored>, RestoreFailure> {
-        restore_in(Some(ctx), plan, create, policy, &Progress::new(), &Cancel::new())
+        restore_in(
+            Some(ctx),
+            plan,
+            create,
+            policy,
+            &Progress::new(),
+            &Cancel::new(),
+        )
     }
 
     #[test]
@@ -436,15 +467,28 @@ mod tests {
         assert!(ctx.home_trash.join("directorysizes").exists());
         let plan = plan_of(&ctx, &items, None);
         assert_eq!(plan.entries.len(), 2);
-        assert!(plan.entries.iter().all(|entry| !entry.taken && entry.missing.is_empty()));
+        assert!(
+            plan.entries
+                .iter()
+                .all(|entry| !entry.taken && entry.missing.is_empty())
+        );
         assert_eq!(plan.entries[0].target.as_deref(), Some(file.as_path()));
         let done = run(&ctx, &plan, false, &ConflictPolicy::Skip).unwrap();
         assert_eq!(done.len(), 2);
         assert_eq!(fs::read_to_string(&file).unwrap(), "one");
         assert!(folder.join("x").exists());
-        assert!(!items[0].info.exists() && !items[1].info.exists(), "the info files go");
-        assert!(!ctx.home_trash.join("directorysizes").exists(), "and the size line");
-        assert_eq!(fs::read_dir(ctx.home_trash.join("files")).unwrap().count(), 0);
+        assert!(
+            !items[0].info.exists() && !items[1].info.exists(),
+            "the info files go"
+        );
+        assert!(
+            !ctx.home_trash.join("directorysizes").exists(),
+            "and the size line"
+        );
+        assert_eq!(
+            fs::read_dir(ctx.home_trash.join("files")).unwrap().count(),
+            0
+        );
         assert_eq!(done[0].to, file);
         assert_eq!(done[0].displaced, None);
     }
@@ -461,8 +505,13 @@ mod tests {
         assert_eq!(plan.missing_folders(), [deep.clone(), deep.join("er")]);
         // Not asked: it fails, says which folder, and moves nothing.
         let failure = run(&ctx, &plan, false, &ConflictPolicy::Skip).unwrap_err();
-        let OpError::Other(text) = &failure.error else { panic!("{failure:?}") };
-        assert!(text.contains("no longer exists") && text.contains("er"), "{text}");
+        let OpError::Other(text) = &failure.error else {
+            panic!("{failure:?}")
+        };
+        assert!(
+            text.contains("no longer exists") && text.contains("er"),
+            "{text}"
+        );
         assert!(items[0].in_trash.exists());
         assert!(failure.done.is_empty());
         // Asked: the folders are made and the file is back.
@@ -489,7 +538,10 @@ mod tests {
 
         // Cancel through the question: stops, nothing changes.
         let ask_cancel = ConflictPolicy::Ask(Box::new(|_| Resolution::Cancel));
-        assert_eq!(run(&ctx, &plan, false, &ask_cancel).unwrap_err().error, OpError::Cancelled);
+        assert_eq!(
+            run(&ctx, &plan, false, &ask_cancel).unwrap_err().error,
+            OpError::Cancelled
+        );
         assert!(items[0].in_trash.exists());
 
         // Keep both: the restored one gets a "(copy)" name beside the newer.
@@ -513,12 +565,19 @@ mod tests {
             Resolution::Replace
         }));
         let done = run(&ctx, &plan, false, &policy).unwrap();
-        assert_eq!(fs::read_to_string(&file).unwrap(), "old", "the trashed one is back");
+        assert_eq!(
+            fs::read_to_string(&file).unwrap(),
+            "old",
+            "the trashed one is back"
+        );
         let displaced = done[0].displaced.clone().expect("the newer one was kept");
         assert_eq!(fs::read_to_string(&displaced.in_trash).unwrap(), "newer");
         assert_eq!(
             *asked.lock().unwrap(),
-            [Conflict { source: items[0].in_trash.clone(), existing: file.clone() }]
+            [Conflict {
+                source: items[0].in_trash.clone(),
+                existing: file.clone()
+            }]
         );
         // And Undo of the replace: the restored one goes out again, the
         // displaced one comes back.
@@ -537,13 +596,19 @@ mod tests {
         assert_eq!(items[1].in_trash.file_name().unwrap(), "a.2.txt");
         let elsewhere = temp.dir("home/elsewhere");
         let plan = plan_of(&ctx, &items[1..], Some(&elsewhere));
-        assert_eq!(plan.entries[0].target.as_deref(), Some(elsewhere.join("a.txt").as_path()));
+        assert_eq!(
+            plan.entries[0].target.as_deref(),
+            Some(elsewhere.join("a.txt").as_path())
+        );
         assert!(plan.entries[0].missing.is_empty());
         let done = run(&ctx, &plan, false, &ConflictPolicy::Skip).unwrap();
         assert_eq!(done[0].to, elsewhere.join("a.txt"));
         assert_eq!(fs::read_to_string(elsewhere.join("a.txt")).unwrap(), "2");
         assert!(!items[1].info.exists());
-        assert!(items[0].in_trash.exists(), "the other item stays in the Trash");
+        assert!(
+            items[0].in_trash.exists(),
+            "the other item stays in the Trash"
+        );
     }
 
     #[test]
@@ -555,14 +620,27 @@ mod tests {
         fs::write(files.join("stray.txt"), "s").unwrap();
         fs::write(files.join("broken.txt"), "b").unwrap();
         fs::create_dir_all(ctx.home_trash.join("info")).unwrap();
-        fs::write(ctx.home_trash.join("info/broken.txt.trashinfo"), "[Trash Info]\nDeletionDate=2024-01-01T00:00:00\n").unwrap();
+        fs::write(
+            ctx.home_trash.join("info/broken.txt.trashinfo"),
+            "[Trash Info]\nDeletionDate=2024-01-01T00:00:00\n",
+        )
+        .unwrap();
         let paths = vec![files.join("stray.txt"), files.join("broken.txt")];
         let plan = plan_restore_in(Some(&ctx.home_trash), &paths, None);
-        assert_eq!(plan.unknown().len(), 2, "no info and no path both mean unknown");
+        assert_eq!(
+            plan.unknown().len(),
+            2,
+            "no info and no path both mean unknown"
+        );
         assert!(plan.without_unknown().entries.is_empty());
         let failure = run(&ctx, &plan, false, &ConflictPolicy::Skip).unwrap_err();
-        let OpError::Other(text) = failure.error else { panic!() };
-        assert!(text.contains("no record") && text.contains("Restore to"), "{text}");
+        let OpError::Other(text) = failure.error else {
+            panic!()
+        };
+        assert!(
+            text.contains("no record") && text.contains("Restore to"),
+            "{text}"
+        );
         let into = temp.dir("home/chosen");
         let plan = plan_restore_in(Some(&ctx.home_trash), &paths, Some(&into));
         assert!(plan.unknown().is_empty());
@@ -577,7 +655,11 @@ mod tests {
         temp.write("home/proj/inner.txt", "i");
         let (ctx, items) = binned(&temp, &[&folder]);
         let inner = items[0].in_trash.join("inner.txt");
-        let plan = plan_restore_in(Some(&ctx.home_trash), &[inner, temp.path().join("home/elsewhere")], None);
+        let plan = plan_restore_in(
+            Some(&ctx.home_trash),
+            &[inner, temp.path().join("home/elsewhere")],
+            None,
+        );
         assert!(plan.entries.is_empty());
     }
 
@@ -611,7 +693,9 @@ mod tests {
         let failure = run(&ctx, &plan, true, &ConflictPolicy::Skip).unwrap_err();
         assert_eq!(failure.done.len(), 1);
         assert_eq!(failure.done[0].to, first);
-        let OpError::Other(text) = &failure.error else { panic!("{:?}", failure.error) };
+        let OpError::Other(text) = &failure.error else {
+            panic!("{:?}", failure.error)
+        };
         assert!(text.contains("not a folder"), "{text}");
         assert!(first.exists() && items[1].in_trash.exists());
     }
@@ -629,8 +713,13 @@ mod tests {
         let plan = plan_of(&ctx, &items, None);
         let failure = run(&ctx, &plan, false, &ConflictPolicy::Skip).unwrap_err();
         fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
-        let OpError::Other(text) = &failure.error else { panic!("{:?}", failure.error) };
-        assert!(text.contains("permission") && text.contains("locked") && text.contains("a.txt"), "{text}");
+        let OpError::Other(text) = &failure.error else {
+            panic!("{:?}", failure.error)
+        };
+        assert!(
+            text.contains("permission") && text.contains("locked") && text.contains("a.txt"),
+            "{text}"
+        );
         assert!(items[0].in_trash.exists(), "it stays in the Trash");
     }
 
@@ -641,10 +730,22 @@ mod tests {
             OpError::Other(text) => text,
             other => panic!("{other:?}"),
         };
-        assert_eq!(text(libc::EROFS), "/mnt/usb/Photos is on a read-only drive, so “a.jpg” cannot be put back there.");
-        assert_eq!(text(libc::EACCES), "You do not have permission to put “a.jpg” back in /mnt/usb/Photos.");
-        assert_eq!(text(libc::ENOTDIR), "/mnt/usb/Photos is not a folder, so “a.jpg” cannot be put back there.");
-        assert_eq!(text(libc::ENOENT), "The folder /mnt/usb/Photos no longer exists, so “a.jpg” cannot be put back.");
+        assert_eq!(
+            text(libc::EROFS),
+            "/mnt/usb/Photos is on a read-only drive, so “a.jpg” cannot be put back there."
+        );
+        assert_eq!(
+            text(libc::EACCES),
+            "You do not have permission to put “a.jpg” back in /mnt/usb/Photos."
+        );
+        assert_eq!(
+            text(libc::ENOTDIR),
+            "/mnt/usb/Photos is not a folder, so “a.jpg” cannot be put back there."
+        );
+        assert_eq!(
+            text(libc::ENOENT),
+            "The folder /mnt/usb/Photos no longer exists, so “a.jpg” cannot be put back."
+        );
         assert_eq!(
             restore_io_error(io::Error::from_raw_os_error(libc::ENOSPC), target),
             OpError::Other("There is no space left on the drive.".into())
@@ -667,7 +768,10 @@ mod tests {
         let to = temp.path().join("dest/b.txt");
         across_drives(&src, &to, &Progress::new(), &Cancel::new()).unwrap();
         assert_eq!(fs::read_to_string(&to).unwrap(), "y");
-        assert_eq!(fs::read_to_string(temp.path().join("dest/b.2.txt")).unwrap(), "taken");
+        assert_eq!(
+            fs::read_to_string(temp.path().join("dest/b.2.txt")).unwrap(),
+            "taken"
+        );
     }
 
     #[test]
@@ -678,7 +782,15 @@ mod tests {
         let plan = plan_of(&ctx, &items, None);
         let cancel = Cancel::new();
         cancel.cancel();
-        let failure = restore_in(Some(&ctx), &plan, false, &ConflictPolicy::Skip, &Progress::new(), &cancel).unwrap_err();
+        let failure = restore_in(
+            Some(&ctx),
+            &plan,
+            false,
+            &ConflictPolicy::Skip,
+            &Progress::new(),
+            &cancel,
+        )
+        .unwrap_err();
         assert_eq!(failure.error, OpError::Cancelled);
         assert!(items[0].in_trash.exists());
     }

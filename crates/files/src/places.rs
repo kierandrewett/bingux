@@ -519,7 +519,11 @@ impl UserDirs {
             if !dirs.iter().any(|(_, known)| *known == path) {
                 dirs.push((kind, path));
             }
-            if !dirs.iter().chain(&standard).any(|(_, known)| *known == usual) {
+            if !dirs
+                .iter()
+                .chain(&standard)
+                .any(|(_, known)| *known == usual)
+            {
                 standard.push((kind, usual));
             }
         }
@@ -585,7 +589,9 @@ static USER_DIRS: Mutex<Option<UserDirsCache>> = Mutex::new(None);
 /// The special folders of this system. Parsed once and kept; reloaded when
 /// `user-dirs.dirs` or `$HOME` changes (looked at most once a second).
 pub fn system_user_dirs() -> Arc<UserDirs> {
-    let mut guard = USER_DIRS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut guard = USER_DIRS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Some(cache) = guard.as_ref()
         && cache.checked.elapsed().as_millis() < 1000
     {
@@ -708,7 +714,9 @@ mod tests {
     fn special_folders_are_decided_by_text() {
         let home = Path::new("/home/a");
         let dirs = UserDirs::parse(
-            Some("XDG_DOWNLOAD_DIR=\"$HOME/Herunterladen\"\nXDG_MUSIC_DIR=\"$HOME/\"\nXDG_PUBLICSHARE_DIR=\"/srv/public\"\n"),
+            Some(
+                "XDG_DOWNLOAD_DIR=\"$HOME/Herunterladen\"\nXDG_MUSIC_DIR=\"$HOME/\"\nXDG_PUBLICSHARE_DIR=\"/srv/public\"\n",
+            ),
             home,
         );
         assert_eq!(dirs.special(home), Some(SpecialFolder::Home));
@@ -729,12 +737,18 @@ mod tests {
         // (so the sidebar lists none), home stays Home, and the usual name
         // is still Music.
         assert_eq!(dirs.path(SpecialFolder::Music), None);
-        assert_eq!(dirs.special(Path::new("/home/a/Music")), Some(SpecialFolder::Music));
+        assert_eq!(
+            dirs.special(Path::new("/home/a/Music")),
+            Some(SpecialFolder::Music)
+        );
         // Paths are case sensitive, as on disk.
         assert_eq!(dirs.special(Path::new("/home/a/music")), None);
         assert_eq!(dirs.special(Path::new("/home/a/Pictures/Documents")), None);
         assert_eq!(dirs.special(Path::new("/other/Downloads")), None);
-        assert_eq!(dirs.special(Path::new("/home/a/Downloads/")), Some(SpecialFolder::Downloads));
+        assert_eq!(
+            dirs.special(Path::new("/home/a/Downloads/")),
+            Some(SpecialFolder::Downloads)
+        );
         assert_eq!(
             dirs.special(Path::new("/srv/public")),
             Some(SpecialFolder::PublicShare)
@@ -768,13 +782,18 @@ mod tests {
         // Folders that are not special stay plain, even as bookmarks.
         assert_eq!(dirs.special(&home.join("Notes")), None);
         assert_eq!(dirs.special(&home.join("dev")), None);
-        let names: Vec<_> = dirs.children_of(home).into_iter().map(|(name, _)| name).collect();
+        let names: Vec<_> = dirs
+            .children_of(home)
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect();
         assert!(names.iter().any(|name| name == "Videos"));
     }
 
     #[test]
     fn a_linked_user_folder_keeps_its_icon_and_the_target_does_not() {
-        let root = std::env::temp_dir().join(format!("bingux-files-special-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("bingux-files-special-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let home = root.join("home");
         let share = root.join("share/downloads");
@@ -792,7 +811,8 @@ mod tests {
 
     #[test]
     fn bookmarks_are_added_and_removed_in_the_gtk_file() {
-        let dir = std::env::temp_dir().join(format!("bingux-files-bookmarks-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("bingux-files-bookmarks-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let file = dir.join("gtk-3.0/bookmarks");
         add_bookmark_to(&file, Path::new("/srv/a b")).unwrap();

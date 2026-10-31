@@ -294,8 +294,10 @@ mod tests {
         });
         let level = stick(&drive);
         let policy = move |_: &Path| level.clone();
-        let renamed =
-            rename_then(&file, "b.txt", |dirs| sync_dirs_with(&recorder, &policy, dirs)).unwrap();
+        let renamed = rename_then(&file, "b.txt", |dirs| {
+            sync_dirs_with(&recorder, &policy, dirs)
+        })
+        .unwrap();
         assert_eq!(renamed, drive.join("b.txt"));
         assert_eq!(*at_sync.lock().unwrap(), [(false, true)]);
         assert_eq!(

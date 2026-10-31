@@ -136,9 +136,17 @@ pub fn list(xbel_path: &Path, limit: usize) -> Listing {
                 .file_name()
                 .map(|name| name.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            Some(Entry::named(item.path.clone(), name, crate::Kind::File, false, false))
+            Some(Entry::named(
+                item.path.clone(),
+                name,
+                crate::Kind::File,
+                false,
+                false,
+            ))
         } else {
-            Entry::from_path(&item.path, false).ok().filter(|entry| !entry.is_dir())
+            Entry::from_path(&item.path, false)
+                .ok()
+                .filter(|entry| !entry.is_dir())
         };
         if let Some(mut entry) = entry {
             // The list is about when you used a file, not when it was saved.

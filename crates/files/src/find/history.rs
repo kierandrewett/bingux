@@ -54,7 +54,8 @@ impl Recents {
     /// the list changed.
     pub fn push(&mut self, search: &str) -> bool {
         let search = search.trim();
-        if search.is_empty() || search.chars().count() > MAX_LENGTH || search.contains(['\n', '\r']) {
+        if search.is_empty() || search.chars().count() > MAX_LENGTH || search.contains(['\n', '\r'])
+        {
             return false;
         }
         if self.items.first().is_some_and(|first| first == search) {
@@ -81,7 +82,9 @@ impl Recents {
         let base = std::env::var_os("XDG_STATE_HOME")
             .map(PathBuf::from)
             .filter(|path| path.is_absolute())
-            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state")))
+            .or_else(|| {
+                std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state"))
+            })
             .unwrap_or_else(|| PathBuf::from("/tmp"));
         base.join("bingux/files/recent-searches")
     }
@@ -92,7 +95,9 @@ impl Recents {
     }
 
     pub fn load_from(path: &Path) -> Recents {
-        std::fs::read_to_string(path).map(|text| Recents::parse(&text)).unwrap_or_default()
+        std::fs::read_to_string(path)
+            .map(|text| Recents::parse(&text))
+            .unwrap_or_default()
     }
 
     /// Write the list to the standard file.

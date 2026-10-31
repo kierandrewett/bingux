@@ -90,7 +90,11 @@ pub enum TrashRefusal {
 impl TrashRefusal {
     /// The reason as a sentence about one item, or about several (`plural`).
     pub fn reason(&self, plural: bool) -> String {
-        let (it, is) = if plural { ("They", "are") } else { ("It", "is") };
+        let (it, is) = if plural {
+            ("They", "are")
+        } else {
+            ("It", "is")
+        };
         let cannot = if plural {
             "they cannot be moved to the Trash"
         } else {
@@ -208,7 +212,9 @@ fn is_bin_part(path: &Path, home_trash: &Path) -> bool {
         .file_name()
         .and_then(OsStr::to_str)
         .is_some_and(|name| matches!(name, "files" | "info" | "directorysizes"));
-    part && path.parent().is_some_and(|dir| is_bin(dir, Some(home_trash)))
+    part && path
+        .parent()
+        .is_some_and(|dir| is_bin(dir, Some(home_trash)))
 }
 
 fn folder_name(kind: SpecialFolder) -> Option<&'static str> {
@@ -566,7 +572,9 @@ fn copy_into(src: &Path, bin: &Path, in_trash: &Path, copying: Copying) -> Resul
     };
     let Some(landed) = landed.first() else {
         let _ = fs::remove_dir(&staging);
-        return Err(OpError::Other("It could not be copied into the Trash.".into()));
+        return Err(OpError::Other(
+            "It could not be copied into the Trash.".into(),
+        ));
     };
     // The original is gone now, so a failure here leaves the only copy in the
     // staging folder and says so.
@@ -898,7 +906,10 @@ pub(super) mod tests {
         untrash(&[dir_item, link_item, dangling_item]).unwrap();
         assert!(dir.join("inner.txt").exists());
         assert_eq!(fs::read_link(&link).unwrap(), target);
-        assert_eq!(fs::read_link(&dangling).unwrap(), temp.path().join("nowhere"));
+        assert_eq!(
+            fs::read_link(&dangling).unwrap(),
+            temp.path().join("nowhere")
+        );
     }
 
     #[test]
@@ -918,10 +929,17 @@ pub(super) mod tests {
             fs::create_dir_all(file.parent().unwrap()).unwrap();
             fs::write(&file, "x").unwrap();
             let item = rename_into(&file, &bin);
-            assert_eq!(item.in_trash.file_name().unwrap(), name, "{name:?} keeps its bytes in the bin");
+            assert_eq!(
+                item.in_trash.file_name().unwrap(),
+                name,
+                "{name:?} keeps its bytes in the bin"
+            );
             let info = parse_info(&fs::read(&item.info).unwrap()).unwrap();
             assert_eq!(info.path, file, "{name:?} is recorded exactly");
-            assert!(info_of_bytes(&item).is_ascii(), "the info file is plain ASCII");
+            assert!(
+                info_of_bytes(&item).is_ascii(),
+                "the info file is plain ASCII"
+            );
             assert_eq!(untrash(&[item]).unwrap(), vec![file.clone()]);
             assert!(file.exists(), "{name:?} is back");
         }
@@ -1051,7 +1069,10 @@ pub(super) mod tests {
             .collect();
         assert_eq!(names, ["proj.2"], "the restored folder left the cache");
         untrash(&[second]).unwrap();
-        assert!(!bin.join("directorysizes").exists(), "an empty cache is no file");
+        assert!(
+            !bin.join("directorysizes").exists(),
+            "an empty cache is no file"
+        );
     }
 
     #[test]
@@ -1102,13 +1123,19 @@ pub(super) mod tests {
         );
         // Without the sticky bit it is not trusted.
         fs::set_permissions(&shared, fs::Permissions::from_mode(0o777)).unwrap();
-        assert_eq!(topdir_trash(&top, me).unwrap(), top.join(format!(".Trash-{me}")));
+        assert_eq!(
+            topdir_trash(&top, me).unwrap(),
+            top.join(format!(".Trash-{me}"))
+        );
         // A link is not trusted either, sticky or not.
         let other = temp.dir("drive2");
         let real = temp.dir("elsewhere");
         fs::set_permissions(&real, fs::Permissions::from_mode(0o1777)).unwrap();
         std::os::unix::fs::symlink(&real, other.join(".Trash")).unwrap();
-        assert_eq!(topdir_trash(&other, me).unwrap(), other.join(format!(".Trash-{me}")));
+        assert_eq!(
+            topdir_trash(&other, me).unwrap(),
+            other.join(format!(".Trash-{me}"))
+        );
     }
 
     #[test]
@@ -1174,14 +1201,23 @@ pub(super) mod tests {
         assert_eq!(plan_bin(&at("home/a.txt"), &ctx), Ok(BinPlan::Home));
         assert_eq!(plan_bin(&at("elsewhere/a.txt"), &ctx), Ok(BinPlan::Home));
         // Another local drive and a stick: their own bins, never the home bin.
-        assert_eq!(plan_bin(&at("usb/a.txt"), &ctx), Ok(BinPlan::Drive(at("usb"))));
-        assert_eq!(plan_bin(&at("data/x/a.txt"), &ctx), Ok(BinPlan::Drive(at("data"))));
+        assert_eq!(
+            plan_bin(&at("usb/a.txt"), &ctx),
+            Ok(BinPlan::Drive(at("usb")))
+        );
+        assert_eq!(
+            plan_bin(&at("data/x/a.txt"), &ctx),
+            Ok(BinPlan::Drive(at("data")))
+        );
         // Read-only.
         assert_eq!(plan_bin(&at("cd/a.txt"), &ctx), Err(TrashRefusal::ReadOnly));
         // A share with no bin of ours: refused; with one: its own bin.
         assert_eq!(plan_bin(&at("nas/a.txt"), &ctx), Err(TrashRefusal::NoBin));
         fs::create_dir(at("nas").join(".Trash-4242")).unwrap();
-        assert_eq!(plan_bin(&at("nas/a.txt"), &ctx), Ok(BinPlan::Drive(at("nas"))));
+        assert_eq!(
+            plan_bin(&at("nas/a.txt"), &ctx),
+            Ok(BinPlan::Drive(at("nas")))
+        );
     }
 
     #[test]
@@ -1208,7 +1244,10 @@ pub(super) mod tests {
         let temp = Temp::new("plan-unknown");
         let mut ctx = context(&temp, &[]);
         ctx.table.clear();
-        assert_eq!(plan_bin(&temp.path().join("home/a"), &ctx), Ok(BinPlan::ByDevice));
+        assert_eq!(
+            plan_bin(&temp.path().join("home/a"), &ctx),
+            Ok(BinPlan::ByDevice)
+        );
     }
 
     #[test]
@@ -1220,24 +1259,48 @@ pub(super) mod tests {
         assert_eq!(refused(Path::new("/")), TrashRefusal::Root);
         assert_eq!(refused(Path::new("relative/a")), TrashRefusal::NotAbsolute);
         assert_eq!(refused(&home), TrashRefusal::Home);
-        assert_eq!(refused(&home.join("Documents")), TrashRefusal::UserFolder("Documents"));
-        assert_eq!(refused(&home.join("Desktop")), TrashRefusal::UserFolder("Desktop"));
-        assert_eq!(refused(&home.join("Public")), TrashRefusal::UserFolder("Public"));
+        assert_eq!(
+            refused(&home.join("Documents")),
+            TrashRefusal::UserFolder("Documents")
+        );
+        assert_eq!(
+            refused(&home.join("Desktop")),
+            TrashRefusal::UserFolder("Desktop")
+        );
+        assert_eq!(
+            refused(&home.join("Public")),
+            TrashRefusal::UserFolder("Public")
+        );
         assert_eq!(refused(home.parent().unwrap()), TrashRefusal::HoldsHome);
         // The bin, the folders it is made of, and what holds it.
         let bin = home.join(".local/share/Trash");
         assert_eq!(refused(&bin), TrashRefusal::TrashItself);
         assert_eq!(refused(&bin.join("files")), TrashRefusal::TrashItself);
         assert_eq!(refused(&bin.join("info")), TrashRefusal::TrashItself);
-        assert_eq!(refused(&home.join(".local/share")), TrashRefusal::HoldsTrash);
+        assert_eq!(
+            refused(&home.join(".local/share")),
+            TrashRefusal::HoldsTrash
+        );
         assert_eq!(refused(&home.join(".local")), TrashRefusal::HoldsTrash);
-        assert_eq!(refused(Path::new("/media/usb/.Trash-1000")), TrashRefusal::TrashItself);
-        assert_eq!(refused(Path::new("/media/usb/.Trash")), TrashRefusal::TrashItself);
-        assert_eq!(refused(Path::new("/media/usb/.Trash/1000")), TrashRefusal::TrashItself);
+        assert_eq!(
+            refused(Path::new("/media/usb/.Trash-1000")),
+            TrashRefusal::TrashItself
+        );
+        assert_eq!(
+            refused(Path::new("/media/usb/.Trash")),
+            TrashRefusal::TrashItself
+        );
+        assert_eq!(
+            refused(Path::new("/media/usb/.Trash/1000")),
+            TrashRefusal::TrashItself
+        );
         // Inside a bin.
         assert_eq!(refused(&bin.join("files/a.txt")), TrashRefusal::InTrash);
         assert_eq!(refused(&bin.join("files/dir/inner")), TrashRefusal::InTrash);
-        assert_eq!(refused(Path::new("/media/usb/.Trash-1000/files/x")), TrashRefusal::InTrash);
+        assert_eq!(
+            refused(Path::new("/media/usb/.Trash-1000/files/x")),
+            TrashRefusal::InTrash
+        );
         // An ordinary file and a folder that merely looks like one of those.
         assert_eq!(check_trash_in(&home.join("Documents/a.txt"), &ctx), Ok(()));
         assert_eq!(check_trash_in(&home.join("files"), &ctx), Ok(()));
@@ -1260,9 +1323,18 @@ pub(super) mod tests {
                 assert!(text.chars().next().unwrap().is_uppercase(), "{text}");
             }
         }
-        assert_eq!(TrashRefusal::ReadOnly.reason(false), "It is on a read-only drive, so it cannot be moved to the Trash.");
-        assert_eq!(TrashRefusal::NoBin.reason(true), "Their drive has no Trash and one cannot be made there, so they cannot be moved to the Trash.");
-        assert_eq!(TrashRefusal::InTrash.reason(true), "They are in the Trash already.");
+        assert_eq!(
+            TrashRefusal::ReadOnly.reason(false),
+            "It is on a read-only drive, so it cannot be moved to the Trash."
+        );
+        assert_eq!(
+            TrashRefusal::NoBin.reason(true),
+            "Their drive has no Trash and one cannot be made there, so they cannot be moved to the Trash."
+        );
+        assert_eq!(
+            TrashRefusal::InTrash.reason(true),
+            "They are in the Trash already."
+        );
         assert!(TrashRefusal::NoBin.offers_delete());
         assert!(TrashRefusal::ReadOnly.offers_delete());
         assert!(TrashRefusal::InTrash.offers_delete());
@@ -1286,7 +1358,10 @@ pub(super) mod tests {
         let usb_file = temp.write("usb/b.txt", "u");
         let items = trash_in(&ctx, &[home_file.clone(), usb_file.clone()], Copying::Small).unwrap();
         assert_eq!(items[0].in_trash, ctx.home_trash.join("files/a.txt"));
-        assert_eq!(items[1].in_trash, temp.path().join("usb/.Trash-4242/files/b.txt"));
+        assert_eq!(
+            items[1].in_trash,
+            temp.path().join("usb/.Trash-4242/files/b.txt")
+        );
         assert!(
             info_of(&items[1]).contains("\nPath=b.txt\n"),
             "a drive's bin is relative to its top: {}",
@@ -1308,7 +1383,10 @@ pub(super) mod tests {
             Err(OpError::CannotTrash(TrashRefusal::ReadOnly))
         );
         assert!(fine.exists() && on_cd.exists(), "neither was moved");
-        assert!(!ctx.home_trash.join("files").exists(), "no bin was even made");
+        assert!(
+            !ctx.home_trash.join("files").exists(),
+            "no bin was even made"
+        );
         assert_eq!(
             trash_in(&ctx, &[ctx.home.clone()], Copying::Small),
             Err(OpError::CannotTrash(TrashRefusal::Home))
@@ -1324,8 +1402,15 @@ pub(super) mod tests {
         let missing = temp.path().join("home/missing.txt");
         let error = trash_in(&ctx, &[one.clone(), missing], Copying::Small).unwrap_err();
         assert_eq!(error, OpError::NotFound);
-        assert_eq!(fs::read_to_string(&one).unwrap(), "1", "the first one is back");
-        assert_eq!(fs::read_dir(ctx.home_trash.join("info")).unwrap().count(), 0);
+        assert_eq!(
+            fs::read_to_string(&one).unwrap(),
+            "1",
+            "the first one is back"
+        );
+        assert_eq!(
+            fs::read_dir(ctx.home_trash.join("info")).unwrap().count(),
+            0
+        );
     }
 
     // ---- copying across a mount point on the home drive --------------------
@@ -1342,8 +1427,14 @@ pub(super) mod tests {
         let item = trash_into(&dir, &bin, None, Placing::Copy(Copying::Small)).unwrap();
         assert_eq!(item.in_trash.file_name().unwrap(), "proj.2");
         assert!(!dir.exists(), "the original went");
-        assert_eq!(fs::read_to_string(item.in_trash.join("inner.txt")).unwrap(), "inside");
-        assert_eq!(fs::read_link(item.in_trash.join("link")).unwrap(), Path::new("inner.txt"));
+        assert_eq!(
+            fs::read_to_string(item.in_trash.join("inner.txt")).unwrap(),
+            "inside"
+        );
+        assert_eq!(
+            fs::read_link(item.in_trash.join("link")).unwrap(),
+            Path::new("inner.txt")
+        );
         let info = parse_info(&fs::read(&item.info).unwrap()).unwrap();
         assert_eq!(info.path, dir);
         assert!(sizes_text(&bin).contains(" proj.2"), "{}", sizes_text(&bin));
@@ -1352,7 +1443,10 @@ pub(super) mod tests {
             .flatten()
             .filter(|entry| entry.file_name().to_string_lossy().starts_with(".moving"))
             .collect();
-        assert!(staging.is_empty(), "the staging folder is removed: {staging:?}");
+        assert!(
+            staging.is_empty(),
+            "the staging folder is removed: {staging:?}"
+        );
         untrash(&[item]).unwrap();
         assert!(dir.join("inner.txt").exists());
     }
@@ -1371,7 +1465,11 @@ pub(super) mod tests {
             Err(OpError::CopyNeeded)
         );
         assert!(big.exists(), "nothing was touched");
-        assert_eq!(fs::read_dir(bin.join("info")).unwrap().count(), 0, "the reserved info is gone");
+        assert_eq!(
+            fs::read_dir(bin.join("info")).unwrap().count(),
+            0,
+            "the reserved info is gone"
+        );
         // Agreed to: it goes.
         let item = trash_into(&big, &bin, None, Placing::Copy(Copying::Any)).unwrap();
         assert!(item.in_trash.exists());
@@ -1383,12 +1481,18 @@ pub(super) mod tests {
         let temp = Temp::new("trash-weigh");
         let small = temp.write("s/a.txt", "tiny");
         assert!(!weighs_more_than(&small, COPY_LIMIT));
-        assert!(weighs_more_than(&small, 10), "every entry counts for at least a kibibyte");
+        assert!(
+            weighs_more_than(&small, 10),
+            "every entry counts for at least a kibibyte"
+        );
         let dir = temp.dir("many");
         for index in 0..5 {
             temp.write(&format!("many/{index}"), "");
         }
-        assert!(weighs_more_than(&dir, 4 * 1024), "six entries are over four kibibytes");
+        assert!(
+            weighs_more_than(&dir, 4 * 1024),
+            "six entries are over four kibibytes"
+        );
         assert!(!weighs_more_than(&dir, 7 * 1024));
     }
 
@@ -1413,7 +1517,11 @@ pub(super) mod tests {
         let temp = Temp::new("can-trash");
         let ctx = context(
             &temp,
-            &[("usb", "vfat", false), ("cd", "iso9660", true), ("nas", "nfs4", false)],
+            &[
+                ("usb", "vfat", false),
+                ("cd", "iso9660", true),
+                ("nas", "nfs4", false),
+            ],
         );
         let ok = |relative: &str| check_trash_in(&temp.path().join(relative), &ctx).is_ok();
         assert!(ok("home/a.txt"), "the home drive");

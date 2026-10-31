@@ -59,7 +59,8 @@ pub fn file_details(path: &Path) -> Result<FileDetails, OpError> {
     let xattrs = xattrs(path);
     let named = |name: &str| xattrs.iter().find(|attribute| attribute.name == name);
     let security_context = named("security.selinux").map(|attribute| attribute.value.clone());
-    let acl = named("system.posix_acl_access").is_some() || named("system.posix_acl_default").is_some();
+    let acl =
+        named("system.posix_acl_access").is_some() || named("system.posix_acl_default").is_some();
     Ok(FileDetails {
         inode: meta.ino(),
         device: device_numbers(meta.dev()),
@@ -97,7 +98,8 @@ pub fn xattrs(path: &Path) -> Vec<Xattr> {
             let attribute = CString::new(name).ok()?;
             Some(Xattr {
                 name: OsStr::from_bytes(name).to_string_lossy().into_owned(),
-                value: read(&c_path, &attribute).map_or_else(|| NOT_SHOWN.to_owned(), |value| value_text(&value)),
+                value: read(&c_path, &attribute)
+                    .map_or_else(|| NOT_SHOWN.to_owned(), |value| value_text(&value)),
             })
         })
         .collect()
@@ -116,7 +118,8 @@ fn list(path: &CString) -> Option<Vec<u8>> {
         }
         let mut buffer = vec![0_u8; size as usize];
         // SAFETY: the buffer is `size` bytes long and outlives the call.
-        let got = unsafe { libc::listxattr(path.as_ptr(), buffer.as_mut_ptr().cast(), buffer.len()) };
+        let got =
+            unsafe { libc::listxattr(path.as_ptr(), buffer.as_mut_ptr().cast(), buffer.len()) };
         if got >= 0 {
             buffer.truncate(got as usize);
             return Some(buffer);
@@ -135,7 +138,12 @@ fn read(path: &CString, name: &CString) -> Option<Vec<u8>> {
     // SAFETY: both strings are NUL-terminated and the buffer is as long as
     // the size passed.
     let got = unsafe {
-        libc::getxattr(path.as_ptr(), name.as_ptr(), buffer.as_mut_ptr().cast(), buffer.len())
+        libc::getxattr(
+            path.as_ptr(),
+            name.as_ptr(),
+            buffer.as_mut_ptr().cast(),
+            buffer.len(),
+        )
     };
     (got >= 0).then(|| {
         buffer.truncate(got as usize);
@@ -183,11 +191,20 @@ mod tests {
 
     #[test]
     fn text_values_are_shown_and_others_in_hex() {
-        assert_eq!(value_text(b"https://example.com/a"), "https://example.com/a");
-        assert_eq!(value_text(b"system_u:object_r:user_home_t:s0\0"), "system_u:object_r:user_home_t:s0");
+        assert_eq!(
+            value_text(b"https://example.com/a"),
+            "https://example.com/a"
+        );
+        assert_eq!(
+            value_text(b"system_u:object_r:user_home_t:s0\0"),
+            "system_u:object_r:user_home_t:s0"
+        );
         assert_eq!(value_text(&[0, 1, 0xff]), "00 01 ff (3 bytes)");
         let long = "x".repeat(300);
-        assert_eq!(value_text(long.as_bytes()), format!("{}…", "x".repeat(SHOWN_CHARS)));
+        assert_eq!(
+            value_text(long.as_bytes()),
+            format!("{}…", "x".repeat(SHOWN_CHARS))
+        );
         let blob = [7_u8; 40];
         assert!(value_text(&blob).ends_with("… (40 bytes)"));
     }
@@ -201,7 +218,10 @@ mod tests {
         assert_eq!(details.hard_links, 2);
         assert!(details.inode > 0 && details.block_size >= 512);
         assert!(details.disk_bytes >= 5 || details.disk_bytes == 0);
-        assert_eq!(file_details(&temp.path().join("gone")), Err(OpError::NotFound));
+        assert_eq!(
+            file_details(&temp.path().join("gone")),
+            Err(OpError::NotFound)
+        );
     }
 
     #[test]
@@ -211,7 +231,15 @@ mod tests {
         let c_path = CString::new(file.as_os_str().as_bytes()).unwrap();
         let name = CString::new("user.bingux.test").unwrap();
         // SAFETY: NUL-terminated strings and a value of the length passed.
-        let set = unsafe { libc::setxattr(c_path.as_ptr(), name.as_ptr(), b"hello".as_ptr().cast(), 5, 0) };
+        let set = unsafe {
+            libc::setxattr(
+                c_path.as_ptr(),
+                name.as_ptr(),
+                b"hello".as_ptr().cast(),
+                5,
+                0,
+            )
+        };
         if set != 0 {
             eprintln!("skipped: this drive keeps no user attributes");
             return;
@@ -232,6 +260,10 @@ mod tests {
         let temp = Temp::new("details-none");
         let file = temp.write("a", "x");
         // A SELinux system labels every file; any other has none.
-        assert!(xattrs(&file).iter().all(|a| a.name.starts_with("security.")));
+        assert!(
+            xattrs(&file)
+                .iter()
+                .all(|a| a.name.starts_with("security."))
+        );
     }
 }

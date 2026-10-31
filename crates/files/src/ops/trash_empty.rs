@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use crate::listing::Cancel;
 use crate::mounts;
 
-use super::trash::{existing_bins, home_trash};
 use super::transfer::delete;
+use super::trash::{existing_bins, home_trash};
 use super::trash_info::{cached_dir_size, disk_use, forget_sizes, item_in};
 use super::{OpError, Progress};
 
@@ -90,7 +90,11 @@ pub fn empty_trash(progress: &Progress, cancel: &Cancel) -> Result<(), OpError> 
     empty_bins(&bins(), progress, cancel)
 }
 
-pub(super) fn empty_bins(bins: &[PathBuf], progress: &Progress, cancel: &Cancel) -> Result<(), OpError> {
+pub(super) fn empty_bins(
+    bins: &[PathBuf],
+    progress: &Progress,
+    cancel: &Cancel,
+) -> Result<(), OpError> {
     let mut doomed = Vec::new();
     for bin in bins {
         // The files first: an info file with no file is harmless, a file with
@@ -120,7 +124,11 @@ pub(super) fn empty_bins(bins: &[PathBuf], progress: &Progress, cancel: &Cancel)
 /// any other. Cannot be undone; ask first. Stops at the first error; what was
 /// deleted stays deleted, and the info files of the items that are gone go
 /// too, so no orphan is left that would number a later item's name.
-pub fn delete_trashed(paths: &[PathBuf], progress: &Progress, cancel: &Cancel) -> Result<(), OpError> {
+pub fn delete_trashed(
+    paths: &[PathBuf],
+    progress: &Progress,
+    cancel: &Cancel,
+) -> Result<(), OpError> {
     delete_trashed_in(home_trash().as_deref(), paths, progress, cancel)
 }
 
@@ -158,11 +166,11 @@ fn delete_trashed_in(
 #[cfg(test)]
 mod tests {
     use super::super::testing::Temp;
-    use crate::mounts::Mount;
-    use std::path::Path;
     use super::super::trash::tests::context;
     use super::super::trash::{Copying, trash_in};
     use super::*;
+    use crate::mounts::Mount;
+    use std::path::Path;
 
     #[test]
     fn the_bins_that_exist_are_found_on_every_drive() {
@@ -215,7 +223,10 @@ mod tests {
         for bin in [&bin_a, &bin_b] {
             assert_eq!(fs::read_dir(bin.join("files")).unwrap().count(), 0);
             assert_eq!(fs::read_dir(bin.join("info")).unwrap().count(), 0);
-            assert!(!bin.join("directorysizes").exists(), "the size cache goes too");
+            assert!(
+                !bin.join("directorysizes").exists(),
+                "the size cache goes too"
+            );
         }
         assert!(bin_a.join("files").is_dir(), "the bin itself stays");
         assert_eq!(fs::read_to_string(outside).unwrap(), "keep");
@@ -251,11 +262,18 @@ mod tests {
         trash_in(&ctx, &[one, folder, link], Copying::Small).unwrap();
         let summary = summarize(&[ctx.home_trash.clone()], &Cancel::new()).unwrap();
         assert_eq!(summary.items, 3, "a file, a folder and a link");
-        assert!(summary.bytes >= 14_000, "the blocks of every file inside: {}", summary.bytes);
+        assert!(
+            summary.bytes >= 14_000,
+            "the blocks of every file inside: {}",
+            summary.bytes
+        );
         assert_eq!(summarize(&[], &Cancel::new()), Ok(TrashSummary::default()));
         let cancel = Cancel::new();
         cancel.cancel();
-        assert_eq!(summarize(&[ctx.home_trash.clone()], &cancel), Err(OpError::Cancelled));
+        assert_eq!(
+            summarize(&[ctx.home_trash.clone()], &cancel),
+            Err(OpError::Cancelled)
+        );
     }
 
     #[test]
@@ -265,16 +283,36 @@ mod tests {
         let folder = temp.dir("home/proj");
         temp.write("home/proj/p1", &"y".repeat(9000));
         trash_in(&ctx, &[folder], Copying::Small).unwrap();
-        let real = summarize(&[ctx.home_trash.clone()], &Cancel::new()).unwrap().bytes;
+        let real = summarize(&[ctx.home_trash.clone()], &Cancel::new())
+            .unwrap()
+            .bytes;
         // A cache line that claims a huge size is believed while the info
         // file has the time it records...
         let info = ctx.home_trash.join("info/proj.trashinfo");
         let mtime = fs::metadata(&info).unwrap().mtime();
-        fs::write(ctx.home_trash.join("directorysizes"), format!("123456789 {mtime} proj\n")).unwrap();
-        assert_eq!(summarize(&[ctx.home_trash.clone()], &Cancel::new()).unwrap().bytes, 123_456_789);
+        fs::write(
+            ctx.home_trash.join("directorysizes"),
+            format!("123456789 {mtime} proj\n"),
+        )
+        .unwrap();
+        assert_eq!(
+            summarize(&[ctx.home_trash.clone()], &Cancel::new())
+                .unwrap()
+                .bytes,
+            123_456_789
+        );
         // ...and not once the info file has changed.
-        fs::write(ctx.home_trash.join("directorysizes"), format!("123456789 {} proj\n", mtime - 10)).unwrap();
-        assert_eq!(summarize(&[ctx.home_trash.clone()], &Cancel::new()).unwrap().bytes, real);
+        fs::write(
+            ctx.home_trash.join("directorysizes"),
+            format!("123456789 {} proj\n", mtime - 10),
+        )
+        .unwrap();
+        assert_eq!(
+            summarize(&[ctx.home_trash.clone()], &Cancel::new())
+                .unwrap()
+                .bytes,
+            real
+        );
     }
 
     #[test]
@@ -293,8 +331,14 @@ mod tests {
         for index in [0, 2] {
             assert!(!items[index].in_trash.exists() && !items[index].info.exists());
         }
-        assert!(items[1].in_trash.exists() && items[1].info.exists(), "the other item is untouched");
-        assert!(!ctx.home_trash.join("directorysizes").exists(), "the folder's line went");
+        assert!(
+            items[1].in_trash.exists() && items[1].info.exists(),
+            "the other item is untouched"
+        );
+        assert!(
+            !ctx.home_trash.join("directorysizes").exists(),
+            "the folder's line went"
+        );
         assert!(progress.files_done() >= 3);
     }
 
@@ -306,7 +350,13 @@ mod tests {
         temp.write("home/proj/inner.txt", "i");
         let items = trash_in(&ctx, &[folder], Copying::Small).unwrap();
         let inner = items[0].in_trash.join("inner.txt");
-        delete_trashed_in(Some(&ctx.home_trash), &[inner.clone()], &Progress::new(), &Cancel::new()).unwrap();
+        delete_trashed_in(
+            Some(&ctx.home_trash),
+            &[inner.clone()],
+            &Progress::new(),
+            &Cancel::new(),
+        )
+        .unwrap();
         assert!(!inner.exists());
         assert!(items[0].in_trash.exists() && items[0].info.exists());
     }
@@ -319,9 +369,17 @@ mod tests {
         let items = trash_in(&ctx, &[file], Copying::Small).unwrap();
         let cancel = Cancel::new();
         cancel.cancel();
-        let result = delete_trashed_in(Some(&ctx.home_trash), &[items[0].in_trash.clone()], &Progress::new(), &cancel);
+        let result = delete_trashed_in(
+            Some(&ctx.home_trash),
+            &[items[0].in_trash.clone()],
+            &Progress::new(),
+            &cancel,
+        );
         assert_eq!(result, Err(OpError::Cancelled));
-        assert!(items[0].in_trash.exists() && items[0].info.exists(), "still restorable");
+        assert!(
+            items[0].in_trash.exists() && items[0].info.exists(),
+            "still restorable"
+        );
     }
 
     #[test]

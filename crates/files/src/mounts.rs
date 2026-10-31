@@ -194,8 +194,18 @@ const NETWORK: &[&str] = &[
 
 /// Folders whose mounts belong to the system, not to the person.
 const SYSTEM_ROOTS: &[&str] = &[
-    "/boot", "/efi", "/sys", "/proc", "/dev", "/var/lib", "/var/tmp", "/var/snap", "/snap",
-    "/usr", "/etc", "/tmp",
+    "/boot",
+    "/efi",
+    "/sys",
+    "/proc",
+    "/dev",
+    "/var/lib",
+    "/var/tmp",
+    "/var/snap",
+    "/snap",
+    "/usr",
+    "/etc",
+    "/tmp",
 ];
 
 /// `/proc/self/mountinfo` writes a space as `\040`, a tab as `\011`, a
@@ -327,11 +337,15 @@ fn classify(fs_type: &str, device: &str, under_media: bool) -> MountKind {
     if PSEUDO.contains(&fs_type) && !fs_type.starts_with("fuse") {
         return MountKind::Local;
     }
-    if fs_type.starts_with("fuse.") && !device.starts_with('/') && (device.contains(':') || device.contains('@')) {
+    if fs_type.starts_with("fuse.")
+        && !device.starts_with('/')
+        && (device.contains(':') || device.contains('@'))
+    {
         return MountKind::Network;
     }
     let name = device.rsplit('/').next().unwrap_or("");
-    if matches!(fs_type, "iso9660" | "udf") || name.starts_with("sr") && device.starts_with("/dev/") {
+    if matches!(fs_type, "iso9660" | "udf") || name.starts_with("sr") && device.starts_with("/dev/")
+    {
         return MountKind::Optical;
     }
     if under_media {
@@ -344,7 +358,13 @@ fn classify(fs_type: &str, device: &str, under_media: bool) -> MountKind {
     }
 }
 
-fn is_listed(fs_type: &str, device: &str, mount_point: &str, kind: MountKind, under_media: bool) -> bool {
+fn is_listed(
+    fs_type: &str,
+    device: &str,
+    mount_point: &str,
+    kind: MountKind,
+    under_media: bool,
+) -> bool {
     if PSEUDO.contains(&fs_type) {
         return false;
     }
@@ -399,10 +419,12 @@ pub(crate) fn unescape_udev(text: &str) -> String {
     let mut raw = Vec::with_capacity(bytes.len());
     let mut index = 0;
     while index < bytes.len() {
-        let value = (bytes[index] == b'\\' && bytes.get(index + 1) == Some(&b'x') && index + 3 < bytes.len())
-            .then(|| std::str::from_utf8(&bytes[index + 2..index + 4]).ok())
-            .flatten()
-            .and_then(|digits| u8::from_str_radix(digits, 16).ok());
+        let value = (bytes[index] == b'\\'
+            && bytes.get(index + 1) == Some(&b'x')
+            && index + 3 < bytes.len())
+        .then(|| std::str::from_utf8(&bytes[index + 2..index + 4]).ok())
+        .flatten()
+        .and_then(|digits| u8::from_str_radix(digits, 16).ok());
         match value {
             Some(value) => {
                 raw.push(value);
@@ -428,7 +450,9 @@ fn volume_labels() -> HashMap<String, String> {
             continue;
         };
         let (Some(device), name) = (
-            target.file_name().map(|name| name.to_string_lossy().into_owned()),
+            target
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned()),
             unescape_udev(&item.file_name().to_string_lossy()),
         ) else {
             continue;
@@ -498,7 +522,9 @@ pub fn mount_for<'a>(path: &Path, mounts: &'a [Mount]) -> Option<&'a Mount> {
 static TABLE: Mutex<Option<(Instant, Arc<Vec<Mount>>)>> = Mutex::new(None);
 
 fn table() -> Arc<Vec<Mount>> {
-    let mut guard = TABLE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut guard = TABLE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Some((read_at, table)) = guard.as_ref()
         && read_at.elapsed() < Duration::from_secs(2)
     {
@@ -656,8 +682,9 @@ fn hotplug_device(device: (u32, u32), depth: u32) -> bool {
     if let Ok(real) = fs::canonicalize(&base)
         && real.components().any(|part| {
             part.as_os_str().to_str().is_some_and(|name| {
-                name.strip_prefix("usb")
-                    .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
+                name.strip_prefix("usb").is_some_and(|rest| {
+                    !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit())
+                })
             })
         })
     {
@@ -706,15 +733,16 @@ static SPACE: Mutex<Option<HashMap<PathBuf, Cached>>> = Mutex::new(None);
 static STUCK: Mutex<Option<HashSet<PathBuf>>> = Mutex::new(None);
 
 fn cached_usage(mount_point: &Path) -> Option<Usage> {
-    let guard = SPACE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    guard
-        .as_ref()?
-        .get(mount_point)
-        .map(|cached| cached.usage)
+    let guard = SPACE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    guard.as_ref()?.get(mount_point).map(|cached| cached.usage)
 }
 
 fn cache_fresh(mount_point: &Path, kind: MountKind) -> Option<Usage> {
-    let guard = SPACE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let guard = SPACE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let cached = guard.as_ref()?.get(mount_point)?;
     let ttl = if kind == MountKind::Network {
         Duration::from_secs(30)
@@ -725,7 +753,9 @@ fn cache_fresh(mount_point: &Path, kind: MountKind) -> Option<Usage> {
 }
 
 fn remember(mount_point: &Path, usage: Usage) {
-    let mut guard = SPACE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut guard = SPACE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     guard.get_or_insert_with(HashMap::new).insert(
         mount_point.to_path_buf(),
         Cached {
@@ -747,7 +777,11 @@ fn statvfs(path: &Path) -> Usage {
         if libc::statvfs(c_path.as_ptr(), &mut buf) != 0 {
             return Usage::Unknown;
         }
-        let unit = if buf.f_frsize > 0 { buf.f_frsize } else { buf.f_bsize };
+        let unit = if buf.f_frsize > 0 {
+            buf.f_frsize
+        } else {
+            buf.f_bsize
+        };
         let total = u64::from(buf.f_blocks).saturating_mul(unit as u64);
         if total == 0 {
             return Usage::Unknown;
@@ -1021,7 +1055,14 @@ pub fn unmount(mount: &Mount) -> Result<(), String> {
     }
     let device = std::ffi::OsString::from(&mount.device);
     let via_udisks = if mount.device.starts_with("/dev/") {
-        match run("udisksctl", &[std::ffi::OsStr::new("unmount"), std::ffi::OsStr::new("-b"), &device]) {
+        match run(
+            "udisksctl",
+            &[
+                std::ffi::OsStr::new("unmount"),
+                std::ffi::OsStr::new("-b"),
+                &device,
+            ],
+        ) {
             Ok(()) => return Ok(()),
             Err(error) => Some(error),
         }
@@ -1057,7 +1098,14 @@ pub fn eject(mount: &Mount) -> Result<(), String> {
         let disk = whole_disk(&mount.device);
         let disk = std::ffi::OsString::from(disk);
         // A drive that cannot be powered off is still safe to remove.
-        let _ = run("udisksctl", &[std::ffi::OsStr::new("power-off"), std::ffi::OsStr::new("-b"), &disk]);
+        let _ = run(
+            "udisksctl",
+            &[
+                std::ffi::OsStr::new("power-off"),
+                std::ffi::OsStr::new("-b"),
+                &disk,
+            ],
+        );
     }
     Ok(())
 }
@@ -1128,15 +1176,24 @@ mod tests {
     #[test]
     fn describes_a_mount() {
         let mounts = parsed();
-        let nfs = mounts.iter().find(|m| m.mount_point == Path::new("/mnt/kieran")).unwrap();
-        assert_eq!((nfs.id, nfs.fs_type.as_str(), nfs.device.as_str()), (1833, "nfs4", "192.168.0.39:/"));
+        let nfs = mounts
+            .iter()
+            .find(|m| m.mount_point == Path::new("/mnt/kieran"))
+            .unwrap();
+        assert_eq!(
+            (nfs.id, nfs.fs_type.as_str(), nfs.device.as_str()),
+            (1833, "nfs4", "192.168.0.39:/")
+        );
         assert_eq!(nfs.label, "kieran");
         let usb = mounts.iter().find(|m| m.device == "/dev/sdb1").unwrap();
         assert!(usb.mounted_by_user && !usb.read_only);
         assert_eq!(usb.label, "My Disk");
         let disc = mounts.iter().find(|m| m.device == "/dev/sr0").unwrap();
         assert!(disc.read_only && disc.can_unmount());
-        let root = mounts.iter().find(|m| m.mount_point == Path::new("/")).unwrap();
+        let root = mounts
+            .iter()
+            .find(|m| m.mount_point == Path::new("/"))
+            .unwrap();
         assert!(!root.can_unmount());
         assert_eq!(root.label, "File System");
     }
@@ -1144,7 +1201,9 @@ mod tests {
     #[test]
     fn finds_the_deepest_mount() {
         let mounts = parsed();
-        let found = |path: &str| mount_for(Path::new(path), &mounts).map(|m| m.mount_point.to_str().unwrap());
+        let found = |path: &str| {
+            mount_for(Path::new(path), &mounts).map(|m| m.mount_point.to_str().unwrap())
+        };
         assert_eq!(found("/mnt/kieran/home/x"), Some("/mnt/kieran"));
         assert_eq!(found("/home/a"), Some("/home"));
         assert_eq!(found("/usr/bin"), Some("/"));
@@ -1166,8 +1225,14 @@ mod tests {
 
     #[test]
     fn writes_to_a_share_are_flushed() {
-        assert_eq!(target("/mnt/kieran/docs", false).map(|t| t.0), Some(FlushReason::Network));
-        assert_eq!(target("/mnt/nas/x", false).map(|t| t.0), Some(FlushReason::Network));
+        assert_eq!(
+            target("/mnt/kieran/docs", false).map(|t| t.0),
+            Some(FlushReason::Network)
+        );
+        assert_eq!(
+            target("/mnt/nas/x", false).map(|t| t.0),
+            Some(FlushReason::Network)
+        );
     }
 
     #[test]
@@ -1196,7 +1261,11 @@ mod tests {
             let text = format!("71 42 8:34 / /mnt/data rw shared:9 - {fs_type} /dev/sdd1 rw\n");
             let mounts = parse_with(&text, &[]);
             let target = write_target_in(Path::new("/mnt/data/x"), &mounts, |_| false);
-            assert_eq!(target.map(|t| t.reason), Some(FlushReason::SimpleFilesystem), "{fs_type}");
+            assert_eq!(
+                target.map(|t| t.reason),
+                Some(FlushReason::SimpleFilesystem),
+                "{fs_type}"
+            );
         }
     }
 
@@ -1211,7 +1280,10 @@ mod tests {
         let busy = "umount: /mnt/x: target is busy.".to_owned();
         assert_eq!(pick_unmount_error(None, busy.clone()), busy);
         assert_eq!(
-            pick_unmount_error(Some("Error unmounting: target is busy.".into()), busy.clone()),
+            pick_unmount_error(
+                Some("Error unmounting: target is busy.".into()),
+                busy.clone()
+            ),
             busy
         );
         let denied = "umount: /mnt/x: must be superuser to unmount.".to_owned();
@@ -1225,9 +1297,15 @@ mod tests {
     fn usage_is_a_fraction() {
         let mut mount = parsed().remove(0);
         assert_eq!(mount.usage_fraction(), None);
-        mount.usage = Usage::Known { total: 200, free: 50 };
+        mount.usage = Usage::Known {
+            total: 200,
+            free: 50,
+        };
         assert_eq!(mount.usage_fraction(), Some(0.75));
-        assert_eq!((mount.total_bytes(), mount.free_bytes()), (Some(200), Some(50)));
+        assert_eq!(
+            (mount.total_bytes(), mount.free_bytes()),
+            (Some(200), Some(50))
+        );
         mount.usage = Usage::NotResponding;
         assert_eq!(mount.usage_fraction(), None);
     }
@@ -1251,7 +1329,10 @@ mod tests {
         assert!(all.iter().any(|mount| mount.mount_point == Path::new("/")));
         let mut listed = list_mounts();
         fill_space(&mut listed, Duration::from_secs(5));
-        let root = listed.iter().find(|mount| mount.mount_point == Path::new("/")).unwrap();
+        let root = listed
+            .iter()
+            .find(|mount| mount.mount_point == Path::new("/"))
+            .unwrap();
         assert!(root.total_bytes().is_some());
     }
 

@@ -176,7 +176,9 @@ impl Format {
         match self {
             Format::Zip if tool::on_path("zip") || tool::seven_zip().is_some() => None,
             Format::SevenZip if tool::seven_zip().is_some() => None,
-            Format::Zip | Format::SevenZip => Some("The program for this format is not installed.".into()),
+            Format::Zip | Format::SevenZip => {
+                Some("The program for this format is not installed.".into())
+            }
             _ => Some("Only .zip and .7z can be cut into volumes.".into()),
         }
     }
@@ -386,9 +388,21 @@ impl NameCheck {
 pub fn base_of(typed: &str, format: Format) -> String {
     let typed = typed.trim();
     let lower = typed.to_lowercase();
-    for candidate in [format, Format::Zip, Format::TarGz, Format::TarXz, Format::TarZst, Format::TarBz2, Format::SevenZip, Format::Tar] {
+    for candidate in [
+        format,
+        Format::Zip,
+        Format::TarGz,
+        Format::TarXz,
+        Format::TarZst,
+        Format::TarBz2,
+        Format::SevenZip,
+        Format::Tar,
+    ] {
         let ending = candidate.extension();
-        if lower.ends_with(ending) && typed.len() > ending.len() && typed.is_char_boundary(typed.len() - ending.len()) {
+        if lower.ends_with(ending)
+            && typed.len() > ending.len()
+            && typed.is_char_boundary(typed.len() - ending.len())
+        {
             return typed[..typed.len() - ending.len()].trim_end().to_string();
         }
     }
@@ -490,7 +504,10 @@ impl Excludes {
                 continue;
             }
             check_pattern(piece)?;
-            let piece = piece.trim_start_matches("./").trim_start_matches('/').trim_end_matches('/');
+            let piece = piece
+                .trim_start_matches("./")
+                .trim_start_matches('/')
+                .trim_end_matches('/');
             if !piece.is_empty() {
                 patterns.push(piece.to_string());
             }
@@ -718,7 +735,10 @@ pub fn build(
     let archive = work.join(file_name);
     let low = true;
     match options.format {
-        Format::Zip if options.password.is_none() && maker.file_name().is_some_and(|name| name == "zip") => {
+        Format::Zip
+            if options.password.is_none()
+                && maker.file_name().is_some_and(|name| name == "zip") =>
+        {
             let mut spec = Spec::new(&maker)
                 .in_dir(parent)
                 .nice(low)
@@ -732,12 +752,14 @@ pub fn build(
                 spec = spec.arg("-s").arg(format!("{mib}m"));
             }
             // Names that hold a line break cannot ride in the stdin list.
-            let (listed, loose): (Vec<&PathBuf>, Vec<&PathBuf>) =
-                names.iter().partition(|name| !tool::bytes_of(name).contains(&b'\n'));
+            let (listed, loose): (Vec<&PathBuf>, Vec<&PathBuf>) = names
+                .iter()
+                .partition(|name| !tool::bytes_of(name).contains(&b'\n'));
             spec = spec.arg(&archive).arg("-@");
             if !loose.is_empty() {
                 spec = spec.arg("--");
-                spec.args.extend(loose.iter().map(|name| name.as_os_str().to_os_string()));
+                spec.args
+                    .extend(loose.iter().map(|name| name.as_os_str().to_os_string()));
             }
             let mut list = Vec::new();
             for name in listed {
@@ -797,19 +819,16 @@ pub fn build(
             })
         }
         tar_kind => {
-            let mut tar = Spec::new(&maker)
-                .in_dir(parent)
-                .nice(low)
-                .args([
-                    "-c",
-                    "-v",
-                    "--no-recursion",
-                    "--null",
-                    "--verbatim-files-from",
-                    "--quoting-style=literal",
-                    "-T",
-                    "-",
-                ]);
+            let mut tar = Spec::new(&maker).in_dir(parent).nice(low).args([
+                "-c",
+                "-v",
+                "--no-recursion",
+                "--null",
+                "--verbatim-files-from",
+                "--quoting-style=literal",
+                "-T",
+                "-",
+            ]);
             if options.follow_links {
                 tar = tar.arg("--dereference");
             }
@@ -834,9 +853,16 @@ pub fn build(
                 .ok_or_else(|| OpError::Unsupported(format!("{program} is not installed.")))?;
             let mut squeeze = Spec::new(found).nice(low);
             squeeze = match tar_kind {
-                Format::TarGz | Format::TarBz2 => squeeze.arg(format!("-{}", options.level.digit())),
-                Format::TarXz => squeeze.arg(format!("-{}", options.level.digit())).arg(format!("-T{}", threads())),
-                _ => squeeze.arg(options.level.zstd()).arg(format!("-T{}", threads())).arg("-q"),
+                Format::TarGz | Format::TarBz2 => {
+                    squeeze.arg(format!("-{}", options.level.digit()))
+                }
+                Format::TarXz => squeeze
+                    .arg(format!("-{}", options.level.digit()))
+                    .arg(format!("-T{}", threads())),
+                _ => squeeze
+                    .arg(options.level.zstd())
+                    .arg(format!("-T{}", threads()))
+                    .arg("-q"),
             };
             Ok(Built {
                 steps: Steps::Pipe { tar, squeeze },
@@ -933,8 +959,14 @@ pub fn check_specs(options: &PackOptions, archive: &Path, work: &Path) -> Result
             let unzip = tool::find("unzip");
             match unzip {
                 Some(unzip) => Ok(Check {
-                    test: Spec::new(&unzip).nice(true).args(["-tq", "--"]).arg(archive),
-                    list: Spec::new(&unzip).nice(true).args(["-Z1", "--"]).arg(archive),
+                    test: Spec::new(&unzip)
+                        .nice(true)
+                        .args(["-tq", "--"])
+                        .arg(archive),
+                    list: Spec::new(&unzip)
+                        .nice(true)
+                        .args(["-Z1", "--"])
+                        .arg(archive),
                 }),
                 None => Ok(Check {
                     test: seven(&["t"])?,
@@ -980,7 +1012,9 @@ mod tests {
     use super::*;
 
     fn text(args: &[OsString]) -> Vec<String> {
-        args.iter().map(|arg| arg.to_string_lossy().into_owned()).collect()
+        args.iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect()
     }
 
     fn one(built: &Built) -> &Spec {
@@ -993,7 +1027,10 @@ mod tests {
     #[test]
     fn extensions_and_names_round_trip() {
         for format in Format::ALL {
-            assert_eq!(Format::from_name(&format!("a{}", format.extension())), Some(format));
+            assert_eq!(
+                Format::from_name(&format!("a{}", format.extension())),
+                Some(format)
+            );
         }
         assert_eq!(Format::from_name("A.TAR.GZ"), Some(Format::TarGz));
         assert_eq!(Format::from_name("a.txt"), None);
@@ -1034,7 +1071,10 @@ mod tests {
         assert_eq!(check_name("   ", Format::Zip, none), NameCheck::Empty);
         assert_eq!(check_name("a/b", Format::Zip, none), NameCheck::HasSlash);
         assert_eq!(check_name("..", Format::Zip, none), NameCheck::Reserved);
-        assert_eq!(check_name(&"x".repeat(300), Format::Zip, none), NameCheck::TooLong);
+        assert_eq!(
+            check_name(&"x".repeat(300), Format::Zip, none),
+            NameCheck::TooLong
+        );
         assert_eq!(check_name("fine", Format::Zip, none), NameCheck::Ok);
         let taken = |name: &str| name == "fine.zip";
         assert_eq!(check_name("fine", Format::Zip, taken), NameCheck::Taken);
@@ -1049,7 +1089,10 @@ mod tests {
         assert_eq!(free_base("Archive", Format::Zip, taken), "Archive 4");
         assert_eq!(free_base("Archive.zip", Format::Zip, taken), "Archive 4");
         assert_eq!(free_base("Other", Format::Zip, taken), "Other 2");
-        assert_eq!(file_name(&free_base("Archive", Format::TarGz, taken), Format::TarGz), "Archive 2.tar.gz");
+        assert_eq!(
+            file_name(&free_base("Archive", Format::TarGz, taken), Format::TarGz),
+            "Archive 2.tar.gz"
+        );
     }
 
     #[test]
@@ -1076,7 +1119,10 @@ mod tests {
         let excludes = Excludes::parse("build/*.o, docs/**").unwrap();
         assert!(excludes.matches("build/a.o"));
         assert!(!excludes.matches("src/build/a.o"));
-        assert!(!excludes.matches("build/sub/a.o"), "a star stops at a slash");
+        assert!(
+            !excludes.matches("build/sub/a.o"),
+            "a star stops at a slash"
+        );
         assert!(excludes.matches("docs/a/b/c.md"), "two stars do not");
     }
 
@@ -1096,13 +1142,19 @@ mod tests {
 
     #[test]
     fn broken_patterns_are_refused_with_a_reason() {
-        assert_eq!(Excludes::parse("a[bc").unwrap_err().reason, "a [ is never closed");
+        assert_eq!(
+            Excludes::parse("a[bc").unwrap_err().reason,
+            "a [ is never closed"
+        );
         assert_eq!(
             Excludes::parse("ok, trailing\\").unwrap_err().reason,
             "a backslash must be followed by a character"
         );
         assert!(Excludes::parse("[]]").is_ok());
-        let many = (0..=PATTERN_LIMIT).map(|n| format!("p{n}")).collect::<Vec<_>>().join(",");
+        let many = (0..=PATTERN_LIMIT)
+            .map(|n| format!("p{n}"))
+            .collect::<Vec<_>>()
+            .join(",");
         assert!(Excludes::parse(&many).is_err());
     }
 
@@ -1133,7 +1185,10 @@ mod tests {
             ..PackOptions::default()
         }
         .normalised();
-        assert!(zip.password.is_some() && !zip.hide_names, "a zip cannot hide its names");
+        assert!(
+            zip.password.is_some() && !zip.hide_names,
+            "a zip cannot hide its names"
+        );
         let empty = PackOptions {
             password: Some(Password::new("")),
             ..PackOptions::default()
@@ -1165,22 +1220,50 @@ mod tests {
             (Level::Smallest, "-9", "-19", "-mx=9"),
         ] {
             let gz = build(
-                &PackOptions { format: Format::TarGz, level, ..PackOptions::default() },
-                Path::new("/p"), work, "a.tar.gz", &names(&["x"]),
-            ).unwrap();
-            let Steps::Pipe { squeeze, .. } = &gz.steps else { panic!("gzip pipes") };
+                &PackOptions {
+                    format: Format::TarGz,
+                    level,
+                    ..PackOptions::default()
+                },
+                Path::new("/p"),
+                work,
+                "a.tar.gz",
+                &names(&["x"]),
+            )
+            .unwrap();
+            let Steps::Pipe { squeeze, .. } = &gz.steps else {
+                panic!("gzip pipes")
+            };
             assert_eq!(text(&squeeze.args)[0], digit);
             let zst = build(
-                &PackOptions { format: Format::TarZst, level, ..PackOptions::default() },
-                Path::new("/p"), work, "a.tar.zst", &names(&["x"]),
-            ).unwrap();
-            let Steps::Pipe { squeeze, .. } = &zst.steps else { panic!("zstd pipes") };
+                &PackOptions {
+                    format: Format::TarZst,
+                    level,
+                    ..PackOptions::default()
+                },
+                Path::new("/p"),
+                work,
+                "a.tar.zst",
+                &names(&["x"]),
+            )
+            .unwrap();
+            let Steps::Pipe { squeeze, .. } = &zst.steps else {
+                panic!("zstd pipes")
+            };
             assert_eq!(text(&squeeze.args)[0], zstd);
             if Format::SevenZip.is_available() {
                 let built = build(
-                    &PackOptions { format: Format::SevenZip, level, ..PackOptions::default() },
-                    Path::new("/p"), work, "a.7z", &names(&["x"]),
-                ).unwrap();
+                    &PackOptions {
+                        format: Format::SevenZip,
+                        level,
+                        ..PackOptions::default()
+                    },
+                    Path::new("/p"),
+                    work,
+                    "a.7z",
+                    &names(&["x"]),
+                )
+                .unwrap();
                 assert!(text(&one(&built).args).contains(&seven.to_string()));
             }
         }
@@ -1192,14 +1275,26 @@ mod tests {
             return;
         }
         let built = build(
-            &PackOptions { format: Format::Tar, ..PackOptions::default() },
-            Path::new("/p"), Path::new("/w"), "a.tar", &names(&["-rf", "sp ace", "dir/x"]),
-        ).unwrap();
+            &PackOptions {
+                format: Format::Tar,
+                ..PackOptions::default()
+            },
+            Path::new("/p"),
+            Path::new("/w"),
+            "a.tar",
+            &names(&["-rf", "sp ace", "dir/x"]),
+        )
+        .unwrap();
         let spec = one(&built);
         let args = text(&spec.args);
         assert!(args.contains(&"--verbatim-files-from".to_string()));
-        assert!(!args.contains(&"-rf".to_string()), "names are not arguments");
-        let Input::Bytes(list) = &spec.input else { panic!("the names ride on stdin") };
+        assert!(
+            !args.contains(&"-rf".to_string()),
+            "names are not arguments"
+        );
+        let Input::Bytes(list) = &spec.input else {
+            panic!("the names ride on stdin")
+        };
         assert_eq!(list, b"-rf\0sp ace\0dir/x\0");
     }
 
@@ -1210,9 +1305,18 @@ mod tests {
         }
         let args = |follow, owner| {
             let built = build(
-                &PackOptions { format: Format::Tar, follow_links: follow, keep_owner: owner, ..PackOptions::default() },
-                Path::new("/p"), Path::new("/w"), "a.tar", &names(&["x"]),
-            ).unwrap();
+                &PackOptions {
+                    format: Format::Tar,
+                    follow_links: follow,
+                    keep_owner: owner,
+                    ..PackOptions::default()
+                },
+                Path::new("/p"),
+                Path::new("/w"),
+                "a.tar",
+                &names(&["x"]),
+            )
+            .unwrap();
             text(&one(&built).args)
         };
         assert!(args(true, true).contains(&"--dereference".to_string()));
@@ -1227,23 +1331,45 @@ mod tests {
             return;
         }
         let built = build(
-            &PackOptions { format: Format::Zip, split_mib: Some(100), ..PackOptions::default() },
-            Path::new("/p"), Path::new("/w"), "a.zip", &names(&["-x", "a b", "line\nbreak"]),
-        ).unwrap();
+            &PackOptions {
+                format: Format::Zip,
+                split_mib: Some(100),
+                ..PackOptions::default()
+            },
+            Path::new("/p"),
+            Path::new("/w"),
+            "a.zip",
+            &names(&["-x", "a b", "line\nbreak"]),
+        )
+        .unwrap();
         let spec = one(&built);
         let args = text(&spec.args);
         assert!(args.contains(&"-y".to_string()), "links are kept");
         assert!(args.windows(2).any(|pair| pair == ["-s", "100m"]));
         assert!(args.contains(&"-nw".to_string()), "no wildcards in names");
         let archive = args.iter().position(|arg| arg == "/w/a.zip").unwrap();
-        assert_eq!(&args[archive + 1..], ["-@", "--", "line\nbreak"], "a name with a line break is an argument");
+        assert_eq!(
+            &args[archive + 1..],
+            ["-@", "--", "line\nbreak"],
+            "a name with a line break is an argument"
+        );
         assert!(!args.contains(&"-x".to_string()));
-        let Input::Bytes(list) = &spec.input else { panic!("names on stdin") };
+        let Input::Bytes(list) = &spec.input else {
+            panic!("names on stdin")
+        };
         assert_eq!(list, b"-x\na b\n");
         let following = build(
-            &PackOptions { format: Format::Zip, follow_links: true, ..PackOptions::default() },
-            Path::new("/p"), Path::new("/w"), "a.zip", &names(&["x"]),
-        ).unwrap();
+            &PackOptions {
+                format: Format::Zip,
+                follow_links: true,
+                ..PackOptions::default()
+            },
+            Path::new("/p"),
+            Path::new("/w"),
+            "a.zip",
+            &names(&["x"]),
+        )
+        .unwrap();
         assert!(!text(&one(&following).args).contains(&"-y".to_string()));
     }
 
@@ -1260,22 +1386,34 @@ mod tests {
                     hide_names: hide,
                     ..PackOptions::default()
                 },
-                Path::new("/p"), Path::new("/w"), &file_name("a", format), &names(&["x", " lead", "trail "]),
-            ).unwrap();
+                Path::new("/p"),
+                Path::new("/w"),
+                &file_name("a", format),
+                &names(&["x", " lead", "trail "]),
+            )
+            .unwrap();
             let spec = one(&built);
             let all = text(&spec.args).join(" ");
             assert!(!all.contains("s3cret"), "{format:?}: {all}");
             assert!(!format!("{spec:?}").contains("s3cret"));
-            let Input::Bytes(input) = &spec.input else { panic!("the password rides on stdin") };
+            let Input::Bytes(input) = &spec.input else {
+                panic!("the password rides on stdin")
+            };
             assert_eq!(input, b"s3cret-pass\ns3cret-pass\n");
             let args = text(&spec.args);
             assert!(args.contains(&"-p".to_string()), "-p alone asks on stdin");
             assert_eq!(args.contains(&"-mhe=on".to_string()), hide);
-            assert_eq!(args.contains(&"-mem=AES256".to_string()), format == Format::Zip);
+            assert_eq!(
+                args.contains(&"-mem=AES256".to_string()),
+                format == Format::Zip
+            );
             // The name with a trailing space cannot ride in a list.
             let (path, list) = built.list_file.as_ref().unwrap();
             assert_eq!(path, Path::new("/w/names.list"));
-            assert_eq!(list, b"x\n", "a name 7-Zip would trim cannot ride in the list");
+            assert_eq!(
+                list, b"x\n",
+                "a name 7-Zip would trim cannot ride in the list"
+            );
             let at = args.iter().position(|arg| arg == "--").unwrap();
             assert_eq!(&args[at + 1..], [" lead", "trail "]);
         }
@@ -1288,15 +1426,29 @@ mod tests {
         }
         let args = |follow| {
             let built = build(
-                &PackOptions { format: Format::SevenZip, follow_links: follow, ..PackOptions::default() },
-                Path::new("/p"), Path::new("/w"), "a.7z", &names(&["x"]),
-            ).unwrap();
+                &PackOptions {
+                    format: Format::SevenZip,
+                    follow_links: follow,
+                    ..PackOptions::default()
+                },
+                Path::new("/p"),
+                Path::new("/w"),
+                "a.7z",
+                &names(&["x"]),
+            )
+            .unwrap();
             text(&one(&built).args)
         };
         assert!(args(false).contains(&"-snl".to_string()));
         assert!(!args(true).contains(&"-snl".to_string()));
-        assert!(args(false).contains(&"-spd".to_string()), "no wildcards in names");
-        assert!(args(false).contains(&"-r-".to_string()), "folders are listed, not walked");
+        assert!(
+            args(false).contains(&"-spd".to_string()),
+            "no wildcards in names"
+        );
+        assert!(
+            args(false).contains(&"-r-".to_string()),
+            "folders are listed, not walked"
+        );
     }
 
     #[test]
@@ -1305,34 +1457,65 @@ mod tests {
             return;
         }
         let built = build(
-            &PackOptions { format: Format::SevenZip, split_mib: Some(650), ..PackOptions::default() },
-            Path::new("/p"), Path::new("/w"), "a.7z", &names(&["x"]),
-        ).unwrap();
+            &PackOptions {
+                format: Format::SevenZip,
+                split_mib: Some(650),
+                ..PackOptions::default()
+            },
+            Path::new("/p"),
+            Path::new("/w"),
+            "a.7z",
+            &names(&["x"]),
+        )
+        .unwrap();
         assert!(text(&one(&built).args).contains(&"-v650m".to_string()));
     }
 
     #[test]
     fn what_a_maker_prints_is_read_back_as_progress() {
         assert_eq!(
-            hear(false, Format::Zip, b"  adding: dir/a (b).txt (deflated 40%)"),
+            hear(
+                false,
+                Format::Zip,
+                b"  adding: dir/a (b).txt (deflated 40%)"
+            ),
             Some(Heard::Entry(b"dir/a (b).txt".to_vec()))
         );
         assert_eq!(hear(false, Format::Zip, b"zip warning: x"), None);
-        assert_eq!(hear(false, Format::TarGz, b"dir/a.txt"), Some(Heard::Entry(b"dir/a.txt".to_vec())));
-        assert_eq!(hear(true, Format::SevenZip, b"+ dir/a.txt"), Some(Heard::Entry(b"dir/a.txt".to_vec())));
-        assert_eq!(hear(true, Format::SevenZip, b" 42%"), Some(Heard::Percent(42)));
-        assert_eq!(hear(true, Format::SevenZip, b" 42% 3 + dir/a.txt"), Some(Heard::Entry(b"dir/a.txt".to_vec())));
+        assert_eq!(
+            hear(false, Format::TarGz, b"dir/a.txt"),
+            Some(Heard::Entry(b"dir/a.txt".to_vec()))
+        );
+        assert_eq!(
+            hear(true, Format::SevenZip, b"+ dir/a.txt"),
+            Some(Heard::Entry(b"dir/a.txt".to_vec()))
+        );
+        assert_eq!(
+            hear(true, Format::SevenZip, b" 42%"),
+            Some(Heard::Percent(42))
+        );
+        assert_eq!(
+            hear(true, Format::SevenZip, b" 42% 3 + dir/a.txt"),
+            Some(Heard::Entry(b"dir/a.txt".to_vec()))
+        );
         assert_eq!(hear(true, Format::SevenZip, b"Everything is Ok"), None);
         assert_eq!(hear(true, Format::SevenZip, b"Scanning the drive:"), None);
     }
 
     #[test]
     fn checks_test_and_list_the_archive() {
-        let Ok(check) = check_specs(&PackOptions::default(), Path::new("/w/a.zip"), Path::new("/w")) else {
+        let Ok(check) = check_specs(
+            &PackOptions::default(),
+            Path::new("/w/a.zip"),
+            Path::new("/w"),
+        ) else {
             return;
         };
         assert!(!check.test.args.is_empty() && !check.list.args.is_empty());
-        let locked = PackOptions { password: Some(Password::new("pw-1")), ..PackOptions::default() };
+        let locked = PackOptions {
+            password: Some(Password::new("pw-1")),
+            ..PackOptions::default()
+        };
         if let Ok(check) = check_specs(&locked, Path::new("/w/a.zip"), Path::new("/w")) {
             assert!(!format!("{check:?}").contains("pw-1"));
             assert!(!text(&check.test.args).join(" ").contains("pw-1"));

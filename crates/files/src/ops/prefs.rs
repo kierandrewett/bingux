@@ -12,9 +12,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use super::media_plan::{
-    AudioCodec, ImageFormat, ReduceOptions, Sound, VideoCodec, VideoQuality,
-};
+use super::media_plan::{AudioCodec, ImageFormat, ReduceOptions, Sound, VideoCodec, VideoQuality};
 use super::pack_plan::{Excludes, Format, Level, PackOptions};
 
 /// The remembered choices.
@@ -37,7 +35,9 @@ impl Default for Prefs {
 pub fn path() -> Option<PathBuf> {
     let base = match std::env::var_os("XDG_CONFIG_HOME") {
         Some(dir) if Path::new(&dir).is_absolute() => PathBuf::from(dir),
-        _ => PathBuf::from(std::env::var_os("HOME").filter(|home| !home.is_empty())?).join(".config"),
+        _ => {
+            PathBuf::from(std::env::var_os("HOME").filter(|home| !home.is_empty())?).join(".config")
+        }
     };
     Some(base.join("bingux/files/compress.conf"))
 }
@@ -51,7 +51,9 @@ fn level_key(level: Level) -> &'static str {
 }
 
 fn level_from(key: &str) -> Option<Level> {
-    Level::ALL.into_iter().find(|level| level_key(*level) == key)
+    Level::ALL
+        .into_iter()
+        .find(|level| level_key(*level) == key)
 }
 
 fn flag(value: &str) -> Option<bool> {
@@ -83,7 +85,10 @@ impl Prefs {
             let value = value.trim();
             match key.trim() {
                 "format" => {
-                    if let Some(format) = Format::ALL.into_iter().find(|f| f.extension().trim_start_matches('.') == value) {
+                    if let Some(format) = Format::ALL
+                        .into_iter()
+                        .find(|f| f.extension().trim_start_matches('.') == value)
+                    {
                         pack.format = format;
                     }
                 }
@@ -124,7 +129,10 @@ impl Prefs {
                 "video_quality" => {
                     if let Some(level) = level_from(value) {
                         reduce.video.quality = VideoQuality::Level(level);
-                    } else if let Some(crf) = value.strip_prefix("crf:").and_then(|n| n.parse::<u8>().ok()) {
+                    } else if let Some(crf) = value
+                        .strip_prefix("crf:")
+                        .and_then(|n| n.parse::<u8>().ok())
+                    {
                         reduce.video.quality = VideoQuality::Crf(crf);
                     }
                 }
@@ -140,7 +148,11 @@ impl Prefs {
                 }
                 "video_sound" => {
                     if let Ok(kbps) = value.parse::<u32>() {
-                        reduce.video.sound = if kbps == 0 { Sound::Remove } else { Sound::Kbps(kbps.clamp(8, 512)) };
+                        reduce.video.sound = if kbps == 0 {
+                            Sound::Remove
+                        } else {
+                            Sound::Kbps(kbps.clamp(8, 512))
+                        };
                     }
                 }
                 "video_strip" => reduce.video.strip_metadata = flag(value).unwrap_or(false),
@@ -260,22 +272,34 @@ mod tests {
         let text = prefs.render();
         assert!(!text.contains("hunter2") && !text.contains("delete") && !text.contains("replace"));
         let back = Prefs::parse(&text);
-        assert!(!back.pack.delete_originals && back.pack.password.is_none() && !back.reduce.replace_original);
+        assert!(
+            !back.pack.delete_originals
+                && back.pack.password.is_none()
+                && !back.reduce.replace_original
+        );
     }
 
     #[test]
     fn what_is_not_understood_is_ignored() {
-        let prefs = Prefs::parse("format=rar\nlevel=\nfuture_key=1\nno equals sign\nimage_quality=900\nvideo_sound=9999\nexcludes=a[b\n");
+        let prefs = Prefs::parse(
+            "format=rar\nlevel=\nfuture_key=1\nno equals sign\nimage_quality=900\nvideo_sound=9999\nexcludes=a[b\n",
+        );
         assert_eq!(prefs.pack.format, Format::Zip);
         assert_eq!(prefs.reduce.image.quality, 100);
         assert_eq!(prefs.reduce.video.sound, Sound::Kbps(512));
-        assert!(prefs.pack.excludes.is_empty(), "a broken pattern list is dropped");
+        assert!(
+            prefs.pack.excludes.is_empty(),
+            "a broken pattern list is dropped"
+        );
         assert_eq!(Prefs::parse(""), Prefs::default());
     }
 
     #[test]
     fn a_missing_file_gives_the_defaults() {
         let temp = Temp::new("prefs-missing");
-        assert_eq!(Prefs::load_from(&temp.path().join("none.conf")), Prefs::default());
+        assert_eq!(
+            Prefs::load_from(&temp.path().join("none.conf")),
+            Prefs::default()
+        );
     }
 }

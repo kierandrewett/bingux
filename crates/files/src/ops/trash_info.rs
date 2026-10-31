@@ -221,7 +221,8 @@ impl InBin {
 
     /// The item's folder in `files`.
     pub fn item_path(&self) -> Option<PathBuf> {
-        self.item_name().map(|name| self.bin.join("files").join(name))
+        self.item_name()
+            .map(|name| self.bin.join("files").join(name))
     }
 }
 
@@ -418,7 +419,12 @@ fn write_sizes(bin: &Path, lines: &[SizeLine]) -> std::io::Result<()> {
 }
 
 /// Add or replace the line of the folder `name`.
-pub(super) fn record_size(bin: &Path, name: &OsStr, size: u64, info_mtime: i64) -> std::io::Result<()> {
+pub(super) fn record_size(
+    bin: &Path,
+    name: &OsStr,
+    size: u64,
+    info_mtime: i64,
+) -> std::io::Result<()> {
     let mut lines = read_sizes(bin);
     lines.retain(|line| line.name != name);
     lines.push(SizeLine {
@@ -440,7 +446,11 @@ pub(super) fn forget_sizes(bin: &Path, names: &[&OsStr]) {
         .iter()
         .filter(|line| {
             !names.contains(&line.name.as_os_str())
-                && bin.join("files").join(&line.name).symlink_metadata().is_ok()
+                && bin
+                    .join("files")
+                    .join(&line.name)
+                    .symlink_metadata()
+                    .is_ok()
         })
         .cloned()
         .collect();
@@ -489,7 +499,9 @@ pub(super) fn disk_use(path: &Path, cancel: &Cancel, limit: Option<u64>) -> Opti
 
 /// The `mtime` the cache keys a folder's line on: its `.trashinfo`'s.
 pub(super) fn info_mtime(bin: &Path, name: &OsStr) -> Option<i64> {
-    fs::metadata(info_path(bin, name)).ok().map(|meta| meta.mtime())
+    fs::metadata(info_path(bin, name))
+        .ok()
+        .map(|meta| meta.mtime())
 }
 
 /// The extension of a file name as bytes, dot included, by the rule
@@ -517,11 +529,17 @@ pub(super) fn split_extension_bytes(name: &[u8]) -> (&[u8], &[u8]) {
 /// `stem.2.ext`, `stem.3.ext`, and so on, made of the original bytes.
 pub(super) fn unique_name(name: &OsStr, attempt: u32) -> OsString {
     let (stem, extension) = split_extension_bytes(name.as_bytes());
-    let tag = if attempt <= 1 { String::new() } else { format!(".{attempt}") };
+    let tag = if attempt <= 1 {
+        String::new()
+    } else {
+        format!(".{attempt}")
+    };
     // The info file adds `.trashinfo` to the name, and a name is 255 bytes at
     // most, so a very long name is cut (the real one is in the info file).
     let room = NAME_MAX - ".trashinfo".len();
-    let keep = room.saturating_sub(tag.len() + extension.len()).min(stem.len());
+    let keep = room
+        .saturating_sub(tag.len() + extension.len())
+        .min(stem.len());
     let mut out = stem[..keep].to_vec();
     out.extend_from_slice(tag.as_bytes());
     out.extend_from_slice(extension);
@@ -591,7 +609,11 @@ mod tests {
         let text = format_date(when);
         assert_eq!(text.len(), 19);
         assert_eq!(parse_date(&text), Some(when));
-        assert_eq!(parse_date("2024-02-30T25:61:00").is_some(), true, "mktime normalises");
+        assert_eq!(
+            parse_date("2024-02-30T25:61:00").is_some(),
+            true,
+            "mktime normalises"
+        );
         assert_eq!(parse_date("2024-13-01T00:00:00"), None);
         assert_eq!(parse_date("yesterday"), None);
         assert_eq!(parse_date("2024-05-01"), None);
@@ -618,7 +640,10 @@ mod tests {
     fn a_broken_info_file_says_nothing_instead_of_guessing() {
         assert_eq!(parse_info(b""), None);
         assert_eq!(parse_info(b"Path=/a\n"), None, "no group");
-        assert_eq!(parse_info(b"[Trash Info]\nDeletionDate=2024-05-01T13:45:09\n"), None);
+        assert_eq!(
+            parse_info(b"[Trash Info]\nDeletionDate=2024-05-01T13:45:09\n"),
+            None
+        );
         assert_eq!(parse_info(b"[Other]\nPath=/a\n"), None);
         // A date that cannot be read leaves the path.
         let info = parse_info(b"[Trash Info]\nPath=/a\nDeletionDate=soon\n").unwrap();
@@ -634,11 +659,20 @@ mod tests {
         assert!(is_bin(Path::new(HOME), home));
         assert!(is_bin(Path::new("/media/usb/.Trash-1000"), home));
         assert!(is_bin(Path::new("/media/usb/.Trash/1000"), home));
-        assert!(!is_bin(Path::new("/media/usb/.Trash"), home), "the shared folder is not a bin");
+        assert!(
+            !is_bin(Path::new("/media/usb/.Trash"), home),
+            "the shared folder is not a bin"
+        );
         assert!(!is_bin(Path::new("/media/usb/Trash"), home));
         assert!(!is_bin(Path::new("/home/me/Trash"), home));
-        assert_eq!(bin_topdir(Path::new("/media/usb/.Trash-1000")), Some("/media/usb".into()));
-        assert_eq!(bin_topdir(Path::new("/media/usb/.Trash/1000")), Some("/media/usb".into()));
+        assert_eq!(
+            bin_topdir(Path::new("/media/usb/.Trash-1000")),
+            Some("/media/usb".into())
+        );
+        assert_eq!(
+            bin_topdir(Path::new("/media/usb/.Trash/1000")),
+            Some("/media/usb".into())
+        );
         assert_eq!(bin_topdir(Path::new(HOME)), None);
     }
 
@@ -649,24 +683,45 @@ mod tests {
         assert_eq!(place.bin, Path::new(HOME));
         assert!(place.is_item());
         assert_eq!(place.item_name(), Some(OsStr::new("a.txt")));
-        let inside = locate(Path::new("/home/me/.local/share/Trash/files/dir/sub/b"), home).unwrap();
+        let inside = locate(
+            Path::new("/home/me/.local/share/Trash/files/dir/sub/b"),
+            home,
+        )
+        .unwrap();
         assert!(!inside.is_item());
         assert_eq!(inside.item_name(), Some(OsStr::new("dir")));
-        assert_eq!(inside.item_path().unwrap(), Path::new("/home/me/.local/share/Trash/files/dir"));
+        assert_eq!(
+            inside.item_path().unwrap(),
+            Path::new("/home/me/.local/share/Trash/files/dir")
+        );
         let root = locate(Path::new("/home/me/.local/share/Trash/files"), home).unwrap();
         assert!(root.is_root());
         let usb = locate(Path::new("/media/usb/.Trash-1000/files/x"), home).unwrap();
         assert_eq!(usb.bin, Path::new("/media/usb/.Trash-1000"));
         // The info folder and ordinary folders called files are not a bin's files.
-        assert_eq!(locate(Path::new("/home/me/.local/share/Trash/info/a.trashinfo"), home), None);
+        assert_eq!(
+            locate(
+                Path::new("/home/me/.local/share/Trash/info/a.trashinfo"),
+                home
+            ),
+            None
+        );
         assert_eq!(locate(Path::new("/home/me/files/a"), home), None);
     }
 
     #[test]
     fn the_sizes_cache_round_trips_and_keeps_odd_names() {
         let lines = vec![
-            SizeLine { size: 4096, info_mtime: 1_700_000_000, name: "a folder".into() },
-            SizeLine { size: 0, info_mtime: 5, name: OsString::from_vec(b"caf\xe9".to_vec()) },
+            SizeLine {
+                size: 4096,
+                info_mtime: 1_700_000_000,
+                name: "a folder".into(),
+            },
+            SizeLine {
+                size: 0,
+                info_mtime: 5,
+                name: OsString::from_vec(b"caf\xe9".to_vec()),
+            },
         ];
         let text = format_sizes(&lines);
         assert_eq!(text, "4096 1700000000 a%20folder\n0 5 caf%E9\n");

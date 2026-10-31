@@ -366,7 +366,10 @@ mod tests {
             if totals.done {
                 return totals;
             }
-            assert!(started.elapsed() < Duration::from_secs(5), "the count did not finish");
+            assert!(
+                started.elapsed() < Duration::from_secs(5),
+                "the count did not finish"
+            );
             std::thread::sleep(Duration::from_millis(5));
         }
     }
@@ -386,7 +389,11 @@ mod tests {
         count(std::slice::from_ref(&root), &whole, &Cancel::new());
         assert_eq!(
             (totals.bytes, totals.files, totals.folders),
-            (whole.totals().bytes, whole.totals().files, whole.totals().folders)
+            (
+                whole.totals().bytes,
+                whole.totals().files,
+                whole.totals().folders
+            )
         );
         let names: Vec<(String, u64, u64)> = counting
             .largest(10)

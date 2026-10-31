@@ -387,8 +387,8 @@ pub(crate) mod recorder {
 
 #[cfg(test)]
 mod tests {
-    use super::recorder::{Call, Recorder, stick};
     use super::super::testing::Temp;
+    use super::recorder::{Call, Recorder, stick};
     use super::*;
 
     #[test]
@@ -478,7 +478,10 @@ mod tests {
         let OpError::Other(text) = error else {
             panic!("{error:?}")
         };
-        assert!(text.starts_with("Could not finish writing to STICK"), "{text}");
+        assert!(
+            text.starts_with("Could not finish writing to STICK"),
+            "{text}"
+        );
         assert_eq!(progress.flushed_to(), None);
         assert_eq!(progress.finishing(), None);
     }

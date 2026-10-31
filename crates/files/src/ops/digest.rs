@@ -46,8 +46,8 @@ impl Sha256 {
     pub fn new() -> Sha256 {
         Sha256 {
             state: [
-                0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c,
-                0x1f83d9ab, 0x5be0cd19,
+                0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
+                0x5be0cd19,
             ],
             block: [0; 64],
             filled: 0,
@@ -91,7 +91,10 @@ impl Sha256 {
         self.update(&pad[..zeros + 9]);
         self.length = length;
         debug_assert_eq!(self.filled, 0);
-        self.state.iter().map(|word| format!("{word:08x}")).collect()
+        self.state
+            .iter()
+            .map(|word| format!("{word:08x}"))
+            .collect()
     }
 
     fn compress(&mut self, block: &[u8; 64]) {
@@ -100,8 +103,12 @@ impl Sha256 {
             *word = u32::from_be_bytes(bytes.try_into().expect("four bytes"));
         }
         for index in 16..64 {
-            let s0 = w[index - 15].rotate_right(7) ^ w[index - 15].rotate_right(18) ^ (w[index - 15] >> 3);
-            let s1 = w[index - 2].rotate_right(17) ^ w[index - 2].rotate_right(19) ^ (w[index - 2] >> 10);
+            let s0 = w[index - 15].rotate_right(7)
+                ^ w[index - 15].rotate_right(18)
+                ^ (w[index - 15] >> 3);
+            let s1 = w[index - 2].rotate_right(17)
+                ^ w[index - 2].rotate_right(19)
+                ^ (w[index - 2] >> 10);
             w[index] = w[index - 16]
                 .wrapping_add(s0)
                 .wrapping_add(w[index - 7])
@@ -224,7 +231,8 @@ impl Drop for Hashing {
 }
 
 fn hash_file(path: &Path, shared: &Shared) -> HashOutcome {
-    let failed = |error: std::io::Error| HashOutcome::Failed(super::OpError::from(error).to_string());
+    let failed =
+        |error: std::io::Error| HashOutcome::Failed(super::OpError::from(error).to_string());
     let mut file = match File::open(path) {
         Ok(file) => file,
         Err(error) => return failed(error),
@@ -319,7 +327,10 @@ mod tests {
             if progress.outcome.is_some() {
                 return progress;
             }
-            assert!(started.elapsed() < Duration::from_secs(10), "the hash did not finish");
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "the hash did not finish"
+            );
             std::thread::sleep(Duration::from_millis(5));
         }
     }
@@ -359,7 +370,9 @@ mod tests {
         let missing = wait(&Hashing::start(temp.path().join("nope")));
         assert_eq!(
             missing.outcome,
-            Some(HashOutcome::Failed("That file or folder no longer exists.".to_owned()))
+            Some(HashOutcome::Failed(
+                "That file or folder no longer exists.".to_owned()
+            ))
         );
         let folder = wait(&Hashing::start(temp.path().to_path_buf()));
         assert!(matches!(folder.outcome, Some(HashOutcome::Failed(_))));

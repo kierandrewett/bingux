@@ -23,8 +23,8 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -34,9 +34,9 @@ use crate::mime;
 
 use super::durable::{sync_dirs, sync_written};
 use super::media_plan::{
-    Beat, MediaKind, Plan, Probe, ReduceOptions, Tools, audio_plan,
-    estimate_sizes, fraction_done, free_reduced_name, image_extension, image_plan, lossy_size,
-    parse_probe, parse_progress, probe_spec, sample_window, scale_sample, split_name, video_plan,
+    Beat, MediaKind, Plan, Probe, ReduceOptions, Tools, audio_plan, estimate_sizes, fraction_done,
+    free_reduced_name, image_extension, image_plan, lossy_size, parse_probe, parse_progress,
+    probe_spec, sample_window, scale_sample, split_name, video_plan,
 };
 use super::pack::Work;
 use super::tool::{self, Stream};
@@ -60,7 +60,9 @@ fn name_of(path: &Path) -> String {
 fn probe(tools: &Tools, path: &Path, cancel: &Cancel) -> Option<Probe> {
     let ffprobe = tools.ffprobe.as_ref()?;
     let (finished, out) = tool::capture(&probe_spec(ffprobe, path), cancel, 64 * 1024).ok()?;
-    finished.success().then(|| parse_probe(&String::from_utf8_lossy(&out)))
+    finished
+        .success()
+        .then(|| parse_probe(&String::from_utf8_lossy(&out)))
 }
 
 fn extension_for(kind: MediaKind, options: &ReduceOptions, name: &str) -> Option<String> {
@@ -86,7 +88,8 @@ fn plan_for(
         MediaKind::Image => {
             let needs_probe = options.image.max_dimension.is_some();
             let probe = needs_probe.then(|| probe(tools, input, cancel)).flatten();
-            let plan = image_plan(tools, &options.image, input, out, probe.as_ref()).map_err(unsupported)?;
+            let plan = image_plan(tools, &options.image, input, out, probe.as_ref())
+                .map_err(unsupported)?;
             Ok((plan, probe))
         }
         MediaKind::Video => {
@@ -95,7 +98,8 @@ fn plan_for(
             if !probe.has_video {
                 return Err(OpError::Other("The file has no picture to reduce.".into()));
             }
-            let plan = video_plan(tools, &options.video, input, out, &probe, window).map_err(unsupported)?;
+            let plan = video_plan(tools, &options.video, input, out, &probe, window)
+                .map_err(unsupported)?;
             Ok((plan, Some(probe)))
         }
         MediaKind::Audio => {
@@ -104,7 +108,8 @@ fn plan_for(
             if !probe.has_audio {
                 return Err(OpError::Other("The file has no sound to reduce.".into()));
             }
-            let plan = audio_plan(tools, &options.audio, input, out, &probe, window).map_err(unsupported)?;
+            let plan = audio_plan(tools, &options.audio, input, out, &probe, window)
+                .map_err(unsupported)?;
             Ok((plan, Some(probe)))
         }
     }
@@ -154,7 +159,10 @@ fn sample(
         return Err(finished.sentence("The size could not be estimated"));
     }
     let bytes = fs::metadata(&out)?.len();
-    let seconds = window.map_or_else(|| full.as_ref().and_then(|p| p.duration).unwrap_or(0.0), |(_, length)| length);
+    let seconds = window.map_or_else(
+        || full.as_ref().and_then(|p| p.duration).unwrap_or(0.0),
+        |(_, length)| length,
+    );
     Ok((bytes, seconds, full.and_then(|p| p.duration)))
 }
 
@@ -162,17 +170,26 @@ fn sample(
 /// at the chosen quality, and a few seconds of the first film; a song's size
 /// follows from its bitrate. Blocks and takes a moment: call it from a worker
 /// and stop it with `cancel` when the settings change.
-pub fn estimate(files: &[PathBuf], options: &ReduceOptions, cancel: &Cancel) -> Result<Estimate, OpError> {
+pub fn estimate(
+    files: &[PathBuf],
+    options: &ReduceOptions,
+    cancel: &Cancel,
+) -> Result<Estimate, OpError> {
     let tools = Tools::get();
     let sizes: Vec<u64> = files
         .iter()
         .map(|path| fs::metadata(path).map_or(0, |meta| meta.len()))
         .collect();
-    let kinds: Vec<Option<MediaKind>> = files.iter().map(|path| kind_of_name(&name_of(path))).collect();
+    let kinds: Vec<Option<MediaKind>> = files
+        .iter()
+        .map(|path| kind_of_name(&name_of(path)))
+        .collect();
     let mut per_file: Vec<Option<u64>> = vec![None; files.len()];
 
     // Pictures: one sample sets the ratio for all.
-    let pictures: Vec<usize> = (0..files.len()).filter(|&i| kinds[i] == Some(MediaKind::Image)).collect();
+    let pictures: Vec<usize> = (0..files.len())
+        .filter(|&i| kinds[i] == Some(MediaKind::Image))
+        .collect();
     let reducible = |i: usize| super::media_plan::image_format_of(&name_of(&files[i])).is_some();
     let pictures: Vec<usize> = pictures.into_iter().filter(|&i| reducible(i)).collect();
     if let Some(&first) = pictures.first() {
@@ -184,9 +201,12 @@ pub fn estimate(files: &[PathBuf], options: &ReduceOptions, cancel: &Cancel) -> 
         }
     }
     // Films: a sample of the first, scaled by length, sets a bitrate ratio.
-    let films: Vec<usize> = (0..files.len()).filter(|&i| kinds[i] == Some(MediaKind::Video)).collect();
+    let films: Vec<usize> = (0..files.len())
+        .filter(|&i| kinds[i] == Some(MediaKind::Video))
+        .collect();
     if let Some(&first) = films.first() {
-        let (bytes, seconds, duration) = sample(tools, MediaKind::Video, options, &files[first], cancel)?;
+        let (bytes, seconds, duration) =
+            sample(tools, MediaKind::Video, options, &files[first], cancel)?;
         let whole = match duration {
             Some(duration) if seconds > 0.0 => scale_sample(bytes, seconds, duration),
             _ => bytes,
@@ -203,7 +223,8 @@ pub fn estimate(files: &[PathBuf], options: &ReduceOptions, cancel: &Cancel) -> 
         per_file[i] = Some(match (options.audio.codec.has_bitrate(), duration) {
             (true, Some(duration)) => lossy_size(options.audio.kbps, duration),
             _ => {
-                let (bytes, seconds, duration) = sample(tools, MediaKind::Audio, options, &files[i], cancel)?;
+                let (bytes, seconds, duration) =
+                    sample(tools, MediaKind::Audio, options, &files[i], cancel)?;
                 match duration {
                     Some(duration) if seconds > 0.0 => scale_sample(bytes, seconds, duration),
                     _ => bytes,
@@ -255,10 +276,16 @@ pub enum Outcome {
         note: Option<String>,
     },
     /// The file would not get smaller.
-    Kept { from: u64 },
+    Kept {
+        from: u64,
+    },
     /// Not something this can reduce.
-    Skipped { reason: String },
-    Failed { error: String },
+    Skipped {
+        reason: String,
+    },
+    Failed {
+        error: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -303,20 +330,30 @@ impl Reduced {
 
     /// The bytes of the originals that were reduced, and of what they became.
     pub fn sizes(&self) -> (u64, u64) {
-        self.files.iter().fold((0, 0), |(from, to), file| match &file.outcome {
-            Outcome::Reduced { from: a, to: b, .. } => (from + a, to + b),
-            _ => (from, to),
-        })
+        self.files
+            .iter()
+            .fold((0, 0), |(from, to), file| match &file.outcome {
+                Outcome::Reduced { from: a, to: b, .. } => (from + a, to + b),
+                _ => (from, to),
+            })
     }
 
     pub fn kept(&self) -> usize {
-        self.files.iter().filter(|file| matches!(file.outcome, Outcome::Kept { .. })).count()
+        self.files
+            .iter()
+            .filter(|file| matches!(file.outcome, Outcome::Kept { .. }))
+            .count()
     }
 
     pub fn failures(&self) -> Vec<&FileReport> {
         self.files
             .iter()
-            .filter(|file| matches!(file.outcome, Outcome::Failed { .. } | Outcome::Skipped { .. }))
+            .filter(|file| {
+                matches!(
+                    file.outcome,
+                    Outcome::Failed { .. } | Outcome::Skipped { .. }
+                )
+            })
             .collect()
     }
 }
@@ -348,7 +385,10 @@ impl Batch {
     }
 
     pub fn lines(&self) -> Vec<Live> {
-        self.0.lock().unwrap_or_else(PoisonError::into_inner).clone()
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     fn set_all(&self, lines: Vec<Live>) {
@@ -356,7 +396,12 @@ impl Batch {
     }
 
     fn update(&self, index: usize, change: impl FnOnce(&mut Live)) {
-        if let Some(line) = self.0.lock().unwrap_or_else(PoisonError::into_inner).get_mut(index) {
+        if let Some(line) = self
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get_mut(index)
+        {
             change(line);
         }
     }
@@ -392,7 +437,12 @@ fn carry_over(path: &Path, like: &fs::Metadata) -> Result<(), OpError> {
 /// Reduce every file. Blocks; call it from a worker. A file that fails does
 /// not stop the others: its report says why. [`Progress`] counts files and
 /// the share of each original's bytes done; `batch` has a line a file.
-pub fn reduce(job: &ReduceJob, progress: &Progress, batch: &Batch, cancel: &Cancel) -> Result<Reduced, OpError> {
+pub fn reduce(
+    job: &ReduceJob,
+    progress: &Progress,
+    batch: &Batch,
+    cancel: &Cancel,
+) -> Result<Reduced, OpError> {
     if job.files.is_empty() {
         return Err(OpError::Other("There is nothing to reduce.".into()));
     }
@@ -435,13 +485,24 @@ pub fn reduce(job: &ReduceJob, progress: &Progress, batch: &Batch, cancel: &Canc
                     }
                     let path = &job.files[index];
                     batch.update(index, |line| line.stage = Stage::Working);
-                    let outcome = match reduce_one(tools, job, index, path, sizes[index], progress, batch, cancel) {
+                    let outcome = match reduce_one(
+                        tools,
+                        job,
+                        index,
+                        path,
+                        sizes[index],
+                        progress,
+                        batch,
+                        cancel,
+                    ) {
                         Ok(outcome) => outcome,
                         Err(OpError::Cancelled) => {
                             *stopped.lock().unwrap_or_else(PoisonError::into_inner) = true;
                             return;
                         }
-                        Err(error) => Outcome::Failed { error: error.to_string() },
+                        Err(error) => Outcome::Failed {
+                            error: error.to_string(),
+                        },
                     };
                     batch.update(index, |line| {
                         line.stage = Stage::Done;
@@ -451,7 +512,13 @@ pub fn reduce(job: &ReduceJob, progress: &Progress, batch: &Batch, cancel: &Canc
                     results
                         .lock()
                         .unwrap_or_else(PoisonError::into_inner)
-                        .insert(index, FileReport { source: path.clone(), outcome });
+                        .insert(
+                            index,
+                            FileReport {
+                                source: path.clone(),
+                                outcome,
+                            },
+                        );
                 }
             });
         }
@@ -461,7 +528,9 @@ pub fn reduce(job: &ReduceJob, progress: &Progress, batch: &Batch, cancel: &Canc
         return Err(OpError::Cancelled);
     }
     let mut results = results.into_inner().unwrap_or_else(PoisonError::into_inner);
-    let files = (0..job.files.len()).filter_map(|index| results.remove(&index)).collect();
+    let files = (0..job.files.len())
+        .filter_map(|index| results.remove(&index))
+        .collect();
     progress.settle();
     Ok(Reduced { files })
 }
@@ -481,15 +550,21 @@ fn reduce_one(
     progress.set_current(&name);
     let Some(kind) = kind_of_name(&name) else {
         progress.add_bytes(size);
-        return Ok(Outcome::Skipped { reason: "It is not a picture, a film or a song.".into() });
+        return Ok(Outcome::Skipped {
+            reason: "It is not a picture, a film or a song.".into(),
+        });
     };
     if kind == MediaKind::Image && super::media_plan::image_format_of(&name).is_none() {
         progress.add_bytes(size);
-        return Ok(Outcome::Skipped { reason: "This kind of picture cannot be reduced here.".into() });
+        return Ok(Outcome::Skipped {
+            reason: "This kind of picture cannot be reduced here.".into(),
+        });
     }
     let source_meta = fs::metadata(path)?;
     if !source_meta.is_file() {
-        return Ok(Outcome::Skipped { reason: "It is not a file.".into() });
+        return Ok(Outcome::Skipped {
+            reason: "It is not a file.".into(),
+        });
     }
     let out_dir = match &job.dest_dir {
         Some(dest) => dest.clone(),
@@ -504,7 +579,10 @@ fn reduce_one(
     let work = Work::make(&out_dir)?;
     let made = work.0.join(format!("{index}.{extension}"));
     let (plan, source_probe) = plan_for(tools, kind, options, path, &made, None, cancel)?;
-    debug_assert_eq!(plan.extension, extension, "the file is named for the plan that makes it");
+    debug_assert_eq!(
+        plan.extension, extension,
+        "the file is named for the plan that makes it"
+    );
 
     let duration = plan.duration;
     let mut reported = 0u64;
@@ -524,19 +602,27 @@ fn reduce_one(
         }
     })?;
     if !finished.success() {
-        return Ok(Outcome::Failed { error: finished.sentence("It could not be reduced").to_string() });
+        return Ok(Outcome::Failed {
+            error: finished.sentence("It could not be reduced").to_string(),
+        });
     }
     if reported < size {
         progress.add_bytes(size - reported);
     }
     let out_meta = match fs::metadata(&made) {
         Ok(meta) if meta.len() > 0 => meta,
-        _ => return Ok(Outcome::Failed { error: "It could not be reduced: the program wrote nothing.".into() }),
+        _ => {
+            return Ok(Outcome::Failed {
+                error: "It could not be reduced: the program wrote nothing.".into(),
+            });
+        }
     };
 
     // Open the new file again before it replaces or sits beside anything.
     if let Some(problem) = verify(tools, kind, &made, source_probe.as_ref(), cancel)? {
-        return Ok(Outcome::Failed { error: format!("The new file did not pass its check: {problem}") });
+        return Ok(Outcome::Failed {
+            error: format!("The new file did not pass its check: {problem}"),
+        });
     }
     if out_meta.len() >= size {
         return Ok(Outcome::Kept { from: size });
@@ -565,7 +651,9 @@ fn reduce_one(
             let place = place_beside(&made, &out_dir, stem, &extension, Some(&wanted))?;
             match trash(std::slice::from_ref(&path.to_path_buf())) {
                 Ok(items) => original = items.into_iter().next(),
-                Err(error) => note = Some(format!("The original was not moved to the Trash: {error}")),
+                Err(error) => {
+                    note = Some(format!("The original was not moved to the Trash: {error}"))
+                }
             }
             place
         }
@@ -584,7 +672,13 @@ fn reduce_one(
 
 /// Move the made file to its name in `dir`: `preferred` if given and free,
 /// else the first free `name (compressed).ext`.
-fn place_beside(made: &Path, dir: &Path, stem: &str, extension: &str, preferred: Option<&str>) -> Result<PathBuf, OpError> {
+fn place_beside(
+    made: &Path,
+    dir: &Path,
+    stem: &str,
+    extension: &str,
+    preferred: Option<&str>,
+) -> Result<PathBuf, OpError> {
     for _ in 0..1000 {
         let name = match preferred {
             Some(name) if !exists(dir, name) => name.to_string(),
@@ -644,7 +738,10 @@ fn verify(
 /// The most files worth running at once: films one at a time (an encoder uses
 /// every core), pictures and songs two.
 pub fn parallelism(files: &[PathBuf]) -> usize {
-    if files.iter().any(|path| kind_of_name(&name_of(path)) == Some(MediaKind::Video)) {
+    if files
+        .iter()
+        .any(|path| kind_of_name(&name_of(path)) == Some(MediaKind::Video))
+    {
         1
     } else {
         2
@@ -653,7 +750,10 @@ pub fn parallelism(files: &[PathBuf]) -> usize {
 
 /// Is every file a picture, a film or a song?
 pub fn all_media(files: &[PathBuf]) -> bool {
-    !files.is_empty() && files.iter().all(|path| path.is_file() && kind_of_name(&name_of(path)).is_some())
+    !files.is_empty()
+        && files
+            .iter()
+            .all(|path| path.is_file() && kind_of_name(&name_of(path)).is_some())
 }
 
 #[cfg(test)]
@@ -661,7 +761,8 @@ mod tests {
     use std::process::Command;
 
     use super::super::media_plan::{
-        AudioCodec, AudioOptions, ImageFormat, ImageOptions, Sound, VideoCodec, VideoOptions, VideoQuality,
+        AudioCodec, AudioOptions, ImageFormat, ImageOptions, Sound, VideoCodec, VideoOptions,
+        VideoQuality,
     };
     use super::super::pack_plan::Level;
     use super::super::testing::{Temp, with_data_home};
@@ -681,24 +782,75 @@ mod tests {
         let image = dir.join("photo.jpg");
         let film = dir.join("film.mp4");
         let song = dir.join("song.wav");
-        let ok = |status: std::io::Result<std::process::ExitStatus>| status.map(|s| s.success()).unwrap_or(false);
+        let ok = |status: std::io::Result<std::process::ExitStatus>| {
+            status.map(|s| s.success()).unwrap_or(false)
+        };
         // A high-quality noisy JPEG compresses a lot at quality 40.
         if !ok(Command::new("ffmpeg")
-            .args(["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=1600x1200:rate=1", "-frames:v", "1", "-q:v", "1"])
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc2=size=1600x1200:rate=1",
+                "-frames:v",
+                "1",
+                "-q:v",
+                "1",
+            ])
             .arg(&image)
             .status())
         {
             return None;
         }
         if !ok(Command::new("ffmpeg")
-            .args(["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30:duration=3", "-f", "lavfi", "-i", "sine=frequency=440:duration=3", "-c:v", "libx264", "-crf", "12", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "256k", "-metadata", "title=Fixture"])
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc2=size=640x360:rate=30:duration=3",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:duration=3",
+                "-c:v",
+                "libx264",
+                "-crf",
+                "12",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "256k",
+                "-metadata",
+                "title=Fixture",
+            ])
             .arg(&film)
             .status())
         {
             return None;
         }
         if !ok(Command::new("ffmpeg")
-            .args(["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=330:duration=4", "-metadata", "artist=Nobody"])
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=330:duration=4",
+                "-metadata",
+                "artist=Nobody",
+            ])
             .arg(&song)
             .status())
         {
@@ -712,7 +864,12 @@ mod tests {
     }
 
     fn job(files: Vec<PathBuf>, options: ReduceOptions) -> ReduceJob {
-        ReduceJob { files, dest_dir: None, options, parallel: 2 }
+        ReduceJob {
+            files,
+            dest_dir: None,
+            options,
+            parallel: 2,
+        }
     }
 
     fn probe_of(path: &Path) -> Probe {
@@ -722,11 +879,30 @@ mod tests {
     #[test]
     fn a_picture_shrinks_beside_the_original_and_opens() {
         let temp = Temp::new("shrink-image");
-        let Some((image, ..)) = make(&temp) else { return };
+        let Some((image, ..)) = make(&temp) else {
+            return;
+        };
         let mut options = ReduceOptions::default();
-        options.image = ImageOptions { quality: 30, max_dimension: Some(800), ..ImageOptions::default() };
+        options.image = ImageOptions {
+            quality: 30,
+            max_dimension: Some(800),
+            ..ImageOptions::default()
+        };
         let done = run(&job(vec![image.clone()], options));
-        let [FileReport { outcome: Outcome::Reduced { output, from, to, original, .. }, .. }] = done.files.as_slice() else {
+        let [
+            FileReport {
+                outcome:
+                    Outcome::Reduced {
+                        output,
+                        from,
+                        to,
+                        original,
+                        ..
+                    },
+                ..
+            },
+        ] = done.files.as_slice()
+        else {
             panic!("{:?}", done.files);
         };
         assert_eq!(output, &image.with_file_name("photo (compressed).jpg"));
@@ -734,28 +910,71 @@ mod tests {
         let found = probe_of(output);
         assert_eq!((found.width, found.height), (Some(800), Some(600)));
         assert!(image.exists(), "the original is untouched");
-        assert_eq!(fs::metadata(output).unwrap().mtime(), fs::metadata(&image).unwrap().mtime());
-        let left: Vec<_> = fs::read_dir(image.parent().unwrap()).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
-        assert!(!left.iter().any(|name| name.starts_with(".bingux")), "{left:?}");
+        assert_eq!(
+            fs::metadata(output).unwrap().mtime(),
+            fs::metadata(&image).unwrap().mtime()
+        );
+        let left: Vec<_> = fs::read_dir(image.parent().unwrap())
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            !left.iter().any(|name| name.starts_with(".bingux")),
+            "{left:?}"
+        );
         // A second run does not overwrite the first.
-        let again = run(&job(vec![image.clone()], ReduceOptions { image: ImageOptions { quality: 30, ..ImageOptions::default() }, ..ReduceOptions::default() }));
-        let [FileReport { outcome: Outcome::Reduced { output, .. }, .. }] = again.files.as_slice() else { panic!() };
+        let again = run(&job(
+            vec![image.clone()],
+            ReduceOptions {
+                image: ImageOptions {
+                    quality: 30,
+                    ..ImageOptions::default()
+                },
+                ..ReduceOptions::default()
+            },
+        ));
+        let [
+            FileReport {
+                outcome: Outcome::Reduced { output, .. },
+                ..
+            },
+        ] = again.files.as_slice()
+        else {
+            panic!()
+        };
         assert_eq!(output, &image.with_file_name("photo (compressed 2).jpg"));
     }
 
     #[test]
     fn pictures_convert_between_formats() {
         let temp = Temp::new("shrink-convert");
-        let Some((image, ..)) = make(&temp) else { return };
-        for (format, extension) in [(ImageFormat::Webp, "webp"), (ImageFormat::Avif, "avif"), (ImageFormat::Png, "png")] {
+        let Some((image, ..)) = make(&temp) else {
+            return;
+        };
+        for (format, extension) in [
+            (ImageFormat::Webp, "webp"),
+            (ImageFormat::Avif, "avif"),
+            (ImageFormat::Png, "png"),
+        ] {
             if Tools::get().image_format_unavailable(format).is_some() {
                 eprintln!("skipped {format:?}");
                 continue;
             }
-            let options = ReduceOptions { image: ImageOptions { format, quality: 40, max_dimension: Some(600), ..ImageOptions::default() }, ..ReduceOptions::default() };
+            let options = ReduceOptions {
+                image: ImageOptions {
+                    format,
+                    quality: 40,
+                    max_dimension: Some(600),
+                    ..ImageOptions::default()
+                },
+                ..ReduceOptions::default()
+            };
             let done = run(&job(vec![image.clone()], options));
             match &done.files[0].outcome {
-                Outcome::Reduced { output, to, from, .. } => {
+                Outcome::Reduced {
+                    output, to, from, ..
+                } => {
                     assert_eq!(output.extension().unwrap(), extension);
                     assert!(to < from, "{format:?}");
                     assert_eq!(probe_of(output).width, Some(600), "{format:?}");
@@ -773,11 +992,15 @@ mod tests {
             return;
         }
         let temp = Temp::new("shrink-strip");
-        let Some((image, ..)) = make(&temp) else { return };
+        let Some((image, ..)) = make(&temp) else {
+            return;
+        };
         let tagged = image.with_file_name("tagged.jpg");
         // An EXIF block with a camera make and a GPS latitude, put right after the JPEG's start.
         let mut exif = b"Exif\0\0MM\0*\0\0\0\x08\0\x02\x01\x0f\0\x02\0\0\0\x0a\0\0\0\x44\x88\x25\0\x04\0\0\0\x01\0\0\0\x26\0\0\0\0".to_vec();
-        exif.extend_from_slice(b"\0\x02\0\x01\0\x02\0\0\0\x02N\0\0\0\0\x02\0\x05\0\0\0\x03\0\0\0\x4e\0\0\0\0");
+        exif.extend_from_slice(
+            b"\0\x02\0\x01\0\x02\0\0\0\x02N\0\0\0\0\x02\0\x05\0\0\0\x03\0\0\0\x4e\0\0\0\0",
+        );
         exif.extend_from_slice(b"BinguxCam\0");
         for number in [51u32, 1, 30, 1, 0, 1] {
             exif.extend_from_slice(&number.to_be_bytes());
@@ -790,17 +1013,44 @@ mod tests {
         spliced.extend_from_slice(&jpeg[2..]);
         fs::write(&tagged, spliced).unwrap();
         let exif = |path: &Path| {
-            let out = Command::new("magick").arg("identify").arg("-format").arg("%[exif:Make]|%[exif:GPSLatitude]").arg(path).output().unwrap();
+            let out = Command::new("magick")
+                .arg("identify")
+                .arg("-format")
+                .arg("%[exif:Make]|%[exif:GPSLatitude]")
+                .arg(path)
+                .output()
+                .unwrap();
             String::from_utf8_lossy(&out.stdout).into_owned()
         };
-        assert!(exif(&tagged).contains("BinguxCam"), "the fixture has EXIF: {}", exif(&tagged));
+        assert!(
+            exif(&tagged).contains("BinguxCam"),
+            "the fixture has EXIF: {}",
+            exif(&tagged)
+        );
         for (strip, expect_kept) in [(false, true), (true, false)] {
-            let options = ReduceOptions { image: ImageOptions { quality: 30, strip_metadata: strip, ..ImageOptions::default() }, ..ReduceOptions::default() };
+            let options = ReduceOptions {
+                image: ImageOptions {
+                    quality: 30,
+                    strip_metadata: strip,
+                    ..ImageOptions::default()
+                },
+                ..ReduceOptions::default()
+            };
             let done = run(&job(vec![tagged.clone()], options));
-            let Outcome::Reduced { output, .. } = &done.files[0].outcome else { panic!("{:?}", done.files) };
+            let Outcome::Reduced { output, .. } = &done.files[0].outcome else {
+                panic!("{:?}", done.files)
+            };
             let found = exif(output);
-            assert_eq!(found.contains("BinguxCam"), expect_kept, "strip={strip}: {found}");
-            assert_eq!(found.contains("51/1"), expect_kept, "strip={strip}: {found}");
+            assert_eq!(
+                found.contains("BinguxCam"),
+                expect_kept,
+                "strip={strip}: {found}"
+            );
+            assert_eq!(
+                found.contains("51/1"),
+                expect_kept,
+                "strip={strip}: {found}"
+            );
             fs::remove_file(output).unwrap();
         }
     }
@@ -808,7 +1058,9 @@ mod tests {
     #[test]
     fn a_film_shrinks_with_caps_and_keeps_its_sound_and_title() {
         let temp = Temp::new("shrink-film");
-        let Some((_, film, _)) = make(&temp) else { return };
+        let Some((_, film, _)) = make(&temp) else {
+            return;
+        };
         let options = ReduceOptions {
             video: VideoOptions {
                 quality: VideoQuality::Level(Level::Fastest),
@@ -821,16 +1073,42 @@ mod tests {
         };
         let progress = Progress::new();
         let batch = Batch::new();
-        let done = reduce(&job(vec![film.clone()], options), &progress, &batch, &Cancel::new()).unwrap();
-        let Outcome::Reduced { output, from, to, .. } = &done.files[0].outcome else { panic!("{:?}", done.files) };
+        let done = reduce(
+            &job(vec![film.clone()], options),
+            &progress,
+            &batch,
+            &Cancel::new(),
+        )
+        .unwrap();
+        let Outcome::Reduced {
+            output, from, to, ..
+        } = &done.files[0].outcome
+        else {
+            panic!("{:?}", done.files)
+        };
         assert!(to < from);
         let found = probe_of(output);
         assert_eq!(found.height, Some(180));
         assert!(found.has_audio && found.has_video);
         assert!((found.fps.unwrap() - 15.0).abs() < 0.5, "{found:?}");
         assert!((found.duration.unwrap() - 3.0).abs() < 0.3);
-        let tags = Command::new("ffprobe").args(["-v", "error", "-show_entries", "format_tags=title", "-of", "default=nw=1:nk=1"]).arg(output).output().unwrap();
-        assert_eq!(String::from_utf8_lossy(&tags.stdout).trim(), "Fixture", "metadata is kept");
+        let tags = Command::new("ffprobe")
+            .args([
+                "-v",
+                "error",
+                "-show_entries",
+                "format_tags=title",
+                "-of",
+                "default=nw=1:nk=1",
+            ])
+            .arg(output)
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&tags.stdout).trim(),
+            "Fixture",
+            "metadata is kept"
+        );
         assert_eq!(progress.fraction(), Some(1.0));
         assert_eq!(batch.lines()[0].stage, Stage::Done);
     }
@@ -838,33 +1116,64 @@ mod tests {
     #[test]
     fn a_film_without_sound_and_with_stripped_tags() {
         let temp = Temp::new("shrink-silent");
-        let Some((_, film, _)) = make(&temp) else { return };
+        let Some((_, film, _)) = make(&temp) else {
+            return;
+        };
         let options = ReduceOptions {
-            video: VideoOptions { sound: Sound::Remove, strip_metadata: true, max_height: Some(180), quality: VideoQuality::Crf(32), ..VideoOptions::default() },
+            video: VideoOptions {
+                sound: Sound::Remove,
+                strip_metadata: true,
+                max_height: Some(180),
+                quality: VideoQuality::Crf(32),
+                ..VideoOptions::default()
+            },
             ..ReduceOptions::default()
         };
         let done = run(&job(vec![film], options));
-        let Outcome::Reduced { output, .. } = &done.files[0].outcome else { panic!("{:?}", done.files) };
+        let Outcome::Reduced { output, .. } = &done.files[0].outcome else {
+            panic!("{:?}", done.files)
+        };
         assert!(!probe_of(output).has_audio);
-        let tags = Command::new("ffprobe").args(["-v", "error", "-show_entries", "format_tags=title", "-of", "default=nw=1:nk=1"]).arg(output).output().unwrap();
+        let tags = Command::new("ffprobe")
+            .args([
+                "-v",
+                "error",
+                "-show_entries",
+                "format_tags=title",
+                "-of",
+                "default=nw=1:nk=1",
+            ])
+            .arg(output)
+            .output()
+            .unwrap();
         assert!(String::from_utf8_lossy(&tags.stdout).trim().is_empty());
     }
 
     #[test]
     fn each_available_film_codec_makes_a_file_that_opens() {
         let temp = Temp::new("shrink-codecs");
-        let Some((_, film, _)) = make(&temp) else { return };
+        let Some((_, film, _)) = make(&temp) else {
+            return;
+        };
         for codec in VideoCodec::ALL {
             if Tools::get().video_codec_unavailable(codec).is_some() {
                 eprintln!("skipped {codec:?}");
                 continue;
             }
             let options = ReduceOptions {
-                video: VideoOptions { codec, quality: VideoQuality::Level(Level::Fastest), max_height: Some(180), sound: Sound::Kbps(64), ..VideoOptions::default() },
+                video: VideoOptions {
+                    codec,
+                    quality: VideoQuality::Level(Level::Fastest),
+                    max_height: Some(180),
+                    sound: Sound::Kbps(64),
+                    ..VideoOptions::default()
+                },
                 ..ReduceOptions::default()
             };
             let done = run(&job(vec![film.clone()], options));
-            let Outcome::Reduced { output, .. } = &done.files[0].outcome else { panic!("{codec:?}: {:?}", done.files) };
+            let Outcome::Reduced { output, .. } = &done.files[0].outcome else {
+                panic!("{codec:?}: {:?}", done.files)
+            };
             assert_eq!(output.extension().unwrap(), codec.extension());
             assert!(probe_of(output).has_video, "{codec:?}");
             fs::remove_file(output).unwrap();
@@ -874,19 +1183,47 @@ mod tests {
     #[test]
     fn a_song_becomes_each_available_codec_and_keeps_its_tags() {
         let temp = Temp::new("shrink-song");
-        let Some((_, _, song)) = make(&temp) else { return };
+        let Some((_, _, song)) = make(&temp) else {
+            return;
+        };
         for codec in AudioCodec::ALL {
             if Tools::get().audio_codec_unavailable(codec).is_some() {
                 eprintln!("skipped {codec:?}");
                 continue;
             }
-            let options = ReduceOptions { audio: AudioOptions { codec, kbps: 64, strip_metadata: false }, ..ReduceOptions::default() };
+            let options = ReduceOptions {
+                audio: AudioOptions {
+                    codec,
+                    kbps: 64,
+                    strip_metadata: false,
+                },
+                ..ReduceOptions::default()
+            };
             let done = run(&job(vec![song.clone()], options));
-            let Outcome::Reduced { output, from, to, .. } = &done.files[0].outcome else { panic!("{codec:?}: {:?}", done.files) };
+            let Outcome::Reduced {
+                output, from, to, ..
+            } = &done.files[0].outcome
+            else {
+                panic!("{codec:?}: {:?}", done.files)
+            };
             assert!(to < from, "{codec:?}");
             assert!(probe_of(output).has_audio);
-            let tags = Command::new("ffprobe").args(["-v", "error", "-show_entries", "format_tags=artist:stream_tags=artist", "-of", "default=nw=1:nk=1"]).arg(output).output().unwrap();
-            assert!(String::from_utf8_lossy(&tags.stdout).contains("Nobody"), "{codec:?} keeps its tags");
+            let tags = Command::new("ffprobe")
+                .args([
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format_tags=artist:stream_tags=artist",
+                    "-of",
+                    "default=nw=1:nk=1",
+                ])
+                .arg(output)
+                .output()
+                .unwrap();
+            assert!(
+                String::from_utf8_lossy(&tags.stdout).contains("Nobody"),
+                "{codec:?} keeps its tags"
+            );
             fs::remove_file(output).unwrap();
         }
     }
@@ -894,25 +1231,54 @@ mod tests {
     #[test]
     fn a_file_that_would_grow_is_kept() {
         let temp = Temp::new("shrink-small");
-        let Some((_, film, _)) = make(&temp) else { return };
+        let Some((_, film, _)) = make(&temp) else {
+            return;
+        };
         // A tiny clip at a very high quality grows.
         let tiny = film.with_file_name("tiny.mp4");
         let made = Command::new("ffmpeg")
             .args(["-hide_banner", "-loglevel", "error", "-y", "-i"])
             .arg(&film)
-            .args(["-t", "0.2", "-vf", "scale=64:36", "-c:v", "libx264", "-crf", "45", "-preset", "veryslow", "-an"])
+            .args([
+                "-t",
+                "0.2",
+                "-vf",
+                "scale=64:36",
+                "-c:v",
+                "libx264",
+                "-crf",
+                "45",
+                "-preset",
+                "veryslow",
+                "-an",
+            ])
             .arg(&tiny)
             .status()
             .unwrap();
         assert!(made.success());
         let options = ReduceOptions {
-            video: VideoOptions { quality: VideoQuality::Crf(16), sound: Sound::Remove, ..VideoOptions::default() },
+            video: VideoOptions {
+                quality: VideoQuality::Crf(16),
+                sound: Sound::Remove,
+                ..VideoOptions::default()
+            },
             ..ReduceOptions::default()
         };
         let done = run(&job(vec![tiny.clone()], options));
-        assert!(matches!(done.files[0].outcome, Outcome::Kept { .. }), "{:?}", done.files);
-        let names: Vec<_> = fs::read_dir(tiny.parent().unwrap()).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
-        assert!(!names.iter().any(|name| name.contains("compressed")), "{names:?}");
+        assert!(
+            matches!(done.files[0].outcome, Outcome::Kept { .. }),
+            "{:?}",
+            done.files
+        );
+        let names: Vec<_> = fs::read_dir(tiny.parent().unwrap())
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            !names.iter().any(|name| name.contains("compressed")),
+            "{names:?}"
+        );
         assert_eq!(done.reduced(), 0);
         assert_eq!(done.kept(), 1);
     }
@@ -920,21 +1286,35 @@ mod tests {
     #[test]
     fn replacing_the_original_puts_it_in_the_trash_and_takes_its_name() {
         let temp = Temp::new("shrink-replace");
-        let Some((image, ..)) = make(&temp) else { return };
+        let Some((image, ..)) = make(&temp) else {
+            return;
+        };
         let data = temp.dir("data");
         let before = fs::read(&image).unwrap();
         let options = ReduceOptions {
-            image: ImageOptions { quality: 30, ..ImageOptions::default() },
+            image: ImageOptions {
+                quality: 30,
+                ..ImageOptions::default()
+            },
             replace_original: true,
             ..ReduceOptions::default()
         };
         let (done, restored) = with_data_home(&data, || {
             let done = run(&job(vec![image.clone()], options));
-            let Outcome::Reduced { output, original, .. } = &done.files[0].outcome else { panic!("{:?}", done.files) };
+            let Outcome::Reduced {
+                output, original, ..
+            } = &done.files[0].outcome
+            else {
+                panic!("{:?}", done.files)
+            };
             assert_eq!(output, &image, "the new file has the old name");
             assert!(fs::read(&image).unwrap().len() < before.len());
             let item = original.as_ref().expect("the original was binned");
-            assert_eq!(fs::read(&item.in_trash).unwrap(), before, "and is whole in the Trash");
+            assert_eq!(
+                fs::read(&item.in_trash).unwrap(),
+                before,
+                "and is whole in the Trash"
+            );
             // Undo: the new file goes, the original returns.
             trash(&done.created()).unwrap();
             untrash(&done.trashed()).unwrap();
@@ -948,17 +1328,38 @@ mod tests {
     #[test]
     fn cancelling_leaves_no_partial_file() {
         let temp = Temp::new("shrink-cancel");
-        let Some((_, film, _)) = make(&temp) else { return };
+        let Some((_, film, _)) = make(&temp) else {
+            return;
+        };
         // A slow, strong encode of a longer clip so the cancel lands mid-way.
         let long = film.with_file_name("long.mp4");
         let made = Command::new("ffmpeg")
-            .args(["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30:duration=60", "-c:v", "libx264", "-crf", "30", "-preset", "ultrafast"])
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc2=size=1280x720:rate=30:duration=60",
+                "-c:v",
+                "libx264",
+                "-crf",
+                "30",
+                "-preset",
+                "ultrafast",
+            ])
             .arg(&long)
             .status()
             .unwrap();
         assert!(made.success());
         let options = ReduceOptions {
-            video: VideoOptions { quality: VideoQuality::Level(Level::Smallest), sound: Sound::Remove, ..VideoOptions::default() },
+            video: VideoOptions {
+                quality: VideoQuality::Level(Level::Smallest),
+                sound: Sound::Remove,
+                ..VideoOptions::default()
+            },
             ..ReduceOptions::default()
         };
         let cancel = Cancel::new();
@@ -967,32 +1368,70 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(700));
             stopper.cancel();
         });
-        let outcome = reduce(&job(vec![long.clone()], options), &Progress::new(), &Batch::new(), &cancel);
+        let outcome = reduce(
+            &job(vec![long.clone()], options),
+            &Progress::new(),
+            &Batch::new(),
+            &cancel,
+        );
         watcher.join().unwrap();
         assert_eq!(outcome.unwrap_err(), OpError::Cancelled);
-        let names: Vec<_> = fs::read_dir(long.parent().unwrap()).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
-        assert!(!names.iter().any(|name| name.contains("compressed") || name.starts_with(".bingux")), "{names:?}");
+        let names: Vec<_> = fs::read_dir(long.parent().unwrap())
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            !names
+                .iter()
+                .any(|name| name.contains("compressed") || name.starts_with(".bingux")),
+            "{names:?}"
+        );
     }
 
     #[test]
     fn estimates_follow_a_real_sample() {
         let temp = Temp::new("shrink-estimate");
-        let Some((image, film, song)) = make(&temp) else { return };
+        let Some((image, film, song)) = make(&temp) else {
+            return;
+        };
         let files = vec![image.clone(), film.clone(), song.clone()];
         let options = ReduceOptions {
-            image: ImageOptions { quality: 30, ..ImageOptions::default() },
-            video: VideoOptions { quality: VideoQuality::Level(Level::Fastest), sound: Sound::Kbps(64), ..VideoOptions::default() },
-            audio: AudioOptions { codec: AudioCodec::Opus, kbps: 64, strip_metadata: false },
+            image: ImageOptions {
+                quality: 30,
+                ..ImageOptions::default()
+            },
+            video: VideoOptions {
+                quality: VideoQuality::Level(Level::Fastest),
+                sound: Sound::Kbps(64),
+                ..VideoOptions::default()
+            },
+            audio: AudioOptions {
+                codec: AudioCodec::Opus,
+                kbps: 64,
+                strip_metadata: false,
+            },
             ..ReduceOptions::default()
         };
         let estimate = estimate(&files, &options, &Cancel::new()).unwrap();
         assert_eq!(estimate.per_file.len(), 3);
         assert!(estimate.estimated < estimate.original);
         // The estimate of the picture is its real size at those settings.
-        let done = run(&job(vec![image], ReduceOptions { image: options.image.clone(), ..ReduceOptions::default() }));
-        let Outcome::Reduced { to, .. } = &done.files[0].outcome else { panic!() };
+        let done = run(&job(
+            vec![image],
+            ReduceOptions {
+                image: options.image.clone(),
+                ..ReduceOptions::default()
+            },
+        ));
+        let Outcome::Reduced { to, .. } = &done.files[0].outcome else {
+            panic!()
+        };
         let guess = estimate.per_file[0].unwrap();
-        assert!(guess.abs_diff(*to) * 10 <= *to, "estimated {guess}, made {to}");
+        assert!(
+            guess.abs_diff(*to) * 10 <= *to,
+            "estimated {guess}, made {to}"
+        );
         // A song at 64 kbit/s for 4 s is 32 000 bytes.
         assert_eq!(estimate.per_file[2], Some(32_000));
     }
@@ -1000,13 +1439,26 @@ mod tests {
     #[test]
     fn odd_names_are_carried_exactly() {
         let temp = Temp::new("shrink-names");
-        let Some((image, ..)) = make(&temp) else { return };
+        let Some((image, ..)) = make(&temp) else {
+            return;
+        };
         let odd = image.with_file_name("-odd: [0] 'x' *.jpg");
         fs::copy(&image, &odd).unwrap();
-        let options = ReduceOptions { image: ImageOptions { quality: 30, ..ImageOptions::default() }, ..ReduceOptions::default() };
+        let options = ReduceOptions {
+            image: ImageOptions {
+                quality: 30,
+                ..ImageOptions::default()
+            },
+            ..ReduceOptions::default()
+        };
         let done = run(&job(vec![odd.clone()], options));
-        let Outcome::Reduced { output, .. } = &done.files[0].outcome else { panic!("{:?}", done.files) };
-        assert_eq!(output, &odd.with_file_name("-odd: [0] 'x' * (compressed).jpg"));
+        let Outcome::Reduced { output, .. } = &done.files[0].outcome else {
+            panic!("{:?}", done.files)
+        };
+        assert_eq!(
+            output,
+            &odd.with_file_name("-odd: [0] 'x' * (compressed).jpg")
+        );
         assert!(probe_of(output).width.is_some());
     }
 
@@ -1020,7 +1472,13 @@ mod tests {
         assert!(matches!(done.files[1].outcome, Outcome::Skipped { .. }));
         assert_eq!(done.failures().len(), 2);
         let progress = Progress::new();
-        reduce(&job(vec![temp.path().join("a.txt")], ReduceOptions::default()), &progress, &Batch::new(), &Cancel::new()).unwrap();
+        reduce(
+            &job(vec![temp.path().join("a.txt")], ReduceOptions::default()),
+            &progress,
+            &Batch::new(),
+            &Cancel::new(),
+        )
+        .unwrap();
         assert_eq!(progress.fraction(), Some(1.0));
     }
 
@@ -1028,7 +1486,13 @@ mod tests {
     fn bad_requests_are_refused() {
         let run = |job: &ReduceJob| reduce(job, &Progress::new(), &Batch::new(), &Cancel::new());
         assert!(run(&job(vec![], ReduceOptions::default())).is_err());
-        assert!(run(&job(vec![PathBuf::from("rel.jpg")], ReduceOptions::default())).is_err());
+        assert!(
+            run(&job(
+                vec![PathBuf::from("rel.jpg")],
+                ReduceOptions::default()
+            ))
+            .is_err()
+        );
         let temp = Temp::new("shrink-bad");
         let mut missing = job(vec![temp.path().join("a.jpg")], ReduceOptions::default());
         missing.dest_dir = Some(temp.path().join("nope"));
@@ -1038,7 +1502,10 @@ mod tests {
     #[test]
     fn parallelism_and_kinds() {
         assert_eq!(parallelism(&[PathBuf::from("/a/x.mp4")]), 1);
-        assert_eq!(parallelism(&[PathBuf::from("/a/x.jpg"), PathBuf::from("/a/y.mp3")]), 2);
+        assert_eq!(
+            parallelism(&[PathBuf::from("/a/x.jpg"), PathBuf::from("/a/y.mp3")]),
+            2
+        );
         assert_eq!(kind_of_name("a.JPG"), Some(MediaKind::Image));
         assert_eq!(kind_of_name("a.mkv"), Some(MediaKind::Video));
         assert_eq!(kind_of_name("a.flac"), Some(MediaKind::Audio));

@@ -206,7 +206,9 @@ pub fn walk(
                 {
                     queue.push_back(path);
                 }
-                if batch.len() >= BATCH_SIZE || (!batch.is_empty() && last_flush.elapsed() >= BATCH_AGE) {
+                if batch.len() >= BATCH_SIZE
+                    || (!batch.is_empty() && last_flush.elapsed() >= BATCH_AGE)
+                {
                     if !flush!() {
                         break 'roots;
                     }

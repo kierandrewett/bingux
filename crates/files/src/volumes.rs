@@ -72,7 +72,10 @@ pub struct Udev {
 pub fn parse_udev(text: &str) -> Udev {
     let mut info = Udev::default();
     for line in text.lines() {
-        let Some((key, value)) = line.strip_prefix("E:").and_then(|rest| rest.split_once('=')) else {
+        let Some((key, value)) = line
+            .strip_prefix("E:")
+            .and_then(|rest| rest.split_once('='))
+        else {
             continue;
         };
         match key {
@@ -82,8 +85,11 @@ pub fn parse_udev(text: &str) -> Udev {
             "ID_BUS" => info.bus = Some(value.to_string()),
             "ID_PART_ENTRY_TYPE" => info.partition_type = Some(value.to_ascii_lowercase()),
             "UDISKS_IGNORE" | "UDISKS_SYSTEM" => info.ignored |= value == "1",
-            "ID_DRIVE_FLASH_SD" | "ID_DRIVE_MEDIA_FLASH_SD" | "ID_DRIVE_FLASH_MS"
-            | "ID_DRIVE_FLASH_SM" | "ID_DRIVE_FLASH_CF" => info.flash_card |= value == "1",
+            "ID_DRIVE_FLASH_SD"
+            | "ID_DRIVE_MEDIA_FLASH_SD"
+            | "ID_DRIVE_FLASH_MS"
+            | "ID_DRIVE_FLASH_SM"
+            | "ID_DRIVE_FLASH_CF" => info.flash_card |= value == "1",
             "ID_CDROM_MEDIA" => info.optical_media |= value == "1",
             _ => {}
         }
@@ -185,8 +191,12 @@ pub fn mount_volume(volume: &Volume) -> Result<PathBuf, String> {
         })?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     if output.status.success() {
-        return parse_mounted(&stdout)
-            .ok_or_else(|| format!("{} was mounted, but not where it could be found.", volume.label));
+        return parse_mounted(&stdout).ok_or_else(|| {
+            format!(
+                "{} was mounted, but not where it could be found.",
+                volume.label
+            )
+        });
     }
     let stderr = String::from_utf8_lossy(&output.stderr);
     Err(failure_sentence(&stderr, &volume.label))

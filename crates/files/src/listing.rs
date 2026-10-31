@@ -176,7 +176,10 @@ impl Listing {
             if view.directories_only && !entry.is_dir() {
                 continue;
             }
-            if matcher.as_ref().is_some_and(|matcher| !matcher.matches(entry)) {
+            if matcher
+                .as_ref()
+                .is_some_and(|matcher| !matcher.matches(entry))
+            {
                 selected.hidden_by_filter += 1;
                 continue;
             }
@@ -225,7 +228,8 @@ impl Listing {
                 let any = !diff.is_empty();
                 if !diff.removed.is_empty() {
                     let gone: HashSet<&str> = diff.removed.iter().map(String::as_str).collect();
-                    self.entries.retain(|entry| !gone.contains(entry.name.as_str()));
+                    self.entries
+                        .retain(|entry| !gone.contains(entry.name.as_str()));
                     self.revision += 1;
                 }
                 if !diff.changed.is_empty() {
@@ -366,7 +370,8 @@ pub(crate) fn read_folder(
         }
         batch.push(entry);
         let due = batch.len() >= target
-            || (count % 16 == 0 && last.elapsed() >= if sent_first { interval } else { FIRST_INTERVAL });
+            || (count % 16 == 0
+                && last.elapsed() >= if sent_first { interval } else { FIRST_INTERVAL });
         if due {
             if stat {
                 stat_batch(&mut batch, threads);
@@ -378,7 +383,11 @@ pub(crate) fn read_folder(
             if sent_first {
                 interval = (interval * 2).min(LAST_INTERVAL);
             }
-            target = if sent_first { (target * 2).min(LAST_BATCH) } else { 256 };
+            target = if sent_first {
+                (target * 2).min(LAST_BATCH)
+            } else {
+                256
+            };
             sent_first = true;
             last = std::time::Instant::now();
         }
@@ -496,12 +505,29 @@ mod tests {
         fs::write(files.join("stray"), b"s").unwrap();
         let listing = list_dir(&files, &Cancel::new()).unwrap();
         let meta = |name: &str| {
-            let entry = listing.entries.iter().find(|entry| entry.name == name).unwrap();
-            entry.trash.clone().unwrap_or_else(|| panic!("{name} has trash info"))
+            let entry = listing
+                .entries
+                .iter()
+                .find(|entry| entry.name == name)
+                .unwrap();
+            entry
+                .trash
+                .clone()
+                .unwrap_or_else(|| panic!("{name} has trash info"))
         };
-        assert_eq!(meta("late.txt").original, Some(dir.join("drive/docs/late.txt")), "relative to the drive's top");
-        assert_eq!(meta("early.txt").original, Some(dir.join("drive/early one.txt")));
-        assert!(meta("early.txt").deleted.is_some() && meta("late.txt").deleted > meta("early.txt").deleted);
+        assert_eq!(
+            meta("late.txt").original,
+            Some(dir.join("drive/docs/late.txt")),
+            "relative to the drive's top"
+        );
+        assert_eq!(
+            meta("early.txt").original,
+            Some(dir.join("drive/early one.txt"))
+        );
+        assert!(
+            meta("early.txt").deleted.is_some()
+                && meta("late.txt").deleted > meta("early.txt").deleted
+        );
         assert_eq!(meta("odd").deleted, None, "a date that cannot be read");
         assert_eq!(meta("stray").original, None, "no info file");
         let view = View {
@@ -515,7 +541,11 @@ mod tests {
             .into_iter()
             .map(|index| listing.entries[index].name.clone())
             .collect();
-        assert_eq!(names[2..], ["early.txt", "late.txt"], "oldest first, the unknown ones before them: {names:?}");
+        assert_eq!(
+            names[2..],
+            ["early.txt", "late.txt"],
+            "oldest first, the unknown ones before them: {names:?}"
+        );
         // An ordinary folder's entries have no such info.
         let plain = list_dir(&dir.join("drive"), &Cancel::new()).unwrap();
         assert!(plain.entries.iter().all(|entry| entry.trash.is_none()));
@@ -544,7 +574,13 @@ mod tests {
     #[test]
     fn a_stopped_first_read_keeps_what_it_had_and_says_so() {
         let mut listing = Listing::new("/x");
-        listing.apply_event(Event::Batch(vec![Entry::named("/x/a".into(), "a".into(), Kind::File, false, false)]));
+        listing.apply_event(Event::Batch(vec![Entry::named(
+            "/x/a".into(),
+            "a".into(),
+            Kind::File,
+            false,
+            false,
+        )]));
         listing.apply_event(Event::Stopped);
         assert!(listing.stopped && !listing.complete);
         assert_eq!(listing.entries.len(), 1);
@@ -566,7 +602,13 @@ mod tests {
     fn a_cached_listing_whose_check_was_stopped_stays_unchecked() {
         let mut listing = Listing::new("/x");
         listing.apply_event(Event::Cached {
-            entries: vec![Entry::named("/x/a".into(), "a".into(), Kind::File, false, false)],
+            entries: vec![Entry::named(
+                "/x/a".into(),
+                "a".into(),
+                Kind::File,
+                false,
+                false,
+            )],
         });
         listing.apply_event(Event::Stopped);
         assert!(listing.stopped && listing.from_cache && !listing.complete);

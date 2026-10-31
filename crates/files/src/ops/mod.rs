@@ -69,60 +69,58 @@ mod data;
 mod details;
 mod digest;
 mod durable;
+mod media_plan;
 mod names;
-mod props;
-mod tally;
-mod transfer;
-mod restore;
-mod trash;
-mod unpack;
-mod trash_empty;
-mod trash_info;
 mod pack;
 mod pack_plan;
-mod media_plan;
 pub mod prefs;
+mod props;
+mod restore;
 mod shrink;
+mod tally;
 pub mod tool;
+mod transfer;
+mod trash;
+mod trash_empty;
+mod trash_info;
+mod unpack;
 
 pub use archive::{can_extract, extract_available};
-pub use unpack::{
-    Inspection, Overwrite, Unpacked, UnpackOptions, check_password, extract, inspect, unpack,
-};
+pub use clip::{gnome_copied_files, parse_gnome_copied_files, parse_uri_list, uri_of};
+pub use details::{FileDetails, Xattr, file_details, xattrs};
+pub use digest::{HashOutcome, HashProgress, Hashing, Sha256};
 pub use media_plan::{
-    AUDIO_KBPS, AudioCodec, AudioOptions, DIMENSIONS, FRAME_RATES, HEIGHTS, ImageFormat, ImageOptions,
-    MediaKind, Probe, ReduceOptions, SOUND_KBPS, Sound, Tools, VideoCodec, VideoOptions, VideoQuality,
-    free_reduced_name, image_format_of, reduced_name,
+    AUDIO_KBPS, AudioCodec, AudioOptions, DIMENSIONS, FRAME_RATES, HEIGHTS, ImageFormat,
+    ImageOptions, MediaKind, Probe, ReduceOptions, SOUND_KBPS, Sound, Tools, VideoCodec,
+    VideoOptions, VideoQuality, free_reduced_name, image_format_of, reduced_name,
 };
+pub use names::{create_dir, create_file, keep_both_name, rename};
+pub use pack::{ItemKind, OnConflict, PackJob, Packed, Scan, pack, parent_of, scan};
+pub use pack_plan::{
+    Excludes, Format, Level, NAME_LIMIT, NameCheck, PackOptions, Password, PatternError,
+    SPLIT_SIZES_MIB, base_of, check_name, file_name, free_base, split_label, suggested_base,
+};
+pub use props::{
+    Permissions, Properties, TreeChange, Volume, chmod, chmod_tree, group_name, permissions,
+    properties, stat_properties, tree_mode, user_name,
+};
+pub use restore::{RestoreEntry, RestoreFailure, RestorePlan, Restored, plan_restore, restore};
 pub use shrink::{
     Batch, Estimate, FileReport, Live, Outcome, ReduceJob, Reduced, Stage, all_media, estimate,
     kind_of_name, parallelism, reduce,
 };
-pub use pack::{ItemKind, OnConflict, Packed, PackJob, Scan, pack, parent_of, scan};
-pub use pack_plan::{
-    Excludes, Format, Level, NAME_LIMIT, NameCheck, PackOptions, PatternError, Password,
-    SPLIT_SIZES_MIB, base_of, check_name, file_name, free_base, split_label, suggested_base,
-};
-pub use clip::{gnome_copied_files, parse_gnome_copied_files, parse_uri_list, uri_of};
-pub use details::{FileDetails, Xattr, file_details, xattrs};
-pub use digest::{HashOutcome, HashProgress, Hashing, Sha256};
-pub use names::{create_dir, create_file, keep_both_name, rename};
-pub use props::{
-    Permissions, Properties, TreeChange, Volume, chmod, chmod_tree, group_name, permissions, properties,
-    stat_properties, tree_mode, user_name,
-};
 pub use tally::{ChildSize, Counting, Tally, Totals, count};
 pub use transfer::{Conflict, ConflictPolicy, Resolution, copy, delete, move_to};
-pub use restore::{RestoreEntry, RestoreFailure, RestorePlan, Restored, plan_restore, restore};
 pub use trash::{
-    Trashed, TrashRefusal, can_trash, check_trash, in_trash, trash, trash_copying, untrash,
+    TrashRefusal, Trashed, can_trash, check_trash, in_trash, trash, trash_copying, untrash,
 };
+pub use trash_empty::{TrashSummary, delete_trashed, empty_trash, trash_is_empty, trash_summary};
 pub(crate) use trash_info::BinFolder;
-pub use trash_empty::{
-    TrashSummary, delete_trashed, empty_trash, trash_is_empty, trash_summary,
-};
 pub use trash_info::{
     InBin, TrashItem, cached_dir_size, trash_folder, trash_item, trash_items, trash_place,
+};
+pub use unpack::{
+    Inspection, Overwrite, UnpackOptions, Unpacked, check_password, extract, inspect, unpack,
 };
 
 /// Why an operation did not happen. Each one reads as a plain sentence.
@@ -225,7 +223,9 @@ fn plain(error: &io::Error) -> String {
 pub struct Progress(Arc<ProgressInner>);
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 #[derive(Debug, Default)]
@@ -453,7 +453,9 @@ pub(crate) mod testing {
     /// process's, so the tests that change it take turns.
     pub fn with_data_home<T>(data: &Path, work: impl FnOnce() -> T) -> T {
         static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let _turn = TURN.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _turn = TURN
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let previous = std::env::var_os("XDG_DATA_HOME");
         // SAFETY: the lock above keeps the tests that set it apart, and no
         // other test in this crate reads it.

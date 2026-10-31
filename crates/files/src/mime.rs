@@ -217,18 +217,48 @@ const TABLE: &[(&str, &str, &str, Category)] = &[
         Other,
     ),
     ("img", "application/x-raw-disk-image", "Disk image", Other),
-    ("dmg", "application/x-apple-diskimage", "Apple disk image", Other),
+    (
+        "dmg",
+        "application/x-apple-diskimage",
+        "Apple disk image",
+        Other,
+    ),
     (
         "qcow qcow2",
         "application/x-qemu-disk",
         "QEMU disk image",
         Other,
     ),
-    ("vdi vmdk", "application/x-virtualbox-vdi", "Virtual disk", Other),
-    ("mobi azw azw3", "application/x-mobipocket-ebook", "Kindle book", Document),
-    ("fb2", "application/x-fictionbook+xml", "FictionBook", Document),
-    ("cbz", "application/vnd.comicbook+zip", "Comic book", Document),
-    ("cbr", "application/vnd.comicbook-rar", "Comic book", Document),
+    (
+        "vdi vmdk",
+        "application/x-virtualbox-vdi",
+        "Virtual disk",
+        Other,
+    ),
+    (
+        "mobi azw azw3",
+        "application/x-mobipocket-ebook",
+        "Kindle book",
+        Document,
+    ),
+    (
+        "fb2",
+        "application/x-fictionbook+xml",
+        "FictionBook",
+        Document,
+    ),
+    (
+        "cbz",
+        "application/vnd.comicbook+zip",
+        "Comic book",
+        Document,
+    ),
+    (
+        "cbr",
+        "application/vnd.comicbook-rar",
+        "Comic book",
+        Document,
+    ),
     ("stl", "model/stl", "STL model", Other),
     ("obj", "model/obj", "OBJ model", Other),
     ("glb", "model/gltf-binary", "glTF binary", Other),
@@ -246,7 +276,12 @@ const TABLE: &[(&str, &str, &str, Category)] = &[
     ("p12 pfx", "application/x-pkcs12", "PKCS #12 bundle", Other),
     ("gpg pgp asc", "application/pgp-keys", "OpenPGP data", Other),
     ("kdbx", "application/x-keepass2", "KeePass database", Other),
-    ("exe msi", "application/x-msdos-program", "Windows program", Other),
+    (
+        "exe msi",
+        "application/x-msdos-program",
+        "Windows program",
+        Other,
+    ),
 ];
 
 /// Whole names that mean a type regardless of extension.
@@ -269,7 +304,11 @@ impl Hasher for Fnv {
     }
 
     fn write(&mut self, bytes: &[u8]) {
-        let mut hash = if self.0 == 0 { 0xcbf2_9ce4_8422_2325 } else { self.0 };
+        let mut hash = if self.0 == 0 {
+            0xcbf2_9ce4_8422_2325
+        } else {
+            self.0
+        };
         for byte in bytes {
             hash ^= u64::from(*byte);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
@@ -359,7 +398,9 @@ fn for_lower_name(lower: &str) -> Type {
 /// Every extension (lower case) the table classifies, for a check that covers
 /// them all.
 pub fn known_extensions() -> impl Iterator<Item = &'static str> {
-    TABLE.iter().flat_map(|(extensions, ..)| extensions.split(' '))
+    TABLE
+        .iter()
+        .flat_map(|(extensions, ..)| extensions.split(' '))
 }
 
 /// Whether `mime` is `wanted`, or a kind of it. `image/*` matches every

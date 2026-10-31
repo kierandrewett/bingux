@@ -391,7 +391,14 @@ impl<'a> Ctx<'a> {
         if self.check().is_err() {
             return;
         }
-        match copy_file(self, &job.source, &job.meta, &job.target, job.replace, job.mode) {
+        match copy_file(
+            self,
+            &job.source,
+            &job.meta,
+            &job.target,
+            job.replace,
+            job.mode,
+        ) {
             Ok(copy_len) => {
                 self.progress.add_files(1);
                 self.remember_file(&job.source, &job.meta, &job.target, copy_len, job.mode);
@@ -674,7 +681,14 @@ pub fn copy(
     progress: &Progress,
     cancel: &Cancel,
 ) -> Result<Vec<PathBuf>, OpError> {
-    copy_in(&Engine::system(), paths, dest_dir, conflicts, progress, cancel)
+    copy_in(
+        &Engine::system(),
+        paths,
+        dest_dir,
+        conflicts,
+        progress,
+        cancel,
+    )
 }
 
 pub(super) fn copy_in(
@@ -722,7 +736,14 @@ pub fn move_to(
     progress: &Progress,
     cancel: &Cancel,
 ) -> Result<Vec<PathBuf>, OpError> {
-    move_in(&Engine::system(), paths, dest_dir, conflicts, progress, cancel)
+    move_in(
+        &Engine::system(),
+        paths,
+        dest_dir,
+        conflicts,
+        progress,
+        cancel,
+    )
 }
 
 pub(super) fn move_in(

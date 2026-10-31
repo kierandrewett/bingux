@@ -541,12 +541,37 @@ mod tests {
             .filter_spec("Pictures", "png jpg")
             .filter(Filter::new("All files"));
         assert_eq!(own.effective_filters().len(), 2);
-        assert!(own.clone().presets(false).effective_filters().iter().all(|f| f.name != "Audio"));
+        assert!(
+            own.clone()
+                .presets(false)
+                .effective_filters()
+                .iter()
+                .all(|f| f.name != "Audio")
+        );
         let with_presets = own.clone().presets(true);
-        let names: Vec<String> = with_presets.effective_filters().into_iter().map(|f| f.name).collect();
+        let names: Vec<String> = with_presets
+            .effective_filters()
+            .into_iter()
+            .map(|f| f.name)
+            .collect();
         // "All files" is not repeated; the rest follow the request's own.
-        assert_eq!(names, ["Pictures", "All files", "Images", "Audio", "Video", "Documents", "Archives", "Text"]);
-        assert_eq!(with_presets.clone().current_filter(3).initial_filter(), Some(3));
+        assert_eq!(
+            names,
+            [
+                "Pictures",
+                "All files",
+                "Images",
+                "Audio",
+                "Video",
+                "Documents",
+                "Archives",
+                "Text"
+            ]
+        );
+        assert_eq!(
+            with_presets.clone().current_filter(3).initial_filter(),
+            Some(3)
+        );
         assert_eq!(with_presets.current_filter(99).initial_filter(), Some(0));
     }
 }

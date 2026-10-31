@@ -174,7 +174,12 @@ impl Finished {
             .lines()
             .map(str::trim)
             .rfind(|line| !line.is_empty() && !line.starts_with("Error: "))
-            .or_else(|| self.complaint.lines().map(str::trim).rfind(|line| !line.is_empty()))
+            .or_else(|| {
+                self.complaint
+                    .lines()
+                    .map(str::trim)
+                    .rfind(|line| !line.is_empty())
+            })
             .unwrap_or("The program gave no reason")
             .trim_end_matches('.');
         let line = line.strip_prefix("Error: ").unwrap_or(line);
@@ -247,7 +252,9 @@ fn read_lines(mut source: impl Read + Send + 'static, stream: Stream, sender: mp
             for &byte in &buffer[..count] {
                 if byte == b'\n' || byte == b'\r' {
                     if !line.is_empty()
-                        && sender.send(Event::Line(stream, std::mem::take(&mut line))).is_err()
+                        && sender
+                            .send(Event::Line(stream, std::mem::take(&mut line)))
+                            .is_err()
                     {
                         return;
                     }
@@ -514,7 +521,10 @@ mod tests {
     fn input_goes_to_stdin_not_to_the_arguments() {
         let spec = Spec::new("cat").with_input(Input::Bytes(b"secret\n".to_vec()));
         let mut seen = Vec::new();
-        run(&spec, &Cancel::new(), &mut |_, line| seen.push(line.to_vec())).unwrap();
+        run(&spec, &Cancel::new(), &mut |_, line| {
+            seen.push(line.to_vec())
+        })
+        .unwrap();
         assert_eq!(seen, [b"secret".to_vec()]);
         assert!(!format!("{spec:?}").contains("secret"));
     }
@@ -549,7 +559,10 @@ mod tests {
         });
         let spec = Spec::new("sh").args(["-c", "sleep 30 & sleep 30"]);
         let started = Instant::now();
-        assert_eq!(run(&spec, &cancel, &mut quiet()).unwrap_err(), OpError::Cancelled);
+        assert_eq!(
+            run(&spec, &cancel, &mut quiet()).unwrap_err(),
+            OpError::Cancelled
+        );
         assert!(started.elapsed() < Duration::from_secs(10));
     }
 

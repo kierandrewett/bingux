@@ -233,7 +233,10 @@ mod tests {
             on_path("unzip") || super::super::tool::seven_zip().is_some(),
         );
         assert_eq!(can_extract(Path::new("/x/a.tar.xz")), on_path("tar"));
-        assert_eq!(can_extract(Path::new("/x/a.7z")), super::super::tool::seven_zip().is_some());
+        assert_eq!(
+            can_extract(Path::new("/x/a.7z")),
+            super::super::tool::seven_zip().is_some()
+        );
         assert_eq!(classify("a.7z"), Some((Kind::Seven, 3)));
     }
 

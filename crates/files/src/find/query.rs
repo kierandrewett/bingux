@@ -457,7 +457,9 @@ impl Query {
                 let phrase: String = chars[from..at].iter().collect();
                 at = (at + 1).min(chars.len());
                 if let Some(term) = Term::phrase(&phrase) {
-                    query.terms.push(if exclude { term.excluded() } else { term });
+                    query
+                        .terms
+                        .push(if exclude { term.excluded() } else { term });
                 }
                 continue;
             }
@@ -477,13 +479,22 @@ impl Query {
                     while end < chars.len() && chars[end] != '"' {
                         end += 1;
                     }
-                    (chars[from..end].iter().collect::<String>(), (end + 1).min(chars.len()))
+                    (
+                        chars[from..end].iter().collect::<String>(),
+                        (end + 1).min(chars.len()),
+                    )
                 } else {
                     let mut end = value_start;
                     while end < chars.len() && !chars[end].is_whitespace() {
                         end += 1;
                     }
-                    (chars[value_start..end].iter().filter(|c| **c != '"').collect::<String>(), end)
+                    (
+                        chars[value_start..end]
+                            .iter()
+                            .filter(|c| **c != '"')
+                            .collect::<String>(),
+                        end,
+                    )
                 };
                 at = next;
                 if value.trim().is_empty() {
@@ -511,7 +522,9 @@ impl Query {
             let word: String = chars[at..end].iter().collect();
             at = end;
             if let Some(term) = Term::new(&word) {
-                query.terms.push(if exclude { term.excluded() } else { term });
+                query
+                    .terms
+                    .push(if exclude { term.excluded() } else { term });
             }
         }
         (query, problems)
@@ -536,7 +549,15 @@ pub fn split_pending(text: &str) -> (&str, &str) {
     let quotes = text.matches('"').count();
     if quotes % 2 == 1 {
         return match text.rfind('"') {
-            Some(at) if text[..at].ends_with(':') && looks_like_operator(&text[..at].rsplit(char::is_whitespace).next().map_or("", |t| t)) => {
+            Some(at)
+                if text[..at].ends_with(':')
+                    && looks_like_operator(
+                        &text[..at]
+                            .rsplit(char::is_whitespace)
+                            .next()
+                            .map_or("", |t| t),
+                    ) =>
+            {
                 let from = text[..at].rfind(char::is_whitespace).map_or(0, |i| i + 1);
                 (&text[..from], &text[from..])
             }
@@ -639,7 +660,11 @@ impl Filters {
                 let mut found = Vec::new();
                 for part in value.split(',') {
                     let ext = part.trim().trim_start_matches('.').to_lowercase();
-                    if ext.is_empty() || ext.chars().any(|c| c.is_whitespace() || c == '/' || c == '"') {
+                    if ext.is_empty()
+                        || ext
+                            .chars()
+                            .any(|c| c.is_whitespace() || c == '/' || c == '"')
+                    {
                         return Err("not an extension");
                     }
                     found.push(ext);
@@ -698,7 +723,9 @@ impl Filters {
                     NameMode::Contains
                 }
             }
-            Key::Sort => self.sort = SortBy::from_word(value).ok_or("not relevance, name, date or size")?,
+            Key::Sort => {
+                self.sort = SortBy::from_word(value).ok_or("not relevance, name, date or size")?
+            }
         }
         Ok(())
     }
@@ -730,7 +757,11 @@ pub fn parse_bytes(text: &str) -> Option<u64> {
         .find(|c: char| !(c.is_ascii_digit() || c == '.'))
         .unwrap_or(text.len());
     let (number, unit) = text.split_at(split);
-    if number.is_empty() || number.matches('.').count() > 1 || number.starts_with('.') || number.ends_with('.') {
+    if number.is_empty()
+        || number.matches('.').count() > 1
+        || number.starts_with('.')
+        || number.ends_with('.')
+    {
         return None;
     }
     let factor = match unit.trim() {
@@ -751,7 +782,12 @@ pub fn format_bytes(bytes: u64) -> String {
     if bytes == 0 {
         return "0".to_string();
     }
-    for (unit, factor) in [("TB", 1_000_000_000_000_u64), ("GB", 1_000_000_000), ("MB", 1_000_000), ("KB", 1_000)] {
+    for (unit, factor) in [
+        ("TB", 1_000_000_000_000_u64),
+        ("GB", 1_000_000_000),
+        ("MB", 1_000_000),
+        ("KB", 1_000),
+    ] {
         if bytes % factor == 0 {
             return format!("{}{unit}", bytes / factor);
         }
@@ -794,7 +830,9 @@ impl Display for SizeCond {
             SizeCond::Lt(n) => write!(f, "<{}", format_bytes(*n)),
             SizeCond::Le(n) => write!(f, "<={}", format_bytes(*n)),
             SizeCond::Eq(n) => write!(f, "={}", format_bytes(*n)),
-            SizeCond::Between(low, high) => write!(f, "{}..{}", format_bytes(*low), format_bytes(*high)),
+            SizeCond::Between(low, high) => {
+                write!(f, "{}..{}", format_bytes(*low), format_bytes(*high))
+            }
         }
     }
 }
@@ -813,7 +851,9 @@ fn parse_modified(value: &str) -> Option<Modified> {
         "year" => return Some(Modified::ThisYear),
         _ => {}
     }
-    if let Some(days) = ["days", "day", "d"].iter().find_map(|unit| lower.strip_suffix(unit))
+    if let Some(days) = ["days", "day", "d"]
+        .iter()
+        .find_map(|unit| lower.strip_suffix(unit))
         && !days.is_empty()
         && days.chars().all(|c| c.is_ascii_digit())
     {

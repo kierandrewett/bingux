@@ -159,7 +159,8 @@ pub fn run(plan: &Plan, cancel: &Cancel, emit: &mut dyn FnMut(Event) -> bool) ->
                         .is_none_or(|filter| filter.accepts_entry(&entry));
                 if chooser_ok
                     && matcher.accepts(&entry)
-                    && (matcher.name_hit(&entry.name).is_some() || matcher.typo_accepts(&entry.name))
+                    && (matcher.name_hit(&entry.name).is_some()
+                        || matcher.typo_accepts(&entry.name))
                 {
                     known.insert(path);
                     found.push(entry);
@@ -192,10 +193,17 @@ pub fn run(plan: &Plan, cancel: &Cancel, emit: &mut dyn FnMut(Event) -> bool) ->
         filter: plan.chooser_filter.clone(),
         max_hits: plan.max_hits - summary.hits,
     };
-    let walked = walk(&roots, &matcher, &options, &known, cancel, &mut |walked| match walked {
-        Walked::Hits(entries) => emit(Event::Found(entries)),
-        Walked::Progress { folders } => emit(Event::Progress { folders }),
-    });
+    let walked = walk(
+        &roots,
+        &matcher,
+        &options,
+        &known,
+        cancel,
+        &mut |walked| match walked {
+            Walked::Hits(entries) => emit(Event::Found(entries)),
+            Walked::Progress { folders } => emit(Event::Progress { folders }),
+        },
+    );
     summary.hits += walked.hits;
     summary.folders = walked.folders;
     summary.unreadable = walked.unreadable;

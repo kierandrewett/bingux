@@ -221,7 +221,8 @@ pub fn parse_encoders(text: &str) -> Vec<String> {
             let flags = words.next()?;
             let name = words.next()?;
             let kind = flags.chars().next()?;
-            (flags.len() == 6 && matches!(kind, 'V' | 'A' | 'S') && name != "=").then(|| name.to_string())
+            (flags.len() == 6 && matches!(kind, 'V' | 'A' | 'S') && name != "=")
+                .then(|| name.to_string())
         })
         .collect()
 }
@@ -235,7 +236,8 @@ pub fn parse_magick_formats(text: &str) -> Vec<String> {
             let name = words.next()?.trim_end_matches('*');
             let _module = words.next()?;
             let mode = words.next()?;
-            (mode.len() == 3 && mode.starts_with('r') && mode[1..].starts_with('w')).then(|| name.to_string())
+            (mode.len() == 3 && mode.starts_with('r') && mode[1..].starts_with('w'))
+                .then(|| name.to_string())
         })
         .collect()
 }
@@ -290,7 +292,9 @@ impl ImageFormat {
     }
 
     pub fn from_key(key: &str) -> Option<ImageFormat> {
-        ImageFormat::ALL.into_iter().find(|format| format.key() == key)
+        ImageFormat::ALL
+            .into_iter()
+            .find(|format| format.key() == key)
     }
 }
 
@@ -345,7 +349,12 @@ pub enum VideoCodec {
 }
 
 impl VideoCodec {
-    pub const ALL: [VideoCodec; 4] = [VideoCodec::H264, VideoCodec::H265, VideoCodec::Av1, VideoCodec::Vp9];
+    pub const ALL: [VideoCodec; 4] = [
+        VideoCodec::H264,
+        VideoCodec::H265,
+        VideoCodec::Av1,
+        VideoCodec::Vp9,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -474,7 +483,12 @@ pub enum AudioCodec {
 }
 
 impl AudioCodec {
-    pub const ALL: [AudioCodec; 4] = [AudioCodec::Opus, AudioCodec::Aac, AudioCodec::Mp3, AudioCodec::Flac];
+    pub const ALL: [AudioCodec; 4] = [
+        AudioCodec::Opus,
+        AudioCodec::Aac,
+        AudioCodec::Mp3,
+        AudioCodec::Flac,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -601,7 +615,12 @@ pub fn parse_probe(text: &str) -> Probe {
                 "width" => width = value.parse::<u32>().ok(),
                 "height" => height = value.parse::<u32>().ok(),
                 "avg_frame_rate" => rate = parse_rate(value),
-                "duration" => duration = value.parse::<f64>().ok().filter(|d| d.is_finite() && *d >= 0.0),
+                "duration" => {
+                    duration = value
+                        .parse::<f64>()
+                        .ok()
+                        .filter(|d| d.is_finite() && *d >= 0.0)
+                }
                 _ => {}
             }
         }
@@ -688,7 +707,16 @@ pub struct Plan {
 
 fn quiet_ffmpeg(ffmpeg: &Path) -> Spec {
     Spec::new(ffmpeg)
-        .args(["-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats"])
+        .args([
+            "-hide_banner",
+            "-nostdin",
+            "-y",
+            "-loglevel",
+            "error",
+            "-progress",
+            "pipe:1",
+            "-nostats",
+        ])
         .nice(true)
 }
 
@@ -733,12 +761,17 @@ pub fn image_plan(
     out: &Path,
     probe: Option<&Probe>,
 ) -> Result<Plan, String> {
-    let name = input.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = input
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let target = match options.format {
-        ImageFormat::Keep => image_format_of(&name).ok_or_else(|| "This kind of picture cannot be reduced here.".to_string())?,
+        ImageFormat::Keep => image_format_of(&name)
+            .ok_or_else(|| "This kind of picture cannot be reduced here.".to_string())?,
         other => other,
     };
-    let source = image_format_of(&name).ok_or_else(|| "This kind of picture cannot be reduced here.".to_string())?;
+    let source = image_format_of(&name)
+        .ok_or_else(|| "This kind of picture cannot be reduced here.".to_string())?;
     if let Some(reason) = tools.image_format_unavailable(target) {
         return Err(reason);
     }
@@ -755,7 +788,10 @@ pub fn image_plan(
             _ => tools.magick_writes("PNG"),
         };
     if by_magick {
-        let program = tools.magick.as_ref().ok_or_else(|| "ImageMagick is not installed.".to_string())?;
+        let program = tools
+            .magick
+            .as_ref()
+            .ok_or_else(|| "ImageMagick is not installed.".to_string())?;
         let mut spec = Spec::new(program).nice(true).arg("-").arg("-auto-orient");
         if let Some(cap) = options.max_dimension {
             spec = spec.arg("-resize").arg(format!("{cap}x{cap}>"));
@@ -765,9 +801,24 @@ pub fn image_plan(
             spec = spec.args(["+profile", "!icc,*", "-set", "comment", ""]);
         }
         spec = match target {
-            ImageFormat::Jpeg => spec.args(["-sampling-factor", "4:2:0", "-interlace", "Plane", "-quality"]).arg(quality.to_string()),
-            ImageFormat::Webp => spec.args(["-define", "webp:method=4", "-quality"]).arg(quality.to_string()),
-            _ => spec.args(["-define", "png:compression-level=9", "-define", "png:compression-filter=5"]),
+            ImageFormat::Jpeg => spec
+                .args([
+                    "-sampling-factor",
+                    "4:2:0",
+                    "-interlace",
+                    "Plane",
+                    "-quality",
+                ])
+                .arg(quality.to_string()),
+            ImageFormat::Webp => spec
+                .args(["-define", "webp:method=4", "-quality"])
+                .arg(quality.to_string()),
+            _ => spec.args([
+                "-define",
+                "png:compression-level=9",
+                "-define",
+                "png:compression-filter=5",
+            ]),
         };
         // The output is named by us and begins with a known letter, so the
         // format prefix pins the format and nothing else can be read from it.
@@ -778,21 +829,28 @@ pub fn image_plan(
         };
         let mut target_arg = OsString::from(format!("{prefix}:"));
         target_arg.push(out.as_os_str());
-        spec = spec.arg(target_arg).with_input(Input::File(input.to_path_buf()));
+        spec = spec
+            .arg(target_arg)
+            .with_input(Input::File(input.to_path_buf()));
         return Ok(Plan {
             spec,
             extension,
             duration: None,
         });
     }
-    let ffmpeg = tools.ffmpeg.as_ref().ok_or_else(|| "ffmpeg is not installed.".to_string())?;
+    let ffmpeg = tools
+        .ffmpeg
+        .as_ref()
+        .ok_or_else(|| "ffmpeg is not installed.".to_string())?;
     let mut spec = quiet_ffmpeg(ffmpeg).arg("-i").arg(file_url(input));
     if let (Some(cap), Some(probe)) = (options.max_dimension, probe)
         && let (Some(width), Some(height)) = (probe.width, probe.height)
     {
         let (new_width, new_height) = fitted(width, height, cap);
         if (new_width, new_height) != (width, height) {
-            spec = spec.arg("-vf").arg(format!("scale={new_width}:{new_height}"));
+            spec = spec
+                .arg("-vf")
+                .arg(format!("scale={new_width}:{new_height}"));
         }
     }
     spec = spec.args(["-frames:v", "1"]);
@@ -805,18 +863,23 @@ pub fn image_plan(
         ImageFormat::Avif => {
             let encoder = tools.video_encoder(VideoCodec::Av1).unwrap_or("libaom-av1");
             let crf = avif_crf(quality).to_string();
-            let spec = spec.args(["-pix_fmt", "yuv420p", "-c:v", encoder, "-crf"]).arg(crf);
+            let spec = spec
+                .args(["-pix_fmt", "yuv420p", "-c:v", encoder, "-crf"])
+                .arg(crf);
             if encoder == "libaom-av1" {
                 spec.args(["-b:v", "0", "-cpu-used", "6", "-still-picture", "1"])
             } else {
                 spec.args(["-preset", "6"])
             }
         }
-        ImageFormat::Webp => spec.args(["-c:v", "libwebp", "-quality"]).arg(quality.to_string()),
+        ImageFormat::Webp => spec
+            .args(["-c:v", "libwebp", "-quality"])
+            .arg(quality.to_string()),
         ImageFormat::Jpeg => {
             // mjpeg's scale is 2 (best) to 31 (worst).
             let q = (31.0 - f64::from(quality) * 0.29).round().clamp(2.0, 31.0) as u32;
-            spec.args(["-pix_fmt", "yuvj420p", "-c:v", "mjpeg", "-q:v"]).arg(q.to_string())
+            spec.args(["-pix_fmt", "yuvj420p", "-c:v", "mjpeg", "-q:v"])
+                .arg(q.to_string())
         }
         _ => spec.args(["-c:v", "png", "-compression_level", "9"]),
     };
@@ -921,13 +984,20 @@ pub fn video_plan(
     if let Some(reason) = tools.video_codec_unavailable(options.codec) {
         return Err(reason);
     }
-    let ffmpeg = tools.ffmpeg.as_ref().ok_or_else(|| "ffmpeg is not installed.".to_string())?;
+    let ffmpeg = tools
+        .ffmpeg
+        .as_ref()
+        .ok_or_else(|| "ffmpeg is not installed.".to_string())?;
     let encoder = tools
         .video_encoder(options.codec)
         .ok_or_else(|| format!("ffmpeg here has no {} encoder.", options.codec.label()))?;
     let mut spec = quiet_ffmpeg(ffmpeg);
     if let Some((start, length)) = window {
-        spec = spec.arg("-ss").arg(format!("{start:.3}")).arg("-t").arg(format!("{length:.3}"));
+        spec = spec
+            .arg("-ss")
+            .arg(format!("{start:.3}"))
+            .arg("-t")
+            .arg(format!("{length:.3}"));
     }
     spec = spec.arg("-i").arg(file_url(input)).args(["-map", "0:v:0"]);
     let keep_sound = probe.has_audio && matches!(options.sound, Sound::Kbps(_));
@@ -984,18 +1054,34 @@ pub fn audio_plan(
     if let Some(reason) = tools.audio_codec_unavailable(options.codec) {
         return Err(reason);
     }
-    let ffmpeg = tools.ffmpeg.as_ref().ok_or_else(|| "ffmpeg is not installed.".to_string())?;
+    let ffmpeg = tools
+        .ffmpeg
+        .as_ref()
+        .ok_or_else(|| "ffmpeg is not installed.".to_string())?;
     let mut spec = quiet_ffmpeg(ffmpeg);
     if let Some((start, length)) = window {
-        spec = spec.arg("-ss").arg(format!("{start:.3}")).arg("-t").arg(format!("{length:.3}"));
+        spec = spec
+            .arg("-ss")
+            .arg(format!("{start:.3}"))
+            .arg("-t")
+            .arg(format!("{length:.3}"));
     }
     spec = spec.arg("-i").arg(file_url(input)).args(["-map", "0:a:0"]);
     // A cover picture rides along where the container has room for one.
-    let cover = matches!(options.codec, AudioCodec::Mp3 | AudioCodec::Aac | AudioCodec::Flac)
-        && probe.has_video
+    let cover = matches!(
+        options.codec,
+        AudioCodec::Mp3 | AudioCodec::Aac | AudioCodec::Flac
+    ) && probe.has_video
         && !options.strip_metadata;
     if cover {
-        spec = spec.args(["-map", "0:v:0", "-c:v", "copy", "-disposition:v", "attached_pic"]);
+        spec = spec.args([
+            "-map",
+            "0:v:0",
+            "-c:v",
+            "copy",
+            "-disposition:v",
+            "attached_pic",
+        ]);
     }
     spec = if options.strip_metadata {
         spec.args(["-map_metadata", "-1"])
@@ -1095,15 +1181,30 @@ mod tests {
             ffmpeg: Some(PathBuf::from("/usr/bin/ffmpeg")),
             ffprobe: Some(PathBuf::from("/usr/bin/ffprobe")),
             magick: Some(PathBuf::from("/usr/bin/magick")),
-            encoders: ["libx264", "libx265", "libsvtav1", "libvpx-vp9", "aac", "libopus", "libmp3lame", "flac", "libwebp", "mjpeg", "png"]
-                .map(String::from)
-                .to_vec(),
+            encoders: [
+                "libx264",
+                "libx265",
+                "libsvtav1",
+                "libvpx-vp9",
+                "aac",
+                "libopus",
+                "libmp3lame",
+                "flac",
+                "libwebp",
+                "mjpeg",
+                "png",
+            ]
+            .map(String::from)
+            .to_vec(),
             magick_formats: ["JPEG", "PNG", "WEBP"].map(String::from).to_vec(),
         }
     }
 
     fn args(spec: &Spec) -> Vec<String> {
-        spec.args.iter().map(|arg| arg.to_string_lossy().into_owned()).collect()
+        spec.args
+            .iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect()
     }
 
     #[test]
@@ -1117,28 +1218,55 @@ mod tests {
     #[test]
     fn tools_say_why_a_kind_is_missing() {
         let none = Tools::default();
-        assert_eq!(none.unavailable(MediaKind::Video).as_deref(), Some("ffmpeg is not installed."));
+        assert_eq!(
+            none.unavailable(MediaKind::Video).as_deref(),
+            Some("ffmpeg is not installed.")
+        );
         assert!(none.unavailable(MediaKind::Image).is_some());
         assert!(tools().unavailable(MediaKind::Audio).is_none());
-        let no_probe = Tools { ffprobe: None, ..tools() };
-        assert_eq!(no_probe.unavailable(MediaKind::Video).as_deref(), Some("ffprobe is not installed."));
-        let only_ffmpeg = Tools { magick: None, magick_formats: vec![], ..tools() };
-        assert!(only_ffmpeg.unavailable(MediaKind::Image).is_none(), "ffmpeg alone can do pictures");
+        let no_probe = Tools {
+            ffprobe: None,
+            ..tools()
+        };
+        assert_eq!(
+            no_probe.unavailable(MediaKind::Video).as_deref(),
+            Some("ffprobe is not installed.")
+        );
+        let only_ffmpeg = Tools {
+            magick: None,
+            magick_formats: vec![],
+            ..tools()
+        };
+        assert!(
+            only_ffmpeg.unavailable(MediaKind::Image).is_none(),
+            "ffmpeg alone can do pictures"
+        );
     }
 
     #[test]
     fn only_the_encoders_the_machine_has_are_offered() {
         let tools = tools();
         assert!(tools.video_codec_unavailable(VideoCodec::H264).is_none());
-        let no_x265 = Tools { encoders: vec!["libx264".into(), "aac".into()], ..tools.clone() };
+        let no_x265 = Tools {
+            encoders: vec!["libx264".into(), "aac".into()],
+            ..tools.clone()
+        };
         assert_eq!(
             no_x265.video_codec_unavailable(VideoCodec::H265).as_deref(),
             Some("ffmpeg here has no H.265 (MP4) encoder.")
         );
         assert!(no_x265.audio_codec_unavailable(AudioCodec::Opus).is_some());
         assert!(tools.image_format_unavailable(ImageFormat::Avif).is_none());
-        let no_av1 = Tools { encoders: vec!["libx264".into()], ..tools };
-        assert_eq!(no_av1.image_format_unavailable(ImageFormat::Avif).as_deref(), Some("ffmpeg here has no AV1 encoder."));
+        let no_av1 = Tools {
+            encoders: vec!["libx264".into()],
+            ..tools
+        };
+        assert_eq!(
+            no_av1
+                .image_format_unavailable(ImageFormat::Avif)
+                .as_deref(),
+            Some("ffmpeg here has no AV1 encoder.")
+        );
     }
 
     #[test]
@@ -1150,7 +1278,16 @@ mod tests {
         let keep = ImageOptions::default();
         assert_eq!(image_extension(&keep, "x.jpeg"), Some("jpg"));
         assert_eq!(image_extension(&keep, "x.bmp"), Some("png"));
-        assert_eq!(image_extension(&ImageOptions { format: ImageFormat::Avif, ..keep }, "x.png"), Some("avif"));
+        assert_eq!(
+            image_extension(
+                &ImageOptions {
+                    format: ImageFormat::Avif,
+                    ..keep
+                },
+                "x.png"
+            ),
+            Some("avif")
+        );
     }
 
     #[test]
@@ -1161,58 +1298,157 @@ mod tests {
             max_dimension: Some(1920),
             strip_metadata: true,
         };
-        let plan = image_plan(&tools(), &options, Path::new("/p/-odd:name[0].png"), Path::new("/w/1.webp"), None).unwrap();
+        let plan = image_plan(
+            &tools(),
+            &options,
+            Path::new("/p/-odd:name[0].png"),
+            Path::new("/w/1.webp"),
+            None,
+        )
+        .unwrap();
         let all = args(&plan.spec);
         assert_eq!(all[0], "-", "the picture is read from standard input");
-        assert!(!all.iter().any(|arg| arg.contains("odd")), "its name is never an argument");
+        assert!(
+            !all.iter().any(|arg| arg.contains("odd")),
+            "its name is never an argument"
+        );
         assert!(matches!(plan.spec.input, Input::File(_)));
         assert!(all.windows(2).any(|pair| pair == ["-resize", "1920x1920>"]));
-        assert!(all.windows(2).any(|pair| pair == ["+profile", "!icc,*"]), "{all:?}");
+        assert!(
+            all.windows(2).any(|pair| pair == ["+profile", "!icc,*"]),
+            "{all:?}"
+        );
         assert!(all.windows(2).any(|pair| pair == ["-quality", "60"]));
         assert_eq!(all.last().unwrap(), "webp:/w/1.webp");
         assert_eq!(plan.extension, "webp");
         // Without stripping, the metadata is left alone; orientation is applied either way.
-        let kept = image_plan(&tools(), &ImageOptions::default(), Path::new("/p/a.jpg"), Path::new("/w/1.jpg"), None).unwrap();
+        let kept = image_plan(
+            &tools(),
+            &ImageOptions::default(),
+            Path::new("/p/a.jpg"),
+            Path::new("/w/1.jpg"),
+            None,
+        )
+        .unwrap();
         let all = args(&kept.spec);
-        assert!(!all.contains(&"+profile".to_string()) && all.contains(&"-auto-orient".to_string()));
+        assert!(
+            !all.contains(&"+profile".to_string()) && all.contains(&"-auto-orient".to_string())
+        );
         assert!(all.windows(2).any(|pair| pair == ["-quality", "75"]));
         assert!(all.contains(&"4:2:0".to_string()));
     }
 
     #[test]
     fn png_is_lossless_and_ignores_quality() {
-        let options = ImageOptions { format: ImageFormat::Png, quality: 10, ..ImageOptions::default() };
-        let plan = image_plan(&tools(), &options, Path::new("/p/a.png"), Path::new("/w/1.png"), None).unwrap();
+        let options = ImageOptions {
+            format: ImageFormat::Png,
+            quality: 10,
+            ..ImageOptions::default()
+        };
+        let plan = image_plan(
+            &tools(),
+            &options,
+            Path::new("/p/a.png"),
+            Path::new("/w/1.png"),
+            None,
+        )
+        .unwrap();
         assert!(!args(&plan.spec).contains(&"-quality".to_string()));
         assert!(!ImageFormat::Png.has_quality() && ImageFormat::Jpeg.has_quality());
     }
 
     #[test]
     fn avif_goes_through_ffmpeg_with_a_file_url_and_a_crf() {
-        let options = ImageOptions { format: ImageFormat::Avif, quality: 80, max_dimension: Some(1000), ..ImageOptions::default() };
-        let probe = Probe { width: Some(4000), height: Some(3000), ..Probe::default() };
-        let plan = image_plan(&tools(), &options, Path::new("/p/-a:b.jpg"), Path::new("/w/1.avif"), Some(&probe)).unwrap();
+        let options = ImageOptions {
+            format: ImageFormat::Avif,
+            quality: 80,
+            max_dimension: Some(1000),
+            ..ImageOptions::default()
+        };
+        let probe = Probe {
+            width: Some(4000),
+            height: Some(3000),
+            ..Probe::default()
+        };
+        let plan = image_plan(
+            &tools(),
+            &options,
+            Path::new("/p/-a:b.jpg"),
+            Path::new("/w/1.avif"),
+            Some(&probe),
+        )
+        .unwrap();
         let all = args(&plan.spec);
         let at = all.iter().position(|arg| arg == "-i").unwrap();
         assert_eq!(all[at + 1], "file:/p/-a:b.jpg");
         assert!(all.windows(2).any(|pair| pair == ["-vf", "scale=1000:750"]));
         assert!(all.windows(2).any(|pair| pair == ["-c:v", "libsvtav1"]));
-        assert!(all.windows(2).any(|pair| pair == ["-crf", &avif_crf(80).to_string()]));
+        assert!(
+            all.windows(2)
+                .any(|pair| pair == ["-crf", &avif_crf(80).to_string()])
+        );
         assert!(all.windows(2).any(|pair| pair == ["-map_metadata", "0"]));
-        let stripped = ImageOptions { strip_metadata: true, ..options };
-        let plan = image_plan(&tools(), &stripped, Path::new("/p/a.jpg"), Path::new("/w/1.avif"), Some(&probe)).unwrap();
-        assert!(args(&plan.spec).windows(2).any(|pair| pair == ["-map_metadata", "-1"]));
+        let stripped = ImageOptions {
+            strip_metadata: true,
+            ..options
+        };
+        let plan = image_plan(
+            &tools(),
+            &stripped,
+            Path::new("/p/a.jpg"),
+            Path::new("/w/1.avif"),
+            Some(&probe),
+        )
+        .unwrap();
+        assert!(
+            args(&plan.spec)
+                .windows(2)
+                .any(|pair| pair == ["-map_metadata", "-1"])
+        );
     }
 
     #[test]
     fn without_imagemagick_ffmpeg_makes_every_picture() {
-        let tools = Tools { magick: None, magick_formats: vec![], ..tools() };
-        let options = ImageOptions { format: ImageFormat::Jpeg, quality: 50, ..ImageOptions::default() };
-        let plan = image_plan(&tools, &options, Path::new("/p/a.png"), Path::new("/w/1.jpg"), None).unwrap();
+        let tools = Tools {
+            magick: None,
+            magick_formats: vec![],
+            ..tools()
+        };
+        let options = ImageOptions {
+            format: ImageFormat::Jpeg,
+            quality: 50,
+            ..ImageOptions::default()
+        };
+        let plan = image_plan(
+            &tools,
+            &options,
+            Path::new("/p/a.png"),
+            Path::new("/w/1.jpg"),
+            None,
+        )
+        .unwrap();
         assert!(args(&plan.spec).contains(&"mjpeg".to_string()));
         let none = Tools::default();
-        assert!(image_plan(&none, &options, Path::new("/p/a.png"), Path::new("/w/1.jpg"), None).is_err());
-        assert!(image_plan(&tools, &ImageOptions::default(), Path::new("/p/a.gif"), Path::new("/w/1.gif"), None).is_err());
+        assert!(
+            image_plan(
+                &none,
+                &options,
+                Path::new("/p/a.png"),
+                Path::new("/w/1.jpg"),
+                None
+            )
+            .is_err()
+        );
+        assert!(
+            image_plan(
+                &tools,
+                &ImageOptions::default(),
+                Path::new("/p/a.gif"),
+                Path::new("/w/1.gif"),
+                None
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -1238,7 +1474,10 @@ mod tests {
                 let crf = codec.crf_for(level);
                 assert!((low..=high).contains(&crf), "{codec:?} {level:?}");
             }
-            assert!(codec.crf_for(Level::Smallest) > codec.crf_for(Level::Balanced), "smaller means a higher CRF");
+            assert!(
+                codec.crf_for(Level::Smallest) > codec.crf_for(Level::Balanced),
+                "smaller means a higher CRF"
+            );
             assert_eq!(crf_of(codec, VideoQuality::Crf(1)), low);
             assert_eq!(crf_of(codec, VideoQuality::Crf(99)), high);
         }
@@ -1246,18 +1485,55 @@ mod tests {
 
     #[test]
     fn a_video_is_capped_by_height_and_rate_only_when_it_is_over() {
-        let probe = Probe { height: Some(2160), width: Some(3840), fps: Some(60.0), has_video: true, has_audio: true, duration: Some(10.0) };
-        let options = VideoOptions { max_height: Some(1080), max_fps: Some(30), ..VideoOptions::default() };
-        assert_eq!(video_filters(&options, &probe).as_deref(), Some("scale=-2:1080,fps=30"));
-        let small = Probe { height: Some(720), fps: Some(25.0), ..probe.clone() };
-        assert_eq!(video_filters(&options, &small), None, "never upscaled, never sped up");
+        let probe = Probe {
+            height: Some(2160),
+            width: Some(3840),
+            fps: Some(60.0),
+            has_video: true,
+            has_audio: true,
+            duration: Some(10.0),
+        };
+        let options = VideoOptions {
+            max_height: Some(1080),
+            max_fps: Some(30),
+            ..VideoOptions::default()
+        };
+        assert_eq!(
+            video_filters(&options, &probe).as_deref(),
+            Some("scale=-2:1080,fps=30")
+        );
+        let small = Probe {
+            height: Some(720),
+            fps: Some(25.0),
+            ..probe.clone()
+        };
+        assert_eq!(
+            video_filters(&options, &small),
+            None,
+            "never upscaled, never sped up"
+        );
         assert_eq!(video_filters(&VideoOptions::default(), &probe), None);
     }
 
     #[test]
     fn a_video_plan_names_its_input_as_a_url_and_keeps_or_drops_sound() {
-        let probe = Probe { height: Some(1080), width: Some(1920), fps: Some(30.0), has_video: true, has_audio: true, duration: Some(10.0) };
-        let plan = video_plan(&tools(), &VideoOptions::default(), Path::new("/v/-clip: 1.mp4"), Path::new("/w/1.mp4"), &probe, None).unwrap();
+        let probe = Probe {
+            height: Some(1080),
+            width: Some(1920),
+            fps: Some(30.0),
+            has_video: true,
+            has_audio: true,
+            duration: Some(10.0),
+        };
+        let plan = video_plan(
+            &tools(),
+            &VideoOptions::default(),
+            Path::new("/v/-clip: 1.mp4"),
+            Path::new("/w/1.mp4"),
+            &probe,
+            None,
+        )
+        .unwrap();
         let all = args(&plan.spec);
         let at = all.iter().position(|arg| arg == "-i").unwrap();
         assert_eq!(all[at + 1], "file:/v/-clip: 1.mp4");
@@ -1268,8 +1544,20 @@ mod tests {
         assert!(all.windows(2).any(|pair| pair == ["-map_metadata", "0"]));
         assert_eq!(plan.extension, "mp4");
         assert_eq!(plan.duration, Some(10.0));
-        let quiet = VideoOptions { sound: Sound::Remove, strip_metadata: true, ..VideoOptions::default() };
-        let plan = video_plan(&tools(), &quiet, Path::new("/v/a.mp4"), Path::new("/w/1.mp4"), &probe, None).unwrap();
+        let quiet = VideoOptions {
+            sound: Sound::Remove,
+            strip_metadata: true,
+            ..VideoOptions::default()
+        };
+        let plan = video_plan(
+            &tools(),
+            &quiet,
+            Path::new("/v/a.mp4"),
+            Path::new("/w/1.mp4"),
+            &probe,
+            None,
+        )
+        .unwrap();
         let all = args(&plan.spec);
         assert!(all.contains(&"-an".to_string()) && !all.contains(&"0:a:0".to_string()));
         assert!(all.windows(2).any(|pair| pair == ["-map_metadata", "-1"]));
@@ -1277,59 +1565,166 @@ mod tests {
 
     #[test]
     fn each_codec_has_its_container_and_tags() {
-        let probe = Probe { has_video: true, duration: Some(4.0), ..Probe::default() };
-        let make = |codec| video_plan(&tools(), &VideoOptions { codec, ..VideoOptions::default() }, Path::new("/v/a.mov"), Path::new("/w/1"), &probe, None).unwrap();
-        assert!(args(&make(VideoCodec::H265).spec).windows(2).any(|pair| pair == ["-tag:v", "hvc1"]));
+        let probe = Probe {
+            has_video: true,
+            duration: Some(4.0),
+            ..Probe::default()
+        };
+        let make = |codec| {
+            video_plan(
+                &tools(),
+                &VideoOptions {
+                    codec,
+                    ..VideoOptions::default()
+                },
+                Path::new("/v/a.mov"),
+                Path::new("/w/1"),
+                &probe,
+                None,
+            )
+            .unwrap()
+        };
+        assert!(
+            args(&make(VideoCodec::H265).spec)
+                .windows(2)
+                .any(|pair| pair == ["-tag:v", "hvc1"])
+        );
         let vp9 = make(VideoCodec::Vp9);
         assert_eq!(vp9.extension, "webm");
         assert!(!args(&vp9.spec).contains(&"-movflags".to_string()));
         let av1 = make(VideoCodec::Av1);
-        assert!(args(&av1.spec).windows(2).any(|pair| pair == ["-c:v", "libsvtav1"]));
+        assert!(
+            args(&av1.spec)
+                .windows(2)
+                .any(|pair| pair == ["-c:v", "libsvtav1"])
+        );
         assert_eq!(av1.extension, "mp4");
-        let missing = Tools { encoders: vec![], ..tools() };
-        assert!(video_plan(&missing, &VideoOptions::default(), Path::new("/v/a.mov"), Path::new("/w/1"), &probe, None).is_err());
+        let missing = Tools {
+            encoders: vec![],
+            ..tools()
+        };
+        assert!(
+            video_plan(
+                &missing,
+                &VideoOptions::default(),
+                Path::new("/v/a.mov"),
+                Path::new("/w/1"),
+                &probe,
+                None
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn a_sample_window_is_cut_from_the_middle() {
-        let probe = Probe { has_video: true, has_audio: true, duration: Some(100.0), ..Probe::default() };
+        let probe = Probe {
+            has_video: true,
+            has_audio: true,
+            duration: Some(100.0),
+            ..Probe::default()
+        };
         assert_eq!(sample_window(100.0, 4.0), Some((48.0, 4.0)));
         assert_eq!(sample_window(5.0, 4.0), None);
-        let plan = video_plan(&tools(), &VideoOptions::default(), Path::new("/v/a.mp4"), Path::new("/w/1.mp4"), &probe, Some((48.0, 4.0))).unwrap();
+        let plan = video_plan(
+            &tools(),
+            &VideoOptions::default(),
+            Path::new("/v/a.mp4"),
+            Path::new("/w/1.mp4"),
+            &probe,
+            Some((48.0, 4.0)),
+        )
+        .unwrap();
         let all = args(&plan.spec);
-        assert!(all.windows(2).any(|pair| pair == ["-ss", "48.000"]) && all.windows(2).any(|pair| pair == ["-t", "4.000"]));
+        assert!(
+            all.windows(2).any(|pair| pair == ["-ss", "48.000"])
+                && all.windows(2).any(|pair| pair == ["-t", "4.000"])
+        );
         assert_eq!(plan.duration, Some(4.0));
     }
 
     #[test]
     fn audio_plans_pick_encoder_extension_and_bitrate() {
-        let probe = Probe { has_audio: true, duration: Some(30.0), ..Probe::default() };
+        let probe = Probe {
+            has_audio: true,
+            duration: Some(30.0),
+            ..Probe::default()
+        };
         for (codec, encoder, extension) in [
             (AudioCodec::Opus, "libopus", "opus"),
             (AudioCodec::Aac, "aac", "m4a"),
             (AudioCodec::Mp3, "libmp3lame", "mp3"),
             (AudioCodec::Flac, "flac", "flac"),
         ] {
-            let options = AudioOptions { codec, kbps: 96, strip_metadata: false };
-            let plan = audio_plan(&tools(), &options, Path::new("/a/-x.wav"), Path::new("/w/1"), &probe, None).unwrap();
+            let options = AudioOptions {
+                codec,
+                kbps: 96,
+                strip_metadata: false,
+            };
+            let plan = audio_plan(
+                &tools(),
+                &options,
+                Path::new("/a/-x.wav"),
+                Path::new("/w/1"),
+                &probe,
+                None,
+            )
+            .unwrap();
             let all = args(&plan.spec);
-            assert!(all.windows(2).any(|pair| pair == ["-c:a", encoder]), "{codec:?}");
+            assert!(
+                all.windows(2).any(|pair| pair == ["-c:a", encoder]),
+                "{codec:?}"
+            );
             assert_eq!(plan.extension, extension);
             assert_eq!(all.contains(&"-b:a".to_string()), codec.has_bitrate());
             assert!(all.contains(&"file:/a/-x.wav".to_string()));
         }
-        let covered = Probe { has_video: true, ..probe };
-        let plan = audio_plan(&tools(), &AudioOptions { codec: AudioCodec::Mp3, ..AudioOptions::default() }, Path::new("/a/x.mp3"), Path::new("/w/1"), &covered, None).unwrap();
-        assert!(args(&plan.spec).contains(&"attached_pic".to_string()), "the cover rides along");
-        let plan = audio_plan(&tools(), &AudioOptions { codec: AudioCodec::Opus, ..AudioOptions::default() }, Path::new("/a/x.mp3"), Path::new("/w/1"), &covered, None).unwrap();
-        assert!(!args(&plan.spec).contains(&"attached_pic".to_string()), "ogg has no place for one");
+        let covered = Probe {
+            has_video: true,
+            ..probe
+        };
+        let plan = audio_plan(
+            &tools(),
+            &AudioOptions {
+                codec: AudioCodec::Mp3,
+                ..AudioOptions::default()
+            },
+            Path::new("/a/x.mp3"),
+            Path::new("/w/1"),
+            &covered,
+            None,
+        )
+        .unwrap();
+        assert!(
+            args(&plan.spec).contains(&"attached_pic".to_string()),
+            "the cover rides along"
+        );
+        let plan = audio_plan(
+            &tools(),
+            &AudioOptions {
+                codec: AudioCodec::Opus,
+                ..AudioOptions::default()
+            },
+            Path::new("/a/x.mp3"),
+            Path::new("/w/1"),
+            &covered,
+            None,
+        )
+        .unwrap();
+        assert!(
+            !args(&plan.spec).contains(&"attached_pic".to_string()),
+            "ogg has no place for one"
+        );
     }
 
     #[test]
     fn probe_output_is_read() {
         let text = "codec_type=video|width=640|height=360|avg_frame_rate=30/1\ncodec_type=audio|avg_frame_rate=0/0\nduration=3.000000\n";
         let probe = parse_probe(text);
-        assert_eq!((probe.width, probe.height, probe.fps), (Some(640), Some(360), Some(30.0)));
+        assert_eq!(
+            (probe.width, probe.height, probe.fps),
+            (Some(640), Some(360), Some(30.0))
+        );
         assert!(probe.has_video && probe.has_audio);
         assert_eq!(probe.duration, Some(3.0));
         let bad = parse_probe("duration=N/A\ncodec_type=video|avg_frame_rate=0/0\n");
@@ -1338,8 +1733,14 @@ mod tests {
 
     #[test]
     fn progress_lines_read_as_seconds_and_the_end() {
-        assert_eq!(parse_progress(b"out_time_us=2933333"), Some(Beat::Time(2.933333)));
-        assert_eq!(parse_progress(b"out_time_ms=1500000"), Some(Beat::Time(1.5)));
+        assert_eq!(
+            parse_progress(b"out_time_us=2933333"),
+            Some(Beat::Time(2.933333))
+        );
+        assert_eq!(
+            parse_progress(b"out_time_ms=1500000"),
+            Some(Beat::Time(1.5))
+        );
         assert_eq!(parse_progress(b"progress=end"), Some(Beat::End));
         assert_eq!(parse_progress(b"progress=continue"), None);
         assert_eq!(parse_progress(b"out_time_us=N/A"), None);
@@ -1361,8 +1762,14 @@ mod tests {
 
     #[test]
     fn reduced_names_sit_beside_the_original_and_never_collide() {
-        assert_eq!(reduced_name("holiday", "jpg", 1), "holiday (compressed).jpg");
-        assert_eq!(reduced_name("holiday", "jpg", 3), "holiday (compressed 3).jpg");
+        assert_eq!(
+            reduced_name("holiday", "jpg", 1),
+            "holiday (compressed).jpg"
+        );
+        assert_eq!(
+            reduced_name("holiday", "jpg", 3),
+            "holiday (compressed 3).jpg"
+        );
         let taken = |name: &str| name == "a (compressed).mp4" || name == "a (compressed 2).mp4";
         assert_eq!(free_reduced_name("a", "mp4", taken), "a (compressed 3).mp4");
         assert_eq!(split_name("a.b.jpg"), ("a.b", "jpg"));

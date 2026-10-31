@@ -50,11 +50,7 @@ fn raw(path: &Path, follow: bool) -> io::Result<libc::statx> {
     // plain-old-data struct that `statx` fully initialises on success.
     unsafe {
         let mut buf: libc::statx = std::mem::zeroed();
-        let flags = if follow {
-            0
-        } else {
-            libc::AT_SYMLINK_NOFOLLOW
-        };
+        let flags = if follow { 0 } else { libc::AT_SYMLINK_NOFOLLOW };
         let mask = libc::STATX_TYPE
             | libc::STATX_MODE
             | libc::STATX_UID
@@ -136,7 +132,9 @@ pub fn stat_entry(path: &Path) -> io::Result<StatInfo> {
 /// The stamp of the folder `path` (a followed `statx`).
 pub fn dir_stamp(path: &Path) -> io::Result<DirStamp> {
     let buf = raw(path, true)?;
-    let ns = |stamp: &libc::statx_timestamp| i128::from(stamp.tv_sec) * 1_000_000_000 + i128::from(stamp.tv_nsec);
+    let ns = |stamp: &libc::statx_timestamp| {
+        i128::from(stamp.tv_sec) * 1_000_000_000 + i128::from(stamp.tv_nsec)
+    };
     Ok(DirStamp {
         modified_ns: ns(&buf.stx_mtime),
         changed_ns: ns(&buf.stx_ctime),

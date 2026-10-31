@@ -155,7 +155,10 @@ impl Matcher {
                 }
                 chars.extend(&pat.chars);
             }
-            Pat { chars, phrase: false }
+            Pat {
+                chars,
+                phrase: false,
+            }
         });
         let regex = if query.filters.name_mode == NameMode::Regex && !pos.is_empty() {
             let source = query.plain_text();
@@ -220,7 +223,11 @@ impl Matcher {
                 return None;
             }
         }
-        if !filters.globs.iter().all(|glob| name_glob(glob, name, self.case)) {
+        if !filters
+            .globs
+            .iter()
+            .all(|glob| name_glob(glob, name, self.case))
+        {
             return None;
         }
         let needs_chars = !self.pos.is_empty() || !self.neg.is_empty();
@@ -231,7 +238,10 @@ impl Matcher {
                 ranges: Vec::new(),
             });
         }
-        let chars: Vec<(usize, char)> = name.char_indices().map(|(at, c)| (at, fold(c, self.case))).collect();
+        let chars: Vec<(usize, char)> = name
+            .char_indices()
+            .map(|(at, c)| (at, fold(c, self.case)))
+            .collect();
         let name_len = name.len();
         let byte_at = |index: usize| chars.get(index).map_or(name_len, |(at, _)| *at);
         let find = |needle: &[char], at_word: bool| find_in(&chars, needle, at_word);
@@ -263,7 +273,8 @@ impl Matcher {
             }
             NameMode::Exact | NameMode::Starts => {
                 let whole = self.whole();
-                let starts = chars.len() >= whole.len() && chars.iter().zip(&whole).all(|((_, c), w)| c == w);
+                let starts = chars.len() >= whole.len()
+                    && chars.iter().zip(&whole).all(|((_, c), w)| c == w);
                 if !starts {
                     return None;
                 }
@@ -331,7 +342,8 @@ impl Matcher {
         if self.pos.len() > 1 {
             let mut ranges = Vec::new();
             for term in &self.pos {
-                let start = find_in(chars, &term.chars, true).or_else(|| find_in(chars, &term.chars, false))?;
+                let start = find_in(chars, &term.chars, true)
+                    .or_else(|| find_in(chars, &term.chars, false))?;
                 ranges.push(range_of(start, term.chars.len()));
             }
             return hit(Tier::Words, merged(ranges));
@@ -344,7 +356,12 @@ impl Matcher {
 
     /// The letters in order, as tightly as they fit.
     fn fuzzy(&self, chars: &[(usize, char)], byte_at: &dyn Fn(usize) -> usize) -> Option<Hit> {
-        let letters: Vec<char> = self.pos[0].chars.iter().copied().filter(|c| !c.is_whitespace()).collect();
+        let letters: Vec<char> = self.pos[0]
+            .chars
+            .iter()
+            .copied()
+            .filter(|c| !c.is_whitespace())
+            .collect();
         if letters.len() < FUZZY_MIN || letters.len() > chars.len() {
             return None;
         }
@@ -402,20 +419,36 @@ impl Matcher {
         }
         if !filters.exts.is_empty() {
             let lower = name.to_lowercase();
-            if !filters.exts.iter().any(|ext| lower.ends_with(&format!(".{ext}"))) {
+            if !filters
+                .exts
+                .iter()
+                .any(|ext| lower.ends_with(&format!(".{ext}")))
+            {
                 return false;
             }
         }
-        if !filters.globs.iter().all(|glob| name_glob(glob, name, self.case)) {
+        if !filters
+            .globs
+            .iter()
+            .all(|glob| name_glob(glob, name, self.case))
+        {
             return false;
         }
-        let chars: Vec<(usize, char)> = name.char_indices().map(|(at, c)| (at, fold(c, false))).collect();
-        !self.neg.iter().any(|pat| find_in(&chars, &pat.chars, false).is_some())
+        let chars: Vec<(usize, char)> = name
+            .char_indices()
+            .map(|(at, c)| (at, fold(c, false)))
+            .collect();
+        !self
+            .neg
+            .iter()
+            .any(|pat| find_in(&chars, &pat.chars, false).is_some())
     }
 
     /// The bytes of `name` to draw heavier; empty when it does not match.
     pub fn highlight(&self, name: &str) -> Vec<Range<usize>> {
-        self.name_hit(name).map(|hit| hit.ranges).unwrap_or_default()
+        self.name_hit(name)
+            .map(|hit| hit.ranges)
+            .unwrap_or_default()
     }
 
     /// Whether an entry the walker saw by name and kind only can still pass.
@@ -511,7 +544,11 @@ fn seconds_since_epoch(time: std::time::SystemTime) -> i64 {
 
 fn name_glob(pattern: &str, name: &str, case: bool) -> bool {
     if pattern.contains(['*', '?', '[']) {
-        if case { glob_match_exact(pattern, name) } else { glob_match(pattern, name) }
+        if case {
+            glob_match_exact(pattern, name)
+        } else {
+            glob_match(pattern, name)
+        }
     } else if case {
         // No wildcard: the name contains it, as a plain word does.
         name.contains(pattern)
@@ -558,7 +595,10 @@ fn modified_range(modified: Modified, clock: &Clock) -> (Option<i64>, Option<i64
             let start = clock.midnight(today);
             (Some(start), Some(clock.midnight(next_day(today))))
         }
-        Modified::Yesterday => (Some(clock.midnight(previous_day(today))), Some(clock.midnight(today))),
+        Modified::Yesterday => (
+            Some(clock.midnight(previous_day(today))),
+            Some(clock.midnight(today)),
+        ),
         Modified::Days(days) => (Some(clock.now - i64::from(days) * 86_400), None),
         Modified::ThisYear => {
             let first = super::civil::Date {
@@ -573,10 +613,16 @@ fn modified_range(modified: Modified, clock: &Clock) -> (Option<i64>, Option<i64
             };
             (Some(clock.midnight(first)), Some(clock.midnight(next)))
         }
-        Modified::On(moment) => (Some(clock.midnight(moment.start())), Some(clock.midnight(moment.end()))),
+        Modified::On(moment) => (
+            Some(clock.midnight(moment.start())),
+            Some(clock.midnight(moment.end())),
+        ),
         Modified::Since(moment) => (Some(clock.midnight(moment.start())), None),
         Modified::Before(moment) => (None, Some(clock.midnight(moment.start()))),
-        Modified::Between(from, to) => (Some(clock.midnight(from.start())), Some(clock.midnight(to.end()))),
+        Modified::Between(from, to) => (
+            Some(clock.midnight(from.start())),
+            Some(clock.midnight(to.end())),
+        ),
     }
 }
 

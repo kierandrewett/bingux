@@ -197,7 +197,10 @@ fn compare(name: &str, source: &Path, bytes: u64, files: usize, dest: &Path, run
     report(name, "old", &old, bytes, files);
     report(name, "new", &new, bytes, files);
     let (o, n) = (median(old).as_secs_f64(), median(new).as_secs_f64());
-    println!("{name:<22} new takes {:.0}% of the time of old", 100.0 * n / o);
+    println!(
+        "{name:<22} new takes {:.0}% of the time of old",
+        100.0 * n / o
+    );
 }
 
 fn main() {

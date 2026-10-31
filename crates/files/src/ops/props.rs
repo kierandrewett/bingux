@@ -118,7 +118,11 @@ pub fn stat_properties(path: &Path) -> Result<Properties, OpError> {
         Kind::Directory => mime::DIRECTORY,
         _ => mime::for_name(&name),
     };
-    let size = if info.kind == Kind::Directory { 0 } else { info.size };
+    let size = if info.kind == Kind::Directory {
+        0
+    } else {
+        info.size
+    };
     let StatInfo {
         created,
         modified,
@@ -568,7 +572,11 @@ mod tests {
         assert_eq!(volume.used_fraction(), None);
         volume.total_bytes = Some(0);
         volume.free_bytes = Some(0);
-        assert_eq!(volume.used_fraction(), None, "an empty drive has no fraction");
+        assert_eq!(
+            volume.used_fraction(),
+            None,
+            "an empty drive has no fraction"
+        );
     }
 
     #[test]
@@ -605,11 +613,17 @@ mod tests {
         let file = temp.write("a", "x");
         fs::set_permissions(&file, fs::Permissions::from_mode(0o640)).unwrap();
         let perms = permissions(&file).unwrap();
-        assert_eq!((perms.mode, perms.is_dir, perms.can_chmod), (0o640, false, true));
+        assert_eq!(
+            (perms.mode, perms.is_dir, perms.can_chmod),
+            (0o640, false, true)
+        );
         assert_eq!(perms.uid, unsafe { libc::getuid() });
         assert!(!perms.owner.is_empty() && !perms.group.is_empty());
         assert!(permissions(temp.path()).unwrap().is_dir);
-        assert_eq!(permissions(&temp.path().join("gone")), Err(OpError::NotFound));
+        assert_eq!(
+            permissions(&temp.path().join("gone")),
+            Err(OpError::NotFound)
+        );
     }
 
     #[test]
@@ -639,7 +653,13 @@ mod tests {
         std::os::unix::fs::symlink(&outside, root.join("link")).unwrap();
         // Owner-only: the sub folder loses nothing, but others lose everything.
         let change = chmod_tree(&root, 0o700, &Cancel::new()).unwrap();
-        assert_eq!(change, TreeChange { changed: 3, failed: 0 });
+        assert_eq!(
+            change,
+            TreeChange {
+                changed: 3,
+                failed: 0
+            }
+        );
         let mode = |path: &Path| permissions(path).unwrap().mode;
         assert_eq!(mode(&script), 0o700);
         assert_eq!(mode(&note), 0o600);
@@ -649,7 +669,13 @@ mod tests {
         assert_ne!(mode(&root), 0);
         // A folder made unreadable (0o000 here) is still walked first.
         let locked = chmod_tree(&root, 0o000, &Cancel::new()).unwrap();
-        assert_eq!(locked, TreeChange { changed: 3, failed: 0 });
+        assert_eq!(
+            locked,
+            TreeChange {
+                changed: 3,
+                failed: 0
+            }
+        );
         assert_eq!(mode(&root.join("sub")), 0o000);
         // Restore so the scratch folder can be removed.
         fs::set_permissions(root.join("sub"), fs::Permissions::from_mode(0o700)).unwrap();
@@ -661,6 +687,9 @@ mod tests {
         temp.write("d/a", "x");
         let cancel = Cancel::new();
         cancel.cancel();
-        assert_eq!(chmod_tree(&temp.path().join("d"), 0o600, &cancel), Err(OpError::Cancelled));
+        assert_eq!(
+            chmod_tree(&temp.path().join("d"), 0o600, &cancel),
+            Err(OpError::Cancelled)
+        );
     }
 }

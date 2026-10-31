@@ -32,7 +32,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::{Duration, Instant};
 
-use bingux_search::{Cancel as EngineCancel, Document, Filter, Index, Limits, Lit, Schema, Search, Strategy};
+use bingux_search::{
+    Cancel as EngineCancel, Document, Filter, Index, Limits, Lit, Schema, Search, Strategy,
+};
 
 use super::matcher::Matcher;
 use super::query::{Kind, NameMode};
@@ -69,7 +71,9 @@ pub struct NameIndex {
 }
 
 fn schema() -> Schema {
-    Schema::new().searchable("name", 10.0).filterable(["ext", "kind", "under"])
+    Schema::new()
+        .searchable("name", 10.0)
+        .filterable(["ext", "kind", "under"])
 }
 
 fn fresh_index() -> Arc<Index> {
@@ -124,12 +128,18 @@ impl NameIndex {
 
     /// A crawl is running.
     pub fn crawling(&self) -> bool {
-        matches!(*self.state.lock().unwrap_or_else(|e| e.into_inner()), State::Crawling)
+        matches!(
+            *self.state.lock().unwrap_or_else(|e| e.into_inner()),
+            State::Crawling
+        )
     }
 
     /// Crawled at least once.
     pub fn ready(&self) -> bool {
-        matches!(*self.state.lock().unwrap_or_else(|e| e.into_inner()), State::Ready { .. })
+        matches!(
+            *self.state.lock().unwrap_or_else(|e| e.into_inner()),
+            State::Ready { .. }
+        )
     }
 
     fn engine(&self) -> Arc<Index> {
@@ -149,15 +159,18 @@ impl NameIndex {
             *state = State::Crawling;
         }
         let this = self.clone();
-        let spawned = std::thread::Builder::new().name("bingux-names-crawl".into()).spawn(move || {
-            lower_priority();
-            let next = fresh_index();
-            // A crawl that stopped on the document limit is still a usable
-            // index; the walker covers the rest.
-            this.crawl(&next);
-            *this.index.write().unwrap_or_else(|e| e.into_inner()) = next;
-            *this.state.lock().unwrap_or_else(|e| e.into_inner()) = State::Ready { at: Instant::now() };
-        });
+        let spawned = std::thread::Builder::new()
+            .name("bingux-names-crawl".into())
+            .spawn(move || {
+                lower_priority();
+                let next = fresh_index();
+                // A crawl that stopped on the document limit is still a usable
+                // index; the walker covers the rest.
+                this.crawl(&next);
+                *this.index.write().unwrap_or_else(|e| e.into_inner()) = next;
+                *this.state.lock().unwrap_or_else(|e| e.into_inner()) =
+                    State::Ready { at: Instant::now() };
+            });
         if spawned.is_err() {
             *self.state.lock().unwrap_or_else(|e| e.into_inner()) = State::Empty;
         }
@@ -231,27 +244,44 @@ impl NameIndex {
     /// index has nothing to say (not covered, or a query only the walker
     /// answers: a regular expression, a start or an exact name, a case
     /// that matters).
-    pub fn candidates(&self, matcher: &Matcher, folder: &Path, cancel: &crate::listing::Cancel) -> Vec<PathBuf> {
+    pub fn candidates(
+        &self,
+        matcher: &Matcher,
+        folder: &Path,
+        cancel: &crate::listing::Cancel,
+    ) -> Vec<PathBuf> {
         let query = matcher.query();
         let filters = &query.filters;
-        if !self.covers(folder) || filters.name_mode != NameMode::Contains || filters.case_sensitive {
+        if !self.covers(folder) || filters.name_mode != NameMode::Contains || filters.case_sensitive
+        {
             return Vec::new();
         }
         if cancel.is_cancelled() {
             return Vec::new();
         }
         let text = engine_text(matcher);
-        let mut parts = vec![Filter::Eq("under".to_string(), Lit::Str(folder.to_string_lossy().into_owned()))];
+        let mut parts = vec![Filter::Eq(
+            "under".to_string(),
+            Lit::Str(folder.to_string_lossy().into_owned()),
+        )];
         if !filters.exts.is_empty() {
             parts.push(Filter::In(
                 "ext".to_string(),
-                filters.exts.iter().map(|ext| Lit::Str(ext.clone())).collect(),
+                filters
+                    .exts
+                    .iter()
+                    .map(|ext| Lit::Str(ext.clone()))
+                    .collect(),
             ));
         }
         if !filters.kinds.is_empty() {
             parts.push(Filter::In(
                 "kind".to_string(),
-                filters.kinds.iter().map(|kind| Lit::Str(kind.word().to_string())).collect(),
+                filters
+                    .kinds
+                    .iter()
+                    .map(|kind| Lit::Str(kind.word().to_string()))
+                    .collect(),
             ));
         }
         let mut search = Search::new(&text).limit(TAKE).strategy(Strategy::All);
@@ -261,14 +291,23 @@ impl NameIndex {
         let Ok(response) = self.engine().search(&search, &EngineCancel::new()) else {
             return Vec::new();
         };
-        response.hits.into_iter().map(|hit| PathBuf::from(hit.id)).collect()
+        response
+            .hits
+            .into_iter()
+            .map(|hit| PathBuf::from(hit.id))
+            .collect()
     }
 }
 
 /// The words as the engine takes them: phrases in quotes.
 fn engine_text(matcher: &Matcher) -> String {
     let mut text = String::new();
-    for term in matcher.query().terms.iter().filter(|term| !term.is_excluded()) {
+    for term in matcher
+        .query()
+        .terms
+        .iter()
+        .filter(|term| !term.is_excluded())
+    {
         if !text.is_empty() {
             text.push(' ');
         }
@@ -307,7 +346,8 @@ fn document(path: &str, name: &str, is_dir: bool, ancestors: &[String]) -> Docum
     let ext = if is_dir {
         ""
     } else {
-        name.rsplit_once('.').map_or("", |(stem, ext)| if stem.is_empty() { "" } else { ext })
+        name.rsplit_once('.')
+            .map_or("", |(stem, ext)| if stem.is_empty() { "" } else { ext })
     };
     Document::new(path)
         .field("name", name)
@@ -315,7 +355,10 @@ fn document(path: &str, name: &str, is_dir: bool, ancestors: &[String]) -> Docum
         .field("kind", kind.map_or("other", Kind::word))
         .field(
             "under",
-            ancestors.iter().map(|path| bingux_search::Value::String(path.clone())).collect::<Vec<_>>(),
+            ancestors
+                .iter()
+                .map(|path| bingux_search::Value::String(path.clone()))
+                .collect::<Vec<_>>(),
         )
 }
 

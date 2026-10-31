@@ -37,8 +37,8 @@ use std::fs;
 use std::io::{Read, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, LazyLock};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, LazyLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::entry::{Entry, Kind};
@@ -101,9 +101,7 @@ impl Cache {
         let base = std::env::var_os("XDG_CACHE_HOME")
             .map(PathBuf::from)
             .filter(|path| path.is_absolute())
-            .or_else(|| {
-                std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache"))
-            })
+            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
             .unwrap_or_else(|| std::env::temp_dir().join("bingux-cache"));
         Cache::at(
             base.join("bingux/files/v1"),
@@ -122,11 +120,15 @@ impl Cache {
     /// checked against the folder's path: use [`Cache::load`] for the content.
     pub fn peek_stamp(&self, dir: &Path) -> Option<DirStamp> {
         let mut head = [0u8; 52];
-        fs::File::open(self.file_for(dir)).ok()?.read_exact(&mut head).ok()?;
+        fs::File::open(self.file_for(dir))
+            .ok()?
+            .read_exact(&mut head)
+            .ok()?;
         if &head[..4] != MAGIC {
             return None;
         }
-        let i128_at = |at: usize| i128::from_le_bytes(head[at..at + 16].try_into().unwrap_or([0; 16]));
+        let i128_at =
+            |at: usize| i128::from_le_bytes(head[at..at + 16].try_into().unwrap_or([0; 16]));
         let u64_at = |at: usize| u64::from_le_bytes(head[at..at + 8].try_into().unwrap_or([0; 8]));
         Some(DirStamp {
             modified_ns: i128_at(4),
@@ -210,7 +212,10 @@ impl Cache {
             let _ = fs::remove_file(&temporary);
             return;
         }
-        let total = self.since_sweep.fetch_add(bytes.len() as u64, Ordering::Relaxed) + bytes.len() as u64;
+        let total = self
+            .since_sweep
+            .fetch_add(bytes.len() as u64, Ordering::Relaxed)
+            + bytes.len() as u64;
         if total > self.budget / 8 || !self.swept_once.swap(true, Ordering::Relaxed) {
             self.since_sweep.store(0, Ordering::Relaxed);
             self.sweep();
@@ -261,7 +266,10 @@ impl Cache {
             let modified = meta.modified().unwrap_or(UNIX_EPOCH);
             if path.extension().is_some_and(|ext| ext == "bfc") {
                 files.push((modified, meta.len(), path));
-            } else if modified.elapsed().is_ok_and(|age| age > Duration::from_secs(3600)) {
+            } else if modified
+                .elapsed()
+                .is_ok_and(|age| age > Duration::from_secs(3600))
+            {
                 let _ = fs::remove_file(path);
             }
         }
@@ -404,7 +412,10 @@ impl<'a> Reader<'a> {
 
 /// The folder path a cache file says it is for.
 fn stored_path(bytes: &[u8]) -> Option<PathBuf> {
-    let mut reader = Reader { bytes, at: 4 + 16 + 16 + 8 + 8 };
+    let mut reader = Reader {
+        bytes,
+        at: 4 + 16 + 16 + 8 + 8,
+    };
     let length = reader.varint()? as usize;
     let path = reader.take(length)?;
     Some(PathBuf::from(std::ffi::OsStr::from_bytes(path)))
@@ -507,7 +518,8 @@ mod tests {
     use super::*;
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("bingux-files-cache-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("bingux-files-cache-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         dir
     }
@@ -528,12 +540,17 @@ mod tests {
                 let mut entry = Entry::named(
                     dir.join(&name),
                     name,
-                    if i % 10 == 0 { Kind::Directory } else { Kind::File },
+                    if i % 10 == 0 {
+                        Kind::Directory
+                    } else {
+                        Kind::File
+                    },
                     i % 7 == 0,
                     i % 13 == 0,
                 );
                 entry.size = (i as u64) * 37;
-                entry.modified = Some(UNIX_EPOCH + Duration::from_secs(1_700_000_000 - (i as u64) * 91));
+                entry.modified =
+                    Some(UNIX_EPOCH + Duration::from_secs(1_700_000_000 - (i as u64) * 91));
                 entry.sized = true;
                 entry
             })
@@ -603,17 +620,30 @@ mod tests {
             // Distinct modification times decide the order.
             let file = cache.file_for(&dir);
             let time = SystemTime::now() - Duration::from_secs(100 - index as u64 * 10);
-            fs::File::options().write(true).open(file).unwrap().set_modified(time).unwrap();
+            fs::File::options()
+                .write(true)
+                .open(file)
+                .unwrap()
+                .set_modified(time)
+                .unwrap();
         }
         let cache = Cache::at(&root, DEFAULT_BUDGET, 3);
         cache.sweep();
         let (_, files) = cache.disk_usage();
         assert_eq!(files, 3);
         for index in 0..3 {
-            assert!(cache.load(Path::new(&format!("/data/folder{index}"))).is_none());
+            assert!(
+                cache
+                    .load(Path::new(&format!("/data/folder{index}")))
+                    .is_none()
+            );
         }
         for index in 3..6 {
-            assert!(cache.load(Path::new(&format!("/data/folder{index}"))).is_some());
+            assert!(
+                cache
+                    .load(Path::new(&format!("/data/folder{index}")))
+                    .is_some()
+            );
         }
         let _ = fs::remove_dir_all(&root);
     }
@@ -621,7 +651,12 @@ mod tests {
     #[test]
     fn evicts_by_size_and_refuses_a_folder_that_is_too_big() {
         let root = scratch("bytes");
-        let probe = encode(Path::new("/data/a"), &stamp(1), &entries(Path::new("/data/a"), 200)).len() as u64;
+        let probe = encode(
+            Path::new("/data/a"),
+            &stamp(1),
+            &entries(Path::new("/data/a"), 200),
+        )
+        .len() as u64;
         // Room for about two such folders, and a quarter of it is too small
         // for a folder ten times bigger.
         let cache = Cache::at(&root, probe * 100, DEFAULT_FOLDERS);
@@ -630,7 +665,12 @@ mod tests {
             cache.store(&dir, &stamp(1), &entries(&dir, 200));
             let file = cache.file_for(&dir);
             let time = SystemTime::now() - Duration::from_secs(100 - u64::from(index) * 10);
-            fs::File::options().write(true).open(file).unwrap().set_modified(time).unwrap();
+            fs::File::options()
+                .write(true)
+                .open(file)
+                .unwrap()
+                .set_modified(time)
+                .unwrap();
         }
         let cache = Cache::at(&root, probe * 2 + probe / 2, DEFAULT_FOLDERS);
         cache.sweep();
@@ -670,7 +710,13 @@ mod tests {
         let dir = Path::new("/data/Odd");
         let named = |bytes: &[u8], kind: Kind| {
             let file = OsStr::from_bytes(bytes);
-            Entry::named(dir.join(file), file.to_string_lossy().into_owned(), kind, false, false)
+            Entry::named(
+                dir.join(file),
+                file.to_string_lossy().into_owned(),
+                kind,
+                false,
+                false,
+            )
         };
         let written = vec![
             named(b"caf\xe9-\xff", Kind::Directory),
@@ -682,7 +728,11 @@ mod tests {
         assert_ne!(written[0].path, written[1].path);
         cache.store(dir, &stamp(1), &written);
         let cached = cache.load(dir).unwrap();
-        let mut found: Vec<PathBuf> = cached.entries.iter().map(|entry| entry.path.clone()).collect();
+        let mut found: Vec<PathBuf> = cached
+            .entries
+            .iter()
+            .map(|entry| entry.path.clone())
+            .collect();
         let mut expected: Vec<PathBuf> = written.iter().map(|entry| entry.path.clone()).collect();
         found.sort();
         expected.sort();
