@@ -5,7 +5,8 @@
 //! icons. The SVG files live in `icons/` and are generated from
 //! `scripts/icons/src` by `make icons`; see `icons/COPYING` for the licence.
 //! Each icon is one fill path, recoloured at draw time so it follows the
-//! active theme.
+//! active theme. A level icon (Wi-Fi signal, battery) has a second path with
+//! `fill-opacity` for the parts that are off; the tint keeps that opacity.
 
 use freya::prelude::*;
 
@@ -90,7 +91,16 @@ pub enum Icon {
     PowerProfileBalanced,
     PowerProfilePerformance,
     SystemShutdown,
+    BatteryLevel0,
+    BatteryLevel10,
+    BatteryLevel20,
+    BatteryLevel30,
+    BatteryLevel40,
     BatteryLevel50,
+    BatteryLevel60,
+    BatteryLevel70,
+    BatteryLevel80,
+    BatteryLevel90,
     BatteryLevel100,
     ViewReveal,
     ViewConceal,
@@ -190,7 +200,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 153] = [
+    pub const ALL: [Icon; 162] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -268,7 +278,16 @@ impl Icon {
         Self::PowerProfileBalanced,
         Self::PowerProfilePerformance,
         Self::SystemShutdown,
+        Self::BatteryLevel0,
+        Self::BatteryLevel10,
+        Self::BatteryLevel20,
+        Self::BatteryLevel30,
+        Self::BatteryLevel40,
         Self::BatteryLevel50,
+        Self::BatteryLevel60,
+        Self::BatteryLevel70,
+        Self::BatteryLevel80,
+        Self::BatteryLevel90,
         Self::BatteryLevel100,
         Self::ViewReveal,
         Self::ViewConceal,
@@ -455,7 +474,16 @@ impl Icon {
                 include_bytes!("../icons/power-profile-performance-symbolic.svg")
             }
             Self::SystemShutdown => include_bytes!("../icons/system-shutdown-symbolic.svg"),
+            Self::BatteryLevel0 => include_bytes!("../icons/battery-level-0-symbolic.svg"),
+            Self::BatteryLevel10 => include_bytes!("../icons/battery-level-10-symbolic.svg"),
+            Self::BatteryLevel20 => include_bytes!("../icons/battery-level-20-symbolic.svg"),
+            Self::BatteryLevel30 => include_bytes!("../icons/battery-level-30-symbolic.svg"),
+            Self::BatteryLevel40 => include_bytes!("../icons/battery-level-40-symbolic.svg"),
             Self::BatteryLevel50 => include_bytes!("../icons/battery-level-50-symbolic.svg"),
+            Self::BatteryLevel60 => include_bytes!("../icons/battery-level-60-symbolic.svg"),
+            Self::BatteryLevel70 => include_bytes!("../icons/battery-level-70-symbolic.svg"),
+            Self::BatteryLevel80 => include_bytes!("../icons/battery-level-80-symbolic.svg"),
+            Self::BatteryLevel90 => include_bytes!("../icons/battery-level-90-symbolic.svg"),
             Self::BatteryLevel100 => include_bytes!("../icons/battery-level-100-symbolic.svg"),
             Self::ViewReveal => include_bytes!("../icons/view-reveal-symbolic.svg"),
             Self::ViewConceal => include_bytes!("../icons/view-conceal-symbolic.svg"),
@@ -631,6 +659,25 @@ impl Icon {
                 | Self::EmblemSymbolicLink
         )
     }
+
+    /// The battery icon filled to `percent` (0 to 100, more is 100), rounded to
+    /// the nearest ten: one of the `battery-level-N` files, which draw the
+    /// charge as the filled part of the body and the rest dimmed.
+    pub const fn battery_level(percent: u8) -> Self {
+        match (percent.saturating_add(5) / 10) * 10 {
+            0 => Self::BatteryLevel0,
+            10 => Self::BatteryLevel10,
+            20 => Self::BatteryLevel20,
+            30 => Self::BatteryLevel30,
+            40 => Self::BatteryLevel40,
+            50 => Self::BatteryLevel50,
+            60 => Self::BatteryLevel60,
+            70 => Self::BatteryLevel70,
+            80 => Self::BatteryLevel80,
+            90 => Self::BatteryLevel90,
+            _ => Self::BatteryLevel100,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -677,5 +724,16 @@ mod tests {
                 "`#mirror_rtl` names {file}, which no Icon draws"
             );
         }
+    }
+
+    #[test]
+    fn battery_level_picks_the_nearest_ten_and_never_goes_past_full() {
+        assert_eq!(Icon::battery_level(0), Icon::BatteryLevel0);
+        assert_eq!(Icon::battery_level(4), Icon::BatteryLevel0);
+        assert_eq!(Icon::battery_level(5), Icon::BatteryLevel10);
+        assert_eq!(Icon::battery_level(49), Icon::BatteryLevel50);
+        assert_eq!(Icon::battery_level(85), Icon::BatteryLevel90);
+        assert_eq!(Icon::battery_level(100), Icon::BatteryLevel100);
+        assert_eq!(Icon::battery_level(255), Icon::BatteryLevel100);
     }
 }
