@@ -3,7 +3,8 @@
 #
 # usage: scripts/build-arch.sh [VERSION [TOPDIR]]
 #
-# VERSION   defaults to 0.1.0 (the Makefile's VERSION)
+# VERSION   defaults to 0.1.0 (the Makefile's VERSION); a nightly build passes its Arch version, such as
+#           0.1.1nightly20261031.5 (scripts/pkgrepo version)
 # TOPDIR    defaults to /var/tmp/BinguxPkg; the packages land in TOPDIR/arch/out
 #
 # On Arch (makepkg installed) this runs makepkg directly. Anywhere else it runs

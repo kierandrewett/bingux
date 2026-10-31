@@ -18,9 +18,13 @@ version="${1:-0.1.0}"
 output="${2:-dist/bingux-${version}.tar.xz}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# A release is digits and dots (0.2.0). A nightly build names its package version (0.1.1~nightly.20261031.5.gabc1234
+# for RPM and Debian, 0.1.1nightly20261031.5 for Arch; `scripts/pkgrepo version` prints them), which also carries
+# letters and a tilde. The archive and its top directory use the same string as the package, so the spec and the
+# PKGBUILD find them.
 case "$version" in
-    *[!0-9.]* | .* | *.)
-        echo "version must contain only digits and dots" >&2
+    *[!0-9A-Za-z.~]* | [!0-9]* | *.)
+        echo "version must be digits and dots, optionally followed by a pre-release such as ~nightly.20261031.5.gabc1234" >&2
         exit 2
         ;;
 esac
