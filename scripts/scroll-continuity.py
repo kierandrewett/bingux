@@ -14,8 +14,10 @@ largest one) at each save and requires the offset to be what it was before, with
 (`--tolerance`), and, so that a walk that never scrolled cannot pass on zero, the first
 offset to be at least 40 px.
 
-  Settings   the Network page scrolled, a subpage pushed, then popped (Alt+Left); the page
-             scrolled while its data is still on its way, then the data lands
+  Settings   the Network page scrolled, a subpage (Wi-Fi, a row that is in view at that offset) pushed, then popped (Alt+Left); the page
+             scrolled while its data is still on its way, then the data lands; the same push
+             and pop with a wheel notch sent at EVERY frame of both slides, the subpage's own
+             data held back 500 ms so it lands in the middle of the push
   Files      a long folder scrolled, then a new tab opened and the first tab returned to
              (Ctrl+T, Alt+1); the parent folder opened by its crumb and Back (Alt+Left)
 
@@ -23,6 +25,22 @@ offset to be at least 40 px.
     python3 scripts/scroll-continuity.py --only files
     python3 scripts/scroll-continuity.py --fixtures     # the comparison on known-bad and clean probes only
     python3 scripts/scroll-continuity.py --show-allowed
+
+The slide walks (`settings-network-slide-*`) open a subpage that is in view at the scrolled offset
+(Wi-Fi) and go Back, with a wheel notch sent at every 16 ms frame of the push, of the Back slide, of
+both or of neither (the control); the notches stay inside the 250 ms slide, because one after it is
+the person scrolling the page that arrived. Each saves a capture at every frame. They hold:
+
+  the push happened   a text only the origin page has is gone from the settled subpage, so a click
+                      that missed cannot pass
+  offset kept         after Back the page is at the offset it had before the push, whatever the
+                      wheel did during either slide (a notch during a slide is not delivered to
+                      either page: `slide_shield` in shell/navigation.rs)
+  no reflow           in every frame of both slides, each page against its own settled capture (a
+                      page's own texts, never one page's boxes against the other's): a text is the
+                      same distance down its page, and across by one slide offset shared by all of
+                      the page's texts . A card that changes height, a row that
+                      lands above others, the veil lifting into another structure: each moves a text.
 
 Exit status is 1 when an offset is not kept, when a walk did not scroll, when a run
 produced nothing, and on an ALLOWED entry that matches nothing. ALLOWED is for a page that
@@ -49,7 +67,16 @@ ALLOWED: list[dict] = []
 
 
 class Scenario:
-    def __init__(self, name: str, job: dict, compare: list[tuple[str, str]], rule_ids: list[str], extra_env: dict[str, str] | None = None, rows: bool = False):
+    def __init__(
+        self,
+        name: str,
+        job: dict,
+        compare: list[tuple[str, str]],
+        rule_ids: list[str],
+        extra_env: dict[str, str] | None = None,
+        rows: bool = False,
+        slide: bool = False,
+    ):
         self.name = name
         self.job = job
         # (earlier save, later save): the offset of the page at the second equals the first.
@@ -57,6 +84,7 @@ class Scenario:
         self.rule_ids = rule_ids
         self.extra_env = extra_env or {}
         self.rows = rows
+        self.slide = slide
 
 
 # ---- the offset of the page -------------------------------------------------------------
@@ -74,9 +102,15 @@ def page_offset(probe: Probe) -> tuple[float, float] | None:
         x, y, w, h = probe.box(node)
         area = w * h
         offset = max(
-            abs(other["offset"][1]) for other in probe.scrollers if other["node"] == node or probe.parent(other["node"]) == node
+            abs(other["offset"][1])
+            for other in probe.scrollers
+            if other["node"] == node or probe.parent(other["node"]) == node
         )
-        inner = max(other["inner"][1] for other in probe.scrollers if other["node"] == node or probe.parent(other["node"]) == node)
+        inner = max(
+            other["inner"][1]
+            for other in probe.scrollers
+            if other["node"] == node or probe.parent(other["node"]) == node
+        )
         if offset > 0 or inner > h:
             if best is None or area > best[0]:
                 best = (area, offset, inner)
@@ -87,11 +121,17 @@ def page_offset(probe: Probe) -> tuple[float, float] | None:
 
 def first_row(probe: Probe) -> str | None:
     """The name on the first file row that is in the list, below the column header: where a virtual list is scrolled to."""
-    tops = [probe.box(i)[1] for i in range(len(probe.nodes)) if probe.title(i) == "ScrollView" and probe.box(i)[3] > 200]
+    tops = [
+        probe.box(i)[1] for i in range(len(probe.nodes)) if probe.title(i) == "ScrollView" and probe.box(i)[3] > 200
+    ]
     if not tops:
         return None
     top = min(tops)
-    rows = sorted((probe.box(i)[1], i) for i in range(len(probe.nodes)) if probe.title(i) == "FileRow" and probe.box(i)[1] >= top - 1)
+    rows = sorted(
+        (probe.box(i)[1], i)
+        for i in range(len(probe.nodes))
+        if probe.title(i) == "FileRow" and probe.box(i)[1] >= top - 1
+    )
     kids = probe.children()
     for _, row in rows:
         stack = [row]
@@ -103,18 +143,41 @@ def first_row(probe: Probe) -> str | None:
     return None
 
 
-def judge(name: str, ids: list[str], probes: dict[str, Probe], compare: list[tuple[str, str]], tolerance: float = TOLERANCE, rows: bool = False) -> list[Finding]:
+def judge(
+    name: str,
+    ids: list[str],
+    probes: dict[str, Probe],
+    compare: list[tuple[str, str]],
+    tolerance: float = TOLERANCE,
+    rows: bool = False,
+) -> list[Finding]:
     found: list[Finding] = []
     if rows:
         return judge_rows(name, ids, probes, compare)
     for before, after in compare:
         a, b = probes.get(before), probes.get(after)
         if a is None or b is None:
-            found.append(Finding("scroll-walk-broken", ids, name, f"{before} -> {after}", f"the walk did not save {before if a is None else after}: its script stopped early"))
+            found.append(
+                Finding(
+                    "scroll-walk-broken",
+                    ids,
+                    name,
+                    f"{before} -> {after}",
+                    f"the walk did not save {before if a is None else after}: its script stopped early",
+                )
+            )
             continue
         offset_a, offset_b = page_offset(a), page_offset(b)
         if offset_a is None or offset_b is None:
-            found.append(Finding("scroll-walk-broken", ids, name, f"{before} -> {after}", "the capture has no scroll container: the page cannot scroll at this size"))
+            found.append(
+                Finding(
+                    "scroll-walk-broken",
+                    ids,
+                    name,
+                    f"{before} -> {after}",
+                    "the capture has no scroll container: the page cannot scroll at this size",
+                )
+            )
             continue
         if offset_a[0] < MIN_SCROLL:
             found.append(
@@ -149,16 +212,165 @@ def judge_rows(name: str, ids: list[str], probes: dict[str, Probe], compare: lis
     for before, after in compare:
         a, b = probes.get(before), probes.get(after)
         if a is None or b is None:
-            found.append(Finding("scroll-walk-broken", ids, name, f"{before} -> {after}", f"the walk did not save {before if a is None else after}: its script stopped early"))
+            found.append(
+                Finding(
+                    "scroll-walk-broken",
+                    ids,
+                    name,
+                    f"{before} -> {after}",
+                    f"the walk did not save {before if a is None else after}: its script stopped early",
+                )
+            )
             continue
         row_a, row_b = first_row(a), first_row(b)
         if row_a is None or row_b is None:
-            found.append(Finding("scroll-walk-broken", ids, name, f"{before} -> {after}", "the capture has no file row in the list"))
+            found.append(
+                Finding(
+                    "scroll-walk-broken", ids, name, f"{before} -> {after}", "the capture has no file row in the list"
+                )
+            )
         elif start is not None and row_a == start:
-            found.append(Finding("scroll-walk-broken", ids, name, f"{before}", f"the list is still at its first row {start!r} after the scroll: the walk proves nothing; scroll further"))
+            found.append(
+                Finding(
+                    "scroll-walk-broken",
+                    ids,
+                    name,
+                    f"{before}",
+                    f"the list is still at its first row {start!r} after the scroll: the walk proves nothing; scroll further",
+                )
+            )
         elif row_a != row_b:
-            found.append(Finding("scroll-lost", ids, name, f"{before} -> {after}", f"the first row in the list was {row_a!r} and is {row_b!r} after: the scroll position is not kept"))
+            found.append(
+                Finding(
+                    "scroll-lost",
+                    ids,
+                    name,
+                    f"{before} -> {after}",
+                    f"the first row in the list was {row_a!r} and is {row_b!r} after: the scroll position is not kept",
+                )
+            )
     return found
+
+
+# ---- the slide of a subpage ----------------------------------------------------------------------
+
+SLIDE_TOLERANCE = 1.5  # px
+
+
+def scroll_of(probe: Probe, index: int) -> float:
+    """How far the nearest scroll container above a node is scrolled."""
+    for node in [index, *probe.ancestors(index)]:
+        held = [s for s in probe.scrollers if s["node"] == node or probe.parent(s["node"]) == node]
+        if held:
+            return max(abs(s["offset"][1]) for s in held)
+    return 0.0
+
+
+def page_texts(probe: Probe) -> dict[str, tuple[float, float]]:
+    """Each text of a page's content that is mounted once: (x, y down its page, before any scroll).
+
+    The sidebar and the header are not page content: they do not slide with the page."""
+    seen: dict[str, list[tuple[float, float]]] = {}
+    for i in range(len(probe.nodes)):
+        if not probe.flags(i) & lib.TEXT or not any(probe.title(up) == "Page" for up in probe.ancestors(i)):
+            continue
+        text = probe.text(i).strip()
+        if text:
+            x, y, _, _ = probe.box(i)
+            seen.setdefault(text, []).append((x, y + scroll_of(probe, i)))
+    return {text: spots[0] for text, spots in seen.items() if len(spots) == 1}
+
+
+def judge_slide(
+    name: str, ids: list[str], probes: dict[str, Probe], origin: str, sub: str, prefix: str
+) -> list[Finding]:
+    """Frames `prefix`NN of a slide against the settled captures of the two pages, each page against itself.
+
+    A page's own texts (the ones the other page does not have, so a text is never matched across the
+    two pages) must be, in every frame, where the page settles: down the page exactly, and across by one
+    slide offset that is the same for all of its texts. The page below moves across too on a pop (it comes in under the leaving one). This holds the layout under the slide still: a card that changes height, a row that
+    arrives above others, the veil lifting into a different structure, all move a text off its settled
+    place.
+    """
+    found: list[Finding] = []
+    a, b = probes.get(origin), probes.get(sub)
+    frames = sorted((k, p) for k, p in probes.items() if k.startswith(prefix) and k[len(prefix) :].isdigit())
+    if a is None or b is None or not frames:
+        return [
+            Finding(
+                "scroll-walk-broken",
+                ids,
+                name,
+                prefix,
+                f"the walk did not save {origin}, {sub} and the frames {prefix}NN",
+            )
+        ]
+    ref_a, ref_b = page_texts(a), page_texts(b)
+    own = {
+        "origin": {t: v for t, v in ref_a.items() if t not in ref_b},
+        "sub": {t: v for t, v in ref_b.items() if t not in ref_a},
+    }
+    compared = 0
+    for key, probe in frames:
+        now = page_texts(probe)
+        for page, ref in own.items():
+            there = [t for t in ref if t in now]
+            if len(there) < 3:
+                continue
+            compared += 1
+            steps = [now[t][0] - ref[t][0] for t in there]
+            if max(steps) - min(steps) > SLIDE_TOLERANCE:
+                worst = max(there, key=lambda t: abs(now[t][0] - ref[t][0] - steps[0]))
+                found.append(
+                    Finding(
+                        "slide-reflow",
+                        ids,
+                        name,
+                        key,
+                        f"the {page} page's text is not one slide offset from its settled place: x offsets span {max(steps) - min(steps):.0f} px ({worst!r})",
+                    )
+                )
+            moved = [(t, now[t][1] - ref[t][1]) for t in there if abs(now[t][1] - ref[t][1]) > SLIDE_TOLERANCE]
+            if moved:
+                text, dy = moved[0]
+                found.append(
+                    Finding(
+                        "slide-reflow",
+                        ids,
+                        name,
+                        key,
+                        f"the {page} page's {text!r} is {dy:+.0f} px down its page from where it settles ({len(moved)} of {len(there)} texts): the layout changed under the slide",
+                    )
+                )
+    if compared == 0:
+        found.append(
+            Finding(
+                "scroll-walk-broken",
+                ids,
+                name,
+                prefix,
+                "no frame of the slide had three texts of a page: the walk proves nothing",
+            )
+        )
+    return found
+
+
+def pushed(name: str, ids: list[str], probes: dict[str, Probe], origin_only: str, step: str) -> list[Finding]:
+    """The walk really opened the subpage: a text only the origin page has is gone from `step`'s capture."""
+    probe = probes.get(step)
+    if probe is None:
+        return []
+    if any(probe.text(i).strip() == origin_only for i in range(len(probe.nodes)) if probe.flags(i) & lib.TEXT):
+        return [
+            Finding(
+                "scroll-walk-broken",
+                ids,
+                name,
+                step,
+                f"{origin_only!r} is still on screen after the click: the subpage was not opened, so the walk proves nothing (is the row in view at that offset?)",
+            )
+        ]
+    return []
 
 
 # ---- scenarios ----------------------------------------------------------------------------------
@@ -169,7 +381,14 @@ def settings_scenarios() -> list[Scenario]:
     size = "1000x520"
 
     def job(name: str, page: str, script: str, env: dict[str, str] | None = None) -> dict:
-        return {"name": name, "argv": [binary, "--snapshot"], "pages": [page], "size": size, "script": script, "env": env or {}}
+        return {
+            "name": name,
+            "argv": [binary, "--snapshot"],
+            "pages": [page],
+            "size": size,
+            "script": script,
+            "env": env or {},
+        }
 
     return [
         Scenario(
@@ -177,7 +396,7 @@ def settings_scenarios() -> list[Scenario]:
             job(
                 "settings-network-push-pop",
                 "network",
-                "wait 1500; scroll 600,300,-220; wait 700; save a.png; click-text Proxy; wait 1500; save sub.png; key alt+left; wait 1800; save b.png",
+                "wait 1500; scroll 600,300,-220; wait 700; save a.png; click-text Wi-Fi; wait 1500; save sub.png; key alt+left; wait 1800; save b.png",
             ),
             [("a", "b")],
             ["LS-05"],
@@ -194,6 +413,42 @@ def settings_scenarios() -> list[Scenario]:
             ["LS-05", "LS-06"],
             {"BINGUX_SETTINGS_SNAPSHOT_SETTLE_MS": "16"},
         ),
+    ]
+
+
+SLIDE_FRAMES = 12  # a slide is 250 ms, 15 frames of 16 ms: the notches stay inside it
+
+
+def slide_script(push_wheel: bool, back_wheel: bool) -> str:
+    """The Network page scrolled, Proxy pushed and popped, a wheel notch sent at every frame of the slides asked for."""
+    notch = "scroll 600,300,-40; "
+    steps = ["wait 1500; scroll 600,300,-220; wait 700; save a.png; click-text Wi-Fi"]
+    steps += [f"{notch if push_wheel else ''}wait 16; save p{i:02d}.png" for i in range(SLIDE_FRAMES)]
+    steps += ["wait 1500; save sub.png; key alt+left"]
+    steps += [f"{notch if back_wheel else ''}wait 16; save q{i:02d}.png" for i in range(SLIDE_FRAMES)]
+    steps += ["wait 1800; save b.png"]
+    return "; ".join(steps)
+
+
+def slide_scenarios() -> list[Scenario]:
+    binary = str(lib.TARGET / "debug" / "bingux-settings")
+
+    def scenario(name: str, push_wheel: bool, back_wheel: bool) -> Scenario:
+        job = {
+            "name": name,
+            "argv": [binary, "--snapshot"],
+            "pages": ["network"],
+            "size": "1000x520",
+            "script": slide_script(push_wheel, back_wheel),
+            "env": {"BINGUX_UI_RESULT_DELAY_MS": "500"},
+        }
+        return Scenario(name, job, [("a", "b")], ["LS-05", "LS-06"], slide=True)
+
+    return [
+        scenario("settings-network-slide-no-wheel", False, False),
+        scenario("settings-network-slide-wheel-push", True, False),
+        scenario("settings-network-slide-wheel-back", False, True),
+        scenario("settings-network-slide-wheel-both", True, True),
     ]
 
 
@@ -219,19 +474,30 @@ def files_scenarios(workdir: Path) -> list[Scenario]:
     }
 
     def job(name: str, script: str) -> dict:
-        return {"name": name, "argv": [binary, "--snapshot"], "pages": [str(folder)], "env": dict(state, BINGUX_FILES_SNAPSHOT_SCRIPT=script)}
+        return {
+            "name": name,
+            "argv": [binary, "--snapshot"],
+            "pages": [str(folder)],
+            "env": dict(state, BINGUX_FILES_SNAPSHOT_SCRIPT=script),
+        }
 
     return [
         Scenario(
             "files-tab-switch",
-            job("files-tab-switch", "wait 1500; save start.png; scroll 600,300,-900; wait 700; save a.png; key ctrl+t; wait 1200; key alt+1; wait 1200; save b.png"),
+            job(
+                "files-tab-switch",
+                "wait 1500; save start.png; scroll 600,300,-900; wait 700; save a.png; key ctrl+t; wait 1200; key alt+1; wait 1200; save b.png",
+            ),
             [("a", "b")],
             ["LS-05", "LS-02"],
             rows=True,
         ),
         Scenario(
             "files-parent-and-back",
-            job("files-parent-and-back", "wait 1500; save start.png; scroll 600,300,-900; wait 700; save a.png; click-text files-fixture; wait 1500; save sub.png; key alt+left; wait 1500; save b.png"),
+            job(
+                "files-parent-and-back",
+                "wait 1500; save start.png; scroll 600,300,-900; wait 700; save a.png; click-text files-fixture; wait 1500; save sub.png; key alt+left; wait 1500; save b.png",
+            ),
             [("a", "b")],
             ["LS-05"],
             rows=True,
@@ -245,7 +511,26 @@ def files_scenarios(workdir: Path) -> list[Scenario]:
 def fixture(offset: float, inner: float = 2000.0) -> Probe:
     titles = ["Window", "ScrollView"]
     nodes = [(-1, 0, 0, 0, 1000, 500, 1, -1), (0, 1, 0, 50, 1000, 450, 1 | lib.SCROLLER, -1)]
-    return Probe("fixture", 1.0, (1000.0, 500.0), titles, [], nodes, [], [], [{"node": 1, "offset": [0, -offset], "inner": [1000, inner]}], "fixture")
+    return Probe(
+        "fixture",
+        1.0,
+        (1000.0, 500.0),
+        titles,
+        [],
+        nodes,
+        [],
+        [],
+        [{"node": 1, "offset": [0, -offset], "inner": [1000, inner]}],
+        "fixture",
+    )
+
+
+def slide_fixture(words: list[str], dx: float = 0.0, dy: float = 0.0) -> Probe:
+    """A page of three texts, `dx` across and the middle one `dy` down from where it rests."""
+    nodes = [(-1, 0, 0, 0, 1000, 500, 1, -1), (0, 1, 300, 0, 700, 500, 1, -1)]
+    for at, y in enumerate((50.0, 100.0 + dy, 150.0)):
+        nodes.append((1, 2, 300 + dx, y, 100, 20, lib.VISIBLE | lib.TEXT, at))
+    return Probe("fixture", 1.0, (1000.0, 500.0), ["Window", "Page", "Label"], words, nodes, [], [], [], "fixture")
 
 
 def run_fixtures() -> list[str]:
@@ -262,6 +547,21 @@ def run_fixtures() -> list[str]:
     still = judge("fixture-never-scrolled", ["LS-05"], {"a": fixture(0), "b": fixture(0)}, [("a", "b")])
     if not any(f.rule == "scroll-walk-broken" for f in still):
         problems.append("fixture: a walk that never scrolled passed on zero")
+    origin, sub = ["one", "two", "three"], ["four", "five", "six"]
+    base = {"a": slide_fixture(origin), "sub": slide_fixture(sub)}
+    clean = judge_slide(
+        "fixture-slide",
+        ["LS-05"],
+        {**base, "p00": slide_fixture(sub, dx=300), "p01": slide_fixture(origin, dx=-80)},
+        "a",
+        "sub",
+        "p",
+    )
+    if clean:
+        problems.append(f"fixture: a page that slides as one block was reported: {[f.what for f in clean]}")
+    moved = judge_slide("fixture-reflow", ["LS-05"], {**base, "p00": slide_fixture(sub, dx=300, dy=9)}, "a", "sub", "p")
+    if not any(f.rule == "slide-reflow" for f in moved):
+        problems.append("fixture: a text that sits 9 px off its settled place during a slide was not found")
     return problems
 
 
@@ -292,7 +592,7 @@ def main() -> int:
     workdir = lib.workdir_of(args, "scroll-continuity-")
     scenarios: list[Scenario] = []
     if args.only in (None, "settings"):
-        scenarios += settings_scenarios()
+        scenarios += settings_scenarios() + slide_scenarios()
     if args.only in (None, "files"):
         scenarios += files_scenarios(workdir)
     for scenario in scenarios:
@@ -309,6 +609,11 @@ def main() -> int:
             scenario: Scenario = result["scenario"]
             by_stem = {Path(probe.capture).stem: probe for probe in result["probes"]}
             found = judge(scenario.name, scenario.rule_ids, by_stem, scenario.compare, rows=scenario.rows)
+            if scenario.slide or scenario.name == "settings-network-push-pop":
+                found += pushed(scenario.name, scenario.rule_ids, by_stem, "Data usage", "sub")
+            if scenario.slide:
+                found += judge_slide(scenario.name, scenario.rule_ids, by_stem, "a", "sub", "p")
+                found += judge_slide(scenario.name, scenario.rule_ids, by_stem, "b", "sub", "q")
             findings += found
             results.append(result)
             print(f"{result['status']:>10}  {scenario.name}  ({len(found)} findings)", flush=True)
