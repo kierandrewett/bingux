@@ -235,6 +235,94 @@ def diff_features(before: np.ndarray, after: np.ndarray) -> list[dict]:
     return pairs
 
 
+MIN_RELOCATED_RULE = 150  # px; only a long rule (a row separator, a card border) is followed past MAX_MOVE
+
+
+def relocated(before: np.ndarray, after: np.ndarray) -> list[dict]:
+    """Blocks of long horizontal rules that moved together by more than MAX_MOVE.
+
+    `diff_features` pairs edges that moved by at most MAX_MOVE px. A group that jumps farther (a Related
+    group pushed down by a list that lands above it, a card that moves under a list that grows) leaves its
+    rules unmatched in each frame, so the move was never reported. Here the rules of `before` that are not
+    in `after` are matched to the rules of `after` that are not in `before`, with the same horizontal extent,
+    by the vertical step that moves the most of them at once. A step that moves only one rule is not a move
+    of a block (a lone rule that is gone and another that came are a row that changed, not one that moved),
+    so at least two rules must share it.
+    """
+
+    def long_rules(feats: np.ndarray) -> list[tuple[int, ...]]:
+        rules = [
+            tuple(int(v) for v in row)
+            for row in feats.tolist()
+            if row[0] == H and row[4] - row[2] >= MIN_RELOCATED_RULE
+        ]
+        # A slider track is two edges a few px apart; it is not a row separator or a card border, and its
+        # edges cross the detector's threshold as a page fades in.
+        return [
+            rule
+            for rule in rules
+            if not any(
+                other is not rule
+                and 0 < abs(other[1] - rule[1]) <= 8
+                and min(other[4], rule[4]) - max(other[2], rule[2]) > 0
+                for other in rules
+            )
+        ]
+
+    old, new = long_rules(before), long_rules(after)
+    old_set, new_set = set(old), set(new)
+    gone = [rule for rule in old if rule not in new_set]
+    came = [rule for rule in new if rule not in old_set]
+    steps: dict[int, list[tuple[int, int]]] = {}
+    for i, a in enumerate(gone):
+        for j, b in enumerate(came):
+            step = b[1] - a[1]
+            if abs(step) > MAX_MOVE and abs(a[2] - b[2]) <= 2 and abs(a[4] - b[4]) <= 2:
+                steps.setdefault(step, []).append((i, j))
+    used_a: set[int] = set()
+    used_b: set[int] = set()
+    pairs: list[dict] = []
+    while True:
+        best: list[tuple[int, int]] = []
+        for step, matches in steps.items():
+            # The rules of this step that are still free, with the steps within 2 px counted too (a rule
+            # and its anti-aliased twin land a pixel apart).
+            free = [
+                (i, j)
+                for near in range(step - 2, step + 3)
+                for i, j in steps.get(near, [])
+                if i not in used_a and j not in used_b
+            ]
+            chosen: list[tuple[int, int]] = []
+            taken_a: set[int] = set()
+            taken_b: set[int] = set()
+            for i, j in free:
+                if i not in taken_a and j not in taken_b:
+                    chosen.append((i, j))
+                    taken_a.add(i)
+                    taken_b.add(j)
+            if len(chosen) > len(best):
+                best = chosen
+        if len(best) < 2:
+            break
+        for i, j in best:
+            used_a.add(i)
+            used_b.add(j)
+            a, b = gone[i], came[j]
+            pairs.append(
+                {
+                    "kind": H,
+                    "change": "moved",
+                    "dc": b[1] - a[1],
+                    "dlo": b[2] - a[2],
+                    "dhi": b[4] - a[4],
+                    "a": list(a),
+                    "b": list(b),
+                }
+            )
+    return pairs
+
+
 def appeared(before: np.ndarray, after: np.ndarray) -> list[tuple[int, int, int, int, int]]:
     """Text bands of `after` with no text band of `before` at the same place: content that was not there.
 
@@ -379,6 +467,7 @@ def analyse(panel: str, frames: Path, shifts: Path) -> dict:
             idle_pairs += 1
             pairs = diff_features(prev["feats"], current["feats"])
             if phase == "load":
+                pairs += relocated(prev["feats"], current["feats"])
                 new_bands = appeared(prev["feats"], current["feats"])
                 if new_bands:
                     popins.append(
