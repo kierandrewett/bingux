@@ -209,6 +209,8 @@ Scope {
     property bool handleVisible: false
     readonly property bool handleHovered: pillAllowed && (handleButton.hovered || (sensor.visible && sensorGesture.hovered) || gestureActive)
     property real pointerPosition: 200
+    // Whether the resize pill is on screen. The fullscreen test reads it.
+    readonly property bool pillShown: handleWindow.visible || gripWindow.visible
     readonly property int closeThreshold: 150
     readonly property real followThreshold: 96
     property bool followingPointer: false
@@ -241,6 +243,8 @@ Scope {
     readonly property real handleAxisLength: edge === "top" ? (screen ? screen.width : 1280) : (screen ? screen.height : 800)
     readonly property real handleStart: Math.ceil(handleAxisLength * 0.3)
     readonly property real handleEnd: Math.floor(handleAxisLength * 0.7)
+    // `pillAllowed` also gates starting an edge gesture, so it must stay true over a fullscreen
+    // app: the pill is hidden by the two windows that draw it (`handleWindow`, `gripWindow`).
     readonly property bool pillAllowed: pointerPosition >= handleStart && pointerPosition < handleEnd && (edge !== "top" || handleOffset + 24 <= usableBottom)
     property real boundaryOpacity: pillAllowed ? 1 : 0
     Behavior on boundaryOpacity {
@@ -1183,7 +1187,7 @@ Scope {
 
     PanelWindow {
         id: handleWindow
-        readonly property bool revealed: root.gestureActive || (root.pillAllowed && sensor.visible && root.handleVisible)
+        readonly property bool revealed: !root.fullscreenApp && (root.gestureActive || (root.pillAllowed && sensor.visible && root.handleVisible))
         property real reveal: revealed ? 1 : 0
         screen: root.screen
         visible: !root.detached && !root.inputSuspended && (revealed || reveal > 0)
@@ -1235,8 +1239,9 @@ Scope {
     }
 
     PanelWindow {
+        id: gripWindow
         screen: root.screen
-        visible: root.gestureActive && (root.pillAllowed || root.boundaryOpacity > 0)
+        visible: !root.fullscreenApp && root.gestureActive && (root.pillAllowed || root.boundaryOpacity > 0)
         color: "transparent"
         mask: Region {}
         implicitWidth: handleWindow.width

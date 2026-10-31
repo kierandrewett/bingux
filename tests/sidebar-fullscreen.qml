@@ -96,6 +96,10 @@ ShellRoot {
             mousePress(sensor.contentItem, 1, 400);
             checks += "Gesture " + sidebar.gestureActive + " pointer " + sidebar.pointerPosition + "\n";
             verify(sidebar.gestureActive);
+            // The gesture works in fullscreen but the pill stays hidden.
+            wait(400);
+            checks += "Pill shown during the fullscreen gesture: " + sidebar.pillShown + "\n";
+            compare(sidebar.pillShown, false, "No resize pill over a fullscreen app");
             mouseMove(sensor.contentItem, -179, 400);
             mouseRelease(sensor.contentItem, -179, 400);
             checks += "Dragged: " + sidebar.opened + "\n";
@@ -104,6 +108,8 @@ ShellRoot {
             verify(ToplevelManager.toplevels.values.some(w => w.title === app.title && w.fullscreen));
             checks += "Retained fullscreen: " + sidebar.fullscreenApp + "\n";
             compare(sidebar.fullscreenApp, true);
+            checks += "Pill shown after the fullscreen drag: " + sidebar.pillShown + "\n";
+            compare(sidebar.pillShown, false, "No resize pill after the drag in fullscreen");
             compare(sidebar.desktopCornerSize, 0, "Fullscreen sidebar has square corners");
             sidebar.hide();
             app.showNormal();
@@ -116,6 +122,21 @@ ShellRoot {
             app.showFullScreen();
             app.requestActivate();
             tryCompare(sidebar, "opened", false);
+        }
+        // Positive control for the fullscreen checks: outside fullscreen the pill is drawn
+        // while a gesture is active, so "hidden" above is not just the pill never working.
+        function test_pill_shown_outside_fullscreen() {
+            app.showNormal();
+            app.requestActivate();
+            tryCompare(sidebar, "fullscreenApp", false);
+            sidebar.selectContent("notes");
+            sidebar.open();
+            wait(400);
+            sidebar.beginGesture(1000, 400, 400);
+            wait(400);
+            checks += "Pill shown during a normal gesture: " + sidebar.pillShown + "\n";
+            compare(sidebar.pillShown, true, "The pill is drawn during a gesture outside fullscreen");
+            sidebar.finishGesture(false);
         }
         function cleanupTestCase() {
             report.setText("FAILURES " + qtest_results.failCount + "\n" + checks);
