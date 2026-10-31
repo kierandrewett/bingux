@@ -404,8 +404,13 @@ pub(super) fn status_text(status: &SearchStatus) -> String {
     if status.truncated {
         text.push_str(" · limit reached, narrow the search");
     } else if status.unreadable > 0 {
+        let folders = if status.unreadable == 1 {
+            "folder"
+        } else {
+            "folders"
+        };
         text.push_str(&format!(
-            " · {} folders could not be read",
+            " · {} {folders} could not be read",
             count(status.unreadable)
         ));
     }
@@ -620,6 +625,12 @@ mod tests {
             status_text(&status),
             "1,204 found · 3 folders could not be read"
         );
+        status.unreadable = 1;
+        assert_eq!(
+            status_text(&status),
+            "1,204 found · 1 folder could not be read"
+        );
+        status.unreadable = 3;
         status.truncated = true;
         assert_eq!(
             status_text(&status),

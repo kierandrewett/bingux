@@ -333,6 +333,7 @@ BLOCKING_ALLOWED: dict[str, str] = {
     "crates/ui/src/files/actions/transfer.rs": "file operations of the transfer worker",
     "crates/ui/src/files/actions.rs": "file operations of the transfer worker",
     "crates/ui/src/files/address_target.rs": "metadata on a thread of its own, with a deadline",
+    "crates/ui/src/files/omnibox_tests.rs": "test fixtures: a tree of files written before the headless window mounts, no window thread",
     "crates/ui/src/files/launch.rs": "the command line's argument is checked on a thread of its own with a deadline, before any window exists",
     "crates/ui/src/files/context_menu.rs": "template listing for the New file menu: reads a folder, to move to a worker (FilesSearch)",
     "crates/ui/src/window/compositor/fake.rs": "test fixture: removes its own socket file, no window thread",
@@ -497,6 +498,7 @@ RAW_PRESS = re.compile(
 RAW_PRESS_ALLOWED = {
     "crates/ui/src/popup_windows/route_tests.rs": "test fixture: a bare box whose press opens a sub-window",
     "crates/ui/src/controls/button.rs": "the button components",
+    "crates/ui/src/controls/omnibox.rs": "the omnibox's own rows and chips: a row, a chip and the chip of a row, each with hover, highlight and pressed fills no library button draws",
     "crates/ui/src/controls/colour_picker/button.rs": "the colour button: a swatch with hover, pressed and open fills, which no library button draws",
     "crates/ui/src/controls/split_button.rs": "the split button's two parts",
     "crates/ui/src/controls/dropdown.rs": "the dropdown's trigger",

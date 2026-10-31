@@ -726,12 +726,10 @@ impl Component for Omnibox {
                     });
                 }
                 OmniItem::Strip { element, height } => {
-                    column = column.child(
-                        rect()
-                            .width(Size::fill())
-                            .height(Size::px(*height))
-                            .child(element.clone()),
-                    );
+                    column = column.child(StripView {
+                        element: element.clone(),
+                        height: *height,
+                    });
                 }
             }
         }
@@ -801,7 +799,7 @@ impl Component for Omnibox {
                             .component("OmniboxList")
                             .width(Size::fill())
                             .height(Size::px(list_h))
-                            .padding((pad, 0.0))
+                            .tw(&tokens, &[py(S2)])
                             .on_wheel(|event: Event<WheelEventData>| event.stop_propagation())
                             .child(
                                 rect()
@@ -810,6 +808,31 @@ impl Component for Omnibox {
                                     .child(ScrollView::new_controlled(scroll).child(column)),
                             )
                     })),
+            )
+    }
+}
+
+/// A strip of chips: one row that scrolls sideways when the card is narrower than the chips, so
+/// none is out of reach on a phone.
+#[derive(PartialEq)]
+struct StripView {
+    element: Element,
+    height: f32,
+}
+
+impl Component for StripView {
+    fn render(&self) -> impl IntoElement {
+        let scroll = use_scroll_controller(ScrollConfig::default);
+        rect()
+            .component("OmniboxStrip")
+            .width(Size::fill())
+            .height(Size::px(self.height))
+            .child(
+                scroll_x_controlled(scroll)
+                    .show_scrollbar(false)
+                    .width(Size::fill())
+                    .height(Size::fill())
+                    .child(self.element.clone()),
             )
     }
 }
@@ -912,7 +935,7 @@ impl Component for OmniChipView {
                     center(),
                     h(Dim::Box7),
                     px(S3),
-                    rounded(Radius::Pill),
+                    rounded(Radius::Control),
                     border(Line::Hairline),
                     surface(Paint::Transparent, hovering(), false, false),
                 ],
@@ -1099,7 +1122,7 @@ impl Component for OmniChip {
                     gap(S1),
                     h(Dim::Box7),
                     px(S3),
-                    rounded(Radius::Pill),
+                    rounded(Radius::Control),
                     surface(
                         if selected {
                             Paint::AccentSoft

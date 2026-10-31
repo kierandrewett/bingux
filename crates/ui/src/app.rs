@@ -374,10 +374,10 @@ impl Blueprint {
         // An alpha channel is not enough: freya clears the canvas to the window's background
         // (white by default) before it draws, so a root drawn at 0.4 opacity would be mixed with
         // white, not with the windows under it. The clear must be transparent too.
-        // ui-lint: allow(the window's own clear colour, not a box)
         let window = if self.transparent {
             window
                 .with_transparency(true)
+                // ui-lint: allow(the window's own clear colour, not a box)
                 .with_background(Color::TRANSPARENT)
         } else {
             window

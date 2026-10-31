@@ -279,8 +279,8 @@ impl Component for StatusLine {
         // text (a link's target) is cut with an ellipsis inside the strip, not laid out wider than it
         // and pinned past its left edge.
         let pill = surface(rect().position(anchor))
-            // ui-lint: allow(the pill's cap is the strip's measured width less the edge it keeps on each side)
             .maybe(strip_width > 0.0, |pill| {
+                // ui-lint: allow(the pill's cap is the strip's measured width less the edge it keeps on each side)
                 pill.max_width(Size::px((strip_width - 2.0 * edge).max(0.0)))
             })
             .on_sized(move |event: Event<SizedEventData>| {
