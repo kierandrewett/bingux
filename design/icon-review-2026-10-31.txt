@@ -1,0 +1,122 @@
+# Kieran's feedback on the icon review page, 2026-10-31, kept as given (typos and all).
+# Format: icon | Icon variant | verdict | note. Source of truth for the icon work that follows.
+view-app-grid | Applications | Good
+network-wired | NetworkWired | no verdict | the squares could be filled in
+network-wireless-signal-excellent | NetworkWirelessSignalExcellent | Good
+network-wireless-signal-good | NetworkWirelessSignalGood | no verdict | you need to dim the lines gang rather than removing the lines
+network-wireless-signal-ok | NetworkWirelessSignalOk | no verdict | you need to dim the lines gang rather than removing the lines
+network-wireless-signal-weak | NetworkWirelessSignalWeak | no verdict | you need to dim the lines gang rather than removing the lines
+network-wireless-signal-none | NetworkWirelessSignalNone | no verdict | you need to dim the lines gang rather than removing the lines
+network-wireless-disabled | NetworkWirelessDisabled | no verdict | to be honest i would subtract a little bit around that slash line so it's clearer
+network-offline | NetworkOffline | no verdict | this is fine although the dot at the bottom missing is kinda weird
+network-error | NetworkError | no verdict | hard to tell. use the same thing that you do for networkoffline just overlay the x with a subtraction
+network-wireless-encrypted | NetworkWirelessEncrypted | Tweak | fine but i wouldve liked the top corners of the lock to be rounded
+preferences-system-notifications | shell | no verdict | perfect
+notifications-disabled | NotificationsDisabled | no verdict | perfect
+audio-volume-high | Sound | no verdict | perefct
+audio-volume-medium | AudioVolumeMedium | no verdict | oerfect
+audio-volume-low | AudioVolumeLow | no verdict | perect
+audio-volume-muted | AudioVolumeMuted | Good
+bluetooth-active | Bluetooth | no verdict | god but i do think it's a little wide. could be slightly skinnier idk
+bluetooth-disabled | shell | no verdict | perfect
+airplane-mode | AirplaneMode | no verdict | perfect
+network-vpn | NetworkVpn | no verdict | perfect but i think it would be cool if you had a chequer pattern on the shield. like material icons has
+system-shutdown | SystemShutdown | no verdict | the straight down line is in a weird spot. you need to make the round circly bit moved down a bit and redrawn so its still a circle
+battery-level-0..100 and battery-level-100-charged | shell | no verdict | terrible, needs to be filled in rather than having a line (all levels)
+battery-level-N-charging (0..100) | shell | no verdict | terrible, needs to be filled in, and doesnt show the charging level
+battery-missing | shell | no verdict | terrible, needs to be filled in
+network-wireless | Network | no verdict | fine
+preferences-desktop-accessibility | Accessibility | no verdict | good
+applications-graphics | Appearance | no verdict | good
+preferences-desktop-wallpaper | Desktop | no verdict | terrible. this makes no sense as a desktop icon.
+system-search | Search | no verdict | fine
+video-display | Display | no verdict | fine
+input-keyboard | Keyboard | no verdict | looks more like an icon for captions than a keyboard lowk
+input-mouse | Mouse | no verdict | terrible. needs filling
+preferences-system-time | Clock | no verdict | fine
+system-users | Users | no verdict | fine
+help-about | About | no verdict | fine
+object-select | Check | no verdict | fine
+go-next, go-previous, pan-up, pan-down, pan-end | no verdict | fine but i don't like how round it is at the point. like the inner bit of the angle is rounded. ew gross
+edit-clear, list-add, list-remove | fine
+view-reveal | ViewReveal | no verdict | could be filled in personally
+view-conceal | ViewConceal | no verdict | could be filled in persoanlly
+starred, non-starred, window-close, window-minimize, window-maximize, window-restore, open-menu, view-more, view-refresh, object-rotate-right | fine
+sidebar-show | good
+focus-top-bar | sure
+edit-copy | EditCopy | no verdict | the border radii is not consistent.
+edit-delete, user-trash, view-filter, find-location | good
+document-edit | DocumentEdit | no verdict | it's fine but the pencil looks weird. also you use this icon in all the wrong places. we need a dedicated pencil icon for edit. rather than this being used everywhere this is only really needed in certain circumstances where it's regarding editing a document
+document-open, send-to | good
+view-list | ViewList | no verdict | blurry
+view-grid | ViewGrid | no verdict | blurry
+media-playback-pause, media-playback-stop | good
+preferences-system | PreferencesSystem | no verdict | horrible cog icon. redraw
+emblem-system | EmblemSystem | no verdict | horrible cog icon. redraw
+folder | good
+folder-download | FolderDownload | no verdict | the arrow is really odd tbh
+bookmarks, dialog-error, dialog-information, dialog-warning, help-browser | good
+security-high | SecurityHigh | no verdict | eh. i don't think we need this. we have a padlock icon that works
+security-low | SecurityLow | no verdict | again dont really need it, use unlocked padlock or something
+system-lock-screen | SystemLockScreen | no verdict | we already have a lock icon above.
+dialog-password, changes-prevent, power-profile-power-saver | sure
+power-profile-balanced | PowerProfileBalanced | no verdict | it's kinda weird idk. the line is like outside the speedo bottom
+power-profile-performance | PowerProfilePerformance | no verdict | good, although some of these icons could really be named something generic like zap. this just restricts its use
+display-brightness | DisplayBrightness | no verdict | good but that sun circle is not a circle?
+night-light, weather-clear-night, audio-headphones, audio-speakers | good
+audio-card | AudioCard | no verdict | good; you use this a lot in the sound settings, i don't think it's the right icon for it to be honest
+audio-input-microphone | good
+input-tablet | InputTablet | no verdict | looks nothing like a tablet.
+input-touchpad, input-gaming | good
+phone | Phone | no verdict | looks nothing like a phone
+computer, printer, camera-web, media-removable, network-server, avatar-default, user-info | good
+web-browser | WebBrowser | no verdict | i dont like the filled bit.
+x-office-calendar | XOfficeCalendar | no verdict | good, maybe some dots to show the dates or something
+mail-unread, image-generic, video-generic, applications-multimedia, accessories-calculator, addon | good
+application-x-executable | Application | no verdict | good but i don't like that you've rounded the bit around the filled bit
+preferences-other | good
+preferences-desktop-keyboard-shortcuts | no verdict | again. we already have a keyboard icon.
+default-app-text, default-app-documents, application-pdf, application-x-generic, audio-x-generic, drive-harddisk, emblem-symbolic-link | good
+folder-desktop | no verdict | hard to tell this is a desktop tbh.ugly
+folder-documents | no verdict | awful icon for documents
+folder-music | no verdict | fine but the note is too thick
+folder-new | good
+folder-pictures | no verdict | hardly looks like a picture
+folder-publicshare | sure
+folder-templates | no verdict | again. ahrd to tell that this is templates
+folder-videos | no verdict | sure but weird to cut out a chunk like that for the video bg
+font-x-generic | sure
+go-up | GoUp | no verdict | i would rather you didnt have this and it was just a chevron up instead
+list-drag-handle, media-eject, media-optical | fine
+media-playback-start | no verdict | we already have a play button no? if not, that's fine
+media-view-subtitles | good
+network-wireless-hotspot | no verdict | could be better, looks more like rss
+object-rotate-left, package-x-generic, text-x-generic, text-x-script, user-home | fine
+view-fullscreen | ViewFullscreen | no verdict | hate this for a fullscreen icon. i prefer it when it looks like lucide's maximize
+view-restore | ViewRestore | no verdict | hate this for a restore icon. i prefer it when it looks like lucide's minimize
+window-new | WindowNew | no verdict | weird corner in the bottom left and i would move the lines for that square so they are inline with the chevron
+x-office-document, x-office-presentation, x-office-spreadsheet | no verdict | fine but dont we already have an icon for ths? and you could try better tha njust putting the file ezxtesnion
+zoom-fit-best, zoom-in, zoom-out | sure
+file-archive | sure
+file-audio | weird alignment could be better
+file-certificate | did you even try
+file-code | invisible
+file-config | idk bro very pixelated. why are these not smooth
+file-database | sure. but hard to see at small size
+file-disk-image | i guess
+file-document, file-ebook, file-executable, file-font, file-image, file-markup, file-model, file-page, file-pdf, file-presentation, file-spreadsheet, file-text, file-torrent, file-unknown, file-video | ugly (meh ugly for file-document)
+folder-desktop (colour) | hard to tell this is a desktop tbh.ugly
+folder-documents (colour) | awful icon for documents
+folder-downloads, folder-home | ugly
+folder-music (colour) | fine but the note is too thick
+folder-pictures (colour) | hardly looks like a picture
+folder-templates (colour) | again. ahrd to tell that this is templates
+folder-videos (colour) | sure but weird to cut out a chunk like that for the video bg
+folder (colour) | good
+trash-empty, trash-full | ugly
+bingux-files | amazing
+bingux-settings | to be honest i'd prefer this to be the traditional cog rather than this
+bingux-taxonomy | good but you could utilise space better
+bingux-mark | i guess but i can see a the line of the B extender sticking out the bottom
+# Every icon the shell takes from the Adwaita theme: "no more adwaita" (replace each with a Bingux icon)
+accessories-text-editor, action-unavailable, battery-good, dialog-question, document-open-recent, document-save, document-save-as, go-down, media-record, media-seek-backward, media-seek-forward, media-skip-backward, media-skip-forward, microphone-sensitivity-high, microphone-sensitivity-muted, network-transmit-receive, network-workgroup, process-stop, screen-shared, screencast-stop, system-log-out, system-reboot, system-run, system-switch-user, utilities-terminal, view-pin, weather-clear
