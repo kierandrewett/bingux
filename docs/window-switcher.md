@@ -38,12 +38,21 @@ open, the compositor raises the existing top bar and dock buffers above
 fullscreen windows. It restores their order when the reveal ends or the search
 process disconnects.
 This also works when the desktop UI is paused. The panels sit above search so
-pointer input reaches them. Repeated Super presses toggle search while keeping
-the top bar and dock revealed and clickable. Closing search with Escape or an
-explicit search-close command ends the reveal. Re-entering fullscreen or clicking
-back into the fullscreen window after hiding search slides the top bar upward
-and dock downward before restoring their normal stacking. Super can interrupt
-the exit and reveal them again. The compositor suppresses the reveal on the lock screen.
+pointer input reaches them. Repeated Super presses, and a click outside the
+search card, hide search and keep the top bar and dock revealed and clickable.
+The reveal ends when you:
+
+- Close search with Escape or an explicit search-close command, or press Alt+Tab.
+- Press a mouse button on the fullscreen window. A transparent surface covers
+  the screen below the panels while they are revealed over a fullscreen window,
+  so this press only ends the reveal and does not reach the window. The next
+  press does.
+- Activate another window, for example from the dock.
+- Put the active window into fullscreen.
+
+The panels then drop back under the fullscreen window at once, without
+sliding. Super reveals them again. The compositor suppresses the reveal on the
+lock screen.
 
 - Alt+Tab selects the previous window. Further Tab presses move forward.
 - Alt+Shift+Tab moves backwards. Super+Tab and Super+Shift+Tab also work.

@@ -21,7 +21,7 @@ Scope {
                 visible: search.visible,
                 acceptingKeyboard: search.acceptingKeyboard,
                 revealCompanions: search.chromeRevealed,
-                surface: search.visible ? "bingux-search" : "bingux-search-chrome",
+                surface: "bingux-search",
                 companionsAbove: true,
                 companions: ["bingux-top-bar", "bingux-dock", "bingux-panel-outline"]
             })
@@ -35,6 +35,18 @@ Scope {
             else if (command.action === "toggle")
                 search.toggleSearch();
         }
+    }
+    // Ordering for the surface below. Gnoblin ignores a declaration whose
+    // `visible` is false, so it cannot share the search session's state,
+    // which is not visible while search is hidden.
+    UiSession {
+        sessionName: "search-chrome"
+        state: ({
+                visible: search.fullscreenUnderReveal,
+                surface: "bingux-search-chrome",
+                companionsAbove: true,
+                companions: ["bingux-top-bar", "bingux-dock", "bingux-panel-outline"]
+            })
     }
     QtObject {
         id: dockProxy
@@ -69,19 +81,27 @@ Scope {
             });
         }
     }
-    // Keep a non-interactive overlay anchor while Super hides only search.
-    // The compositor raises the real panel buffers relative to this surface.
+    // Over a fullscreen window, the panels stay revealed after Super hides
+    // only search. This surface covers the screen below them (see the session
+    // above) and the first press on it ends the reveal, so the panels drop
+    // back under the window. That press does not reach the window. The surface
+    // exists only while it should take input: resizing a masked surface after
+    // it mapped left the press undelivered in testing.
     PanelWindow {
         screen: search.screen
-        visible: search.chromeRevealed && !search.visible
-        implicitWidth: 1
-        implicitHeight: 1
+        visible: search.fullscreenUnderReveal
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
-        mask: Region {}
         anchors {
             top: true
+            bottom: true
             left: true
+            right: true
+        }
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.AllButtons
+            onPressed: search.endChromeReveal()
         }
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "bingux-search-chrome"

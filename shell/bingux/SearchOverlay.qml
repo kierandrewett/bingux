@@ -296,6 +296,39 @@ PanelWindow {
     }
 
     property bool chromeRevealed: false
+    // Hiding search with Super or an outside click keeps the revealed top bar
+    // and dock clickable. That reveal ends here, without Escape or Alt+Tab,
+    // once the user goes back to a window: another window becomes active, the
+    // active one enters fullscreen, or a press lands on the fullscreen window
+    // (see the dismissal surface in SearchHost).
+    function endChromeReveal() {
+        if (chromeRevealed && !visible)
+            chromeRevealed = false;
+    }
+    // A layer surface can clear the compositor's active toplevel for a moment,
+    // so only a different window counts as the user going somewhere else. Not
+    // a binding: it must still hold the previous window when the signal runs.
+    property var lastActiveWindow: null
+    Component.onCompleted: lastActiveWindow = ToplevelManager.activeToplevel
+    Connections {
+        target: ToplevelManager
+        function onActiveToplevelChanged() {
+            const window = ToplevelManager.activeToplevel;
+            if (!window || window === root.lastActiveWindow)
+                return;
+            root.lastActiveWindow = window;
+            root.endChromeReveal();
+        }
+    }
+    Connections {
+        target: root.lastActiveWindow
+        function onFullscreenChanged() {
+            if (root.lastActiveWindow.fullscreen)
+                root.endChromeReveal();
+        }
+    }
+    // The fullscreen window the revealed panels sit above on this screen.
+    readonly property bool fullscreenUnderReveal: chromeRevealed && !visible && !!lastActiveWindow && lastActiveWindow.fullscreen && !lastActiveWindow.minimized && (lastActiveWindow.screens.length === 0 || lastActiveWindow.screens.includes(screen))
     // SearchShell keeps the revealed top bar and dock as the next interaction
     // layer. Other embedded previews retain their normal outside-click close.
     property bool keepChromeOnOutsideClick: false
@@ -308,7 +341,6 @@ PanelWindow {
 
     function showSearch() {
         PopupTransitions.refresh("bingux-search");
-        chromeRevealed = true;
         browserFocus.cancel();
         webFocusOnClose = "";
         launchEffect.cancel();
@@ -327,6 +359,9 @@ PanelWindow {
             searchInput.text = "";
             visible = true;
         }
+        // After `visible`: with search still hidden, the reveal would briefly
+        // look like one that outlives search, and map the dismissal surface.
+        chromeRevealed = true;
         focusInput.restart();
         Qt.callLater(root.syncKeyboardHandoff);
     }
