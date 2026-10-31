@@ -18,7 +18,6 @@ use bingux_ui::style::*;
 use super::{Fx, Loaded};
 use crate::system::background_then;
 use crate::ui::files::{ChooserRequest, choose};
-use crate::ui::{Group, Icon, hstack, row, switch_row};
 
 /// The presets menu of the top bar: the presets of the direction to pick from,
 /// and the actions on the one in use.
@@ -53,9 +52,7 @@ pub(super) fn menu(fx: Fx, data: &Loaded) -> Element {
         let current = current.clone();
         move |_| confirm_delete(fx, current.clone())
     }));
-    menu_button(format!("Presets: {current}"), items)
-        .icon(Icon::ViewMore)
-        .into()
+    menu_button(format!("Preset: {current}"), items).into()
 }
 
 /// Make `name` the preset in use and play it.

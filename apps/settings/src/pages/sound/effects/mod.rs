@@ -320,7 +320,7 @@ pub fn open(window: Window) {
     window.open(
         popup("Effects", body::EffectsBody)
             .size(1040.0, 760.0)
-            .flags(PopupFlags::CANCEL | PopupFlags::GRABBER | PopupFlags::FILL),
+            .flags(PopupFlags::OK | PopupFlags::GRABBER | PopupFlags::FILL),
     );
 }
 

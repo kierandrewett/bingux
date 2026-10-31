@@ -13,8 +13,9 @@ use bingux_ui::style::*;
 use freya::prelude::*;
 
 use super::Fx;
+use super::page::level_row;
 use super::page::{control_row, set_control};
-use crate::ui::{Group, action_button, caption, hstack, level_row, row, switch_row, use_tokens};
+use crate::ui::{Group, action_button, caption, hstack, row, switch_row, use_tokens};
 
 /// The gain at the top and bottom of a fader, in dB.
 const RANGE_DB: f64 = 24.0;

@@ -3,12 +3,13 @@
 //! effect that is selected.
 
 use bingux_audio_effects::Direction;
-use bingux_ui::prelude::{master_detail, segmented};
+use bingux_ui::prelude::{
+    PopupAction, PopupActions, WindowLike, master_detail, segmented, use_popup_actions,
+};
 use bingux_ui::style::*;
 use freya::prelude::*;
 
 use super::{cached, page, presets, stack, use_fx};
-use crate::pages::loading::veiled;
 use crate::ui::{caption, hstack, switch, use_tokens};
 
 #[derive(PartialEq)]
@@ -17,6 +18,14 @@ pub(super) struct EffectsBody;
 impl Component for EffectsBody {
     fn render(&self) -> impl IntoElement {
         let fx = use_fx(Direction::Output);
+        let window = fx.window;
+        use_popup_actions(PopupActions {
+            primary: Some(PopupAction {
+                label: "Done".to_string(),
+                enabled: true,
+                on_press: EventHandler::new(move |()| window.close()),
+            }),
+        });
         let tokens = use_tokens();
         let data = fx.data.read().clone();
         let runtime = fx.runtime.read().clone();
@@ -43,19 +52,25 @@ impl Component for EffectsBody {
         .tabs();
 
         let bar = rect()
-            .tw(&tokens, &[w_full(), flex_row(), items(Align::Center), gap(S3), px(S4), py(S3)])
+            .tw(
+                &tokens,
+                &[
+                    w_full(),
+                    flex_row(),
+                    items(Align::Center),
+                    justify(Align::Between),
+                    gap(S3),
+                    px(S4),
+                    py(S3),
+                ],
+            )
             .child(
                 hstack(S2)
                     .tw_layout(&[items(Align::Center)])
                     .child(switch(enabled, move |on: bool| fx.set_enabled(on)))
                     .child(caption("Effects")),
             )
-            .child(
-                rect()
-                    .width(Size::flex(1.0))
-                    .tw(&tokens, &[flex_row(), justify(Align::Center)])
-                    .child(tabs),
-            )
+            .child(tabs)
             .child(presets::menu(fx, &data));
 
         let selected = fx.selected_id(&data);
@@ -92,6 +107,6 @@ impl Component for EffectsBody {
                     .height(Size::flex(1.0))
                     .child(split),
             );
-        veiled(content, !data.ready)
+        content
     }
 }

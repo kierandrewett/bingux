@@ -96,3 +96,7 @@ impl Component for MasterDetail {
             )
     }
 }
+
+#[cfg(all(test, feature = "testing"))]
+#[path = "master_detail_tests.rs"]
+mod tests;

@@ -11,14 +11,14 @@
 use bingux_audio_effects::catalog::{Control, PluginInfo};
 use bingux_audio_effects::effects::{self, Effect};
 use bingux_audio_effects::{PluginSlot, Unit};
-use bingux_ui::prelude::dropdown;
+use bingux_ui::prelude::{dropdown, slider};
 use bingux_ui::style::*;
 use freya::prelude::*;
 
 use super::{Fx, Loaded, Runtime, eq_page};
 use crate::ui::files::{ChooserRequest, choose};
 use crate::ui::{
-    Group, Status, action_button, caption, hstack, level_row, row, status, switch_row, use_tokens,
+    Group, Status, action_button, caption, hstack, row, status, switch_row, use_tokens,
 };
 
 #[derive(PartialEq)]
@@ -395,4 +395,56 @@ fn convolver_row(fx: Fx, slot: &PluginSlot) -> Element {
             );
         }))
         .into()
+}
+
+/// A row with a slider and its value on the row's line: the title at the left,
+/// the track and the readout at the right, at one width in every card.
+pub(super) struct SliderLine {
+    title: String,
+    value: f64,
+    on_moved: EventHandler<f64>,
+    text: String,
+}
+
+/// A slider row over 0 to 100 percent.
+pub(super) fn level_row(
+    title: impl Into<String>,
+    value: f64,
+    on_moved: impl Into<EventHandler<f64>>,
+) -> SliderLine {
+    SliderLine {
+        title: title.into(),
+        value,
+        on_moved: on_moved.into(),
+        text: String::new(),
+    }
+}
+
+impl SliderLine {
+    pub fn value_text(mut self, text: impl Into<String>) -> Self {
+        self.text = text.into();
+        self
+    }
+}
+
+impl From<SliderLine> for Element {
+    fn from(line: SliderLine) -> Element {
+        let on_moved = line.on_moved;
+        row(line.title.clone())
+            .trailing(
+                hstack(S3)
+                    .tw_layout(&[items(Align::Center)])
+                    .child(
+                        slider(line.value, move |value: f64| on_moved.call(value))
+                            .width(Dim::Field)
+                            .label(line.title),
+                    )
+                    .child(
+                        rect()
+                            .tw_layout(&[w(Dim::SliderValue), flex_row(), justify(Align::End)])
+                            .child(caption(line.text)),
+                    ),
+            )
+            .into()
+    }
 }
