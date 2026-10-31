@@ -251,10 +251,7 @@ impl Component for WallpaperPicker {
             }
             tiles.extend((0..PLACEHOLDER_TILES).map(|_| placeholder_tile(&tokens)));
             rows.extend(tile_rows(&tokens, tiles, TILE_HEIGHT));
-            return Element::from(
-                Group::titled("Wallpaper")
-                    .rows(rows),
-            );
+            return Element::from(Group::titled("Wallpaper").rows(rows));
         };
         let all = with_current(loaded, &current);
         let shown = matching(&all, &source_key, &query_text);
@@ -279,10 +276,7 @@ impl Component for WallpaperPicker {
             rows.push(status(Status::Empty("Nothing matches.".to_string())).into());
         }
 
-        Element::from(
-            Group::titled("Wallpaper")
-                .rows(rows),
-        )
+        Element::from(Group::titled("Wallpaper").rows(rows))
     }
 }
 

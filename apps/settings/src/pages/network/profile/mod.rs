@@ -169,11 +169,7 @@ impl Component for PasswordRow {
         let overlays = crate::ui::use_overlays();
         let shown = use_state(|| false);
         if self.password.is_empty() {
-            return Element::from(
-                row("Password")
-                    .subtitle("Not saved")
-                    .subtitle_one_line(),
-            );
+            return Element::from(row("Password").subtitle("Not saved").subtitle_one_line());
         }
         Element::from(super::wifi::secret_row(
             "Password",
@@ -374,19 +370,18 @@ fn advanced_page(page: &Page, extra: Option<Element>) -> Element {
 
     let priority = {
         let page = page.clone();
-        row("Priority")
-            .trailing(
-                stepper(
-                    saved.int("connection.autoconnect-priority").unwrap_or(0),
-                    move |value: i64| {
-                        page.apply_now(Changes::one(
-                            "connection.autoconnect-priority",
-                            value.to_string(),
-                        ))
-                    },
-                )
-                .range(-999, 999),
+        row("Priority").trailing(
+            stepper(
+                saved.int("connection.autoconnect-priority").unwrap_or(0),
+                move |value: i64| {
+                    page.apply_now(Changes::one(
+                        "connection.autoconnect-priority",
+                        value.to_string(),
+                    ))
+                },
             )
+            .range(-999, 999),
+        )
     };
     let everyone = {
         let page = page.clone();

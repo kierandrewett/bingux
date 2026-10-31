@@ -13,8 +13,8 @@ use super::model::NetCtx;
 use crate::routes;
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
-    Group, PageHead, Status, choice_row, form_field, page_column, pending_bar, row, skeleton_rows, status,
-    switch_row, use_overlays,
+    Group, PageHead, Status, choice_row, form_field, page_column, pending_bar, row, skeleton_rows,
+    status, switch_row, use_overlays,
 };
 use bingux_ui::controls::form::validate;
 

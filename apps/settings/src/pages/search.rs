@@ -15,10 +15,10 @@ use crate::system::{
     self, CommandError, CommandResult, background, background_then, optimistic_then,
 };
 use crate::ui::{
-    CANCEL_ID, Group, Overlays, PageHead, PopupAction, PopupActions, ResponseKind, Row, Status, Window,
-    caption, choice_row, dialog, form_row, icon_button, page_column, popup, popup_column,
-    primary_button, row, slider_row, status, switch, switch_row, text_field,
-    use_overlays, use_popup_actions, use_tokens, use_window,
+    CANCEL_ID, Group, Overlays, PageHead, PopupAction, PopupActions, ResponseKind, Row, Status,
+    Window, caption, choice_row, dialog, form_row, icon_button, page_column, popup, popup_column,
+    primary_button, row, slider_row, status, switch, switch_row, text_field, use_overlays,
+    use_popup_actions, use_tokens, use_window,
 };
 use bingux_ui::shell::menu_item;
 use bingux_ui::style::*;
@@ -1238,36 +1238,35 @@ fn assistant_group(data: &Model, ctx: Ctx) -> Group {
         ("pi".to_string(), "Pi".to_string()),
         ("claude".to_string(), "Claude".to_string()),
     ];
-    let mut group = Group::titled("Assistant")
-        .row(choice_row(
-            "Assistant program",
-            options,
-            &selected,
-            move |harness: String| {
-                if harness == "none" {
-                    commit(ctx, vec!["unset".into(), "search.ai".into()]);
-                    return;
-                }
-                // Keep the model when switching; an executable only fits its own harness.
-                let next = match &current {
-                    Some(ai) if ai.harness == harness => Ai {
-                        harness: harness.clone(),
-                        ..ai.clone()
-                    },
-                    Some(ai) => Ai {
-                        harness: harness.clone(),
-                        model: ai.model.clone(),
-                        executable: None,
-                    },
-                    None => Ai {
-                        harness: harness.clone(),
-                        model: String::new(),
-                        executable: None,
-                    },
-                };
-                commit(ctx, set_args("search.ai", ai_toml(&next)));
-            },
-        ));
+    let mut group = Group::titled("Assistant").row(choice_row(
+        "Assistant program",
+        options,
+        &selected,
+        move |harness: String| {
+            if harness == "none" {
+                commit(ctx, vec!["unset".into(), "search.ai".into()]);
+                return;
+            }
+            // Keep the model when switching; an executable only fits its own harness.
+            let next = match &current {
+                Some(ai) if ai.harness == harness => Ai {
+                    harness: harness.clone(),
+                    ..ai.clone()
+                },
+                Some(ai) => Ai {
+                    harness: harness.clone(),
+                    model: ai.model.clone(),
+                    executable: None,
+                },
+                None => Ai {
+                    harness: harness.clone(),
+                    model: String::new(),
+                    executable: None,
+                },
+            };
+            commit(ctx, set_args("search.ai", ai_toml(&next)));
+        },
+    ));
     if let Some(ai) = data.ai.clone() {
         group = group.row(AssistantModel { ai, ctx });
     }

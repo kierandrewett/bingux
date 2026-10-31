@@ -26,8 +26,9 @@ use crate::pages::loading::veiled;
 use crate::routes;
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
-    CANCEL_ID, Group, PageHead, ResponseKind, SpinnerSize, Status, Tokens, action_button, action_strip,
-    caption, dialog, page_column, row, spinner, status, strip_action, use_page_busy, use_tokens,
+    CANCEL_ID, Group, PageHead, ResponseKind, SpinnerSize, Status, Tokens, action_button,
+    action_strip, caption, dialog, page_column, row, spinner, status, strip_action, use_page_busy,
+    use_tokens,
 };
 use bingux_ui::layout::hstack;
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
@@ -507,7 +508,9 @@ fn network_menu(ui: Ui, model: &Model, network: &Network) -> Vec<MenuItem> {
     let key = profile.map_or_else(|| network.ssid.clone(), |saved| saved.name.clone());
     items.push(
         menu_item("Open", move |_| {
-            ui.ctx.router.open(routes::wifi_network(&key.clone(), false))
+            ui.ctx
+                .router
+                .open(routes::wifi_network(&key.clone(), false))
         })
         .icon(Icon::PreferencesSystem),
     );
@@ -614,7 +617,9 @@ fn connected_block(ui: Ui, model: &Model) -> Option<Element> {
         .subtitle(link_line(network))
         .navigates()
         .on_press(move |_| {
-            ui.ctx.router.open(routes::wifi_network(&key.clone(), false))
+            ui.ctx
+                .router
+                .open(routes::wifi_network(&key.clone(), false))
         });
     hero = match network {
         Some(network) => {
@@ -674,7 +679,9 @@ fn network_rows(ui: Ui, data: &Data, tokens: Tokens) -> Vec<Element> {
                 .context_menu(network_menu(ui, &data.model, network));
             Element::from(if profile.is_some() {
                 line.navigates().on_press(move |_| {
-                    ui.ctx.router.open(routes::wifi_network(&key.clone(), false))
+                    ui.ctx
+                        .router
+                        .open(routes::wifi_network(&key.clone(), false))
                 })
             } else {
                 line.on_press(move |_| ui.join(&target))
@@ -869,9 +876,7 @@ impl Component for SavedNetworksPage {
                     )
                     .subtitle(parts.join(" · "))
                     .navigates()
-                    .on_press(move |_| {
-                        ui.ctx.router.open(routes::wifi_network(&key.clone(), true))
-                    })
+                    .on_press(move |_| ui.ctx.router.open(routes::wifi_network(&key.clone(), true)))
                     .context_menu(menu),
             )
         });

@@ -23,7 +23,6 @@ pub const INDEX: &str = "settings";
 /// The index of installed applications.
 pub const APPS_INDEX: &str = "settings-applications";
 
-
 /// Page, visible title, and extra words to match.
 const SETTINGS: &[(PageId, &str, &str)] = &[
     (PageId::Network, "Wi-Fi", "wireless internet on off radio"),
@@ -747,7 +746,15 @@ impl Searchable for SettingsIndex {
             .searchable("keywords", 5.0)
             .searchable("breadcrumb", 3.0)
             .filterable(["page", "category", "kind"])
-            .displayed(["title", "breadcrumb", "icon", "uri", "page", "category", "kind"])
+            .displayed([
+                "title",
+                "breadcrumb",
+                "icon",
+                "uri",
+                "page",
+                "category",
+                "kind",
+            ])
             .synonym_group(&["colour", "color"])
             .synonym_group(&["wallpaper", "background"])
             .synonym_group(&["display", "monitor", "screen"])
@@ -787,7 +794,15 @@ impl Searchable for ApplicationsIndex {
             .searchable("keywords", 5.0)
             .searchable("breadcrumb", 3.0)
             .filterable(["page", "kind"])
-            .displayed(["title", "breadcrumb", "icon", "uri", "page", "category", "kind"])
+            .displayed([
+                "title",
+                "breadcrumb",
+                "icon",
+                "uri",
+                "page",
+                "category",
+                "kind",
+            ])
     }
 
     fn documents(&self) -> Box<dyn Iterator<Item = Document> + Send + '_> {
@@ -826,7 +841,10 @@ pub fn register() {
     if DONE.swap(true, Ordering::AcqRel) {
         return;
     }
-    for result in [search::register(SettingsIndex), search::register(ApplicationsIndex)] {
+    for result in [
+        search::register(SettingsIndex),
+        search::register(ApplicationsIndex),
+    ] {
         if let Err(error) = result {
             eprintln!("bingux-settings: search index did not register: {error}");
         }
@@ -852,7 +870,12 @@ mod tests {
         found
             .hits
             .iter()
-            .map(|h| (h.title().unwrap_or_default().to_string(), h.uri().unwrap_or_default().to_string()))
+            .map(|h| {
+                (
+                    h.title().unwrap_or_default().to_string(),
+                    h.uri().unwrap_or_default().to_string(),
+                )
+            })
             .collect()
     }
 
@@ -864,7 +887,8 @@ mod tests {
         assert!(docs.len() > 150, "{} documents", docs.len());
         for doc in docs {
             let uri = doc.fields["uri"].as_str().expect("uri");
-            let location = Location::parse(uri).unwrap_or_else(|| panic!("{uri} is not an address"));
+            let location =
+                Location::parse(uri).unwrap_or_else(|| panic!("{uri} is not an address"));
             assert_eq!(location.scheme(), SCHEME, "{uri}");
             assert!(
                 table.resolve(&location).is_some(),
@@ -882,7 +906,10 @@ mod tests {
         ids.sort_unstable();
         ids.dedup();
         assert_eq!(ids.len(), total, "two settings share an id");
-        assert_eq!(slug("Use this connection only for resources on its network"), "use-this-connection-only-for-resources-on-its-network");
+        assert_eq!(
+            slug("Use this connection only for resources on its network"),
+            "use-this-connection-only-for-resources-on-its-network"
+        );
         assert_eq!(slug("Wi-Fi"), "wi-fi");
     }
 
@@ -897,19 +924,32 @@ mod tests {
         assert_eq!(top(&index, "prxoy")[0].0, "Proxy");
         assert_eq!(top(&index, "wifi")[0].0, "Wi-Fi");
         assert_eq!(top(&index, "time zo")[0].0, "Time zone");
-        assert_eq!(top(&index, "accent colour")[0].1, "bingux-settings://background#accent-colour");
+        assert_eq!(
+            top(&index, "accent colour")[0].1,
+            "bingux-settings://background#accent-colour"
+        );
         // The American spelling finds the British one through a synonym.
         assert!(top(&index, "color").iter().any(|h| h.0 == "Accent colour"));
         // A synonym.
-        assert!(top(&index, "monitor").iter().any(|h| h.1.starts_with("bingux-settings://display")));
+        assert!(
+            top(&index, "monitor")
+                .iter()
+                .any(|h| h.1.starts_with("bingux-settings://display"))
+        );
         // A page name finds the page before its settings.
         assert_eq!(top(&index, "keyboard")[0].0, "Keyboard");
     }
 
     #[test]
     fn the_index_is_external_and_private_data_is_not_in_it() {
-        assert!(SettingsIndex.schema().external, "Spotlight may search the settings");
-        assert!(!ApplicationsIndex.schema().external, "the application list is the person's");
+        assert!(
+            SettingsIndex.schema().external,
+            "Spotlight may search the settings"
+        );
+        assert!(
+            !ApplicationsIndex.schema().external,
+            "the application list is the person's"
+        );
         for doc in SettingsIndex.documents() {
             assert_ne!(doc.external, Some(true));
         }

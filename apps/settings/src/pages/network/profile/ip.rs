@@ -11,8 +11,8 @@ use super::draft::{Draft, ListLook, Values, list_rows, remove_slot, use_draft};
 use super::store;
 use super::{Page, options};
 use crate::pages::connection_editor::{
-    Changes, IP6_PRIVACY_CHOICES, ProfileData, diff, ip_methods, join_list, route4,
-    route6, shown, yes_no,
+    Changes, IP6_PRIVACY_CHOICES, ProfileData, diff, ip_methods, join_list, route4, route6, shown,
+    yes_no,
 };
 use crate::ui::{Group, choice_row, page_column, switch_row};
 
@@ -276,42 +276,36 @@ impl Component for IpBody {
         let mut behaviour = Group::new(None::<String>);
         if visible.auto_routes {
             let page = page.clone();
-            behaviour = behaviour.row(
-                switch_row(
-                    "Use automatic routes",
-                    !page.saved.yes(&format!("{prefix}.ignore-auto-routes")),
-                    move |on: bool| {
-                        page.apply_now(Changes::one(
-                            &format!("{prefix}.ignore-auto-routes"),
-                            yes_no(!on),
-                        ))
-                    },
-                ),
-            );
+            behaviour = behaviour.row(switch_row(
+                "Use automatic routes",
+                !page.saved.yes(&format!("{prefix}.ignore-auto-routes")),
+                move |on: bool| {
+                    page.apply_now(Changes::one(
+                        &format!("{prefix}.ignore-auto-routes"),
+                        yes_no(!on),
+                    ))
+                },
+            ));
         }
         if visible.never_default {
             let page = page.clone();
-            behaviour = behaviour.row(
-                switch_row(
-                    "Use only for resources on this network",
-                    page.saved.yes(&format!("{prefix}.never-default")),
-                    move |on: bool| {
-                        page.apply_now(Changes::one(&format!("{prefix}.never-default"), yes_no(on)))
-                    },
-                ),
-            );
+            behaviour = behaviour.row(switch_row(
+                "Use only for resources on this network",
+                page.saved.yes(&format!("{prefix}.never-default")),
+                move |on: bool| {
+                    page.apply_now(Changes::one(&format!("{prefix}.never-default"), yes_no(on)))
+                },
+            ));
         }
         if visible.privacy {
             let page = page.clone();
             let selected = page.saved.get("ipv6.ip6-privacy").to_string();
-            behaviour = behaviour.row(
-                choice_row(
-                    "Privacy extensions",
-                    options(IP6_PRIVACY_CHOICES),
-                    &selected,
-                    move |value: String| page.apply_now(Changes::one("ipv6.ip6-privacy", value)),
-                ),
-            );
+            behaviour = behaviour.row(choice_row(
+                "Privacy extensions",
+                options(IP6_PRIVACY_CHOICES),
+                &selected,
+                move |value: String| page.apply_now(Changes::one("ipv6.ip6-privacy", value)),
+            ));
         }
         if visible.auto_routes || visible.never_default || visible.privacy {
             column = column.child(behaviour);

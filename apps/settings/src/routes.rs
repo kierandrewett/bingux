@@ -217,7 +217,6 @@ pub fn sound_applications() -> Target {
     PageId::Sound.location().join("applications").into()
 }
 
-
 /// One input source, by its value in the configuration file, with its name
 /// for the header.
 pub fn input_source(source: &keyboard::sources::Source, name: &str) -> Target {
@@ -267,23 +266,43 @@ pub fn table() -> RouteTable {
         .page(|_| applications::DefaultAppsPage.into());
     for (kind, known) in applications::KINDS.iter().enumerate() {
         table = table
-            .route(&format!("applications/default/{}", known.title.to_ascii_lowercase()))
+            .route(&format!(
+                "applications/default/{}",
+                known.title.to_ascii_lowercase()
+            ))
             .title(known.title)
             .page(move |_| applications::DefaultKindPage { kind }.into());
     }
     table = table
         .route("applications/:id")
-        .title_with(|p| crate::apps::cached_name(p.str("id")).unwrap_or_else(|| p.str("id").to_string()))
-        .page(|p| applications::AppPage { id: p.str("id").to_string() }.into());
+        .title_with(|p| {
+            crate::apps::cached_name(p.str("id")).unwrap_or_else(|| p.str("id").to_string())
+        })
+        .page(|p| {
+            applications::AppPage {
+                id: p.str("id").to_string(),
+            }
+            .into()
+        });
 
     // Bluetooth, Users, Date and time, Appearance, Displays, Keyboard, Sound.
     table = table
         .route("bluetooth/:mac")
         .title_param("mac")
-        .page(|p| bluetooth::BluetoothDevicePage { mac: p.str("mac").to_string() }.into())
+        .page(|p| {
+            bluetooth::BluetoothDevicePage {
+                mac: p.str("mac").to_string(),
+            }
+            .into()
+        })
         .route("users/:path")
         .title_param("path")
-        .page(|p| users::AccountPage { path: p.str("path").to_string() }.into())
+        .page(|p| {
+            users::AccountPage {
+                path: p.str("path").to_string(),
+            }
+            .into()
+        })
         .route("datetime/timezone")
         .title("Time zone")
         .page(|_| datetime::TimeZonePage.into())
@@ -292,7 +311,12 @@ pub fn table() -> RouteTable {
         .page(|_| appearance::FontPage.into())
         .route("display/:index:int")
         .title_with(|p| format!("Display {}", p.int("index").unwrap_or(0) + 1))
-        .page(|p| displays::DisplayPage { index: p.int("index").unwrap_or(0) as usize }.into())
+        .page(|p| {
+            displays::DisplayPage {
+                index: p.int("index").unwrap_or(0) as usize,
+            }
+            .into()
+        })
         .route("keyboard/shortcuts")
         .title("Shortcuts")
         .page(|_| keyboard::ShortcutsPage.into())
@@ -346,12 +370,23 @@ fn network_routes(table: RouteTable) -> RouteTable {
         .page(|p| wifi_network_page(p, true))
         .route("network/ethernet/:device")
         .title_with(|p| {
-            network::cached_ethernet_title(p.str("device")).unwrap_or_else(|| p.str("device").to_string())
+            network::cached_ethernet_title(p.str("device"))
+                .unwrap_or_else(|| p.str("device").to_string())
         })
-        .page(|p| network::ethernet::EthernetPage { device: p.str("device").to_string() }.into())
+        .page(|p| {
+            network::ethernet::EthernetPage {
+                device: p.str("device").to_string(),
+            }
+            .into()
+        })
         .route("network/ethernet/:device/profile")
         .title("Profiles")
-        .page(|p| network::ethernet::ProfilesPage { device: p.str("device").to_string() }.into())
+        .page(|p| {
+            network::ethernet::ProfilesPage {
+                device: p.str("device").to_string(),
+            }
+            .into()
+        })
         .route("network/ethernet/:device/profile/:profile")
         .title_param("profile")
         .page(|p| {
@@ -363,13 +398,23 @@ fn network_routes(table: RouteTable) -> RouteTable {
         })
         .route("network/vpn/:name")
         .title_param("name")
-        .page(|p| network::vpn::VpnPage { name: p.str("name").to_string() }.into())
+        .page(|p| {
+            network::vpn::VpnPage {
+                name: p.str("name").to_string(),
+            }
+            .into()
+        })
         .route("network/add-vpn")
         .title_with(|_| network::add_vpn_title(None))
         .page(|_| network::vpn_add::AddVpnPage { kind: None }.into())
         .route("network/add-vpn/:kind")
         .title_with(|p| network::add_vpn_title(Some(p.str("kind"))))
-        .page(|p| network::vpn_add::AddVpnPage { kind: Some(p.str("kind").to_string()) }.into())
+        .page(|p| {
+            network::vpn_add::AddVpnPage {
+                kind: Some(p.str("kind").to_string()),
+            }
+            .into()
+        })
         .route("network/mobile")
         .title("Mobile network")
         .page(|_| network::mobile::MobilePage.into())
@@ -390,27 +435,48 @@ fn network_routes(table: RouteTable) -> RouteTable {
         .page(|_| network::mobile::ApnPage { name: None }.into())
         .route("network/mobile/advanced/apn/:name")
         .title_param("name")
-        .page(|p| network::mobile::ApnPage { name: Some(p.str("name").to_string()) }.into())
+        .page(|p| {
+            network::mobile::ApnPage {
+                name: Some(p.str("name").to_string()),
+            }
+            .into()
+        })
         .route("network/proxy")
         .title("Proxy")
         .page(|_| network::proxy::ProxyPage.into())
         .route("network/usage")
         .title("Data usage")
-        .page(|_| network::usage::UsagePage { scope: UsageScope::All }.into())
+        .page(|_| {
+            network::usage::UsagePage {
+                scope: UsageScope::All,
+            }
+            .into()
+        })
         .route("network/usage/interface/:name")
         .title_param("name")
         .page(|p| {
-            network::usage::UsagePage { scope: UsageScope::Interface(p.str("name").to_string()) }.into()
+            network::usage::UsagePage {
+                scope: UsageScope::Interface(p.str("name").to_string()),
+            }
+            .into()
         })
         .route("network/usage/connection/:name")
         .title_param("name")
         .page(|p| {
-            network::usage::UsagePage { scope: UsageScope::Connection(p.str("name").to_string()) }.into()
+            network::usage::UsagePage {
+                scope: UsageScope::Connection(p.str("name").to_string()),
+            }
+            .into()
         })
         .route("network/details/:connection")
         .title_param("connection")
         .ephemeral()
-        .page(|p| network::details::DetailsPage { connection: p.str("connection").to_string() }.into());
+        .page(|p| {
+            network::details::DetailsPage {
+                connection: p.str("connection").to_string(),
+            }
+            .into()
+        });
 
     // The pages below each kind of connection: Advanced and its editors, the
     // connection's data usage, and a VPN's tunnel and peers.
@@ -422,12 +488,16 @@ fn network_routes(table: RouteTable) -> RouteTable {
             profile: String::new(),
             in_use: true,
         }),
-        ("network/ethernet/:device/profile/:profile", |p| Owner::Wired {
-            device: p.str("device").to_string(),
-            profile: p.str("profile").to_string(),
-            in_use: false,
+        ("network/ethernet/:device/profile/:profile", |p| {
+            Owner::Wired {
+                device: p.str("device").to_string(),
+                profile: p.str("profile").to_string(),
+                in_use: false,
+            }
         }),
-        ("network/vpn/:name", |p| Owner::Vpn { name: p.str("name").to_string() }),
+        ("network/vpn/:name", |p| Owner::Vpn {
+            name: p.str("name").to_string(),
+        }),
     ];
     for (base, owner) in owners {
         for (suffix, section) in SECTIONS {
@@ -441,12 +511,21 @@ fn network_routes(table: RouteTable) -> RouteTable {
     table
         .route("network/vpn/:name/tunnel")
         .title("Tunnel")
-        .page(|p| section_page(Owner::Vpn { name: p.str("name").to_string() }, Section::Tunnel))
+        .page(|p| {
+            section_page(
+                Owner::Vpn {
+                    name: p.str("name").to_string(),
+                },
+                Section::Tunnel,
+            )
+        })
         .route("network/vpn/:name/tunnel/peer/:index:int")
         .title_with(|p| format!("Peer {}", p.int("index").unwrap_or(0) + 1))
         .page(|p| {
             section_page(
-                Owner::Vpn { name: p.str("name").to_string() },
+                Owner::Vpn {
+                    name: p.str("name").to_string(),
+                },
                 Section::Peer(p.int("index").unwrap_or(0) as usize),
             )
         })
@@ -509,27 +588,38 @@ pub fn legacy(location: &Location) -> Location {
     let segments: Vec<&str> = location.segments().iter().map(String::as_str).collect();
     let under_network: Option<Vec<&str>> = match segments.as_slice() {
         ["network", ..] => Some(segments.clone()),
-        ["wifi" | "wi-fi", rest @ ..] => Some(["network", "wifi"].into_iter().chain(rest.iter().copied()).collect()),
+        ["wifi" | "wi-fi", rest @ ..] => Some(
+            ["network", "wifi"]
+                .into_iter()
+                .chain(rest.iter().copied())
+                .collect(),
+        ),
         ["wired" | "ethernet" | "vpn", "vpn", name] => Some(vec!["network", "vpn", name]),
         ["wired" | "ethernet", device] => Some(vec!["network", "ethernet", device]),
         ["vpn", name] => Some(vec!["network", "vpn", name]),
         ["wired" | "ethernet" | "vpn"] => Some(vec!["network"]),
-        ["mobile" | "wwan" | "cellular", rest @ ..] => {
-            Some(["network", "mobile"].into_iter().chain(rest.iter().copied()).collect())
-        }
+        ["mobile" | "wwan" | "cellular", rest @ ..] => Some(
+            ["network", "mobile"]
+                .into_iter()
+                .chain(rest.iter().copied())
+                .collect(),
+        ),
         ["proxy"] => Some(vec!["network", "proxy"]),
-        ["usage" | "data-usage", rest @ ..] => {
-            Some(["network", "usage"].into_iter().chain(rest.iter().copied()).collect())
-        }
+        ["usage" | "data-usage", rest @ ..] => Some(
+            ["network", "usage"]
+                .into_iter()
+                .chain(rest.iter().copied())
+                .collect(),
+        ),
         _ => None,
     };
     let mapped: Vec<&str> = match under_network {
         Some(path) => upgrade_network_path(path),
         None => match segments.split_first() {
             Some((first, rest)) => match PageId::from_panel(first) {
-                Some(page) if page.panel_name() != *first => {
-                    std::iter::once(page.panel_name()).chain(rest.iter().copied()).collect()
-                }
+                Some(page) if page.panel_name() != *first => std::iter::once(page.panel_name())
+                    .chain(rest.iter().copied())
+                    .collect(),
                 _ => segments.clone(),
             },
             None => segments.clone(),
@@ -602,13 +692,19 @@ mod tests {
             canonical("network/wifi/network/Home/security"),
             "network/wifi/network/Home/advanced/security"
         );
-        assert_eq!(canonical("network/vpn/Work/dns"), "network/vpn/Work/advanced/dns");
+        assert_eq!(
+            canonical("network/vpn/Work/dns"),
+            "network/vpn/Work/advanced/dns"
+        );
         assert_eq!(
             canonical("wifi/network/Home/proxy"),
             "network/wifi/network/Home/advanced/proxy"
         );
         // Not an editor of a connection: unchanged.
-        assert_eq!(canonical("network/vpn/Work/tunnel"), "network/vpn/Work/tunnel");
+        assert_eq!(
+            canonical("network/vpn/Work/tunnel"),
+            "network/vpn/Work/tunnel"
+        );
         assert_eq!(
             canonical("network/wifi/network/Home/advanced"),
             "network/wifi/network/Home/advanced"
@@ -623,7 +719,10 @@ mod tests {
             canonical("mobile/apn/Vodafone"),
             "network/mobile/advanced/apn/Vodafone"
         );
-        assert_eq!(canonical("cellular/network"), "network/mobile/advanced/network");
+        assert_eq!(
+            canonical("cellular/network"),
+            "network/mobile/advanced/network"
+        );
         assert_eq!(canonical("network/mobile"), "network/mobile");
         assert_eq!(canonical("wired/enp42s0"), "network/ethernet/enp42s0");
     }
@@ -634,7 +733,10 @@ mod tests {
         assert_eq!(canonical("displays/1"), "display/1");
         assert_eq!(canonical("user-accounts"), "users");
         assert_eq!(canonical("apps/default"), "applications/default");
-        assert_eq!(legacy(&location("appearance?x=1#frag")).to_string(), format!("{SCHEME}://background?x=1#frag"));
+        assert_eq!(
+            legacy(&location("appearance?x=1#frag")).to_string(),
+            format!("{SCHEME}://background?x=1#frag")
+        );
     }
 
     /// Every page a person can reach has a route, and every route's page opens
@@ -701,7 +803,10 @@ mod tests {
     #[test]
     fn the_sidebar_lists_the_pages_in_order_and_not_the_account_page() {
         let table = table();
-        let listed: Vec<String> = table.sidebar().map(|(_, route)| route.id().to_string()).collect();
+        let listed: Vec<String> = table
+            .sidebar()
+            .map(|(_, route)| route.id().to_string())
+            .collect();
         let expected: Vec<&str> = PageId::ALL.iter().map(|page| page.panel_name()).collect();
         assert_eq!(listed, expected);
         assert!(table.roots().any(|(_, route)| route.id() == "users"));
@@ -736,21 +841,30 @@ mod tests {
             up("network/ethernet/enp42s0/advanced/ipv4"),
             "network/ethernet/enp42s0/advanced"
         );
-        assert_eq!(up("network/ethernet/enp42s0/advanced"), "network/ethernet/enp42s0");
+        assert_eq!(
+            up("network/ethernet/enp42s0/advanced"),
+            "network/ethernet/enp42s0"
+        );
         assert_eq!(up("network/ethernet/enp42s0"), "network");
         // A profile opens from the list of profiles, which sits below the device.
         assert_eq!(
             up("network/ethernet/enp42s0/profile/Office"),
             "network/ethernet/enp42s0/profile"
         );
-        assert_eq!(up("network/ethernet/enp42s0/profile"), "network/ethernet/enp42s0");
+        assert_eq!(
+            up("network/ethernet/enp42s0/profile"),
+            "network/ethernet/enp42s0"
+        );
         // A Wi-Fi network opens from Wi-Fi, or from Saved networks.
         assert_eq!(up("network/wifi/network/Home"), "network/wifi");
         assert_eq!(up("network/wifi/saved/Home"), "network/wifi/saved");
         assert_eq!(up("network/wifi"), "network");
         // The data usage of one connection returns to the connection.
         assert_eq!(up("network/vpn/Work/usage"), "network/vpn/Work");
-        assert_eq!(up("network/vpn/Work/tunnel/peer/0"), "network/vpn/Work/tunnel");
+        assert_eq!(
+            up("network/vpn/Work/tunnel/peer/0"),
+            "network/vpn/Work/tunnel"
+        );
         assert_eq!(up("network/hotspot"), "network");
         assert_eq!(
             up("network/mobile/advanced/apn/Vodafone"),
@@ -758,7 +872,10 @@ mod tests {
         );
         // An old link goes up to where its new form does.
         assert_eq!(up("network/wifi/hotspot"), "network");
-        assert_eq!(up("wifi/network/Home/ipv4"), "network/wifi/network/Home/advanced");
+        assert_eq!(
+            up("wifi/network/Home/ipv4"),
+            "network/wifi/network/Home/advanced"
+        );
     }
 
     #[test]
@@ -769,21 +886,41 @@ mod tests {
             wifi_network("Home", true),
             profile("enp42s0", "Office"),
             vpn("Work"),
-            section(&Owner::Vpn { name: "Work".into() }, &Section::Peer(2)),
             section(
-                &Owner::Wired { device: "enp42s0".into(), profile: String::new(), in_use: true },
+                &Owner::Vpn {
+                    name: "Work".into(),
+                },
+                &Section::Peer(2),
+            ),
+            section(
+                &Owner::Wired {
+                    device: "enp42s0".into(),
+                    profile: String::new(),
+                    in_use: true,
+                },
                 &Section::Ipv6,
             ),
             mobile_apn(None),
             mobile_apn(Some("Vodafone")),
             usage(&UsageScope::Connection("Home".into())),
             default_app(0, "Web"),
-            input_source(&keyboard::sources::Source { kind: "xkb".into(), id: "us".into() }, "English"),
+            input_source(
+                &keyboard::sources::Source {
+                    kind: "xkb".into(),
+                    id: "us".into(),
+                },
+                "English",
+            ),
             display(1, "Display 2"),
         ] {
             let found = table.resolve(&target.location);
             assert!(found.is_some(), "{} names no page", target.location);
-            assert_eq!(table.canonical(&target.location), target.location, "{}", target.location);
+            assert_eq!(
+                table.canonical(&target.location),
+                target.location,
+                "{}",
+                target.location
+            );
         }
     }
 }

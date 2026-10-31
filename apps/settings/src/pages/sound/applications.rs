@@ -93,7 +93,8 @@ impl Component for ApplicationsPage {
                 let message = e.0.clone();
                 return veiled(
                     page_column().child(PageHead::new()).child(
-                        status(Status::Error(message)).action("Try again", move |_| reload(ctx.model)),
+                        status(Status::Error(message))
+                            .action("Try again", move |_| reload(ctx.model)),
                     ),
                     false,
                 );
@@ -102,7 +103,8 @@ impl Component for ApplicationsPage {
 
         let list = held.read().clone();
         let group = if list.is_empty() {
-            Group::new(None::<String>).row(row("Nothing is playing or recording.").leading(Icon::Sound))
+            Group::new(None::<String>)
+                .row(row("Nothing is playing or recording.").leading(Icon::Sound))
         } else {
             Group::new(None::<String>).rows(
                 list.iter()

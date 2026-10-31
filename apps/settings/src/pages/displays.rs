@@ -11,7 +11,6 @@ use freya::prelude::*;
 
 use crate::pages::gnoblin;
 use crate::routes;
-use bingux_ui::prelude::{Router, use_router};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
     Group, Icon, Overlays, PageHead, ResponseKind, Status, Tokens, action_row, caption, choice_row,
@@ -19,6 +18,7 @@ use crate::ui::{
     skeleton, skeleton_rows, status, switch_row, typography, use_overlays, use_tokens,
 };
 use bingux_ui::controls::slider;
+use bingux_ui::prelude::{Router, use_router};
 use bingux_ui::runtime::optimistic;
 use bingux_ui::shell::MenuItem;
 use bingux_ui::style::*;
@@ -1873,17 +1873,16 @@ fn arrangement_group(
     changed: bool,
     tokens: Tokens,
 ) -> Group {
-    Group::titled("Arrangement")
-        .row(
-            Arrangement {
-                ctx,
-                monitors: monitors.to_vec(),
-                selected,
-                changed,
-                tokens,
-            }
-            .into_element(),
-        )
+    Group::titled("Arrangement").row(
+        Arrangement {
+            ctx,
+            monitors: monitors.to_vec(),
+            selected,
+            changed,
+            tokens,
+        }
+        .into_element(),
+    )
 }
 
 fn monitor_group(
@@ -2146,9 +2145,7 @@ fn monitor_list_group(ctx: Ctx, monitors: &[Monitor], router: Router) -> Group {
                 .subtitle(monitor_caption(monitor))
                 .value(monitor_state(monitor))
                 .navigates()
-                .on_press(move |_| {
-                    router.open(routes::display(index, &label.clone()))
-                })
+                .on_press(move |_| router.open(routes::display(index, &label.clone())))
                 .context_menu(monitor_menu(ctx, router, index, monitor)),
         );
     }
@@ -2225,9 +2222,7 @@ impl Component for DisplaysPage {
                     group = group.row(
                         row(record.title.clone())
                             .navigates()
-                            .on_press(move |_| {
-                                router.open(routes::display(index, &title.clone()))
-                            })
+                            .on_press(move |_| router.open(routes::display(index, &title.clone())))
                             .context_menu(menu),
                     );
                 }

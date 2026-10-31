@@ -378,7 +378,8 @@ fn snapshot_timing(
         shot.navigate(page.clone());
         times.push(started.elapsed().as_secs_f64() * 1000.0);
         shot.settle(Duration::from_millis(400));
-        shot.navigate(home.clone()).settle(Duration::from_millis(400));
+        shot.navigate(home.clone())
+            .settle(Duration::from_millis(400));
     }
     let first = times.remove(0);
     times.sort_by(f64::total_cmp);

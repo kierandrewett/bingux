@@ -138,13 +138,14 @@ impl Component for PasswordBody {
             .validate(check)
             .on_submit(move |_: ()| start(submit_ssid.clone()));
         popup_column()
-            .child(
-                Group::new(None::<String>).row(field).footer(format!(
-                    "{} network. Passwords are case sensitive.",
-                    self.security.label()
-                )),
-            )
-            .child(bingux_ui::motion::reveal_block_if(S6, phase_line(&phase.read(), &ssid)))
+            .child(Group::new(None::<String>).row(field).footer(format!(
+                "{} network. Passwords are case sensitive.",
+                self.security.label()
+            )))
+            .child(bingux_ui::motion::reveal_block_if(
+                S6,
+                phase_line(&phase.read(), &ssid),
+            ))
     }
 }
 
@@ -301,7 +302,10 @@ impl Component for HiddenBody {
         let ssid = name.read().trim().to_string();
         popup_column()
             .child(fields)
-            .child(bingux_ui::motion::reveal_block_if(S6, phase_line(&phase.read(), &ssid)))
+            .child(bingux_ui::motion::reveal_block_if(
+                S6,
+                phase_line(&phase.read(), &ssid),
+            ))
     }
 }
 

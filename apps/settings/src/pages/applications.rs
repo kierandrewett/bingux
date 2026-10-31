@@ -21,8 +21,8 @@ use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 use crate::apps::{self, AppEntry, Details, Removal, Source};
 use crate::pages::sound::AppSound;
 use crate::routes;
-use bingux_ui::prelude::{Router, use_router};
 use crate::system::{self, CommandError, background_then};
+use bingux_ui::prelude::{Router, use_router};
 
 mod file_types;
 
@@ -345,7 +345,10 @@ impl Component for LoadMore {
             .width(Size::fill())
             .height(Size::px(probe_height))
             .on_visible(move |_| on_more.call(()));
-        rect().width(Size::fill()).child(self.row.clone()).child(probe)
+        rect()
+            .width(Size::fill())
+            .child(self.row.clone())
+            .child(probe)
     }
 }
 
@@ -412,11 +415,14 @@ fn ask_uninstall(
         None => format!("{} is installed on this system.", app.name),
     };
     let title = format!("Uninstall {}?", app.name);
-    overlays.show_dialog(dialog(title, body).cancel("Cancel").default_action(CANCEL_ID).response(
-        "Uninstall",
-        ResponseKind::Destructive,
-        move |_| run_uninstall(app.clone(), model, busy, overlays, leave),
-    ));
+    overlays.show_dialog(
+        dialog(title, body)
+            .cancel("Cancel")
+            .default_action(CANCEL_ID)
+            .response("Uninstall", ResponseKind::Destructive, move |_| {
+                run_uninstall(app.clone(), model, busy, overlays, leave)
+            }),
+    );
 }
 
 /// Make `app` the default for every type of kind `kind`, with `gio mime`.
@@ -457,7 +463,9 @@ fn browser_default(model: &Model) -> String {
 /// row shows, and is greyed out when there is none.
 fn kind_menu(app: Option<AppEntry>, overlays: Overlays, router: Router) -> Vec<MenuItem> {
     let available = app.is_some();
-    let route = app.as_ref().map(|app| routes::app(&app.id.clone(), &app.name.clone()));
+    let route = app
+        .as_ref()
+        .map(|app| routes::app(&app.id.clone(), &app.name.clone()));
     let open = menu_item("Open", move |_| {
         if let Some(app) = &app {
             apps::launch(app, move |reason| overlays.toast(reason));
@@ -776,17 +784,19 @@ impl Component for ApplicationsPage {
             }
         };
 
-        bingux_ui::stage::staged(page_column()
-            .child(PageHead::new())
-            .child(
-                Group::new(None).row(
-                    row("Default applications")
-                        .value(summary)
-                        .navigates()
-                        .on_press(move |_| router.open(routes::default_apps())),
-                ),
-            )
-            .child(list))
+        bingux_ui::stage::staged(
+            page_column()
+                .child(PageHead::new())
+                .child(
+                    Group::new(None).row(
+                        row("Default applications")
+                            .value(summary)
+                            .navigates()
+                            .on_press(move |_| router.open(routes::default_apps())),
+                    ),
+                )
+                .child(list),
+        )
     }
 }
 
@@ -907,7 +917,10 @@ impl Component for AppPage {
                                     .value(if is_default { "Default" } else { "Not default" })
                                     .navigates()
                                     .on_press(move |_| {
-                                        router.open(routes::default_app(kind, &KINDS[kind].title.to_string()))
+                                        router.open(routes::default_app(
+                                            kind,
+                                            &KINDS[kind].title.to_string(),
+                                        ))
                                     })
                                     .context_menu(menu),
                             )

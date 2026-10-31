@@ -90,7 +90,9 @@ pub fn use_modem(watch: bool) -> ModemState {
         spawn(async move {
             loop {
                 timer(POLL).await;
-                if *focus.peek() && wanted.get() && now_ms().saturating_sub(LAST_READ.load(Ordering::SeqCst)) >= 8000
+                if *focus.peek()
+                    && wanted.get()
+                    && now_ms().saturating_sub(LAST_READ.load(Ordering::SeqCst)) >= 8000
                 {
                     reload_modem(state);
                 }
@@ -535,39 +537,37 @@ fn data_group(
 ) -> Group {
     let usable = can_switch(Some(modem), link);
     let toggle = link.clone();
-    let data = row("Mobile data")
-        .trailing(
-            switch(link.data_on() && usable, move |next: bool| {
-                set_mobile_data(ctx, &toggle, next)
-            })
-            .enabled(usable),
-        );
+    let data = row("Mobile data").trailing(
+        switch(link.data_on() && usable, move |next: bool| {
+            set_mobile_data(ctx, &toggle, next)
+        })
+        .enabled(usable),
+    );
     let allowed = shown
         .read()
         .unwrap_or_else(|| list.iter().all(|profile| !profile.home_only));
     let can_roam = usable && !list.is_empty() && !link.airplane;
-    let roaming = row("Data roaming")
-        .trailing({
-            let list = list.to_vec();
-            switch(allowed, move |next: bool| {
-                let all = list.clone();
-                system::optimistic_then(
-                    shown,
-                    Some(ctx.overlays),
-                    None,
-                    Some(next),
-                    move || apn::set_roaming(&all, next),
-                    move || {
-                        apn::reload_then(profiles, move || {
-                            let mut shown = shown;
-                            shown.set(None);
-                        });
-                        ctx.reload();
-                    },
-                );
-            })
-            .enabled(can_roam)
-        });
+    let roaming = row("Data roaming").trailing({
+        let list = list.to_vec();
+        switch(allowed, move |next: bool| {
+            let all = list.clone();
+            system::optimistic_then(
+                shown,
+                Some(ctx.overlays),
+                None,
+                Some(next),
+                move || apn::set_roaming(&all, next),
+                move || {
+                    apn::reload_then(profiles, move || {
+                        let mut shown = shown;
+                        shown.set(None);
+                    });
+                    ctx.reload();
+                },
+            );
+        })
+        .enabled(can_roam)
+    });
     Group::new(None::<String>).row(data).row(roaming)
 }
 
@@ -666,17 +666,17 @@ fn sim_group(ctx: NetCtx, modem_state: ModemState, modem: &Modem) -> Group {
         return group;
     };
     let lock = sim_id.clone();
-    group = group.row(
-        row("Lock SIM with PIN")
-            .trailing(switch(modem.pin_lock, move |on: bool| {
-                let task = if on {
-                    PinTask::Enable
-                } else {
-                    PinTask::Disable
-                };
-                sim::open(ctx, modem_state, task, lock.clone());
-            })),
-    );
+    group = group.row(row("Lock SIM with PIN").trailing(switch(
+        modem.pin_lock,
+        move |on: bool| {
+            let task = if on {
+                PinTask::Enable
+            } else {
+                PinTask::Disable
+            };
+            sim::open(ctx, modem_state, task, lock.clone());
+        },
+    )));
     if modem.pin_lock {
         group = group.row(
             row("Change PIN…")

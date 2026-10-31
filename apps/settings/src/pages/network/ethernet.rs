@@ -20,15 +20,15 @@ use super::{Device, Owner, Section, UsageScope, device_icon, failure_page};
 use crate::icons::Icon;
 use crate::pages::loading::veiled;
 use crate::routes;
-use bingux_ui::prelude::Target;
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{
-    CANCEL_ID, Group, MenuItem, PageHead, PopupAction, PopupActions, PopupFlags, ResponseKind, Status,
-    StripAction, Window, WindowLike, WindowParent, action_strip, choice_row, dialog, expander_row,
-    form_field, menu_item, menu_separator, page_column, popup, popup_column, row, row_button,
-    status, strip_action, switch, use_popup_actions, use_tokens, use_window,
+    CANCEL_ID, Group, MenuItem, PageHead, PopupAction, PopupActions, PopupFlags, ResponseKind,
+    Status, StripAction, Window, WindowLike, WindowParent, action_strip, choice_row, dialog,
+    expander_row, form_field, menu_item, menu_separator, page_column, popup, popup_column, row,
+    row_button, status, strip_action, switch, use_popup_actions, use_tokens, use_window,
 };
 use bingux_ui::controls::form::validate::Check;
+use bingux_ui::prelude::Target;
 
 /// The title of a wired device's row and page: its profile's name, or `Ethernet (enp42s0)`. A
 /// profile name that two devices share gets the interface too, so no two rows read alike.
@@ -196,8 +196,11 @@ pub fn ethernet_rows(ctx: NetCtx, ov: &Overview) -> Vec<Element> {
             })
             .collect();
         shown.push(Element::from(
-            expander_row(format!("{} other wired adapter{plural}", spare.len()), children)
-                .subtitle("Cable unplugged"),
+            expander_row(
+                format!("{} other wired adapter{plural}", spare.len()),
+                children,
+            )
+            .subtitle("Cable unplugged"),
         ));
     }
     shown
@@ -627,11 +630,7 @@ impl Component for EthernetPage {
         };
         let mut actions: Vec<StripAction> = vec![link];
         if profiles.len() > 1 {
-            let (device, name, uuid) = (
-                device.clone(),
-                current.name.clone(),
-                current.uuid.clone(),
-            );
+            let (device, name, uuid) = (device.clone(), current.name.clone(), current.uuid.clone());
             actions.push(strip_action(Icon::UserTrash, "Delete", move |_| {
                 confirm_delete(ctx, device.clone(), name.clone(), Some(uuid.clone()), false)
             }));
@@ -848,7 +847,10 @@ impl Component for AddProfileRow {
         let new_error = use_state(|| None::<String>);
         let found = find_device(ctx, &self.device);
         let taken: Vec<String> = match list_state(&self.device).read().clone() {
-            Some(Ok(profiles)) => profiles.iter().map(|profile| profile.name.clone()).collect(),
+            Some(Ok(profiles)) => profiles
+                .iter()
+                .map(|profile| profile.name.clone())
+                .collect(),
             _ => Vec::new(),
         };
         let device = match found {
@@ -1007,7 +1009,8 @@ impl Component for ProfilePage {
             .then(|| device.name.clone());
         use_side_effect_with_deps(&redirect, move |redirect| {
             if let Some(device) = redirect {
-                ctx.router.open(routes::ethernet(&device.clone(), &device.clone()));
+                ctx.router
+                    .open(routes::ethernet(&device.clone(), &device.clone()));
             }
         });
         if redirect.is_some() || profiles.is_none() {
@@ -1089,11 +1092,14 @@ impl Component for WiredSection {
             .then(|| (device.clone(), section.clone()));
         use_side_effect_with_deps(&moves, move |moves| {
             if let Some((device, section)) = moves {
-                ctx.router.open(routes::section(&Owner::Wired {
-                    device: device.clone(),
-                    profile: String::new(),
-                    in_use: true,
-                }, &section.clone()));
+                ctx.router.open(routes::section(
+                    &Owner::Wired {
+                        device: device.clone(),
+                        profile: String::new(),
+                        in_use: true,
+                    },
+                    &section.clone(),
+                ));
             }
         });
         let resolved = if in_use { current } else { Some(profile) };

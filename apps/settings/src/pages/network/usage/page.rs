@@ -14,11 +14,11 @@ use super::model::{self, Breakdown, Period, Request, Snapshot};
 use crate::icons::Icon;
 use crate::pages::loading::veiled;
 use crate::routes;
-use bingux_ui::prelude::use_router;
 use crate::ui::{
     Group, Row, Status, Tone, form_field, page_column, property_row, row, segmented, status,
 };
 use bingux_data_usage::Source;
+use bingux_ui::prelude::use_router;
 use bingux_ui::style::is_compact;
 use bingux_ui::task::use_polled_resource;
 
@@ -137,8 +137,7 @@ fn totals_rows(
     }
     if let Some(since_boot) = snapshot.since_boot {
         rows.push(Element::from(
-            row("Since boot")
-                .value(format::pair(since_boot)),
+            row("Since boot").value(format::pair(since_boot)),
         ));
     }
     rows
@@ -153,15 +152,13 @@ fn chart_group(snapshot: &Snapshot, period: Period, custom_missing: bool) -> Gro
     }
     match &snapshot.series {
         Err(why) => group.row(Element::from(status(Status::Info(format!("{why}."))))),
-        Ok(buckets) if !chart::has_traffic(buckets) => {
-            group.row(Element::from(status(Status::Empty(
-                if snapshot.source.is_none() {
-                    "Nothing has been recorded yet.".into()
-                } else {
-                    "Nothing was received or sent in this period.".into()
-                },
-            ))))
-        }
+        Ok(buckets) if !chart::has_traffic(buckets) => group.row(Element::from(status(
+            Status::Empty(if snapshot.source.is_none() {
+                "Nothing has been recorded yet.".into()
+            } else {
+                "Nothing was received or sent in this period.".into()
+            }),
+        ))),
         Ok(buckets) => {
             let data = chart::chart_data(buckets, period.granularity(), period, snapshot.zone);
             let total = buckets.iter().fold(Totals::default(), |sum, bucket| {
@@ -198,12 +195,8 @@ impl Component for UsagePage {
                 .as_ref()
                 .and_then(|dates| dates.as_ref().ok().copied()),
         };
-        let resource = use_polled_resource(
-            request.clone(),
-            model::load,
-            POLL,
-            Snapshot::draws_same,
-        );
+        let resource =
+            use_polled_resource(request.clone(), model::load, POLL, Snapshot::draws_same);
 
         if let Some(failure) = resource.with(|state| state.error().map(str::to_string)) {
             return Element::from(page_column().child(
@@ -265,10 +258,8 @@ impl Component for UsagePage {
         page = page.child(selector);
 
         // Totals.
-        page = page.child(
-            Group::titled("Totals")
-                .rows(totals_rows(&snapshot, current, custom_span)),
-        );
+        page =
+            page.child(Group::titled("Totals").rows(totals_rows(&snapshot, current, custom_span)));
 
         // Chart.
         let custom_missing = current == Period::Custom && request.custom.is_none();
@@ -315,10 +306,7 @@ impl Component for UsagePage {
             Some(Source::Vnstat) => "vnStat",
             None => "Nothing recorded yet",
         };
-        page = page.child(
-            Group::titled("About this data")
-                .row(property_row("Source", source)),
-        );
+        page = page.child(Group::titled("About this data").row(property_row("Source", source)));
 
         Element::from(veiled(page, loading))
     }

@@ -7,8 +7,8 @@ use std::collections::HashMap;
 
 use freya::prelude::*;
 
-use bingux_ui::prelude::*;
 use bingux_ui::files::{FileIcon, FileKind};
+use bingux_ui::prelude::*;
 use bingux_ui::shell::{MenuItem, menu_item};
 
 use super::{FileType, LoadMore, ModelState, PAGE, app_name, set_file_type, set_limit};
@@ -255,7 +255,11 @@ impl Component for OtherFileTypes {
         let mut groups: Vec<Group> = Vec::new();
         let mut current: Option<(Category, Vec<Element>)> = None;
         for (index, entry) in entries.iter().take(visible).enumerate() {
-            let ambiguous = name_count.get(entry.file.title.as_str()).copied().unwrap_or(0) > 1;
+            let ambiguous = name_count
+                .get(entry.file.title.as_str())
+                .copied()
+                .unwrap_or(0)
+                > 1;
             let mut element = Element::from(file_type_row(
                 self.model,
                 self.overlays,
@@ -305,11 +309,13 @@ impl Component for OtherFileTypes {
             .child(search);
 
         let cards = if groups.is_empty() {
-            page_column().child(Group::new(None).row(status(Status::Empty(
-                "No file type matches.".to_string(),
-            ))))
+            page_column().child(
+                Group::new(None).row(status(Status::Empty("No file type matches.".to_string()))),
+            )
         } else {
-            groups.into_iter().fold(page_column(), |cards, group| cards.child(group))
+            groups
+                .into_iter()
+                .fold(page_column(), |cards, group| cards.child(group))
         };
         rect()
             .tw(&tokens, &[flex_col(), w_full(), gap(S3)])
@@ -359,8 +365,10 @@ fn toolbar(
     let handlers = vec![
         menu_item("All", move |_| pick_handler(HandlerFilter::All))
             .checked(handler_now == HandlerFilter::All),
-        menu_item("Has a default", move |_| pick_handler(HandlerFilter::Custom))
-            .checked(handler_now == HandlerFilter::Custom),
+        menu_item("Has a default", move |_| {
+            pick_handler(HandlerFilter::Custom)
+        })
+        .checked(handler_now == HandlerFilter::Custom),
         menu_item("Not set", move |_| pick_handler(HandlerFilter::Unset))
             .checked(handler_now == HandlerFilter::Unset),
     ];
@@ -370,8 +378,7 @@ fn toolbar(
         set_limit(limit, PAGE);
     };
     let sorts = vec![
-        menu_item("Name", move |_| pick_sort(TypeSort::Name))
-            .checked(sort_now == TypeSort::Name),
+        menu_item("Name", move |_| pick_sort(TypeSort::Name)).checked(sort_now == TypeSort::Name),
         menu_item("Application", move |_| pick_sort(TypeSort::Handler))
             .checked(sort_now == TypeSort::Handler),
     ];
@@ -461,6 +468,9 @@ mod tests {
     #[test]
     fn a_name_is_made_from_the_type_when_the_database_has_none() {
         assert_eq!(derived_name("application/x-foo-bar"), "Foo bar");
-        assert_eq!(derived_name("application/vnd.acme.widget+xml"), "Acme widget");
+        assert_eq!(
+            derived_name("application/vnd.acme.widget+xml"),
+            "Acme widget"
+        );
     }
 }

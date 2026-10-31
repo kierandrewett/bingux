@@ -583,8 +583,7 @@ impl Component for SecurityBody {
             let (page, draft) = (page.clone(), draft.clone());
             move |_: ()| draft.reset(&page.saved)
         };
-        let column =
-            page_column().child(pending_bar(dirty, ok && !*busy.read(), apply, revert));
+        let column = page_column().child(pending_bar(dirty, ok && !*busy.read(), apply, revert));
 
         if kind == Kind::Wired {
             wired_page(column, &draft, page.ctx.window)

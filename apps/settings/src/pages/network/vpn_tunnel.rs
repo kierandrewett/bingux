@@ -19,8 +19,9 @@ use crate::pages::loading::veiled;
 use crate::routes;
 use crate::system;
 use crate::ui::{
-    CANCEL_ID, Group, ResponseKind, Status, action_button, action_row, choice_row, dialog, form_field,
-    icon_button, page_column, pending_bar, primary_button, row, status, switch_row, text_field,
+    CANCEL_ID, Group, ResponseKind, Status, action_button, action_row, choice_row, dialog,
+    form_field, icon_button, page_column, pending_bar, primary_button, row, status, switch_row,
+    text_field,
 };
 use bingux_ui::style::*;
 
@@ -273,8 +274,7 @@ impl Component for WgTunnel {
         };
 
         let public_row = if has_wg {
-            row("Public key")
-                .mono_value(public.read().clone().unwrap_or_default())
+            row("Public key").mono_value(public.read().clone().unwrap_or_default())
         } else {
             row("Public key").subtitle("The wg tool is not installed")
         };
@@ -340,7 +340,8 @@ impl Component for WgTunnel {
                     .subtitle_one_line()
                     .navigates()
                     .on_press(move |_| {
-                        ctx.router.open(routes::section(&owner.clone(), &Section::Peer(index)))
+                        ctx.router
+                            .open(routes::section(&owner.clone(), &Section::Peer(index)))
                     }),
             );
         }
@@ -351,7 +352,8 @@ impl Component for WgTunnel {
                 .leading(Icon::ListAdd)
                 .navigates()
                 .on_press(move |_| {
-                    ctx.router.open(routes::section(&owner.clone(), &Section::Peer(next)))
+                    ctx.router
+                        .open(routes::section(&owner.clone(), &Section::Peer(next)))
                 }),
         );
 
@@ -615,8 +617,8 @@ impl Component for PeerForm {
         };
 
         let all = wireguard::is_all_traffic(&peer.allowed_ips);
-        let mut traffic = Group::titled("Traffic")
-            .row(switch_row("Route all traffic", all, move |on: bool| {
+        let mut traffic =
+            Group::titled("Traffic").row(switch_row("Route all traffic", all, move |on: bool| {
                 let mut allowed = draft.allowed;
                 allowed.set(if on {
                     wireguard::list_text(&wireguard::ALL_TRAFFIC.map(String::from).to_vec())

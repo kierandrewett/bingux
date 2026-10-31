@@ -10,17 +10,17 @@ use freya::prelude::*;
 
 use crate::passwd;
 use crate::routes;
-use bingux_ui::prelude::{Router, Target, use_router};
 use crate::system::{
     self, CommandError, CommandResult, background, background_then, optimistic_then,
 };
 use crate::theme::Tokens;
 use crate::ui::{
     Group, Overlays, PageHead, PopupAction, PopupActions, Status, Window, action_button, avatar,
-    caption, form_row, heading, menu_item, page_column, popup, popup_column, row, skeleton_rows, skeleton_shape,
-    status, text_field, use_overlays, use_popup_actions, use_tokens, use_window,
+    caption, form_row, heading, menu_item, page_column, popup, popup_column, row, skeleton_rows,
+    skeleton_shape, status, text_field, use_overlays, use_popup_actions, use_tokens, use_window,
 };
 use bingux_ui::motion::reveal_block_if;
+use bingux_ui::prelude::{Router, Target, use_router};
 use bingux_ui::style::*;
 use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 
@@ -242,7 +242,8 @@ impl Component for UsersPage {
             group.row(status(Status::Empty("No accounts found.".into())))
         } else {
             group.rows(accounts.iter().map(|account| {
-                let route = routes::account(&account.path.clone(), &account.display_name().to_string());
+                let route =
+                    routes::account(&account.path.clone(), &account.display_name().to_string());
                 account_row(account, route, router, password)
             }))
         };
@@ -670,9 +671,7 @@ fn account_row(
         .navigates();
     let current = account.current;
     let open_route = route.clone();
-    let mut menu = vec![menu_item("Open", move |_| {
-        router.open(open_route.clone())
-    })];
+    let mut menu = vec![menu_item("Open", move |_| router.open(open_route.clone()))];
     if current {
         menu.push(menu_item("Change password", move |_| password.open()));
     }

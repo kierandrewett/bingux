@@ -234,9 +234,7 @@ impl Component for LimitsGroup {
                 .subtitle(format!("This cycle: {}", self.cycle))
                 .trailing(stepper(i64::from(current.billing_day), on_day).range(1, 31)),
         );
-        group = group.row(
-            switch_row("Monthly limit", on, on_toggle),
-        );
+        group = group.row(switch_row("Monthly limit", on, on_toggle));
         if on {
             group = group
                 .row(
@@ -261,14 +259,13 @@ impl Component for LimitsGroup {
                 ));
         }
         group = group.row(
-            row("Warn at")
-                .trailing(
-                    stepper(i64::from(current.warn_percent), on_warn)
-                        .range(1, 100)
-                        .step(5)
-                        .suffix("%")
-                        .enabled(saved.monthly_limit_bytes.is_some()),
-                ),
+            row("Warn at").trailing(
+                stepper(i64::from(current.warn_percent), on_warn)
+                    .range(1, 100)
+                    .step(5)
+                    .suffix("%")
+                    .enabled(saved.monthly_limit_bytes.is_some()),
+            ),
         );
         if self.connection.is_some() && self.own {
             let connection = connection.clone();

@@ -217,10 +217,7 @@ impl Component for IdentityBody {
             identity = identity.row(row("Name").value(page.saved.get("connection.id")));
             let bssid = page.saved.get("802-11-wireless.bssid");
             if !bssid.is_empty() {
-                identity = identity.row(
-                    row("BSSID")
-                        .mono_value(bssid),
-                );
+                identity = identity.row(row("BSSID").mono_value(bssid));
             }
         }
 
@@ -309,15 +306,25 @@ impl Component for IdentityBody {
 /// After a wired profile is renamed its address has changed, unless the page is the device's own:
 /// open the page again under the new name.
 fn open_renamed(page: &Page, renamed: Option<String>) {
-    let (Some(profile), Owner::Wired { device, in_use: false, .. }) = (renamed, &page.owner)
+    let (
+        Some(profile),
+        Owner::Wired {
+            device,
+            in_use: false,
+            ..
+        },
+    ) = (renamed, &page.owner)
     else {
         return;
     };
-    page.ctx.router.open(routes::section(&Owner::Wired {
-        device: device.clone(),
-        profile,
-        in_use: false,
-    }, &Section::Identity));
+    page.ctx.router.open(routes::section(
+        &Owner::Wired {
+            device: device.clone(),
+            profile,
+            in_use: false,
+        },
+        &Section::Identity,
+    ));
 }
 
 #[cfg(test)]

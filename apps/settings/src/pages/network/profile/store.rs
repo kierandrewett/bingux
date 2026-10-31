@@ -147,7 +147,9 @@ mod fake {
             "Wired connection 1" | "Office desk" => format!(
                 "connection.type:802-3-ethernet\nconnection.id:{name}\n802-3-ethernet.mtu:auto\n{common}"
             ),
-            "Work WireGuard" => format!("connection.type:wireguard\nconnection.id:{name}\n{common}"),
+            "Work WireGuard" => {
+                format!("connection.type:wireguard\nconnection.id:{name}\n{common}")
+            }
             "Office OpenVPN" => format!("connection.type:vpn\nconnection.id:{name}\n{common}"),
             _ => return None,
         };

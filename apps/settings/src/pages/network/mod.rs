@@ -299,9 +299,7 @@ fn status_group(ctx: NetCtx, ov: &Overview, airplane: bool) -> Element {
             }
         }
         (_, true) => {
-            group = group.row(
-                row("Airplane mode is on"),
-            );
+            group = group.row(row("Airplane mode is on"));
         }
         _ => {
             group = group.row(row("Not connected"));

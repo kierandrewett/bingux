@@ -10,8 +10,8 @@
 
 use std::path::Path;
 
-use freya::prelude::*;
 use bingux_ui::style::S10;
+use freya::prelude::*;
 
 use super::model::{self, NetCtx};
 use super::vpn::data::PluginProfile;
@@ -158,9 +158,7 @@ impl Component for Chooser {
         let installed = installed.unwrap_or_default();
         let open = move |kind: &str| {
             let kind = kind.to_string();
-            move |_: ()| {
-                ctx.router.open(routes::add_vpn(Some(&kind.clone())))
-            }
+            move |_: ()| ctx.router.open(routes::add_vpn(Some(&kind.clone())))
         };
 
         let mut types = Group::titled("Type").row(
@@ -330,8 +328,8 @@ impl Component for WireguardForm {
                     .hint("Keeps the connection open through a router. 25 is usual.")
                     .validate(check::keepalive),
             );
-        let mut traffic = Group::titled("Traffic")
-            .row(switch_row("Route all traffic", all, move |on: bool| {
+        let mut traffic =
+            Group::titled("Traffic").row(switch_row("Route all traffic", all, move |on: bool| {
                 let mut allowed = allowed;
                 allowed.set(if on {
                     wireguard::ALL_TRAFFIC.join("\n")
@@ -511,15 +509,14 @@ impl Component for PluginAddForm {
         if known {
             group = field_rows(group, fields, &states, &texts);
         } else {
-            group = field_rows(group, fields, &states, &texts)
-                .row(
-                    form_field("Settings", raw)
-                        .multiline(4)
-                        .monospace()
-                        .placeholder("gateway = vpn.example.com")
-                        .hint("One name = value per line.")
-                        .validate(check_lines),
-                );
+            group = field_rows(group, fields, &states, &texts).row(
+                form_field("Settings", raw)
+                    .multiline(4)
+                    .monospace()
+                    .placeholder("gateway = vpn.example.com")
+                    .hint("One name = value per line.")
+                    .validate(check_lines),
+            );
         }
 
         page_column()

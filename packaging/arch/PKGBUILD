@@ -51,6 +51,9 @@ _take() {
 }
 
 # licence texts for the crates linked into a program, plus the project licence.
+# makepkg sets pkgname to the one package being built while a package_*() function runs, so
+# "$pkgname" below is a string, not the pkgname array of the split package.
+# shellcheck disable=SC2128
 _licenses() {
     local program
     install -Dm644 "$srcdir/$pkgbase-$pkgver/COPYING" "$pkgdir/usr/share/licenses/$pkgname/COPYING"

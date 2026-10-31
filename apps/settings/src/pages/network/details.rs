@@ -11,9 +11,9 @@ use freya::prelude::*;
 use super::model::{DeviceKind, nmcli, split_terse, unescape};
 use super::{Owner, Section};
 use crate::routes;
-use bingux_ui::prelude::use_router;
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{Group, PageHead, Status, page_column, row, skeleton_rows, status};
+use bingux_ui::prelude::use_router;
 use bingux_ui::style::*;
 
 const QUICK: Duration = Duration::from_secs(5);
@@ -396,7 +396,11 @@ mod fake {
             addresses: strings(addresses),
             gateway: gateway.to_string(),
             dns: strings(dns),
-            domains: if live { strings(&["home.arpa"]) } else { Vec::new() },
+            domains: if live {
+                strings(&["home.arpa"])
+            } else {
+                Vec::new()
+            },
             routes: if live && !gateway.is_empty() {
                 strings(&[
                     "192.168.0.0/24 direct, metric 100",
@@ -459,7 +463,11 @@ mod fake {
                 live,
                 if live && !vpn { addresses } else { &[] },
                 if live && !vpn { "192.168.0.1" } else { "" },
-                if live && !vpn { &["1.1.1.1", "9.9.9.9"] } else { &[] },
+                if live && !vpn {
+                    &["1.1.1.1", "9.9.9.9"]
+                } else {
+                    &[]
+                },
             ),
             v6: Family::default(),
             mac: if vpn { "" } else { "3C:52:82:11:9A:F0" }.to_string(),
@@ -577,7 +585,11 @@ fn view(details: &Details) -> Vec<Element> {
     }
     blocks.push(Group::titled("Technical details").rows(general).into());
 
-    blocks.extend(family_group("IPv4", &details.v4, details.state == Live::Saved));
+    blocks.extend(family_group(
+        "IPv4",
+        &details.v4,
+        details.state == Live::Saved,
+    ));
     blocks.extend(family_group("IPv6", &details.v6, true));
     blocks
 }

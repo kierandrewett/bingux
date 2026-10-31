@@ -125,7 +125,10 @@ mod fake {
     fn real_now() -> i64 {
         // `BINGUX_SETTINGS_FAKE_NOW=<Unix seconds>` stops the clock there, so two captures show
         // the same time.
-        if let Some(fixed) = std::env::var("BINGUX_SETTINGS_FAKE_NOW").ok().and_then(|text| text.parse().ok()) {
+        if let Some(fixed) = std::env::var("BINGUX_SETTINGS_FAKE_NOW")
+            .ok()
+            .and_then(|text| text.parse().ok())
+        {
             return fixed;
         }
         SystemTime::now()

@@ -225,7 +225,11 @@ fn dock_slot(tokens: &Tokens, icon: Dim, app: &str, running: bool) -> Element {
                     // stuck out of the pill and over its neighbours).
                     .child(app_icon(
                         app.to_string(),
-                        if matches!(icon, Dim::Box9) { IconSize::App } else { IconSize::AppSmall },
+                        if matches!(icon, Dim::Box9) {
+                            IconSize::App
+                        } else {
+                            IconSize::AppSmall
+                        },
                     )),
             )
             .child(rect().tw(
@@ -253,8 +257,16 @@ fn dock_slot(tokens: &Tokens, icon: Dim, app: &str, running: bool) -> Element {
 /// picture (the hero, which is as wide as the page, shows the dock at the size the setting says).
 fn dock_row(tokens: &Tokens, dock: &Dock, bar: Paint, frame: Frame, menus: Option<Ctx>) -> Element {
     let miniature = frame == Frame::Card;
-    let icon = if miniature { Dim::Box5 } else { icon_box(dock.size) };
-    let apps = if miniature { &DOCK_APPS[..3] } else { &DOCK_APPS[..] };
+    let icon = if miniature {
+        Dim::Box5
+    } else {
+        icon_box(dock.size)
+    };
+    let apps = if miniature {
+        &DOCK_APPS[..3]
+    } else {
+        &DOCK_APPS[..]
+    };
     let (between, inset) = if miniature { (S0_5, S0_5) } else { (S1, S1) };
     let placed = match dock.alignment {
         "left" => Align::Start,
@@ -415,7 +427,15 @@ fn window_card(tokens: &Tokens, window: Paint, stub: Paint, miniature: bool) -> 
         .child(stub_line(tokens, w_full(), stub));
     let content = rect()
         .tw(tokens, &[w_flex(), h_full(), flex_col(), gap(S1), p(S1)])
-        .child(stub_line(tokens, if miniature { w_full() } else { w(Dim::PreviewLine) }, Paint::Accent))
+        .child(stub_line(
+            tokens,
+            if miniature {
+                w_full()
+            } else {
+                w(Dim::PreviewLine)
+            },
+            Paint::Accent,
+        ))
         .child(stub_line(tokens, w_full(), stub))
         .child(stub_line(tokens, w_full(), stub));
     let body = rect()

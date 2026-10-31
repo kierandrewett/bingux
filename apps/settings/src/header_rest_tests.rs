@@ -20,7 +20,9 @@ fn no_icon_button_of_the_settings_header_has_a_fill_at_rest() {
         let mut shot = settled(size);
         let buttons = shot.icon_buttons();
         assert!(
-            buttons.iter().any(|button| button.component == "IconMenuButton"),
+            buttons
+                .iter()
+                .any(|button| button.component == "IconMenuButton"),
             "{label}: the main menu button is in the header: {buttons:?}"
         );
         let filled: Vec<String> = buttons
@@ -28,6 +30,9 @@ fn no_icon_button_of_the_settings_header_has_a_fill_at_rest() {
             .filter(|button| button.fill.is_some())
             .map(|button| format!("{} ({})", button.name, button.component))
             .collect();
-        assert!(filled.is_empty(), "{label}: icon buttons that fill at rest: {filled:?}");
+        assert!(
+            filled.is_empty(),
+            "{label}: icon buttons that fill at rest: {filled:?}"
+        );
     }
 }

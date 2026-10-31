@@ -12,9 +12,9 @@ use super::limits::{self, Level};
 use super::model;
 use crate::pages::network::model::NetCtx;
 use crate::routes;
-use bingux_ui::prelude::Target;
 use crate::system;
 use crate::ui::{Row, row};
+use bingux_ui::prelude::Target;
 use bingux_ui::style::is_compact;
 
 /// How often the row reads the totals again while it is on screen.
@@ -131,11 +131,7 @@ impl Component for UsageRow {
             })
         });
         let summary = summary.read().clone();
-        entry(
-            self.ctx,
-            summary.as_ref(),
-            routes::usage(&UsageScope::All),
-        )
+        entry(self.ctx, summary.as_ref(), routes::usage(&UsageScope::All))
     }
 }
 

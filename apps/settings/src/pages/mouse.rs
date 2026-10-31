@@ -795,11 +795,9 @@ impl Component for MousePage {
             let touchpad = |key, title| setting(TOUCHPAD, "touchpad", key, title);
             let send_events = touchpad("send-events", "Use touchpad");
             let effective = send_events.lua().unwrap_or_else(|| pad.send_events.clone());
-            let head = send_events.choice(
-                &SEND_EVENTS,
-                &pad.send_events,
-                |model, value| with_touchpad(model, |tp| tp.send_events = value),
-            );
+            let head = send_events.choice(&SEND_EVENTS, &pad.send_events, |model, value| {
+                with_touchpad(model, |tp| tp.send_events = value)
+            });
             let click_cards = vec![
                 MethodCard {
                     label: "Bottom corners",
@@ -898,7 +896,12 @@ impl Component for MousePage {
         });
 
         let test_group = Group::titled("Test your settings")
-            .row(ClickTest { within_ms: mouse.double_click }.into_element())
+            .row(
+                ClickTest {
+                    within_ms: mouse.double_click,
+                }
+                .into_element(),
+            )
             .row(ScrollTest.into_element());
 
         let page = page_column()

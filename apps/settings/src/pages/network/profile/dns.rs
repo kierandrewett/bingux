@@ -199,14 +199,8 @@ impl Component for DnsBody {
         page_column()
             .child(pending_bar(dirty, ok && !*busy.read(), apply, revert))
             .child(Group::titled("DNS").row(automatic_row).row(tls_row))
-            .child(
-                Group::titled("Servers")
-                    .rows(servers),
-            )
-            .child(
-                Group::titled("Search domains")
-                    .rows(search),
-            )
+            .child(Group::titled("Servers").rows(servers))
+            .child(Group::titled("Search domains").rows(search))
     }
 }
 

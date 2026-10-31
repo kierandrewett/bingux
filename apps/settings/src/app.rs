@@ -68,7 +68,9 @@ impl Component for RootPage {
         rect()
             .tw(&tokens, PAGE)
             .child(self.page.render())
-            .child(bingux_ui::stage::after_page(RelatedPages { page: self.page }))
+            .child(bingux_ui::stage::after_page(RelatedPages {
+                page: self.page,
+            }))
     }
 }
 

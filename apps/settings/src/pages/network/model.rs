@@ -11,9 +11,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
-use bingux_ui::prelude::{Router, use_router};
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{Overlays, Tokens, Window, centered_caption, heading, use_overlays, use_window};
+use bingux_ui::prelude::{Router, use_router};
 use bingux_ui::style::*;
 
 pub const QUICK: Duration = Duration::from_secs(5);

@@ -6,8 +6,8 @@
 use std::time::Duration;
 
 use crate::ui::{
-    Group, Icon, Overlays, PageHead, Row, Status, dropdown, level_row, page_column, row, segmented,
-    row_button, status, switch_row, use_overlays, use_tokens,
+    Group, Icon, Overlays, PageHead, Row, Status, dropdown, level_row, page_column, row,
+    row_button, segmented, status, switch_row, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
 use freya::prelude::*;
@@ -19,7 +19,7 @@ use crate::system::{self, CommandError, background, background_then, optimistic_
 
 pub(crate) mod preview;
 
-use preview::{desktop_preview};
+use preview::desktop_preview;
 
 /// Control Centre tiles: the camelCase key in `dump`, its label and its icon.
 const TILES: [(&str, &str, Icon); 5] = [
@@ -330,7 +330,9 @@ fn introduction_group(error: State<Option<String>>) -> Group {
     Group::titled("Introduction").row(
         row("Shortcuts and shell tour")
             .subtitle("Show the first-login guide to this desktop's shortcuts again.")
-            .trailing(row_button("Show introduction", move |_| show_introduction(error))),
+            .trailing(row_button("Show introduction", move |_| {
+                show_introduction(error)
+            })),
     )
 }
 
@@ -339,7 +341,11 @@ fn show_introduction(mut error: State<Option<String>>) {
     background_then(
         || {
             let program = system::locate("binguxctl");
-            system::run(&program, &["ipc", "introduction", "show"], Duration::from_secs(5))
+            system::run(
+                &program,
+                &["ipc", "introduction", "show"],
+                Duration::from_secs(5),
+            )
         },
         move |result| match result {
             Ok(_) => error.set(None),
@@ -543,7 +549,8 @@ impl Component for DesktopPage {
         if !searching {
             page = page.child(desktop_preview(&tokens, ctx, &m));
         }
-        let page = page.child(dock)
+        let page = page
+            .child(dock)
             .child(
                 Group::titled("Dock mouse actions")
                     .row(menu_row(
@@ -592,11 +599,11 @@ impl Component for DesktopPage {
             .child(sidebar)
             .child(
                 Group::titled("Top bar")
-                    .row(
-                        switch_row("Show system usage", m.metrics, move |on: bool| {
-                            write(ctx, Change::Set("desktop.metrics", on.to_string()))
-                        }),
-                    )
+                    .row(switch_row(
+                        "Show system usage",
+                        m.metrics,
+                        move |on: bool| write(ctx, Change::Set("desktop.metrics", on.to_string())),
+                    ))
                     .row(switch_row(
                         "Show seconds in the clock",
                         m.clock_seconds,
@@ -606,8 +613,8 @@ impl Component for DesktopPage {
                     )),
             )
             .child(
-                Group::titled("Control Centre")
-                    .rows(TILES.iter().enumerate().map(|(index, (_, label, icon))| {
+                Group::titled("Control Centre").rows(TILES.iter().enumerate().map(
+                    |(index, (_, label, icon))| {
                         let tiles = m.tiles;
                         Element::from(
                             switch_row(*label, tiles[index], move |on: bool| {
@@ -617,12 +624,23 @@ impl Component for DesktopPage {
                             })
                             .leading(*icon),
                         )
-                    })),
+                    },
+                )),
             )
             .maybe_child(m.gnome.as_ref().map(|gnome| media_group(ctx, gnome)))
-            .child(privacy_group(ctx, m.public_ip_lookup, m.show_personal_images, m.gnome.as_ref()))
+            .child(privacy_group(
+                ctx,
+                m.public_ip_lookup,
+                m.show_personal_images,
+                m.gnome.as_ref(),
+            ))
             .child(introduction_group(introduction_error))
-            .maybe_child(introduction_error.read().clone().map(|message| status(Status::Error(message))));
+            .maybe_child(
+                introduction_error
+                    .read()
+                    .clone()
+                    .map(|message| status(Status::Error(message))),
+            );
         veiled(page, loading)
     }
 }

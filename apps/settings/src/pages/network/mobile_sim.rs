@@ -216,15 +216,15 @@ impl Component for PinBody {
         if let Some(note) = note {
             fields = fields.footer(note);
         }
-        popup_column()
-            .child(fields.description(task.hint()))
-            .child(bingux_ui::motion::reveal_block_if(
+        popup_column().child(fields.description(task.hint())).child(
+            bingux_ui::motion::reveal_block_if(
                 S6,
                 error
                     .read()
                     .clone()
                     .map(|text| Element::from(status(Status::Error(text)))),
-            ))
+            ),
+        )
     }
 }
 
