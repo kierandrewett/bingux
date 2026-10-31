@@ -13,6 +13,7 @@ use crate::{
             PointerEventData,
             TouchEventData,
             WheelEventData,
+            WheelSource,
         },
         name::EventName,
         platform::MouseEventName,
@@ -208,6 +209,13 @@ impl EmmitableEvent {
                 let element_y =
                     (cursor.y - node_area.unwrap_or_default().min_y() as f64) / scale_factor;
                 let element_location = CursorPoint::new(element_x, element_y);
+                // Bingux patch: a touchpad's pixel delta is in physical pixels, as the cursor is, and
+                // the scroll offset is in logical ones: on a display scaled 2x the content moved
+                // twice as far as the fingers. A wheel's lines are already a logical distance.
+                let scroll = match source {
+                    WheelSource::Pixel => CursorPoint::new(scroll.x / scale_factor, scroll.y / scale_factor),
+                    _ => scroll,
+                };
 
                 Self {
                     node_id,
