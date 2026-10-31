@@ -25,7 +25,7 @@ override_dh_auto_test:
 	# The program checks run in CI (make check); desktop entries and AppStream files are validated after the install.
 
 override_dh_auto_install:
-	$(MAKE) install PREFIX=/usr DESTDIR=$(CURDIR)/debian/tmp BUILD_DIR=build QMLDIR=/usr/lib/bingux/qml LADSPADIR=/usr/lib/ladspa
+	$(MAKE) install PREFIX=/usr DESTDIR=$(CURDIR)/debian/tmp BUILD_DIR=build QMLDIR=/usr/lib/bingux/qml
 	desktop-file-validate debian/tmp/usr/share/applications/bingux-*.desktop
 	appstreamcli validate --no-net debian/tmp/usr/share/metainfo/*.metainfo.xml
 	# The scripts name /usr/bin/env; Debian wants the interpreter itself.

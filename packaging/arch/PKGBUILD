@@ -35,7 +35,7 @@ build() {
     cd "$srcdir/$pkgbase-$pkgver" || return
     make BUILD_DIR=build JOBS="$(nproc)"
     make licenses BUILD_DIR=build
-    make install PREFIX=/usr DESTDIR="$srcdir/stage" BUILD_DIR=build QMLDIR=/usr/lib/bingux/qml LADSPADIR=/usr/lib/ladspa
+    make install PREFIX=/usr DESTDIR="$srcdir/stage" BUILD_DIR=build QMLDIR=/usr/lib/bingux/qml
     # Arch has no %check-style hook for these; check them where the files are made.
     desktop-file-validate "$srcdir"/stage/usr/share/applications/bingux-*.desktop
     appstreamcli validate --no-net "$srcdir"/stage/usr/share/metainfo/*.metainfo.xml
@@ -133,13 +133,17 @@ package_bingux-preview-host() {
 }
 
 package_bingux-audio-effects() {
-    pkgdesc='Sound effects for the Bingux desktop: engine and LADSPA plugins'
+    pkgdesc='Sound effects for the Bingux desktop: a stack of published LV2 plugins'
     license=('GPL-3.0-or-later' 'MIT' 'Unicode-3.0')
-    depends=('pipewire' 'systemd')
+    # pipewire-audio carries PipeWire's LV2 loader; lilv reads plugin metadata.
+    depends=('pipewire' 'pipewire-audio' 'lilv' 'lsp-plugins' 'systemd')
     optdepends=('wireplumber: choose the real device'
-        'lsp-plugins-ladspa: more effect plugins')
+        'calf: bass enhancer, exciter, crusher, de-esser, reverb and stereo tools'
+        'zam-plugins: maximizer'
+        'mda.lv2: bass loudness'
+        'x42-plugins: autotune'
+        'rubberband: pitch')
     _take usr/bin/bingux-effects \
-        usr/lib/ladspa/libbingux_dsp.so \
         usr/lib/systemd/user/bingux-effects@.service \
         usr/share/man/man1/bingux-effects.1
     _licenses bingux-effects

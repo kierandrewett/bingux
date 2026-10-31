@@ -2,8 +2,13 @@
 //!
 //! A preset is one JSON file, `<name>.json`, in
 //! `$XDG_CONFIG_HOME/bingux/effects/<output|input>/presets/`. It holds the
-//! ordered chain of plugins for one direction. `docs/audio-effects.md`
+//! ordered stack of effects for one direction. `docs/audio-effects.md`
 //! describes every field; the types here are the format.
+//!
+//! Version 2 names an effect by its kind (`compressor`, see `effects`) and
+//! stores the plugin's controls under the plugin's own port symbols, so a
+//! preset says exactly what the plugin was set to and nothing about how it is
+//! hosted. Version 1 presets (Bingux's own plugins) are migrated by `legacy`.
 
 use std::collections::BTreeMap;
 
@@ -12,7 +17,7 @@ use serde::{Deserialize, Serialize};
 /// The `format` value every preset carries.
 pub const FORMAT: &str = "bingux-effects-preset";
 /// The version this code writes. A newer version is refused, not guessed at.
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 /// Which way the sound flows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
@@ -36,148 +41,31 @@ impl Direction {
     }
 
     pub fn parse(text: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|direction| direction.name() == text)
+        Self::ALL
+            .into_iter()
+            .find(|direction| direction.name() == text)
     }
-}
-
-/// What a filter band does.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum BandKind {
-    Peaking,
-    LowShelf,
-    HighShelf,
-    LowPass,
-    HighPass,
-    BandPass,
-    Notch,
-    AllPass,
-}
-
-impl BandKind {
-    pub const ALL: [BandKind; 8] = [
-        BandKind::Peaking,
-        BandKind::LowShelf,
-        BandKind::HighShelf,
-        BandKind::LowPass,
-        BandKind::HighPass,
-        BandKind::BandPass,
-        BandKind::Notch,
-        BandKind::AllPass,
-    ];
-
-    pub fn title(self) -> &'static str {
-        match self {
-            BandKind::Peaking => "Bell",
-            BandKind::LowShelf => "Low shelf",
-            BandKind::HighShelf => "High shelf",
-            BandKind::LowPass => "Low pass",
-            BandKind::HighPass => "High pass",
-            BandKind::BandPass => "Band pass",
-            BandKind::Notch => "Notch",
-            BandKind::AllPass => "All pass",
-        }
-    }
-
-    /// The value in preset files.
-    pub fn key(self) -> &'static str {
-        match self {
-            BandKind::Peaking => "peaking",
-            BandKind::LowShelf => "low_shelf",
-            BandKind::HighShelf => "high_shelf",
-            BandKind::LowPass => "low_pass",
-            BandKind::HighPass => "high_pass",
-            BandKind::BandPass => "band_pass",
-            BandKind::Notch => "notch",
-            BandKind::AllPass => "all_pass",
-        }
-    }
-
-    /// The label of the PipeWire built-in biquad that implements it.
-    pub fn label(self) -> &'static str {
-        match self {
-            BandKind::Peaking => "bq_peaking",
-            BandKind::LowShelf => "bq_lowshelf",
-            BandKind::HighShelf => "bq_highshelf",
-            BandKind::LowPass => "bq_lowpass",
-            BandKind::HighPass => "bq_highpass",
-            BandKind::BandPass => "bq_bandpass",
-            BandKind::Notch => "bq_notch",
-            BandKind::AllPass => "bq_allpass",
-        }
-    }
-
-    /// Whether the band uses its gain.
-    pub fn has_gain(self) -> bool {
-        matches!(self, BandKind::Peaking | BandKind::LowShelf | BandKind::HighShelf)
-    }
-}
-
-/// One filter of an equalizer.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Band {
-    #[serde(rename = "type")]
-    pub kind: BandKind,
-    /// Hz.
-    pub frequency: f64,
-    /// dB. Ignored by filters without gain.
-    #[serde(default)]
-    pub gain: f64,
-    #[serde(default = "default_q")]
-    pub q: f64,
-    #[serde(default = "yes")]
-    pub enabled: bool,
-}
-
-impl Band {
-    pub fn peaking(frequency: f64, gain: f64, q: f64) -> Self {
-        Self {
-            kind: BandKind::Peaking,
-            frequency,
-            gain,
-            q,
-            enabled: true,
-        }
-    }
-}
-
-fn default_q() -> f64 {
-    1.0
 }
 
 fn yes() -> bool {
     true
 }
 
-/// The plugin type of the parametric equalizer.
-pub const EQUALIZER: &str = "equalizer";
-/// The plugin type of the plain gain stage.
-pub const GAIN: &str = "gain";
-/// The plugin type of the delay.
-pub const DELAY: &str = "delay";
-/// The plugin type of the convolver (impulse response reverb and speaker correction).
-pub const CONVOLVER: &str = "convolver";
-
-/// One plugin in the chain.
+/// One effect in the stack.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PluginSlot {
-    /// Names the plugin in this preset, such as `compressor-1`. Letters, digits and `-`.
+    /// Names the effect in this preset, such as `compressor-1`. Letters, digits and `-`.
     pub id: String,
-    /// `equalizer`, `gain`, `delay`, `convolver` or `ladspa:<library>:<label>`.
+    /// The kind of effect: `compressor`, `equalizer` and the rest of `effects::ALL`.
     #[serde(rename = "type")]
     pub kind: String,
-    /// A plugin that is off is left out of the audio path.
+    /// An effect that is off is left out of the audio path and keeps its settings.
     #[serde(default = "yes")]
     pub enabled: bool,
-    /// Control values by port name. A control that is missing has its default.
+    /// Control values by the plugin's port symbol. A control that is missing
+    /// has the plugin's default.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub controls: BTreeMap<String, f64>,
-    /// Equalizer only: gain before the bands, in dB.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub preamp: Option<f64>,
-    /// Equalizer only: the filters, in order.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub bands: Vec<Band>,
     /// Convolver only: the impulse response file (WAV, FLAC and the like).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
@@ -190,31 +78,22 @@ impl PluginSlot {
             kind: kind.into(),
             enabled: true,
             controls: BTreeMap::new(),
-            preamp: None,
-            bands: Vec::new(),
             path: None,
         }
     }
 
-    pub fn control(mut self, name: &str, value: f64) -> Self {
-        self.controls.insert(name.to_string(), value);
+    pub fn control(mut self, symbol: &str, value: f64) -> Self {
+        self.controls.insert(symbol.to_string(), value);
         self
     }
 
-    pub fn equalizer(id: impl Into<String>, preamp: f64, bands: Vec<Band>) -> Self {
-        let mut slot = Self::new(id, EQUALIZER);
-        slot.preamp = Some(preamp);
-        slot.bands = bands;
-        slot
-    }
-
-    /// `ladspa:<library>:<label>` for a LADSPA plugin.
-    pub fn ladspa(id: impl Into<String>, library: &str, label: &str) -> Self {
-        Self::new(id, format!("ladspa:{library}:{label}"))
+    /// The value of `symbol`: the stored one, else `default`.
+    pub fn value(&self, symbol: &str, default: f64) -> f64 {
+        self.controls.get(symbol).copied().unwrap_or(default)
     }
 }
 
-/// A named chain of plugins for one direction.
+/// A named stack of effects for one direction.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Preset {
     #[serde(default = "format_name")]
@@ -223,6 +102,7 @@ pub struct Preset {
     pub version: u32,
     pub name: String,
     pub direction: Direction,
+    /// The effects, in the order the sound passes through them.
     #[serde(default)]
     pub plugins: Vec<PluginSlot>,
 }
@@ -263,7 +143,8 @@ impl Preset {
         self
     }
 
-    /// Read a preset from JSON text and check it.
+    /// Read a version 2 preset from JSON text and check it. A version 1 file
+    /// is refused here: `legacy::migrate` reads those.
     pub fn parse(text: &str) -> Result<Self, PresetError> {
         let preset: Preset =
             serde_json::from_str(text).map_err(|e| PresetError(format!("Not a preset: {e}")))?;
@@ -271,7 +152,7 @@ impl Preset {
         Ok(preset)
     }
 
-    /// The preset as pretty JSON, one plugin per block.
+    /// The preset as pretty JSON, one effect per block.
     pub fn to_json(&self) -> String {
         let mut text = serde_json::to_string_pretty(self).unwrap_or_default();
         text.push('\n');
@@ -280,11 +161,20 @@ impl Preset {
 
     fn check(&self) -> Result<(), PresetError> {
         if self.format != FORMAT {
-            return Err(PresetError(format!("Not a Bingux preset (format \"{}\").", self.format)));
+            return Err(PresetError(format!(
+                "Not a Bingux preset (format \"{}\").",
+                self.format
+            )));
         }
         if self.version > VERSION {
             return Err(PresetError(format!(
                 "Preset version {} is newer than this app understands ({VERSION}).",
+                self.version
+            )));
+        }
+        if self.version < VERSION {
+            return Err(PresetError(format!(
+                "Preset version {} is out of date and has not been migrated.",
                 self.version
             )));
         }
@@ -293,25 +183,39 @@ impl Preset {
         }
         let mut seen = Vec::new();
         for slot in &self.plugins {
-            if slot.id.is_empty() || !slot.id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            if slot.id.is_empty()
+                || !slot
+                    .id
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-')
+            {
                 return Err(PresetError(format!(
-                    "Plugin id \"{}\" must be letters, digits and dashes.",
+                    "Effect id \"{}\" must be letters, digits and dashes.",
                     slot.id
                 )));
             }
             if seen.contains(&slot.id) {
-                return Err(PresetError(format!("Plugin id \"{}\" is used twice.", slot.id)));
+                return Err(PresetError(format!(
+                    "Effect id \"{}\" is used twice.",
+                    slot.id
+                )));
             }
             seen.push(slot.id.clone());
         }
         Ok(())
     }
 
-    /// An id like `compressor-3` that no plugin in the preset uses.
+    /// An id like `compressor-3` that no effect in the preset uses.
     pub fn fresh_id(&self, stem: &str) -> String {
         let stem: String = stem
             .chars()
-            .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+            .map(|c| {
+                if c.is_ascii_alphanumeric() {
+                    c.to_ascii_lowercase()
+                } else {
+                    '-'
+                }
+            })
             .collect();
         let stem = stem.trim_matches('-');
         (1..)
@@ -327,6 +231,36 @@ impl Preset {
     pub fn slot_mut(&mut self, id: &str) -> Option<&mut PluginSlot> {
         self.plugins.iter_mut().find(|slot| slot.id == id)
     }
+
+    /// Move the effect at `from` so it sits at `to`, both indexes into the
+    /// stack before the move. Out of range or equal indexes change nothing.
+    pub fn move_slot(&mut self, from: usize, to: usize) {
+        if from == to || from >= self.plugins.len() || to >= self.plugins.len() {
+            return;
+        }
+        let slot = self.plugins.remove(from);
+        self.plugins.insert(to, slot);
+    }
+
+    /// Add a new effect of `kind` at the end with its initial settings, and
+    /// return its id.
+    pub fn add(&mut self, kind: &str) -> Option<String> {
+        let effect = crate::effects::find(kind)?;
+        let id = self.fresh_id(kind.replace('_', "-").as_str());
+        let mut slot = PluginSlot::new(id.clone(), kind);
+        for (symbol, value) in effect.initial_controls() {
+            slot.controls.insert(symbol, value);
+        }
+        self.plugins.push(slot);
+        Some(id)
+    }
+
+    /// Take the effect `id` out of the stack.
+    pub fn remove(&mut self, id: &str) -> bool {
+        let before = self.plugins.len();
+        self.plugins.retain(|slot| slot.id != id);
+        self.plugins.len() != before
+    }
 }
 
 /// A file name for a preset name: the name with anything unsafe in a path
@@ -335,10 +269,20 @@ pub fn file_stem(name: &str) -> String {
     let cleaned: String = name
         .trim()
         .chars()
-        .map(|c| if c.is_control() || "/\\:*?\"<>|".contains(c) { '_' } else { c })
+        .map(|c| {
+            if c.is_control() || "/\\:*?\"<>|".contains(c) {
+                '_'
+            } else {
+                c
+            }
+        })
         .collect();
     let cleaned = cleaned.trim_start_matches('.').trim().to_string();
-    if cleaned.is_empty() { "Preset".to_string() } else { cleaned }
+    if cleaned.is_empty() {
+        "Preset".to_string()
+    } else {
+        cleaned
+    }
 }
 
 #[cfg(test)]
@@ -348,8 +292,12 @@ mod tests {
     #[test]
     fn a_preset_survives_a_round_trip() {
         let preset = Preset::new("Night", Direction::Output)
-            .with(PluginSlot::equalizer("eq-1", -2.0, vec![Band::peaking(100.0, 3.0, 1.0)]))
-            .with(PluginSlot::ladspa("comp-1", "bingux_dsp", "bingux_compressor").control("Threshold", -24.0));
+            .with(
+                PluginSlot::new("equalizer-1", "equalizer")
+                    .control("ftl_0", 1.0)
+                    .control("fl_0", 100.0),
+            )
+            .with(PluginSlot::new("compressor-1", "compressor").control("cr", 6.0));
         assert_eq!(Preset::parse(&preset.to_json()).unwrap(), preset);
     }
 
@@ -357,7 +305,7 @@ mod tests {
     fn missing_fields_take_their_defaults() {
         let preset = Preset::parse(
             r#"{ "name": "Mine", "direction": "input",
-                 "plugins": [ { "id": "g", "type": "gain" } ] }"#,
+                 "plugins": [ { "id": "g", "type": "limiter" } ] }"#,
         )
         .unwrap();
         assert!(preset.plugins[0].enabled);
@@ -369,15 +317,49 @@ mod tests {
         assert!(Preset::parse("[]").is_err());
         assert!(Preset::parse(r#"{"format":"other","name":"x","direction":"output"}"#).is_err());
         assert!(Preset::parse(r#"{"version":99,"name":"x","direction":"output"}"#).is_err());
-        let twice = r#"{"name":"x","direction":"output","plugins":[{"id":"a","type":"gain"},{"id":"a","type":"gain"}]}"#;
+        assert!(
+            Preset::parse(r#"{"version":1,"name":"x","direction":"output"}"#)
+                .unwrap_err()
+                .0
+                .contains("migrated")
+        );
+        let twice = r#"{"name":"x","direction":"output","plugins":[{"id":"a","type":"gate"},{"id":"a","type":"gate"}]}"#;
         assert!(Preset::parse(twice).unwrap_err().0.contains("twice"));
     }
 
     #[test]
     fn fresh_ids_do_not_collide() {
-        let preset = Preset::new("x", Direction::Output).with(PluginSlot::new("gain-1", GAIN));
-        assert_eq!(preset.fresh_id("Gain"), "gain-2");
-        assert_eq!(preset.fresh_id("Bingux Compressor"), "bingux-compressor-1");
+        let preset = Preset::new("x", Direction::Output).with(PluginSlot::new("gate-1", "gate"));
+        assert_eq!(preset.fresh_id("gate"), "gate-2");
+        assert_eq!(preset.fresh_id("Bass enhancer"), "bass-enhancer-1");
+    }
+
+    #[test]
+    fn effects_are_added_moved_and_removed_in_order() {
+        let mut preset = Preset::new("x", Direction::Output);
+        let eq = preset.add("equalizer").unwrap();
+        let comp = preset.add("compressor").unwrap();
+        let lim = preset.add("limiter").unwrap();
+        assert_eq!(
+            preset
+                .plugins
+                .iter()
+                .map(|s| s.id.as_str())
+                .collect::<Vec<_>>(),
+            [eq.as_str(), comp.as_str(), lim.as_str()]
+        );
+        preset.move_slot(2, 0);
+        assert_eq!(preset.plugins[0].id, lim);
+        preset.move_slot(0, 9);
+        assert_eq!(preset.plugins[0].id, lim, "out of range moves nothing");
+        assert!(preset.remove(&comp));
+        assert!(!preset.remove(&comp));
+        assert_eq!(preset.plugins.len(), 2);
+        assert!(preset.add("not-an-effect").is_none());
+        assert!(
+            preset.slot(&eq).unwrap().controls.contains_key("ftl_0"),
+            "an equalizer starts with its bands"
+        );
     }
 
     #[test]

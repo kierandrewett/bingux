@@ -2,14 +2,14 @@
 
 One source package, `bingux`, builds six binary packages (and their debuginfo):
 
-| Package | Contents |
-| --- | --- |
-| `bingux` | Shell, search and status daemons, `binguxctl`, helpers, QML plugins, Gnoblin drop-in, user units and preset |
-| `bingux-config` | `bingux-config` |
-| `bingux-settings` | Settings: program, desktop entry, icon, metainfo, man page, search-app manifest |
-| `bingux-files` | Files: program, desktop entry, icon, metainfo, man page |
-| `bingux-audio-effects` | `bingux-effects`, the LADSPA library `libbingux_dsp.so`, the `bingux-effects@.service` template |
-| `bingux-taxonomy` | The Bingux UI reference window |
+| Package                | Contents                                                                                                                                                                                                             |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bingux`               | Shell, search and status daemons, `binguxctl`, helpers, QML plugins, Gnoblin drop-in, user units and preset                                                                                                          |
+| `bingux-config`        | `bingux-config`                                                                                                                                                                                                      |
+| `bingux-settings`      | Settings: program, desktop entry, icon, metainfo, man page, search-app manifest                                                                                                                                      |
+| `bingux-files`         | Files: program, desktop entry, icon, metainfo, man page                                                                                                                                                              |
+| `bingux-audio-effects` | `bingux-effects` and the `bingux-effects@.service` template; requires `lsp-plugins-lv2`, `pipewire-module-filter-chain-lv2` and `lilv-libs`, recommends the Calf, ZamAudio, MDA, x42 and Rubber Band plugin packages |
+| `bingux-taxonomy`      | The Bingux UI reference window                                                                                                                                                                                       |
 
 The spec does not install Gnoblin; Gnoblin is a separate package and session
 requirement (`Recommends: gnoblin`).

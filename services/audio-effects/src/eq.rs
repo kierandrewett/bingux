@@ -1,131 +1,173 @@
-//! The frequency response of an equalizer, for drawing its curve.
+//! Equalizer bands, in the plugin's own terms.
 //!
-//! The coefficients are the RBJ "Audio EQ Cookbook" ones, which are also what
-//! PipeWire's built-in biquads use, so the drawn curve is the curve that is
-//! heard.
+//! The equalizer is the Linux Studio Plugins parametric equalizer. Each of its
+//! 32 filters has a type, frequency, gain and quality factor for each side
+//! (left and right, or mid and side), stored in the preset under the
+//! plugin's port symbols (`ftl_3`, `fl_3`, `gl_3`, `ql_3`, and `ftr_3` and so
+//! on for the right). This module is the one place that knows those names:
+//! the page, the importers and the migration all go through it.
 
-use crate::preset::{Band, BandKind};
+use std::collections::BTreeMap;
 
-/// Filter coefficients, normalised so `a0` is 1.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Coefficients {
-    pub b0: f64,
-    pub b1: f64,
-    pub b2: f64,
-    pub a1: f64,
-    pub a2: f64,
+/// How many filters the plugin has.
+pub const BANDS: usize = 32;
+
+/// The ten bands a new equalizer starts with, as Easy Effects has them:
+/// frequency in Hz.
+pub const DEFAULT_FREQUENCIES: [f64; 10] = [
+    30.0, 60.0, 119.0, 238.0, 475.0, 947.0, 1900.0, 3800.0, 7500.0, 15000.0,
+];
+/// The quality factor a new band has.
+pub const DEFAULT_Q: f64 = 1.5;
+
+/// What a filter does. The numbers are the plugin's `Filter type` choices.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BandKind {
+    Off = 0,
+    Bell = 1,
+    HighPass = 2,
+    HighShelf = 3,
+    LowPass = 4,
+    LowShelf = 5,
+    Notch = 6,
+    Resonance = 7,
+    AllPass = 8,
+    BandPass = 9,
 }
 
-impl Coefficients {
-    /// The filter `band` is at sample rate `rate`.
-    pub fn of(band: &Band, rate: f64) -> Self {
-        let freq = band.frequency.clamp(10.0, rate * 0.499);
-        let q = band.q.max(0.01);
-        let w = 2.0 * std::f64::consts::PI * freq / rate;
-        let (sin, cos) = w.sin_cos();
-        let alpha = sin / (2.0 * q);
-        let a = 10f64.powf(band.gain / 40.0);
-        let (b0, b1, b2, a0, a1, a2) = match band.kind {
-            BandKind::Peaking => (
-                1.0 + alpha * a,
-                -2.0 * cos,
-                1.0 - alpha * a,
-                1.0 + alpha / a,
-                -2.0 * cos,
-                1.0 - alpha / a,
-            ),
-            BandKind::LowShelf => {
-                let beta = 2.0 * a.sqrt() * alpha;
-                (
-                    a * ((a + 1.0) - (a - 1.0) * cos + beta),
-                    2.0 * a * ((a - 1.0) - (a + 1.0) * cos),
-                    a * ((a + 1.0) - (a - 1.0) * cos - beta),
-                    (a + 1.0) + (a - 1.0) * cos + beta,
-                    -2.0 * ((a - 1.0) + (a + 1.0) * cos),
-                    (a + 1.0) + (a - 1.0) * cos - beta,
-                )
-            }
-            BandKind::HighShelf => {
-                let beta = 2.0 * a.sqrt() * alpha;
-                (
-                    a * ((a + 1.0) + (a - 1.0) * cos + beta),
-                    -2.0 * a * ((a - 1.0) + (a + 1.0) * cos),
-                    a * ((a + 1.0) + (a - 1.0) * cos - beta),
-                    (a + 1.0) - (a - 1.0) * cos + beta,
-                    2.0 * ((a - 1.0) - (a + 1.0) * cos),
-                    (a + 1.0) - (a - 1.0) * cos - beta,
-                )
-            }
-            BandKind::LowPass => (
-                (1.0 - cos) / 2.0,
-                1.0 - cos,
-                (1.0 - cos) / 2.0,
-                1.0 + alpha,
-                -2.0 * cos,
-                1.0 - alpha,
-            ),
-            BandKind::HighPass => (
-                (1.0 + cos) / 2.0,
-                -(1.0 + cos),
-                (1.0 + cos) / 2.0,
-                1.0 + alpha,
-                -2.0 * cos,
-                1.0 - alpha,
-            ),
-            BandKind::BandPass => (alpha, 0.0, -alpha, 1.0 + alpha, -2.0 * cos, 1.0 - alpha),
-            BandKind::Notch => (1.0, -2.0 * cos, 1.0, 1.0 + alpha, -2.0 * cos, 1.0 - alpha),
-            BandKind::AllPass => (
-                1.0 - alpha,
-                -2.0 * cos,
-                1.0 + alpha,
-                1.0 + alpha,
-                -2.0 * cos,
-                1.0 - alpha,
-            ),
+impl BandKind {
+    pub fn code(self) -> f64 {
+        f64::from(self as u8)
+    }
+
+    /// Whether the filter uses its gain.
+    pub fn has_gain(self) -> bool {
+        matches!(
+            self,
+            BandKind::Bell | BandKind::HighShelf | BandKind::LowShelf | BandKind::Resonance
+        )
+    }
+}
+
+/// Which side of the stereo image a set of bands is for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Side {
+    /// Left, or mid in the mid/side equalizer.
+    First,
+    /// Right, or side in the mid/side equalizer.
+    Second,
+}
+
+/// The port symbols of band `index` for `side`. `mid_side` selects the
+/// mid/side equalizer's names (`ftm_0`) instead of left/right (`ftl_0`).
+pub struct Symbols {
+    pub kind: String,
+    pub mode: String,
+    pub slope: String,
+    pub solo: String,
+    pub mute: String,
+    pub frequency: String,
+    pub width: String,
+    pub gain: String,
+    pub quality: String,
+}
+
+impl Symbols {
+    pub fn of(index: usize, side: Side, mid_side: bool) -> Self {
+        let letter = match (side, mid_side) {
+            (Side::First, false) => 'l',
+            (Side::Second, false) => 'r',
+            (Side::First, true) => 'm',
+            (Side::Second, true) => 's',
         };
         Self {
-            b0: b0 / a0,
-            b1: b1 / a0,
-            b2: b2 / a0,
-            a1: a1 / a0,
-            a2: a2 / a0,
+            kind: format!("ft{letter}_{index}"),
+            mode: format!("fm{letter}_{index}"),
+            slope: format!("s{letter}_{index}"),
+            solo: format!("xs{letter}_{index}"),
+            mute: format!("xm{letter}_{index}"),
+            frequency: format!("f{letter}_{index}"),
+            width: format!("w{letter}_{index}"),
+            gain: format!("g{letter}_{index}"),
+            quality: format!("q{letter}_{index}"),
+        }
+    }
+}
+
+/// One filter, in the units a person reads.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Band {
+    pub kind: BandKind,
+    /// Hz.
+    pub frequency: f64,
+    /// dB.
+    pub gain: f64,
+    pub q: f64,
+    /// 0 to 3: the filter is repeated 1 to 4 times for a steeper slope.
+    pub slope: u8,
+    pub mute: bool,
+}
+
+impl Band {
+    pub fn new(kind: BandKind, frequency: f64, gain: f64, q: f64) -> Self {
+        Self {
+            kind,
+            frequency,
+            gain,
+            q,
+            slope: 0,
+            mute: false,
         }
     }
 
-    /// The gain of the filter at `freq` Hz, in dB.
-    pub fn magnitude_db(&self, freq: f64, rate: f64) -> f64 {
-        let w = 2.0 * std::f64::consts::PI * freq / rate;
-        let (s1, c1) = w.sin_cos();
-        let (s2, c2) = (2.0 * w).sin_cos();
-        let num_re = self.b0 + self.b1 * c1 + self.b2 * c2;
-        let num_im = -(self.b1 * s1 + self.b2 * s2);
-        let den_re = 1.0 + self.a1 * c1 + self.a2 * c2;
-        let den_im = -(self.a1 * s1 + self.a2 * s2);
-        let num = num_re * num_re + num_im * num_im;
-        let den = den_re * den_re + den_im * den_im;
-        10.0 * (num / den.max(1e-300)).max(1e-300).log10()
+    pub fn bell(frequency: f64, gain: f64, q: f64) -> Self {
+        Self::new(BandKind::Bell, frequency, gain, q)
     }
 }
 
-/// The sample rate the curve is drawn for.
-pub const RATE: f64 = 48_000.0;
-
-/// The gain of a whole equalizer at `freq` Hz, in dB: the preamp plus every
-/// enabled band.
-pub fn response_db(preamp: f64, bands: &[Band], freq: f64) -> f64 {
-    preamp
-        + bands
-            .iter()
-            .filter(|band| band.enabled)
-            .map(|band| Coefficients::of(band, RATE).magnitude_db(freq, RATE))
-            .sum::<f64>()
+fn linear(db: f64) -> f64 {
+    10f64.powf(db / 20.0)
 }
 
-/// `count` frequencies spaced evenly on a log scale from `low` to `high` Hz.
-pub fn log_frequencies(low: f64, high: f64, count: usize) -> Vec<f64> {
-    (0..count)
-        .map(|i| low * (high / low).powf(i as f64 / (count - 1).max(1) as f64))
-        .collect()
+/// The controls that set `first` and `second` as the two sides' bands of an
+/// equalizer: left and right, or mid and side when `mid_side`. Bands past the
+/// last are switched off, so replacing a preset's bands leaves none of the old
+/// ones behind.
+pub fn controls_for(first: &[Band], second: &[Band], mid_side: bool) -> BTreeMap<String, f64> {
+    let mut controls = BTreeMap::new();
+    for index in 0..BANDS {
+        for (side, bands) in [(Side::First, first), (Side::Second, second)] {
+            let symbols = Symbols::of(index, side, mid_side);
+            match bands.get(index) {
+                Some(band) => {
+                    controls.insert(symbols.kind, band.kind.code());
+                    controls.insert(symbols.frequency, band.frequency.clamp(10.0, 24_000.0));
+                    controls.insert(symbols.gain, linear(band.gain).clamp(0.015_85, 63.095_7));
+                    controls.insert(symbols.quality, band.q.clamp(0.0, 100.0));
+                    controls.insert(symbols.slope, f64::from(band.slope.min(3)));
+                    controls.insert(symbols.mute, if band.mute { 1.0 } else { 0.0 });
+                }
+                None => {
+                    controls.insert(symbols.kind, BandKind::Off.code());
+                }
+            }
+        }
+    }
+    controls
+}
+
+/// The controls that set `bands` on both sides of a left/right equalizer.
+pub fn controls(bands: &[Band]) -> BTreeMap<String, f64> {
+    controls_for(bands, bands, false)
+}
+
+/// The bands a new equalizer starts with.
+pub fn default_controls() -> BTreeMap<String, f64> {
+    let bands: Vec<Band> = DEFAULT_FREQUENCIES
+        .iter()
+        .map(|&frequency| Band::bell(frequency, 0.0, DEFAULT_Q))
+        .collect();
+    controls(&bands)
 }
 
 #[cfg(test)]
@@ -133,38 +175,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_bell_has_its_gain_at_its_centre() {
-        let band = Band::peaking(1000.0, 6.0, 1.0);
-        let db = Coefficients::of(&band, RATE).magnitude_db(1000.0, RATE);
-        assert!((db - 6.0).abs() < 0.01, "{db}");
-        let far = Coefficients::of(&band, RATE).magnitude_db(60.0, RATE);
-        assert!(far.abs() < 0.3, "{far}");
+    fn bands_become_the_plugins_port_symbols_for_both_sides() {
+        let controls = controls(&[Band::bell(1000.0, 6.0, 2.0)]);
+        assert_eq!(controls["ftl_0"], 1.0);
+        assert_eq!(controls["ftr_0"], 1.0);
+        assert_eq!(controls["fl_0"], 1000.0);
+        assert!((controls["gl_0"] - 1.9953).abs() < 1e-3);
+        assert_eq!(controls["ql_0"], 2.0);
+        assert_eq!(controls["ftl_1"], 0.0, "bands after the last are off");
+        assert!(!controls.contains_key("fl_1"));
     }
 
     #[test]
-    fn shelves_reach_their_gain_on_their_side() {
-        let low = Band {
-            kind: BandKind::LowShelf,
-            frequency: 200.0,
-            gain: 5.0,
-            q: 0.707,
-            enabled: true,
-        };
-        assert!((response_db(0.0, &[low.clone()], 20.0) - 5.0).abs() < 0.2);
-        assert!(response_db(0.0, &[low], 10_000.0).abs() < 0.2);
+    fn mid_side_symbols_use_m_and_s() {
+        assert_eq!(Symbols::of(3, Side::First, true).frequency, "fm_3");
+        assert_eq!(Symbols::of(3, Side::Second, true).kind, "fts_3");
+        assert_eq!(Symbols::of(12, Side::Second, false).gain, "gr_12");
     }
 
     #[test]
-    fn a_high_pass_cuts_the_bass_and_a_disabled_band_does_nothing() {
-        let mut band = Band {
-            kind: BandKind::HighPass,
-            frequency: 1000.0,
-            gain: 0.0,
-            q: 0.707,
-            enabled: true,
-        };
-        assert!(response_db(0.0, &[band.clone()], 100.0) < -30.0);
-        band.enabled = false;
-        assert_eq!(response_db(-3.0, &[band], 100.0), -3.0);
+    fn a_new_equalizer_has_ten_flat_bands() {
+        let controls = default_controls();
+        let bells = (0..BANDS)
+            .filter(|i| controls[&format!("ftl_{i}")] == 1.0)
+            .count();
+        assert_eq!(bells, 10);
+        assert_eq!(controls["fl_4"], 475.0);
+        assert!((controls["gl_4"] - 1.0).abs() < 1e-9);
     }
 }

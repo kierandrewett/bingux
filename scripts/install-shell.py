@@ -149,15 +149,13 @@ def migrate_legacy_search_launcher(prefix):
     )
 
 
-def build_payload(source, build, prefix, qml, target, managed=False, cargo=None, ladspa=None):
+def build_payload(source, build, prefix, qml, target, managed=False, cargo=None):
     """Install payload files and return their paths relative to prefix.
 
     `cargo` is the Cargo target directory that holds `release/` (default
-    BUILD/cargo) and `ladspa` is where the LADSPA plugin library goes (default
-    PREFIX/lib/ladspa; Fedora packages use lib64).
+    BUILD/cargo).
     """
     cargo = cargo or build / "cargo"
-    ladspa = ladspa or prefix / "lib/ladspa"
     payload = {
         build / "effects/libbinguxeffects.so": qml / "Bingux/Effects/libbinguxeffects.so",
         source / "native/effects/qmldir": qml / "Bingux/Effects/qmldir",
@@ -178,10 +176,9 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
         cargo / "release/xdg-desktop-portal-bingux": prefix / "libexec/bingux/xdg-desktop-portal-bingux",
         cargo / "release/bingux-global-shortcuts": prefix / "libexec/bingux/bingux-global-shortcuts",
         cargo / "release/bingux-settings": prefix / "bin/bingux-settings",
-        # Sound effects: the engine Settings starts, and the LADSPA library
-        # (bingux_dsp) with the compressor, limiter, reverb and the rest.
+        # Sound effects: the engine Settings starts. It hosts published plugins
+        # (see docs/audio-effects.md) and installs none.
         cargo / "release/bingux-effects": prefix / "bin/bingux-effects",
-        cargo / "release/libbingux_dsp.so": ladspa / "libbingux_dsp.so",
         source / "apps/settings/bingux-settings.desktop": prefix / "share/applications/bingux-settings.desktop",
         source / "apps/settings/bingux-settings.svg": prefix / "share/icons/hicolor/scalable/apps/bingux-settings.svg",
         cargo / "release/bingux-files": prefix / "bin/bingux-files",
@@ -574,7 +571,7 @@ def ensure_gnoblin_dropin_loader():
     )
 
 
-def install_user(source, build, prefix, qml, no_systemd, cargo=None, ladspa=None):
+def install_user(source, build, prefix, qml, no_systemd, cargo=None):
     manifest_path = prefix / ".bingux-install.json"
     if prefix.is_symlink():
         raise ValueError(f"refusing to install through symlink: {prefix}")
@@ -600,7 +597,6 @@ def install_user(source, build, prefix, qml, no_systemd, cargo=None, ladspa=None
             lambda path: staging / path.relative_to(prefix),
             managed=True,
             cargo=cargo,
-            ladspa=ladspa,
         )
         manifest = {
             "format": 1,
@@ -725,7 +721,6 @@ def apps_payload(source, cargo, prefix):
     entries = []
     for name in APPS_PROGRAMS:
         entries.append((prefix / "bin" / name, cargo / "release" / name, 0o755, True))
-    entries.append((prefix / "lib/ladspa/libbingux_dsp.so", cargo / "release/libbingux_dsp.so", 0o755, True))
     for package, name in (
         ("apps/settings", "bingux-settings"),
         ("apps/files", "bingux-files"),
@@ -957,7 +952,6 @@ def main():
     parser.add_argument("--build-dir", default="build")
     parser.add_argument("--qml-dir")
     parser.add_argument("--cargo-dir", help="Cargo target directory that holds release/ (default: BUILD_DIR/cargo)")
-    parser.add_argument("--ladspa-dir", help="where the LADSPA plugin library goes (default: PREFIX/lib/ladspa)")
     parser.add_argument("--no-systemd", action="store_true", help="do not reload or start user services")
     parser.add_argument(
         "--no-cache-update",
@@ -966,8 +960,8 @@ def main():
     )
     args = parser.parse_args()
     if args.apps:
-        if args.user or args.destdir or args.qml_dir or args.ladspa_dir:
-            parser.error("--apps cannot be combined with --user, --destdir, --qml-dir or --ladspa-dir")
+        if args.user or args.destdir or args.qml_dir:
+            parser.error("--apps cannot be combined with --user, --destdir or --qml-dir")
         prefix = Path(args.prefix or default_apps_prefix()).expanduser()
         validate_prefix(parser, prefix)
         try:
@@ -1000,14 +994,6 @@ def main():
             qml.relative_to(prefix)
         except ValueError:
             parser.error("--qml-dir must be inside --prefix for a managed user install")
-    ladspa = Path(args.ladspa_dir or prefix / "lib/ladspa")
-    if not ladspa.is_absolute():
-        parser.error("prefix and LADSPA directory must be absolute")
-    if args.user:
-        try:
-            ladspa.relative_to(prefix)
-        except ValueError:
-            parser.error("--ladspa-dir must be inside --prefix for a managed user install")
     if args.uninstall:
         try:
             uninstall_user(prefix, args.no_systemd)
@@ -1019,7 +1005,7 @@ def main():
     cargo = Path(args.cargo_dir).resolve() if args.cargo_dir else None
     try:
         if args.user:
-            install_user(source, build, prefix, qml, args.no_systemd, cargo, ladspa)
+            install_user(source, build, prefix, qml, args.no_systemd, cargo)
             return
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         parser.error(str(error))
@@ -1029,7 +1015,7 @@ def main():
         return stage / path.relative_to("/")
 
     try:
-        build_payload(source, build, prefix, qml, target, cargo=cargo, ladspa=ladspa)
+        build_payload(source, build, prefix, qml, target, cargo=cargo)
     except (OSError, ValueError) as error:
         parser.error(str(error))
     print("Installed Bingux under " + str(target(prefix)))

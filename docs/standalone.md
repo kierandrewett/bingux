@@ -205,9 +205,11 @@ make install-apps
 - `share/man/man1`: the manual pages.
 - `share/bingux/search-apps/bingux-settings.json`: tells `bingux-searchd` that
   Settings can be searched. The installer does not start the daemon.
-- `lib/ladspa/libbingux_dsp.so` and `share/systemd/user/bingux-effects@.service`:
-  the sound effects plugins and the unit Settings enables. A unit of the same name
-  in `$XDG_CONFIG_HOME/systemd/user` takes precedence over this one.
+- `share/systemd/user/bingux-effects@.service`: the unit Settings enables for the
+  sound effects engine. A unit of the same name in `$XDG_CONFIG_HOME/systemd/user`
+  takes precedence over this one. The effects themselves are published plugins
+  (Linux Studio Plugins and others) that come from your distribution, not from the
+  install: see [Sound effects](audio-effects.md#install-the-plugins).
 - `share/bingux-apps/`: the manifest and a copy of the installer, and
   `bin/bingux-apps-uninstall`, which removes the install without the checkout.
 
@@ -245,7 +247,6 @@ The package-oriented installer writes only below `DESTDIR`. It installs:
 - The Settings, Files and Taxonomy applications and the sound effects engine in
   `bin`, with their desktop entries, `hicolor` icons, AppStream metainfo
   (`share/metainfo`) and man pages (`share/man/man1`).
-- The Bingux DSP LADSPA library in `lib/ladspa` (`LADSPADIR` changes it).
 - The Gnoblin module in `share/gnoblin/conf.d/bingux.lua`.
 - User systemd units in `lib/systemd/user` and the preset in
   `lib/systemd/user-preset`.

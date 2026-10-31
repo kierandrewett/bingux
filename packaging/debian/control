@@ -214,19 +214,25 @@ Architecture: any
 Depends:
  ${misc:Depends},
  ${shlibs:Depends},
- pipewire (>= 1.0),
+ pipewire (>= 1.4),
+ libspa-0.2-modules (>= 1.4),
+ liblilv-0-0,
+ lsp-plugins-lv2,
  systemd,
 Recommends:
  pipewire-bin,
  wireplumber,
-Suggests:
- lsp-plugins-ladspa,
+ calf-plugins,
+ zam-plugins,
+ mda-lv2,
+ x42-plugins,
+ rubberband-ladspa,
 Description: Sound effects for the Bingux desktop
- bingux-effects puts a chain of plugins between applications and the speakers,
+ bingux-effects puts a stack of effects between applications and the speakers,
  or between a microphone and applications, using PipeWire's filter-chain. The
- package includes the Bingux DSP plugin library (compressor, limiter, gate,
- reverb, bass enhancer and more) in LADSPA format, which any LADSPA host can
- also load. Settings edits the presets and turns the effects on.
+ effects are the published plugins Easy Effects uses (Linux Studio Plugins,
+ Calf Studio Gear, ZamAudio, MDA, x42 and Rubber Band); the package contains
+ none of its own. Settings edits the presets and turns the effects on.
 
 Package: bingux-taxonomy
 Architecture: any

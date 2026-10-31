@@ -59,8 +59,17 @@ bluez-utils
 upower
 pipewire
 pipewire-alsa
+pipewire-audio
 pipewire-pulse
 wireplumber
+# Sound effects (Settings > Sound > Effects): the plugins Easy Effects hosts.
+lilv
+lsp-plugins
+calf
+zam-plugins
+mda.lv2
+x42-plugins
+rubberband
 sof-firmware
 alsa-utils
 arch-install-scripts
