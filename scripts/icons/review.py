@@ -582,8 +582,33 @@ def extra_items(ours: set[str]) -> list[dict]:
             (REPO / "shell/bingux/AdwaitaIconIndex.js").read_text().split("var paths")[0],
         )
     )
+    drawn = {
+        "screencast-stop": (
+            "ActivityIndicator.qml draws it as a 10 px square with a 1.5 px radius in a 16 px box. "
+            "It does not use the theme glyph, so the shell's alias to media-playback-stop is never shown.",
+            '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">'
+            '<rect x="3" y="3" width="10" height="10" rx="1.5" fill="#2e3436"/></svg>',
+        )
+    }
     for name in sorted(users):
         if name in ours:
+            continue
+        if name in drawn:
+            note, svg = drawn[name]
+            used = ", ".join(sorted(users[name]))
+            items.append(
+                {
+                    "id": name,
+                    "group": "shell-theme",
+                    "variant": None,
+                    "category": "drawn in QML",
+                    "glyph": "Rectangle in ActivityIndicator.qml",
+                    "where": html.escape(f"Shell: {used}. {note}"),
+                    "metaphor": "",
+                    "symbolic": True,
+                    "svg": base64.b64encode(svg.encode()).decode("ascii"),
+                }
+            )
             continue
         target = aliases.get(f"{name}-symbolic", aliases.get(name, f"{name}-symbolic"))
         found = next(iter(sorted(theme.glob(f"*/{target}.svg"))), None)
