@@ -49,3 +49,13 @@ preferences-desktop-keyboard-shortcuts
 [default-apps]
 web-browser mail-unread x-office-calendar folder default-app-text default-app-documents
 image-generic applications-multimedia video-generic
+
+[shell-power-and-media]
+system-switch-user system-log-out weather-clear-night system-reboot system-shutdown
+media-skip-backward media-seek-backward media-playback-pause media-playback-start media-seek-forward
+media-skip-forward media-playback-stop media-record screen-shared camera-photo
+audio-input-microphone audio-input-microphone-muted network-transmit-receive network-workgroup weather-clear
+
+[notes-slash-menu]
+format-text-plaintext view-list view-list-ordered checkbox-checked format-text-bold format-text-italic
+format-text-strikethrough format-code format-quote insert-link

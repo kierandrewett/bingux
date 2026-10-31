@@ -17,12 +17,17 @@
 #mark: list-drag-handle go-next go-previous pan-up pan-down pan-end object-select list-add list-remove window-close window-minimize window-maximize window-restore view-more
 #exempt size: network-wireless-signal-none network-wireless-signal-weak
 #exempt centre: audio-volume-low network-wireless-signal-none network-wireless-signal-weak
+#policy action: system-switch-user view-list-ordered checkbox-checked format-text-bold format-text-italic format-text-strikethrough format-text-plaintext format-code format-quote insert-link
+#policy control: system-log-out system-reboot
+#policy indicator: network-transmit-receive
+#policy object: audio-input-microphone-muted network-workgroup screen-shared weather-clear camera-photo
+#policy status: media-record media-seek-backward media-seek-forward media-skip-backward media-skip-forward
 # Icons that are flipped left to right when the interface reads right to left, because what they draw has a direction in the reading order: a
 # chevron or arrow that points forward or back, the panel a sidebar toggle shows at the start edge, a list's bullets at the start, a paper
 # plane that is sent. Not flipped: what is physical (a rotation, a speaker, a padlock, a fan), a media control (play points the way the
 # film runs), a check, a clock, a logo or a letter. design/rtl.md has the reasons. Checked by `build.py --check` and by the test
 # `icons::tests::mirrored_icons_are_the_ones_labels_tsv_names`.
-#mirror_rtl: go-next go-previous pan-end sidebar-show send-to view-list help-browser emblem-symbolic-link
+#mirror_rtl: go-next go-previous pan-end sidebar-show send-to view-list help-browser emblem-symbolic-link system-log-out
 
 network-wireless | Wi-Fi (sidebar), top-bar wireless | Wi-Fi fan | custom: two 2 px arcs and a dot
 network-wireless-signal-none | Wi-Fi list row: no signal | dot only | custom: a 3 px dot, centre (8, 12)
@@ -36,8 +41,10 @@ network-wireless-hotspot | Hotspot | broadcasting dot with arcs | Broadcast bold
 network-offline | top bar: no network | fan with x | custom: two 2 px arcs and an x where the dot is
 network-error | top bar: network problem | network with x | NetworkX bold
 network-wired | Network (sidebar), wired connection row, top-bar wired | wired network | Network bold
+network-transmit-receive | top bar: connected, kind unknown | arrows up and down | ArrowsDownUp bold
 network-vpn | VPN (rows, Control Centre) | shield | Shield fill
 network-server | Server / share | server stack | HardDrives fill
+network-workgroup | Tailscale: local network access and exit node rows | devices on one network | Devices fill
 airplane-mode | Airplane mode (top bar, Control Centre) | aeroplane | Airplane fill
 bluetooth-active | Bluetooth (sidebar, hero, top bar) | Bluetooth rune | Bluetooth bold scale=1.1
 bluetooth-disabled | Bluetooth off (top bar) | rune with slash | BluetoothSlash bold scale=1.1
@@ -46,14 +53,23 @@ audio-volume-medium | volume medium (top bar) | speaker with one wave | SpeakerL
 audio-volume-low | volume low (top bar) | speaker, no waves | SpeakerNone fill
 audio-volume-muted | volume muted (top bar) | speaker with x | SpeakerX fill
 audio-input-microphone | Microphone device, Sound page | microphone | Microphone fill
+audio-input-microphone-muted | Microphone muted (top bar, Control Centre, volume row) | microphone with a slash | MicrophoneSlash fill
 audio-headphones | Headphones device (Sound, Bluetooth) | headphones | Headphones fill
 audio-speakers | Speakers device (Sound, Bluetooth) | box speaker | SpeakerHifi fill
 audio-card | Sound card device (Sound page) | audio device / waveform | Waveform bold
 media-playback-pause | Pause (inspector toolbar) | two bars | Pause fill
+media-record | Recording (top-bar recording indicator and widget, capture notification) | record dot | Circle fill
+media-skip-backward | Previous track (media controls) | skip to start | SkipBack fill
+media-skip-forward | Next track (media controls) | skip to end | SkipForward fill
+media-seek-backward | Back 10 seconds (media controls) | rewind | Rewind fill
+media-seek-forward | Forward 10 seconds (media controls) | fast forward | FastForward fill
 preferences-system-notifications | Notifications (top bar) | bell | Bell fill
 notifications-disabled | Do not disturb (top bar, Control Centre) | bell with slash | BellSlash fill
 view-app-grid | Applications (sidebar), top-bar launcher | grid of nine dots | DotsNine bold
 system-shutdown | Power (top bar, power menu) | power symbol | Power bold
+system-log-out | Log Out (power menu) | arrow leaving a door | SignOut bold
+system-reboot | Restart (power menu) | circular arrow | ArrowClockwise bold
+system-switch-user | Switch User (power menu) | person with swap arrows | UserSwitch fill scale=0.98
 battery-level-100 | Power (sidebar), battery full | horizontal battery | BatteryFull bold
 battery-level-50 | battery half | horizontal battery | BatteryMedium bold
 battery-level-0 | battery empty (top bar, Power) | empty battery | BatteryEmpty bold
@@ -83,11 +99,13 @@ power-profile-balanced | Power mode: balanced | speedometer | Speedometer fill
 power-profile-performance | Power mode: performance | lightning bolt | Lightning fill
 display-brightness | Brightness | sun | Sun fill
 night-light | Night light | moon and stars | MoonStars fill
+weather-clear | Light background (preview toolbar), clear weather (search result) | sun | Sun fill
 weather-clear-night | Dark style | moon | Moon fill
 preferences-desktop-accessibility | Accessibility (sidebar) | person in circle | PersonSimpleCircle fill
 applications-graphics | Appearance (sidebar) | palette | Palette fill
 preferences-desktop-wallpaper | Desktop (sidebar), wallpaper | landscape picture | ImageSquare bold
 video-display | Displays (sidebar), display device | monitor | Monitor fill
+screen-shared | Screen sharing (top-bar privacy indicator) | monitor with an arrow | MonitorArrowUp fill
 system-search | Search (sidebar, search fields) | magnifier | MagnifyingGlass bold
 input-keyboard | Keyboard (sidebar, device) | keyboard | Keyboard bold
 preferences-desktop-keyboard-shortcuts | Keyboard shortcuts row | keyboard | Keyboard bold
@@ -134,6 +152,15 @@ document-edit | Text editor (Applications) | pencil on page | NotePencil fill
 document-open | Open | open folder | FolderOpen fill
 send-to | Share | square with arrow up | Export bold
 view-list | List view | bulleted list | ListBullets bold
+view-list-ordered | Numbered list (notes slash menu) | numbered list | ListNumbers bold
+checkbox-checked | To-do list (notes slash menu) | ticked box | CheckSquare bold
+format-text-plaintext | Text paragraph (notes slash menu) | letter T | TextT bold
+format-text-bold | Bold (notes slash menu) | bold B | TextB bold
+format-text-italic | Italic (notes slash menu) | italic I | TextItalic bold
+format-text-strikethrough | Strikethrough (notes slash menu) | struck S | TextStrikethrough bold
+format-code | Code block, inline code (notes slash menu) | angle brackets | Code bold
+format-quote | Quote (notes slash menu) | quotation marks | Quotes fill
+insert-link | Link (notes slash menu) | chain link | Link bold
 view-grid | Grid view | four squares | SquaresFour fill
 folder | Folder, Files | folder | Folder fill
 go-up | Parent folder (file chooser toolbar: Up) | folder with an arrow out of it | custom: Folder fill with an up arrow cut out
@@ -153,6 +180,7 @@ input-tablet | Tablet (Bluetooth) | tablet | DeviceTablet fill
 input-touchpad | Touchpad | finger tapping | HandTap bold
 phone | Phone (Bluetooth), phone preview | phone | DeviceMobile fill
 camera-web | Webcam (Sound page, Bluetooth) | webcam | Webcam fill
+camera-photo | Camera (Bluetooth device row), screenshot notification | still camera | Camera fill
 media-removable | USB drive | USB symbol | Usb fill
 printer | Printer (Bluetooth) | printer | Printer fill
 web-browser | Web (Applications, search) | globe | Globe fill

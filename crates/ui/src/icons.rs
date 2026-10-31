@@ -183,6 +183,52 @@ pub enum Icon {
     ApplicationXGeneric,
     /// The badge on the icon of a symbolic link.
     EmblemSymbolicLink,
+    /// Recording: the dot of a recording indicator.
+    MediaRecord,
+    /// Previous track.
+    MediaSkipBackward,
+    /// Next track.
+    MediaSkipForward,
+    /// Back 10 seconds.
+    MediaSeekBackward,
+    /// Forward 10 seconds.
+    MediaSeekForward,
+    /// Microphone muted.
+    AudioInputMicrophoneMuted,
+    /// Connected, kind of network unknown.
+    NetworkTransmitReceive,
+    /// Devices on one local network.
+    NetworkWorkgroup,
+    /// Screen sharing in progress.
+    ScreenShared,
+    /// Log out of the session.
+    SystemLogOut,
+    /// Restart the machine.
+    SystemReboot,
+    /// Switch to another user.
+    SystemSwitchUser,
+    /// A clear day: the sun.
+    WeatherClear,
+    /// A still camera.
+    CameraPhoto,
+    /// A numbered list.
+    ViewListOrdered,
+    /// A ticked box.
+    CheckboxChecked,
+    /// A paragraph of plain text.
+    FormatTextPlaintext,
+    /// Bold text.
+    FormatTextBold,
+    /// Italic text.
+    FormatTextItalic,
+    /// Struck-through text.
+    FormatTextStrikethrough,
+    /// Code, written as angle brackets.
+    FormatCode,
+    /// A quotation, written as quotation marks.
+    FormatQuote,
+    /// A link, written as a chain.
+    InsertLink,
     /// Any icon of the chat fork at any weight, as the fork draws it (feature `chat-icons`).
     #[cfg(feature = "chat-icons")]
     Chat(crate::chat_icons::ChatIcon, crate::chat_icons::ChatWeight),
@@ -190,7 +236,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 153] = [
+    pub const ALL: [Icon; 176] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -344,6 +390,29 @@ impl Icon {
         Self::TextXScript,
         Self::ApplicationXGeneric,
         Self::EmblemSymbolicLink,
+        Self::MediaRecord,
+        Self::MediaSkipBackward,
+        Self::MediaSkipForward,
+        Self::MediaSeekBackward,
+        Self::MediaSeekForward,
+        Self::AudioInputMicrophoneMuted,
+        Self::NetworkTransmitReceive,
+        Self::NetworkWorkgroup,
+        Self::ScreenShared,
+        Self::SystemLogOut,
+        Self::SystemReboot,
+        Self::SystemSwitchUser,
+        Self::WeatherClear,
+        Self::CameraPhoto,
+        Self::ViewListOrdered,
+        Self::CheckboxChecked,
+        Self::FormatTextPlaintext,
+        Self::FormatTextBold,
+        Self::FormatTextItalic,
+        Self::FormatTextStrikethrough,
+        Self::FormatCode,
+        Self::FormatQuote,
+        Self::InsertLink,
     ];
 
     /// The embedded SVG source for this icon.
@@ -539,6 +608,37 @@ impl Icon {
             Self::TextXScript => include_bytes!("../icons/text-x-script-symbolic.svg"),
             Self::ApplicationXGeneric => include_bytes!("../icons/application-x-generic-symbolic.svg"),
             Self::EmblemSymbolicLink => include_bytes!("../icons/emblem-symbolic-link-symbolic.svg"),
+            Self::MediaRecord => include_bytes!("../icons/media-record-symbolic.svg"),
+            Self::MediaSkipBackward => include_bytes!("../icons/media-skip-backward-symbolic.svg"),
+            Self::MediaSkipForward => include_bytes!("../icons/media-skip-forward-symbolic.svg"),
+            Self::MediaSeekBackward => include_bytes!("../icons/media-seek-backward-symbolic.svg"),
+            Self::MediaSeekForward => include_bytes!("../icons/media-seek-forward-symbolic.svg"),
+            Self::AudioInputMicrophoneMuted => {
+                include_bytes!("../icons/audio-input-microphone-muted-symbolic.svg")
+            }
+            Self::NetworkTransmitReceive => {
+                include_bytes!("../icons/network-transmit-receive-symbolic.svg")
+            }
+            Self::NetworkWorkgroup => include_bytes!("../icons/network-workgroup-symbolic.svg"),
+            Self::ScreenShared => include_bytes!("../icons/screen-shared-symbolic.svg"),
+            Self::SystemLogOut => include_bytes!("../icons/system-log-out-symbolic.svg"),
+            Self::SystemReboot => include_bytes!("../icons/system-reboot-symbolic.svg"),
+            Self::SystemSwitchUser => include_bytes!("../icons/system-switch-user-symbolic.svg"),
+            Self::WeatherClear => include_bytes!("../icons/weather-clear-symbolic.svg"),
+            Self::CameraPhoto => include_bytes!("../icons/camera-photo-symbolic.svg"),
+            Self::ViewListOrdered => include_bytes!("../icons/view-list-ordered-symbolic.svg"),
+            Self::CheckboxChecked => include_bytes!("../icons/checkbox-checked-symbolic.svg"),
+            Self::FormatTextPlaintext => {
+                include_bytes!("../icons/format-text-plaintext-symbolic.svg")
+            }
+            Self::FormatTextBold => include_bytes!("../icons/format-text-bold-symbolic.svg"),
+            Self::FormatTextItalic => include_bytes!("../icons/format-text-italic-symbolic.svg"),
+            Self::FormatTextStrikethrough => {
+                include_bytes!("../icons/format-text-strikethrough-symbolic.svg")
+            }
+            Self::FormatCode => include_bytes!("../icons/format-code-symbolic.svg"),
+            Self::FormatQuote => include_bytes!("../icons/format-quote-symbolic.svg"),
+            Self::InsertLink => include_bytes!("../icons/insert-link-symbolic.svg"),
             #[cfg(feature = "chat-icons")]
             // A weight the fork lacks is drawn in the regular weight, which every fork icon has.
             Self::Chat(icon, weight) => icon
@@ -629,6 +729,7 @@ impl Icon {
                 | Self::ViewList
                 | Self::HelpBrowser
                 | Self::EmblemSymbolicLink
+                | Self::SystemLogOut
         )
     }
 }
