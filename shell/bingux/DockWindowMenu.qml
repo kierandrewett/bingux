@@ -1,26 +1,13 @@
 import QtQuick
 
-TrayMenu {
+// The window action menu of a dock icon's window row.
+DockPointMenu {
     id: root
 
     // DockWindowActions: resolves the exact Gnoblin window and dispatches.
     required property var bridge
     property var toplevel: null
-    property point requestedPosition: Qt.point(0, 0)
     property int requestGeneration: 0
-
-    // Keep the row point that opened the menu outside its card, as WindowMenu
-    // does, so a click near a screen edge cannot land on the card.
-    readonly property real edgeGap: 1
-    readonly property real menuX: requestedPosition.x + popupWidth + edgeGap <= width - edgeGap ? requestedPosition.x + edgeGap : requestedPosition.x - popupWidth - edgeGap
-    readonly property real menuY: requestedPosition.y + popupHeight + edgeGap <= height - edgeGap ? requestedPosition.y + edgeGap : requestedPosition.y - popupHeight - edgeGap
-    preferredX: menuX
-    preferredY: menuY
-    compactRows: true
-    openMotion: 80
-    revealOriginX: 0
-    revealOriginY: 0
-    onAboutToOpen: revealScale = Theme.reducedMotion ? 1 : initialRevealScale
 
     // Opens the menu for one live window. A dispatch failure reopens it with
     // the error at the top, against a fresh lookup of the window's state.

@@ -165,8 +165,7 @@ click again to collapse it. Covers crossfade, play/pause morphs, and long titles
 use the shared marquee with fading edges. Hover colours change immediately.
 Reduced-motion mode disables the motion and keeps long titles elided.
 
-`MediaControls.qml` is shared by the dock and control centre; `DockMediaControls`
-is its compatibility name. `AlbumArtCache` retains at most twelve 512px covers
+`MediaControls.qml` is shared by the dock and control centre. `AlbumArtCache` retains at most twelve 512px covers
 in Qt's in-memory image cache, with matching decode settings across consumers.
 This avoids repeat downloads when a menu is reopened. The OS icon renderer
 samples each app icon's palette for its player accent and speaker badge;

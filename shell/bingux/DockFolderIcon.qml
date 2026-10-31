@@ -1,30 +1,44 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import "DockFolders.js" as DockFolders
 
+// A closed dock folder: a tile in the folder's colour holding a grid of its
+// apps. Up to four apps show 2 by 2, more show 3 by 3, and when the grid is
+// full its last cell says how many more there are.
 Item {
     id: root
     property var folder: null
     property var dock: null
     property real iconSize: 56
     property bool highlighted: false
+    // True while the folder is open: its popup shows the apps instead.
     property bool contentsHidden: false
     property string activeAppId: ""
-    readonly property real miniCellSize: iconSize * 0.30
-    readonly property real miniGap: Math.max(3, iconSize * 0.09)
-    readonly property real miniIconInset: Math.max(1, iconSize * 0.022)
-    readonly property bool activeOutsidePreview: {
-        if (!activeAppId)
-            return false;
-        for (let index = 0; index < Math.min(4, folder?.apps?.length || 0); index++)
-            if (folder.apps[index] === activeAppId)
-                return false;
-        return true;
-    }
+    readonly property var apps: folder?.apps || []
+    readonly property var grid: DockFolders.preview(apps.length, iconSize)
+    readonly property real inset: iconSize * 0.1
+    readonly property real gap: Math.max(2, iconSize * 0.05)
+    readonly property real cellSize: (iconSize - inset * 2 - gap * (grid.columns - 1)) / grid.columns
+    readonly property int cellCount: grid.shown + (grid.more > 0 ? 1 : 0)
+    readonly property bool activeOutsidePreview: activeAppId.length > 0 && apps.indexOf(activeAppId) >= grid.shown
     readonly property color folderColor: Theme.accentColorFor(folder?.color || Theme.gnomeAccentName)
     width: iconSize
     height: iconSize
 
+    // Where the mini icon of app `index` sits, in this item's coordinates.
+    // The open folder's popup flies its apps out of these places.
+    function miniGeometry(index) {
+        // A grid with spare rows (two apps in a 2 by 2) sits in the middle.
+        const spare = grid.columns - Math.ceil(cellCount / grid.columns);
+        return {
+            x: inset + (index % grid.columns) * (cellSize + gap),
+            y: inset + (Math.floor(index / grid.columns) + spare / 2) * (cellSize + gap),
+            size: cellSize
+        };
+    }
+
     Rectangle {
+        id: tile
         anchors.fill: parent
         radius: Math.max(12, root.iconSize * 0.25)
         color: Theme.surfaceColor(Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, root.contentsHidden ? 0.38 : 0.28), Theme.popupSurface)
@@ -42,72 +56,59 @@ Item {
             loops: Animation.Infinite
             NumberAnimation {
                 to: 0.68
-                duration: Theme.reducedMotion ? 0 : 170
+                duration: 170
             }
             NumberAnimation {
                 to: 1
-                duration: Theme.reducedMotion ? 0 : 170
+                duration: 170
             }
         }
     }
 
-    Grid {
-        visible: !root.contentsHidden
-        anchors.centerIn: parent
-        columns: 2
-        rows: 2
-        spacing: root.miniGap
-        Repeater {
-            model: 4
-            Item {
-                required property int index
-                width: root.miniCellSize
-                height: width
-                readonly property string appId: root.folder?.apps?.[index] || ""
-                readonly property bool active: appId.length > 0 && appId === root.activeAppId
-                Rectangle {
-                    anchors.fill: parent
-                    radius: Math.max(4, parent.width * 0.22)
-                    color: Theme.surfaceColor(Qt.rgba(1, 1, 1, 0.24), Theme.popupSurface)
-                    border.width: parent.active ? 1 : 0
-                    border.color: Theme.surfaceColor(Qt.rgba(1, 1, 1, 0.7), Theme.popupSurface)
-                    visible: parent.active
-                }
-                OsIconImage {
-                    anchors.fill: parent
-                    anchors.margins: root.miniIconInset
-                    visible: parent.appId.length > 0
-                    source: root.dock?.folderIcon(parent.appId) || "application-x-executable"
-                    implicitSize: parent.width - root.miniIconInset * 2
-                }
-            }
-        }
-    }
-    Grid {
-        visible: root.contentsHidden
-        anchors.centerIn: parent
-        columns: 2
-        spacing: Math.max(3, root.iconSize * 0.1)
-        Repeater {
-            model: 4
+    Repeater {
+        model: root.contentsHidden ? 0 : root.cellCount
+        Item {
+            id: cell
+            required property int index
+            readonly property var place: root.miniGeometry(index)
+            readonly property bool overflow: root.grid.more > 0 && index === root.grid.shown
+            readonly property string appId: overflow ? "" : root.apps[index] || ""
+            readonly property bool active: appId.length > 0 && appId === root.activeAppId
+            x: place.x
+            y: place.y
+            width: place.size
+            height: place.size
             Rectangle {
-                width: root.iconSize * 0.15
-                height: width
+                anchors.fill: parent
+                anchors.margins: -1
+                radius: Math.max(3, parent.width * 0.24)
+                color: Theme.surfaceColor(Qt.rgba(1, 1, 1, 0.26), Theme.popupSurface)
+                visible: cell.active
+            }
+            OsIconImage {
+                anchors.fill: parent
+                visible: !cell.overflow
+                source: root.dock?.folderIcon(cell.appId) || "application-x-executable"
+                implicitSize: cell.width
+            }
+            Rectangle {
+                anchors.fill: parent
+                visible: cell.overflow
                 radius: Math.max(3, width * 0.24)
-                color: Theme.surfaceColor(Qt.rgba(0.03, 0.03, 0.05, 0.13), Theme.popupSurface)
+                color: Theme.surfaceColor(Qt.rgba(1, 1, 1, 0.18), Theme.popupSurface)
+                Text {
+                    anchors.centerIn: parent
+                    text: "+" + Math.min(99, root.grid.more)
+                    color: Theme.text
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Math.max(7, parent.width * 0.5)
+                    font.weight: Font.DemiBold
+                }
             }
         }
     }
-    Rectangle {
-        visible: root.activeAppId.length > 0
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: -5
-        width: 17
-        height: 4
-        radius: 2
-        color: root.folderColor
-    }
+
+    // The app in focus when the folder's preview does not show it.
     Rectangle {
         visible: root.activeOutsidePreview && !root.contentsHidden
         x: root.width - width + 4
@@ -125,15 +126,5 @@ Item {
             implicitSize: 17
             source: root.dock?.folderIcon(root.activeAppId) || "application-x-executable"
         }
-    }
-    Rectangle {
-        visible: !root.contentsHidden && (root.folder?.apps?.length || 0) > 4
-        width: 5
-        height: 5
-        radius: 3
-        color: "white"
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.margins: 5
     }
 }
