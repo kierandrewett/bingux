@@ -142,9 +142,13 @@ local defaults = {
                 ["keep-fullscreen"] = false,
                 ["keep-tiled"] = true,
                 ["shadow-animation"] = { duration = 180, easing = "ease-out-cubic" },
-                -- Two soft layers and no tight one: a 4 to 6 px shadow with opacity 0.22 to 0.32
-                -- draws a dark ring just outside the window, which shows on a light background.
+                -- macOS draws a 1 px line on both sides of the window edge. The inner one is the
+                -- border above. The outer one is the first shadow layer: no offset, no blur, 1 px
+                -- of spread, so it is an even ring. Two soft layers follow it. The earlier tight
+                -- layers (blur 4 and 6, offset down, opacity 0.22 to 0.32) made a heavy, uneven
+                -- dark ring that showed on a light background.
                 shadow = {
+                    { x = 0, y = 0, blur = 0, spread = 1, opacity = 0.22 },
                     { x = 0, y = 10, blur = 40, spread = 0, opacity = 0.16 },
                     { x = 0, y = 3, blur = 12, spread = 0, opacity = 0.10 },
                 },
@@ -154,6 +158,7 @@ local defaults = {
             match = { type = "window", focused = true },
             corners = {
                 shadow = {
+                    { x = 0, y = 0, blur = 0, spread = 1, opacity = 0.30 },
                     { x = 0, y = 18, blur = 56, spread = 0, opacity = 0.28 },
                     { x = 0, y = 6, blur = 18, spread = 0, opacity = 0.16 },
                 },
