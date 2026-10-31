@@ -403,13 +403,20 @@ def analyse(panel: str, frames: Path, shifts: Path) -> dict:
 
 
 def record(groups, panel, frames, shifts, before, after, pairs) -> None:
-    """Add one shifting frame pair, extending the group it continues."""
+    """Add one shifting frame pair, extending the group it continues.
+
+    A group keeps every pair of its frames in `pairs`: the largest move of a
+    multi-frame shift is usually in a middle pair, not the first or the last.
+    `crop_worst` is the crop of the pair with the largest move."""
     crop_name = f"{panel}-f{after['index']:06d}.png"
     write_pair(before, after, pairs, shifts / crop_name)
+    biggest = max(abs(pair["dc"]) for pair in pairs)
     last = groups[-1] if groups else None
     if last and last["frame_to"] == before["index"] and last["phase"] == after["phase"]:
-        if last["crop_last"] != last["crop_first"]:
-            (shifts / last["crop_last"]).unlink(missing_ok=True)
+        worst = crop_name if biggest > last["max_dc"] else last["crop_worst"]
+        for stale in {last["crop_last"], last["crop_worst"]} - {last["crop_first"], worst, crop_name}:
+            (shifts / stale).unlink(missing_ok=True)
+        last["crop_worst"] = worst
         last.update(
             frame_to=after["index"],
             t_to=after["t"],
@@ -418,7 +425,8 @@ def record(groups, panel, frames, shifts, before, after, pairs) -> None:
             last_pairs=pairs,
             count=last["count"] + 1,
         )
-        last["max_dc"] = max([last["max_dc"]] + [abs(pair["dc"]) for pair in pairs])
+        last["pairs"] = last["pairs"] + pairs
+        last["max_dc"] = max(last["max_dc"], biggest)
         return
     first_full = f"{panel}-f{before['index']:06d}-before.png"
     last_full = f"{panel}-f{after['index']:06d}-after.png"
@@ -435,13 +443,15 @@ def record(groups, panel, frames, shifts, before, after, pairs) -> None:
             "t_to": after["t"],
             "since_to": after["since"],
             "count": 1,
-            "max_dc": max(abs(pair["dc"]) for pair in pairs),
+            "max_dc": biggest,
             "crop_first": crop_name,
             "crop_last": crop_name,
+            "crop_worst": crop_name,
             "full_before": first_full,
             "full_after": last_full,
             "first_pairs": pairs,
             "last_pairs": pairs,
+            "pairs": list(pairs),
         }
     )
 

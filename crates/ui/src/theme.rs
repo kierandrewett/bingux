@@ -212,7 +212,11 @@ impl Tokens {
             }
             fresh
         });
-        Self { scheme, reduced_motion, ..derived }
+        Self {
+            scheme,
+            reduced_motion,
+            ..derived
+        }
     }
 
     pub(crate) fn derive(accent_name: &'static str, scheme: Scheme, reduced_motion: bool) -> Self {
@@ -267,11 +271,7 @@ impl Tokens {
                 floating,
                 on_colour(composite(floating, p.content)),
             ),
-            danger_on_floating: ensure_contrast(
-                danger,
-                &[composite(floating, p.content)],
-                AA_TEXT,
-            ),
+            danger_on_floating: ensure_contrast(danger, &[composite(floating, p.content)], AA_TEXT),
             accent_ink: text_ink(accent, &p),
             danger_ink: text_ink(danger, &p),
             success_ink: text_ink(success, &p),
@@ -374,10 +374,19 @@ fn notice_palettes(
     on_floating: Color,
 ) -> [NoticePalette; 5] {
     use crate::contrast::{AAA_TEXT, Oklch};
-    let (fill_l, keep, max) = if dark { NOTICE_FILL_DARK } else { NOTICE_FILL_LIGHT };
+    let (fill_l, keep, max) = if dark {
+        NOTICE_FILL_DARK
+    } else {
+        NOTICE_FILL_LIGHT
+    };
     let tinted = |hue: Color| {
         let h = Oklch::from_colour(hue);
-        let fill = Oklch { l: fill_l, c: (h.c * keep).min(max), h: h.h }.to_colour();
+        let fill = Oklch {
+            l: fill_l,
+            c: (h.c * keep).min(max),
+            h: h.h,
+        }
+        .to_colour();
         let seed = Oklch {
             l: if dark { 0.88 } else { 0.42 },
             c: h.c.min(NOTICE_INK_CHROMA_MAX),
@@ -387,7 +396,12 @@ fn notice_palettes(
         let ink = ensure_contrast(seed, &[fill], AAA_TEXT);
         let glyph = ensure_contrast(hue, &[fill], AA_LARGE);
         let edge = composite(ink.with_af32(NOTICE_EDGE_ALPHA), fill);
-        NoticePalette { fill, ink, glyph, edge }
+        NoticePalette {
+            fill,
+            ink,
+            glyph,
+            edge,
+        }
     };
     let [info, success, warning, error] = hues.map(tinted);
     let neutral = NoticePalette {
@@ -436,7 +450,11 @@ fn fit_fill(fill: Color, p: &Palette) -> Color {
     let mut step = FILL_NUDGE_STEP;
     while step <= FILL_NUDGE_MAX {
         for direction in [-1.0, 1.0] {
-            let candidate = crate::contrast::Oklch { l: base.l + direction * step, ..base }.to_colour();
+            let candidate = crate::contrast::Oklch {
+                l: base.l + direction * step,
+                ..base
+            }
+            .to_colour();
             if reads(candidate) {
                 return candidate;
             }
@@ -517,7 +535,13 @@ pub(crate) struct Palette {
 impl Palette {
     /// The opaque layers a control or text can sit on.
     fn layers(&self) -> [Color; 5] {
-        [self.content, self.sidebar, self.card, self.control, self.popup]
+        [
+            self.content,
+            self.sidebar,
+            self.card,
+            self.control,
+            self.popup,
+        ]
     }
 
     /// The layers and each of them under the hover, press and selection
@@ -643,22 +667,28 @@ pub fn load_tokens() -> Tokens {
     let accent = read_gsettings("accent-color")
         .map(|raw| normalise_accent(&raw))
         .unwrap_or(DEFAULT_ACCENT);
-    // The snapshot harness pins the scheme so both palettes can be rendered
-    // without changing the desktop setting.
-    let scheme = std::env::var("BINGUX_SETTINGS_SNAPSHOT_SCHEME")
-        .ok()
-        .map(|raw| Scheme::from_gsettings(&raw))
+    let scheme = pinned_scheme()
         .or_else(|| read_gsettings("color-scheme").map(|raw| Scheme::from_gsettings(&raw)))
         .unwrap_or(Scheme::PreferDark);
     Tokens::new(accent, scheme, reduced_motion_from_env())
 }
 
+/// The scheme the snapshot harness pins with `BINGUX_SETTINGS_SNAPSHOT_SCHEME`,
+/// so both palettes can be rendered without changing the desktop setting.
+fn pinned_scheme() -> Option<Scheme> {
+    std::env::var("BINGUX_SETTINGS_SNAPSHOT_SCHEME")
+        .ok()
+        .map(|raw| Scheme::from_gsettings(&raw))
+}
+
 /// Tokens shown until the GNOME settings have been read on the task pool.
-/// The default accent and dark scheme match the shell's own defaults.
+/// The default accent and dark scheme match the shell's own defaults. A pinned
+/// scheme applies from the first frame, so a capture is not dark until the
+/// read lands and then recoloured.
 fn startup_tokens() -> Tokens {
     Tokens::new(
         DEFAULT_ACCENT,
-        Scheme::PreferDark,
+        pinned_scheme().unwrap_or(Scheme::PreferDark),
         reduced_motion_from_env(),
     )
 }

@@ -78,6 +78,12 @@ FAKES = {
     "BINGUX_SETTINGS_FAKE_DISPLAYS": "1",
     "BINGUX_SETTINGS_FAKE_BLUETOOTH": "1",
     "BINGUX_SETTINGS_FAKE_INPUT": "1",
+    # The colour scheme is pinned, and applies from the first frame. Unpinned, the
+    # window starts dark and recolours itself when the scheme read lands (held back
+    # like every other result), and the frame matcher then pairs rules across two
+    # palettes. The light palette is the one the matcher sees best: a dark card is
+    # only a few luminance steps off its page, below the matcher's edge threshold.
+    "BINGUX_SETTINGS_SNAPSHOT_SCHEME": "prefer-light",
 }
 # Subpages that need more than the default fakes.
 EXTRA_FAKES = {"network/mobile": {"BINGUX_SETTINGS_FAKE_NETWORK": "modem"}}
@@ -92,11 +98,13 @@ def significant(group: dict) -> list[dict]:
 
     Row separators and card borders are horizontal rules. One that moves by
     MIN_MOVE px or more between two frames means a row or group changed height
-    or appeared. Text bands and vertical rules are not used: the veil dims the
+    or appeared. Every pair of frames of the group counts, not only its first and
+    last: the biggest move of a shift that takes several frames is in the middle.
+    Text bands and vertical rules are not used: the veil dims the
     loading frames, which changes how wide a text band is and where a scrollbar
     thumb ends, without moving anything.
     """
-    pairs = group["first_pairs"] + group["last_pairs"]
+    pairs = group["pairs"]
     return [
         pair
         for pair in pairs
@@ -240,9 +248,9 @@ def main() -> None:
         for group in row["groups"]:
             lines.append(f"## {row['size']} {row['page']}: frames {group['frame_from']}-{group['frame_to']}")
             lines.append("")
-            for pair in significant(group)[:10]:
+            for pair in sorted(significant(group), key=lambda pair: -abs(pair["dc"]))[:10]:
                 lines.append(f"- {frame_walk.describe(pair)}")
-            lines += ["", f"![shift](shifts/{group['crop_first']})", ""]
+            lines += ["", f"![shift](shifts/{group['crop_worst']})", ""]
     (out / "report.md").write_text("\n".join(lines))
     (out / "shifts.json").write_text(
         json.dumps([{k: v for k, v in row.items()} for row in rows], indent=2, default=str)
