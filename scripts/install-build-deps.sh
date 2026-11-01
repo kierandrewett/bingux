@@ -26,7 +26,7 @@ case "$distro" in
             qt6-qtdeclarative-devel qt6-qtshadertools-devel \
             qt6-qtsvg-devel qt6-qttools-devel qt6-qtwayland-devel rust \
             spirv-tools systemd-devel util-linux wayland-devel wayland-protocols-devel wl-clipboard \
-            cairo-devel fontconfig-devel freetype-devel xdg-utils binutils tar xz
+            cairo-devel fontconfig-devel freetype-devel xdg-utils binutils patch tar xz
         dnf clean all
         ;;
     debian)
