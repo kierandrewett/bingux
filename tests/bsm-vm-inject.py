@@ -45,12 +45,15 @@ import sys
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 from crate_dirs import CRATE_DIRS, crate_dir  # noqa: E402
+
 DEFAULT_OUT = Path(os.environ.get("BSM_INJECT_DIR", "/tmp/bsm-vm/inject"))
 TARGET_DIR = Path(os.environ.get("BSM_PACKAGING_TARGET", "/tmp/bsm-target/packaging"))
 CONTAINER_IMAGE = "localhost/bsm-arch-build"
 PKGBUILD = ROOT / "distro/packages/bsm/PKGBUILD"
 # The plain cargo, not a caching wrapper: builds go to /tmp, never into the home directory.
-CARGO = os.environ.get("CARGO") or (str(Path.home() / ".cargo/bin/cargo") if (Path.home() / ".cargo/bin/cargo").exists() else "cargo")
+CARGO = os.environ.get("CARGO") or (
+    str(Path.home() / ".cargo/bin/cargo") if (Path.home() / ".cargo/bin/cargo").exists() else "cargo"
+)
 
 # Crates in the order the PKGBUILD builds them, with the binaries each provides.
 CRATES = {
@@ -162,15 +165,28 @@ def build_container(crates):
     cargo_home = Path("/tmp/bsm-vm/cargo-home")
     cargo_home.mkdir(parents=True, exist_ok=True)
     TARGET_DIR.mkdir(parents=True, exist_ok=True)
-    script = " && ".join(
-        f"cargo build --release --manifest-path /src/{CRATE_DIRS[name]}/Cargo.toml" for name in crates
-    )
+    script = " && ".join(f"cargo build --release --manifest-path /src/{CRATE_DIRS[name]}/Cargo.toml" for name in crates)
     run(
         [
-            "podman", "run", "--rm", "--security-opt", "label=disable",
-            "-v", f"{ROOT}:/src:ro", "-v", f"{TARGET_DIR}:/target", "-v", f"{cargo_home}:/cargo",
-            "-e", "CARGO_TARGET_DIR=/target", "-e", "CARGO_HOME=/cargo",
-            CONTAINER_IMAGE, "bash", "-c", script,
+            "podman",
+            "run",
+            "--rm",
+            "--security-opt",
+            "label=disable",
+            "-v",
+            f"{ROOT}:/src:ro",
+            "-v",
+            f"{TARGET_DIR}:/target",
+            "-v",
+            f"{cargo_home}:/cargo",
+            "-e",
+            "CARGO_TARGET_DIR=/target",
+            "-e",
+            "CARGO_HOME=/cargo",
+            CONTAINER_IMAGE,
+            "bash",
+            "-c",
+            script,
         ]
     )
 
@@ -186,13 +202,7 @@ def run_package(out, target):
     pkgver = "0.1.0"
     (work / "src" / f"bingux-{pkgver}").symlink_to(ROOT)
     (work / "src" / "target").symlink_to(target)
-    script = (
-        "set -euo pipefail\n"
-        f'source "{PKGBUILD}"\n'
-        f'srcdir="{work / "src"}"\n'
-        f'pkgdir="{root}"\n'
-        "package\n"
-    )
+    script = f'set -euo pipefail\nsource "{PKGBUILD}"\nsrcdir="{work / "src"}"\npkgdir="{root}"\npackage\n'
     run(["bash", "-c", script])
 
 
@@ -233,10 +243,18 @@ def stage(arguments):
     run_package(out, private)
     image = out / "image"
     shutil.rmtree(image, ignore_errors=True)
-    shutil.copytree(ROOT / "packaging/bsm/image", image, symlinks=True)
+    shutil.copytree(ROOT / "data/bsm/image", image, symlinks=True)
     if arguments.probe:
         # The root checks of tests/bsm-helper-root.sh drive this example binary in the guest.
-        command = [CARGO, "build", "--release", "-j4", "--examples", "--manifest-path", str(ROOT / "bsm/helper/Cargo.toml")]
+        command = [
+            CARGO,
+            "build",
+            "--release",
+            "-j4",
+            "--examples",
+            "--manifest-path",
+            str(ROOT / "bsm/helper/Cargo.toml"),
+        ]
         run(command, env=host_env())
         probe = TARGET_DIR / "release/examples/bsm-helper-probe"
         if probe.is_file():
@@ -288,8 +306,12 @@ def main():
     stage_parser.add_argument("--out", default=str(DEFAULT_OUT))
     stage_parser.add_argument("--build", choices=["host", "container", "none"], default="host")
     stage_parser.add_argument("--shell", action="store_true", help="also pack shell/bingux into a new bingux-shell.sxa")
-    stage_parser.add_argument("--probe", action="store_true", help="also install the bsm-helper-probe example (root checks)")
-    stage_parser.add_argument("--seatd", help="seatd binary to install as /usr/bin/seatd (images built before bsm lack it)")
+    stage_parser.add_argument(
+        "--probe", action="store_true", help="also install the bsm-helper-probe example (root checks)"
+    )
+    stage_parser.add_argument(
+        "--seatd", help="seatd binary to install as /usr/bin/seatd (images built before bsm lack it)"
+    )
     stage_parser.set_defaults(func=stage)
     status_parser = commands.add_parser("status", help="show what the last stage contains")
     status_parser.add_argument("--out", default=str(DEFAULT_OUT))

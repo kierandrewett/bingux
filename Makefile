@@ -8,8 +8,9 @@ PKG_CONFIG ?= pkg-config
 QMLDIR ?= $(PREFIX)/lib/bingux/qml
 # Where Cargo puts its output; package builders can point this at a shared target.
 CARGO_TARGET ?= $(abspath $(BUILD_DIR))/cargo
-# Work and results of `make rpm-package`, `make arch-package` and `make deb-package`.
-PACKAGE_DIR ?= /var/tmp/BinguxPkg
+# The prefix `make prefix` builds, and where `make packages` writes the packages (docs/packaging.md).
+PREFIX_DIR ?= $(abspath prefix)
+PACKAGE_DIR ?= $(abspath dist)
 # lib or lib64: where the shell archive and QML plugins live under PREFIX.
 LIBDIR_NAME ?= lib
 CMAKE ?= cmake
@@ -22,7 +23,7 @@ OUTPUT ?= dist/bingux-$(VERSION).tar.xz
 SHELL := /bin/bash
 ROOT := $(abspath .)
 
-.PHONY: check-static test-desktop test-desktop-fast all native shell shell-archive daemons apps icons icons-check doctor doctor-build check check-session layout-check overflow-check copy-check pixel-check stability-check motion-check ui-motion state-check rules-check install install-user uninstall-user install-apps uninstall-apps rpm-package rpm-check arch-package deb-package licenses source-archive
+.PHONY: check-static test-desktop test-desktop-fast all native shell shell-archive daemons bsm apps icons icons-check doctor doctor-build check check-session layout-check overflow-check copy-check pixel-check stability-check motion-check ui-motion state-check rules-check install install-user uninstall-user install-apps uninstall-apps install-bsm prefix packages package-check licenses source-archive
 all: native shell daemons
 
 native: $(BUILD_DIR)/bingux-image-clipboard $(BUILD_DIR)/bingux-frame
@@ -73,6 +74,16 @@ daemons: apps
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path services/session/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path services/portal/Cargo.toml --target-dir $(CARGO_TARGET)
 
+# bsm, the Bingux Session Manager: the system compositor, its root helper, the bridge to a hosted
+# Gnoblin and the image converter. Not part of `all`: it needs the seat, input, GBM, PipeWire and
+# PAM development files, which a shell and apps build does not. `make prefix` builds it.
+# Production build: no `test-auth` or `test-pattern` feature, so no mock login and no generated frames.
+bsm:
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path bsm/core/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path bsm/helper/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path bsm/host/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path bsm/appearance/Cargo.toml --target-dir $(CARGO_TARGET)
+
 # Compile the icon sources (scripts/icons/src) into the bingux-ui icons and the
 # shell's copy. Needs uv: the script declares its own packages. map-fork.py first
 # writes the one-line sources from scripts/icons/labels.tsv. colour.py compiles the
@@ -96,25 +107,18 @@ doctor-build:
 doctor:
 	python3 scripts/check-dependencies.py --install-user --qmake '$(QMAKE)' --cargo '$(CARGO)' --cc '$(CC)' --cmake '$(CMAKE)' --pkg-config '$(PKG_CONFIG)'
 
-# Builds every RPM from a source archive with rpmbuild into $(PACKAGE_DIR). It needs
-# the build dependencies of packaging/rpm/bingux.spec unless BINGUX_RPM_NODEPS=1
-# (the default here) skips the dependency check. See docs/release.md.
-rpm-package:
-	bash scripts/build-rpms.sh '$(VERSION)' '$(PACKAGE_DIR)'
+# The packages, from one prefix. `prefix` builds all of Bingux into $(PREFIX_DIR) with this machine's
+# toolchain and libraries (scripts/build-prefix.sh), and `packages` runs pkgsmith on that folder
+# (scripts/build-packages.sh). Nothing else builds a package. docs/packaging.md.
+prefix:
+	PREFIX_DIR='$(PREFIX_DIR)' CARGO_TARGET='$(CARGO_TARGET)' BUILD_DIR='$(BUILD_DIR)' JOBS='$(JOBS)' VERSION='$(VERSION)' bash scripts/build-prefix.sh
 
-# Checks the spec, the units, the desktop entries and the AppStream files without building.
-rpm-check:
-	python3 tests/rpm-package.py
+packages:
+	PREFIX_DIR='$(PREFIX_DIR)' PACKAGE_DIR='$(PACKAGE_DIR)' VERSION='$(VERSION)' bash scripts/build-packages.sh
 
-# Builds the Arch packages from packaging/arch/PKGBUILD into $(PACKAGE_DIR)/arch, in
-# an Arch container when makepkg is not installed.
-arch-package:
-	bash scripts/build-arch.sh '$(VERSION)' '$(PACKAGE_DIR)'
-
-# Builds the Debian packages from packaging/debian into $(PACKAGE_DIR)/deb/out, in a
-# debian:trixie container when dpkg-buildpackage is not installed.
-deb-package:
-	bash scripts/build-debs.sh '$(VERSION)' '$(PACKAGE_DIR)'
+# Checks the pkgsmith scripts, the units, the desktop entries and the AppStream files without building.
+package-check:
+	python3 tests/packaging.py
 
 # The licences of the Rust crates linked into each program, for the packages.
 licenses:
@@ -226,7 +230,7 @@ check: doctor-build native daemons
 	python3 tests/bsm-lock-binding.py
 	$(MAKE) check-session
 	python3 tests/install-dependencies.py
-	$(MAKE) rpm-check
+	$(MAKE) package-check
 	python3 tests/standalone-install.py
 
 # The checks that build nothing and start no program: lints, the taxonomy and layout contracts, the
@@ -264,6 +268,11 @@ check-session: native daemons shell
 
 install:
 	python3 scripts/install-shell.py --prefix '$(PREFIX)' --destdir '$(DESTDIR)' --build-dir '$(BUILD_DIR)' --qml-dir '$(QMLDIR)' --cargo-dir '$(CARGO_TARGET)'
+
+# The system files of bsm (units, accounts, bus and polkit policy, PAM services) and its programs.
+# Needs `make bsm`. PREFIX must be /usr; docs/bsm/packaging.md lists what it installs.
+install-bsm:
+	bash scripts/install-bsm.sh --prefix '$(PREFIX)' --destdir '$(DESTDIR)' --cargo-dir '$(CARGO_TARGET)'
 
 install-user: doctor all
 	python3 scripts/install-shell.py --user --prefix '$(USER_PREFIX)' --build-dir '$(BUILD_DIR)' --qml-dir '$(USER_PREFIX)/lib/bingux/qml' --cargo-dir '$(CARGO_TARGET)'

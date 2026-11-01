@@ -18,14 +18,14 @@ Read from `c4adcbf`, and looked at in the running chooser
 (`file_chooser --features testing -- OUT preview-image,preview-text,preview-document,preview-folder`,
 captures kept in `/var/tmp/PreviewKit/cap0`).
 
-| Piece | Where | What it does |
-| ----- | ----- | ------------ |
-| Kind and text head | `crates/files/src/preview.rs` | `kind_of(Kind, mime) -> PreviewKind` (image, text, poster, folder, sniff, icon), `read_text` (first 64 KiB, NUL means binary), `neighbour` (arrow-key arithmetic). Takes `Cancel` from `bingux_files::listing`. |
-| Header facts | `crates/files/src/media/*` | `image_info` (PNG/GIF/BMP/WebP/JPEG size, JPEG EXIF), `av_info` (WAV, FLAC, Ogg, MP4, Matroska length and codecs), `clock`. Header parsers, no decoding. Also used by Properties. |
-| The card | `crates/ui/src/files/preview.rs` | `show(shared)` opens a `framed_dialog` 1040x760 around `QuickLook`; keys (`route`), `step` moves the file view's selection; the header is `HeaderBar` with name, "n of N" and Close. |
-| The stage | `crates/ui/src/files/preview_stage.rs` | `Subject` per kind: `PictureStage` (`ImageViewer`, decode at most 2048 px), `TextStage` (64 KiB, 1500 lines, monospace), `PosterStage` (largest thumbnail in `~/.cache/thumbnails`, else the icon), `FolderStage` (live count), `IconStage`. A one-line footer. |
-| Properties | `crates/ui/src/files/properties*.rs` | A separate dialog (Alt+Enter, Ctrl+I, menu). Preview closes first, then it opens. |
-| Entry points | `files/view.rs` (Space, `Env::preview`), the context menu | Only the file view. Nothing outside `files::` can preview anything. |
+| Piece              | Where                                                     | What it does                                                                                                                                                                                                                                                    |
+| ------------------ | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Kind and text head | `crates/files/src/preview.rs`                             | `kind_of(Kind, mime) -> PreviewKind` (image, text, poster, folder, sniff, icon), `read_text` (first 64 KiB, NUL means binary), `neighbour` (arrow-key arithmetic). Takes `Cancel` from `bingux_files::listing`.                                                 |
+| Header facts       | `crates/files/src/media/*`                                | `image_info` (PNG/GIF/BMP/WebP/JPEG size, JPEG EXIF), `av_info` (WAV, FLAC, Ogg, MP4, Matroska length and codecs), `clock`. Header parsers, no decoding. Also used by Properties.                                                                               |
+| The card           | `crates/ui/src/files/preview.rs`                          | `show(shared)` opens a `framed_dialog` 1040x760 around `QuickLook`; keys (`route`), `step` moves the file view's selection; the header is `HeaderBar` with name, "n of N" and Close.                                                                            |
+| The stage          | `crates/ui/src/files/preview_stage.rs`                    | `Subject` per kind: `PictureStage` (`ImageViewer`, decode at most 2048 px), `TextStage` (64 KiB, 1500 lines, monospace), `PosterStage` (largest thumbnail in `~/.cache/thumbnails`, else the icon), `FolderStage` (live count), `IconStage`. A one-line footer. |
+| Properties         | `crates/ui/src/files/properties*.rs`                      | A separate dialog (Alt+Enter, Ctrl+I, menu). Preview closes first, then it opens.                                                                                                                                                                               |
+| Entry points       | `files/view.rs` (Space, `Env::preview`), the context menu | Only the file view. Nothing outside `files::` can preview anything.                                                                                                                                                                                             |
 
 What is wrong with it, as a person using it:
 
@@ -59,15 +59,15 @@ What is wrong with it, as a person using it:
 
 ## 2. Conventions compared
 
-| | Header | Content | Controls | Close | Next / previous |
-| - | ------ | ------- | -------- | ----- | --------------- |
-| macOS Quick Look | name, centred, Open with, Share | content first, no chrome until pointer moves; video has a floating bar | floating media bar, page thumbnails for PDF, rotate and markup for images | Space or Esc | arrows follow the Finder selection; Space toggles; fullscreen button |
-| Finder preview pane | none (pane header is the file) | thumbnail large, then "Information" list | a few quick actions below (Rotate, Markup) | View menu | follows the selection live |
-| GNOME Sushi | name and type, window title bar | content only | floating bar for video; page buttons for PDF | Space or Esc | follows Nautilus selection |
-| Nautilus preview | n/a (Properties sidebar elsewhere) | | | | |
-| KDE Dolphin Information panel / Gwenview | panel title is the file | thumbnail, metadata table, comment/rating | Gwenview: bottom thumbnail strip, zoom slider, fit/100% buttons | panel is a toggle (F11) | arrows; panel follows selection |
-| Windows Explorer preview pane | none | content in the pane, resizable by its edge | none (content's own controls) | Alt+P toggles | follows selection |
-| Google Photos / Drive viewer | scrim-free; top bar with name, actions, close at the left | content first | bottom bar for video; side arrows | Esc, X | arrows, side chevrons |
+|                                          | Header                                                    | Content                                                                | Controls                                                                  | Close                   | Next / previous                                                      |
+| ---------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------- | ----------------------- | -------------------------------------------------------------------- |
+| macOS Quick Look                         | name, centred, Open with, Share                           | content first, no chrome until pointer moves; video has a floating bar | floating media bar, page thumbnails for PDF, rotate and markup for images | Space or Esc            | arrows follow the Finder selection; Space toggles; fullscreen button |
+| Finder preview pane                      | none (pane header is the file)                            | thumbnail large, then "Information" list                               | a few quick actions below (Rotate, Markup)                                | View menu               | follows the selection live                                           |
+| GNOME Sushi                              | name and type, window title bar                           | content only                                                           | floating bar for video; page buttons for PDF                              | Space or Esc            | follows Nautilus selection                                           |
+| Nautilus preview                         | n/a (Properties sidebar elsewhere)                        |                                                                        |                                                                           |                         |                                                                      |
+| KDE Dolphin Information panel / Gwenview | panel title is the file                                   | thumbnail, metadata table, comment/rating                              | Gwenview: bottom thumbnail strip, zoom slider, fit/100% buttons           | panel is a toggle (F11) | arrows; panel follows selection                                      |
+| Windows Explorer preview pane            | none                                                      | content in the pane, resizable by its edge                             | none (content's own controls)                                             | Alt+P toggles           | follows selection                                                    |
+| Google Photos / Drive viewer             | scrim-free; top bar with name, actions, close at the left | content first                                                          | bottom bar for video; side arrows                                         | Esc, X                  | arrows, side chevrons                                                |
 
 What the table settles, as rules for Bingux:
 
@@ -130,12 +130,12 @@ What the table settles, as rules for Bingux:
 One content component, three frames. `PreviewHost` takes a `PreviewSource`, a
 `Mode` and a `Follow` (what to do with arrows) and renders `Viewer` inside:
 
-| Mode | Frame | Keyboard | List |
-| ---- | ----- | -------- | ---- |
-| `Popup` | `framed_dialog` card over the scrim, 1040x760 cut to the window | the viewer owns it | dead (modal) |
-| `Pane` | a docked column at the file view's right edge, between the list and the window edge, inside the view's scroll container's sibling slot | stays in the list | live, selection changes the pane |
-| `Fullscreen` | `framed_dialog` at the whole window, header and footer hidden until the pointer moves | the viewer owns it | dead |
-| `Sheet` (compact) | the popup at the whole window, standard header, Back closes | the viewer owns it | dead |
+| Mode              | Frame                                                                                                                                  | Keyboard           | List                             |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | -------------------------------- |
+| `Popup`           | `framed_dialog` card over the scrim, 1040x760 cut to the window                                                                        | the viewer owns it | dead (modal)                     |
+| `Pane`            | a docked column at the file view's right edge, between the list and the window edge, inside the view's scroll container's sibling slot | stays in the list  | live, selection changes the pane |
+| `Fullscreen`      | `framed_dialog` at the whole window, header and footer hidden until the pointer moves                                                  | the viewer owns it | dead                             |
+| `Sheet` (compact) | the popup at the whole window, standard header, Back closes                                                                            | the viewer owns it | dead                             |
 
 The three frames render the same `Viewer`; a headless test renders each at
 1100x820 and 390x800 and compares the content tree.
@@ -145,7 +145,7 @@ Open -> Closing(t) -> Closed`, with `width` in logical px. Opening and closing
 tween the pane's width from 0 with `use_tween` (the standard quadratic ease
 out, `MOVE_MS`), so the list resizes with it and no content jumps; reduced
 motion gives `ms == 0` and the change is instant. The viewer inside is laid out
-at its *final* width during the slide, clipped, so nothing re-flows per frame
+at its _final_ width during the slide, clipped, so nothing re-flows per frame
 (the list beside it does; that is one resize). Dragging the left edge sets the
 width, clamped to `[280, 60 % of the view]`, saved through `view_state` key
 `preview.pane` when the drag ends (not per frame), restored at open, and
@@ -156,7 +156,7 @@ future opens use the sheet.
 **Selection following** is a `Subject` derived from the view's selection
 (`Follow::Selection`), debounced by one frame, and the viewer is keyed by the
 source's identity: stepping to another file is a new `Viewer`, so every load
-starts fresh and the old one is cancelled (§ 6), but the *frame* around it
+starts fresh and the old one is cancelled (§ 6), but the _frame_ around it
 (header, pane) is not remounted, so nothing flickers. Multi-selection shows a
 summary card ("3 files, 4.2 MB") rather than the cursor row only.
 
@@ -164,13 +164,13 @@ summary card ("3 files, 4.2 MB") rather than the cursor row only.
 
 ### 4.1 Options for the split
 
-| | A. Everything in bingux-ui | B. `bingux-preview-core` (no Freya) + UI in bingux-ui | C. core + a `bingux-preview` UI crate on top of bingux-ui |
-| - | ------------------------- | ---------------------------------------------------- | -------------------------------------------------------- |
-| Callers outside the file manager | yes | yes | yes, but bingux-ui cannot call it |
-| bingux-ui's chooser can open it | yes | yes | **no**: the chooser is in bingux-ui, bingux-preview would depend on bingux-ui (cycle). It needs inversion (a registry of boxed components in bingux-ui) |
-| Decode, sniff, protocol testable without Freya | no | yes | yes |
-| Compile time of UI-less tools (a thumbnailer, `binguxctl`) | pulls Freya | light | light |
-| Cost | one more module of a big crate | one more small crate | an inversion layer for a use nobody has yet |
+|                                                            | A. Everything in bingux-ui     | B. `bingux-preview-core` (no Freya) + UI in bingux-ui | C. core + a `bingux-preview` UI crate on top of bingux-ui                                                                                               |
+| ---------------------------------------------------------- | ------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Callers outside the file manager                           | yes                            | yes                                                   | yes, but bingux-ui cannot call it                                                                                                                       |
+| bingux-ui's chooser can open it                            | yes                            | yes                                                   | **no**: the chooser is in bingux-ui, bingux-preview would depend on bingux-ui (cycle). It needs inversion (a registry of boxed components in bingux-ui) |
+| Decode, sniff, protocol testable without Freya             | no                             | yes                                                   | yes                                                                                                                                                     |
+| Compile time of UI-less tools (a thumbnailer, `binguxctl`) | pulls Freya                    | light                                                 | light                                                                                                                                                   |
+| Cost                                                       | one more module of a big crate | one more small crate                                  | an inversion layer for a use nobody has yet                                                                                                             |
 
 **Decision: B.** The viewers are bingux-ui components (they use `HeaderBar`,
 `icon_button`, tokens, `Overlays`, motion, `use_resource`), and the chooser
@@ -238,16 +238,16 @@ Freya components in `bingux_ui::preview::viewers` render them. Heavy pixels
 (video frames, PDF pages) never travel inside `Loaded`: they arrive through the
 host protocol (§ 5.4).
 
-| Viewer | Handles | Loaded by | Notes |
-| ------ | ------- | --------- | ----- |
-| `Image` | PNG, JPEG, GIF, WebP, BMP, ICO, AVIF/HEIF where Skia has the codec, SVG | Freya `ImageViewer`/`GifViewer`/`SvgViewer` decode on their own pool; core reads EXIF and size | zoom, pan, rotate, fit and 100 %, EXIF panel, animated GIF. Animated WebP shows its first frame (§ 8) |
-| `Media` | audio, video | the host (`OpenMedia`) | player, § 5 |
-| `Document` | PDF; others via the host's poppler for the formats poppler opens (PDF, PS-less) | the host (`OpenDocument`) | page view, thumbnails, search, copy. Office documents: LibreOffice is installed here but not a dependency, so they fall to `Card` plus the thumbnail if one exists |
-| `Text` | text, code, markdown, JSON, logs, unknown text | core, windowed | line numbers, wrap, small highlighter, windowed loading |
-| `Archive` | zip, tar, tar.gz | core | listing without extracting (hand-written central directory reader; `tar` and `flate2` from the lock) |
-| `Font` | ttf, otf | core reads names; the UI draws the specimen with the font bytes registered under a private name | |
-| `Folder` | directories, mounts | core (the existing live counter) | |
-| `Card` | everything else, and every failure | core facts | icon from the single file icon API, facts, Open with |
+| Viewer     | Handles                                                                         | Loaded by                                                                                       | Notes                                                                                                                                                              |
+| ---------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Image`    | PNG, JPEG, GIF, WebP, BMP, ICO, AVIF/HEIF where Skia has the codec, SVG         | Freya `ImageViewer`/`GifViewer`/`SvgViewer` decode on their own pool; core reads EXIF and size  | zoom, pan, rotate, fit and 100 %, EXIF panel, animated GIF. Animated WebP shows its first frame (§ 8)                                                              |
+| `Media`    | audio, video                                                                    | the host (`OpenMedia`)                                                                          | player, § 5                                                                                                                                                        |
+| `Document` | PDF; others via the host's poppler for the formats poppler opens (PDF, PS-less) | the host (`OpenDocument`)                                                                       | page view, thumbnails, search, copy. Office documents: LibreOffice is installed here but not a dependency, so they fall to `Card` plus the thumbnail if one exists |
+| `Text`     | text, code, markdown, JSON, logs, unknown text                                  | core, windowed                                                                                  | line numbers, wrap, small highlighter, windowed loading                                                                                                            |
+| `Archive`  | zip, tar, tar.gz                                                                | core                                                                                            | listing without extracting (hand-written central directory reader; `tar` and `flate2` from the lock)                                                               |
+| `Font`     | ttf, otf                                                                        | core reads names; the UI draws the specimen with the font bytes registered under a private name |                                                                                                                                                                    |
+| `Folder`   | directories, mounts                                                             | core (the existing live counter)                                                                |                                                                                                                                                                    |
+| `Card`     | everything else, and every failure                                              | core facts                                                                                      | icon from the single file icon API, facts, Open with                                                                                                               |
 
 ### 4.4 Viewer chrome
 
@@ -263,14 +263,14 @@ frame and the router between viewers), `open(overlays, source, options)`
 
 ### 5.1 Evidence from this machine (Fedora 43)
 
-| Need | Installed | Dev files | Crate offline? | Crate online? |
-| ---- | --------- | --------- | -------------- | ------------- |
+| Need                     | Installed                                                                                                                     | Dev files                                                                                                                                              | Crate offline?                                                            | Crate online?                                                                                                                                       |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Audio and video playback | GStreamer 1.26.11 with base, good, bad, ugly, libav, openh264, dav1d, vaapi, pipewire sink; ffmpeg 7.1.5, mpv 0.40 (`libmpv`) | `gstreamer1-devel`, `gstreamer1-plugins-base-devel` (pkg-config `gstreamer-app`, `gstreamer-video` present). **No** `ffmpeg-devel`, **no** `mpv-devel` | no `gstreamer*` in `~/.cargo/registry`; `symphonia` 0.5.5 (audio only) is | crates.io reachable; `gstreamer`, `gstreamer-app`, `gstreamer-video` 0.24.5 fetch and **build here** (probe in `/var/tmp/PreviewKit/scratch`, 28 s) |
-| PDF | poppler 25.07, `poppler-glib`, `poppler-utils`; mupdf 1.27 libs and `mutool`; evince-djvu | `poppler-devel`, `poppler-glib-devel`, `cairo-devel` present; **no** `mupdf-devel` | `lopdf` (parser only), `pdf-inspector`; nothing that renders | `poppler-rs` 0.25 renders, extracts text and finds text: probe rendered page 1 of a 5-page PDF and returned its text and 1 search hit |
-| SVG | librsvg | `librsvg2-devel` | `resvg`, `usvg` | Skia already has an SVG module through Freya |
-| Images | Skia in Freya (PNG, JPEG, WebP, GIF, AVIF through its codecs), libheif, LibRaw, libwebp | `libwebp-devel` only | `image`, `png`, `gif`, `zune-jpeg` | — |
-| Highlighting | — | — | `syntect` 5.3, tree-sitter grammars | both available; see 5.3 |
-| Archives | `bsdtar`, `unzip` | — | `tar`, `flate2`, `miniz_oxide` already in the lock | — |
+| PDF                      | poppler 25.07, `poppler-glib`, `poppler-utils`; mupdf 1.27 libs and `mutool`; evince-djvu                                     | `poppler-devel`, `poppler-glib-devel`, `cairo-devel` present; **no** `mupdf-devel`                                                                     | `lopdf` (parser only), `pdf-inspector`; nothing that renders              | `poppler-rs` 0.25 renders, extracts text and finds text: probe rendered page 1 of a 5-page PDF and returned its text and 1 search hit               |
+| SVG                      | librsvg                                                                                                                       | `librsvg2-devel`                                                                                                                                       | `resvg`, `usvg`                                                           | Skia already has an SVG module through Freya                                                                                                        |
+| Images                   | Skia in Freya (PNG, JPEG, WebP, GIF, AVIF through its codecs), libheif, LibRaw, libwebp                                       | `libwebp-devel` only                                                                                                                                   | `image`, `png`, `gif`, `zune-jpeg`                                        | —                                                                                                                                                   |
+| Highlighting             | —                                                                                                                             | —                                                                                                                                                      | `syntect` 5.3, tree-sitter grammars                                       | both available; see 5.3                                                                                                                             |
+| Archives                 | `bsdtar`, `unzip`                                                                                                             | —                                                                                                                                                      | `tar`, `flate2`, `miniz_oxide` already in the lock                        | —                                                                                                                                                   |
 
 Licences. Every Bingux crate is `GPL-3.0-or-later` (checked in the manifests).
 GStreamer core and plugin-base: LGPL-2.1+; `gstreamer-libav`: LGPL; the
@@ -285,14 +285,14 @@ linking it and is the one library avoided on licence alone.
 
 Media playback:
 
-| | In-process GStreamer | ffmpeg-next | libmpv render API | Helper process decodes into shared memory | Wayland subsurface from a player |
-| - | -------------------- | ----------- | ----------------- | ------------------------------------------ | ---------------------------------- |
-| Builds here | yes | **no** (no `ffmpeg-devel`) | **no** (no `mpv-devel`) | yes (GStreamer in the helper) | yes (mpv exists) |
-| Audio, A/V sync, seeking, subtitles, buffering | `playbin3` does all | write all of it | mpv does all | `playbin3` in the helper | mpv |
-| A bad file can crash the file manager | **yes** (a codec bug is a segfault in the UI process) | yes | yes | no | no |
-| Frames reach Freya | `appsink` copy to Skia | copy | GL render context shared with Skia (Freya owns the GL context; not exposed) | memfd frames, mapped and uploaded as `SkImage` | not at all: the compositor composes it. No clip to a rounded card, no overlay controls, no scrim, no screenshot |
-| Licence of the UI binary | LGPL libraries linked in | GPL (this ffmpeg) | GPL | UI binary stays free of them | n/a |
-| Cost | small | medium and blocked | medium and blocked | a protocol and a second binary | a window per preview |
+|                                                | In-process GStreamer                                  | ffmpeg-next                | libmpv render API                                                           | Helper process decodes into shared memory      | Wayland subsurface from a player                                                                                |
+| ---------------------------------------------- | ----------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Builds here                                    | yes                                                   | **no** (no `ffmpeg-devel`) | **no** (no `mpv-devel`)                                                     | yes (GStreamer in the helper)                  | yes (mpv exists)                                                                                                |
+| Audio, A/V sync, seeking, subtitles, buffering | `playbin3` does all                                   | write all of it            | mpv does all                                                                | `playbin3` in the helper                       | mpv                                                                                                             |
+| A bad file can crash the file manager          | **yes** (a codec bug is a segfault in the UI process) | yes                        | yes                                                                         | no                                             | no                                                                                                              |
+| Frames reach Freya                             | `appsink` copy to Skia                                | copy                       | GL render context shared with Skia (Freya owns the GL context; not exposed) | memfd frames, mapped and uploaded as `SkImage` | not at all: the compositor composes it. No clip to a rounded card, no overlay controls, no scrim, no screenshot |
+| Licence of the UI binary                       | LGPL libraries linked in                              | GPL (this ffmpeg)          | GPL                                                                         | UI binary stays free of them                   | n/a                                                                                                             |
+| Cost                                           | small                                                 | medium and blocked         | medium and blocked                                                          | a protocol and a second binary                 | a window per preview                                                                                            |
 
 **Decision: helper process.** The helper `bingux-preview-host` links GStreamer
 and poppler; the UI process never does. A malformed file kills the helper, the
@@ -300,18 +300,18 @@ viewer shows "The player stopped" with Open with, and the next file starts a new
 helper. It costs a copy per frame (viewport-sized, scaled in the helper, so a
 4K film is 1280x720 on a pane) and a protocol. It earns: crash isolation,
 licence isolation (the GPL libraries are a separate program, which is also what
-the RPM's `bingux-preview-host` sub-package makes optional), no `Requires`
-in the main UI package, and the same transport for PDF pages.
+a separate program that the `bingux` package ships next to the shell), no
+GStreamer or poppler link in the UI program, and the same transport for PDF pages.
 
 PDF:
 
-| | poppler (glib) in the helper | mupdf | pdfium | pure Rust (lopdf, hayro, pdf-rs) |
-| - | --------------------------- | ----- | ------ | ------------------------------- |
-| Available here | yes, dev files too | libs, no dev files | not packaged | parsers only offline; hayro/pdf-rs would be new dependencies and unproven here |
-| Licence | GPL-2/3, fine in a GPL-3 helper | AGPL | BSD, but a binary blob to ship | MIT/Apache |
-| Text, search, links, page labels | all | all | all | text only, or nothing |
-| Render quality and speed | reference quality, Cairo | fastest | good | not measured, large gaps in fonts and colour |
-| Cost | `poppler-rs` crate, ~25 lines per call | needs headers | needs a packaging story | a renderer to write |
+|                                  | poppler (glib) in the helper           | mupdf              | pdfium                         | pure Rust (lopdf, hayro, pdf-rs)                                               |
+| -------------------------------- | -------------------------------------- | ------------------ | ------------------------------ | ------------------------------------------------------------------------------ |
+| Available here                   | yes, dev files too                     | libs, no dev files | not packaged                   | parsers only offline; hayro/pdf-rs would be new dependencies and unproven here |
+| Licence                          | GPL-2/3, fine in a GPL-3 helper        | AGPL               | BSD, but a binary blob to ship | MIT/Apache                                                                     |
+| Text, search, links, page labels | all                                    | all                | all                            | text only, or nothing                                                          |
+| Render quality and speed         | reference quality, Cairo               | fastest            | good                           | not measured, large gaps in fonts and colour                                   |
+| Cost                             | `poppler-rs` crate, ~25 lines per call | needs headers      | needs a packaging story        | a renderer to write                                                            |
 
 **Decision: poppler-glib through `poppler-rs`, in the helper.** The cairo image
 surface becomes a memfd frame exactly like a video frame. Out-of-process also
@@ -351,27 +351,27 @@ ends the session. Decoding is a total function (`decode(&[u8]) -> Result<Message
 ProtocolError>`) with a round-trip and a fuzz-style test (random bytes never
 panic).
 
-| Tag | Dir | Fields | fds |
-| --- | --- | ------ | --- |
-| `Hello` | C to H | `version` | |
-| `Ready` | H to C | `version`, `features` (bit 0 media, bit 1 document) | |
-| `OpenMedia` | C to H | `want_video`, `max_w`, `max_h`, `autoplay`, `has_subtitle_file` | media (O_RDONLY), subtitle |
-| `OpenDocument` | C to H | | document (O_RDONLY) |
-| `Opened` | H to C | `kind`, `duration_ns`, `video_w`, `video_h`, `has_audio`, `seekable`, `pages`, `title` | |
-| `Play`, `Pause`, `Seek{ns}`, `SetVolume{f32}`, `SetMute{bool}`, `SetRate{f32}`, `SetSize{max_w,max_h}`, `SetSubtitle{index or -1}` | C to H | | |
-| `FrameReady` | H to C | `slot`, `width`, `height`, `stride`, `pts_ns`, `format` (BGRA premul = 0) | memfd on first use of a slot |
-| `FrameDone{slot}` | C to H | | |
-| `State` | H to C | `playing`, `buffering_percent`, `ended` | |
-| `Position` | H to C | `position_ns`, `buffered_to_ns` (every 250 ms while playing, on seek) | |
-| `Tracks` | H to C | counts and names of audio and subtitle tracks | |
-| `Cue` | H to C | `text`, `until_ns` (empty text clears) | |
-| `RenderPage` | C to H | `page`, `scale_milli`, `max_w`, `max_h` | |
-| `PageReady` | H to C | `page`, `width`, `height`, `stride` | memfd |
-| `PageText`, `PageTextIs` | C to H, H to C | `page`; words as `rect + str`, as many as fit 4 KiB per message, continued | |
-| `Search`, `SearchHit` | C to H, H to C | `query`; `page`, `rect` | |
-| `Cancel{request}` | C to H | | |
-| `Error` | H to C | `code` (not found, unsupported, corrupt, no decoder, killed), `message` for a person | |
-| `Close` | C to H | | |
+| Tag                                                                                                                                | Dir            | Fields                                                                                 | fds                          |
+| ---------------------------------------------------------------------------------------------------------------------------------- | -------------- | -------------------------------------------------------------------------------------- | ---------------------------- |
+| `Hello`                                                                                                                            | C to H         | `version`                                                                              |                              |
+| `Ready`                                                                                                                            | H to C         | `version`, `features` (bit 0 media, bit 1 document)                                    |                              |
+| `OpenMedia`                                                                                                                        | C to H         | `want_video`, `max_w`, `max_h`, `autoplay`, `has_subtitle_file`                        | media (O_RDONLY), subtitle   |
+| `OpenDocument`                                                                                                                     | C to H         |                                                                                        | document (O_RDONLY)          |
+| `Opened`                                                                                                                           | H to C         | `kind`, `duration_ns`, `video_w`, `video_h`, `has_audio`, `seekable`, `pages`, `title` |                              |
+| `Play`, `Pause`, `Seek{ns}`, `SetVolume{f32}`, `SetMute{bool}`, `SetRate{f32}`, `SetSize{max_w,max_h}`, `SetSubtitle{index or -1}` | C to H         |                                                                                        |                              |
+| `FrameReady`                                                                                                                       | H to C         | `slot`, `width`, `height`, `stride`, `pts_ns`, `format` (BGRA premul = 0)              | memfd on first use of a slot |
+| `FrameDone{slot}`                                                                                                                  | C to H         |                                                                                        |                              |
+| `State`                                                                                                                            | H to C         | `playing`, `buffering_percent`, `ended`                                                |                              |
+| `Position`                                                                                                                         | H to C         | `position_ns`, `buffered_to_ns` (every 250 ms while playing, on seek)                  |                              |
+| `Tracks`                                                                                                                           | H to C         | counts and names of audio and subtitle tracks                                          |                              |
+| `Cue`                                                                                                                              | H to C         | `text`, `until_ns` (empty text clears)                                                 |                              |
+| `RenderPage`                                                                                                                       | C to H         | `page`, `scale_milli`, `max_w`, `max_h`                                                |                              |
+| `PageReady`                                                                                                                        | H to C         | `page`, `width`, `height`, `stride`                                                    | memfd                        |
+| `PageText`, `PageTextIs`                                                                                                           | C to H, H to C | `page`; words as `rect + str`, as many as fit 4 KiB per message, continued             |                              |
+| `Search`, `SearchHit`                                                                                                              | C to H, H to C | `query`; `page`, `rect`                                                                |                              |
+| `Cancel{request}`                                                                                                                  | C to H         |                                                                                        |                              |
+| `Error`                                                                                                                            | H to C         | `code` (not found, unsupported, corrupt, no decoder, killed), `message` for a person   |                              |
+| `Close`                                                                                                                            | C to H         |                                                                                        |                              |
 
 **Frames.** The host allocates up to three `memfd`s per session, each
 `max_w * max_h * 4` bytes, sealed against shrinking, and sends each over
@@ -445,16 +445,16 @@ Kieran's review of the first build: "too much stuff going on", the PDF zoom
 instead of choosing the next file. Each was reproduced with the installed Files
 app in a headless session, and each had a cause:
 
-| Seen | Cause | Fix |
-| ---- | ----- | --- |
-| The zoom menu (and any menu opened from the popup) opened behind the card; its right edge showed beside the card and the rest was invisible, so a zoom could not be chosen | The window's menu layer (`OverlayLevel(8)`) was below the dialog layer (`OverlayLevel(12)`), and the preview card is a dialog | `OverlayStack::menu_layer(over_dialog)`: above an open dialog the menu is on level 14. Pixel test: a menu over a loud-red dialog has no red in its panel |
-| Down and Up scrolled the PDF in Quick Look; after a click in the docked PDF every arrow scrolled it | `keys::route` gave Up and Down to a document and Left and Right to a player; the PDF's own handler scrolled on the arrows, and a clicked pane took the keyboard from the list | No viewer takes an arrow; a pane that holds the keyboard steps the selection itself (`Keyboard`, `PreviewNav::pane_keys`) |
-| Space never showed the popup after one use of Alt+P | Space opened "the last mode used" and, with the pane open, hid it | Space is always Quick Look |
-| The PDF opened as fit width: a tall page showed only its top | `Zoom::FitWidth` was the default | The default is fit page: the whole first page, centred (a stack shorter than the viewport is centred vertically too) |
-| The zoom buttons moved when the label changed from "Fit width" to "150%" | The label sat in a menu button that sized to its text | A fixed slot as wide as "Fit width" |
-| A pane had no zoom label at all | The compact toolbar dropped the menu | One toolbar everywhere: page field, zoom out, menu, zoom in, find |
-| The big play button sat at the top of a paused popup or pane | An absolute box with `Size::fill()` sized to its content's top, not to its parent | Overlays are sized from the measured box |
-| The phone's seek bar shrank to nothing | The bar picked its form from a width the caller had to pass | The bar measures its own room once laid out |
+| Seen                                                                                                                                                                       | Cause                                                                                                                                                                         | Fix                                                                                                                                                      |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The zoom menu (and any menu opened from the popup) opened behind the card; its right edge showed beside the card and the rest was invisible, so a zoom could not be chosen | The window's menu layer (`OverlayLevel(8)`) was below the dialog layer (`OverlayLevel(12)`), and the preview card is a dialog                                                 | `OverlayStack::menu_layer(over_dialog)`: above an open dialog the menu is on level 14. Pixel test: a menu over a loud-red dialog has no red in its panel |
+| Down and Up scrolled the PDF in Quick Look; after a click in the docked PDF every arrow scrolled it                                                                        | `keys::route` gave Up and Down to a document and Left and Right to a player; the PDF's own handler scrolled on the arrows, and a clicked pane took the keyboard from the list | No viewer takes an arrow; a pane that holds the keyboard steps the selection itself (`Keyboard`, `PreviewNav::pane_keys`)                                |
+| Space never showed the popup after one use of Alt+P                                                                                                                        | Space opened "the last mode used" and, with the pane open, hid it                                                                                                             | Space is always Quick Look                                                                                                                               |
+| The PDF opened as fit width: a tall page showed only its top                                                                                                               | `Zoom::FitWidth` was the default                                                                                                                                              | The default is fit page: the whole first page, centred (a stack shorter than the viewport is centred vertically too)                                     |
+| The zoom buttons moved when the label changed from "Fit width" to "150%"                                                                                                   | The label sat in a menu button that sized to its text                                                                                                                         | A fixed slot as wide as "Fit width"                                                                                                                      |
+| A pane had no zoom label at all                                                                                                                                            | The compact toolbar dropped the menu                                                                                                                                          | One toolbar everywhere: page field, zoom out, menu, zoom in, find                                                                                        |
+| The big play button sat at the top of a paused popup or pane                                                                                                               | An absolute box with `Size::fill()` sized to its content's top, not to its parent                                                                                             | Overlays are sized from the measured box                                                                                                                 |
+| The phone's seek bar shrank to nothing                                                                                                                                     | The bar picked its form from a width the caller had to pass                                                                                                                   | The bar measures its own room once laid out                                                                                                              |
 
 The chrome that was removed: the footer line (it repeated the type and size
 that Info shows), the Info-less fullscreen button in the header (F), the text
@@ -483,5 +483,5 @@ zoom out, menu, zoom in, find), song 10.
 - Subtitles come from a sidecar `.srt`/`.vtt` named like the film and from
   tracks `playbin3` reports; no styling.
 - `Uri` sources other than `file://`.
-- Should `Pane` follow the *cursor* row or the *selected* set in a multi-select?
+- Should `Pane` follow the _cursor_ row or the _selected_ set in a multi-select?
   Decided: the cursor row, with a summary card above two selected.

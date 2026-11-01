@@ -11,12 +11,11 @@ Install a matching Qt 6 development environment, CMake, Ninja, a C and C++
 compiler, Cargo and the system libraries used by the shell and the optional
 helpers. Then run:
 
-On Fedora, use the spec as the dependency source instead of maintaining a
-second package list:
+On Fedora, Debian and Arch, use the build dependency script instead of
+maintaining a second package list:
 
 ```sh
-sudo dnf install rpmdevtools
-sudo dnf builddep packaging/rpm/bingux.spec
+sudo scripts/install-build-deps.sh fedora    # or debian, or arch
 ```
 
 Fetch the pinned submodules once; the source archive used by packages already

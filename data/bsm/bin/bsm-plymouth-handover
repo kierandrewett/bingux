@@ -28,7 +28,10 @@ splash_running() {
 
 case "${1:-}" in
     deactivate)
-        splash_running || { log "no boot splash is running; nothing to take over"; exit 0; }
+        splash_running || {
+            log "no boot splash is running; nothing to take over"
+            exit 0
+        }
         if "$PLYMOUTH" deactivate; then
             log "splash deactivated: DRM master released, picture stays on the display"
         else

@@ -1,0 +1,1 @@
+A stand-in package of the install check; see stubs.star.

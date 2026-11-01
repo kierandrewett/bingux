@@ -1,23 +1,30 @@
 # Packaging
 
-Bingux is distributed as a set of packages: the shell, its configuration
-command, and the apps that go with it. It does not define a system profile,
-kernel, host, Flatpak policy or secret store.
+Bingux is distributed as four packages: the desktop, and the three apps that
+go with it. It does not define a system profile, kernel, host, Flatpak policy
+or secret store.
 
 ## The packages
 
-| Package                | What it installs                                                                                                                                | Install it when                                                                       |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `bingux`               | The shell, the search and status helper services, `binguxctl`, the user units                                                                   | You want the Bingux desktop                                                           |
-| `bingux-config`        | The `bingux-config` command                                                                                                                     | Pulled in by the shell and Settings                                                   |
-| `bingux-settings`      | Settings                                                                                                                                        | You want to change Bingux and system settings in one place                            |
-| `bingux-files`         | Files, the file manager                                                                                                                         | You want a file manager that matches the shell                                        |
-| `bingux-audio-effects` | The sound effects engine. It hosts published plugins (Linux Studio Plugins, Calf, ZamAudio, MDA, x42, Rubber Band) and installs none of its own | You want an effects stack (equaliser, compressor and the rest) under Settings > Sound |
-| `bingux-taxonomy`      | A window that shows every Bingux UI component                                                                                                   | You build Bingux apps. Ordinary desktops do not need it                               |
+| Package           | What it installs                                                                                                                                                                                                                                                    | Install it when                                            |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `bingux`          | The whole desktop: the shell, every core service (search, status, the login and lock screens, the portal backend, the sound effects engine, the preview helper Files runs, the `bingux-config` command), `binguxctl`, `bsm` (installed disabled) and the user units | You want the Bingux desktop                                |
+| `bingux-settings` | Settings                                                                                                                                                                                                                                                            | You want to change Bingux and system settings in one place |
+| `bingux-files`    | Files, the file manager                                                                                                                                                                                                                                             | You want a file manager that matches the shell             |
+| `bingux-taxonomy` | A window that shows every Bingux UI component                                                                                                                                                                                                                       | You build Bingux apps. Ordinary desktops do not need it    |
 
-All six have the same version. Settings, Files and Taxonomy each have a desktop
-entry, an icon in the `hicolor` theme and AppStream metadata, so they show up in
-the application list, in search and in software centres.
+All four have the same version, and each app depends on exactly that version of
+`bingux`. `bingux` depends on the Gnoblin packages `gnoblin` and
+`xdg-desktop-portal-gnoblin`, which come from the Gnoblin repository on the same
+host. Settings, Files and Taxonomy each have a desktop entry, an icon in the
+`hicolor` theme and AppStream metadata, so they show up in the application list,
+in search and in software centres.
+
+Until 0.1.0 the desktop was split into `bingux`, `bingux-config`,
+`bingux-audio-effects` and `bingux-preview-host` (and `bsm` on Arch). `bingux`
+now replaces those packages: it obsoletes, conflicts with and provides each of
+their names, so an upgrade removes them and installs the one package. The sound
+effects plugins (`lsp-plugins` and the rest) are recommended, not required.
 
 ## Package repositories
 
@@ -47,100 +54,11 @@ accept the key.
 
 ### Fedora
 
-```sh
-sudo curl -fsSL -o /etc/yum.repos.d/bingux-stable.repo \
-  https://repo.gnoblin.org/bingux/stable/fedora/bingux-stable.repo
-sudo dnf install bingux
-```
-
-For the nightly channel, use `nightly` in both places of the first command.
-`dnf` shows the key and asks you to accept it the first time it reads the
-repository. The repository file turns on `gpgcheck` (package signatures) and
-`repo_gpgcheck` (metadata signatures). The packages are built for Fedora 43.
-
-### Debian 13
+Install from the Bingux repository above. The [Bingux COPR](https://copr.fedorainfracloud.org/coprs/kierandrewett/bingux/)
+is no longer built: the packages are written with pkgsmith from a built prefix
+and there is no source RPM to submit.
 
 ```sh
-sudo install -d -m 0755 /etc/apt/keyrings
-sudo curl -fsSL -o /etc/apt/keyrings/bingux.asc https://repo.gnoblin.org/gpg.key
-sudo curl -fsSL -o /etc/apt/sources.list.d/bingux.sources \
-  https://repo.gnoblin.org/bingux/stable/deb/bingux-stable-trixie.sources
-sudo apt update
-sudo apt install bingux
-```
-
-For the nightly channel, use `nightly` in both URLs. The sources file restricts
-the repository to the key you downloaded. Ubuntu has no packages: the Rust
-toolchain of Ubuntu 24.04 is older than the 1.88 that the apps need.
-
-### Arch Linux
-
-```sh
-curl -fsSL -o bingux.key https://repo.gnoblin.org/gpg.key
-sudo pacman-key --add bingux.key
-sudo pacman-key --lsign-key 91BAA3790941B9B3BBA63BC4F1B8D899DF3D786E
-printf '\n' | sudo tee -a /etc/pacman.conf > /dev/null
-curl -fsSL https://repo.gnoblin.org/bingux/stable/arch/bingux.conf | sudo tee -a /etc/pacman.conf
-sudo pacman -Syu bingux
-```
-
-The `bingux.conf` file holds this section, which requires a valid signature on
-every package and on the database:
-
-```ini
-[bingux]
-SigLevel = Required DatabaseRequired
-Server = https://repo.gnoblin.org/bingux/stable/arch/$arch
-```
-
-For the nightly channel, download `arch/bingux-nightly.conf` from the nightly
-directory. Its section is named `[bingux-nightly]` because pacman names the
-database file after the section. This repository is separate from the
-`[bingux-os]` repository below, which belongs to the Bingux OS image.
-
-### Both channels
-
-- `dnf` and `apt` use the newest version of any enabled repository, so with both
-  channels enabled you follow the nightly build.
-- `pacman` uses the first repository in `/etc/pacman.conf` that has the package,
-  not the newest. List `[bingux-nightly]` above `[bingux]` to follow the nightly
-  build, or below it to stay on releases.
-
-To go back to the release, remove the nightly repository and downgrade:
-
-```sh
-sudo rm /etc/yum.repos.d/bingux-nightly.repo
-sudo dnf --refresh distro-sync bingux
-```
-
-On Debian, delete the nightly sources file, run `sudo apt update`, then
-`sudo apt install --allow-downgrades bingux=VERSION` with the release version.
-On Arch, delete the `[bingux-nightly]` section, run `sudo pacman -Sy`, then
-`sudo pacman -S bingux`.
-
-### Remove a repository
-
-Remove the repository, then the key. Removing a repository does not remove
-Bingux; see [Remove the packages](#remove-the-packages).
-
-- Fedora: delete `/etc/yum.repos.d/bingux-*.repo`. List the imported keys with
-  `rpm -qa 'gpg-pubkey*' --queryformat '%{NAME}  %{SUMMARY}\n'` and remove the
-  one whose fingerprint matches with `sudo rpm -e NAME`.
-- Debian: delete `/etc/apt/sources.list.d/bingux.sources` and
-  `/etc/apt/keyrings/bingux.asc`, then run `sudo apt update`.
-- Arch: delete the `[bingux]` and `[bingux-nightly]` sections, then run
-  `sudo pacman-key --delete 91BAA3790941B9B3BBA63BC4F1B8D899DF3D786E`.
-
-## Fedora
-
-The supported repository target is the [Bingux COPR](https://copr.fedorainfracloud.org/coprs/kierandrewett/bingux/).
-The project is public, but builds are not advertised as ready until the first
-clean package and install check passes.
-
-After a build is published, install it with:
-
-```sh
-sudo dnf copr enable kierandrewett/bingux
 sudo dnf install bingux
 ```
 
@@ -152,7 +70,7 @@ sudo dnf install --setopt=install_weak_deps=False bingux
 ```
 
 Add the apps you want later by name, for example
-`sudo dnf install bingux-audio-effects`.
+`sudo dnf install bingux-taxonomy`.
 
 The package enables `bingux.target` for every user. The target starts the search
 and status helper services in Gnoblin sessions. Log out and back in after the
@@ -227,9 +145,11 @@ Settings pages you use.
 ## Remove the packages
 
 ```sh
-sudo dnf remove bingux bingux-settings bingux-files bingux-audio-effects bingux-config
+sudo dnf remove bingux bingux-settings bingux-files bingux-taxonomy
+# Debian:
+sudo apt remove bingux bingux-settings bingux-files bingux-taxonomy
 # Arch Linux and Bingux OS:
-sudo pacman -Rns bingux bingux-settings bingux-files bingux-audio-effects bingux-config
+sudo pacman -Rns bingux bingux-settings bingux-files bingux-taxonomy
 ```
 
 On Fedora, removal stops and unregisters the units of the packages, and an
@@ -238,39 +158,29 @@ packages does not delete your data: see [Runtime state](#runtime-state).
 
 ## Build the packages yourself
 
-From a clean checkout, build every RPM from the source archive:
+Two steps build the packages, and `pkgsmith` writes them; nothing else builds a
+package. Build everything into a prefix with this machine's toolchain, then write
+the packages from the prefix:
 
 ```sh
-sudo dnf install rpm-build rpmdevtools
-make rpm-package
+sudo scripts/install-build-deps.sh fedora    # or debian, or arch
+scripts/install-pkgsmith.sh                  # builds pkgsmith into ./pkgsmith-bin
+make prefix                                  # builds all of Bingux into ./prefix
+PKGSMITH=$PWD/pkgsmith-bin/pkgsmith FORMATS=rpm,tar make packages
 ```
 
-`make rpm-package` builds `bingux-VERSION.tar.xz`, runs `rpmbuild`, and leaves
-the packages in `/var/tmp/BinguxPkg/rpmbuild/RPMS` and the source package in
-`/var/tmp/BinguxPkg/rpmbuild/SRPMS`. Change the folder with
-`make rpm-package PACKAGE_DIR=/some/folder`. Install the result with
-`sudo dnf install /var/tmp/BinguxPkg/rpmbuild/RPMS/x86_64/*.rpm`. To check the
-spec, the desktop entries and the AppStream files without building:
+The packages are in `dist/`. Build on the distribution you package for: the shell
+links the Qt of that machine. [Packaging](packaging.md) explains the scripts, the
+formats and what the packages depend on. To check the definitions, the desktop
+entries and the AppStream files without building:
 
 ```sh
-make rpm-check
+make package-check
 ```
 
-The Arch packages build from `packaging/arch/PKGBUILD`:
-
-```sh
-make arch-package
-sudo pacman -U /var/tmp/BinguxPkg/arch/out/*.pkg.tar.zst
-```
-
-Without `makepkg`, the command builds inside an `archlinux` container with
-`podman` or `docker`.
-
-Both builds download Rust crates and a prebuilt Skia archive, so they need the
-network. To build uncommitted changes as a packaging check, set
-`BINGUX_ARCHIVE_WORKTREE=1`; never publish what that builds. How a release is
-cut is in [releases](release.md); the contents of each package and the open
-decisions are in [Bingux userspace](../design/userspace.md).
+The build downloads Rust crates and a prebuilt Skia archive, so it needs the
+network. How a release is cut is in [releases](release.md); the contents of each
+package and the open decisions are in [Bingux userspace](../design/userspace.md).
 
 ## Source installation
 
@@ -286,14 +196,15 @@ use `make install-apps` (remove with `make uninstall-apps`); see
 `make install PREFIX=/usr DESTDIR=...` remains available for package builders.
 That deterministic staging path writes only below `DESTDIR` and is intentionally
 separate from the managed user install. Package builders choose which staged
-files go into which package; `packaging/rpm/bingux.spec` and
-`packaging/arch/PKGBUILD` are the reference lists.
+files go into which package; `pkgsmith/` holds the lists (see
+[Packaging](packaging.md)).
 
 ## Other distributions
 
-APT packages are not published. Keep their packaging work outside the shell
-source tree until the native install layout and runtime dependencies are
-stable. Do not add distribution-specific host configuration to Bingux.
+Debian 13 packages are written by the same scripts. There are no packages for
+Ubuntu (the Rust of Ubuntu 24.04 is older than the 1.88 that the apps need) or for
+Alpine (Bingux needs systemd; see [Packaging](packaging.md#why-there-is-no-apk)).
+Do not add distribution-specific host configuration to Bingux.
 
 ## Runtime state
 

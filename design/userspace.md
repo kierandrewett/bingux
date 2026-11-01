@@ -11,12 +11,11 @@ how to cut a release is in [releases](../docs/release.md).
 - Bingux is a **desktop shell plus apps**, not a distribution. The shell
   (`bingux`) runs on Gnoblin, a Mutter-based compositor with its own session.
   **Bingux OS** is the product image: Arch Linux packages, `greetd`, the Gnoblin
-  greeter and the Bingux packages. Fedora is the other target: an RPM spec and a
-  planned COPR project, and the QEMU test guest is Fedora 43.
-- Both targets are built from one source archive and one `make install`
-  staging tree. Each package format only decides which staged files go into
-  which package. This change splits the single `bingux` package into six
-  packages in both formats (RPM spec, Arch PKGBUILD).
+  greeter and the Bingux packages. Fedora is the other target: an rpm written by pkgsmith and
+  published at repo.gnoblin.org, and the QEMU test guest is Fedora 43.
+- Every target is built from one `make install` prefix. The pkgsmith scripts only
+  decide which files of the prefix go into which package: `bingux` (the shell and
+  every core service) and one package for each app, in rpm, deb and Arch formats.
 - Apps are plain Wayland programs with a desktop entry, an icon, AppStream
   metainfo and a man page. They install under `/usr`, follow XDG for their data,
   and the only daemons are the search and status helpers (user units under
@@ -69,20 +68,27 @@ engine or the split packages. Its shell is also built differently: one
 not need the image branch to adopt anything except the merge; section 5 lists
 the changes the image needs after it.
 
-### 1.3 Decision: one stage, two formats, same version
+### 1.3 Decision: one prefix, pkgsmith scripts, same version
 
-- `make install PREFIX=/usr DESTDIR=...` (`scripts/install-shell.py`) is the single
-  description of what the software installs. `packaging/rpm/bingux.spec` and
-  `packaging/arch/PKGBUILD` only choose which staged files belong to which
-  package, so a new file cannot be installed by one format and forgotten by the
-  other. RPM fails the build on an unclaimed file; the PKGBUILD gives the
-  leftovers to the shell package.
-- Every package has the same version (`VERSION` in the `Makefile`, `Version:` in
-  the spec, `pkgver` in the PKGBUILD, `version` in each `Cargo.toml`).
-  `tests/rpm-package.py` checks the first three. Packages depend on each other
-  with exact versions (`= %{version}-%{release}`) wherever they share a private
-  interface (`bingux-config`'s schema).
-- Release flow, repositories and signing are in [releases](../docs/release.md).
+- `make install PREFIX=/usr DESTDIR=...` (`scripts/install-shell.py`, and
+  `scripts/install-bsm.sh` for bsm) is the single description of what the software
+  installs. `scripts/build-prefix.sh` builds everything into a prefix that way, and
+  the pkgsmith scripts in `pkgsmith/` only choose which files of the prefix belong
+  to which package, so a new file cannot be installed by one format and forgotten by
+  the other. `bingux` takes everything no application package claims.
+- Every package has the same version (`VERSION` in the `Makefile`, the default in
+  `pkgsmith/common.star`, `version` in each `Cargo.toml`). `tests/packaging.py`
+  checks the first two and the metainfo and man pages. The apps depend on exactly
+  that version of `bingux`.
+- Release flow, repositories and signing are in [releases](../docs/release.md); the
+  pipeline is in [packaging](../docs/packaging.md).
+
+> Update: this note first described a split into seven packages written by an RPM
+> spec, a PKGBUILD and a Debian source package. The split is now four packages
+> (`bingux` with every core service, and the apps `bingux-settings`, `bingux-files`
+> and `bingux-taxonomy`) written by pkgsmith. `bingux-config`, `bingux-audio-effects`
+> and `bingux-preview-host` are part of `bingux`; the table in section 2.1 shows the
+> earlier split and the reasons for it.
 
 ## 2. The app model
 
@@ -198,7 +204,7 @@ command}`; the installer fills `@BINDIR@`. Settings keeps a snapshot index in
   `scripts/cargo-licenses.py` lists them per program (it chooses a licence a
   crate already shares with another when a crate offers a choice) and writes
   `<program>.LICENSE.dependencies`, which each package installs as `%license`.
-  `tests/rpm-package.py` fails when a spec `License:` tag is out of date. The
+  `make package-check` fails when a `LICENSES` entry of `pkgsmith/common.star` is out of date. The
   Quickshell (embedded in the shell package) is LGPL-3.0-or-later; the package
   carries its text. The Bingux icons are MIT-licensed Phosphor work, whose text sits in
   `share/licenses/bingux/icons/COPYING`. Skia's own licence (BSD-3-Clause) is already in the set;
@@ -401,15 +407,10 @@ by COPR.
 
 ### 10. CI
 
-The Bingux repository has no GitHub workflows. Gnoblin has fifteen
-(`release.yml`, `copr.yml`, `arch-package.yml`, …).
-
-- **Document the steps, add no workflow yet (default).** Pro: nothing untested
-  lands. Con: nothing runs on a push.
-- **Add a workflow** that runs `make rpm-check` and `make arch-package` in
-  containers on every pull request and publishes on a tag. Pro: catches a
-  broken spec before a release. Con: the Rust and Skia build is long and needs
-  the network.
+Decided: `.github/workflows/packages.yml` builds a prefix and writes the packages
+with pkgsmith in a container of each distribution, installs them in a clean
+container and publishes to the repository on a tag or a nightly run (see
+[packaging](../docs/packaging.md#ci)). `ci.yml` runs the checks that need no build.
 
 ### 11. What about `bingux-inventory` and other unpackaged files?
 
@@ -427,9 +428,9 @@ are merged into it: its tree has no `apps/files`,
 (`bingux-shell`, no `qs`). Adding the package names to `packages.x86_64` today
 would make `pacman` fail with "target not found".
 
-After the merge, replace `distro/packages/bingux/PKGBUILD` with
-`packaging/arch/PKGBUILD` from this branch, extended by the image branch's
-additions (portal, greeter and bsm files go to the shell package, which takes
+After the merge, replace `distro/packages/bingux/PKGBUILD` with the pkgsmith
+`bingux` package of this branch (or keep the image's PKGBUILD, which builds from the
+same `data/` files), extended by the image branch's additions (portal, greeter and bsm files go to the shell package, which takes
 the stage's leftovers), and:
 
 ```diff
@@ -469,5 +470,5 @@ the new packages come from the same archive, so no new case is needed.
 
 ## 6. How the packages were verified
 
-The commands, their output and the limits (what could not be run) are in
-[the packaging notes](../packaging/README.md#verification-record).
+What was run, and what could not be, is in
+[packaging](../docs/packaging.md#how-it-was-verified).

@@ -1,8 +1,9 @@
 name: Package repository
 
-# Builds the signed RPM, APT and pacman repository of one Bingux channel from the packages the Packages workflow built,
-# checks it the way a client would, and uploads it. The tool is scripts/pkgrepo of the Gnoblin repository, fetched at the
-# commit named in packaging/pkgrepo.ref, so Gnoblin and Bingux build their repositories the same way.
+# Builds the signed RPM, APT and pacman repository of one Bingux channel from the packages the Packages workflow wrote with
+# pkgsmith, checks it the way a client would, and uploads it. The repository is repo.gnoblin.org, the same host and the same
+# tool as Gnoblin's; Bingux's channels are below /bingux/. The tool is scripts/pkgrepo of the Gnoblin repository, fetched at the
+# commit named in .github/pkgrepo.ref, so Gnoblin and Bingux build their repositories the same way.
 # design/package-repositories.md has the layout, the version rules and the key handling.
 #
 # Without the signing key (a fork, a pull request, a run before the key exists) the tree is built and verified with a
@@ -79,7 +80,7 @@ jobs:
       - name: Name the commit of the repository tool
         id: tool
         run: |
-          read -r repository commit < <(grep -v '^#' packaging/pkgrepo.ref)
+          read -r repository commit < <(grep -v '^#' .github/pkgrepo.ref)
           echo "repository=$repository" >> "$GITHUB_OUTPUT"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
       - name: Fetch the repository tool
@@ -93,29 +94,26 @@ jobs:
         run: ./pkgrepo-source/scripts/pkgrepo/container/install-tools.sh
       - uses: actions/download-artifact@v4
         with:
-          name: rpms-${{ inputs.version }}
-          path: raw/rpm
-      - uses: actions/download-artifact@v4
-        with:
-          name: arch-packages-${{ inputs.version }}
-          path: raw/arch
-      - uses: actions/download-artifact@v4
-        with:
-          name: debs-${{ inputs.version }}
-          path: raw/deb
+          # The rpm, deb and Arch packages of every distribution and architecture, and the tar of every prefix. Only
+          # the three package formats go into the repositories.
+          pattern: packages-*-${{ inputs.version }}
+          merge-multiple: true
+          path: raw
       - name: Arrange the packages by distribution
         run: |
           mkdir -p packages/arch packages/deb/trixie
           # The release the RPMs were built for is in their release tag (.fc43), so it is not written down twice.
-          mapfile -t rpms < <(find raw/rpm -type f -name '*.rpm' ! -name '*.src.rpm')
+          mapfile -t rpms < <(find raw -type f -name '*.rpm' ! -name '*.src.rpm')
           test "${#rpms[@]}" -gt 0
-          fedora_release="$(rpm -qp --nosignature --queryformat '%{RELEASE}\n' "${rpms[0]}" | sed -n 's/.*\.fc\([0-9][0-9]*\)$/\1/p')"
-          test -n "$fedora_release"
-          mkdir -p "packages/fedora/$fedora_release"
-          cp -- "${rpms[@]}" "packages/fedora/$fedora_release/"
-          find raw/arch -type f -name '*.pkg.tar.zst' -exec cp -t packages/arch {} +
+          for rpm in "${rpms[@]}"; do
+            fedora_release="$(rpm -qp --nosignature --queryformat '%{RELEASE}\n' "$rpm" | sed -n 's/.*\.fc\([0-9][0-9]*\)$/\1/p')"
+            test -n "$fedora_release"
+            mkdir -p "packages/fedora/$fedora_release"
+            cp -- "$rpm" "packages/fedora/$fedora_release/"
+          done
+          find raw -type f -name '*.pkg.tar.zst' -exec cp -t packages/arch {} +
           # The Debian packages are built in a debian:trixie container, so they belong to the trixie suite.
-          find raw/deb -type f -name '*.deb' -exec cp -t packages/deb/trixie {} +
+          find raw -type f -name '*.deb' -exec cp -t packages/deb/trixie {} +
           find packages -type f | sort
       - name: Signing key
         id: key

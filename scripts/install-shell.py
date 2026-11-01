@@ -191,25 +191,25 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None)
         source / "apps/taxonomy/bingux-taxonomy.svg": prefix / "share/icons/hicolor/scalable/apps/bingux-taxonomy.svg",
         # Tells bingux-searchd that Settings exposes search: its program (opens a
         # hit's address) and its id. See design/search.md section 8.
-        source / "packaging/search-apps/bingux-settings.json": prefix / "share/bingux/search-apps/bingux-settings.json",
+        source / "data/search-apps/bingux-settings.json": prefix / "share/bingux/search-apps/bingux-settings.json",
         source / "scripts/bingux-greeter-session": prefix / "bin/bingux-greeter-session",
         source / "scripts/bingux-bsm-greeter": prefix / "bin/bingux-bsm-greeter",
         source / "gnoblin/bingux.lua": prefix / "share/gnoblin/conf.d/bingux.lua",
         source / "gnoblin/greeter.lua": prefix / "share/bingux/greeter/gnoblin.lua",
-        source / "packaging/greetd/config.toml": prefix / "share/bingux/greeter/greetd.toml",
-        source / "packaging/polkit/50-bingux-greeter.rules": prefix / "share/polkit-1/rules.d/50-bingux-greeter.rules",
-        source / "packaging/tmpfiles/bingux-greeter.conf": prefix / "lib/tmpfiles.d/bingux-greeter.conf",
-        source / "packaging/portal/bingux.portal": prefix / "share/xdg-desktop-portal/portals/bingux.portal",
-        source / "packaging/portal/org.freedesktop.impl.portal.desktop.bingux.service": prefix
+        source / "data/greetd/config.toml": prefix / "share/bingux/greeter/greetd.toml",
+        source / "data/polkit/50-bingux-greeter.rules": prefix / "share/polkit-1/rules.d/50-bingux-greeter.rules",
+        source / "data/tmpfiles/bingux-greeter.conf": prefix / "lib/tmpfiles.d/bingux-greeter.conf",
+        source / "data/portal/bingux.portal": prefix / "share/xdg-desktop-portal/portals/bingux.portal",
+        source / "data/portal/org.freedesktop.impl.portal.desktop.bingux.service": prefix
         / "share/dbus-1/services/org.freedesktop.impl.portal.desktop.bingux.service",
-        source / "packaging/portal/org.gnoblin.Shell.GlobalShortcutsProvider.service": prefix
+        source / "data/portal/org.gnoblin.Shell.GlobalShortcutsProvider.service": prefix
         / "share/dbus-1/services/org.gnoblin.Shell.GlobalShortcutsProvider.service",
-        # Enables bingux.target for every user; see packaging/systemd/90-bingux.preset.
-        source / "packaging/systemd/90-bingux.preset": prefix / "lib/systemd/user-preset/90-bingux.preset",
+        # Enables bingux.target for every user; see data/systemd/90-bingux.preset.
+        source / "data/systemd/90-bingux.preset": prefix / "lib/systemd/user-preset/90-bingux.preset",
     }
-    for path in sorted((source / "packaging/metainfo").glob("*.metainfo.xml")):
+    for path in sorted((source / "data/metainfo").glob("*.metainfo.xml")):
         payload[path] = prefix / "share/metainfo" / path.name
-    for path in sorted((source / "packaging/man").glob("*.1")):
+    for path in sorted((source / "data/man").glob("*.1")):
         payload[path] = prefix / "share/man/man1" / path.name
     missing = [str(path) for path in payload if not path.is_file()]
     if missing:
@@ -255,7 +255,7 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None)
                 prefix / "libexec/bingux/bingux-global-shortcuts",
             )
         )
-        if path == source / "packaging/search-apps/bingux-settings.json":
+        if path == source / "data/search-apps/bingux-settings.json":
             destination_path = target(destination)
             destination_path.parent.mkdir(parents=True, exist_ok=True)
             destination_path.write_text(path.read_text().replace("@BINDIR@", str(prefix / "bin")))
@@ -297,8 +297,8 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None)
                 )
             write_generated(destination, generated)
         elif path in (
-            source / "packaging/portal/org.freedesktop.impl.portal.desktop.bingux.service",
-            source / "packaging/portal/org.gnoblin.Shell.GlobalShortcutsProvider.service",
+            source / "data/portal/org.freedesktop.impl.portal.desktop.bingux.service",
+            source / "data/portal/org.gnoblin.Shell.GlobalShortcutsProvider.service",
         ):
             # D-Bus activation runs the installed backend, so Exec must follow the prefix.
             write_generated(
@@ -419,10 +419,10 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None)
     )
     installed.append(Path("libexec/bingux/search-service"))
     installed.append(Path("bin/bingux-search-service"))
-    unit_sources = sorted((source / "packaging/systemd").glob("bingux*.service"))
-    unit_sources += sorted((source / "packaging/systemd").glob("bingux*.path"))
-    unit_sources.append(source / "packaging/systemd/xdg-desktop-portal-bingux.service")
-    unit_sources.append(source / "packaging/systemd/bingux.target")
+    unit_sources = sorted((source / "data/systemd").glob("bingux*.service"))
+    unit_sources += sorted((source / "data/systemd").glob("bingux*.path"))
+    unit_sources.append(source / "data/systemd/xdg-desktop-portal-bingux.service")
+    unit_sources.append(source / "data/systemd/bingux.target")
     for unit_source in unit_sources:
         unit = unit_source.read_text()
         unit = unit.replace("/usr/bin", str(prefix / "bin"))
@@ -741,14 +741,14 @@ def apps_payload(source, cargo, prefix):
         )
     # No AppStream metainfo: appstreamcli and software centres index only the
     # system metainfo folders, so a copy below ~/.local would never be read.
-    for path in sorted((source / "packaging/man").glob("*.1")):
+    for path in sorted((source / "data/man").glob("*.1")):
         entries.append((prefix / "share/man/man1" / path.name, path, 0o644, False))
     # bingux-searchd reads this manifest to know Settings exposes search.
-    search_app = (source / "packaging/search-apps/bingux-settings.json").read_text().replace("@BINDIR@", bin_dir)
+    search_app = (source / "data/search-apps/bingux-settings.json").read_text().replace("@BINDIR@", bin_dir)
     entries.append((prefix / "share/bingux/search-apps/bingux-settings.json", search_app.encode(), 0o644, False))
     # Settings turns the sound effects on by enabling this template unit; the
     # user manager reads $XDG_DATA_HOME/systemd/user. Nothing is enabled here.
-    unit = (source / "packaging/systemd/bingux-effects@.service").read_text().replace("/usr/bin", bin_dir)
+    unit = (source / "data/systemd/bingux-effects@.service").read_text().replace("/usr/bin", bin_dir)
     entries.append((prefix / "share/systemd/user/bingux-effects@.service", unit.encode(), 0o644, False))
     # The way out does not need the source checkout.
     entries.append((prefix / APPS_HELPER, Path(__file__).resolve(), 0o755, False))

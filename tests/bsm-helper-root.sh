@@ -6,14 +6,12 @@
 # pam_faillock, which is what this script is for.
 #
 # usage (in the guest, as root):
-#   BSM_HELPER=/usr/libexec/bsm/bsm-helper \
-#   BSM_PROBE=/usr/libexec/bsm/bsm-helper-probe \
-#   sh tests/bsm-helper-root.sh
+#   BSM_PROBE=/usr/libexec/bsm/bsm-helper-probe sh tests/bsm-helper-root.sh
 #
 # Preconditions: bsm-helper, bsm-helper-probe, the PAM services bsm-login and
-# bsm-unlock (packaging/bsm/pam), the units bsm-helper.socket and
-# bsm-helper.service (packaging/bsm/systemd) and the sysusers file
-# (packaging/bsm/sysusers) are installed. tests/bsm-helper-vm.py boots the
+# bsm-unlock (data/bsm/pam), the units bsm-helper.socket and
+# bsm-helper.service (data/bsm/systemd) and the sysusers file
+# (data/bsm/sysusers) are installed. tests/bsm-helper-vm.py boots the
 # image, stages exactly that and runs this script.
 #
 # It creates the accounts bsmt1 and bsmt2 (password "bsm-test-pw"), rewrites
@@ -23,9 +21,11 @@
 # and the raw `loginctl show-session` records. Exit status: 0 all passed, 1 a
 # check failed, 77 skipped (not root).
 
-[ "$(id -u)" = 0 ] || { echo "SKIP: this script needs root"; exit 77; }
+[ "$(id -u)" = 0 ] || {
+    echo "SKIP: this script needs root"
+    exit 77
+}
 
-HELPER=${BSM_HELPER:-/usr/libexec/bsm/bsm-helper}
 PROBE=${BSM_PROBE:-/usr/libexec/bsm/bsm-helper-probe}
 SOCK=/run/bsm-helper/helper.sock
 PW=bsm-test-pw
@@ -33,7 +33,10 @@ WORK=/run/bsm-helper-test
 FAILS=0
 
 pass() { echo "PASS $1"; }
-fail() { echo "FAIL $1: $2"; FAILS=$((FAILS + 1)); }
+fail() {
+    echo "FAIL $1: $2"
+    FAILS=$((FAILS + 1))
+}
 info() { echo "INFO $*"; }
 check() { # name, command...; status 0 when the check passed
     name=$1
@@ -70,11 +73,20 @@ mkdir -p "$WORK" /etc/bsm /run/bsm/sessions
 chmod 1777 "$WORK"
 [ -f /etc/bsm/helper.toml ] && cp /etc/bsm/helper.toml /etc/bsm/helper.toml.bsm-test-orig
 systemd-sysusers 2>/dev/null
-id bsm >/dev/null 2>&1 || { echo "FAIL precondition: account bsm missing (sysusers)"; exit 1; }
-id bingux-greeter >/dev/null 2>&1 || { echo "FAIL precondition: account bingux-greeter missing (sysusers)"; exit 1; }
+id bsm >/dev/null 2>&1 || {
+    echo "FAIL precondition: account bsm missing (sysusers)"
+    exit 1
+}
+id bingux-greeter >/dev/null 2>&1 || {
+    echo "FAIL precondition: account bingux-greeter missing (sysusers)"
+    exit 1
+}
 for u in bsmt1 bsmt2; do
     userdel -r "$u" 2>/dev/null
-    useradd -m -s /bin/sh "$u" || { echo "FAIL precondition: cannot create $u"; exit 1; }
+    useradd -m -s /bin/sh "$u" || {
+        echo "FAIL precondition: cannot create $u"
+        exit 1
+    }
     echo "$u:$PW" | chpasswd
 done
 usermod -aG video bsmt1

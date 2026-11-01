@@ -5,7 +5,8 @@ name: CI
 #
 #   lint      the pre-commit hooks (ruff, shellcheck, clang-format, shfmt, prettier, qmlformat, stylua,
 #             rustfmt, taxonomy) on the files the change touches
-#   static    `make check-static` (nothing is built) and `make test-desktop-fast` (the framework's own tests)
+#   static    `make check-static` (nothing is built), `make package-check` without the licence check, and
+#             `make test-desktop-fast` (the framework's own tests)
 #   snapshot  builds Bingux Settings with --features snapshot and runs the headless app suites
 #   desktop   the isolated Gnoblin + Bingux desktop suite, on a self-hosted runner that has Gnoblin
 #
@@ -74,6 +75,9 @@ jobs:
         run: python -m pip install pytest pillow numpy
       - name: Checks that build nothing
         run: make check-static
+      - name: Package definitions (the pkgsmith scripts, units, desktop entries, AppStream files, man pages)
+        # The licence check needs the crate sources, which only a build downloads (the Packages workflow runs it).
+        run: python -m pytest tests/packaging.py -k "not license_expressions"
       - name: The framework's own tests (no compositor, no built program)
         run: make test-desktop-fast
 

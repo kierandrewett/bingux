@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-USER_UNITS = REPO / "packaging/systemd"
+USER_UNITS = REPO / "data/systemd"
 PROFILE_SYSTEM = REPO / "distro/profile/airootfs/etc/systemd/system"
 
 

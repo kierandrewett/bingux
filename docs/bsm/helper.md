@@ -13,15 +13,15 @@ Architecture decisions D3 and D4: [architecture.md](architecture.md).
 
 ## Status
 
-| Area                                                        | State                                                                                                                                                  |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Socket, peer check, datagram limits                         | Implemented. Tested unprivileged (`tests/auth_protocol.rs`, `tests/socket_activation.rs`) and as root in the image (`tests/bsm-helper-root.sh`, passed).   |
-| PAM conversation (prompts, abort, timeouts, supersede)      | Implemented. Tested unprivileged against the real libpam through a test service directory, and against the image's real `system-auth` stack as root.       |
-| Tickets (single use, bound to uid, intent, generation, TTL) | Implemented. Unit and protocol tests.                                                                                                                  |
-| Session start, PAM lifetime, termination, adoption          | Implemented. Tested unprivileged with real processes, and as root in the image with `pam_systemd`, a real scope and `setresuid` (all checks passed).       |
-| Greeter launch                                              | Implemented. Same split; the root run covers identity, capabilities and private directories.                                                           |
-| `SetLockedHint` through logind                              | Implemented with libsystemd's sd-bus. Verified as root in the image: logind reports `LockedHint=yes` then `no`.                                         |
-| Real hosted Gnoblin as the leader                           | Not run here: `gnoblin --hosted` is not in the image yet. The tests use `sleep` as leader and bridge.                                                  |
+| Area                                                        | State                                                                                                                                                    |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Socket, peer check, datagram limits                         | Implemented. Tested unprivileged (`tests/auth_protocol.rs`, `tests/socket_activation.rs`) and as root in the image (`tests/bsm-helper-root.sh`, passed). |
+| PAM conversation (prompts, abort, timeouts, supersede)      | Implemented. Tested unprivileged against the real libpam through a test service directory, and against the image's real `system-auth` stack as root.     |
+| Tickets (single use, bound to uid, intent, generation, TTL) | Implemented. Unit and protocol tests.                                                                                                                    |
+| Session start, PAM lifetime, termination, adoption          | Implemented. Tested unprivileged with real processes, and as root in the image with `pam_systemd`, a real scope and `setresuid` (all checks passed).     |
+| Greeter launch                                              | Implemented. Same split; the root run covers identity, capabilities and private directories.                                                             |
+| `SetLockedHint` through logind                              | Implemented with libsystemd's sd-bus. Verified as root in the image: logind reports `LockedHint=yes` then `no`.                                          |
+| Real hosted Gnoblin as the leader                           | Not run here: `gnoblin --hosted` is not in the image yet. The tests use `sleep` as leader and bridge.                                                    |
 
 [What ran where](#what-ran-where) lists exactly which suite ran in which
 environment, and [Observed on the image](#observed-on-the-image) records what
@@ -40,44 +40,44 @@ flowchart TB
     helper -->|fork| hint[sd-bus child: SetLockedHint]
 ```
 
-* The helper is single threaded on purpose: it `fork`s with PAM state in the
+- The helper is single threaded on purpose: it `fork`s with PAM state in the
   child, which is only sound without other threads. That is also why logind is
   reached through libsystemd's synchronous `sd-bus` and not through a D-Bus
   crate that starts its own executor thread, and why that call runs in a
   short-lived child (it blocks).
-* The long-lived helper never calls PAM. Authentication, `pam_setcred`,
+- The long-lived helper never calls PAM. Authentication, `pam_setcred`,
   `pam_open_session` and `pam_close_session` all run in the forked child.
-* `PR_SET_DUMPABLE` is 0 in the helper: no core dumps and no `ptrace` of a
+- `PR_SET_DUMPABLE` is 0 in the helper: no core dumps and no `ptrace` of a
   process that has seen a password.
 
 ## Socket and peer check
 
-* Path: `paths::HELPER_SOCKET` (`/run/bsm-helper/helper.sock`), created by
+- Path: `paths::HELPER_SOCKET` (`/run/bsm-helper/helper.sock`), created by
   `bsm-helper.socket` (mode 0600, owner `bsm`) and passed in by `LISTEN_FDS`.
   Without socket activation the helper binds `--socket PATH` or
   `socket.path` itself (tests).
-* The type must be `SOCK_SEQPACKET`; one datagram is one JSON message of at
+- The type must be `SOCK_SEQPACKET`; one datagram is one JSON message of at
   most `MAX_DATAGRAM` (64 KiB). Longer datagrams are detected with
   `MSG_TRUNC` and drop the connection; undecodable datagrams are ignored and
   logged by category only (a message can quote the secret).
-* `SO_PEERCRED` uid must equal the `bsm` account (and, review F10, the process must be
+- `SO_PEERCRED` uid must equal the `bsm` account (and, review F10, the process must be
   the compositor: see [Review fixes](#review-fixes)) (`socket.allowed_user`, or
   `socket.allowed_uid` for tests). Root is not exempt: a root process can open
   the socket but is closed at once. Other peers are closed before any byte is
   read.
-* One connection at a time. A second connection is closed; a restarting `bsm`
+- One connection at a time. A second connection is closed; a restarting `bsm`
   is accepted because the old connection's end is seen first.
-* When the connection ends, pending conversations and tickets are discarded
+- When the connection ends, pending conversations and tickets are discarded
   and the greeter is stopped. Desktop sessions are not touched.
 
 ## Authentication
 
 `AuthStart{req_id, user, uid, intent, generation, service}`:
 
-| Intent            | Required `service`   | Child after success                                                           |
-| ----------------- | -------------------- | ----------------------------------------------------------------------------- |
-| `Login`, `Switch` | `bsm-login`          | Parks with the authenticated PAM handle until its ticket is redeemed or ends. |
-| `Unlock`          | `bsm-unlock`         | Exits. No session phase, nothing kept.                                        |
+| Intent            | Required `service` | Child after success                                                           |
+| ----------------- | ------------------ | ----------------------------------------------------------------------------- |
+| `Login`, `Switch` | `bsm-login`        | Parks with the authenticated PAM handle until its ticket is redeemed or ends. |
+| `Unlock`          | `bsm-unlock`       | Exits. No session phase, nothing kept.                                        |
 
 Service names are configurable but only these two are ever accepted: the
 compositor cannot make a root process run an arbitrary PAM service. `Switch`
@@ -93,28 +93,28 @@ PAM prints reaches the greeter (fingerprint hints, `pam_faillock` messages,
 
 Rules:
 
-* **One live conversation.** A new `AuthStart` aborts the running one
+- **One live conversation.** A new `AuthStart` aborts the running one
   (`AuthDone{ok:false, code:cancelled}` for the old `req_id`). Switching account
   is `AuthAbort` plus `AuthStart`; nothing is retargeted.
-* **Stale responses are dropped.** An `AuthResponse` is delivered only to the
+- **Stale responses are dropped.** An `AuthResponse` is delivered only to the
   live conversation with that `req_id` and only while a prompt is waiting.
-* **Abort.** `AuthAbort` tells the child, reports `cancelled`, and kills the
+- **Abort.** `AuthAbort` tells the child, reports `cancelled`, and kills the
   child after one second if it is still busy. Its result is never used, even if
   it authenticated in the meantime.
-* **No failed login from an abort.** When a conversation is cancelled (`AuthAbort`, a new
+- **No failed login from an abort.** When a conversation is cancelled (`AuthAbort`, a new
   `AuthStart`, bsm gone) or a prompt times out, the child sends its verdict and `_exit`s inside the
   conversation callback. Returning an error instead makes `pam_unix` fail and the stack reach
   `pam_faillock authfail`, which records a failed login nobody attempted (three account switches
   or three idle minutes at the lock screen locked the account for ten minutes: found by the VM
   security scenario 4). Real wrong passwords are still recorded by the stack and counted by the
   helper's own back-off.
-* **Timeouts.** `pam.prompt_timeout_secs` (60 s) bounds one answer, measured
+- **Timeouts.** `pam.prompt_timeout_secs` (60 s) bounds one answer, measured
   in the child. `pam.conversation_timeout_secs` (120 s) bounds the whole
   conversation and kills the child. Both report `timeout`.
-* **Crash safety.** An authentication child has `PR_SET_PDEATHSIG=SIGKILL` and
+- **Crash safety.** An authentication child has `PR_SET_PDEATHSIG=SIGKILL` and
   sees EOF when the helper drops its socket, so it ends when the helper dies,
   when `bsm` disconnects, when it is aborted or superseded.
-* **Secrets.** A response is never logged. It travels in a `Zeroizing<String>`;
+- **Secrets.** A response is never logged. It travels in a `Zeroizing<String>`;
   receive buffers are zeroed after parsing; the copy handed to libpam is
   zeroed after `strdup`. Limit: `serde_json` may keep transient copies of an
   escaped string in its scratch buffer that this code cannot reach. Lockout
@@ -184,7 +184,7 @@ then:
    so a missing binary fails the login with the path in the message instead of
    becoming a session that ends a moment later.
 6. Creates the adoption socket, then reports `SessionOpened{host_pid,
-   leader_pid, scope, logind_session}`. `host_pid` is the exact pid of the
+leader_pid, scope, logind_session}`. `host_pid` is the exact pid of the
    bridge, which is the process that connects to the brokered socket. `scope`
    is the **absolute cgroup path** of the session scope, read from the supervisor's
    `/proc/<pid>/cgroup` after `pam_systemd`
@@ -229,13 +229,13 @@ The task allowed a transient scope through `StartTransientUnit` or the logind
 session scope. The helper uses the **logind session scope** that
 `pam_systemd` creates:
 
-* It already is a systemd scope in `user-<uid>.slice`, it is the scope logind
+- It already is a systemd scope in `user-<uid>.slice`, it is the scope logind
   accounts the session to, and `loginctl` shows the same processes. A second,
   helper-made scope would split the session across two units and logind would
   not know the second.
-* No D-Bus call is needed for it, so the root helper stays free of a bus client
+- No D-Bus call is needed for it, so the root helper stays free of a bus client
   on the hot path.
-* The compositor's cgroup check (`/proc/<pid>/cgroup` equals the reported absolute path)
+- The compositor's cgroup check (`/proc/<pid>/cgroup` equals the reported absolute path)
   compares against this name.
 
 Cost: when `pam_systemd` is missing from the stack there is no scope.
@@ -302,20 +302,20 @@ logind session, `logind_failure` otherwise.
 `SpawnGreeter{req_id, generation, wayland_socket, control_socket}` runs
 `greeter.command` (default `/usr/bin/bingux-bsm-greeter`) as `bingux-greeter`:
 
-* Both socket paths must be inside `greeter.socket_root` (`/run/bsm`), with no
+- Both socket paths must be inside `greeter.socket_root` (`/run/bsm`), with no
   `..`. The account must exist and not be root.
-* Private directories `/run/bsm-greeter/<generation>/{rt,home}` are created
+- Private directories `/run/bsm-greeter/<generation>/{rt,home}` are created
   (root creates, then `chown` to the greeter, mode 0700, previous leftovers
   removed first) and removed when the greeter exits. Leftovers of a crashed
   helper are removed at start.
-* Environment: `PATH`, locale, `HOME` and `XDG_*_HOME` in the private home,
+- Environment: `PATH`, locale, `HOME` and `XDG_*_HOME` in the private home,
   `XDG_RUNTIME_DIR`, `WAYLAND_DISPLAY=<absolute socket path>`,
   `BSM_CONTROL_SOCKET`, `BSM_GENERATION`, `QT_QPA_PLATFORM=wayland`,
   `XDG_SESSION_TYPE=wayland`, plus `greeter.extra_env`. No session bus, no
   seat, no inherited variable, no `LD_*`.
-* Identity as for sessions; supplementary groups from `initgroups` (the image
+- Identity as for sessions; supplementary groups from `initgroups` (the image
   puts `bingux-greeter` in `render` for GPU buffers). No PAM session.
-* `GreeterSpawned{req_id, generation, pid}` with the exact pid (the compositor
+- `GreeterSpawned{req_id, generation, pid}` with the exact pid (the compositor
   matches it with `SO_PEERCRED`). `GreeterExited{generation, status}` on exit;
   a greeter that cannot be started gives `GreeterExited` with status 127 and no
   `GreeterSpawned`. `KillGreeter` sends SIGTERM to the process group, SIGKILL
@@ -325,14 +325,14 @@ logind session, `logind_failure` otherwise.
 
 ## Refusals
 
-| Request                    | Refused when                                                                                                       | Code               |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------ |
-| `AuthStart`                | service does not match the intent; duplicate `req_id`                                                              | `invalid_argument` |
-| `AuthStart`, `OpenSession` | uid does not belong to the name; uid 0; uid below `session.min_uid` (1000); when root, the `bsm` or greeter account | `invalid_account`  |
-| `OpenSession`              | ticket unknown, expired, used, wrong intent                                                                        | `unauthorised`     |
-| `OpenSession`              | ticket for another generation                                                                                      | `stale_generation` |
-| `OpenSession`              | session id not `[A-Za-z0-9_-]{1,32}`; socket path outside `session.socket_dir` or with `..`; bad output hints; duplicate hosted session id (`busy`) | `invalid_argument` |
-| `SpawnGreeter`             | sockets outside `greeter.socket_root`                                                                              | `GreeterExited` 127 |
+| Request                    | Refused when                                                                                                                                        | Code                |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `AuthStart`                | service does not match the intent; duplicate `req_id`                                                                                               | `invalid_argument`  |
+| `AuthStart`, `OpenSession` | uid does not belong to the name; uid 0; uid below `session.min_uid` (1000); when root, the `bsm` or greeter account                                 | `invalid_account`   |
+| `OpenSession`              | ticket unknown, expired, used, wrong intent                                                                                                         | `unauthorised`      |
+| `OpenSession`              | ticket for another generation                                                                                                                       | `stale_generation`  |
+| `OpenSession`              | session id not `[A-Za-z0-9_-]{1,32}`; socket path outside `session.socket_dir` or with `..`; bad output hints; duplicate hosted session id (`busy`) | `invalid_argument`  |
+| `SpawnGreeter`             | sockets outside `greeter.socket_root`                                                                                                               | `GreeterExited` 127 |
 
 Without root the helper can only start its own uid, which is also the
 connecting account's, so the service-account refusal is skipped; the
@@ -363,7 +363,7 @@ on both Fedora and Arch.
 
 ## PAM files
 
-`packaging/bsm/pam/bsm-login` and `bsm-unlock` stack like the distribution's
+`data/bsm/pam/bsm-login` and `bsm-unlock` stack like the distribution's
 login: `auth include system-auth` (so `pam_faillock` lockout, `pam_unix` and
 `pam_fprintd` are the machine's own policy and bsm invents none), `account`
 with `pam_nologin`, and for `bsm-login` the session modules (`pam_keyinit`,
@@ -375,13 +375,13 @@ stays in one process, where this one lives across a fork and a socket.
 
 ## Tests
 
-| Suite                                                | Runs as   | What it proves                                                                                                                                                                                                     |
-| ---------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `cargo test --lib` (unit)                            | user      | libpam trampoline (all four message kinds, interruption, limits), real PAM conversations through a test service (success, wrong password, abort, timeout, parent loss, deny stack, missing service), tickets, config, environment, cgroup parsing, greeter directories. |
-| `cargo test --test auth_protocol`                    | user      | Real binary and socket: peer uid check, single connection, garbage and oversized datagrams, whole conversations, refusals, stale responses, supersede, timeouts, ticket rules (single use, expiry, generation, intent, connection loss), parked child lifetime, children die with helper and connection, rapid restarts. |
-| `cargo test --test session_lifecycle`                | user      | Real processes: PAM session opened once and closed only at the end or on failure, PAM environment seen by a module (seatless wayland user), process environments, leader and bridge exit end the session, SIGKILL after grace, one session closed while another runs, adoption after helper kill -9 and after SIGTERM, adopted session reports its exit, greeter identity-free parts (directories, environment, replacement, death with the connection). The same PAM process authenticates and supervises (`parent_of(leader)`). |
-| `tests/bsm-helper-root.sh`                           | root, in the image | `pam_systemd`, logind (`Type`, `Class`, `Seat`, `Active`, `Scope`, `LockedHint`), scope membership, real uid/gid/capabilities of leader, bridge and greeter, supplementary groups, user manager and bus, `pam_faillock` policy, scope-wide stop including a `setsid` orphan, two users, adoption, the greeter as `bingux-greeter`. |
-| `tests/bsm-helper-vm.py`                             | host      | Builds, stages and boots the live ISO and runs the script above.                                                                                                                                                   |
+| Suite                                 | Runs as            | What it proves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cargo test --lib` (unit)             | user               | libpam trampoline (all four message kinds, interruption, limits), real PAM conversations through a test service (success, wrong password, abort, timeout, parent loss, deny stack, missing service), tickets, config, environment, cgroup parsing, greeter directories.                                                                                                                                                                                                                                                           |
+| `cargo test --test auth_protocol`     | user               | Real binary and socket: peer uid check, single connection, garbage and oversized datagrams, whole conversations, refusals, stale responses, supersede, timeouts, ticket rules (single use, expiry, generation, intent, connection loss), parked child lifetime, children die with helper and connection, rapid restarts.                                                                                                                                                                                                          |
+| `cargo test --test session_lifecycle` | user               | Real processes: PAM session opened once and closed only at the end or on failure, PAM environment seen by a module (seatless wayland user), process environments, leader and bridge exit end the session, SIGKILL after grace, one session closed while another runs, adoption after helper kill -9 and after SIGTERM, adopted session reports its exit, greeter identity-free parts (directories, environment, replacement, death with the connection). The same PAM process authenticates and supervises (`parent_of(leader)`). |
+| `tests/bsm-helper-root.sh`            | root, in the image | `pam_systemd`, logind (`Type`, `Class`, `Seat`, `Active`, `Scope`, `LockedHint`), scope membership, real uid/gid/capabilities of leader, bridge and greeter, supplementary groups, user manager and bus, `pam_faillock` policy, scope-wide stop including a `setsid` orphan, two users, adoption, the greeter as `bingux-greeter`.                                                                                                                                                                                                |
+| `tests/bsm-helper-vm.py`              | host               | Builds, stages and boots the live ISO and runs the script above.                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 Unprivileged tests drive libpam through `pam_start_confdir` with a temporary
 directory. The stacks use `pam_echo` (info text), `pam_exec expose_authtok`
@@ -399,7 +399,7 @@ only of it returns `PAM_PERM_DENIED` from `pam_setcred`; the test stack ends
 Running the root checks by hand in the image: copy `bsm-helper`,
 `bsm-helper-probe` (`cargo build --release --examples`) to
 `/usr/libexec/bsm/`, install the PAM files, units and sysusers file from
-`packaging/bsm`, then as root `sh tests/bsm-helper-root.sh`. The script creates
+`data/bsm`, then as root `sh tests/bsm-helper-root.sh`. The script creates
 the accounts `bsmt1` and `bsmt2`, rewrites `/etc/bsm/helper.toml` (restoring it
 afterwards) and prints `PASS`, `FAIL` and `INFO` lines. `tests/bsm-helper-vm.py`
 does all of that in QEMU.
@@ -420,62 +420,62 @@ libraries resolved). The script's output is kept by the run in
 
 Facts, in the order the design questions arise:
 
-* **Session record.** `loginctl show-session` of a hosted login:
+- **Session record.** `loginctl show-session` of a hosted login:
   `Type=wayland`, `Class=user`, `Active=yes`, `State=active`, `Remote=no`,
   `Service=bsm-login`, `Desktop=gnoblin`, `Scope=session-19.scope`,
   `LockedHint=no`, `CanLock=yes`, `VTNr=0`, **no `Seat` property** (logind omits
   an empty seat). `Leader=` is the supervisor (`bsm-session`), not the desktop:
   it is the process that called `pam_open_session`.
-* **Seatless is active.** A session without a seat is `Active=yes` and
+- **Seatless is active.** A session without a seat is `Active=yes` and
   `State=active` at once. The live user's seat0 session on tty1 stayed
   active at the same time; opening a hosted session did not touch it. D4 holds.
-* **Two sessions per login.** logind lists a `user` class session (ours) and a
+- **Two sessions per login.** logind lists a `user` class session (ours) and a
   `manager` class session for the user manager (`systemd --user`), both
   seatless. The manager session outlives the hosted session by a moment after
   logout; tests look at class `user`.
-* **Scope.** `session-<id>.scope`, equal to `SessionOpened.scope` and
+- **Scope.** `session-<id>.scope`, equal to `SessionOpened.scope` and
   `loginctl`'s `Scope=`. The supervisor, the leader and the bridge are all in
   it; the helper's own cgroup is not. Stopping the scope's processes also
   stopped a `setsid` background process started by the leader.
-* **User manager and bus.** After `pam_open_session` returned, `/run/user/<uid>`,
+- **User manager and bus.** After `pam_open_session` returned, `/run/user/<uid>`,
   `user@<uid>.service` and the bus socket `/run/user/<uid>/bus` existed (the
   helper waits for them anyway and fails the login if they do not appear).
-* **Identity.** Leader, bridge and greeter run with real, effective, saved and
+- **Identity.** Leader, bridge and greeter run with real, effective, saved and
   filesystem uid equal to the account and `CapEff` 0. Supplementary groups were
   applied (`video` for the test account, `render` and one more for the greeter).
   The helper itself runs as root with `Seccomp: 0` and `NoNewPrivs: 0`, so
   desktops inherit no filter and setuid helpers work.
-* **Environment.** `XDG_SESSION_TYPE`, `XDG_SESSION_CLASS`,
+- **Environment.** `XDG_SESSION_TYPE`, `XDG_SESSION_CLASS`,
   `XDG_SESSION_DESKTOP`, `DESKTOP_SESSION`, `XDG_RUNTIME_DIR`, `XDG_SESSION_ID`
   (from `pam_systemd`), `USER`, `LOGNAME`, `HOME`, `BSM_SESSION_ID`,
   `BSM_GENERATION` and the bus address reach the leader and the bridge;
   `XDG_SEAT`, `XDG_VTNR`, `WAYLAND_DISPLAY` and `DISPLAY` reach neither;
   `BSM_HOST_SOCKET` reaches the bridge only.
-* **PAM lifetime.** Five seconds after login the logind session was still
+- **PAM lifetime.** Five seconds after login the logind session was still
   there: no premature `pam_close_session`. Closing the session, the leader
   dying (`SIGKILL`, reported as status -9) and a failed start all ended with
   `pam_close_session` and no `user` class session left.
-* **One handle, proven by the keyring.** The journal shows
+- **One handle, proven by the keyring.** The journal shows
   `gkr-pam: stashed password to try later in open session` in the auth phase and
   `gkr-pam: unlocked login keyring` in the session phase of the same PAM
   handle. With a fresh handle per phase the second line could not occur.
-* **Lockout is the distribution's.** The image's `system-auth` has
+- **Lockout is the distribution's.** The image's `system-auth` has
   `pam_faillock`; after three wrong passwords through the helper the correct
   password was refused (`pam_faillock ... temporarily locked out due to 3
-  consecutive failed login attempts`), and worked again after `faillock
-  --reset`. The helper counted and delayed nothing.
-* **LockedHint.** `SetLockedHint` from the root helper changed logind's
+consecutive failed login attempts`), and worked again after `faillock
+--reset`. The helper counted and delayed nothing.
+- **LockedHint.** `SetLockedHint` from the root helper changed logind's
   `LockedHint` to `yes` and back to `no`.
-* **polkit.** `pkcheck --action-id org.freedesktop.login1.reboot` (allowed
+- **polkit.** `pkcheck --action-id org.freedesktop.login1.reboot` (allowed
   without authentication for an active local session): exit 0 for the live
   user's seat0 session, exit 2 (authentication required) for the hosted session.
   So polkit treats a seatless session as not local, as architecture.md
   predicts. The `bsm.rules` are not part of this run; whether they cover each
   needed action is the packaging's check.
-* **Adoption.** Stopping `bsm-helper.service` left the session, its processes and
+- **Adoption.** Stopping `bsm-helper.service` left the session, its processes and
   its logind session running; a helper started on demand adopted it and closed
   it on request.
-* **Failures.** A missing bridge binary failed the login with
+- **Failures.** A missing bridge binary failed the login with
   `bridge: cannot execute /nonexistent/bsm-host: No such file or directory`.
   Connections from root and from another account were refused.
 
@@ -489,14 +489,13 @@ inhibitors, suspend. Hosted Gnoblin and `bsm-host` were not in the image.
 
 ## What ran where
 
-| Suite                                          | Environment                                             | Result                                                |
-| ---------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------- |
-| `cargo test` (unit, protocol, lifecycle, activation) | Fedora 43 host, unprivileged                       | 43 + 21 + 16 + 1 tests passed                         |
-| `tests/bsm-helper-root.sh` via `tests/bsm-helper-vm.py` | QEMU, live ISO of 2026-10-24 (Arch), root in the guest | 108 checks passed, 0 failed                           |
-| Hosted Gnoblin and the real bridge as leader and bridge | not run                                         | blocked on `gnoblin --hosted` and `bsm-host` in the image |
+| Suite                                                   | Environment                                            | Result                                                    |
+| ------------------------------------------------------- | ------------------------------------------------------ | --------------------------------------------------------- |
+| `cargo test` (unit, protocol, lifecycle, activation)    | Fedora 43 host, unprivileged                           | 43 + 21 + 16 + 1 tests passed                             |
+| `tests/bsm-helper-root.sh` via `tests/bsm-helper-vm.py` | QEMU, live ISO of 2026-10-24 (Arch), root in the guest | 108 checks passed, 0 failed                               |
+| Hosted Gnoblin and the real bridge as leader and bridge | not run                                                | blocked on `gnoblin --hosted` and `bsm-host` in the image |
 
-Events while `bsm` is not connected: the end of a session is queued (at most
-64) and delivered to the next connection, so a restarting `bsm` learns that a
+Events while `bsm` is not connected: the end of a session is queued (at most 64) and delivered to the next connection, so a restarting `bsm` learns that a
 session ended in between. Other events (prompts, `SessionOpened`) are dropped
 with the connection, because their requests are gone with it.
 
@@ -506,40 +505,40 @@ Findings of `docs/bsm/review-helper.md` fixed in the helper (regression tests in
 `bsm/helper/tests` and `tests/bsm-helper-root.sh`; the root script passed 120
 checks on the 2026-10-26 ISO after them):
 
-* **F1 greeter directories.** `<gen>` is created root-owned 0700, `rt` and `home` are made inside
+- **F1 greeter directories.** `<gen>` is created root-owned 0700, `rt` and `home` are made inside
   it and handed over with `fchown` on `O_NOFOLLOW` descriptors, `<gen>` is handed over last. Before a
   new greeter's directories exist, the old greeter's group and (as root) every process of the
   greeter account must be gone (`SIGKILL`, bounded wait); when a greeter exits or is stopped, leftover
   processes of the account are killed too, because a `setsid` child leaves the process group.
-* **F3 PAM_USER.** Read back with `pam_get_item` after authentication and after
+- **F3 PAM_USER.** Read back with `pam_get_item` after authentication and after
   `pam_open_session`; it must still resolve to the uid the helper acts for, else the login fails.
-* **F4 adoption.** The adoption directory is created by `mkdir 0700` + `fchmod`, never
+- **F4 adoption.** The adoption directory is created by `mkdir 0700` + `fchmod`, never
   `create_dir_all`; adoption needs a directory and a socket owned by the helper's euid, directory
   mode without group/other bits, socket mode 0600, no symlinks, and a listener with the helper's
   euid. A loose directory means nothing is adopted. Packaging creates `/run/bsm-helper` 0711 and
   `/run/bsm-helper/sessions` 0700 through tmpfiles.
-* **F5 descriptors.** Leader, bridge and greeter get `/dev/null` on 0, 1, 2 and nothing else
+- **F5 descriptors.** Leader, bridge and greeter get `/dev/null` on 0, 1, 2 and nothing else
   (`close_range`). Consequence: a greeter's stderr no longer reaches the journal; use a wrapper
   that logs to the greeter's own home when debugging.
-* **F6 teardown.** SIGTERM to the scope, the grace, then the supervisor moves into the helper's cgroup
+- **F6 teardown.** SIGTERM to the scope, the grace, then the supervisor moves into the helper's cgroup
   and writes `cgroup.kill` on the scope, waiting for `populated 0`: a respawning process
   cannot outrun it (verified in the image with a respawner). The tight sweep remains as fallback
   (no scope, kernel before 5.14). Process-group kills skip reaped children.
-* **F7 throttling.** After `pam.free_failures` (3) consecutive failed guesses the helper
+- **F7 throttling.** After `pam.free_failures` (3) consecutive failed guesses the helper
   adds 2, 4, 8 .. 30 s before the next `AuthStart` for that uid (`busy`); success resets it. A
   conversation that already received an answer and is then superseded or aborted counts as a failed
   guess and waits PAM's 2 s failure delay, so aborting cannot skip it. At most 8 authentication children may
   be ending at once. The distribution's lockout (`pam_faillock`) stays the real policy; stacks
   without it (the build host's authselect profile has only `pam_faildelay`) get only this back-off.
-* **F8 substack.** `bsm-login` and `bsm-unlock` pull `system-auth` in with `substack`. Tested with
+- **F8 substack.** `bsm-login` and `bsm-unlock` pull `system-auth` in with `substack`. Tested with
   real libpam (a `sufficient` module in the included stack ends only the substack) and on the
   image (`pam_gnome_keyring` stashes the password in auth and unlocks in the session phase).
   Not tested: a Fedora authselect `system-auth`.
-* **F10 helper socket.** Besides the uid, `/proc/<pid>/exe` must be `socket.allowed_exe`
+- **F10 helper socket.** Besides the uid, `/proc/<pid>/exe` must be `socket.allowed_exe`
   (`/usr/bin/bsm`, ` (deleted)` tolerated for upgrades) and the cgroup path must end in
   `socket.allowed_cgroup` (`bsm.service`); a pidfd from `SO_PEERPIDFD` proves the pid was not
   reused during the check. The image converter and any other process of the `bsm` uid are refused
   before a byte is read and cannot hold the single connection slot. Empty values switch a check off
   (tests; the image test connects with a probe and names its path). The converter's seccomp changes
   are BsmAppearance's. Not run: the real `bsm` connecting under these checks (BsmPackaging's walkthrough).
-* **F9** is a packaging polkit change, not helper code.
+- **F9** is a packaging polkit change, not helper code.

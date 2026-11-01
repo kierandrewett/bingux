@@ -6,7 +6,7 @@ presentability, transition validation, greeter crash cover), read against spec
 section 3 and the invariants in `docs/bsm/architecture.md`. Adjacent code was read
 where it decides an outcome: `bsm/core/src/run.rs` (watchdog, event channel),
 `bsm/manager/src/runtime/driver.rs` (event forwarder),
-`packaging/bsm/*`, and the vendored dependencies `smithay 0.7.0`,
+`data/bsm/*`, and the vendored dependencies `smithay 0.7.0`,
 `wayland-backend 0.3.17`, `rustix 1.1.5` from `~/.cargo/registry`.
 
 Method and honesty statement. This is a read-only review of source. Nothing was
@@ -26,21 +26,21 @@ accuracy of docs or tests.
 
 ## Summary
 
-| #  | Severity | Title                                                                                         | Invariant / spec           |
-| -- | -------- | --------------------------------------------------------------------------------------------- | -------------------------- |
-| F1 | High     | `Protected` and transition phases are acknowledged without proof that a new frame was shown  | inv. 3, 8; spec 8, 15      |
-| F2 | Medium   | Implicit pointer grab survives `Protect` and owner changes                                    | inv. 1, 3; spec 3          |
-| F3 | Medium   | One authorised client can starve the whole event loop; the systemd watchdog cannot see it     | availability, inv. 9       |
-| F4 | Medium   | Unbounded compositor-to-manager event flow shares one bounded queue with auth traffic         | availability, inv. 5       |
-| F5 | Low      | Input is revoked on the `Protect` command only; implicit protection paths lag by a frame      | inv. 1, 3                  |
-| F6 | Low      | `SetInputOwner(Greeter)` is always allowed, and `owner_allowed` ignores presentability        | inv. 1, 3                  |
-| F7 | Low      | Hosted identity rests on uid plus pid; the scope check is spoofable and the exe check is inert across uids | spec 3, arch. role table |
-| F8 | Low      | pid-recycle TOCTOU remains where `SO_PEERPIDFD` is absent (kernel < 6.5)                      | spec 3                     |
-| F9 | Low      | Pending-connection slots can be exhausted; the legitimate peer is dropped silently            | availability               |
-| F10| Low      | Hosted surface liveness is never tracked (destroyed `wl_surface` keeps the session "presentable") | inv. 8                 |
-| F11| Low      | No per-client resource caps (hosts, surfaces, buffers, dmabuf imports, redraw triggers)       | availability               |
-| F12| Info     | Keys held at hand-off are listed in `wl_keyboard.enter`; docs say otherwise                   | arch. "Transitions"        |
-| F13| Info     | Doc and code differences (random socket name, test-only socket modes, `UCred` niche)          | docs                       |
+| #   | Severity | Title                                                                                                      | Invariant / spec         |
+| --- | -------- | ---------------------------------------------------------------------------------------------------------- | ------------------------ |
+| F1  | High     | `Protected` and transition phases are acknowledged without proof that a new frame was shown                | inv. 3, 8; spec 8, 15    |
+| F2  | Medium   | Implicit pointer grab survives `Protect` and owner changes                                                 | inv. 1, 3; spec 3        |
+| F3  | Medium   | One authorised client can starve the whole event loop; the systemd watchdog cannot see it                  | availability, inv. 9     |
+| F4  | Medium   | Unbounded compositor-to-manager event flow shares one bounded queue with auth traffic                      | availability, inv. 5     |
+| F5  | Low      | Input is revoked on the `Protect` command only; implicit protection paths lag by a frame                   | inv. 1, 3                |
+| F6  | Low      | `SetInputOwner(Greeter)` is always allowed, and `owner_allowed` ignores presentability                     | inv. 1, 3                |
+| F7  | Low      | Hosted identity rests on uid plus pid; the scope check is spoofable and the exe check is inert across uids | spec 3, arch. role table |
+| F8  | Low      | pid-recycle TOCTOU remains where `SO_PEERPIDFD` is absent (kernel < 6.5)                                   | spec 3                   |
+| F9  | Low      | Pending-connection slots can be exhausted; the legitimate peer is dropped silently                         | availability             |
+| F10 | Low      | Hosted surface liveness is never tracked (destroyed `wl_surface` keeps the session "presentable")          | inv. 8                   |
+| F11 | Low      | No per-client resource caps (hosts, surfaces, buffers, dmabuf imports, redraw triggers)                    | availability             |
+| F12 | Info     | Keys held at hand-off are listed in `wl_keyboard.enter`; docs say otherwise                                | arch. "Transitions"      |
+| F13 | Info     | Doc and code differences (random socket name, test-only socket modes, `UCred` niche)                       | docs                     |
 
 Checked and found sound is in [Controls that held](#controls-that-held).
 
@@ -59,7 +59,7 @@ path. Five independent ways to get an early or false acknowledgement on DRM:
 `Engine::frame_done` drains the whole list whatever frame is being completed
 (`engine.rs:504-507`). On DRM the frame in flight is held in `State::awaiting`
 (`state.rs:641-645`, `676-678`) and completed by `complete_awaiting`
-(`state.rs:710-714`) with the plan it was *rendered from*, which pre-dates the
+(`state.rs:710-714`) with the plan it was _rendered from_, which pre-dates the
 `Protect` command. Sequence:
 
 1. Frame N (plan contains session S) is queued; `awaiting = Some(N)`.
@@ -120,13 +120,14 @@ manager calls logind `Suspend`, the machine sleeps with S in the scanout buffer.
 [NOT REPRODUCED]
 
 Minimal fix.
+
 1. In `Engine`, keep two lists: `queued_protect` (added by `protect`) and
    `in_flight_protect`. `plan()` moves `queued_protect` into `in_flight_protect`;
    `frame_done()` emits only `in_flight_protect`. A frame can then only release
-   replies that were queued before *its* plan was made.
+   replies that were queued before _its_ plan was made.
 2. In `State::render_frame`, set `self.needs_redraw = false` at plan time and make
    `complete_frame` do `self.needs_redraw |= self.engine.transition_running() ||
-   self.engine.has_queued_protect()` instead of assigning.
+self.engine.has_queued_protect()` instead of assigning.
 3. Make the backend return an honest result: `DrmGfx::render` returns
    `composed: bool`, true only if every output either queued a frame for this plan
    or reported an empty (unchanged, already correct) frame. When false, do not
@@ -190,7 +191,7 @@ hosted session. A bridge is a user-privileged process, so a compromised user
 session that controls it (or a bug in `bsm-host`) takes the seat down for every
 user.
 
-Watchdog. `bsm.service` has `WatchdogSec=30` (`packaging/bsm/systemd/bsm.service:37`)
+Watchdog. `bsm.service` has `WatchdogSec=30` (`data/bsm/systemd/bsm.service:37`)
 and the docs imply a hung compositor is restarted. But `WATCHDOG=1` is sent by the
 `bsm-notify` thread (`bsm/core/src/run.rs:311-333`) whose loop condition is
 `alive && !handle.is_finished()`. Both refer to the manager driver, not to the
@@ -200,6 +201,7 @@ INFERENCE for the starvation rate: compositor parse speed vs client `send(2)` sp
 was not measured.]
 
 Minimal fix.
+
 - Tie the heartbeat to the compositor: a calloop timer on the compositor thread
   stores `Instant::now()` into an `AtomicU64` every 250 ms (`loop_timeout` already
   wakes at 250 ms, `gfx.rs:283-285`), and `bsm-notify` sends `WATCHDOG=1` only if
@@ -343,7 +345,7 @@ frees the pid number when the peer is reaped even if the socket still holds the
 (`broker.rs:329-337`), passes the connected fd to a second process (or keeps a
 forked child), and exits; with a small `kernel.pid_max` the helper's bridge later
 receives the same pid number; `verify_host` compares the cached number to
-`host_pid` (equal), reads the *bridge's* `/proc/<pid>/cgroup` and `exe` (both
+`host_pid` (equal), reads the _bridge's_ `/proc/<pid>/cgroup` and `exe` (both
 match), and promotes the attacker's socket. The real bridge is then refused (single
 use). With a pidfd the final `still_alive()` (`peer.rs:148-150`) catches the dead
 peer, so the path is closed on kernel >= 6.5. [INFERENCE: not reproduced; needs pid
@@ -495,7 +497,7 @@ caught. Without a pidfd see F8.
 (`broker.rs:67-69`); there is no window with a wider mode. The greeter socket goes
 `0660` then `chown` to the greeter group (`broker.rs:68-73`), which fails closed if
 the group lookup fails (`run.rs:359`). `/run/bsm/sessions` is `0711`
-(`packaging/bsm/tmpfiles/bsm.conf:10`): session sockets are `0666` but cannot be
+(`data/bsm/tmpfiles/bsm.conf:10`): session sockets are `0666` but cannot be
 listed. The stale-socket removal (`broker.rs:60-66`) runs inside a directory only
 `bsm` can write.
 

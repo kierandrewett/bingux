@@ -1,16 +1,31 @@
 name: Packages
 
-# Builds the Bingux RPMs (Fedora 43), the Arch packages and the Debian packages (Debian 13), checks that the RPMs and
-# the Debian packages install on a clean system, and hands them to the repository stage (package-repository.yml), which
-# signs and publishes them. docs/release.md describes the release steps this automates.
+# Builds the Bingux packages and hands them to the repository stage (package-repository.yml), which signs and publishes
+# them to repo.gnoblin.org. docs/packaging.md describes the pipeline, docs/release.md the release steps.
 #
-#   a tag v*          builds the release and publishes the stable channel
+#   a tag v*          builds the release, publishes the stable channel and makes a GitHub release
 #   nightly.yml       builds a nightly version of main and publishes the nightly channel
 #   a pull request    builds and verifies everything with a throw-away key and publishes nothing, when packaging changed
 #   a manual run      the same dry run, on the branch chosen
 #
-# The Rust and Skia build takes tens of minutes per package format and needs about 5 GB. None of these jobs has run on
-# a GitHub runner yet; docs/release.md says what was run locally.
+# The path of every package is the same:
+#
+#   1. scripts/build-prefix.sh builds ALL of Bingux (the shell, the daemons, bsm and the apps) into a prefix, a folder laid out
+#      like the installed system. It runs in a container of the distribution the packages are for, because the shell links
+#      Qt's private API and the Rust programs link that distribution's C library.
+#   2. scripts/build-packages.sh runs pkgsmith (pkgsmith/bingux.star and pkgsmith/apps.star) on the prefix. pkgsmith builds
+#      nothing; it writes the packages from the files in the prefix.
+#   3. A clean container of the same distribution installs the packages, checks that every program finds its libraries and
+#      removes them again (scripts/verify-packages.sh).
+#
+# One job writes the packages of one format (rpm for Fedora 43, deb for Debian 13, Arch Linux), on amd64 and arm64. Arch
+# Linux has no official arm64 image, so it is amd64 only. Every job also writes a tar of its prefix, named by distribution.
+# There is no apk: Bingux needs systemd and logind, which Alpine does not ship. docs/packaging.md says what an apk would
+# need.
+#
+# The Rust and Skia build takes tens of minutes per job and needs about 6 GB. A manual run of this workflow on a branch
+# is a dry run: it builds, installs the packages on clean systems and builds a repository with a throw-away key, and it
+# publishes nothing. Only a v* tag publishes.
 
 on:
   push:
@@ -18,11 +33,22 @@ on:
       - "v*"
   pull_request:
     paths:
-      - "packaging/**"
-      - "scripts/build-rpms.sh"
-      - "scripts/build-arch.sh"
-      - "scripts/build-debs.sh"
-      - "scripts/make-source-archive.sh"
+      - "data/**"
+      - "pkgsmith/**"
+      - "apps/*/*.desktop"
+      - "apps/*/*.svg"
+      - "scripts/build-prefix.sh"
+      - "scripts/build-packages.sh"
+      - "scripts/install-build-deps.sh"
+      - "scripts/install-pkgsmith.sh"
+      - "scripts/install-shell.py"
+      - "scripts/install-bsm.sh"
+      - "scripts/cargo-licenses.py"
+      - "scripts/check-package-libs.sh"
+      - "scripts/verify-packages.sh"
+      - "tests/pkgsmith/**"
+      - ".github/pkgsmith.ref"
+      - ".github/pkgrepo.ref"
       - ".github/workflows/packages.yml"
       - ".github/workflows/package-repository.yml"
       - ".github/workflows/nightly.yml"
@@ -52,9 +78,7 @@ jobs:
       channel: ${{ steps.name.outputs.channel }}
       publish: ${{ steps.name.outputs.publish }}
       label: ${{ steps.name.outputs.label }}
-      rpm: ${{ steps.name.outputs.rpm }}
-      deb: ${{ steps.name.outputs.deb }}
-      arch: ${{ steps.name.outputs.arch }}
+      version: ${{ steps.name.outputs.version }}
       commit: ${{ steps.name.outputs.commit }}
     steps:
       - uses: actions/checkout@v4
@@ -63,7 +87,7 @@ jobs:
       - name: Name the repository tool commit
         id: tool
         run: |
-          read -r repository commit < <(grep -v '^#' packaging/pkgrepo.ref)
+          read -r repository commit < <(grep -v '^#' .github/pkgrepo.ref)
           echo "repository=$repository" >> "$GITHUB_OUTPUT"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
       - name: Fetch the repository tool
@@ -77,159 +101,190 @@ jobs:
         id: name
         env:
           NIGHTLY: ${{ inputs.nightly }}
-          EVENT_NAME: ${{ github.event_name }}
         run: |
           tree_version="$(sed -n 's/^VERSION ?= //p' Makefile)"
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          # `version` is the version as pkgsmith spells it (pkgsmith/common.star); pkgsmith writes it as each format
+          # orders versions. `label` names the artifacts of the run.
           if [ "$NIGHTLY" = true ]; then
             PYTHONPATH=pkgrepo-source/scripts python3 -m pkgrepo version --git . --tag-prefix v \
               --tree-version "$tree_version" --format lines > versions.txt
             cat versions.txt
-            field() { sed -n "s/^$1=//p" versions.txt; }
-            printf 'channel=nightly\npublish=true\nlabel=%s\nrpm=%s\ndeb=%s\narch=%s\n' \
-              "$(field semver)" "$(field rpm)" "$(field deb)" "$(field arch)" >> "$GITHUB_OUTPUT"
+            semver="$(sed -n 's/^semver=//p' versions.txt)"
+            printf 'channel=nightly\npublish=true\nlabel=%s\nversion=%s\n' "$semver" "$semver" >> "$GITHUB_OUTPUT"
           elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             version="${GITHUB_REF_NAME#v}"
             if [ "$version" != "$tree_version" ]; then
               echo "The tag $GITHUB_REF_NAME does not match VERSION ?= $tree_version in the Makefile" >&2
               exit 1
             fi
-            printf 'channel=stable\npublish=true\nlabel=%s\nrpm=%s\ndeb=%s\narch=%s\n' \
-              "$version" "$version" "$version" "$version" >> "$GITHUB_OUTPUT"
+            printf 'channel=stable\npublish=true\nlabel=%s\nversion=%s\n' "$version" "$version" >> "$GITHUB_OUTPUT"
           else
-            # A dry run: a version no channel will ever carry, so nothing can be mistaken for a release.
-            label="$tree_version-dryrun.${GITHUB_SHA::7}"
-            printf 'channel=stable\npublish=false\nlabel=%s\nrpm=%s\ndeb=%s\narch=%s\n' \
-              "$label" "$tree_version" "$tree_version" "$tree_version" >> "$GITHUB_OUTPUT"
+            # A dry run: a label no channel will ever carry, so nothing can be mistaken for a release.
+            printf 'channel=stable\npublish=false\nlabel=%s\nversion=%s\n' \
+              "$tree_version-dryrun.${GITHUB_SHA::7}" "$tree_version" >> "$GITHUB_OUTPUT"
           fi
 
-  rpm:
-    needs: version
-    runs-on: ubuntu-latest
-    container: fedora:43
-    timeout-minutes: 180
+  pkgsmith:
+    # pkgsmith has no published release yet: build the commit of .github/pkgsmith.ref, once for each architecture.
+    name: pkgsmith (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
     steps:
-      - name: Install the tools the build needs
-        run: dnf -y install dnf-plugins-core git make rpm-build rpmdevtools hardlink tar xz
+      - uses: actions/checkout@v4
+      - name: Build pkgsmith and the plugins of the four formats
+        run: scripts/install-pkgsmith.sh "$RUNNER_TEMP/pkgsmith"
+      - name: Pack it
+        run: tar -C "$RUNNER_TEMP/pkgsmith" -czf pkgsmith-${{ matrix.arch }}.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkgsmith-${{ matrix.arch }}
+          path: pkgsmith-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  package:
+    name: package (${{ matrix.id }})
+    needs: [version, pkgsmith]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: fedora43-amd64, distro: fedora, format: rpm, image: "fedora:43", runner: ubuntu-24.04, arch: amd64 }
+          - {
+              id: fedora43-arm64,
+              distro: fedora,
+              format: rpm,
+              image: "fedora:43",
+              runner: ubuntu-24.04-arm,
+              arch: arm64,
+            }
+          - {
+              id: debian13-amd64,
+              distro: debian,
+              format: deb,
+              image: "debian:trixie",
+              runner: ubuntu-24.04,
+              arch: amd64,
+            }
+          - {
+              id: debian13-arm64,
+              distro: debian,
+              format: deb,
+              image: "debian:trixie",
+              runner: ubuntu-24.04-arm,
+              arch: arm64,
+            }
+          - {
+              id: arch-amd64,
+              distro: arch,
+              format: archlinux,
+              image: "archlinux:base",
+              runner: ubuntu-24.04,
+              arch: amd64,
+            }
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.image }}
+    timeout-minutes: 240
+    steps:
+      - name: Install Git for the checkout
+        run: |
+          case "${{ matrix.distro }}" in
+            fedora) dnf -y install git ;;
+            debian) apt-get update -qq && apt-get install -y -qq --no-install-recommends ca-certificates git ;;
+            arch) pacman -Syu --noconfirm --needed git ;;
+          esac
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Install the BuildRequires of the spec
+      - name: Install the build dependencies
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          dnf -y builddep packaging/rpm/bingux.spec
-      - name: Build the RPMs
-        env:
-          VERSION: ${{ needs.version.outputs.rpm }}
-        run: |
-          # make rpm-package runs make-source-archive.sh, which wants a clean tree and pinned submodules.
-          BINGUX_RPM_CHECK_DEPS=1 JOBS="$(nproc)" make rpm-package VERSION="$VERSION"
-          find /var/tmp/BinguxPkg/rpmbuild/RPMS /var/tmp/BinguxPkg/rpmbuild/SRPMS -name '*.rpm' | sort
-      - name: Keep the packages without debug packages
-        run: |
-          mkdir -p rpms
-          find /var/tmp/BinguxPkg/rpmbuild/RPMS -name '*.rpm' ! -name '*-debuginfo-*' ! -name '*-debugsource-*' \
-            -exec cp -t rpms {} +
-          cp /var/tmp/BinguxPkg/rpmbuild/SRPMS/*.src.rpm rpms/
-      - uses: actions/upload-artifact@v4
-        with:
-          name: rpms-${{ needs.version.outputs.label }}
-          path: rpms/*.rpm
-          if-no-files-found: error
-          retention-days: 30
-
-  rpm-install:
-    needs: [version, rpm]
-    runs-on: ubuntu-latest
-    container: fedora:43
-    timeout-minutes: 30
-    steps:
+          scripts/install-build-deps.sh "${{ matrix.distro }}"
       - uses: actions/download-artifact@v4
         with:
-          name: rpms-${{ needs.version.outputs.label }}
-          path: rpms
-      - name: Install on a clean Fedora, verify, and remove
+          name: pkgsmith-${{ matrix.arch }}
+          path: pkgsmith-download
+      - name: Unpack pkgsmith
         run: |
-          dnf -y install desktop-file-utils
-          mapfile -t packages < <(find rpms -name '*.rpm' ! -name '*.src.rpm')
-          dnf -y install "${packages[@]}"
-          rpm -V bingux bingux-config bingux-settings bingux-files bingux-audio-effects bingux-taxonomy bingux-preview-host
-          desktop-file-validate /usr/share/applications/bingux-*.desktop
-          test -x /usr/bin/bingux-settings
-          dnf -y remove bingux bingux-config bingux-settings bingux-files bingux-audio-effects bingux-taxonomy bingux-preview-host
-          ! rpm -q bingux-settings
-
-  arch:
-    needs: version
-    runs-on: ubuntu-latest
-    container: archlinux:base
-    timeout-minutes: 180
-    steps:
-      - name: Install the tools the build needs
-        run: pacman -Syu --noconfirm --needed base-devel git sudo python
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - name: Build the Arch packages as an unprivileged user
+          mkdir -p /opt/pkgsmith
+          tar -C /opt/pkgsmith -xzf pkgsmith-download/pkgsmith-${{ matrix.arch }}.tar.gz
+          /opt/pkgsmith/pkgsmith plugins | sed -n '/^Loaded:/,$p'
+      - name: Build all of Bingux into the prefix
+        run: JOBS="$(nproc)" scripts/build-prefix.sh
+      - name: Check the package definitions
+        run: PKGSMITH=/opt/pkgsmith/pkgsmith python3 tests/packaging.py
+      - name: Write the packages with pkgsmith
         env:
-          VERSION: ${{ needs.version.outputs.arch }}
+          VERSION: ${{ needs.version.outputs.version }}
+          # The tar holds the prefix of this distribution; it is named by it.
+          FORMATS: ${{ matrix.format }},tar
+          PKGSMITH: /opt/pkgsmith/pkgsmith
         run: |
-          # makepkg refuses to run as root; the build installs its makedepends with sudo.
-          useradd -m builder
-          echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder
-          chown -R builder:builder "$GITHUB_WORKSPACE"
-          runuser -u builder -- git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          runuser -u builder -- env JOBS="$(nproc)" make -C "$GITHUB_WORKSPACE" arch-package \
-            VERSION="$VERSION" PACKAGE_DIR=/tmp/BinguxPkg
-      - name: Install on a clean system and remove
-        run: |
-          pacman -U --noconfirm /tmp/BinguxPkg/arch/out/*.pkg.tar.zst
-          pacman -Q bingux bingux-settings bingux-files
-          pacman -R --noconfirm bingux-settings bingux-files bingux-audio-effects bingux-taxonomy bingux-preview-host bingux bingux-config
+          scripts/build-packages.sh
+          ls -l dist
       - uses: actions/upload-artifact@v4
         with:
-          name: arch-packages-${{ needs.version.outputs.label }}
-          path: /tmp/BinguxPkg/arch/out/*.pkg.tar.zst
+          name: packages-${{ matrix.id }}-${{ needs.version.outputs.label }}
+          path: dist/*
           if-no-files-found: error
           retention-days: 30
 
-  deb:
-    needs: version
-    runs-on: ubuntu-latest
-    container: debian:trixie
-    timeout-minutes: 180
+  verify:
+    # A clean container of the same distribution, without the build dependencies: the packages must install with
+    # what they depend on, every program must find its libraries, and removing them must leave nothing behind.
+    name: verify (${{ matrix.id }})
+    needs: [version, pkgsmith, package]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: fedora43-amd64, distro: fedora, image: "fedora:43", runner: ubuntu-24.04, arch: amd64 }
+          - { id: fedora43-arm64, distro: fedora, image: "fedora:43", runner: ubuntu-24.04-arm, arch: arm64 }
+          - { id: debian13-amd64, distro: debian, image: "debian:trixie", runner: ubuntu-24.04, arch: amd64 }
+          - { id: debian13-arm64, distro: debian, image: "debian:trixie", runner: ubuntu-24.04-arm, arch: arm64 }
+          - { id: arch-amd64, distro: arch, image: "archlinux:base", runner: ubuntu-24.04, arch: amd64 }
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.image }}
+    timeout-minutes: 60
     steps:
-      - name: Install the tools the build needs
-        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends build-essential fakeroot ca-certificates curl git xz-utils
+      - name: Install Git for the checkout
+        run: |
+          case "${{ matrix.distro }}" in
+            fedora) dnf -y install git tar gzip ;;
+            debian) apt-get update -qq && apt-get install -y -qq --no-install-recommends ca-certificates git ;;
+            arch) pacman -Syu --noconfirm --needed git ;;
+          esac
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
-          submodules: recursive
-      - name: Install the build dependencies of packaging/debian
+          name: packages-${{ matrix.id }}-${{ needs.version.outputs.label }}
+          path: packages
+      - uses: actions/download-artifact@v4
+        with:
+          name: pkgsmith-${{ matrix.arch }}
+          path: pkgsmith-download
+      - name: Unpack pkgsmith
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          cp -r packaging/debian debian
-          bash scripts/debian-build-deps.sh
-          rm -rf debian
-      - name: Build the Debian packages
+          mkdir -p /opt/pkgsmith
+          tar -C /opt/pkgsmith -xzf pkgsmith-download/pkgsmith-${{ matrix.arch }}.tar.gz
+      - name: Install, check and remove the packages
         env:
-          VERSION: ${{ needs.version.outputs.deb }}
-        run: JOBS="$(nproc)" bash scripts/build-debs.sh "$VERSION" /tmp/BinguxPkg
-      - name: Install on a clean Debian and remove
-        run: |
-          apt-get install -y -qq /tmp/BinguxPkg/deb/out/*.deb
-          dpkg -l 'bingux*' | grep '^ii'
-          apt-get remove -y -qq bingux bingux-settings bingux-files bingux-audio-effects bingux-taxonomy bingux-preview-host bingux-config
-      - uses: actions/upload-artifact@v4
-        with:
-          name: debs-${{ needs.version.outputs.label }}
-          path: /tmp/BinguxPkg/deb/out/*.deb
-          if-no-files-found: error
-          retention-days: 30
+          PKGSMITH: /opt/pkgsmith/pkgsmith
+          VERSION: ${{ needs.version.outputs.version }}
+          CHANNEL: ${{ needs.version.outputs.channel }}
+          ARCH: ${{ matrix.arch }}
+        run: scripts/verify-packages.sh packages
 
   repository:
     # The signed package repository. A tag publishes the stable channel and the nightly run the nightly channel. Any
     # other run builds and verifies the tree with a throw-away key and publishes nothing.
-    needs: [version, rpm-install, arch, deb]
+    needs: [version, verify]
     uses: ./.github/workflows/package-repository.yml
     with:
       channel: ${{ needs.version.outputs.channel }}
@@ -244,3 +299,30 @@ jobs:
       REPO_PAGES_TOKEN: ${{ secrets.REPO_PAGES_TOKEN }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+  release:
+    # A tag also makes a GitHub release: the source archive, the packages of every distribution, the tar of every
+    # prefix and the checksums.
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push' }}
+    needs: [version, verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Source archive
+        run: make source-archive VERSION="${GITHUB_REF_NAME#v}" OUTPUT="release/bingux-${GITHUB_REF_NAME#v}.tar.xz"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: packages-*-${{ needs.version.outputs.label }}
+          merge-multiple: true
+          path: release
+      - name: Checksums and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd release
+          sha256sum -- * > SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" --title "Bingux ${GITHUB_REF_NAME#v}" --generate-notes ./*

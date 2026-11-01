@@ -40,12 +40,12 @@ package() {
     cd "$srcdir/$pkgname-$pkgver" || return
     make install PREFIX=/usr DESTDIR="$pkgdir" BUILD_DIR=build QMLDIR=/usr/lib/bingux/qml
     # The installer writes units for /usr/lib64 prefixes; Arch uses /usr/lib.
-    for unit in packaging/systemd/bingux*.service packaging/systemd/xdg-desktop-portal-bingux.service packaging/systemd/bingux*.path packaging/systemd/bingux.target; do
+    for unit in data/systemd/bingux*.service data/systemd/xdg-desktop-portal-bingux.service data/systemd/bingux*.path data/systemd/bingux.target; do
         sed -e 's|/usr/lib64|/usr/lib|g' "$unit" >"$pkgdir/usr/lib/systemd/user/$(basename "$unit")"
     done
     install -Dm644 shell/runtime/quickshell/LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE.quickshell"
-    install -Dpm 0644 packaging/pam/bingux-lock "$pkgdir/etc/pam.d/bingux-lock"
-    install -Dpm 0644 packaging/pam/bingux-lock-fingerprint "$pkgdir/etc/pam.d/bingux-lock-fingerprint"
-    install -Dpm 0644 packaging/greetd/config.toml "$pkgdir/usr/share/bingux/greeter/greetd.toml"
+    install -Dpm 0644 data/pam/bingux-lock "$pkgdir/etc/pam.d/bingux-lock"
+    install -Dpm 0644 data/pam/bingux-lock-fingerprint "$pkgdir/etc/pam.d/bingux-lock-fingerprint"
+    install -Dpm 0644 data/greetd/config.toml "$pkgdir/usr/share/bingux/greeter/greetd.toml"
     install -Dpm 0644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
 }

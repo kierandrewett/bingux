@@ -13,25 +13,25 @@ restricted, most exposed process, so its compromise is in scope).
 
 ## Summary
 
-| #   | Severity | Finding                                                                                              |
-| --- | -------- | ---------------------------------------------------------------------------------------------------- |
-| F1  | Medium   | Any hosted session can cancel another user's login or kill their half-started session via a power or logout request |
-| F2  | Medium   | A background session's logout occupies the operation slot and makes the foreground user's lock return `Busy` |
-| F3  | Medium   | Failed-attempt cooldown is bypassed by cancelling after the answer was submitted                    |
-| F4  | Medium   | Shipped polkit rule grants `*-multiple-sessions` power actions to every hosted user; greeter power ignores other sessions |
+| #   | Severity             | Finding                                                                                                                          |
+| --- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| F1  | Medium               | Any hosted session can cancel another user's login or kill their half-started session via a power or logout request              |
+| F2  | Medium               | A background session's logout occupies the operation slot and makes the foreground user's lock return `Busy`                     |
+| F3  | Medium               | Failed-attempt cooldown is bypassed by cancelling after the answer was submitted                                                 |
+| F4  | Medium               | Shipped polkit rule grants `*-multiple-sessions` power actions to every hosted user; greeter power ignores other sessions        |
 | F5  | Medium (unconfirmed) | polkit `CheckAuthorization` for another uid's bus name may be refused to the `bsm` account, so every session power request fails |
-| F6  | Medium   | Scene event channel is unbounded and hosted-client requests are not rate limited                    |
-| F7  | Low      | One shared bounded driver queue, no per-caller limit on D-Bus; call tasks busy-poll when it is full |
-| F8  | Low (unconfirmed) | Greeter QML renders display names with the default (auto-detect rich text) format                  |
-| F9  | Medium   | bsm restart recovery cannot reattach a bridge; sessions are dropped or closed, not resumed (spec 9, invariant 9) |
-| F10 | Low      | D-Bus reads and broadcast signals are visible to every local account (spec 12 "filtered by caller authority") |
-| F11 | Low      | Passwords are not zeroised in the manager; two Debug-deriving wire types carry them                  |
-| F12 | Low      | Greeter control socket: unbounded pending connections and a verdict/state desync after the 5 s expiry |
-| F13 | Low      | Bridge accepts reporter-declared required surfaces, so a same-uid process can weaken the reveal gate |
-| F14 | Info     | Caller-to-session mapping trusts connection-time pid plus cgroup; only a same-uid caller can profit |
-| F15 | Low      | Persisted registry is trusted without validation on load (needs the `bsm` uid to tamper)              |
-| F16 | Low      | Helper socket peer is not verified; a failed send is reported as a lost helper even if it is not    |
-| F17 | Low (unconfirmed) | Unlock and switch-back gate needs one frame ever, not a fresh frame, in the manager             |
+| F6  | Medium               | Scene event channel is unbounded and hosted-client requests are not rate limited                                                 |
+| F7  | Low                  | One shared bounded driver queue, no per-caller limit on D-Bus; call tasks busy-poll when it is full                              |
+| F8  | Low (unconfirmed)    | Greeter QML renders display names with the default (auto-detect rich text) format                                                |
+| F9  | Medium               | bsm restart recovery cannot reattach a bridge; sessions are dropped or closed, not resumed (spec 9, invariant 9)                 |
+| F10 | Low                  | D-Bus reads and broadcast signals are visible to every local account (spec 12 "filtered by caller authority")                    |
+| F11 | Low                  | Passwords are not zeroised in the manager; two Debug-deriving wire types carry them                                              |
+| F12 | Low                  | Greeter control socket: unbounded pending connections and a verdict/state desync after the 5 s expiry                            |
+| F13 | Low                  | Bridge accepts reporter-declared required surfaces, so a same-uid process can weaken the reveal gate                             |
+| F14 | Info                 | Caller-to-session mapping trusts connection-time pid plus cgroup; only a same-uid caller can profit                              |
+| F15 | Low                  | Persisted registry is trusted without validation on load (needs the `bsm` uid to tamper)                                         |
+| F16 | Low                  | Helper socket peer is not verified; a failed send is reported as a lost helper even if it is not                                 |
+| F17 | Low (unconfirmed)    | Unlock and switch-back gate needs one frame ever, not a fresh frame, in the manager                                              |
 
 No method exists on D-Bus or the control socket that unlocks a session, reveals a desktop or
 accepts an authentication result. That holds: the method list in
@@ -134,7 +134,7 @@ conversations that never received an answer.
 
 ## F4 Medium: polkit grants multi-session power to every hosted user; greeter power is not session-aware
 
-**Where.** `packaging/bsm/polkit/50-bsm.rules:44-51` and `119-121`,
+**Where.** `data/bsm/polkit/50-bsm.rules:44-51` and `119-121`,
 `core/power.rs:39-53` (`action_id`), `core/auth.rs:115-123`,
 `bsm/core/src/config.rs:74-78` (`greeter_power` defaults all true).
 
@@ -164,7 +164,7 @@ from the session-aware guard at `auth.rs:115`.
 
 ## F5 Medium (unconfirmed): polkit refuses `CheckAuthorization` for another uid's subject
 
-**Where.** `runtime/system.rs:293-309`, `packaging/bsm/polkit/50-bsm.rules:112-118`.
+**Where.** `runtime/system.rs:293-309`, `data/bsm/polkit/50-bsm.rules:112-118`.
 
 **What.** `polkit_check` is called by the `bsm` account for the caller's bus name. polkitd
 (from memory of its source; **not verified here**) refuses `CheckAuthorization`
@@ -211,7 +211,7 @@ disconnected (the `bsm_session_host_v1` objects are the only requests it can mak
 
 **Where.** `runtime/driver.rs:33,53-55` (one `sync_channel(1024)` for all sources),
 `runtime/dbus.rs:536-548` (a full queue is polled every 5 ms for up to 5 s per call),
-`packaging/bsm/dbus/org.bingux.Session1.conf:30-34`.
+`data/bsm/dbus/org.bingux.Session1.conf:30-34`.
 
 **What.** Any local account may call every method (the bus policy allows it; bsm
 decides). Calls are cheap to make and each waits in a task that wakes every 5 ms
@@ -273,7 +273,7 @@ is gone, so no orphan survives.
 
 **Where.** `core/dbus.rs:78-100` (every `Get*` for every principal),
 `runtime/dbus.rs:930-990` (signals sent to the bus without a destination),
-`packaging/bsm/dbus/org.bingux.Session1.conf:32-33` (`receive_sender` allowed for everyone).
+`data/bsm/dbus/org.bingux.Session1.conf:32-33` (`receive_sender` allowed for everyone).
 
 **What.** Any local account, including service accounts such as `nobody`, can learn
 which users are signed in, which sessions are locked, who is foreground and launch-failure
@@ -403,43 +403,43 @@ can reach the slide-up. Minimal fix: record the count at `Protect` and require m
 
 ## Reviewed and sound
 
-* **Authorisation table** in `core/dbus.rs` matches `docs/bsm/manager.md:272-279`
+- **Authorisation table** in `core/dbus.rs` matches `docs/bsm/manager.md:272-279`
   except that `SelectGreeterUser` also admits the greeter (the `bsmctl` header comment,
   `bsm/core/src/ctl.rs:7-8`, says root only; the code and `manager.md` say root or
   greeter). Acting on another uid is refused: `own_session_action`
   (`core/dbus.rs:133-157`) requires the target to equal the caller's own session; root is
   the only exception.
-* **Auth challenge binding**: single use (`auth.rs:312`), bound to uid, plan, generation,
+- **Auth challenge binding**: single use (`auth.rs:312`), bound to uid, plan, generation,
   operation and a timer; a late or duplicate `AuthDone` is ignored; a mid-flight
   selection change cancels (`auth.rs:154-157`); a stale selection cannot retarget
   (`auth.rs:198-200`); `still_ok` (`auth.rs:329-341`) rechecks the world. A response
   needs an open prompt (`auth.rs:267-270`) and is capped at 4096 bytes.
-* **State machine**: all setters go through `session_legal`, `phase_legal`,
+- **State machine**: all setters go through `session_legal`, `phase_legal`,
   `transition_legal` (`core/tables.rs`); a compositor event cannot commit an operation
   that did not begin (`ops.rs:638-642`); `commit_op` revalidates the session and
   generation (`ops.rs:704-719`); `check_invariants` runs after every input in debug builds.
   Besides F1 and F2 I found no sequence of lock, switch and power inputs that reaches
   `Foreground` for an unauthorised session or two foreground sessions.
-* **Readiness**: stale generations are ignored on both sides (compositor
+- **Readiness**: stale generations are ignored on both sides (compositor
   `host.rs:242-248`, manager `session.rs:328`); `DesktopReady` counts only after the
   surfaces stage and requires strictly later frames (`session.rs:357-369,440-449`);
   `OutputsConfigured` needs a compositor-observed acknowledgement, not the bridge's word.
-* **Control socket framing**: lines over 64 KiB disconnect (`greeter_server.rs:236-239`),
+- **Control socket framing**: lines over 64 KiB disconnect (`greeter_server.rs:236-239`),
   partial lines are buffered, malformed JSON is counted and ends at ten, `Hello` is
   required first (`auth.rs:99-102`), one connection, peer uid and pid checked
   (`auth.rs:51-64`), writer queue bounded with disconnect on overflow. The greeter can
   select, authenticate, ask for power and cancel its own operation; it cannot name a
   session, an intent the manager does not re-derive, or cancel another principal's
   operation (`ops.rs:330-332`).
-* **ready.sock**: directory 0700, socket 0600, same-uid peer check, 4 KiB lines, parse
+- **ready.sock**: directory 0700, socket 0600, same-uid peer check, 4 KiB lines, parse
   failure disconnects (`ready_sock.rs:28-125`).
-* **Input forwarding**: key, button, pointer, touch and scroll are forwarded only while
+- **Input forwarding**: key, button, pointer, touch and scroll are forwarded only while
   `input_active`, and `release_all_input` runs on deactivation (`bridge.rs:1010-1078`,
   `1229-1317`). A key pressed before activation is not delivered (only its release).
-* **Persistence**: atomic write, mode 0600, no secrets; a damaged file starts empty
+- **Persistence**: atomic write, mode 0600, no secrets; a damaged file starts empty
   (`persist.rs:19-52`). Recovered sessions come back `LockedBackground` and protected,
   never foreground (`session.rs:134-171`).
-* **PublishAppearance**: uid from the bus, descriptors validated (regular, read-only, not
+- **PublishAppearance**: uid from the bus, descriptors validated (regular, read-only, not
   `O_PATH`, 16 MiB) and duplicated, rate limited per uid (`core/dbus.rs:175-202`).
   Note: the 16 worker threads (`driver.rs:32`) are shared with polkit and power jobs;
   a stalled read on a user-owned FUSE file (**unconfirmed**) can hold one.
