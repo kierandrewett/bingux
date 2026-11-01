@@ -135,11 +135,16 @@ rpm_dist=
 if [ "$os_id" = fedora ]; then
     rpm_dist=".fc$os_version"
 fi
+# Arch is a rolling release: its VERSION_ID is a build date, not a release.
+distro_name="$os_id$os_version"
+if [ "$os_id" = arch ]; then
+    distro_name=arch
+fi
 qt_minor="$(pkg-config --modversion Qt6Core | cut -d. -f1,2)"
 cat >"$PREFIX_DIR.env" <<ENV
 PREFIX_ARCH=$arch
 PREFIX_QT_MINOR=$qt_minor
 PREFIX_RPM_DIST=$rpm_dist
-PREFIX_DISTRO=$os_id$os_version
+PREFIX_DISTRO=$distro_name
 ENV
 log "done: $(find "$PREFIX_DIR" -type f | wc -l) files in $PREFIX_DIR ($(cat "$PREFIX_DIR.env" | tr '\n' ' '))"

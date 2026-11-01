@@ -135,11 +135,13 @@ case "$family" in
         # --ask 4 answers yes to the question that removes the packages the new one conflicts with.
         pacman -U --noconfirm --ask 4 "${files[@]}"
         for old in $OLD bsm; do
-            ! pacman -Q "$old" >/dev/null 2>&1 || fail "$old is still installed after the upgrade"
+            # pacman -Q also finds a package by what it provides, so compare the name it prints.
+            ! pacman -Q "$old" 2>/dev/null | grep -q "^$old " || fail "$old is still installed after the upgrade"
         done
         for package in $ALL; do pacman -Q "$package"; done
-        pacman -Qkk $ALL | tee /tmp/pacman-qkk.txt
-        ! grep -q 'warning\|error' /tmp/pacman-qkk.txt || fail "pacman -Qkk found a difference"
+        pacman -Qkk $ALL | tee /tmp/pacman-qkk.txt || true
+        # The base image does not extract /usr/share/doc and /usr/share/man (NoExtract), which -Qkk reports.
+        ! grep 'warning\|error' /tmp/pacman-qkk.txt | grep -v '/usr/share/\(doc\|man\) (No such file' | grep -q . || fail "pacman -Qkk found a difference"
         for file in "${files[@]}"; do
             pacman -Qip "$file" | sed -n 's/^Optional Deps *: *//p;s/^ *\([a-z][^ :]*\):.*/\1/p'
         done | sed 's/:.*//' | sort -u | grep -v '^bingux\|^None$\|^$' | while read -r name; do

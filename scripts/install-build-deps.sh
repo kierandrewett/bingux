@@ -42,7 +42,7 @@ case "$distro" in
             libei-dev libfontconfig-dev libfreetype-dev libgbm-dev libgl-dev libglib2.0-dev \
             libgstreamer-plugins-base1.0-dev libgstreamer1.0-dev libgtk-4-dev libinput-dev \
             libjemalloc-dev libpam0g-dev libpipewire-0.3-dev libpoppler-glib-dev libpolkit-agent-1-dev \
-            libpulse-dev libseat-dev libudev-dev libwayland-dev libxcb1-dev libxkbcommon-dev ninja-build \
+            libpulse-dev libseat-dev libsystemd-dev libudev-dev libwayland-dev libxcb1-dev libxkbcommon-dev ninja-build \
             pkgconf python3 qmake6 qt6-base-dev qt6-base-private-dev qt6-declarative-dev \
             qt6-declarative-private-dev qt6-shadertools-dev qt6-svg-dev qt6-tools-dev \
             qt6-tools-dev-tools qt6-wayland-dev qt6-wayland-private-dev spirv-tools util-linux \

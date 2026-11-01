@@ -226,20 +226,21 @@ packages.
 
 ## How it was verified
 
-Run on 2026-11-01 on a Fedora 43 host, with pkgsmith built from `192b96d`:
+Run on 2026-11-01 on a Fedora 43 host. pkgsmith was built with `scripts/install-pkgsmith.sh` at `1041e4c`.
 
-- `make all bsm` and `scripts/build-prefix.sh` (installing from that build) made a prefix of 156 files.
-- `pkgsmith/bingux.star` and `pkgsmith/apps.star` wrote rpm and tar for a release (`0.1.0`) and rpm for a
-  nightly (`0.1.1-nightly.20261031.142.gabc1234`). Every `%files` entry of the old spec (69) is in the right new
-  package.
-- `scripts/verify-packages.sh` ran in a clean `fedora:43` container for both versions: the stand-ins for the old
-  packages were replaced, the four packages installed (the nightly with its exact `bingux = ...~nightly...` pins),
-  `rpm -V` and `ldd` on 24 programs were clean, the programs printed their usage, the accounts `bsm` and
-  `bingux-greeter` existed, `bingux.target` was enabled by the preset, and removal left nothing.
-- `tests/packaging.py` passes with pkgsmith, rpm, dpkg-deb and bsdtar present (rpm, deb and Arch metadata of the
-  packages were read back: obsoletes, replaces, conflicts, provides, pins, scriptlets, config files).
-- `actionlint` and the repository's lint hooks pass on every new file.
+- **Fedora 43.** `make all bsm` and `scripts/build-prefix.sh` made a prefix of 156 files. The scripts wrote rpm and tar for
+  `0.1.0` and rpm for `0.1.1-nightly.20261031.142.gabc1234`. Every `%files` entry of the old spec (69) is in the right
+  new package. `scripts/verify-packages.sh` ran in a clean `fedora:43` container for both versions.
+- **Debian 13 and Arch Linux.** `scripts/install-build-deps.sh` and `scripts/build-prefix.sh` ran in `debian:trixie` (Qt 6.8)
+  and `archlinux:base` (Qt 6.12), as CI runs them, and wrote a 156-file prefix each. pkgsmith wrote the deb and the
+  Arch packages, and `scripts/verify-packages.sh` ran in a clean container of each image.
+- **What `verify-packages.sh` checked, in each:** stand-ins for the replaced packages (and `bsm` on Arch) were installed first and
+  were gone after installing the four packages; the exact `bingux` pins resolved; the package manager's own verification
+  was clean (`rpm -V`, `dpkg -V`, `pacman -Qkk`); `ldd` found every library of 24 programs; the programs printed usage and the
+  shell printed its version; the accounts `bsm` and `bingux-greeter` existed; installing did not change the display
+  manager; removal left no file behind. On Fedora the preset enabled `bingux.target`.
+- The first Debian run found two missing dependencies (`libqt6widgets6`, `libadwaita-1-0`), which are now in the list.
+- `tests/packaging.py` passes (it reads back the rpm, deb and Arch metadata). `actionlint` and the lint hooks pass.
 
-Not run: a prefix build and an install in `debian:trixie` and `archlinux:base` (the container builds were started and
-stopped unfinished; the dependency lists of those two formats are checked only by the scripts), any arm64 build,
-the GitHub workflows, publishing, and a login to a session with the packaged shell.
+Not run: any arm64 build, the GitHub workflows, publishing, a build with the real `gnoblin` packages (stand-ins were used),
+and a login to a session with the packaged shell. There is no Alpine run because there is no apk (see above).

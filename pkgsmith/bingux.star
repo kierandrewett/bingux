@@ -140,6 +140,8 @@ DEPENDS = {
         "libpipewire-0.3-0t64",
         "libpolkit-agent-1-0",
         "libpoppler-glib8t64",
+        "libqt6widgets6",
+        "libadwaita-1-0",
     ],
     "archlinux": [
         "gnoblin",
