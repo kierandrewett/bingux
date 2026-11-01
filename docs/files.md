@@ -254,7 +254,7 @@ zoom, Ctrl+F finds (Enter and Shift+Enter step through the matches), F9 shows
 the page thumbnails, and dragging over text selects it and Ctrl+C copies it.
 
 Films, songs and PDFs are decoded by a separate program,
-`bingux-preview-host` (the `bingux-preview-host` package; GStreamer and
+`bingux-preview-host` (part of the `bingux` package; GStreamer and
 poppler). If it is not installed, if it crashes, or if a file cannot be decoded, the
 preview shows the file's card with the reason and Open, and nothing else
 changes. A film whose codec is missing says which kind it is; install the

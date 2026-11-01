@@ -33,9 +33,11 @@ case "$distro" in
         export DEBIAN_FRONTEND=noninteractive
         echo "deb http://deb.debian.org/debian trixie-backports main" >/etc/apt/sources.list.d/trixie-backports.list
         apt-get update -qq
-        apt-get install -y -qq --no-install-recommends -t trixie-backports rustc cargo
+        # curl comes from backports too: cargo needs the newer libcurl there, and curl of trixie wants the
+        # libcurl of trixie. skia-bindings runs curl to download its prebuilt Skia archive.
+        apt-get install -y -qq --no-install-recommends -t trixie-backports rustc cargo curl ca-certificates
         apt-get install -y -qq --no-install-recommends \
-            appstream binutils build-essential ca-certificates clang cmake curl desktop-file-utils git \
+            appstream binutils build-essential clang cmake desktop-file-utils git \
             libadwaita-1-dev libarchive-dev libcairo2-dev libcli11-dev libclang-dev libdrm-dev libegl-dev \
             libei-dev libfontconfig-dev libfreetype-dev libgbm-dev libgl-dev libglib2.0-dev \
             libgstreamer-plugins-base1.0-dev libgstreamer1.0-dev libgtk-4-dev libinput-dev \
@@ -50,7 +52,7 @@ case "$distro" in
     arch)
         pacman -Syu --noconfirm --needed \
             appstream base-devel cargo clang cli11 cmake curl desktop-file-utils git glib2 gst-plugins-base \
-            gstreamer gtk4 jemalloc libadwaita libarchive libdrm libei libinput libpulse libseat \
+            gstreamer gtk4 jemalloc libadwaita libarchive libdrm libei libinput libpulse \
             libxcb libxkbcommon mesa ninja pam pipewire pkgconf poppler-glib polkit python qt6-base \
             qt6-declarative qt6-shadertools qt6-svg qt6-tools qt6-wayland seatd spirv-tools \
             systemd-libs util-linux wayland wayland-protocols wl-clipboard xdg-utils cairo fontconfig \

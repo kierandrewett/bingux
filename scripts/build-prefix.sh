@@ -114,29 +114,32 @@ if command -v strip >/dev/null; then
     done
 fi
 
-# A prefix that names the build machine would install a broken desktop.
-if grep -rIl -e "$PREFIX_DIR" -e "$root" -e "${HOME:-/nonexistent-home}/" "$PREFIX_DIR" 2>/dev/null | grep -q .; then
+# A prefix that names the build machine would install a broken desktop. Documents may mention any path.
+leaks="$(grep -rIl --exclude-dir=doc -e "$PREFIX_DIR" -e "$root" -e "${HOME:-/nonexistent-home}/" "$PREFIX_DIR" || true)"
+if [ -n "$leaks" ]; then
     echo "build-prefix.sh: these files name the build machine's paths:" >&2
-    grep -rIl -e "$PREFIX_DIR" -e "$root" -e "${HOME:-/nonexistent-home}/" "$PREFIX_DIR" >&2
+    echo "$leaks" >&2
     exit 1
 fi
+
 # What scripts/build-packages.sh needs to know about the machine that built the prefix. It is a file
 # beside the prefix, not in it, so no package carries it.
-. /etc/os-release
+os_id="$(. /etc/os-release && echo "$ID")"
+os_version="$(. /etc/os-release && echo "${VERSION_ID:-}")"
 case "$(uname -m)" in
     x86_64) arch=amd64 ;;
     aarch64) arch=arm64 ;;
     *) arch="$(uname -m)" ;;
 esac
 rpm_dist=
-if [ "$ID" = fedora ]; then
-    rpm_dist=".fc${VERSION_ID:-}"
+if [ "$os_id" = fedora ]; then
+    rpm_dist=".fc$os_version"
 fi
 qt_minor="$(pkg-config --modversion Qt6Core | cut -d. -f1,2)"
 cat >"$PREFIX_DIR.env" <<ENV
 PREFIX_ARCH=$arch
 PREFIX_QT_MINOR=$qt_minor
 PREFIX_RPM_DIST=$rpm_dist
-PREFIX_DISTRO=$ID${VERSION_ID:-}
+PREFIX_DISTRO=$os_id$os_version
 ENV
 log "done: $(find "$PREFIX_DIR" -type f | wc -l) files in $PREFIX_DIR ($(cat "$PREFIX_DIR.env" | tr '\n' ' '))"

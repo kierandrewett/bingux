@@ -223,3 +223,23 @@ The Bingux OS image (`distro/`) still builds its own `bingux` and `bsm` packages
 from PKGBUILDs, from the same source archive and the same `data/` files, because its
 dependency set and its Gnoblin build differ. It does not use the repository
 packages.
+
+## How it was verified
+
+Run on 2026-11-01 on a Fedora 43 host, with pkgsmith built from `192b96d`:
+
+- `make all bsm` and `scripts/build-prefix.sh` (installing from that build) made a prefix of 156 files.
+- `pkgsmith/bingux.star` and `pkgsmith/apps.star` wrote rpm and tar for a release (`0.1.0`) and rpm for a
+  nightly (`0.1.1-nightly.20261031.142.gabc1234`). Every `%files` entry of the old spec (69) is in the right new
+  package.
+- `scripts/verify-packages.sh` ran in a clean `fedora:43` container for both versions: the stand-ins for the old
+  packages were replaced, the four packages installed (the nightly with its exact `bingux = ...~nightly...` pins),
+  `rpm -V` and `ldd` on 24 programs were clean, the programs printed their usage, the accounts `bsm` and
+  `bingux-greeter` existed, `bingux.target` was enabled by the preset, and removal left nothing.
+- `tests/packaging.py` passes with pkgsmith, rpm, dpkg-deb and bsdtar present (rpm, deb and Arch metadata of the
+  packages were read back: obsoletes, replaces, conflicts, provides, pins, scriptlets, config files).
+- `actionlint` and the repository's lint hooks pass on every new file.
+
+Not run: a prefix build and an install in `debian:trixie` and `archlinux:base` (the container builds were started and
+stopped unfinished; the dependency lists of those two formats are checked only by the scripts), any arm64 build,
+the GitHub workflows, publishing, and a login to a session with the packaged shell.

@@ -26,7 +26,7 @@ PKGSMITH="${PKGSMITH:-pkgsmith}"
 GNOBLIN_SOURCE="${GNOBLIN_SOURCE:-stub}"
 CHANNEL="${CHANNEL:-nightly}"
 ARCH="${ARCH:-$(case "$(uname -m)" in x86_64) echo amd64 ;; aarch64) echo arm64 ;; *) uname -m ;; esac)}"
-. /etc/os-release
+ID="$(. /etc/os-release && echo "$ID")"
 ALL="bingux bingux-settings bingux-files bingux-taxonomy"
 OLD="bingux-config bingux-audio-effects bingux-preview-host"
 
@@ -154,7 +154,14 @@ log "libraries"
 "$root/scripts/check-package-libs.sh" $ALL
 
 log "programs"
-bingux-config --help >/dev/null
+# Each program starts far enough to print its usage (the exit status of a usage message differs by
+# program); the shell prints its version without a display.
+QT_QPA_PLATFORM=offscreen bingux-shell --version
+for program in bingux-config bsm bsmctl bingux-effects bingux-helper bingux-session bingux-searchd; do
+    output="$("$program" --help 2>&1 || true)"
+    [ -n "$output" ] || fail "$program printed nothing"
+    ! grep -q 'error while loading shared libraries' <<<"$output" || fail "$program: $output"
+done
 test -x /usr/bin/bsm && test -x /usr/libexec/bsm/bsm-helper
 test -f /usr/lib/systemd/user/bingux.target && test -f /usr/lib/systemd/system/bsm.service
 test -f /usr/lib/systemd/user-preset/90-bingux.preset
@@ -171,9 +178,10 @@ test ! -e /etc/systemd/system/display-manager.service || fail "installing bingux
 
 log "removal"
 case "$family" in
-    rpm) dnf -y remove $ALL ;;
+    # Only these packages: the dependencies they pulled in stay (a base image protects some of them).
+    rpm) dnf -y remove --setopt=clean_requirements_on_remove=False $ALL ;;
     deb) apt-get remove -y -qq $ALL ;;
-    archlinux) pacman -Rns --noconfirm $ALL ;;
+    archlinux) pacman -R --noconfirm $ALL ;;
 esac
 for path in /usr/bin/bingux-shell /usr/bin/bingux-settings /usr/bin/bsm /usr/lib/systemd/user/bingux.target; do
     test ! -e "$path" || fail "$path is left after the removal"
