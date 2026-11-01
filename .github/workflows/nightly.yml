@@ -37,7 +37,7 @@ jobs:
       - name: Name the commit of the repository tool
         id: tool
         run: |
-          read -r repository commit < <(grep -v '^#' packaging/pkgrepo.ref)
+          read -r repository commit < <(grep -v '^#' .github/pkgrepo.ref)
           echo "repository=$repository" >> "$GITHUB_OUTPUT"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
       - name: Fetch the repository tool
