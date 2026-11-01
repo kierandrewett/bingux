@@ -23,8 +23,9 @@ name: Packages
 # There is no apk: Bingux needs systemd and logind, which Alpine does not ship. docs/packaging.md says what an apk would
 # need.
 #
-# The Rust and Skia build takes tens of minutes per job and needs about 6 GB. None of these jobs has run on a GitHub
-# runner yet; docs/packaging.md says what was run locally.
+# The Rust and Skia build takes tens of minutes per job and needs about 6 GB. A manual run of this workflow on a branch
+# is a dry run: it builds, installs the packages on clean systems and builds a repository with a throw-away key, and it
+# publishes nothing. Only a v* tag publishes.
 
 on:
   push:
