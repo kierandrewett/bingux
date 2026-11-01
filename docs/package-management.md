@@ -15,9 +15,10 @@ Installing `bingux` also installs Gnoblin, the compositor it runs on. The apps n
 
 ## Package repositories
 
-Bingux has a package repository for Fedora 43, Debian 13 and Arch Linux. Add it and your package manager installs
-and updates Bingux. The repository carries the `nightly` channel, the newest build of the main branch, once a day.
-Bingux needs Gnoblin, so add the [Gnoblin repository](https://gnoblin.org/installation) too.
+Add the Bingux package repository and your package manager installs and updates Bingux. Bingux needs Gnoblin, so
+also follow the [Gnoblin install guide](https://gnoblin.org/installation) to add its repository.
+
+The repository has a `nightly` channel, which follows the main branch.
 
 Packages and repository metadata are signed with one key, published at `https://repo.gnoblin.org/gpg.key`. Its
 fingerprint is:
