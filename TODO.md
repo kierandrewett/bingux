@@ -5,8 +5,9 @@ work belongs in Git history and does not stay here as a second changelog.
 
 ## Release blockers
 
-- [ ] Build the RPMs in a clean Fedora 43 chroot (mock or COPR). `make rpm-package`
-      builds all six on a Fedora 43 host, with the host's toolchain and `--nodeps`.
+- [ ] Build the packages in the Packages workflow on GitHub runners (`packages.yml`
+      has not run yet). `make prefix` and `make packages` write them on any machine
+      with the distribution's build dependencies.
 - [ ] Install the RPMs with `dnf` into a clean user account, start the user target
       and open Settings and Files from a Gnoblin session.
 - [ ] Decide how COPR gets the Rust crates and the prebuilt Skia archive
@@ -94,34 +95,30 @@ work belongs in Git history and does not stay here as a second changelog.
 - [x] Black live installer on 5f53de8.iso: UEFI runs 1, 3, 4, 5 and BIOS run 6 of the E2E
       agent, and 5 of 5 boots in my VMs on a loaded host (`~/.cache/bingux-black2/runs/boot1..5/bundle.txt`;
       in-guest replays `exp2` to `exp6`). Two failures, one cause: the guardian waits for the
-      helper units before it starts the supervisor.
-      - Gnoblin's guardian runs `systemctl --user start gnoblin-session.target`
-        (`gnoblin-runtime-environment.c:441`, called at `gnoblin-runtime.c:265`) before it spawns the
-        session supervisor (`gnoblin-runtime.c:323`) that sends the compositor its configuration. The
-        compositor stops waiting 10 s after it started (`gnoblin-control-connection.c:235`). The start job
-        waited for `bingux.target`, so for `bingux-greeter-export.service` (run 1: "Consumed 4.257s CPU
-        time over 8.199s wall clock time", then "Reached target Bingux helper services" and "Reached target
-        Gnoblin graphical session" in the same second). Login to that target: 14 s (run 1), 15 s (run 3),
-        19 s (run 4), 16 s (run 5), 19 s (run 6); 7 s in the good run 2.
-      - A. The compositor times out first. My boot 3: `session-last.log` "05:08:10 compositor spawned
-        pid=828", "05:08:25 session supervisor spawned pid=1133", "compositor pid=828 exited
-        status=1"; `compositor-last.log`: "Failed to receive Gnoblin runtime config: timed out waiting
-        for Gnoblin runtime configuration". The guardian exits, greetd starts the greeter (runs 3, 5, 6;
-        the greeter hit the same slow start in runs 3 and 5 and stayed black). Gaps spawn to supervisor
-        in my five boots: 13, 22, 15, 20 and 18 s.
-      - B. The compositor survives and the Lua runtime falls back (runs 1 and 4: supervisor and worker
-        pids far apart, worker with `--resume-runtime-worker`, nm-applet registered). Journal of a
-        replay with the new script (`exp5/new1.txt`): "gnoblin: runtime supervisor: compositor did not
-        complete the private runtime handshake" (10 s after the supervisor), then "restarting Lua
-        runtime worker", "configuration fell back to the built-in defaults: The Lua runtime restarted;
-        built-in defaults are being applied"; or "could not suspend Mutter for supervisor recovery;
-        keeping the session alive: Mutter did not acknowledge worker suspension" and the note
-        `$XDG_RUNTIME_DIR/gnoblin/config-fallback` reads "Lua runtime recovery failed. The compositor is
-        still running, but configuration and Lua callbacks are unavailable" (`exp4/new1.txt`).
-        `installer.lua` never loads, `bingux-installer-ui` never starts.
-      - Not Xwayland: no Xwayland error in any `compositor-last.log` ("Using public X11 display :0");
-        the installer comes up in good boots. The hand-run abort ("Failed to open Xauthority file")
-        had no logind session.
+      helper units before it starts the supervisor. - Gnoblin's guardian runs `systemctl --user start gnoblin-session.target`
+      (`gnoblin-runtime-environment.c:441`, called at `gnoblin-runtime.c:265`) before it spawns the
+      session supervisor (`gnoblin-runtime.c:323`) that sends the compositor its configuration. The
+      compositor stops waiting 10 s after it started (`gnoblin-control-connection.c:235`). The start job
+      waited for `bingux.target`, so for `bingux-greeter-export.service` (run 1: "Consumed 4.257s CPU
+      time over 8.199s wall clock time", then "Reached target Bingux helper services" and "Reached target
+      Gnoblin graphical session" in the same second). Login to that target: 14 s (run 1), 15 s (run 3),
+      19 s (run 4), 16 s (run 5), 19 s (run 6); 7 s in the good run 2. - A. The compositor times out first. My boot 3: `session-last.log` "05:08:10 compositor spawned
+      pid=828", "05:08:25 session supervisor spawned pid=1133", "compositor pid=828 exited
+      status=1"; `compositor-last.log`: "Failed to receive Gnoblin runtime config: timed out waiting
+      for Gnoblin runtime configuration". The guardian exits, greetd starts the greeter (runs 3, 5, 6;
+      the greeter hit the same slow start in runs 3 and 5 and stayed black). Gaps spawn to supervisor
+      in my five boots: 13, 22, 15, 20 and 18 s. - B. The compositor survives and the Lua runtime falls back (runs 1 and 4: supervisor and worker
+      pids far apart, worker with `--resume-runtime-worker`, nm-applet registered). Journal of a
+      replay with the new script (`exp5/new1.txt`): "gnoblin: runtime supervisor: compositor did not
+      complete the private runtime handshake" (10 s after the supervisor), then "restarting Lua
+      runtime worker", "configuration fell back to the built-in defaults: The Lua runtime restarted;
+      built-in defaults are being applied"; or "could not suspend Mutter for supervisor recovery;
+      keeping the session alive: Mutter did not acknowledge worker suspension" and the note
+      `$XDG_RUNTIME_DIR/gnoblin/config-fallback` reads "Lua runtime recovery failed. The compositor is
+      still running, but configuration and Lua callbacks are unavailable" (`exp4/new1.txt`).
+      `installer.lua` never loads, `bingux-installer-ui` never starts. - Not Xwayland: no Xwayland error in any `compositor-last.log` ("Using public X11 display :0");
+      the installer comes up in good boots. The hand-run abort ("Failed to open Xauthority file")
+      had no logind session.
       Measured on four busy CPUs: `systemctl --user start gnoblin-session.target` took 6.54 s and
       0.41 s with `bingux.target` `DefaultDependencies=no` (`exp1`). The first start of the compositor
       still takes 14 to 30 s on this host ("Running Mutter" to "Using Wayland display name"), even with
@@ -246,36 +243,36 @@ work belongs in Git history and does not stay here as a second changelog.
 
 Before/after (ISO 6c65aa4, `tests/distro-installed-greeter.py 3`, stage medians in seconds from `stages.json`):
 
-| Metric | Before | Now | Target |
-| --- | --- | --- | --- |
-| Greeter submit-to-session-bar (sign-in submit to desktop painted) | 11 (runs 10, 18, 11) | 9.0 (9.01 x3) | 8 or less |
-| Power on to greeter | not measured | 42.8 | - |
-| Greeter shown to desktop painted | not measured | 19.9 | - |
-| Lock request to lock screen | not measured | 2.6 | - |
-| Unlock to desktop | not measured | 6.2 | - |
-| Logout request to logout done | not measured | 12.6 | - |
-| Installer restart to guest reset black frames (`tests/distro-handover.py`) | not measured | 261-263 s (uefi), 297-299 s (uefi-luks), from 255 s (bios) | 0 |
-| Black gaps over 0.5 s in greeter recordings | not measured | 5-17 s, 38-40 s, 59 s (x3 runs) | 0 |
-| Wallpaper jump greeter shown to desktop painted | not measured | 13.1-13.4 s | not gated |
+| Metric                                                                     | Before               | Now                                                        | Target    |
+| -------------------------------------------------------------------------- | -------------------- | ---------------------------------------------------------- | --------- |
+| Greeter submit-to-session-bar (sign-in submit to desktop painted)          | 11 (runs 10, 18, 11) | 9.0 (9.01 x3)                                              | 8 or less |
+| Power on to greeter                                                        | not measured         | 42.8                                                       | -         |
+| Greeter shown to desktop painted                                           | not measured         | 19.9                                                       | -         |
+| Lock request to lock screen                                                | not measured         | 2.6                                                        | -         |
+| Unlock to desktop                                                          | not measured         | 6.2                                                        | -         |
+| Logout request to logout done                                              | not measured         | 12.6                                                       | -         |
+| Installer restart to guest reset black frames (`tests/distro-handover.py`) | not measured         | 261-263 s (uefi), 297-299 s (uefi-luks), from 255 s (bios) | 0         |
+| Black gaps over 0.5 s in greeter recordings                                | not measured         | 5-17 s, 38-40 s, 59 s (x3 runs)                            | 0         |
+| Wallpaper jump greeter shown to desktop painted                            | not measured         | 13.1-13.4 s                                                | not gated |
 
 Before/after (ISO e6048dc, one E2E chain run; `tests/distro-installed-greeter.py 3`, `distro-install.py` uefi-luks/uefi/bios, `distro-boot.py`, `distro-handover.py` over all recordings; stage medians in seconds from `stages.json` and `timeline.json`). The "Before" column is 6c65aa4 where it was measured; no start-up numbers exist for 6c65aa4, so the start-up row uses this run's boot timeline.
 
-| Metric | Before (6c65aa4) | Now (e6048dc) | Target |
-| --- | --- | --- | --- |
-| Greeter submit-to-session-bar (sign-in submit to desktop painted) | 11 (runs 10, 18, 11) | 9.02 (9.06, 9.01, 9.02) | 8 or less |
-| Power on to greeter | not measured | 45.5 (50.1, 44.4, 45.5) | - |
-| Greeter shown to desktop painted | not measured | 19.9 (19.9, 19.9, 19.9) | - |
-| Lock request to lock screen | not measured | 2.6 | - |
-| Unlock to desktop | not measured | 6.2 | - |
-| Logout request to logout done | not measured | 12.6 | - |
-| Installer restart to guest reset (`distro-install.py`) | not measured | 8.1 (luks), 11.9 (uefi), 3.4 (bios) | - |
-| Install page "Installing Bingux" to "Bingux is installed" | not measured | 775.5 s (luks), 674.0 s (uefi), 421.9 s (bios) | - |
-| Installer restart to guest reset black frames (`distro-handover.py`) | not measured | 1262.0-1266.5 s (luks, 4.5 s), 1245.2-1252.9 s (uefi, 7.7 s), 967.9-969.8 s (bios, 1.9 s) | 0 |
-| Greeter to session black (`distro-handover.py`) | not measured | 1408.3-1412.1 s (luks), 1328.9-1335.6 s (uefi), 1002.1-1003.2 s (bios); installed-greeter 0.9 s, 0.6 s, 0.8 s | 0 |
-| Black gaps over 0.5 s in installed-greeter recordings | not measured | 7.5-9.0, 10.1-17.8, 45.2-47.5, 67.1-67.9 s (run 1); 5.5-18.1, 39.1-40.9, 60.8-61.5 s (run 2); 5.3-18.0, 40.0-41.9, 61.8-62.6 s (run 3) | 0 |
-| Wallpaper greeter shown to session first frame (`distro-handover.py`, gated) | not measured | 4.0 (installed-greeter x3): both sides are the blurred twin, the residual is the greeter's scrim | 8 (limit) |
-| Wallpaper jump greeter shown to desktop painted, after the sharp fade-in (`distro-handover.py`, reported) | not measured | 13.19 / 13.45 / 13.31 (install luks/uefi/bios), 13.30 / 13.34 / 13.27 (installed-greeter x3) | not gated: the sharp wallpaper fades in after the first frame |
-| Live desktop bar vs desktop after unlock (boot-test, `distro-handover.py`) | not measured | bar clock box moved; wallpaper jump 25.87 | 0 |
+| Metric                                                                                                    | Before (6c65aa4)     | Now (e6048dc)                                                                                                                          | Target                                                        |
+| --------------------------------------------------------------------------------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Greeter submit-to-session-bar (sign-in submit to desktop painted)                                         | 11 (runs 10, 18, 11) | 9.02 (9.06, 9.01, 9.02)                                                                                                                | 8 or less                                                     |
+| Power on to greeter                                                                                       | not measured         | 45.5 (50.1, 44.4, 45.5)                                                                                                                | -                                                             |
+| Greeter shown to desktop painted                                                                          | not measured         | 19.9 (19.9, 19.9, 19.9)                                                                                                                | -                                                             |
+| Lock request to lock screen                                                                               | not measured         | 2.6                                                                                                                                    | -                                                             |
+| Unlock to desktop                                                                                         | not measured         | 6.2                                                                                                                                    | -                                                             |
+| Logout request to logout done                                                                             | not measured         | 12.6                                                                                                                                   | -                                                             |
+| Installer restart to guest reset (`distro-install.py`)                                                    | not measured         | 8.1 (luks), 11.9 (uefi), 3.4 (bios)                                                                                                    | -                                                             |
+| Install page "Installing Bingux" to "Bingux is installed"                                                 | not measured         | 775.5 s (luks), 674.0 s (uefi), 421.9 s (bios)                                                                                         | -                                                             |
+| Installer restart to guest reset black frames (`distro-handover.py`)                                      | not measured         | 1262.0-1266.5 s (luks, 4.5 s), 1245.2-1252.9 s (uefi, 7.7 s), 967.9-969.8 s (bios, 1.9 s)                                              | 0                                                             |
+| Greeter to session black (`distro-handover.py`)                                                           | not measured         | 1408.3-1412.1 s (luks), 1328.9-1335.6 s (uefi), 1002.1-1003.2 s (bios); installed-greeter 0.9 s, 0.6 s, 0.8 s                          | 0                                                             |
+| Black gaps over 0.5 s in installed-greeter recordings                                                     | not measured         | 7.5-9.0, 10.1-17.8, 45.2-47.5, 67.1-67.9 s (run 1); 5.5-18.1, 39.1-40.9, 60.8-61.5 s (run 2); 5.3-18.0, 40.0-41.9, 61.8-62.6 s (run 3) | 0                                                             |
+| Wallpaper greeter shown to session first frame (`distro-handover.py`, gated)                              | not measured         | 4.0 (installed-greeter x3): both sides are the blurred twin, the residual is the greeter's scrim                                       | 8 (limit)                                                     |
+| Wallpaper jump greeter shown to desktop painted, after the sharp fade-in (`distro-handover.py`, reported) | not measured         | 13.19 / 13.45 / 13.31 (install luks/uefi/bios), 13.30 / 13.34 / 13.27 (installed-greeter x3)                                           | not gated: the sharp wallpaper fades in after the first frame |
+| Live desktop bar vs desktop after unlock (boot-test, `distro-handover.py`)                                | not measured         | bar clock box moved; wallpaper jump 25.87                                                                                              | 0                                                             |
 
 Results: `tests/distro-install.py` uefi-luks 24/24, uefi 23/23, bios 24/24; `tests/distro-installed-greeter.py` 9/9 on each of three runs; `tests/distro-boot.py` 16/16; `tests/distro-handover.py` fails on every recording (installer->reboot and greeter->session black checks, black gaps above, and on the boot recording the bar and wallpaper checks). The handover failures reproduce the two open black spans above. The 13.2-13.5 "wallpaper jump" was the greeter against the sharp desktop after its fade-in, not a wallpaper mismatch: the session's first painted frame is the same blurred twin the greeter shows, 4.0 from the greeter on all three installed-greeter runs, so the gated wallpaper check now compares those two frames.
 

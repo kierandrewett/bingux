@@ -254,9 +254,12 @@ catches it where the code ran, and `bingux_ui::resilience` shows an error card
 
 ## Packaging
 
-Builds use `packaging/rpm/bingux.spec` and the source archive produced by
-`make source-archive`. A package must pass a clean Fedora build and a staged
-install before it is published to COPR.
+Packages are written by pkgsmith from a prefix that `scripts/build-prefix.sh`
+builds (`make prefix`, then `make packages`; see `docs/packaging.md`). The
+scripts are `pkgsmith/*.star`. A package must pass a clean build in a container
+of its distribution and an install in a clean one (`scripts/verify-packages.sh`)
+before it is published. Change the files of a package in `pkgsmith/` and
+`data/`, and run `make package-check`.
 
 Use small commits with a conventional subject and a body that explains the
 user-visible result. Keep unrelated working-tree changes out of a commit.
