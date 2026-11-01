@@ -332,7 +332,7 @@ class PkgsmithTest(unittest.TestCase):
             apps = self.build("apps", version, "rpm,deb,archlinux")
             if shutil.which("rpm"):
                 rpm = next(core.glob("bingux-[0-9]*.rpm")).name
-                native = rpm[len("bingux-") : -len(".x86_64.rpm")]
+                native = rpm[len("bingux-") :].rsplit(".", 2)[0]
                 requires = subprocess.run(
                     ["rpm", "-qp", "--requires", str(next(apps.glob("bingux-files-*.rpm")))],
                     capture_output=True,
@@ -342,7 +342,7 @@ class PkgsmithTest(unittest.TestCase):
                 self.assertIn(f"bingux = {native}", requires)
             if shutil.which("dpkg-deb"):
                 deb = next(core.glob("bingux_*.deb")).name
-                native = deb[len("bingux_") : -len("_amd64.deb")]
+                native = deb[len("bingux_") :].rsplit("_", 1)[0]
                 depends = subprocess.run(
                     ["dpkg-deb", "-f", str(next(apps.glob("bingux-files_*.deb"))), "Depends"],
                     capture_output=True,
@@ -352,7 +352,7 @@ class PkgsmithTest(unittest.TestCase):
                 self.assertIn(f"bingux (= {native})", depends)
             if shutil.which("bsdtar"):
                 arch = next(core.glob("bingux-[0-9]*.pkg.tar.zst")).name
-                native = arch[len("bingux-") : -len("-x86_64.pkg.tar.zst")]
+                native = arch[len("bingux-") :].rsplit("-", 1)[0]
                 info = subprocess.run(
                     ["bsdtar", "-xOf", str(next(apps.glob("bingux-files-*.pkg.tar.zst"))), ".PKGINFO"],
                     capture_output=True,
