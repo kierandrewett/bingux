@@ -278,7 +278,7 @@ class PkgsmithTest(unittest.TestCase):
                     package = re.search(r"name=([\w.+-]+)", line).group(1)
                 elif re.match(r"\d+ root:root /", line):
                     path = line.split()[2]
-                    # Folders are shared (both scripts own /usr/share/applications); files are not.
+                    # Only files count here: folders are owned by one package each (own_dirs), checked by the file lists.
                     if not (self.prefix / path.lstrip("/")).is_file():
                         continue
                     self.assertNotIn(path, owners, f"{path} is in {owners.get(path)} and {package}")

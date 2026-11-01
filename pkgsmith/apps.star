@@ -6,7 +6,7 @@
 #
 #   pkgsmith build -f pkgsmith/apps.star --prefix prefix --build-arg VERSION=0.1.0
 
-load("common.star", "APPS", "FORMATS", "app_files", "identity", "pin_bingux")
+load("common.star", "APPS", "FORMATS", "app_files", "identity", "own_dirs", "pin_bingux")
 
 DESCRIPTIONS = {
     "bingux-settings": """Settings application for the Bingux desktop
@@ -113,6 +113,7 @@ for name in APPS:
             depends = [pin_bingux(fmt)] + GRAPHICS[fmt] + DEPENDS[name][fmt],
             recommends = RECOMMENDS[name][fmt],
             suggests = SUGGESTS[name][fmt],
+            own_dirs = own_dirs("/usr/share/doc/" + name, "/usr/share/licenses/" + name) + (["/usr/share/bingux/search-apps"] if name == "bingux-settings" else []),
             options = {"section": "x11"} if fmt == "deb" else {},
             **fields
         )

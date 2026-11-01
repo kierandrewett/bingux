@@ -59,6 +59,14 @@ def app_files(name):
         "/usr/share/licenses/" + name,
     ] + app["extra"]
 
+# The folders a package owns: its own, never the shared ones (/usr/share/applications, /etc/pam.d, /usr/lib/systemd, ...),
+# which other packages and the system own. Each name owns the folder and everything below it.
+def own_dirs(*names):
+    out = []
+    for name in names:
+        out += [name, name + "/**"]
+    return out
+
 APP_FILES = []
 for _name in APPS:
     APP_FILES += app_files(_name)

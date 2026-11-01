@@ -13,7 +13,7 @@
 # The package is everything in the prefix that no application package owns, so a file the build adds is
 # packaged without an edit here. tests/packaging.py checks that the application files are all claimed.
 
-load("common.star", "APP_FILES", "FORMATS", "QT_MINOR", "SYSTEMD_RUNNING", "identity", "qt_pin")
+load("common.star", "APP_FILES", "FORMATS", "QT_MINOR", "SYSTEMD_RUNNING", "identity", "own_dirs", "qt_pin")
 
 DESCRIPTION = """The Bingux desktop: shell, session services and session manager
 Bingux is a Wayland desktop. It provides a top bar, dock, search, notifications, media controls and an optional
@@ -329,6 +329,22 @@ fi
 # Configuration files: the package manager keeps the changes of the administrator.
 CONFIG_FILES = ["/etc/pam.d/bingux-lock", "/etc/pam.d/bingux-lock-fingerprint", "/etc/pam.d/bsm-login", "/etc/pam.d/bsm-unlock", "/etc/bsm/bsm.toml"]
 
+# The folders of the package. /usr/share/bingux/search-apps is shared with Settings, which ships a file in it.
+OWN_DIRS = own_dirs(
+    "/usr/lib/bingux",
+    "/usr/lib64/bingux",
+    "/usr/libexec/bingux",
+    "/usr/libexec/bsm",
+    "/usr/share/bingux",
+    "/usr/share/bsm",
+    "/usr/share/doc/bingux",
+    "/usr/share/doc/bsm",
+    "/usr/share/licenses/bingux",
+    "/etc/bsm",
+    "/usr/lib/systemd/system/plymouth-quit.service.d",
+    "/var/lib/bingux",
+)
+
 # Every file of an application package belongs to that package; the rest of the prefix is this one.
 exclude(APP_FILES)
 
@@ -350,6 +366,7 @@ for fmt in FORMATS:
         conflicts = [] if fmt == "rpm" else old,
         provides = old,
         config_files = CONFIG_FILES,
+        own_dirs = OWN_DIRS,
         scripts = SCRIPTS[fmt],
         options = {"section": "x11"} if fmt == "deb" else {},
         **fields
