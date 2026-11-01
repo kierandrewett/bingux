@@ -10,12 +10,14 @@ also prints the SPDX expression for the program's `License:` tag: the unique
 licence expressions of all linked crates, joined with AND. The packages install
 the files with `%license`.
 
-usage: scripts/cargo-licenses.py [--out DIR] [--summary] [--check]
+usage: scripts/cargo-licenses.py [--out DIR] [--prefix DIR] [--summary] [--check]
 
-  --out DIR   write the per-program files there (default: build/licenses)
-  --summary   print `program: expression` for every program
-  --check     compare the expression with the License tag of each package in
-              packaging/rpm/bingux.spec and exit 1 when they differ
+  --out DIR     write the per-program files there (default: build/licenses)
+  --prefix DIR  also install each file into the prefix folder of the package that ships
+                its program: DIR/usr/share/licenses/PACKAGE/ (scripts/build-prefix.sh)
+  --summary     print `package: expression` for every package
+  --check       compare the expression with the `license` of each package in the LICENSES
+                table of pkgsmith/common.star and exit 1 when they differ
 """
 
 import argparse
@@ -40,24 +42,44 @@ PROGRAMS = {
     "bingux-searchd": "bingux-searchd",
     "bingux-statusd": "bingux-statusd",
     "bingux-effects": "bingux-audio-effects",
+    "bingux-session": "bingux-session",
+    "bingux-helper": "bingux-helper",
+    "xdg-desktop-portal-bingux": "bingux-portal",
+    "bsm": "bsm",
+    "bsm-helper": "bsm-helper",
+    "bsm-host": "bsm-host",
+    "bsm-imgconv": "bsm-appearance",
 }
 
 
-# The RPM package that ships each program, and the licences that package adds
-# for files that are not Rust crates (Quickshell, which the shell binary embeds, is
-# LGPL; the project's own code is GPL).
+# The package that ships each program (pkgsmith/), and the licences that package adds for files
+# that are not Rust crates (Quickshell, which the shell binary embeds, is LGPL; the project's own
+# code is GPL). Settings, Files and Taxonomy are the application packages; every other program is
+# part of `bingux`.
 PACKAGE_OF = {
     "bingux-settings": "bingux-settings",
     "bingux-files": "bingux-files",
     "bingux-taxonomy": "bingux-taxonomy",
-    "bingux-preview-host": "bingux-preview-host",
-    "bingux-config": "bingux-config",
+    "bingux-preview-host": "bingux",
+    "bingux-config": "bingux",
     "bingux-searchd": "bingux",
     "bingux-statusd": "bingux",
-    "bingux-effects": "bingux-audio-effects",
+    "bingux-effects": "bingux",
+    "bingux-session": "bingux",
+    "bingux-helper": "bingux",
+    "xdg-desktop-portal-bingux": "bingux",
+    "bsm": "bingux",
+    "bsm-helper": "bingux",
+    "bsm-host": "bingux",
+    "bsm-imgconv": "bingux",
 }
 OWN = ["GPL-3.0-or-later"]
 EXTRA = {"bingux": ["LGPL-3.0-or-later"]}
+
+
+def own_crate(name):
+    """A crate of this repository: its licence is the project's, not a dependency's."""
+    return name.startswith(("bingux-", "bsm-")) or name == "bsm"
 
 
 def normalise(expression):
@@ -172,26 +194,19 @@ def expression(licences):
     return " AND ".join(f"({atom})" if wrap and " OR " in atom else atom for atom in sorted(kept))
 
 
-def spec_licences():
-    """License tag of each package in the spec: {package name: expression}."""
-    text = (ROOT / "packaging/rpm/bingux.spec").read_text()
-    tags = {}
-    name = None
-    for line in text.splitlines():
-        if match := re.match(r"%package\s+-n\s+(\S+)", line):
-            name = match.group(1)
-        elif match := re.match(r"%package\s+(\S+)", line):
-            name = "bingux-" + match.group(1)
-        elif line.startswith("Name:"):
-            name = line.split()[1]
-        elif match := re.match(r"License:\s*(.+)", line):
-            tags[name] = match.group(1).strip()
-    return tags
+def script_licences():
+    """The LICENSES table of pkgsmith/common.star: {package name: expression}."""
+    text = (ROOT / "pkgsmith/common.star").read_text()
+    table = re.search(r"^LICENSES = \{(.*?)^\}", text, re.M | re.S)
+    if table is None:
+        raise SystemExit("pkgsmith/common.star has no LICENSES table")
+    return dict(re.findall(r'^\s+"([^"]+)":\s*"([^"]+)",?\s*$', table.group(1), re.M))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", default="build/licenses")
+    parser.add_argument("--prefix")
     parser.add_argument("--summary", action="store_true")
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
@@ -200,7 +215,7 @@ def main():
     summaries = {}
     for program, crate_name in PROGRAMS.items():
         found, paths = crates(crate_name)
-        licences = [licence for name, _, licence in found if not name.startswith("bingux-")]
+        licences = [licence for name, _, licence in found if not own_crate(name)]
         summary = expression(licences)
         summaries[program] = summary
         lines = [
@@ -210,25 +225,33 @@ def main():
             f"Summary: {summary}",
             "",
         ]
-        external = [(name, version, licence) for name, version, licence in found if not name.startswith("bingux-")]
+        external = [(name, version, licence) for name, version, licence in found if not own_crate(name)]
         lines += [f"{name} {version}: {licence}" for name, version, licence in external]
         texts = licence_texts(external, paths)
         lines += ["", "Licence texts", "=============", ""]
         for text, names in sorted(texts.items(), key=lambda item: (item[1], item[0])):
             lines += ["-" * 72, "Used by: " + ", ".join(sorted(set(names))), "-" * 72, text, ""]
-        (out / f"{program}.LICENSE.dependencies").write_text("\n".join(lines) + "\n")
+        text = "\n".join(lines) + "\n"
+        (out / f"{program}.LICENSE.dependencies").write_text(text)
+        if args.prefix:
+            folder = Path(args.prefix) / "usr/share/licenses" / PACKAGE_OF[program]
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / f"{program}.LICENSE.dependencies").write_text(text)
     if args.summary:
         for package in sorted(set(PACKAGE_OF.values())):
             licences = [summaries[program] for program, owner in PACKAGE_OF.items() if owner == package]
             print(f"{package}: {expression(OWN + EXTRA.get(package, []) + licences)}")
     if args.check:
-        tags = spec_licences()
+        tags = script_licences()
         failed = False
         for package in sorted(set(PACKAGE_OF.values())):
             licences = [summaries[program] for program, owner in PACKAGE_OF.items() if owner == package]
             expected = expression(OWN + EXTRA.get(package, []) + licences)
             if tags.get(package) != expected:
-                print(f"{package}: spec says {tags.get(package)!r}, crates say {expected!r}", file=sys.stderr)
+                print(
+                    f"{package}: pkgsmith/common.star says {tags.get(package)!r}, crates say {expected!r}",
+                    file=sys.stderr,
+                )
                 failed = True
         if failed:
             raise SystemExit(1)

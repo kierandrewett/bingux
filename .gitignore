@@ -21,3 +21,6 @@ __pycache__/
 # Standalone build and release output
 /build/
 /dist/
+/prefix/
+/prefix.env
+/pkgsmith-bin/

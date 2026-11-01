@@ -60,8 +60,7 @@ def optional_notes():
 def print_platform_hint():
     if Path("/etc/fedora-release").is_file() and available("dnf"):
         print("\nOn Fedora, install the project dependencies with:")
-        print("  sudo dnf install rpmdevtools")
-        print("  sudo dnf builddep packaging/rpm/bingux.spec")
+        print("  sudo scripts/install-build-deps.sh fedora")
 
 
 def main():
