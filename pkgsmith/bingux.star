@@ -41,6 +41,9 @@ DEPENDS = {
         # bsm: seat management and the boot splash it hands the display over from.
         "seatd",
         "plymouth",
+        # The pointer and the icons: Gnoblin leaves both to the shell.
+        "adwaita-cursor-theme",
+        "adwaita-icon-theme",
         "wireplumber",
         # The sound effects engine hosts LV2 plugins through PipeWire's filter chain.
         "pipewire >= 1.4",
@@ -95,6 +98,7 @@ DEPENDS = {
         "libpam-modules",
         "seatd",
         "plymouth",
+        "adwaita-icon-theme",
         "wireplumber",
         "pipewire (>= 1.4)",
         "libspa-0.2-modules (>= 1.4)",
@@ -153,6 +157,8 @@ DEPENDS = {
         "pam",
         "seatd",
         "plymouth",
+        "adwaita-cursors",
+        "adwaita-icon-theme",
         "wireplumber",
         "pipewire",
         "pipewire-audio",
