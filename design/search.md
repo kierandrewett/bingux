@@ -7,12 +7,12 @@ changes.
 
 ## 1. What exists today (audit)
 
-| Piece | Where | What it does | Why it is not the answer |
-| ----- | ----- | ------------ | ------------------------ |
-| Settings index | `apps/settings/src/settings_index.rs` | A `&[(PageId, title, keywords)]` table, ~330 rows. `matching(query)` lower-cases `title + keywords` once (`LazyLock`) and keeps rows that contain every whitespace-separated query word as a **substring**. `matching_pages` does the same for page titles. | Linear scan, substring only (no word boundaries, no typo tolerance, no ranking: index order), runs on the UI thread, private to Settings. The table has no breadcrumb, anchor or icon, so a hit can only open a page. |
-| In-place filtering | `crates/ui/src/search_highlight.rs`, `shell/sections.rs`, `shell/navigation.rs`, `settings/src/search_results.rs` | Pages not marked `index_only` render their real controls while the search has text; every `Row`/`Group` calls `use_match` and hides itself unless its text contains every query word; the sidebar lists the blocks that stayed visible (`sections::hits`, registered through `on_sized`). | It needs the whole page tree mounted, so it cannot work for anything outside the app (Spotlight) or for data that is not a row. Choosing a result only opens the page; no row is singled out. |
-| Files name matcher | `crates/files/src/search.rs` | `Query::matches` gives a `Tier` (exact, prefix, word-start, substring, all words, fuzzy subsequence) over file names; `walk` is a cancellable BFS. | Replaced by `bingux_files::find` (see `design/files-search.md`): a typed query language, a names index built on this engine for the home folder, and the live walk. Files still registers no `Searchable`. |
-| bingux-searchd | `services/searchd` | The Spotlight daemon. The shell speaks protocol v1 over `$XDG_RUNTIME_DIR/bingux/search-v1.sock` (newline JSON, `query` / `activate` / `cancel`, records ≤ 64 KiB, socket 0600 in a 0700 directory). Built-in providers: applications (desktop files), files (bounded walker + optional plocate), calculation, weather, web, SQLite, AI chat. External providers are **subprocesses** declared by manifests (`bingux.search-provider`) speaking `hello` / `query` / `activate` on stdio, with `timeoutMs` ≤ 10 s, `priority` ≤ 1000, lazy/eager start and bounded backoff restarts. Results are `ProviderResult { resultId, kind, title, subtitle, icon, score }`; the daemon turns result ids into short-lived opaque activation ids. Ranking is `score` desc, then `0.001 × priority`, then stable fields; each local source contributes at most 5 results. | It already has the aggregator machinery (deadlines, cancellation, activation registry, limits). It has no notion of a running app's live data, of typed documents, facets or highlights, or of "the app is closed". It is extended, not replaced (section 8.6). |
+| Piece              | Where                                                                                                             | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Why it is not the answer                                                                                                                                                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Settings index     | `apps/settings/src/settings_index.rs`                                                                             | A `&[(PageId, title, keywords)]` table, ~330 rows. `matching(query)` lower-cases `title + keywords` once (`LazyLock`) and keeps rows that contain every whitespace-separated query word as a **substring**. `matching_pages` does the same for page titles.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Linear scan, substring only (no word boundaries, no typo tolerance, no ranking: index order), runs on the UI thread, private to Settings. The table has no breadcrumb, anchor or icon, so a hit can only open a page.                                           |
+| In-place filtering | `crates/ui/src/search_highlight.rs`, `shell/sections.rs`, `shell/navigation.rs`, `settings/src/search_results.rs` | Pages not marked `index_only` render their real controls while the search has text; every `Row`/`Group` calls `use_match` and hides itself unless its text contains every query word; the sidebar lists the blocks that stayed visible (`sections::hits`, registered through `on_sized`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | It needs the whole page tree mounted, so it cannot work for anything outside the app (Spotlight) or for data that is not a row. Choosing a result only opens the page; no row is singled out.                                                                   |
+| Files name matcher | `crates/files/src/search.rs`                                                                                      | `Query::matches` gives a `Tier` (exact, prefix, word-start, substring, all words, fuzzy subsequence) over file names; `walk` is a cancellable BFS.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Replaced by `bingux_files::find` (see `design/files-search.md`): a typed query language, a names index built on this engine for the home folder, and the live walk. Files still registers no `Searchable`.                                                      |
+| bingux-searchd     | `services/searchd`                                                                                                | The Spotlight daemon. The shell speaks protocol v1 over `$XDG_RUNTIME_DIR/bingux/search-v1.sock` (newline JSON, `query` / `activate` / `cancel`, records ≤ 64 KiB, socket 0600 in a 0700 directory). Built-in providers: applications (desktop files), files (bounded walker + optional plocate), calculation, weather, web, SQLite, AI chat. External providers are **subprocesses** declared by manifests (`bingux.search-provider`) speaking `hello` / `query` / `activate` on stdio, with `timeoutMs` ≤ 10 s, `priority` ≤ 1000, lazy/eager start and bounded backoff restarts. Results are `ProviderResult { resultId, kind, title, subtitle, icon, score }`; the daemon turns result ids into short-lived opaque activation ids. Ranking is `score` desc, then `0.001 × priority`, then stable fields; each local source contributes at most 5 results. | It already has the aggregator machinery (deadlines, cancellation, activation registry, limits). It has no notion of a running app's live data, of typed documents, facets or highlights, or of "the app is closed". It is extended, not replaced (section 8.6). |
 
 The old Settings matcher is not slow (330 rows, tens of microseconds); the
 problem is that it cannot express anything richer than "page + title" and cannot
@@ -22,7 +22,7 @@ leave the process.
 
 Goals
 
-1. Any Bingux app registers *searchable documents* with bingux-ui once and gets
+1. Any Bingux app registers _searchable documents_ with bingux-ui once and gets
    in-app search for free; it does not write a matcher.
 2. Documents look like Meilisearch documents (`id` + JSON fields), so a hit can
    be as thin as a title or as rich as an icon, breadcrumb, category, URI and
@@ -31,14 +31,14 @@ Goals
    data).
 4. As-you-type: below 1 ms at 10k documents, below 10 ms at 1M short documents,
    never on the UI thread, superseded queries cancelled.
-5. Spotlight (`bingux-searchd`) searches what an app *chose* to expose, whether
+5. Spotlight (`bingux-searchd`) searches what an app _chose_ to expose, whether
    the app is running or not, and can ask the app to open a hit.
 6. UI-free engine: Spotlight and searchd link it without Freya.
 
 Non-goals
 
 - Full-text search over file contents; the Files app and searchd keep their own
-  walkers. The engine is for *app-owned structured records* (settings, apps,
+  walkers. The engine is for _app-owned structured records_ (settings, apps,
   contacts, notes, devices) up to about a million short documents.
 - All of OpenSearch. A documented subset (section 6.1) is accepted; anything
   else is rejected with an OpenSearch-shaped error, never silently ignored.
@@ -69,16 +69,16 @@ Document { id: String, fields: Map<String, serde_json::Value>, external: Option<
 
 `Schema` (Meilisearch calls it settings) is per index:
 
-| Setting | Meaning | Default |
-| ------- | ------- | ------- |
-| `searchable: [(field, weight)]` | Tokenised and searched fields. The weight scales BM25F and fixes the attribute rank (higher weight, better rank; ties keep declaration order). | at least one required |
-| `filterable: [field]` | Usable in `filter`, `term`, `terms`, `range`, and as facets / `terms` aggregations. | none |
-| `sortable: [field]` | Usable in `sort`. | none |
-| `displayed: Option<[field]>` | Fields copied into `_source` of a hit. | all |
-| `ranking_rules` | Ordered subset of `words, typo, proximity, attribute, exactness`. | all five, in that order |
-| `synonyms`, `stop_words` | Query-side synonym groups; stop words are neither indexed nor searched. | empty |
-| `typo` | `enabled`, `min_word_len_one_typo` (4), `min_word_len_two_typos` (8), words where it is off. | on |
-| `external` | The index may be shown to other processes (section 8). | **false** |
+| Setting                         | Meaning                                                                                                                                        | Default                 |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| `searchable: [(field, weight)]` | Tokenised and searched fields. The weight scales BM25F and fixes the attribute rank (higher weight, better rank; ties keep declaration order). | at least one required   |
+| `filterable: [field]`           | Usable in `filter`, `term`, `terms`, `range`, and as facets / `terms` aggregations.                                                            | none                    |
+| `sortable: [field]`             | Usable in `sort`.                                                                                                                              | none                    |
+| `displayed: Option<[field]>`    | Fields copied into `_source` of a hit.                                                                                                         | all                     |
+| `ranking_rules`                 | Ordered subset of `words, typo, proximity, attribute, exactness`.                                                                              | all five, in that order |
+| `synonyms`, `stop_words`        | Query-side synonym groups; stop words are neither indexed nor searched.                                                                        | empty                   |
+| `typo`                          | `enabled`, `min_word_len_one_typo` (4), `min_word_len_two_typos` (8), words where it is off.                                                   | on                      |
+| `external`                      | The index may be shown to other processes (section 8).                                                                                         | **false**               |
 
 Conventional weights: `title` 10, `keywords` 5, `breadcrumb` 3, `body` 1.
 
@@ -144,7 +144,7 @@ For a query word of `n` chars: 0 typos below 4, 1 from 4, 2 from 8. The first
 character must match exactly. Candidates are found by scanning the dictionary
 range of that first character with a bounded Damerau-Levenshtein (a
 transposition costs 1) that stops when the row minimum exceeds the budget. The
-last word of a query that does not end with a space is also a *prefix*: a term
+last word of a query that does not end with a space is also a _prefix_: a term
 whose prefix is within the budget matches. At most 256 expansions per word are
 kept (nearest first, then document frequency).
 
@@ -159,14 +159,14 @@ compare, and the `_score` returned is `key / 2^51`, a number in `[0, 1)` that
 sorts exactly like the key. The key concatenates one bit field per ranking rule
 in the configured order, then BM25F:
 
-| Rule | Field in key | Better when |
-| ---- | ------------ | ----------- |
-| `words` | share of the query's words matched, 0..31 (5 bits) | more |
-| `typo` | summed edit distance of matched words (6 bits) | fewer |
-| `proximity` | minimal summed position gap between consecutive matched words, across fields 8 (8 bits) | smaller |
-| `attribute` | summed rank of the best field each word matched in, then summed position (13 bits) | higher weight, earlier |
-| `exactness` | share of the words matched by an identical term, not a prefix or typo, 0..31 (5 bits) | more |
-| (tail) | BM25F quantised (14 bits) | higher |
+| Rule        | Field in key                                                                            | Better when            |
+| ----------- | --------------------------------------------------------------------------------------- | ---------------------- |
+| `words`     | share of the query's words matched, 0..31 (5 bits)                                      | more                   |
+| `typo`      | summed edit distance of matched words (6 bits)                                          | fewer                  |
+| `proximity` | minimal summed position gap between consecutive matched words, across fields 8 (8 bits) | smaller                |
+| `attribute` | summed rank of the best field each word matched in, then summed position (13 bits)      | higher weight, earlier |
+| `exactness` | share of the words matched by an identical term, not a prefix or typo, 0..31 (5 bits)   | more                   |
+| (tail)      | BM25F quantised (14 bits)                                                               | higher                 |
 
 This is Meilisearch's order with its documented equivalents. BM25F uses the
 field weights and per-field length normalisation (k1 = 1.2, b = 0.75) as the
@@ -209,20 +209,35 @@ case-insensitive.
 
 ```json
 {
-  "took": 1,
-  "timed_out": false,
-  "_shards": { "total": 1, "successful": 1, "skipped": 0, "failed": 0 },
-  "hits": {
-    "total": { "value": 3, "relation": "eq" },
-    "max_score": 0.93,
-    "hits": [{
-      "_index": "settings", "_id": "network/proxy", "_score": 0.93,
-      "_source": { "title": "Proxy", "breadcrumb": ["Network"], "icon": "network", "uri": "bingux-settings://network/proxy" },
-      "highlight": { "title": ["<em>Pro</em>xy"] },
-      "sort": [0.93, "network/proxy"]
-    }]
-  },
-  "aggregations": { "by_category": { "doc_count_error_upper_bound": 0, "sum_other_doc_count": 0, "buckets": [{ "key": "Network", "doc_count": 2 }] } }
+    "took": 1,
+    "timed_out": false,
+    "_shards": { "total": 1, "successful": 1, "skipped": 0, "failed": 0 },
+    "hits": {
+        "total": { "value": 3, "relation": "eq" },
+        "max_score": 0.93,
+        "hits": [
+            {
+                "_index": "settings",
+                "_id": "network/proxy",
+                "_score": 0.93,
+                "_source": {
+                    "title": "Proxy",
+                    "breadcrumb": ["Network"],
+                    "icon": "network",
+                    "uri": "bingux-settings://network/proxy"
+                },
+                "highlight": { "title": ["<em>Pro</em>xy"] },
+                "sort": [0.93, "network/proxy"]
+            }
+        ]
+    },
+    "aggregations": {
+        "by_category": {
+            "doc_count_error_upper_bound": 0,
+            "sum_other_doc_count": 0,
+            "buckets": [{ "key": "Network", "doc_count": 2 }]
+        }
+    }
 }
 ```
 
@@ -276,23 +291,23 @@ section 4.4.
 
 ### 8.1 What has to be possible
 
-A. Spotlight finds a hit in a *running* app (live data).
-B. Spotlight finds a hit in an app that is *closed*.
+A. Spotlight finds a hit in a _running_ app (live data).
+B. Spotlight finds a hit in an app that is _closed_.
 C. Choosing a hit opens its `uri` in the app, starting the app if needed.
 D. Spotlight sees only what the app marked `external`; no other process can
-   widen that.
+widen that.
 
 ### 8.2 What Bingux already uses for IPC (evidence)
 
-| Job | Mechanism | Where |
-| --- | --------- | ----- |
-| Shell ↔ search daemon | Unix socket `$XDG_RUNTIME_DIR/bingux/search-v1.sock`, newline-delimited UTF-8 JSON, versioned records (`"v":1`), 64 KiB record cap, directory 0700, socket 0600, stale socket replaced; QML client `shell/bingux/SearchSocket.qml` | `services/searchd/src/server.rs`, `protocol.rs`; `docs/desktop-shell.md` ("The shell and daemon run as the profile user... does not listen on TCP") |
-| Shell ↔ status daemon | Unix socket `$XDG_RUNTIME_DIR/bingux/metrics-v1.sock`, same framing | `services/statusd/README.md` |
-| Daemon ↔ external search providers | Subprocess on stdio, same newline JSON, manifests of kind `bingux.search-provider` listed in `providerManifestPaths` | `services/searchd/src/external.rs`, `docs/search-presentation.md` |
-| App single instance and URI hand-off | Unix socket `$XDG_RUNTIME_DIR/<app-id>.sock`; a second launch writes its address as one line and exits; the running copy opens it and raises its window | `crates/ui/src/app.rs` (`socket_path`, `listen`, `start_forwarding`) |
-| Launching an app with a URI | Desktop entries (`Exec=bingux-settings %u`, `MimeType=x-scheme-handler/bingux-settings`) launched through GIO (`shell/bingux/launch-application.py`); searchd already spawns programs for results (`Activation::Spawn`) | `apps/settings/bingux-settings.desktop`, `services/searchd/src/providers.rs` |
-| Compositor test channel, notifications | D-Bus (Gnoblin test client, `org.freedesktop.Notifications`, GIO launch notifications) | `shell/bingux/shell_notify.py`, `docs/portable-testing.md` |
-| systemd | user *services* only (`bingux-searchd.service`, `bingux-statusd.service`); no `.socket` units | `data/systemd/` |
+| Job                                    | Mechanism                                                                                                                                                                                                                          | Where                                                                                                                                               |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shell ↔ search daemon                  | Unix socket `$XDG_RUNTIME_DIR/bingux/search-v1.sock`, newline-delimited UTF-8 JSON, versioned records (`"v":1`), 64 KiB record cap, directory 0700, socket 0600, stale socket replaced; QML client `shell/bingux/SearchSocket.qml` | `services/searchd/src/server.rs`, `protocol.rs`; `docs/desktop-shell.md` ("The shell and daemon run as the profile user... does not listen on TCP") |
+| Shell ↔ status daemon                  | Unix socket `$XDG_RUNTIME_DIR/bingux/metrics-v1.sock`, same framing                                                                                                                                                                | `services/statusd/README.md`                                                                                                                        |
+| Daemon ↔ external search providers     | Subprocess on stdio, same newline JSON, manifests of kind `bingux.search-provider` listed in `providerManifestPaths`                                                                                                               | `services/searchd/src/external.rs`, `docs/search-presentation.md`                                                                                   |
+| App single instance and URI hand-off   | Unix socket `$XDG_RUNTIME_DIR/<app-id>.sock`; a second launch writes its address as one line and exits; the running copy opens it and raises its window                                                                            | `crates/ui/src/app.rs` (`socket_path`, `listen`, `start_forwarding`)                                                                                |
+| Launching an app with a URI            | Desktop entries (`Exec=bingux-settings %u`, `MimeType=x-scheme-handler/bingux-settings`) launched through GIO (`shell/bingux/launch-application.py`); searchd already spawns programs for results (`Activation::Spawn`)            | `apps/settings/bingux-settings.desktop`, `services/searchd/src/providers.rs`                                                                        |
+| Compositor test channel, notifications | D-Bus (Gnoblin test client, `org.freedesktop.Notifications`, GIO launch notifications)                                                                                                                                             | `shell/bingux/shell_notify.py`, `docs/portable-testing.md`                                                                                          |
+| systemd                                | user _services_ only (`bingux-searchd.service`, `bingux-statusd.service`); no `.socket` units                                                                                                                                      | `data/systemd/`                                                                                                                                     |
 
 No Bingux protocol between its own processes uses D-Bus; it is used where a
 freedesktop service already speaks it. The Bingux convention for its own
@@ -301,16 +316,16 @@ integer version in each record.
 
 ### 8.3 Options compared
 
-| | Per-app unix socket, searchd framing, manifest + snapshot | D-Bus (zbus), one name per app | Apps push documents into searchd over `search-v1.sock` |
-| - | - | - | - |
-| Fits Bingux conventions | Yes: same directory, framing, permissions, versioning and error style as `search-v1.sock` and `metrics-v1.sock`; same per-app-socket pattern as the single-instance hand-off. | No other Bingux protocol uses it; adds `zbus` to searchd and a bus-name / XML / activation-file vocabulary the codebase does not otherwise have. | Transport yes, but it changes the closed v1 shell protocol or adds a third kind of client to it. |
-| Discovery of running apps | `readdir` of `$XDG_RUNTIME_DIR/bingux/search/`; a dead socket fails to connect and is skipped. | Free (`ListNames`, `NameOwnerChanged`). | Not needed: apps connect to searchd. |
-| Apps that are not running | A manifest (`bingux.search-app`, like the existing provider manifests) names the app and its command; the on-disk snapshot answers search; activation launches the app with the URI. | `.service` activation file; the bus starts the whole Freya app only to answer a search. | searchd keeps what was pushed; stale until the app next runs. |
-| Live data | Yes, the app answers. | Yes. | Only what was pushed; every change costs a copy. |
-| Latency | One local stream round trip, ≈ 0.05-0.1 ms + search. | ≈ 0.1-0.3 ms. | In-process in searchd, but searchd holds every app's documents in memory. |
-| Security | 0700 directory, 0600 socket, same user; only `external` data is served. | Per-user bus; any same-user process can call it; same exposure. | Data leaves the app when pushed; any same-user peer could push into searchd. |
-| Tooling | `socat - UNIX-CONNECT:...`, `nc -U` | `busctl`, `d-spy` | `socat` |
-| New dependencies | none | `zbus` in searchd | none |
+|                           | Per-app unix socket, searchd framing, manifest + snapshot                                                                                                                            | D-Bus (zbus), one name per app                                                                                                                   | Apps push documents into searchd over `search-v1.sock`                                           |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| Fits Bingux conventions   | Yes: same directory, framing, permissions, versioning and error style as `search-v1.sock` and `metrics-v1.sock`; same per-app-socket pattern as the single-instance hand-off.        | No other Bingux protocol uses it; adds `zbus` to searchd and a bus-name / XML / activation-file vocabulary the codebase does not otherwise have. | Transport yes, but it changes the closed v1 shell protocol or adds a third kind of client to it. |
+| Discovery of running apps | `readdir` of `$XDG_RUNTIME_DIR/bingux/search/`; a dead socket fails to connect and is skipped.                                                                                       | Free (`ListNames`, `NameOwnerChanged`).                                                                                                          | Not needed: apps connect to searchd.                                                             |
+| Apps that are not running | A manifest (`bingux.search-app`, like the existing provider manifests) names the app and its command; the on-disk snapshot answers search; activation launches the app with the URI. | `.service` activation file; the bus starts the whole Freya app only to answer a search.                                                          | searchd keeps what was pushed; stale until the app next runs.                                    |
+| Live data                 | Yes, the app answers.                                                                                                                                                                | Yes.                                                                                                                                             | Only what was pushed; every change costs a copy.                                                 |
+| Latency                   | One local stream round trip, ≈ 0.05-0.1 ms + search.                                                                                                                                 | ≈ 0.1-0.3 ms.                                                                                                                                    | In-process in searchd, but searchd holds every app's documents in memory.                        |
+| Security                  | 0700 directory, 0600 socket, same user; only `external` data is served.                                                                                                              | Per-user bus; any same-user process can call it; same exposure.                                                                                  | Data leaves the app when pushed; any same-user peer could push into searchd.                     |
+| Tooling                   | `socat - UNIX-CONNECT:...`, `nc -U`                                                                                                                                                  | `busctl`, `d-spy`                                                                                                                                | `socat`                                                                                          |
+| New dependencies          | none                                                                                                                                                                                 | `zbus` in searchd                                                                                                                                | none                                                                                             |
 
 ### 8.4 Decision
 
@@ -344,12 +359,12 @@ Framing is `search-v1`'s: one JSON object per line. The record limit is 1 MiB
 server answers each request with exactly one record carrying the request's
 `id`.
 
-| Request `type` | Fields | Reply |
-| -------------- | ------ | ----- |
-| `hello` | | `{"v":1,"type":"hello","app":"bingux-settings","indexes":[{"name","title","documents","generation","updated"}]}`; **external indexes only** |
-| `search` | `id`, `index`, `body` (an OpenSearch or Meilisearch-shaped object) | `{"v":1,"type":"result","id","generation","response":{...OpenSearch _search...}}` or `{"v":1,"type":"error","id","error":{"type","reason"},"status"}` |
-| `activate` | `id`, `index`, `doc` | `{"v":1,"type":"activated","id"}` once the app's router has the `uri`; `error` if the document is gone |
-| `subscribe` | | `{"v":1,"type":"subscribed"}`, then `{"v":1,"type":"changed","index","generation"}` events, at most one per 250 ms per index |
+| Request `type` | Fields                                                             | Reply                                                                                                                                                 |
+| -------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hello`        |                                                                    | `{"v":1,"type":"hello","app":"bingux-settings","indexes":[{"name","title","documents","generation","updated"}]}`; **external indexes only**           |
+| `search`       | `id`, `index`, `body` (an OpenSearch or Meilisearch-shaped object) | `{"v":1,"type":"result","id","generation","response":{...OpenSearch _search...}}` or `{"v":1,"type":"error","id","error":{"type","reason"},"status"}` |
+| `activate`     | `id`, `index`, `doc`                                               | `{"v":1,"type":"activated","id"}` once the app's router has the `uri`; `error` if the document is gone                                                |
+| `subscribe`    |                                                                    | `{"v":1,"type":"subscribed"}`, then `{"v":1,"type":"changed","index","generation"}` events, at most one per 250 ms per index                          |
 
 Only external indexes and, inside them, external documents are visible; an
 unknown or non-external index answers `index_not_found_exception`, the same as
@@ -406,7 +421,7 @@ built-in source inside `LocalProviders::query`:
   each app (socket, else snapshot) in parallel under a 40 ms deadline, merges by
   `_score × weight` (weight from `search.appWeights`, default 1.0), keeps at
   most 5 per app as local sources do, and maps each hit to a candidate: `title`
-  = `_source.title`, `subtitle` = breadcrumb joined by ` › `, `icon` =
+  = `_source.title`, `subtitle` = breadcrumb joined by `›`, `icon` =
   `_source.icon`, `kind` = `action`, activation = spawn of the app with the
   `uri`;
 - the same code returns the merged OpenSearch JSON (`aggregate()`) for a future
@@ -457,25 +472,25 @@ load average 60 while this ran, so wall times were 1.2-3x larger and their tails
 much larger; CPU time excludes waiting for a core but not cache and SMT
 contention. Rerun on a quiet machine for wall numbers.
 
-| docs | build | est. heap | RSS |
-| ---: | ----: | --------: | --: |
-| 1,000 | 0.03 s | 0 MiB | 0 MiB |
-| 10,000 | 0.23 s | 2 MiB | 3 MiB |
-| 100,000 | 2.92 s | 29 MiB | 37 MiB |
-| 1,000,000 | 55.20 s | 281 MiB | 369 MiB |
+|      docs |   build | est. heap |     RSS |
+| --------: | ------: | --------: | ------: |
+|     1,000 |  0.03 s |     0 MiB |   0 MiB |
+|    10,000 |  0.23 s |     2 MiB |   3 MiB |
+|   100,000 |  2.92 s |    29 MiB |  37 MiB |
+| 1,000,000 | 55.20 s |   281 MiB | 369 MiB |
 
-| query | 1,000 p50 / p99 | 10,000 p50 / p99 | 100,000 p50 / p99 | 1,000,000 p50 / p99 |
-| --- | ---: | ---: | ---: | ---: |
-| single word | 19 µs / 45 µs | 40 µs / 211 µs | 202 µs / 1.9 ms | 547 µs / 15.9 ms |
-| prefix (3 chars) | 17 µs / 41 µs | 42 µs / 197 µs | 325 µs / 2.1 ms | 3.4 ms / 10.0 ms |
-| prefix (1 char) | 30 µs / 79 µs | 206 µs / 469 µs | 1.5 ms / 4.2 ms | 3.2 ms / 24.0 ms |
-| typo (swap) | 19 µs / 44 µs | 60 µs / 184 µs | 719 µs / 2.3 ms | 5.9 ms / 25.9 ms |
-| two words | 33 µs / 109 µs | 150 µs / 687 µs | 1.8 ms / 6.2 ms | 21.1 ms / 93.4 ms |
-| two rare words, typed | 16 µs / 34 µs | 54 µs / 195 µs | 634 µs / 2.2 ms | 7.0 ms / 22.5 ms |
-| three words, typed | 37 µs / 139 µs | 196 µs / 2.3 ms | 1.7 ms / 34.1 ms | 20.5 ms / 114.1 ms |
-| filtered word | 9 µs / 19 µs | 22 µs / 126 µs | 71 µs / 1.7 ms | 487 µs / 30.6 ms |
-| filter only (match all) | 8 µs / 17 µs | 9 µs / 12 µs | 20 µs / 28 µs | 167 µs / 250 µs |
-| single + facet | 21 µs / 68 µs | 54 µs / 215 µs | 342 µs / 2.0 ms | 2.3 ms / 29.5 ms |
+| query                   | 1,000 p50 / p99 | 10,000 p50 / p99 | 100,000 p50 / p99 | 1,000,000 p50 / p99 |
+| ----------------------- | --------------: | ---------------: | ----------------: | ------------------: |
+| single word             |   19 µs / 45 µs |   40 µs / 211 µs |   202 µs / 1.9 ms |    547 µs / 15.9 ms |
+| prefix (3 chars)        |   17 µs / 41 µs |   42 µs / 197 µs |   325 µs / 2.1 ms |    3.4 ms / 10.0 ms |
+| prefix (1 char)         |   30 µs / 79 µs |  206 µs / 469 µs |   1.5 ms / 4.2 ms |    3.2 ms / 24.0 ms |
+| typo (swap)             |   19 µs / 44 µs |   60 µs / 184 µs |   719 µs / 2.3 ms |    5.9 ms / 25.9 ms |
+| two words               |  33 µs / 109 µs |  150 µs / 687 µs |   1.8 ms / 6.2 ms |   21.1 ms / 93.4 ms |
+| two rare words, typed   |   16 µs / 34 µs |   54 µs / 195 µs |   634 µs / 2.2 ms |    7.0 ms / 22.5 ms |
+| three words, typed      |  37 µs / 139 µs |  196 µs / 2.3 ms |  1.7 ms / 34.1 ms |  20.5 ms / 114.1 ms |
+| filtered word           |    9 µs / 19 µs |   22 µs / 126 µs |    71 µs / 1.7 ms |    487 µs / 30.6 ms |
+| filter only (match all) |    8 µs / 17 µs |     9 µs / 12 µs |     20 µs / 28 µs |     167 µs / 250 µs |
+| single + facet          |   21 µs / 68 µs |   54 µs / 215 µs |   342 µs / 2.0 ms |    2.3 ms / 29.5 ms |
 
 Reading it against the goals:
 

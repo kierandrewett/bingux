@@ -17,19 +17,19 @@ validation in `bsm/manager/src/runtime/dbus.rs` and the ACL table in
 
 ## Summary table
 
-| ID  | Severity     | Status      | Where                                             | One line |
-| --- | ------------ | ----------- | ------------------------------------------------- | -------- |
-| F1  | Medium       | CONFIRMED (path), race UNCONFIRMED | greeter.rs:33-56, server.rs:805-814 | Root chown/chmod follows symlinks inside a directory the greeter account already owns |
-| F2  | Medium       | CONFIRMED   | server.rs:307-326, sandbox.rs:159, bsm.service, convert.rs:267 | The image converter runs as the same uid that the helper, D-Bus and polkit trust |
-| F3  | Low-Medium   | CONFIRMED   | auth.rs:103-111, server.rs:476-480                | PAM_USER is never compared with the account the session is opened for |
-| F4  | Low-Medium   | CONFIRMED   | server.rs:201-244, session.rs:366-376, 513-519    | Adoption trusts any socket file in a directory whose mode nobody sets |
-| F5  | Low          | CONFIRMED   | session.rs:156-179                                | Users inherit stdout/stderr (journal stream) and any non-CLOEXEC fd |
-| F6  | Low          | CONFIRMED   | session.rs:461-509, 474-483                       | Session stop is a racy pid sweep; can be outrun; killpg on a reaped pid in dev mode |
-| F7  | Low          | CONFIRMED   | server.rs:485-487, 555-567                        | No throttle, unbounded dying children, fail delay bypassed by supersede |
-| F8  | Low          | CONFIRMED   | data/bsm/pam/bsm-login:26-30                 | include (not substack) lets a sufficient module skip pam_gnome_keyring |
-| F9  | Low          | CONFIRMED   | polkit/50-bsm.rules:112-123                       | bsm uid gets YES on power actions for any process; hostedSession forks loginctl per check |
-| F10 | Low          | CONFIRMED   | publish.rs:251-268, 333-335, sys.rs:69-85         | Converter output only magic-checked; world-readable cache; squatted uid dir is a permanent DoS |
-| F11 | Info         | CONFIRMED   | bsm.service:59-83, D-Bus policy                   | Hardening gaps and information disclosure by design |
+| ID  | Severity   | Status                             | Where                                                          | One line                                                                                       |
+| --- | ---------- | ---------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| F1  | Medium     | CONFIRMED (path), race UNCONFIRMED | greeter.rs:33-56, server.rs:805-814                            | Root chown/chmod follows symlinks inside a directory the greeter account already owns          |
+| F2  | Medium     | CONFIRMED                          | server.rs:307-326, sandbox.rs:159, bsm.service, convert.rs:267 | The image converter runs as the same uid that the helper, D-Bus and polkit trust               |
+| F3  | Low-Medium | CONFIRMED                          | auth.rs:103-111, server.rs:476-480                             | PAM_USER is never compared with the account the session is opened for                          |
+| F4  | Low-Medium | CONFIRMED                          | server.rs:201-244, session.rs:366-376, 513-519                 | Adoption trusts any socket file in a directory whose mode nobody sets                          |
+| F5  | Low        | CONFIRMED                          | session.rs:156-179                                             | Users inherit stdout/stderr (journal stream) and any non-CLOEXEC fd                            |
+| F6  | Low        | CONFIRMED                          | session.rs:461-509, 474-483                                    | Session stop is a racy pid sweep; can be outrun; killpg on a reaped pid in dev mode            |
+| F7  | Low        | CONFIRMED                          | server.rs:485-487, 555-567                                     | No throttle, unbounded dying children, fail delay bypassed by supersede                        |
+| F8  | Low        | CONFIRMED                          | data/bsm/pam/bsm-login:26-30                                   | include (not substack) lets a sufficient module skip pam_gnome_keyring                         |
+| F9  | Low        | CONFIRMED                          | polkit/50-bsm.rules:112-123                                    | bsm uid gets YES on power actions for any process; hostedSession forks loginctl per check      |
+| F10 | Low        | CONFIRMED                          | publish.rs:251-268, 333-335, sys.rs:69-85                      | Converter output only magic-checked; world-readable cache; squatted uid dir is a permanent DoS |
+| F11 | Info       | CONFIRMED                          | bsm.service:59-83, D-Bus policy                                | Hardening gaps and information disclosure by design                                            |
 
 Controls that were checked and held are listed at the end ("Checked, no finding").
 
@@ -70,13 +70,13 @@ run it; hence "race UNCONFIRMED". The unsafe ordering itself is CONFIRMED.
 
 Minimal fix (no new dependencies):
 
-* Create `<gen>` root-owned mode 0700, create `rt` and `home` inside it (still root-owned,
+- Create `<gen>` root-owned mode 0700, create `rt` and `home` inside it (still root-owned,
   inside a directory no one else can enter), chown them with `fchownat(.., AT_SYMLINK_NOFOLLOW)`
   on an `O_DIRECTORY|O_NOFOLLOW` fd, and chown `<gen>` itself last.
-* Before `prepare_dirs`, wait until the old greeter's cgroup (or at least its process
+- Before `prepare_dirs`, wait until the old greeter's cgroup (or at least its process
   group and session) is empty. Better: start the greeter in its own transient scope or
   service so `cgroup.kill` ends everything it ever forked.
-* Keep `remove_dir_all`: the toolchain's version is symlink safe (fixed in Rust 1.58.1);
+- Keep `remove_dir_all`: the toolchain's version is symlink safe (fixed in Rust 1.58.1);
   pin that as a minimum.
 
 ---
@@ -93,7 +93,7 @@ allow list applied before the first decoded byte, `KillProcess` default, descrip
 closed). The weaknesses are about what a kernel or seccomp escape or a bug in an allowed
 syscall would reach, because the converter has bsm's uid:
 
-* Helper socket: `accept_connections` admits any peer with `uid == allowed_uid` and
+- Helper socket: `accept_connections` admits any peer with `uid == allowed_uid` and
   nothing else (server.rs:307-317), and permits exactly one connection
   (server.rs:320-326). A process with uid `bsm` that is not the compositor can connect
   whenever bsm's connection is down (bsm restarting, crashed, or killed by the next
@@ -102,17 +102,17 @@ syscall would reach, because the converter has bsm's uid:
   `AuthStart`, `SpawnGreeter`, `KillGreeter`, `SetLockedHint` and `CloseSession`. It
   cannot mint a ticket without a valid password, so this is denial of service plus
   greeter control, not root.
-* `tgkill` is in the seccomp allow list with no argument condition (sandbox.rs:159).
+- `tgkill` is in the seccomp allow list with no argument condition (sandbox.rs:159).
   `tgkill(tgid, tid, sig)` can address any thread group the uid may signal. A converter
   that has code execution can loop `tgkill(pid, pid, SIGKILL)` over pids and kill bsm,
   which trips `OnFailure=bsm-fallback.service` after three restarts
   (`StartLimitBurst=3`) and swaps the display manager for greetd. Needs prior code
   execution in the sandbox: UNCONFIRMED as an end to end exploit, CONFIRMED as an
   over-wide allow rule.
-* polkit grants `YES` to subject.user === 'bsm' for power-off, reboot and suspend,
+- polkit grants `YES` to subject.user === 'bsm' for power-off, reboot and suspend,
   including the `-multiple-sessions` variants (50-bsm.rules:113-118). Any process of that
   uid, including the converter, can reboot the machine under other users' sessions.
-* `futex` and `madvise` are allowed without argument filters; they are the main
+- `futex` and `madvise` are allowed without argument filters; they are the main
   remaining kernel surface.
 
 Minimal fixes, in order of effort:
@@ -186,12 +186,12 @@ session ids and generations. UNCONFIRMED as an exploit (needs the wrong umask).
 
 Fix:
 
-* Add `d /run/bsm-helper/sessions 0700 root root -` to tmpfiles (and `d /run/bsm-helper
-  0711 root root -`; 0711 suffices for bsm to reach `helper.sock`).
-* In `adopt_running_sessions`, `lstat` each socket (owner 0, mode 0600, not a symlink) and
+- Add `d /run/bsm-helper/sessions 0700 root root -` to tmpfiles (and `d /run/bsm-helper
+0711 root root -`; 0711 suffices for bsm to reach `helper.sock`).
+- In `adopt_running_sessions`, `lstat` each socket (owner 0, mode 0600, not a symlink) and
   read SO_PEERCRED from the connected fd (listener uid must be 0) before trusting the
   greeting.
-* In the supervisor, create the directory with `mkdir` mode 0700 and `fchmod`, not
+- In the supervisor, create the directory with `mkdir` mode 0700 and `fchmod`, not
   `create_dir_all`.
 
 ---
@@ -232,15 +232,15 @@ waits the grace, then loops `list; SIGKILL each; sleep 50 ms` for at most three
 seconds and gives up with "processes survived SIGKILL". Then `run` calls
 `pam_close_session` and `pam_delete_credentials` regardless.
 
-* A user process that forks continuously (a fork loop or a respawning daemon) can stay
+- A user process that forks continuously (a fork loop or a respawning daemon) can stay
   ahead of a sweep that sleeps 50 ms between listings, so the user's processes outlive
   the session close, lock and logout. After the supervisor exits nothing watches the
   scope. For logout of a user who is hostile to the machine this defeats the
   guarantee that "logout ends the session"; it is not a privilege escalation.
-* Signalling pids from a text listing has the usual window in which a pid exits and
+- Signalling pids from a text listing has the usual window in which a pid exits and
   is reused before `kill`. Impact is small because only pids listed from the
   scope a moment earlier are targeted.
-* In the no-scope development configuration (`require_scope = false`) `signal` also
+- In the no-scope development configuration (`require_scope = false`) `signal` also
   calls `kill_group(ch.leader.pid, ..)` and `kill_group(ch.bridge.pid, ..)` after
   `ch.reap()` has marked the leader as exited (session.rs:478-482). A reaped leader's pid
   can be recycled and the supervisor, root, then signals an unrelated process group.
@@ -339,15 +339,15 @@ session without a seat) was not exercised here: UNCONFIRMED; the VM test is the 
 
 Residual issues:
 
-* Any process in a hosted session gets the same grants (that matches an active seat
+- Any process in a hosted session gets the same grants (that matches an active seat
   session), including `login1.reboot-multiple-sessions`: a user can reboot the machine
   while other users are logged in without a password. This is the default of the
   installed `login1.policy` for active sessions, so not an over-grant by this rule.
   `set-wall-message` is implied by `power-off` and `reboot` (login1.policy:176,209),
   so hosted sessions and bsm can also post wall messages.
-* Subject `bsm` gets YES for the power actions regardless of who in that uid asks; see
+- Subject `bsm` gets YES for the power actions regardless of who in that uid asks; see
   F2 for what that means if the uid is compromised.
-* `hostedSession` runs `polkit.spawn(["/usr/bin/loginctl", ...])` on every check. polkit
+- `hostedSession` runs `polkit.spawn(["/usr/bin/loginctl", ...])` on every check. polkit
   evaluates rules on its authority thread; a user generating many authorisation
   requests (any desktop component does) serialises on forks of `loginctl`, and a slow
   logind stalls every polkit decision. No injection: `subject.session` is set by polkit
@@ -355,7 +355,7 @@ Residual issues:
   seconds (`Service` and `Class` cannot change for a session) or by reading
   `/run/systemd/sessions/<id>` with `polkit.spawn` of `/usr/bin/cat` only when the first
   call succeeds.
-* There is no rule for the greeter account, so the greeter's reboot goes through bsm
+- There is no rule for the greeter account, so the greeter's reboot goes through bsm
   (`[greeter_power]` policy in bsm) and then bsm's own YES. A compromised greeter cannot
   reach logind through polkit. Confirmed by reading the rule: no branch names it.
 
@@ -366,7 +366,7 @@ Residual issues:
 Locations: `bsm/appearance/src/publish.rs:251-268`, `318-342`,
 `bsm/appearance/src/sys.rs:68-85`, `data/bsm/share/tmpfiles-active.conf:9`.
 
-* Converter output is trusted after a size and a magic check. `read_back` accepts up
+- Converter output is trusted after a size and a magic check. `read_back` accepts up
   to `MAX_READBACK_BYTES` = 64 MiB (publish.rs:48) whatever the per-kind limit in
   `ConvertLimits` is, and the width and height written to `profile.json` come from the
   converter's own report (publish.rs:672-679). The files are then read by the greeter's
@@ -375,11 +375,11 @@ Locations: `bsm/appearance/src/publish.rs:251-268`, `318-342`,
   trusts. Fix: pass `limits.max_output_bytes` to `read_back`, parse the PNG IHDR or
   JPEG SOF in the parent and require the dimensions to match the report and the
   documented maxima.
-* Files are mode 0644 and directories 0755 (sys.rs:69-85, publish.rs:338), so every local user
+- Files are mode 0644 and directories 0755 (sys.rs:69-85, publish.rs:338), so every local user
   can read every account's avatar, wallpaper and `profile.json`. The design says so
   (greeter cache), and `show_personal_images = false` removes the files; the
   account name to uid mapping is also visible. Informational.
-* `open_user_dir` accepts an existing `<cache>/<uid>` only if it is owned by the
+- `open_user_dir` accepts an existing `<cache>/<uid>` only if it is owned by the
   publisher (publish.rs:333-335). `tmpfiles-active.conf` takes the directory over only at
   `bsm.service` start; before that it is 1777 and persistent on disk. A hostile local
   user who created `<cache>/<victim uid>` (or `<cache>/<victim name>/`) while the
@@ -388,7 +388,7 @@ Locations: `bsm/appearance/src/publish.rs:251-268`, `318-342`,
   owns the parent. Fix: when the entry is not ours and bsm owns the parent, `renameat` it
   to a quarantine name (or `unlinkat` with `AT_REMOVEDIR` after `O_NOFOLLOW` checks)
   and recreate it.
-* Passed-in source fds: the D-Bus layer rejects non-regular, non-read-only and
+- Passed-in source fds: the D-Bus layer rejects non-regular, non-read-only and
   over-16-MiB descriptors (`bsm/manager/src/runtime/dbus.rs:403-427`) and the converter
   repeats `fstat` and the size check (imgconv.rs:118-128,188-195). A regular file on a
   user-mounted FUSE filesystem that never answers blocks the converter until the 30 s
@@ -408,12 +408,12 @@ below configured roots and with trusted owners.
 
 Units.
 
-* `bsm-helper.service` sets no sandboxing on purpose and documents why (inherited by every
+- `bsm-helper.service` sets no sandboxing on purpose and documents why (inherited by every
   desktop). Consequence to keep in mind: it has `PR_SET_DUMPABLE=0` from `main.rs:29`
   but no `LimitCORE`; `dumpable` survives `fork` and `setresuid` and is reset by `execve`
   of the user's program, which is the intended behaviour. No `UMask=` is set; the helper
   inherits the manager default and `spawn_as_user` resets 022 for users.
-* `bsm.service` (lines 59-83) is well hardened. Not set: `ProtectKernelTunables`,
+- `bsm.service` (lines 59-83) is well hardened. Not set: `ProtectKernelTunables`,
   `ProtectProc`/`ProcSubset` (bsm reads `/proc/<pid>/cgroup` of D-Bus callers, so
   `ProtectProc=default` is the right choice), `RestrictNamespaces` (the converter needs
   `user` and `net` for `unshare`; `RestrictNamespaces=user net` would still be an
@@ -421,11 +421,11 @@ Units.
   nodes, `SystemCallFilter` (not profiled, stated in the unit). `NoNewPrivileges=yes` with an
   empty bounding set is consistent with sysusers giving bsm membership of
   `bingux-greeter` for socket group chowns.
-* `bsm-seatd.service` runs seatd as root with `-g bsm`: every member of group `bsm` can take
+- `bsm-seatd.service` runs seatd as root with `-g bsm`: every member of group `bsm` can take
   DRM and input devices. Members are only the bsm account; any process of that uid has
   the same reach (F2). No `CapabilityBoundingSet` is set; seatd needs few capabilities,
   worth trimming after profiling (UNCONFIRMED which are required).
-* `bsm.service:54` runs `systemd-tmpfiles --create` as root from `/usr/share/bsm`
+- `bsm.service:54` runs `systemd-tmpfiles --create` as root from `/usr/share/bsm`
   (root-owned); that is fine.
 
 D-Bus policy (`data/bsm/dbus/org.bingux.Session1.conf:26-34`). Only uid `bsm` may own the
@@ -448,7 +448,7 @@ internal), no `mlock`, so a password can reach swap.
 
 ## Checked, no finding
 
-* Ticket forgery and replay (`ticket.rs`, `server.rs:628-711`). 64-bit values come from
+- Ticket forgery and replay (`ticket.rs`, `server.rs:628-711`). 64-bit values come from
   `getrandom`, zero and collisions are retried, failure to read randomness discards the
   ticket (server.rs:628-643). A ticket is removed on first redemption, whether or not the
   checks pass, and it records uid, user, intent and generation. `open_session` redeems,
@@ -457,7 +457,7 @@ internal), no `mlock`, so a password can reach swap.
   An Unlock ticket has no payload and is refused for sessions
   (server.rs:663-693). The table is capped at 64 and expires. Only the single
   connection (uid `bsm`) can redeem, so cross-uid redemption is not possible.
-* Root to user transition (`sys.rs:408-431`, `session.rs:128-199`). `initgroups`,
+- Root to user transition (`sys.rs:408-431`, `session.rs:128-199`). `initgroups`,
   `setresgid`, `setresuid`, in that order, with a check of real, effective and saved
   ids and an attempt to regain root that must fail; this also clears permitted and
   effective capabilities because the uid becomes non-zero (no `SECBIT_KEEP_CAPS` is
@@ -471,21 +471,21 @@ internal), no `mlock`, so a password can reach swap.
   `user_readenv` is used in the shipped stacks, so nothing user-controlled reaches it.
   Rlimits and umask: limits set by `pam_limits` in the supervisor are inherited; the
   umask is fixed at 022 (the shipped stack has no `pam_umask`).
-* PID reuse in the helper (`server.rs`). Reaping and signalling are on one thread and
+- PID reuse in the helper (`server.rs`). Reaping and signalling are on one thread and
   `child_exited` removes every record of a reaped pid; parked sessions are
   addressed by socket, not by pid; `CloseSession` addresses the supervisor by its
   socket (server.rs:416-423) and matches (session, generation), so the stale-generation
   case is refused.
-* Greeter spawn (`server.rs:789-837`). Socket paths must be lexically inside
+- Greeter spawn (`server.rs:789-837`). Socket paths must be lexically inside
   `socket_root`, absolute, without `..`; the greeter account must exist and not be uid
   0; uid below `min_uid`, root and the service accounts cannot start sessions
   (`account_allowed`, server.rs:441-456). The greeter gets an explicit minimal
   environment (greeter.rs:81-114) and no PAM session. (The directory creation issue is F1.)
-* Helper socket permissions. Unit: `SocketMode=0600`, `SocketUser=bsm`, `ListenSequentialPacket`;
+- Helper socket permissions. Unit: `SocketMode=0600`, `SocketUser=bsm`, `ListenSequentialPacket`;
   helper-created fallback socket is bound under umask 0177 then chmod (sys.rs:48-68).
   Inherited fds are only trusted when `LISTEN_PID` matches, the type is SEQPACKET, and the
   variables are removed afterwards (server.rs:122-145).
-* Unit ordering. `bsm-fallback.service` takes no input; `bsm-set-display-manager` is
+- Unit ordering. `bsm-fallback.service` takes no input; `bsm-set-display-manager` is
   root only, `set -eu`, and writes fixed paths.
 
 ## What was not verified

@@ -23,7 +23,7 @@ area = "build and install checks"
 fate = "fold"
 note = "packaging, install tree, QML plugin and archive checks; no compositor"
 patterns = [
-  "tests/install-dependencies.py", "tests/standalone-install.py", "tests/packaging.py", "tests/shell-archive.py",
+  "tests/install-dependencies.py", "tests/standalone-install.py", "tests/packaging.py", "tests/pkgsmith/*", "tests/shell-archive.py",
   "tests/pack-shell.test.py", "tests/qmldir-complete.py", "tests/quality-tools.py", "tests/rules-check.test.py",
   "tests/rules-tests.json", "tests/app-env.test.py", "tests/bingux-config.test.py", "tests/binguxctl.test.py",
   "tests/os-icons.test.py", "tests/icon-cache*", "tests/bingux-autostart-config.*", "tests/gnoblin-config-loader.py",

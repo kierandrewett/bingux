@@ -14,7 +14,10 @@ ALIAS=/etc/systemd/system/display-manager.service
 BSM_UNIT=/usr/lib/systemd/system/bsm.service
 STATE=/var/lib/bsm/previous-display-manager
 
-die() { echo "bsm-set-display-manager: $*" >&2; exit 1; }
+die() {
+    echo "bsm-set-display-manager: $*" >&2
+    exit 1
+}
 
 alias_target() {
     if [ -L "$ALIAS" ]; then readlink "$ALIAS"; fi
@@ -31,7 +34,7 @@ status() {
     fi
 }
 
-enable() {
+enable_bsm() {
     force="${1:-}"
     [ "$(id -u)" -eq 0 ] || die "run as root"
     [ -e "$BSM_UNIT" ] || die "$BSM_UNIT is missing; install the bsm package"
@@ -101,7 +104,7 @@ disable() {
 
 case "${1:-status}" in
     status) status ;;
-    enable) enable "${2:-}" ;;
+    enable) enable_bsm "${2:-}" ;;
     disable) disable ;;
     *) die "usage: bsm-set-display-manager status|enable [--force]|disable" ;;
 esac
