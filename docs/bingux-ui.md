@@ -2084,7 +2084,7 @@ index by index:
    launch, which only hands its address to the running copy, must not take the
    socket.
 3. Install `<data dir>/bingux/search-apps/<app-id>.json`
-   (`packaging/search-apps/bingux-settings.json`): `{"kind":
+   (`data/search-apps/bingux-settings.json`): `{"kind":
 "bingux.search-app", "id": "bingux-settings", "displayName": "Settings",
 "command": ["/usr/bin/bingux-settings"]}`. Spotlight asks only apps that
    have one, and opens a hit by running `command` with its `uri` (a second

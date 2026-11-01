@@ -292,7 +292,7 @@ D. Spotlight sees only what the app marked `external`; no other process can
 | App single instance and URI hand-off | Unix socket `$XDG_RUNTIME_DIR/<app-id>.sock`; a second launch writes its address as one line and exits; the running copy opens it and raises its window | `crates/ui/src/app.rs` (`socket_path`, `listen`, `start_forwarding`) |
 | Launching an app with a URI | Desktop entries (`Exec=bingux-settings %u`, `MimeType=x-scheme-handler/bingux-settings`) launched through GIO (`shell/bingux/launch-application.py`); searchd already spawns programs for results (`Activation::Spawn`) | `apps/settings/bingux-settings.desktop`, `services/searchd/src/providers.rs` |
 | Compositor test channel, notifications | D-Bus (Gnoblin test client, `org.freedesktop.Notifications`, GIO launch notifications) | `shell/bingux/shell_notify.py`, `docs/portable-testing.md` |
-| systemd | user *services* only (`bingux-searchd.service`, `bingux-statusd.service`); no `.socket` units | `packaging/systemd/` |
+| systemd | user *services* only (`bingux-searchd.service`, `bingux-statusd.service`); no `.socket` units | `data/systemd/` |
 
 No Bingux protocol between its own processes uses D-Bus; it is used where a
 freedesktop service already speaks it. The Bingux convention for its own

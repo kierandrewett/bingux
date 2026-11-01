@@ -1,6 +1,6 @@
-# Security review: bsm-helper, packaging/bsm, bsm-appearance
+# Security review: bsm-helper, data/bsm, bsm-appearance
 
-Scope: `bsm/helper` (root helper), `packaging/bsm` (units, sysusers, tmpfiles,
+Scope: `bsm/helper` (root helper), `data/bsm` (units, sysusers, tmpfiles,
 PAM, polkit, D-Bus policy) and `bsm/appearance` (imgconv sandbox, publisher,
 accounts). Read-only review: no source was edited, no payload was run, no network call
 was made. Status words: CONFIRMED means the code path was read end to end and the
@@ -10,7 +10,7 @@ was not exercised (named in each entry). Nothing below was reproduced dynamicall
 Reviewed on branch feat/bsm. Files read in full: helper `server.rs`, `auth.rs`,
 `ticket.rs`, `session.rs`, `sys.rs`, `env.rs`, `greeter.rs`, `config.rs`, `main.rs`,
 `ipc.rs`, `cgroup.rs`, `logind.rs`, `pam.rs` (FFI and conversation), all of
-`packaging/bsm`, appearance `publish.rs`, `sys.rs`, `sandbox.rs`, `imgconv.rs`,
+`data/bsm`, appearance `publish.rs`, `sys.rs`, `sandbox.rs`, `imgconv.rs`,
 `convert.rs` (spawn side), `record.rs`, `accounts.rs` (file readers), plus the fd
 validation in `bsm/manager/src/runtime/dbus.rs` and the ACL table in
 `bsm/manager/src/core/dbus.rs` because they feed the publisher.
@@ -26,7 +26,7 @@ validation in `bsm/manager/src/runtime/dbus.rs` and the ACL table in
 | F5  | Low          | CONFIRMED   | session.rs:156-179                                | Users inherit stdout/stderr (journal stream) and any non-CLOEXEC fd |
 | F6  | Low          | CONFIRMED   | session.rs:461-509, 474-483                       | Session stop is a racy pid sweep; can be outrun; killpg on a reaped pid in dev mode |
 | F7  | Low          | CONFIRMED   | server.rs:485-487, 555-567                        | No throttle, unbounded dying children, fail delay bypassed by supersede |
-| F8  | Low          | CONFIRMED   | packaging/bsm/pam/bsm-login:26-30                 | include (not substack) lets a sufficient module skip pam_gnome_keyring |
+| F8  | Low          | CONFIRMED   | data/bsm/pam/bsm-login:26-30                 | include (not substack) lets a sufficient module skip pam_gnome_keyring |
 | F9  | Low          | CONFIRMED   | polkit/50-bsm.rules:112-123                       | bsm uid gets YES on power actions for any process; hostedSession forks loginctl per check |
 | F10 | Low          | CONFIRMED   | publish.rs:251-268, 333-335, sys.rs:69-85         | Converter output only magic-checked; world-readable cache; squatted uid dir is a permanent DoS |
 | F11 | Info         | CONFIRMED   | bsm.service:59-83, D-Bus policy                   | Hardening gaps and information disclosure by design |
@@ -85,7 +85,7 @@ Minimal fix (no new dependencies):
 
 Locations: `bsm/appearance/src/convert.rs:267-302` (spawn as the caller's uid,
 inside `bsm.service`'s cgroup), `bsm/appearance/src/sandbox.rs:62-73,141-160`,
-`bsm/helper/src/server.rs:307-326`, `packaging/bsm/polkit/50-bsm.rules:112-118`.
+`bsm/helper/src/server.rs:307-326`, `data/bsm/polkit/50-bsm.rules:112-118`.
 
 Evidence and exploit sketch. The decoder is the largest untrusted-input parser in the
 privileged side. Its sandbox is good (rlimits, empty netns, no_new_privs, seccomp
@@ -163,7 +163,7 @@ session if it changed.
 Locations: `bsm/helper/src/server.rs:201-244` (`adopt_running_sessions`),
 `bsm/helper/src/session.rs:366-376` (`create_dir_all` of the sessions
 directory), `session.rs:513-519` (`connect_adopt`), `session.rs:447-457`
-(`accept_adopter`), `packaging/bsm/systemd/bsm-helper.socket:14`.
+(`accept_adopter`), `data/bsm/systemd/bsm-helper.socket:14`.
 
 Evidence. The supervisor refuses adopters whose uid is not its own euid
 (session.rs:451), which is right. The helper side does not check who it is talking to:
@@ -173,7 +173,7 @@ thing that makes the directory safe is that it is writable by root alone, and no
 sets that. `/run/bsm-helper` is created by the socket unit with `DirectoryMode=0755`
 (root); `sessions` under it is created by the supervisor with `create_dir_all` and
 whatever umask the process had after `pam_open_session` (session.rs:367-369). It is
-absent from `packaging/bsm/tmpfiles/bsm.conf`. With the usual 022 the mode is 0755 and
+absent from `data/bsm/tmpfiles/bsm.conf`. With the usual 022 the mode is 0755 and
 the design holds; with a PAM stack that leaves umask 0 (a stack-dependent surprise) the
 directory is world-writable, any user can bind a socket there, and root then adopts it.
 
@@ -256,7 +256,7 @@ Keep the sweep only as a fallback. Guard the `kill_group` calls with
 ## F7 Low: helper-side authentication has no throttle and a supersede that skips PAM's failure delay
 
 Location: `bsm/helper/src/server.rs:485-487` (supersede loop), `555-567`
-(`abort_auth`), `559` (`Dying`), `packaging/bsm/pam/bsm-login`, `bsm-unlock`.
+(`abort_auth`), `559` (`Dying`), `data/bsm/pam/bsm-login`, `bsm-unlock`.
 
 Evidence. A new `AuthStart` aborts the live conversation, but the old child is only
 killed after 1 s (`Dying { kill_at: +1000 ms }`) and not counted anywhere, so an
@@ -287,8 +287,8 @@ the stack must carry `pam_faillock` and check for it in `bsm-set-display-manager
 
 ## F8 Low: PAM `include` lets a `sufficient` module skip `pam_gnome_keyring` (keyring and fingerprint)
 
-Location: `packaging/bsm/pam/bsm-login:26-27` (and the account and session includes at
-29, 33), `packaging/bsm/pam/bsm-unlock`.
+Location: `data/bsm/pam/bsm-login:26-27` (and the account and session includes at
+29, 33), `data/bsm/pam/bsm-unlock`.
 
 Evidence. `include` splices the lines of `system-auth` into the calling stack. A
 `sufficient` success inside the included lines ends the whole `auth` stack, so the line
@@ -324,7 +324,7 @@ refuses `pam_confdir` unless it is root-owned and not group or world writable
 
 ## F9 Low: polkit rule scope
 
-Location: `packaging/bsm/polkit/50-bsm.rules:112-123` (rule), `97-110` (`hostedSession`).
+Location: `data/bsm/polkit/50-bsm.rules:112-123` (rule), `97-110` (`hostedSession`).
 
 Verified against the installed action files (this host): every action in
 `HOSTED_ACTIONS` has `allow_active` set to `yes` (login1 power-off, reboot, suspend
@@ -364,7 +364,7 @@ Residual issues:
 ## F10 Low: appearance cache
 
 Locations: `bsm/appearance/src/publish.rs:251-268`, `318-342`,
-`bsm/appearance/src/sys.rs:68-85`, `packaging/bsm/share/tmpfiles-active.conf:9`.
+`bsm/appearance/src/sys.rs:68-85`, `data/bsm/share/tmpfiles-active.conf:9`.
 
 * Converter output is trusted after a size and a magic check. `read_back` accepts up
   to `MAX_READBACK_BYTES` = 64 MiB (publish.rs:48) whatever the per-kind limit in
@@ -428,7 +428,7 @@ Units.
 * `bsm.service:54` runs `systemd-tmpfiles --create` as root from `/usr/share/bsm`
   (root-owned); that is fine.
 
-D-Bus policy (`packaging/bsm/dbus/org.bingux.Session1.conf:26-34`). Only uid `bsm` may own the
+D-Bus policy (`data/bsm/dbus/org.bingux.Session1.conf:26-34`). Only uid `bsm` may own the
 name; every account may send to it, so access control rests entirely on bsm's
 per-method checks (core/dbus.rs:9-18, 37-53). That table was read and is consistent with
 the policy. Read-only methods (`GetUsers`, `GetSessions`, `GetStatus`) disclose the

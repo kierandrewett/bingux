@@ -13,7 +13,7 @@ impl Conversation for Silent {
 }
 
 fn shipped(name: &str) -> String {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../packaging/bsm/pam").join(name);
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/bsm/pam").join(name);
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 

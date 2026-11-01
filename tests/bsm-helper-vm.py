@@ -5,7 +5,7 @@ usage: tests/bsm-helper-vm.py [--iso ISO] [--out DIR] [--skip-build] [--keep-wor
 
 Builds bsm-helper and its probe client on the host (release, private target
 directory), stages them with the PAM services, the units and the sysusers file
-from packaging/bsm into a directory, boots the live ISO with that directory
+from data/bsm into a directory, boots the live ISO with that directory
 shared over virtio-9p, installs it in the guest and runs the root-only checks.
 The plain image is booted (no `bingux.bsm`), so greetd keeps the display and
 nothing here depends on the compositor or on hosted Gnoblin.
@@ -82,11 +82,11 @@ def stage():
     files = {
         TARGET / "release/bsm-helper": "root/usr/libexec/bsm/bsm-helper",
         TARGET / "release/examples/bsm-helper-probe": "root/usr/libexec/bsm/bsm-helper-probe",
-        ROOT / "packaging/bsm/pam/bsm-login": "root/etc/pam.d/bsm-login",
-        ROOT / "packaging/bsm/pam/bsm-unlock": "root/etc/pam.d/bsm-unlock",
-        ROOT / "packaging/bsm/systemd/bsm-helper.socket": "root/usr/lib/systemd/system/bsm-helper.socket",
-        ROOT / "packaging/bsm/systemd/bsm-helper.service": "root/usr/lib/systemd/system/bsm-helper.service",
-        ROOT / "packaging/bsm/sysusers/bsm.conf": "root/usr/lib/sysusers.d/bsm.conf",
+        ROOT / "data/bsm/pam/bsm-login": "root/etc/pam.d/bsm-login",
+        ROOT / "data/bsm/pam/bsm-unlock": "root/etc/pam.d/bsm-unlock",
+        ROOT / "data/bsm/systemd/bsm-helper.socket": "root/usr/lib/systemd/system/bsm-helper.socket",
+        ROOT / "data/bsm/systemd/bsm-helper.service": "root/usr/lib/systemd/system/bsm-helper.service",
+        ROOT / "data/bsm/sysusers/bsm.conf": "root/usr/lib/sysusers.d/bsm.conf",
         ROOT / "tests/bsm-helper-root.sh": "bsm-helper-root.sh",
     }
     for source, destination in files.items():

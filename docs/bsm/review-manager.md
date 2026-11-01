@@ -134,7 +134,7 @@ conversations that never received an answer.
 
 ## F4 Medium: polkit grants multi-session power to every hosted user; greeter power is not session-aware
 
-**Where.** `packaging/bsm/polkit/50-bsm.rules:44-51` and `119-121`,
+**Where.** `data/bsm/polkit/50-bsm.rules:44-51` and `119-121`,
 `core/power.rs:39-53` (`action_id`), `core/auth.rs:115-123`,
 `bsm/core/src/config.rs:74-78` (`greeter_power` defaults all true).
 
@@ -164,7 +164,7 @@ from the session-aware guard at `auth.rs:115`.
 
 ## F5 Medium (unconfirmed): polkit refuses `CheckAuthorization` for another uid's subject
 
-**Where.** `runtime/system.rs:293-309`, `packaging/bsm/polkit/50-bsm.rules:112-118`.
+**Where.** `runtime/system.rs:293-309`, `data/bsm/polkit/50-bsm.rules:112-118`.
 
 **What.** `polkit_check` is called by the `bsm` account for the caller's bus name. polkitd
 (from memory of its source; **not verified here**) refuses `CheckAuthorization`
@@ -211,7 +211,7 @@ disconnected (the `bsm_session_host_v1` objects are the only requests it can mak
 
 **Where.** `runtime/driver.rs:33,53-55` (one `sync_channel(1024)` for all sources),
 `runtime/dbus.rs:536-548` (a full queue is polled every 5 ms for up to 5 s per call),
-`packaging/bsm/dbus/org.bingux.Session1.conf:30-34`.
+`data/bsm/dbus/org.bingux.Session1.conf:30-34`.
 
 **What.** Any local account may call every method (the bus policy allows it; bsm
 decides). Calls are cheap to make and each waits in a task that wakes every 5 ms
@@ -273,7 +273,7 @@ is gone, so no orphan survives.
 
 **Where.** `core/dbus.rs:78-100` (every `Get*` for every principal),
 `runtime/dbus.rs:930-990` (signals sent to the bus without a destination),
-`packaging/bsm/dbus/org.bingux.Session1.conf:32-33` (`receive_sender` allowed for everyone).
+`data/bsm/dbus/org.bingux.Session1.conf:32-33` (`receive_sender` allowed for everyone).
 
 **What.** Any local account, including service accounts such as `nobody`, can learn
 which users are signed in, which sessions are locked, who is foreground and launch-failure

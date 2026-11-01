@@ -11,9 +11,9 @@
 #   sh tests/bsm-helper-root.sh
 #
 # Preconditions: bsm-helper, bsm-helper-probe, the PAM services bsm-login and
-# bsm-unlock (packaging/bsm/pam), the units bsm-helper.socket and
-# bsm-helper.service (packaging/bsm/systemd) and the sysusers file
-# (packaging/bsm/sysusers) are installed. tests/bsm-helper-vm.py boots the
+# bsm-unlock (data/bsm/pam), the units bsm-helper.socket and
+# bsm-helper.service (data/bsm/systemd) and the sysusers file
+# (data/bsm/sysusers) are installed. tests/bsm-helper-vm.py boots the
 # image, stages exactly that and runs this script.
 #
 # It creates the accounts bsmt1 and bsmt2 (password "bsm-test-pw"), rewrites

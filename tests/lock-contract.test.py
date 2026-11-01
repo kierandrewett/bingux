@@ -76,9 +76,9 @@ class LockContractTest(unittest.TestCase):
         self.assertIn("not installed, enabled", docs)
 
     def test_pam_and_unit_are_packaged_but_not_enabled(self):
-        pam = (ROOT / "packaging/pam/bingux-lock").read_text()
-        unit = (ROOT / "packaging/systemd/bingux-lock.service").read_text()
-        target = (ROOT / "packaging/systemd/bingux.target").read_text()
+        pam = (ROOT / "data/pam/bingux-lock").read_text()
+        unit = (ROOT / "data/systemd/bingux-lock.service").read_text()
+        target = (ROOT / "data/systemd/bingux.target").read_text()
         self.assertIn("auth include system-auth", pam)
         self.assertIn("ExecStart=/usr/bin/bingux-lock", unit)
         self.assertNotIn("[Install]", unit)

@@ -233,7 +233,7 @@ def stage(arguments):
     run_package(out, private)
     image = out / "image"
     shutil.rmtree(image, ignore_errors=True)
-    shutil.copytree(ROOT / "packaging/bsm/image", image, symlinks=True)
+    shutil.copytree(ROOT / "data/bsm/image", image, symlinks=True)
     if arguments.probe:
         # The root checks of tests/bsm-helper-root.sh drive this example binary in the guest.
         command = [CARGO, "build", "--release", "-j4", "--examples", "--manifest-path", str(ROOT / "bsm/helper/Cargo.toml")]

@@ -6,7 +6,7 @@ presentability, transition validation, greeter crash cover), read against spec
 section 3 and the invariants in `docs/bsm/architecture.md`. Adjacent code was read
 where it decides an outcome: `bsm/core/src/run.rs` (watchdog, event channel),
 `bsm/manager/src/runtime/driver.rs` (event forwarder),
-`packaging/bsm/*`, and the vendored dependencies `smithay 0.7.0`,
+`data/bsm/*`, and the vendored dependencies `smithay 0.7.0`,
 `wayland-backend 0.3.17`, `rustix 1.1.5` from `~/.cargo/registry`.
 
 Method and honesty statement. This is a read-only review of source. Nothing was
@@ -190,7 +190,7 @@ hosted session. A bridge is a user-privileged process, so a compromised user
 session that controls it (or a bug in `bsm-host`) takes the seat down for every
 user.
 
-Watchdog. `bsm.service` has `WatchdogSec=30` (`packaging/bsm/systemd/bsm.service:37`)
+Watchdog. `bsm.service` has `WatchdogSec=30` (`data/bsm/systemd/bsm.service:37`)
 and the docs imply a hung compositor is restarted. But `WATCHDOG=1` is sent by the
 `bsm-notify` thread (`bsm/core/src/run.rs:311-333`) whose loop condition is
 `alive && !handle.is_finished()`. Both refer to the manager driver, not to the
@@ -495,7 +495,7 @@ caught. Without a pidfd see F8.
 (`broker.rs:67-69`); there is no window with a wider mode. The greeter socket goes
 `0660` then `chown` to the greeter group (`broker.rs:68-73`), which fails closed if
 the group lookup fails (`run.rs:359`). `/run/bsm/sessions` is `0711`
-(`packaging/bsm/tmpfiles/bsm.conf:10`): session sockets are `0666` but cannot be
+(`data/bsm/tmpfiles/bsm.conf:10`): session sockets are `0666` but cannot be
 listed. The stale-socket removal (`broker.rs:60-66`) runs inside a directory only
 `bsm` can write.
 

@@ -53,7 +53,7 @@ Gnoblin's own logs stay in `~/.local/state/gnoblin/session-last.log` and
 
 ## Load at the start
 
-- `packaging/systemd/bingux.target` has `DefaultDependencies=no`, so the start of
+- `data/systemd/bingux.target` has `DefaultDependencies=no`, so the start of
   `gnoblin-session.target` does not wait for the helper units. It waited for the
   wallpaper export (about 4 s of CPU): 6.5 s on four busy CPUs, 14 to 22 s in the E2E
   boots; now 0.4 s.

@@ -363,7 +363,7 @@ on both Fedora and Arch.
 
 ## PAM files
 
-`packaging/bsm/pam/bsm-login` and `bsm-unlock` stack like the distribution's
+`data/bsm/pam/bsm-login` and `bsm-unlock` stack like the distribution's
 login: `auth include system-auth` (so `pam_faillock` lockout, `pam_unix` and
 `pam_fprintd` are the machine's own policy and bsm invents none), `account`
 with `pam_nologin`, and for `bsm-login` the session modules (`pam_keyinit`,
@@ -399,7 +399,7 @@ only of it returns `PAM_PERM_DENIED` from `pam_setcred`; the test stack ends
 Running the root checks by hand in the image: copy `bsm-helper`,
 `bsm-helper-probe` (`cargo build --release --examples`) to
 `/usr/libexec/bsm/`, install the PAM files, units and sysusers file from
-`packaging/bsm`, then as root `sh tests/bsm-helper-root.sh`. The script creates
+`data/bsm`, then as root `sh tests/bsm-helper-root.sh`. The script creates
 the accounts `bsmt1` and `bsmt2`, rewrites `/etc/bsm/helper.toml` (restoring it
 afterwards) and prints `PASS`, `FAIL` and `INFO` lines. `tests/bsm-helper-vm.py`
 does all of that in QEMU.
