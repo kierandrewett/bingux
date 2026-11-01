@@ -23,8 +23,8 @@ case "$distro" in
             libxkbcommon-devel make mesa-libEGL-devel mesa-libGL-devel mesa-libgbm-devel ninja-build \
             pam-devel pipewire-devel pkgconf-pkg-config poppler-glib-devel polkit-devel \
             pulseaudio-libs-devel python3 qt6-qtbase-devel qt6-qtbase-private-devel \
-            qt6-qtdeclarative-devel qt6-qtdeclarative-private-devel qt6-qtshadertools-devel \
-            qt6-qtsvg-devel qt6-qttools-devel qt6-qtwayland-devel qt6-qtwayland-private-devel rust \
+            qt6-qtdeclarative-devel qt6-qtshadertools-devel \
+            qt6-qtsvg-devel qt6-qttools-devel qt6-qtwayland-devel rust \
             spirv-tools systemd-devel util-linux wayland-devel wayland-protocols-devel wl-clipboard \
             cairo-devel fontconfig-devel freetype-devel xdg-utils binutils tar xz
         dnf clean all
