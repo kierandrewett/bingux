@@ -64,6 +64,11 @@ jobs:
   nightly:
     needs: check
     if: needs.check.outputs.needs_build == 'true'
+    # packages.yml has a release job that asks for contents: write. GitHub checks that before the run starts, even
+    # though a nightly never runs that job (it needs a v* tag), and a caller that grants less fails with
+    # startup_failure. So the caller grants it.
+    permissions:
+      contents: write
     uses: ./.github/workflows/packages.yml
     with:
       nightly: true
