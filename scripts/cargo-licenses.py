@@ -45,10 +45,6 @@ PROGRAMS = {
     "bingux-session": "bingux-session",
     "bingux-helper": "bingux-helper",
     "xdg-desktop-portal-bingux": "bingux-portal",
-    "bsm": "bsm",
-    "bsm-helper": "bsm-helper",
-    "bsm-host": "bsm-host",
-    "bsm-imgconv": "bsm-appearance",
 }
 
 
@@ -68,10 +64,6 @@ PACKAGE_OF = {
     "bingux-session": "bingux",
     "bingux-helper": "bingux",
     "xdg-desktop-portal-bingux": "bingux",
-    "bsm": "bingux",
-    "bsm-helper": "bingux",
-    "bsm-host": "bingux",
-    "bsm-imgconv": "bingux",
 }
 OWN = ["GPL-3.0-or-later"]
 EXTRA = {"bingux": ["LGPL-3.0-or-later"]}

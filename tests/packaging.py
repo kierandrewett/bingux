@@ -40,7 +40,7 @@ APPLICATIONS = {
     "bingux-files": ("apps/files", "dev.drewett.bingux.Files"),
     "bingux-taxonomy": ("apps/taxonomy", "dev.drewett.bingux.Taxonomy"),
 }
-# The packages `bingux` replaces: the split of 0.1.0 and the bsm package of the image.
+# The packages `bingux` replaces: the split of 0.1.0.
 OLD_NAMES = ("bingux-config", "bingux-audio-effects", "bingux-preview-host")
 MAN_PAGES = ("bingux-settings", "bingux-files", "bingux-taxonomy", "bingux-config", "bingux-effects")
 
@@ -71,10 +71,21 @@ class UnitFilesTest(unittest.TestCase):
         self.assertEqual([line for line in lines if line.startswith("enable ")], ["enable bingux.target"])
 
     def test_bsm_units_enable_nothing(self):
-        # Installing the package must not change how a machine logs in (docs/bsm/packaging.md).
+        # Bingux OS only, but an administrator who installs bsm must not lose their login manager (docs/bsm/packaging.md).
         for path in sorted((ROOT / "data/bsm/systemd").glob("bsm*.service")):
             code = [line for line in path.read_text().splitlines() if not line.startswith("#")]
             self.assertNotIn("Alias=display-manager.service", code, path.name)
+
+    def test_the_helper_target_wants_no_login_screen_unit(self):
+        # The wallpaper units of the login screen belong to the Bingux OS image; its drop-in adds them.
+        target = (ROOT / "data/systemd/bingux.target").read_text()
+        wants = next(line for line in target.splitlines() if line.startswith("Wants="))
+        self.assertNotIn("greeter", wants)
+        self.assertNotIn("bsm", wants)
+        self.assertFalse(list((ROOT / "data/systemd").glob("*greeter*")))
+        self.assertFalse(list((ROOT / "data/systemd").glob("*bsm*")))
+        dropin = (ROOT / "data/os/systemd/bingux.target.d/10-bingux-os.conf").read_text()
+        self.assertIn("bingux-greeter-export.service", dropin)
 
 
 class DesktopFilesTest(unittest.TestCase):
@@ -159,7 +170,12 @@ class ScriptsTest(unittest.TestCase):
     def test_the_core_package_replaces_what_it_absorbed(self):
         for name in OLD_NAMES:
             self.assertIn(f'"{name}"', self.bingux)
-        self.assertIn('OLD_NAMES + (["bsm"] if fmt == "archlinux" else [])', self.bingux)
+
+    def test_the_core_package_holds_nothing_of_bingux_os(self):
+        # bsm, the login screen, greetd and the boot splash are in the image of distro/, not in the package.
+        text = re.sub(r"(?m)^#.*$", "", self.bingux)
+        for word in ("bsm", "greetd", "greeter", "plymouth", "seatd", "libseat"):
+            self.assertNotIn(word, text.lower(), word)
 
     def test_every_format_of_a_distribution_is_written_and_no_apk(self):
         self.assertIn('FORMATS = ["rpm", "deb", "archlinux", "tar"]', self.common)
@@ -196,16 +212,13 @@ def fake_prefix(root):
         "usr/bin/bingux-config",
         "usr/bin/bingux-effects",
         "usr/bin/bingux-preview-host",
-        "usr/bin/bsm",
         "usr/lib/systemd/user/bingux.target",
         "usr/lib/systemd/user/bingux-effects@.service",
-        "usr/lib/systemd/system/bsm.service",
         "usr/share/bingux/search.json",
         "usr/share/man/man1/bingux-config.1.gz",
         "usr/share/doc/bingux/README.md",
         "usr/share/licenses/bingux/COPYING",
         "etc/pam.d/bingux-lock",
-        "etc/bsm/bsm.toml",
     ]
     for name, (_, component) in APPLICATIONS.items():
         paths += [
@@ -291,9 +304,14 @@ class PkgsmithTest(unittest.TestCase):
         self.assertEqual(owners["/usr/bin/bingux-config"], "bingux")
         self.assertEqual(owners["/usr/bin/bingux-effects"], "bingux")
         self.assertEqual(owners["/usr/bin/bingux-preview-host"], "bingux")
-        self.assertEqual(owners["/usr/bin/bsm"], "bingux")
-        self.assertEqual(owners["/usr/lib/systemd/system/bsm.service"], "bingux")
+        self.assertEqual(owners["/usr/lib/systemd/user/bingux.target"], "bingux")
+        self.assertEqual(owners["/etc/pam.d/bingux-lock"], "bingux")
         self.assertEqual(owners["/usr/share/bingux/search-apps/bingux-settings.json"], "bingux-settings")
+
+    def test_the_core_package_lists_no_file_of_bingux_os(self):
+        listing = self.pkgsmith("files", "bingux", "-F", "rpm,deb,archlinux")
+        for word in ("bsm", "greetd", "greeter", "plymouth", "seatd"):
+            self.assertNotIn(word, listing.lower(), word)
 
     def build(self, script, version, formats):
         output = Path(self.temp.name) / f"out-{script}-{version}"
@@ -384,7 +402,7 @@ class PkgsmithTest(unittest.TestCase):
             for key in ("replaces", "conflict", "provides"):
                 self.assertEqual(
                     sorted(line.split(" = ")[1] for line in info if line.startswith(key + " = ")),
-                    sorted((*OLD_NAMES, "bsm")),
+                    sorted(OLD_NAMES),
                     key,
                 )
 

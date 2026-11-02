@@ -12,8 +12,9 @@
 #   2. Make `gnoblin` and `xdg-desktop-portal-gnoblin` available: stand-ins by default, or the packages
 #      of repo.gnoblin.org with GNOBLIN_SOURCE=repository.
 #   3. Install bingux and the applications. The old packages must be gone afterwards.
-#   4. Check that every program finds its shared libraries, that the files are as packaged, that the
-#      scriptlets created the accounts, and that the recommended names exist in the distribution.
+#   4. Check that every program finds its shared libraries, that the files are as packaged, that
+#      the install changed nothing about how the machine logs in, and that the recommended names
+#      exist in the distribution.
 #   5. Remove the packages and check that nothing of them is left.
 #
 # Environment: PKGSMITH (the program that writes the stand-ins), VERSION, ARCH (amd64 or arm64),
@@ -134,7 +135,7 @@ case "$family" in
         log "installing ${#files[@]} packages"
         # --ask 4 answers yes to the question that removes the packages the new one conflicts with.
         pacman -U --noconfirm --ask 4 "${files[@]}"
-        for old in $OLD bsm; do
+        for old in $OLD; do
             # pacman -Q also finds a package by what it provides, so compare the name it prints.
             ! pacman -Q "$old" 2>/dev/null | grep -q "^$old " || fail "$old is still installed after the upgrade"
         done
@@ -159,19 +160,22 @@ log "programs"
 # Each program starts far enough to print its usage (the exit status of a usage message differs by
 # program); the shell prints its version without a display.
 QT_QPA_PLATFORM=offscreen bingux-shell --version
-for program in bingux-config bsm bsmctl bingux-effects bingux-helper bingux-session bingux-searchd; do
+for program in bingux-config bingux-effects bingux-helper bingux-session bingux-searchd; do
     output="$("$program" --help 2>&1 || true)"
     [ -n "$output" ] || fail "$program printed nothing"
     ! grep -q 'error while loading shared libraries' <<<"$output" || fail "$program: $output"
 done
-test -x /usr/bin/bsm && test -x /usr/libexec/bsm/bsm-helper
-test -f /usr/lib/systemd/user/bingux.target && test -f /usr/lib/systemd/system/bsm.service
+test -f /usr/lib/systemd/user/bingux.target
 test -f /usr/lib/systemd/user-preset/90-bingux.preset
-# The scriptlets create the accounts of bsm and the directories bsm and the greeter use.
-getent passwd bsm >/dev/null || fail "the account bsm was not created"
-getent passwd bingux-greeter >/dev/null || fail "the account bingux-greeter was not created"
-test -d /var/lib/bsm
-# Installing must not change how the machine logs in.
+test -f /usr/share/gnoblin/conf.d/bingux.lua
+# Nothing of Bingux OS is in the packages: no session manager, login screen, greetd or boot splash files.
+for path in /usr/bin/bsm /usr/bin/bingux-greeter /usr/bin/bingux-greeter-session /usr/lib/systemd/system/bsm.service \
+    /usr/share/bingux/greeter /etc/bsm /etc/pam.d/bsm-login /usr/lib/sysusers.d/bsm.conf; do
+    test ! -e "$path" || fail "$path is in the packages; it belongs to Bingux OS"
+done
+# Installing must not create accounts or change how the machine logs in.
+getent passwd bsm >/dev/null && fail "installing bingux created the account bsm"
+getent passwd bingux-greeter >/dev/null && fail "installing bingux created the account bingux-greeter"
 test ! -e /etc/systemd/system/display-manager.service || fail "installing bingux changed the display manager"
 # The shell's runtime files name no build path.
 ! grep -rIl -e '/home/' -e '/__w/' -e '/build/' /usr/bin/bingux* /usr/libexec/bingux /usr/lib*/systemd/user/bingux* 2>/dev/null | grep -q . || fail "an installed file names a build path"
@@ -185,7 +189,7 @@ case "$family" in
     deb) apt-get remove -y -qq $ALL ;;
     archlinux) pacman -R --noconfirm $ALL ;;
 esac
-for path in /usr/bin/bingux-shell /usr/bin/bingux-settings /usr/bin/bsm /usr/lib/systemd/user/bingux.target; do
+for path in /usr/bin/bingux-shell /usr/bin/bingux-settings /usr/lib/systemd/user/bingux.target; do
     test ! -e "$path" || fail "$path is left after the removal"
 done
 log "ok"

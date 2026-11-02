@@ -3,8 +3,8 @@
 #
 #   KIND=gnoblin   gnoblin and xdg-desktop-portal-gnoblin: the compositor and portal that `bingux` depends on.
 #                  They are published from repo.gnoblin.org by Gnoblin's own CI.
-#   KIND=legacy    the packages that `bingux` replaces (bingux-config, bingux-audio-effects, bingux-preview-host,
-#                  and bsm on Arch): installing them first proves that the upgrade removes them.
+#   KIND=legacy    the packages that `bingux` replaces (bingux-config, bingux-audio-effects, bingux-preview-host):
+#                  installing them first proves that the upgrade removes them.
 #
 #   pkgsmith build -f tests/pkgsmith/stubs.star --prefix tests/pkgsmith --build-arg KIND=gnoblin -F rpm
 
@@ -14,14 +14,11 @@ ARCH = arg("ARCH", host()["arch"])
 
 NAMES = {
     "gnoblin": ["gnoblin", "xdg-desktop-portal-gnoblin"],
-    "legacy": ["bingux-config", "bingux-audio-effects", "bingux-preview-host", "bsm"],
+    "legacy": ["bingux-config", "bingux-audio-effects", "bingux-preview-host"],
 }[KIND]
 
 for name in NAMES:
     for fmt in ["rpm", "deb", "archlinux"]:
-        # bsm was a package of the Arch image only.
-        if name == "bsm" and fmt != "archlinux":
-            continue
         reset()
         expose(file(here() + "/stub.txt", "/usr/share/bingux-stubs/" + name))
         package(

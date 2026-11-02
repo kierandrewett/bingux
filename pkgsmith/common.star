@@ -22,9 +22,8 @@ DISTRO = arg("DISTRO", host()["distro"])
 RELEASE = "1"
 
 # The formats of every script, in the order they are written. There is no apk: Bingux needs systemd
-# and logind (bingux.target, the user units, bsm.service and its sysusers and tmpfiles files), which
-# Alpine does not ship, and the prefix links glibc and the Qt of the distribution. docs/packaging.md
-# says what an apk would need.
+# and logind (bingux.target and the user units), which Alpine does not ship, and the prefix links
+# glibc and the Qt of the distribution. docs/packaging.md says what an apk would need.
 FORMATS = ["rpm", "deb", "archlinux", "tar"]
 
 # The licence expression of each package: the project's GPL, the licences of the crates linked into

@@ -60,8 +60,8 @@ export LDFLAGS="${LDFLAGS:--pie -Wl,-z,relro,-z,now}"
 make_args=(BUILD_DIR="$BUILD_DIR" CARGO_TARGET="$CARGO_TARGET" JOBS="$JOBS" LIBDIR_NAME="$LIBDIR_NAME" VERSION="$base_version")
 
 if [ "${SKIP_BUILD:-0}" != 1 ]; then
-    log "building everything with $JOBS jobs (shell, native plugins, daemons, apps, bsm)"
-    make "${make_args[@]}" all bsm
+    log "building everything with $JOBS jobs (shell, native plugins, daemons, apps)"
+    make "${make_args[@]}" all
 fi
 
 log "installing into $PREFIX_DIR"
@@ -72,7 +72,6 @@ mkdir -p "$PREFIX_DIR"
 # toolchain or home folder of the build machine.
 system_path=/usr/sbin:/usr/bin:/sbin:/bin
 PATH="$system_path" make "${make_args[@]}" install PREFIX=/usr DESTDIR="$PREFIX_DIR" QMLDIR="/usr/$LIBDIR_NAME/bingux/qml"
-PATH="$system_path" make "${make_args[@]}" install-bsm PREFIX=/usr DESTDIR="$PREFIX_DIR"
 
 # The scripts name /usr/bin/env; every target system has /usr/bin/python3, and packaging policies
 # of Fedora and Debian want the interpreter itself.

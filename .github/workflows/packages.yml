@@ -10,7 +10,7 @@ name: Packages
 #
 # The path of every package is the same:
 #
-#   1. scripts/build-prefix.sh builds ALL of Bingux (the shell, the daemons, bsm and the apps) into a prefix, a folder laid out
+#   1. scripts/build-prefix.sh builds ALL of Bingux (the shell, the daemons and the apps) into a prefix, a folder laid out
 #      like the installed system. It runs in a container of the distribution the packages are for, because the shell links
 #      Qt's private API and the Rust programs link that distribution's C library.
 #   2. scripts/build-packages.sh runs pkgsmith (pkgsmith/bingux.star and pkgsmith/apps.star) on the prefix. pkgsmith builds
@@ -42,7 +42,6 @@ on:
       - "scripts/install-build-deps.sh"
       - "scripts/install-pkgsmith.sh"
       - "scripts/install-shell.py"
-      - "scripts/install-bsm.sh"
       - "scripts/cargo-licenses.py"
       - "scripts/check-package-libs.sh"
       - "scripts/verify-packages.sh"

@@ -1,8 +1,13 @@
-# The `bingux` package: the whole desktop. It holds the shell and every core service the desktop does not
-# work without: the session and greeter programs, the search and status daemons, the privileged helper, the
+# The `bingux` package: the whole desktop, for an ordinary Fedora, Debian or Arch system that logs in through
+# GDM or another display manager that is already there. It holds the shell and every core service the desktop
+# does not work without: the session and lock programs, the search and status daemons, the privileged helper, the
 # portal backend, the sound effects engine, the preview helper that Files runs, the configuration command, the
-# Quickshell-based shell with its QML plugins, bsm (the Bingux Session Manager) and the system integration around
-# them (systemd units and presets, greetd, PAM, polkit, D-Bus, sysusers and tmpfiles files).
+# Quickshell-based shell with its QML plugins and the system integration around them (systemd units and presets,
+# the PAM service of the lock screen, and the Gnoblin drop-in that starts the shell).
+#
+# It holds nothing of Bingux OS: bsm, the login screen, greetd and the boot splash belong to the image built in
+# distro/, which has its own packages (distro/README.md). scripts/install-shell.py leaves those files out unless it
+# is run with --os-image, so they are never in the prefix this script reads.
 #
 # Settings, Files and Taxonomy are applications and have their own package (apps.star). They depend on this one.
 #
@@ -15,17 +20,16 @@
 
 load("common.star", "APP_FILES", "FORMATS", "QT_MINOR", "SYSTEMD_RUNNING", "identity", "own_dirs", "qt_pin")
 
-DESCRIPTION = """The Bingux desktop: shell, session services and session manager
+DESCRIPTION = """The Bingux desktop: shell and session services
 Bingux is a Wayland desktop. It provides a top bar, dock, search, notifications, media controls and an optional
 sidebar for the Gnoblin compositor, and the services behind them: the search and status daemons, the portal backend,
-the lock screen and login greeter, the privileged helper, the configuration command, the sound effects engine and the
-preview helper that Files runs. It also holds bsm, the Bingux Session Manager, which installs disabled; an
-administrator turns it on with bsm-set-display-manager.
+the lock screen, the privileged helper, the configuration command, the sound effects engine and the preview helper
+that Files runs. Choose the Gnoblin session in your login screen to start it.
 
 Settings, Files and Taxonomy are separate packages."""
 
 # The packages that this one replaces. Until 0.1.0 the desktop was split into these packages; installing
-# `bingux` upgrades them. `bsm` was a separate package of the Bingux OS image.
+# `bingux` upgrades them.
 OLD_NAMES = ["bingux-config", "bingux-audio-effects", "bingux-preview-host"]
 
 DEPENDS = {
@@ -38,9 +42,6 @@ DEPENDS = {
         "dbus",
         "polkit",
         "pam",
-        # bsm: seat management and the boot splash it hands the display over from.
-        "seatd",
-        "plymouth",
         # The pointer and the icons: Gnoblin leaves both to the shell.
         "adwaita-cursor-theme",
         "adwaita-icon-theme",
@@ -79,8 +80,6 @@ DEPENDS = {
         "mesa-dri-drivers",
         "mesa-libgbm",
         "libdrm",
-        "libinput",
-        "libseat",
         "libxcb",
         "libxkbcommon",
         "libarchive",
@@ -96,8 +95,6 @@ DEPENDS = {
         "dbus",
         "polkitd",
         "libpam-modules",
-        "seatd",
-        "plymouth",
         "adwaita-icon-theme",
         "wireplumber",
         "pipewire (>= 1.4)",
@@ -135,8 +132,6 @@ DEPENDS = {
         "libgl1-mesa-dri",
         "libgbm1",
         "libdrm2",
-        "libinput10",
-        "libseat1",
         "libxcb1",
         "libxkbcommon0",
         "libarchive13t64",
@@ -155,8 +150,6 @@ DEPENDS = {
         "dbus",
         "polkit",
         "pam",
-        "seatd",
-        "plymouth",
         "adwaita-cursors",
         "adwaita-icon-theme",
         "wireplumber",
@@ -186,7 +179,6 @@ DEPENDS = {
         "libglvnd",
         "mesa",
         "libdrm",
-        "libinput",
         "libxcb",
         "libxkbcommon",
         "libarchive",
@@ -216,8 +208,6 @@ RECOMMENDS = {
         "gstreamer1-plugins-bad-free",
         "gstreamer1-plugin-openh264",
         "pipewire-gstreamer",
-        # bsm falls back to greetd when it cannot be kept running.
-        "greetd",
         "gnome-settings-daemon",
         "python3-pyyaml",
         "NetworkManager",
@@ -238,7 +228,6 @@ RECOMMENDS = {
         "gstreamer1.0-libav",
         "gstreamer1.0-pipewire",
         "gstreamer1.0-plugins-bad",
-        "greetd",
         "gnome-settings-daemon",
         "python3-yaml",
         "network-manager",
@@ -258,7 +247,6 @@ RECOMMENDS = {
         "gst-libav: more video and audio formats in previews",
         "gst-plugins-bad: more video and audio formats in previews",
         "gst-plugin-pipewire: audio output of previews through PipeWire",
-        "greetd: login screen that bsm falls back to when it cannot be kept running",
         "gnome-settings-daemon: night light",
         "networkmanager: network status and Wi-Fi",
         "upower: battery",
@@ -267,31 +255,14 @@ RECOMMENDS = {
     ],
 }
 
-# Accounts and directories first, then the policy files that D-Bus and polkit read when they start.
-# The install changes nothing about how a machine logs in: bsm is not enabled.
-ACCOUNTS = """systemd-sysusers bsm.conf >/dev/null 2>&1 || true
-systemd-tmpfiles --create bsm.conf bingux-greeter.conf >/dev/null 2>&1 || true
-"""
-RELOAD_POLICY = """systemctl reload dbus-broker.service >/dev/null 2>&1 || systemctl reload dbus.service >/dev/null 2>&1 || true
-systemctl reload polkit.service >/dev/null 2>&1 || true
-"""
 EFFECTS = "bingux-effects@output.service bingux-effects@input.service"
 UNITS = "bingux.target bingux-searchd.service bingux-statusd.service " + EFFECTS
-
-# Leave the machine with a login manager if bsm was the display manager, as the bsm package did.
-REMOVE_BSM = """if [ "$(readlink /etc/systemd/system/display-manager.service 2>/dev/null)" = /usr/lib/systemd/system/bsm.service ]; then
-    rm -f /etc/systemd/system/display-manager.service
-    systemctl enable greetd.service >/dev/null 2>&1 || true
-    echo "bsm: removed the display-manager alias; greetd is enabled again."
-fi
-systemctl disable bsm.service bsm-helper.socket >/dev/null 2>&1 || true
-"""
 
 SCRIPTS = {
     # The bodies of %systemd_user_post, %systemd_user_preun and %systemd_user_postun_with_restart of Fedora 43,
     # which enable bingux.target through the user preset on the first install and restart the daemons on upgrade.
     "rpm": {
-        "post_install": ACCOUNTS + RELOAD_POLICY + """if [ $1 -eq 1 ]; then
+        "post_install": """if [ $1 -eq 1 ]; then
     if [ -x /usr/lib/systemd/systemd-update-helper ]; then
         /usr/lib/systemd/systemd-update-helper install-user-units bingux.target || :
     else
@@ -299,11 +270,9 @@ SCRIPTS = {
     fi
 fi
 """,
-        "pre_remove": """if [ $1 -eq 0 ]; then
-    if [ -x /usr/lib/systemd/systemd-update-helper ]; then
-        /usr/lib/systemd/systemd-update-helper remove-user-units """ + UNITS + """ || :
-    fi
-""" + REMOVE_BSM + """fi
+        "pre_remove": """if [ $1 -eq 0 ] && [ -x /usr/lib/systemd/systemd-update-helper ]; then
+    /usr/lib/systemd/systemd-update-helper remove-user-units """ + UNITS + """ || :
+fi
 """,
         "post_remove": """if [ $1 -ge 1 ] && [ -x /usr/lib/systemd/systemd-update-helper ]; then
     /usr/lib/systemd/systemd-update-helper mark-restart-user-units """ + UNITS + """ || :
@@ -313,44 +282,35 @@ fi
     # dpkg passes configure after an install or an upgrade and remove on removal; the preset file enables
     # bingux.target for every user.
     "deb": {
-        "post_install": ACCOUNTS + RELOAD_POLICY + """if [ "$1" = configure ] && """ + SYSTEMD_RUNNING + """; then
+        "post_install": """if [ "$1" = configure ] && """ + SYSTEMD_RUNNING + """; then
     systemctl --global preset bingux.target >/dev/null 2>&1 || true
 fi
 """,
-        "pre_remove": """if [ "$1" = remove ]; then
-    if """ + SYSTEMD_RUNNING + """; then
-        systemctl --global disable bingux.target >/dev/null 2>&1 || true
-    fi
-""" + REMOVE_BSM + """fi
+        "pre_remove": """if [ "$1" = remove ] && """ + SYSTEMD_RUNNING + """; then
+    systemctl --global disable bingux.target >/dev/null 2>&1 || true
+fi
 """,
     },
-    # pacman runs the install script for post_install and post_upgrade, and pre_remove only on removal. An
-    # upgrade does not restart a running bsm: that would end the compositor and every session.
+    # pacman runs the install script for post_install and post_upgrade, and pre_remove only on removal.
     "archlinux": {
-        "post_install": ACCOUNTS + RELOAD_POLICY + """systemctl --global preset bingux.target >/dev/null 2>&1 || true
+        "post_install": """systemctl --global preset bingux.target >/dev/null 2>&1 || true
 """,
         "pre_remove": """systemctl --global disable bingux.target >/dev/null 2>&1 || true
-""" + REMOVE_BSM,
+""",
     },
 }
 
 # Configuration files: the package manager keeps the changes of the administrator.
-CONFIG_FILES = ["/etc/pam.d/bingux-lock", "/etc/pam.d/bingux-lock-fingerprint", "/etc/pam.d/bsm-login", "/etc/pam.d/bsm-unlock", "/etc/bsm/bsm.toml"]
+CONFIG_FILES = ["/etc/pam.d/bingux-lock", "/etc/pam.d/bingux-lock-fingerprint"]
 
 # The folders of the package. /usr/share/bingux/search-apps is shared with Settings, which ships a file in it.
 OWN_DIRS = own_dirs(
     "/usr/lib/bingux",
     "/usr/lib64/bingux",
     "/usr/libexec/bingux",
-    "/usr/libexec/bsm",
     "/usr/share/bingux",
-    "/usr/share/bsm",
     "/usr/share/doc/bingux",
-    "/usr/share/doc/bsm",
     "/usr/share/licenses/bingux",
-    "/etc/bsm",
-    "/usr/lib/systemd/system/plymouth-quit.service.d",
-    "/var/lib/bingux",
 )
 
 # Every file of an application package belongs to that package; the rest of the prefix is this one.
@@ -363,7 +323,7 @@ for fmt in FORMATS:
         continue
     # The shell and its plugins link the private API of the Qt they were built with.
     depends = DEPENDS[fmt] + (qt_pin(fmt) if QT_MINOR else [])
-    old = OLD_NAMES + (["bsm"] if fmt == "archlinux" else [])
+    old = OLD_NAMES
     package(
         fmt,
         depends = depends,
