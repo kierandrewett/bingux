@@ -36,6 +36,23 @@ BUILD_OUTPUTS = (
 )
 
 
+# What only the Bingux OS image installs (--os-image): the login screen and its system files.
+OS_IMAGE_FILES = (
+    "usr/bin/bingux-greeter",
+    "usr/bin/bingux-greeter-session",
+    "usr/bin/bingux-bsm-greeter",
+    "usr/share/bingux/greeter/gnoblin.lua",
+    "usr/share/bingux/greeter/greetd.toml",
+    "usr/share/polkit-1/rules.d/50-bingux-greeter.rules",
+    "usr/lib/tmpfiles.d/bingux-greeter.conf",
+    "usr/lib/systemd/user/bingux-greeter-export.service",
+    "usr/lib/systemd/user/bingux-greeter-export.path",
+    "usr/lib/systemd/user/bingux-bsm-publish.service",
+    "usr/lib/systemd/user/bingux-bsm-publish.path",
+    "usr/lib/systemd/user/bingux.target.d/10-bingux-os.conf",
+)
+
+
 def write_build_fixtures(build):
     for filename in BUILD_OUTPUTS:
         path = build / filename
@@ -145,7 +162,6 @@ class InstallTest(unittest.TestCase):
             for name in (
                 "bingux",
                 "bingux-lock",
-                "bingux-greeter",
                 "bingux-popouts",
                 "bingux-wallpaper",
             ):
@@ -218,9 +234,8 @@ class InstallTest(unittest.TestCase):
             self.assertIn("WantedBy=gnoblin-session.target", target_unit)
             self.assertNotIn("gnome-session@gnoblin.target", target_unit)
             self.assertNotIn("WantedBy=graphical-session.target", target_unit)
-            # Only the helper daemons and the greeter wallpaper export are pulled in. The
-            # shell and its surfaces come from Gnoblin's Lua autostart, so wanting them
-            # here would start a second copy.
+            # Only the helper daemons are pulled in. The shell and its surfaces come from
+            # Gnoblin's Lua autostart, so wanting them here would start a second copy.
             wants = next(line for line in target_unit.splitlines() if line.startswith("Wants="))
             self.assertEqual(
                 set(wants[len("Wants=") :].split()),
@@ -229,16 +244,12 @@ class InstallTest(unittest.TestCase):
                     "bingux-statusd.service",
                     "xdg-desktop-portal-bingux.service",
                     "bingux-global-shortcuts.service",
-                    "bingux-greeter-export.service",
-                    "bingux-greeter-export.path",
-                    "bingux-bsm-publish.service",
-                    "bingux-bsm-publish.path",
                 },
             )
-            self.assertTrue((stage / "usr/lib/systemd/user/bingux-greeter-export.path").is_file())
-            self.assertTrue((stage / "usr/lib/systemd/user/bingux-bsm-publish.path").is_file())
-            self.assertTrue((stage / "usr/lib/systemd/user/bingux-bsm-publish.service").is_file())
-            self.assertTrue((stage / "usr/lib/tmpfiles.d/bingux-greeter.conf").is_file())
+            # Nothing of the Bingux OS login screen is installed without --os-image.
+            for path in OS_IMAGE_FILES:
+                self.assertFalse((stage / path).exists(), path)
+            self.assertFalse((stage / "usr/lib/systemd/user/bingux.target.d").exists())
             portal_unit = (stage / "usr/lib/systemd/user/xdg-desktop-portal-bingux.service").read_text()
             self.assertIn("ExecStart=/usr/libexec/bingux/xdg-desktop-portal-bingux", portal_unit)
             self.assertIn("Environment=BINGUXCTL=/usr/bin/binguxctl", portal_unit)
@@ -291,6 +302,53 @@ class InstallTest(unittest.TestCase):
             for path in stage.rglob("*"):
                 if path.is_file() and not path.is_symlink():
                     self.assertNotIn(str(stage).encode(), path.read_bytes(), str(path))
+
+    def test_os_image_adds_the_login_screen(self):
+        with tempfile.TemporaryDirectory() as name:
+            base = Path(name)
+            build, stage = base / "build", base / "stage"
+            write_build_fixtures(build)
+            subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "scripts/install-shell.py"),
+                    "--os-image",
+                    "--prefix",
+                    "/usr",
+                    "--destdir",
+                    str(stage),
+                    "--build-dir",
+                    str(build),
+                ],
+                check=True,
+            )
+            for path in OS_IMAGE_FILES:
+                self.assertTrue((stage / path).exists(), path)
+            self.assertEqual(os.readlink(stage / "usr/bin/bingux-greeter"), "bingux-shell")
+            dropin = (stage / "usr/lib/systemd/user/bingux.target.d/10-bingux-os.conf").read_text()
+            self.assertIn("Wants=bingux-greeter-export.service bingux-greeter-export.path", dropin)
+            # The greeter account has no profile: its scripts name the install's own programs.
+            greeter = (stage / "usr/bin/bingux-greeter-session").read_text()
+            self.assertIn("/usr/share/bingux/greeter/gnoblin.lua", greeter)
+            self.assertNotIn(str(stage), greeter)
+
+    def test_os_image_is_refused_for_a_user_install(self):
+        with tempfile.TemporaryDirectory() as name:
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "scripts/install-shell.py"),
+                    "--user",
+                    "--os-image",
+                    "--prefix",
+                    str(Path(name) / "p"),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("--os-image", result.stderr)
 
     def test_portal_service_follows_a_non_usr_prefix(self):
         with tempfile.TemporaryDirectory() as name:

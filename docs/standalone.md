@@ -73,6 +73,10 @@ symlinks to the binary and select the same modes:
 | `bingux-emoji-ui`    | `emoji`     | `EmojiShell.qml`     |
 | `bingux-capture-ui`  | `capture`   | `CaptureShell.qml`   |
 
+`bingux-greeter` is the login screen of Bingux OS; only the image's install
+(`make install OS_IMAGE=1`) creates that link. The shell archive holds its entry
+file in every install.
+
 On first start the binary unpacks the archive into
 `$XDG_CACHE_HOME/bingux/shell/<content id>/` (or `/tmp/bingux-shell-<uid>`
 when the cache is not writable, as for the greeter account) and runs the entry

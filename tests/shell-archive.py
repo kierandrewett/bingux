@@ -119,6 +119,8 @@ def main():
             [
                 sys.executable,
                 str(ROOT / "scripts/install-shell.py"),
+                # The login screens of Bingux OS run from the same archive as the lock screen.
+                "--os-image",
                 "--prefix",
                 "/usr",
                 "--destdir",
@@ -209,9 +211,12 @@ def main():
                 [
                     sys.executable,
                     str(ROOT / "tests/bsm-fake-control.py"),
-                    "--socket", str(runtime / "bsm-control.sock"),
-                    "--assets", str(bsm_assets),
-                    "--log", str(bsm_log),
+                    "--socket",
+                    str(runtime / "bsm-control.sock"),
+                    "--assets",
+                    str(bsm_assets),
+                    "--log",
+                    str(bsm_log),
                 ],
                 stdout=subprocess.PIPE,
                 text=True,

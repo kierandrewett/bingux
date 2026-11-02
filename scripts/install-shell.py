@@ -20,13 +20,22 @@ import time
 SHELL_COMMANDS = (
     "bingux",
     "bingux-lock",
-    "bingux-greeter",
     "bingux-popouts",
     "bingux-wallpaper",
     "bingux-search-ui",
     "bingux-switcher-ui",
     "bingux-emoji-ui",
     "bingux-capture-ui",
+)
+
+# What only the Bingux OS image needs: the login screen programs and their system files. `make install`
+# adds them with --os-image (OS_IMAGE=1); the `bingux` package and a user install do not have them.
+OS_SHELL_COMMANDS = ("bingux-greeter",)
+OS_USER_UNITS = (
+    "bingux-greeter-export.service",
+    "bingux-greeter-export.path",
+    "bingux-bsm-publish.service",
+    "bingux-bsm-publish.path",
 )
 
 
@@ -149,8 +158,10 @@ def migrate_legacy_search_launcher(prefix):
     )
 
 
-def build_payload(source, build, prefix, qml, target, managed=False, cargo=None):
+def build_payload(source, build, prefix, qml, target, managed=False, cargo=None, os_image=False):
     """Install payload files and return their paths relative to prefix.
+
+    `os_image` adds the login screen and its system files, which only Bingux OS uses.
 
     `cargo` is the Cargo target directory that holds `release/` (default
     BUILD/cargo).
@@ -192,13 +203,7 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None)
         # Tells bingux-searchd that Settings exposes search: its program (opens a
         # hit's address) and its id. See design/search.md section 8.
         source / "data/search-apps/bingux-settings.json": prefix / "share/bingux/search-apps/bingux-settings.json",
-        source / "scripts/bingux-greeter-session": prefix / "bin/bingux-greeter-session",
-        source / "scripts/bingux-bsm-greeter": prefix / "bin/bingux-bsm-greeter",
         source / "gnoblin/bingux.lua": prefix / "share/gnoblin/conf.d/bingux.lua",
-        source / "gnoblin/greeter.lua": prefix / "share/bingux/greeter/gnoblin.lua",
-        source / "data/greetd/config.toml": prefix / "share/bingux/greeter/greetd.toml",
-        source / "data/polkit/50-bingux-greeter.rules": prefix / "share/polkit-1/rules.d/50-bingux-greeter.rules",
-        source / "data/tmpfiles/bingux-greeter.conf": prefix / "lib/tmpfiles.d/bingux-greeter.conf",
         source / "data/portal/bingux.portal": prefix / "share/xdg-desktop-portal/portals/bingux.portal",
         source / "data/portal/org.freedesktop.impl.portal.desktop.bingux.service": prefix
         / "share/dbus-1/services/org.freedesktop.impl.portal.desktop.bingux.service",
@@ -207,6 +212,20 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None)
         # Enables bingux.target for every user; see data/systemd/90-bingux.preset.
         source / "data/systemd/90-bingux.preset": prefix / "lib/systemd/user-preset/90-bingux.preset",
     }
+    if os_image:
+        payload.update(
+            {
+                source / "scripts/bingux-greeter-session": prefix / "bin/bingux-greeter-session",
+                source / "scripts/bingux-bsm-greeter": prefix / "bin/bingux-bsm-greeter",
+                source / "gnoblin/greeter.lua": prefix / "share/bingux/greeter/gnoblin.lua",
+                source / "data/os/greetd/config.toml": prefix / "share/bingux/greeter/greetd.toml",
+                source / "data/os/polkit/50-bingux-greeter.rules": prefix
+                / "share/polkit-1/rules.d/50-bingux-greeter.rules",
+                source / "data/os/tmpfiles/bingux-greeter.conf": prefix / "lib/tmpfiles.d/bingux-greeter.conf",
+                source / "data/os/systemd/bingux.target.d/10-bingux-os.conf": prefix
+                / "lib/systemd/user/bingux.target.d/10-bingux-os.conf",
+            }
+        )
     for path in sorted((source / "data/metainfo").glob("*.metainfo.xml")):
         payload[path] = prefix / "share/metainfo" / path.name
     for path in sorted((source / "data/man").glob("*.1")):
@@ -334,7 +353,7 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None)
     # Each shell surface is bingux-shell under another name; the binary reads
     # argv[0] and sets its own environment. Scripts that are not the shell
     # keep a small launcher so binguxctl and the uninstaller find their files.
-    for name in SHELL_COMMANDS:
+    for name in SHELL_COMMANDS + (OS_SHELL_COMMANDS if os_image else ()):
         link = target(prefix / "bin" / name)
         link.parent.mkdir(parents=True, exist_ok=True)
         if link.is_symlink() or link.exists():
@@ -420,9 +439,10 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None)
     installed.append(Path("libexec/bingux/search-service"))
     installed.append(Path("bin/bingux-search-service"))
     unit_sources = sorted((source / "data/systemd").glob("bingux*.service"))
-    unit_sources += sorted((source / "data/systemd").glob("bingux*.path"))
     unit_sources.append(source / "data/systemd/xdg-desktop-portal-bingux.service")
     unit_sources.append(source / "data/systemd/bingux.target")
+    if os_image:
+        unit_sources += [source / "data/os/systemd" / name for name in OS_USER_UNITS]
     for unit_source in unit_sources:
         unit = unit_source.read_text()
         unit = unit.replace("/usr/bin", str(prefix / "bin"))
@@ -455,10 +475,6 @@ def integration_paths(prefix, managed=False):
         "bingux-capture-ui.service",
         "bingux-emoji-ui.service",
         "bingux-lock.service",
-        "bingux-greeter-export.service",
-        "bingux-greeter-export.path",
-        "bingux-bsm-publish.service",
-        "bingux-bsm-publish.path",
         "xdg-desktop-portal-bingux.service",
         "bingux-global-shortcuts.service",
     )
@@ -954,14 +970,19 @@ def main():
     parser.add_argument("--cargo-dir", help="Cargo target directory that holds release/ (default: BUILD_DIR/cargo)")
     parser.add_argument("--no-systemd", action="store_true", help="do not reload or start user services")
     parser.add_argument(
+        "--os-image",
+        action="store_true",
+        help="also install the login screen of Bingux OS (greeter programs, greetd, polkit and tmpfiles files); system installs only",
+    )
+    parser.add_argument(
         "--no-cache-update",
         action="store_true",
         help="with --apps: do not refresh the desktop, icon and MIME caches",
     )
     args = parser.parse_args()
     if args.apps:
-        if args.user or args.destdir or args.qml_dir:
-            parser.error("--apps cannot be combined with --user, --destdir or --qml-dir")
+        if args.user or args.destdir or args.qml_dir or args.os_image:
+            parser.error("--apps cannot be combined with --user, --destdir, --qml-dir or --os-image")
         prefix = Path(args.prefix or default_apps_prefix()).expanduser()
         validate_prefix(parser, prefix)
         try:
@@ -974,6 +995,8 @@ def main():
         except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
             parser.error(str(error))
         return
+    if args.os_image and (args.user or args.uninstall):
+        parser.error("--os-image is only valid for a system install")
     if args.no_strip or args.no_cache_update:
         parser.error("--no-strip and --no-cache-update are only valid with --apps")
     if args.uninstall and not args.user:
@@ -1015,7 +1038,7 @@ def main():
         return stage / path.relative_to("/")
 
     try:
-        build_payload(source, build, prefix, qml, target, cargo=cargo)
+        build_payload(source, build, prefix, qml, target, cargo=cargo, os_image=args.os_image)
     except (OSError, ValueError) as error:
         parser.error(str(error))
     print("Installed Bingux under " + str(target(prefix)))

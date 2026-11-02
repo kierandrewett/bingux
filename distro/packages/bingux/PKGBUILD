@@ -38,14 +38,16 @@ build() {
 
 package() {
     cd "$srcdir/$pkgname-$pkgver" || return
-    make install PREFIX=/usr DESTDIR="$pkgdir" BUILD_DIR=build QMLDIR=/usr/lib/bingux/qml
+    # OS_IMAGE=1: this package is the one of the Bingux OS image, so it also carries the login screen
+    # (greeter programs, greetd, polkit and tmpfiles files) that the `bingux` package of Fedora, Debian and Arch leaves out.
+    make install PREFIX=/usr DESTDIR="$pkgdir" BUILD_DIR=build QMLDIR=/usr/lib/bingux/qml OS_IMAGE=1
     # The installer writes units for /usr/lib64 prefixes; Arch uses /usr/lib.
-    for unit in data/systemd/bingux*.service data/systemd/xdg-desktop-portal-bingux.service data/systemd/bingux*.path data/systemd/bingux.target; do
+    for unit in data/systemd/bingux*.service data/systemd/xdg-desktop-portal-bingux.service data/systemd/bingux.target; do
         sed -e 's|/usr/lib64|/usr/lib|g' "$unit" >"$pkgdir/usr/lib/systemd/user/$(basename "$unit")"
     done
     install -Dm644 shell/runtime/quickshell/LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE.quickshell"
     install -Dpm 0644 data/pam/bingux-lock "$pkgdir/etc/pam.d/bingux-lock"
     install -Dpm 0644 data/pam/bingux-lock-fingerprint "$pkgdir/etc/pam.d/bingux-lock-fingerprint"
-    install -Dpm 0644 data/greetd/config.toml "$pkgdir/usr/share/bingux/greeter/greetd.toml"
+    install -Dpm 0644 data/os/greetd/config.toml "$pkgdir/usr/share/bingux/greeter/greetd.toml"
     install -Dpm 0644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
 }

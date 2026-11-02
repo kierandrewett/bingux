@@ -17,6 +17,8 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 USER_UNITS = REPO / "data/systemd"
+# The units only the Bingux OS image installs (scripts/install-shell.py --os-image).
+OS_UNITS = REPO / "data/os/systemd"
 PROFILE_SYSTEM = REPO / "distro/profile/airootfs/etc/systemd/system"
 
 
@@ -47,13 +49,15 @@ class StartLoadTest(unittest.TestCase):
     def test_no_helper_unit_orders_the_session_target_after_it(self):
         # Before=gnoblin-session.target (or graphical-session.target) on a helper would
         # bring the gate back.
-        for path in sorted(USER_UNITS.glob("*.service")) + sorted(USER_UNITS.glob("*.path")):
+        for path in (
+            sorted(USER_UNITS.glob("*.service")) + sorted(OS_UNITS.glob("*.service")) + sorted(OS_UNITS.glob("*.path"))
+        ):
             with self.subTest(unit=path.name):
                 before = " ".join(settings(path).get(("Unit", "Before"), []))
                 self.assertNotIn("session.target", before)
 
     def test_wallpaper_export_runs_in_idle_time(self):
-        unit = settings(USER_UNITS / "bingux-greeter-export.service")
+        unit = settings(OS_UNITS / "bingux-greeter-export.service")
         self.assertEqual(unit.get(("Service", "Type")), ["oneshot"])
         self.assertEqual(unit.get(("Service", "Nice")), ["19"])
         self.assertEqual(unit.get(("Service", "CPUSchedulingPolicy")), ["idle"])

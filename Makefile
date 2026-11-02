@@ -266,11 +266,15 @@ check-session: native daemons shell
 	QUICKSHELL_BIN=$(SHELL_BIN) bash tests/search-command.sh
 	python3 tests/shell-archive.py --build-dir $(BUILD_DIR)
 
+# OS_IMAGE=1 adds the login screen of Bingux OS (greeter programs, greetd, polkit and tmpfiles files).
+# The distro/ packages build with it; the `bingux` package for Fedora, Debian and Arch does not.
+OS_IMAGE ?=
 install:
-	python3 scripts/install-shell.py --prefix '$(PREFIX)' --destdir '$(DESTDIR)' --build-dir '$(BUILD_DIR)' --qml-dir '$(QMLDIR)' --cargo-dir '$(CARGO_TARGET)'
+	python3 scripts/install-shell.py --prefix '$(PREFIX)' --destdir '$(DESTDIR)' --build-dir '$(BUILD_DIR)' --qml-dir '$(QMLDIR)' --cargo-dir '$(CARGO_TARGET)' $(if $(OS_IMAGE),--os-image)
 
 # The system files of bsm (units, accounts, bus and polkit policy, PAM services) and its programs.
-# Needs `make bsm`. PREFIX must be /usr; docs/bsm/packaging.md lists what it installs.
+# Bingux OS only: no package for ordinary distributions includes them. Needs `make bsm`.
+# PREFIX must be /usr; docs/bsm/packaging.md lists what it installs.
 install-bsm:
 	bash scripts/install-bsm.sh --prefix '$(PREFIX)' --destdir '$(DESTDIR)' --cargo-dir '$(CARGO_TARGET)'
 

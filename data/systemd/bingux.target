@@ -12,8 +12,10 @@ After=graphical-session.target
 # 4 s of CPU), held the compositor back and a busy start ended with a black
 # screen or a lost login (5f53de8.iso: 6.5 s with the default, 0.4 s without,
 # on four busy CPUs). The helpers start in the background instead.
+# The Bingux OS image adds its login-screen wallpaper units in
+# bingux.target.d/10-bingux-os.conf (data/os/systemd).
 DefaultDependencies=no
-Wants=bingux-searchd.service bingux-statusd.service xdg-desktop-portal-bingux.service bingux-global-shortcuts.service bingux-greeter-export.service bingux-greeter-export.path bingux-bsm-publish.service bingux-bsm-publish.path
+Wants=bingux-searchd.service bingux-statusd.service xdg-desktop-portal-bingux.service bingux-global-shortcuts.service
 
 [Install]
 WantedBy=gnoblin-session.target
