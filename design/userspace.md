@@ -141,9 +141,9 @@ names them explicitly (section 5).
 | Licences                    | `/usr/share/licenses/<package>/`, plus `COPYING` and a `*.LICENSE.dependencies` file per program                        | each package                                                  |
 
 There is no polkit rule, D-Bus service file, gsettings schema or GSettings
-override in this branch's packages. (The image branch adds polkit and portal
-files for the greeter and the portal backend; they belong to the shell package
-there.)
+override in this branch's packages. (The image branch adds the greeter's polkit
+rules; they stay out of the repository packages and are installed only by the
+image, with `make install OS_IMAGE=1`.)
 
 ### 2.3 Integration points
 
@@ -430,8 +430,8 @@ would make `pacman` fail with "target not found".
 
 After the merge, replace `distro/packages/bingux/PKGBUILD` with the pkgsmith
 `bingux` package of this branch (or keep the image's PKGBUILD, which builds from the
-same `data/` files), extended by the image branch's additions (portal, greeter and bsm files go to the shell package, which takes
-the stage's leftovers), and:
+same `data/` files and passes `OS_IMAGE=1` to `make install` for the greeter files, so that
+the repository package carries nothing of bsm or the login screen), and:
 
 ```diff
 --- a/distro/profile/packages.x86_64

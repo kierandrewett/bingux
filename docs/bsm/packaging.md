@@ -5,7 +5,9 @@ recovered when it does not come up. The design is in
 [architecture.md](architecture.md). Status of every item is in
 [Status](#status).
 
-bsm is opt-in. Installing the `bsm` package changes nothing about how a
+bsm belongs to Bingux OS. It is built only by the image's `bsm` PKGBUILD
+(`distro/packages/bsm`); the `bingux` package for Fedora, Debian and Arch does not
+contain it. bsm is opt-in. Installing the `bsm` package changes nothing about how a
 machine logs in. Two things switch it on:
 
 - the **live image** starts bsm when the kernel command line has `bingux.bsm`
@@ -33,17 +35,16 @@ Both leave greetd installed, so going back is one command or one reboot.
 | `data/bsm/polkit/50-bsm.rules`           | `/usr/share/polkit-1/rules.d/`        | See [Polkit and logind](#polkit-and-logind).                                                                                                                                  |
 | `data/bsm/pam/bsm-login`, `bsm-unlock`   | `/etc/pam.d/`                         | PAM services of the helper.                                                                                                                                                   |
 
-The files are part of the `bingux` package, written by `pkgsmith/bingux.star` from
-a prefix that `make prefix` builds (`make bsm` and `make install-bsm` build and
-install bsm; `docs/packaging.md` has the path). The Bingux OS image builds a `bsm`
-package of its own from `distro/packages/bsm/PKGBUILD`, from the same source
-archive. The `bingux` package replaces the earlier `bsm` package of the image
-(`replaces`, `conflicts` and `provides` on Arch). It installs no PAM file for the greeter (the greeter does no
-authentication) and no `Alias=display-manager.service`.
+The files are in the `bsm` package of the Bingux OS image, built from
+`distro/packages/bsm/PKGBUILD` (`make bsm` and `make install-bsm` build and install
+them; `scripts/install-bsm.sh` does the work). No package written by pkgsmith contains
+them: the `bingux` package for Fedora, Debian and Arch is for systems that keep their
+own display manager (`docs/packaging.md`). The package installs no PAM file for the
+greeter (the greeter does no authentication) and no `Alias=display-manager.service`.
 
-The greeter itself, `bingux-bsm-greeter`, and its QML belong to the `bingux`
-package. `bsm` depends on `bingux` and `gnoblin`; nothing in `bingux` or
-`gnoblin` depends on `bsm`.
+The greeter itself, `bingux-bsm-greeter`, and its QML belong to the `bingux` package of
+the image, which is built with `make install OS_IMAGE=1`. `bsm` depends on `bingux` and
+`gnoblin`; nothing in `bingux` or `gnoblin` depends on `bsm`.
 
 ## Boot order
 

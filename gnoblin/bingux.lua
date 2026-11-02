@@ -1,8 +1,8 @@
 -- Bingux integration defaults for Gnoblin.
--- Load from init.lua with:
---   local g = require("gnoblin")
---   g.load("/usr/share/gnoblin/conf.d/*.lua")
--- Source installs use their installed share/gnoblin/conf.d path instead.
+-- The package installs this file as /usr/share/gnoblin/conf.d/bingux.lua and Gnoblin
+-- loads it from that system drop-in directory, so init.lua needs no line for it.
+-- A source install (make install-user) links it into ~/.config/gnoblin/conf.d and
+-- adds the loader to init.lua itself.
 
 -- Window open and close follow macOS: a slight scale from the centre with a
 -- quick fade. Minimize and restore keep Gnoblin's dock-aware presets, which

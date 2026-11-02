@@ -37,16 +37,11 @@ Removal stops Bingux and deletes the install root while preserving
 `$XDG_CONFIG_HOME/bingux` user settings. For package builds, use the separate
 staging flow documented in [package management](docs/package-management.md).
 
-If Gnoblin uses `init.lua`, load the package and user drop-in directories:
-
-```lua
-local g = require("gnoblin")
-g.load("/usr/share/gnoblin/conf.d/*.lua")
-g.load("~/.config/gnoblin/conf.d/*.lua")
-```
-
-The managed installer prints its exact package drop-in directory. Bingux user
-settings remain under `$XDG_CONFIG_HOME/bingux`.
+A package install needs no Gnoblin configuration: Gnoblin loads the Bingux
+integration, `/usr/share/gnoblin/conf.d/bingux.lua`, from its system drop-in
+directory. The managed installer links its own copy into
+`~/.config/gnoblin/conf.d` and adds the loader to your `init.lua` itself. Bingux
+user settings remain under `$XDG_CONFIG_HOME/bingux`.
 
 Signed package repositories for Fedora, Debian 13 and Arch, each with a `stable`
 and a `nightly` channel, are described in
@@ -70,9 +65,9 @@ See [desktop panels](docs/popup-loading.md) for first opening and dismissal.
 
 See [portals](docs/portals.md) for the Screenshot backend, its permission rules and the known state of each portal interface.
 
-See the [login screen](docs/login-screen.md) and [secure session locking](docs/locking.md)
-for the greeter and the lock screen, [Bingux OS](distro/README.md) for the live image,
-and [installing Bingux OS](docs/installer.md) for the installer.
+See [secure session locking](docs/locking.md) for the lock screen.
+[Bingux OS](distro/README.md) is the live image, with its [login screen](docs/login-screen.md);
+[installing Bingux OS](docs/installer.md) covers the installer.
 For shell behaviour and configuration, see the [shell guide](shell/bingux/README.md).
 If something does not start or shows no data, see [troubleshooting](docs/troubleshooting.md).
 

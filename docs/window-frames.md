@@ -31,8 +31,8 @@ corner.
 
 ## Configure a frame in Gnoblin
 
-To use Bingux's renderer for a selected app, add this after the
-`gnoblin.load(...)` lines in `~/.config/gnoblin/init.lua`:
+To use Bingux's renderer for a selected app, add this to your
+`~/.config/gnoblin/init.lua`:
 
 ```lua
 gnoblin.configure {

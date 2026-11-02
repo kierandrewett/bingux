@@ -2,10 +2,10 @@
 
 What Bingux installs into the Gnoblin compositor.
 
-| Path | Installed as | Purpose |
-| ---- | ------------ | ------- |
-| `bingux.lua` | `share/gnoblin/conf.d/bingux.lua` | The Gnoblin module for the desktop session: animations, window rules, autostart and shortcuts. |
-| `greeter.lua` | `share/bingux/greeter/gnoblin.lua` | The Gnoblin configuration for the login greeter session. |
+| Path          | Installed as                       | Purpose                                                                                              |
+| ------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `bingux.lua`  | `share/gnoblin/conf.d/bingux.lua`  | The Gnoblin module for the desktop session: animations, window rules, autostart and shortcuts.       |
+| `greeter.lua` | `share/bingux/greeter/gnoblin.lua` | Bingux OS only (`make install OS_IMAGE=1`): the Gnoblin configuration for the login greeter session. |
 
 `scripts/install-shell.py` rewrites command paths in the Lua files for the
 chosen prefix.

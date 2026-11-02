@@ -128,13 +128,10 @@ package installs this file with these defaults; copy it to
 `$XDG_CONFIG_HOME/bingux/switcher.json` to change them.
 
 The compositor bridge is built into Gnoblin and starts with the session. Bingux
-does not install a bridge script. Load the installed Bingux integration from
-your `init.lua`; it clears Mutter's four default switcher bindings so the
-switcher can register its own shortcuts:
-
-```lua
-gnoblin.load("/usr/share/gnoblin/conf.d/*.lua")
-```
+does not install a bridge script. Gnoblin loads the installed Bingux integration,
+`/usr/share/gnoblin/conf.d/bingux.lua`, from its system drop-in directory; it clears
+Mutter's four default switcher bindings so the switcher can register its own
+shortcuts.
 
 Use the same backdrop blur as Bingux popouts, with compositor animations
 disabled so shortcut presentation remains immediate. The switcher publishes

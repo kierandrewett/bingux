@@ -4,14 +4,17 @@ Bingux is four packages: the desktop, and the three apps that go with it.
 
 ## The packages
 
-| Package           | What it installs                                                                                                                                                                                                                                                    | Install it when                                            |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `bingux`          | The whole desktop: the shell, every core service (search, status, the login and lock screens, the portal backend, the sound effects engine, the preview helper Files runs, the `bingux-config` command), `binguxctl`, `bsm` (installed disabled) and the user units | You want the Bingux desktop                                |
-| `bingux-settings` | Settings                                                                                                                                                                                                                                                            | You want to change Bingux and system settings in one place |
-| `bingux-files`    | Files, the file manager                                                                                                                                                                                                                                             | You want a file manager that matches the shell             |
-| `bingux-taxonomy` | A window that shows every Bingux UI component                                                                                                                                                                                                                       | You build Bingux apps. Ordinary desktops do not need it    |
+| Package           | What it installs                                                                                                                                                                                                             | Install it when                                            |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `bingux`          | The whole desktop: the shell, every core service (search, status, the lock screen, the portal backend, the sound effects engine, the preview helper Files runs, the `bingux-config` command), `binguxctl` and the user units | You want the Bingux desktop                                |
+| `bingux-settings` | Settings                                                                                                                                                                                                                     | You want to change Bingux and system settings in one place |
+| `bingux-files`    | Files, the file manager                                                                                                                                                                                                      | You want a file manager that matches the shell             |
+| `bingux-taxonomy` | A window that shows every Bingux UI component                                                                                                                                                                                | You build Bingux apps. Ordinary desktops do not need it    |
 
 Installing `bingux` also installs Gnoblin, the compositor it runs on. The apps need `bingux` at the same version.
+
+Bingux changes nothing about how you log in. Your display manager (GDM, SDDM or whichever you use) stays, and the
+packages create no accounts.
 
 ## Package repositories
 
@@ -66,7 +69,9 @@ pacman does not install recommended packages. Name the apps you want, as in the 
 
 ### After installing
 
-Log out, choose **Gnoblin** at the login screen and log in. Bingux starts with the session.
+Log out, choose **Gnoblin** at the login screen and log in. Bingux starts with the session. The package works after
+the install: Gnoblin loads the Bingux integration, `/usr/share/gnoblin/conf.d/bingux.lua`, from its system drop-in
+directory, so you add nothing to your Gnoblin configuration.
 
 ## Open the apps
 

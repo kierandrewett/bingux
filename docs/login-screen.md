@@ -1,6 +1,11 @@
 # Login screen
 
-Bingux ships its own login screen, `bingux-greeter`. It is a greetd greeter:
+The login screen belongs to [Bingux OS](../distro/README.md), the image built from
+`distro/`. The `bingux` package for Fedora, Debian and Arch does not include it: those
+systems keep their own display manager (GDM, SDDM or another), and the package creates
+no greeter account.
+
+Bingux OS ships its own login screen, `bingux-greeter`. It is a greetd greeter:
 greetd owns the PAM conversation and the privileged session start, Gnoblin in
 greeter mode (`gnoblin --greeter`) is the compositor it runs on, and the greeter
 is a Quickshell client built on the same `SessionScreen` as the lock screen.
@@ -23,7 +28,8 @@ sequenceDiagram
 
 ## Install
 
-The installer places these files (paths for the default prefix):
+The image's `bingux` package places these files (`make install OS_IMAGE=1`; paths for
+the default prefix):
 
 | File                                             | Purpose                                                                                                                  |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |

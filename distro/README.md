@@ -11,7 +11,10 @@ distro/
   publish-repo.sh       uploads the pacman repository to a GitHub release
   packages/             PKGBUILDs for the packages Arch does not ship
     gnoblin/            placeholder; the PKGBUILD comes from the Gnoblin release tooling
-    bingux/             this repository, including bingux-shell (vendored Quickshell)
+    bingux/             this repository, including bingux-shell (vendored Quickshell);
+                        built with `make install OS_IMAGE=1`, which adds the login screen
+                        that the `bingux` package for other distributions leaves out
+    bsm/                bsm, the Bingux Session Manager (not in any other package)
     bingux-os/          image defaults: login screen, wallpaper, skel, repository
   profile/              archiso overlay on top of the releng profile
   sources/              generated inputs (ignored)
@@ -145,15 +148,15 @@ JSON. `plan.json` is a schema v2 document; the minimum is:
 
 ```json
 {
-  "version": 2,
-  "disk": "/dev/vda",
-  "confirm_erase": "/dev/vda",
-  "storage": {"mode": "erase"},
-  "users": [{"name": "kieran", "password": "correct horse", "admin": true}],
-  "hostname": "bingux-box",
-  "timezone": "Europe/London",
-  "locale": "en_GB.UTF-8",
-  "keymap": "uk"
+    "version": 2,
+    "disk": "/dev/vda",
+    "confirm_erase": "/dev/vda",
+    "storage": { "mode": "erase" },
+    "users": [{ "name": "kieran", "password": "correct horse", "admin": true }],
+    "hostname": "bingux-box",
+    "timezone": "Europe/London",
+    "locale": "en_GB.UTF-8",
+    "keymap": "uk"
 }
 ```
 
@@ -164,7 +167,6 @@ supported for an erase; see the firmware table in the installer guide.
 
 `tests/distro-install.py` runs this end to end in QEMU: it installs onto a
 blank virtual disk, inspects the result, boots the disk alone and signs in.
-
 
 ## Package repository
 

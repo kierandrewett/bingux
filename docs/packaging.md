@@ -20,19 +20,18 @@ publishes.
 
 ## The packages
 
-| Package           | What it is                                                                                         |
-| ----------------- | -------------------------------------------------------------------------------------------------- |
-| `bingux`          | The whole desktop: the shell and every core service, the system integration around them, and `bsm` |
-| `bingux-settings` | The Settings app                                                                                   |
-| `bingux-files`    | The Files app                                                                                      |
-| `bingux-taxonomy` | The Taxonomy app (a reference window for the UI library, a development tool)                       |
+| Package           | What it is                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| `bingux`          | The whole desktop: the shell and every core service, and the system integration around them |
+| `bingux-settings` | The Settings app                                                                            |
+| `bingux-files`    | The Files app                                                                               |
+| `bingux-taxonomy` | The Taxonomy app (a reference window for the UI library, a development tool)                |
 
 **Why this split.** The desktop does not work without its services, so they are one
 package: the shell (`bingux-shell`, Quickshell with the Bingux patches, and its QML
 plugins), the search and status daemons, the privileged helper, the portal backend
-and global shortcuts, the greeter and lock screen programs, `bingux-config`, the
-sound effects engine, the preview helper Files runs, and `bsm` with its helper,
-host bridge and image converter. Each of those is started by the shell, by a
+and global shortcuts, the lock screen program, `bingux-config`, the
+sound effects engine and the preview helper Files runs. Each of those is started by the shell, by a
 systemd unit of `bingux`, or by D-Bus activation, and the shell cannot be installed
 without them. Settings, Files and Taxonomy are applications: a user can run a
 desktop without any of them, each has a desktop entry, an icon and AppStream
@@ -45,13 +44,15 @@ the build adds is packaged without editing a script. The file lists of the
 applications are in `pkgsmith/common.star` (`APPS`). `tests/packaging.py` checks
 that no file is in two packages and none is in no package.
 
-**What `bsm` installs.** `bsm` is the system compositor and session manager. Its
-files are part of `bingux`, but installing them enables nothing: the package
-creates the accounts `bsm` and `bingux-greeter` and the directories under `/run`
-and `/var/lib`, and leaves the login manager as it is. An administrator turns it on
-with `bsm-set-display-manager enable`; removing `bingux` removes that alias again
-and enables greetd. [bsm packaging](bsm/packaging.md) has the files, the boot order
-and the recovery steps.
+**What is not in the packages.** `bingux` is for Fedora, Debian and Arch systems that
+log in through GDM or another display manager that is already there. It creates no
+account and changes no login manager. The pieces that exist only for the Bingux OS
+image (bsm, the login screen and its greetd configuration, the boot splash and the
+greeter account) are not in any package of this repository; the image builds them
+from `distro/` ([Bingux OS](../distro/README.md), [bsm packaging](bsm/packaging.md)).
+`scripts/install-shell.py` installs them only with `--os-image` (`make install
+OS_IMAGE=1`), which the PKGBUILD of the image passes and `scripts/build-prefix.sh`
+does not, so they never reach the prefix.
 
 ### Dependencies
 
@@ -59,7 +60,7 @@ and the recovery steps.
 `xdg-desktop-portal`. The first two are published at `https://repo.gnoblin.org`
 (see [package management](package-management.md#package-repositories)); Gnoblin's
 CI builds them and Bingux's does not. The sound effects plugins, the film decoders
-for previews, Settings, Files and greetd are recommended.
+for previews, Settings and Files are recommended.
 
 pkgsmith does not look inside programs, so the dependency lists in `pkgsmith/*.star`
 are written by hand for Fedora 43, Debian 13 and Arch Linux. Two things keep them
@@ -79,14 +80,13 @@ honest:
 ### Upgrades from the earlier packages
 
 Before 0.1.0 the desktop was `bingux`, `bingux-config`, `bingux-audio-effects` and
-`bingux-preview-host`, and the Bingux OS image had a separate `bsm`. `bingux` takes
-those names over in the way of each format:
+`bingux-preview-host`. `bingux` takes those names over in the way of each format:
 
-| Format      | Fields                                                             |
-| ----------- | ------------------------------------------------------------------ |
-| `rpm`       | `Obsoletes:` and `Provides:` of each old name                      |
-| `deb`       | `Replaces:`, `Conflicts:` and `Provides:` of each old name         |
-| `archlinux` | `replaces`, `conflicts` and `provides` of each old name, and `bsm` |
+| Format      | Fields                                                     |
+| ----------- | ---------------------------------------------------------- |
+| `rpm`       | `Obsoletes:` and `Provides:` of each old name              |
+| `deb`       | `Replaces:`, `Conflicts:` and `Provides:` of each old name |
+| `archlinux` | `replaces`, `conflicts` and `provides` of each old name    |
 
 `scripts/verify-packages.sh` installs stand-ins for the old names first and checks
 that installing the new packages removes them. `bingux-settings`, `bingux-files` and
@@ -103,8 +103,8 @@ sudo scripts/install-build-deps.sh fedora    # or debian, or arch
 scripts/build-prefix.sh                      # ./prefix, ./prefix.env
 ```
 
-`scripts/build-prefix.sh` runs `make all bsm`, installs with `make install` and
-`make install-bsm` (`PREFIX=/usr`, `DESTDIR=prefix`), adds the PAM services,
+`scripts/build-prefix.sh` runs `make all`, installs with `make install`
+(`PREFIX=/usr`, `DESTDIR=prefix`), adds the PAM services of the lock screen,
 documents and licences, compresses the man pages, strips the programs and fails
 when a text file names the build machine's paths. It writes `prefix.env` beside the
 prefix with the facts of the machine (architecture, Qt minor version, Fedora dist
@@ -155,8 +155,7 @@ Arch). The pin of an application on `bingux` uses the same spelling;
 
 The scripts write no `apk`. A glibc prefix does not run on Alpine, which uses musl,
 and a musl prefix is not enough: Bingux needs systemd. `bingux.target`, every user
-unit, `bsm.service` and its sysusers and tmpfiles files, the user presets and the
-polkit and logind rules assume systemd and logind, and Alpine ships neither (it
+unit, the user presets and the logind session assume systemd and logind, and Alpine ships neither (it
 runs OpenRC). To add an `apk`, make a prefix on Alpine or with a musl toolchain
 (the Freya apps would need a Skia build for musl) and a session that does not need
 systemd, then add `"apk"` to `FORMATS` and a dependency table to the scripts.
@@ -207,26 +206,37 @@ Debian 13.
 ## Files that are not built
 
 `data/` holds the files that are installed as they are, and `scripts/install-shell.py`
-and `scripts/install-bsm.sh` put them in place:
+puts them in place:
 
-| Folder                                           | What it holds                                                                                                                        |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `data/systemd/`                                  | User units, `bingux.target`, `bingux-effects@.service` and the preset `90-bingux.preset`                                             |
-| `data/bsm/`                                      | The units, accounts, directories, D-Bus and polkit policy, PAM services and scripts of bsm; `image/` is for the Bingux OS image only |
-| `data/pam/`                                      | The PAM services of the lock screen                                                                                                  |
-| `data/polkit/`, `data/tmpfiles/`, `data/greetd/` | The greeter's polkit rules, directories and greetd configuration                                                                     |
-| `data/portal/`                                   | The portal backend registration and the D-Bus activation files                                                                       |
-| `data/metainfo/`, `data/man/`                    | AppStream files and man pages of the apps and the commands                                                                           |
-| `data/search-apps/`                              | Search-app manifests that `bingux-searchd` reads                                                                                     |
+| Folder                        | What it holds                                                                            |
+| ----------------------------- | ---------------------------------------------------------------------------------------- |
+| `data/systemd/`               | User units, `bingux.target`, `bingux-effects@.service` and the preset `90-bingux.preset` |
+| `data/pam/`                   | The PAM services of the lock screen                                                      |
+| `data/portal/`                | The portal backend registration and the D-Bus activation files                           |
+| `data/metainfo/`, `data/man/` | AppStream files and man pages of the apps and the commands                               |
+| `data/search-apps/`           | Search-app manifests that `bingux-searchd` reads                                         |
 
-The Bingux OS image (`distro/`) still builds its own `bingux` and `bsm` packages
-from PKGBUILDs, from the same source archive and the same `data/` files, because its
-dependency set and its Gnoblin build differ. It does not use the repository
-packages.
+`data/os/` and `data/bsm/` are for Bingux OS only and are not packaged here; see
+[the image's packages](#the-bingux-os-image).
+
+### The Bingux OS image
+
+The Bingux OS image (`distro/`) builds its own `bingux`, `bsm` and `bingux-os`
+packages from PKGBUILDs, from the same source archive, because its dependency set
+and its Gnoblin build differ. It does not use the repository packages or pkgsmith.
+Its `bingux` is built with `make install OS_IMAGE=1`, which adds what the repository
+package leaves out: the greeter programs and `gnoblin/greeter.lua`, the greetd,
+polkit and tmpfiles files and the wallpaper units for the login screen (`data/os/`).
+`bsm` has its own PKGBUILD and `scripts/install-bsm.sh` (`make bsm`,
+`make install-bsm`); `bingux-os` holds the image defaults. The same sources therefore
+stay in the tree, and nothing for the image is in a package that ordinary
+distributions install.
 
 ## How it was verified
 
-Run on 2026-11-01 on a Fedora 43 host. pkgsmith was built with `scripts/install-pkgsmith.sh` at `1041e4c`.
+Run on 2026-11-01 on a Fedora 43 host. pkgsmith was built with `scripts/install-pkgsmith.sh` at `1041e4c`. That run
+was of the package as it was before bsm and the login screen files were taken out of `bingux`; the numbers and the account
+checks below describe that package. `scripts/verify-packages.sh` now checks that none of those files is installed.
 
 - **Fedora 43.** `make all bsm` and `scripts/build-prefix.sh` made a prefix of 156 files. The scripts wrote rpm and tar for
   `0.1.0` and rpm for `0.1.1-nightly.20261031.142.gabc1234`. Every `%files` entry of the old spec (69) is in the right
