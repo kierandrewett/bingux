@@ -272,6 +272,6 @@ end
 for _, rule in ipairs(edge_rules(gnoblin.appearance.color_scheme())) do
     gnoblin.window_rule(rule)
 end
-gnoblin.events.on("gnoblin.appearance.color-scheme-changed", function(event)
+gnoblin.on("gnoblin.appearance.color-scheme-changed", function(event)
     apply_edges(event.color_scheme)
 end)
