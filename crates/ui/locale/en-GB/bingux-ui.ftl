@@ -471,6 +471,23 @@ ui-preview-edge =
     .a11y = Preview pane edge
 ui-preview-not-started-error = Could not start the preview. Try again.
 ui-preview-stopped-error = This preview was stopped to make room for another. Open it again to see it.
+# The preview helper is the separate process that plays media and renders documents.
+ui-preview-helper-missing = The preview helper (bingux-preview-host) is not installed.
+# $error (Text) - the system's reason the helper did not start
+ui-preview-helper-start-error = The preview helper did not start ({ $error }).
+ui-preview-no-thread = The preview could not start (no thread).
+ui-preview-timeout-open = The preview took too long to open and was stopped.
+# $error (Text) - the reason the helper's file could not be opened
+ui-preview-file-not-opened = The file could not be opened ({ $error }).
+ui-preview-timeout = The preview took too long and was stopped.
+# $status (Text) - the helper's exit status
+ui-preview-helper-stopped-status = The preview helper stopped unexpectedly ({ $status }).
+ui-preview-helper-stopped = The preview helper stopped unexpectedly.
+# $error (Text) - the reason the helper's message could not be read
+ui-preview-helper-unreadable = The preview helper sent something unreadable ({ $error }).
+ui-preview-frame-invalid = The preview helper sent a frame that does not fit.
+ui-preview-page-invalid = The preview helper sent a page that does not fit.
+ui-preview-version-mismatch = The preview helper speaks another version.
 # The names in the Info panel of a preview.
 ui-info-name = Name
 ui-info-type = Type

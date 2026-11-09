@@ -507,7 +507,7 @@ fn supervise(inner: &Arc<Inner>) {
     let Some(program) = host_program() else {
         inner.finish(Failure {
             code: ErrorCode::NoDecoder,
-            message: "The preview helper (bingux-preview-host) is not installed.".to_owned(),
+            message: crate::tr!("ui-preview-helper-missing"),
         });
         return;
     };
@@ -529,7 +529,7 @@ fn supervise(inner: &Arc<Inner>) {
         Err(error) => {
             inner.finish(Failure {
                 code: ErrorCode::Internal,
-                message: format!("The preview helper did not start ({error})."),
+                message: crate::tr!("ui-preview-helper-start-error", error = error.to_string()),
             });
             return;
         }
@@ -561,7 +561,7 @@ fn supervise(inner: &Arc<Inner>) {
         let _ = child.wait();
         inner.finish(Failure {
             code: ErrorCode::Internal,
-            message: "The preview could not start (no thread).".to_owned(),
+            message: crate::tr!("ui-preview-no-thread"),
         });
         return;
     }
@@ -594,7 +594,7 @@ fn supervise(inner: &Arc<Inner>) {
                 if deadline != 0 && inner.start.elapsed() > Duration::from_millis(deadline - 1) {
                     inner.finish(Failure {
                         code: ErrorCode::Internal,
-                        message: "The preview took too long to open and was stopped.".to_owned(),
+                        message: crate::tr!("ui-preview-timeout-open"),
                     });
                     break None;
                 }
@@ -645,9 +645,9 @@ fn supervise(inner: &Arc<Inner>) {
                             request: packet.request,
                             message: Message::Error {
                                 code: ErrorCode::NotFound,
-                                message: format!(
-                                    "The file could not be opened ({}).",
-                                    bingux_preview_core::text::plain(&error)
+                                message: crate::tr!(
+                                    "ui-preview-file-not-opened",
+                                    error = bingux_preview_core::text::plain(&error)
                                 ),
                             },
                         }));
@@ -677,10 +677,13 @@ fn supervise(inner: &Arc<Inner>) {
     if !closing {
         let what = match status {
             Some(status) if status.code() == Some(124) => {
-                "The preview took too long and was stopped.".to_owned()
+                crate::tr!("ui-preview-timeout")
             }
-            Some(status) => format!("The preview helper stopped unexpectedly ({status})."),
-            None => "The preview helper stopped unexpectedly.".to_owned(),
+            Some(status) => crate::tr!(
+                "ui-preview-helper-stopped-status",
+                status = status.to_string()
+            ),
+            None => crate::tr!("ui-preview-helper-stopped"),
         };
         inner.finish(Failure {
             code: ErrorCode::Internal,
@@ -711,7 +714,7 @@ fn read(inner: &Arc<Inner>, channel: &Channel) {
             Err(error) => {
                 inner.finish(Failure {
                     code: ErrorCode::Internal,
-                    message: format!("The preview helper sent something unreadable ({error})."),
+                    message: crate::tr!("ui-preview-helper-unreadable", error = error.to_string()),
                 });
                 break;
             }
@@ -734,7 +737,7 @@ fn read(inner: &Arc<Inner>, channel: &Channel) {
                 if !valid {
                     inner.finish(Failure {
                         code: ErrorCode::Internal,
-                        message: "The preview helper sent a frame that does not fit.".to_owned(),
+                        message: crate::tr!("ui-preview-frame-invalid"),
                     });
                     break;
                 }
@@ -784,7 +787,7 @@ fn read(inner: &Arc<Inner>, channel: &Channel) {
                 if !valid {
                     inner.finish(Failure {
                         code: ErrorCode::Internal,
-                        message: "The preview helper sent a page that does not fit.".to_owned(),
+                        message: crate::tr!("ui-preview-page-invalid"),
                     });
                     break;
                 }
@@ -801,7 +804,7 @@ fn read(inner: &Arc<Inner>, channel: &Channel) {
             Message::Ready { version, .. } if version != VERSION => {
                 inner.finish(Failure {
                     code: ErrorCode::Internal,
-                    message: "The preview helper speaks another version.".to_owned(),
+                    message: crate::tr!("ui-preview-version-mismatch"),
                 });
                 break;
             }
