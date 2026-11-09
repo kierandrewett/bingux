@@ -77,12 +77,16 @@ enum Step {
 }
 
 fn missing_rule() -> String {
-    "That rule no longer exists. Try again.".to_owned()
+    "Could not find that rule. Reopen the page and try again.".to_owned()
 }
 
 /// Checks the store after an edit, so every write passes the schema.
 fn checked(store: Store) -> Result<Store, String> {
-    store.validate().map_err(|error| error.to_string())?;
+    store.validate().map_err(|error| {
+        eprintln!("settings: permission store rejected: {error}");
+        "Could not save the rule. Check that its name is not already used, then try again."
+            .to_owned()
+    })?;
     Ok(store)
 }
 
@@ -125,7 +129,7 @@ fn move_rule(store: &Store, index: usize, step: Step) -> Result<Store, String> {
         Step::Up => index.checked_sub(1),
         Step::Down => Some(index + 1).filter(|target| *target < len),
     }
-    .ok_or_else(|| "That rule cannot move that way.".to_owned())?;
+    .ok_or_else(|| "Could not move the rule. Reopen the page and try again.".to_owned())?;
     let mut next = store.clone();
     next.rules.swap(index, target);
     checked(next)
@@ -201,7 +205,7 @@ impl Draft {
             .as_deref()
             .is_some_and(|path| !Path::new(path).is_absolute())
         {
-            return Err("The program path must start with /.".to_owned());
+            return Err("Start the program path with /.".to_owned());
         }
         let monitors = if capabilities.iter().any(|c| c.supports_monitors()) {
             split_names(&self.monitors)
@@ -390,8 +394,8 @@ fn confirm_delete(ctx: Ctx, model: &Model, index: usize) {
     let model = model.clone();
     ctx.overlays.show_dialog(
         dialog(
-            format!("Delete {name}?"),
-            "Apps that match this rule fall back to the other rules and the default level.",
+            format!("Delete “{name}”?"),
+            "Apps that match this rule use the other rules and the default level.",
         )
         .cancel("Cancel")
         .response("Delete", ResponseKind::Destructive, move |_| {
@@ -426,14 +430,16 @@ impl Component for PrivacyPage {
         let data = match loaded {
             Ok(data) => data,
             Err(e) => {
-                let path = store::default_path();
+                eprintln!(
+                    "settings: permission file {}",
+                    store::default_path().display()
+                );
                 return page_column()
                     .child(PageHead::new())
                     .child(status(Status::Error(e.0)).action("Try again", move |_| reload(ctx)))
-                    .child(status(Status::Info(format!(
-                        "Fix or remove “{}”, then try again.",
-                        path.display()
-                    ))))
+                    .child(status(Status::Info(
+                        "Fix or remove the permissions file, then try again.".to_string(),
+                    )))
                     .into_element();
             }
         };
@@ -473,7 +479,7 @@ fn defaults_group(data: &Model, ctx: Ctx) -> Group {
             };
             apply(ctx, &model, move |store| with_default(store, level));
         })
-        .subtitle("Applies when no rule decides. Deny refuses every request that no rule allows."),
+        .subtitle("Used when no rule applies. Deny refuses every request that no rule allows."),
     );
     if !data.exists {
         group = group.row(
@@ -496,7 +502,7 @@ fn rules_group(data: &Model, ctx: Ctx) -> Group {
     }
     let model = data.clone();
     group.row(
-        row("Add a rule")
+        row("New rule")
             .subtitle("A matching deny always wins. Otherwise the rule listed last wins.")
             .trailing(primary_button("Add rule", move |_| {
                 open_editor(ctx, &model, None, Draft::new());
@@ -617,15 +623,15 @@ impl Component for RuleEditor {
             .row(text_row("Name", name, |_: String| {}))
             .row(
                 text_row("App ID", app_id, |_: String| {})
-                    .subtitle("The app's ID, such as org.example.Viewer."),
+                    .subtitle("The app ID, such as org.example.Viewer."),
             )
             .row(
                 text_row("Program", exe, |_: String| {})
-                    .subtitle("An absolute path, such as /usr/bin/viewer."),
+                    .subtitle("The full path, such as /usr/bin/viewer."),
             )
             .row(
                 text_row("Pattern", pattern, |_: String| {})
-                    .subtitle("A glob over the requester. * matches any run, ? one character."),
+                    .subtitle("Use * for any text and ? for one character."),
             );
 
         for capability in CAPABILITIES {
@@ -644,7 +650,7 @@ impl Component for RuleEditor {
         if monitors_apply {
             fields = fields.row(
                 text_row("Monitors", monitors, |_: String| {})
-                    .subtitle("Output names, separated by commas, such as DP-1."),
+                    .subtitle("Monitor names separated by commas, such as DP-1."),
             );
         }
 
@@ -816,7 +822,7 @@ mod tests {
         relative.exe = "bin/viewer".to_owned();
         assert_eq!(
             relative.to_rule().unwrap_err(),
-            "The program path must start with /."
+            "Start the program path with /."
         );
         relative.exe = "/usr/bin/viewer".to_owned();
         assert!(relative.to_rule().is_ok());
