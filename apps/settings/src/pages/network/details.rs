@@ -13,6 +13,7 @@ use super::{Owner, Section};
 use crate::routes;
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{Group, PageHead, Status, page_column, row, skeleton_rows, status};
+use bingux_ui::prelude::tr;
 use bingux_ui::prelude::use_router;
 use bingux_ui::style::*;
 
@@ -135,16 +136,24 @@ fn format_route(text: &str) -> String {
     if destination.is_empty() {
         return text.trim().to_string();
     }
-    let mut line = destination;
-    if next_hop.is_empty() || next_hop == "0.0.0.0" || next_hop == "::" {
-        line.push_str(" direct");
+    let line = if next_hop.is_empty() || next_hop == "0.0.0.0" || next_hop == "::" {
+        tr!("network-route-direct", destination = destination.as_str())
     } else {
-        line.push_str(&format!(" via {next_hop}"));
+        tr!(
+            "network-route-via",
+            destination = destination.as_str(),
+            hop = next_hop.as_str()
+        )
+    };
+    if metric.is_empty() {
+        line
+    } else {
+        tr!(
+            "network-route-metric",
+            route = line.as_str(),
+            metric = metric.as_str()
+        )
     }
-    if !metric.is_empty() {
-        line.push_str(&format!(", metric {metric}"));
-    }
-    line
 }
 
 /// The routes of a saved profile. nmcli prints them either as
@@ -186,15 +195,14 @@ fn parse_saved_list(text: &str) -> Vec<String> {
 /// An IP method in words.
 fn method_label(method: &str) -> String {
     match method {
-        "auto" => "Automatic",
-        "dhcp" => "Automatic (DHCP)",
-        "manual" => "Manual",
-        "disabled" | "ignore" => "Off",
-        "link-local" => "Link-local only",
-        "shared" => "Shared with other computers",
-        other => other,
+        "auto" => tr!("network-method-auto"),
+        "dhcp" => tr!("network-method-dhcp"),
+        "manual" => tr!("network-method-manual"),
+        "disabled" | "ignore" => tr!("network-method-off"),
+        "link-local" => tr!("network-method-link-local"),
+        "shared" => tr!("network-method-shared"),
+        other => other.to_string(),
     }
-    .to_string()
 }
 
 /// The live facts of one family from an active connection.
@@ -228,18 +236,18 @@ fn saved_family(pairs: &Pairs, prefix: &str) -> Family {
 /// What a connection type is called.
 fn kind_label(kind: &str, service: &str) -> String {
     match kind {
-        "802-3-ethernet" | "ethernet" => "Ethernet".into(),
-        "802-11-wireless" | "wifi" => "Wi-Fi".into(),
+        "802-3-ethernet" | "ethernet" => tr!("network-kind-ethernet"),
+        "802-11-wireless" | "wifi" => tr!("network-kind-wifi"),
         "wireguard" => "WireGuard".into(),
-        "gsm" | "cdma" => "Mobile broadband".into(),
+        "gsm" | "cdma" => tr!("network-kind-mobile"),
         "vpn" => match service.rsplit('.').next().unwrap_or("") {
             "openvpn" => "OpenVPN".into(),
             "openconnect" => "OpenConnect".into(),
             "vpnc" => "Cisco VPN (vpnc)".into(),
-            "" => "VPN".into(),
-            other => format!("VPN ({other})"),
+            "" => tr!("network-kind-vpn"),
+            other => tr!("network-kind-vpn-named", name = other),
         },
-        "bridge" => "Bridge".into(),
+        "bridge" => tr!("network-kind-bridge"),
         other => super::model::capitalise(other),
     }
 }
@@ -316,7 +324,7 @@ fn read_wifi(device: &str) -> Option<WifiFacts> {
             channel: field(2),
             band: band_of(&field(3)),
             security: if field(4).is_empty() {
-                "Open".into()
+                tr!("network-security-open")
             } else {
                 field(4)
             },

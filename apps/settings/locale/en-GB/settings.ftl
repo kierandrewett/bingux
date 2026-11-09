@@ -778,3 +778,218 @@ network-vpn-hint-private-key = Stays on this computer. Never share it.
 network-vpn-group-interface = Interface
 # Value shown when a public key is not available yet.
 network-vpn-not-available = Not available
+
+## Wi-Fi hotspot
+# Error when the hotspot settings cannot be read.
+network-hotspot-error-read = Could not read the hotspot settings. Try again.
+# Button to retry a failed load.
+network-hotspot-try-again = Try again
+# Action to share the connection through the hotspot.
+network-hotspot-share = Share
+# Action to turn the hotspot off.
+network-hotspot-turn-off = Turn off
+# Status shown while the hotspot is turning off.
+network-hotspot-turning-off = Turning off { $name }…
+# Error when the hotspot cannot be turned off.
+network-hotspot-error-stop = Could not turn off the hotspot. Try again.
+# Status when the computer has no Wi-Fi adapter.
+network-hotspot-no-adapter = This computer has no Wi-Fi adapter.
+# Status when a hardware switch has turned Wi-Fi off.
+network-hotspot-hardware-switch = A hardware switch has turned Wi-Fi off.
+# Status when airplane mode blocks the hotspot.
+network-hotspot-airplane = Airplane mode has turned Wi-Fi off, so there is no connection to share.
+# Action to turn off airplane mode.
+network-hotspot-turn-off-airplane = Turn off airplane mode
+# Status when Wi-Fi is off.
+network-hotspot-wifi-off = Wi-Fi is off.
+# Action to turn Wi-Fi on.
+network-hotspot-turn-on-wifi = Turn on Wi-Fi
+# Band option meaning the hotspot picks a band itself.
+network-hotspot-band-auto = Automatic
+# Status shown while the hotspot is starting.
+network-hotspot-turning-on = Turning on the Wi-Fi hotspot…
+# Error when the hotspot cannot be started.
+network-hotspot-error-start = Could not turn on the hotspot. Try again.
+# Label for the hotspot network name field.
+network-hotspot-field-name = Network name
+# Label for the hotspot password field.
+network-hotspot-field-password = Password
+# Hint under the hotspot password field.
+network-hotspot-hint-password = At least 8 characters.
+# Label for the hotspot band field.
+network-hotspot-field-band = Band
+# Warning that turning on the hotspot disconnects from the current network.
+network-hotspot-disconnects = Turning it on disconnects this computer from { $network }.
+# Description of the hotspot sharing behaviour.
+network-hotspot-shares = Devices that join share this computer's connection.
+# Action to turn the hotspot on.
+network-hotspot-turn-on = Turn on
+# Value shown when no hotspot password is saved.
+network-hotspot-password-none = None saved
+# Error value when the hotspot password cannot be read.
+network-hotspot-password-error = Could not read the password
+# Value shown when no devices are connected.
+network-hotspot-devices-none = No devices
+# Value shown for one connected device.
+network-hotspot-devices-one = 1 device
+# Value shown for several connected devices.
+network-hotspot-devices-many = { $count ->
+    [one] 1 device
+   *[other] { $count } devices
+}
+# Title of the group shown while the hotspot is on.
+network-hotspot-group-on = Hotspot is on
+# Row label for the connected devices count.
+network-hotspot-row-connected = Connected devices
+
+## Connection detail
+# Route description with no next hop.
+network-route-direct = { $destination } direct
+# Route description via a next hop.
+network-route-via = { $destination } via { $hop }
+# Route description with a metric appended.
+network-route-metric = { $route }, metric { $metric }
+# IP method: automatic.
+network-method-auto = Automatic
+# IP method: automatic via DHCP.
+network-method-dhcp = Automatic (DHCP)
+# IP method: manual.
+network-method-manual = Manual
+# IP method: off.
+network-method-off = Off
+# IP method: link-local only.
+network-method-link-local = Link-local only
+# IP method: shared with other computers.
+network-method-shared = Shared with other computers
+# Connection type: Ethernet.
+network-kind-ethernet = Ethernet
+# Connection type: Wi-Fi.
+network-kind-wifi = Wi-Fi
+# Connection type: mobile broadband.
+network-kind-mobile = Mobile broadband
+# Connection type: generic VPN.
+network-kind-vpn = VPN
+# Connection type: named VPN service.
+network-kind-vpn-named = VPN ({ $name })
+# Connection type: bridge.
+network-kind-bridge = Bridge
+# Security value for an open Wi-Fi network.
+network-security-open = Open
+
+## Profile advanced
+# Validation error for a client ID.
+network-advanced-client-id-invalid = Use up to 255 characters, with no space at either end.
+# Validation error for a route metric.
+network-advanced-route-metric-invalid = Enter a whole number, or leave it empty for automatic.
+# Section title for connection options.
+network-advanced-group-connection = Connection
+# Row: retry count when connecting.
+network-advanced-retries = Connection retries
+# Row: multicast DNS setting.
+network-advanced-mdns = Multicast DNS
+# Row: LLMNR setting.
+network-advanced-llmnr = LLMNR
+# Row: hidden network setting.
+network-advanced-hidden = Hidden network
+# Row: Wi-Fi band.
+network-advanced-band = Frequency band
+# Row: require IPv4 to connect.
+network-advanced-ipv4-required = Require IPv4 to connect
+# Row: send host name to DHCP server.
+network-advanced-send-hostname = Send host name
+# Field label: DHCP host name.
+network-advanced-hostname = Host name
+# Hint under the host name field.
+network-advanced-hostname-hint = Leave empty to send this computer's own name.
+# Field label: DHCP client ID.
+network-advanced-client-id = Client ID
+# Hint under the client ID field.
+network-advanced-client-id-hint = mac, duid, or a hex string
+# Field label: route metric.
+network-advanced-route-metric = Route metric
+# Placeholder for an automatic value.
+network-advanced-automatic = Automatic
+# Hint under the route metric field.
+network-advanced-metric-hint = Lower numbers are preferred.
+# Row: require IPv6 to connect.
+network-advanced-ipv6-required = Require IPv6 to connect
+# Row: IPv6 address generation mode.
+network-advanced-addr-gen = Address generation
+
+## Profile identity
+# Note on a VPN page where hardware settings do not apply.
+network-identity-vpn-no-hardware = A VPN has no hardware address or MTU of its own.
+# Section title for identity.
+network-identity-group = Identity
+# Row: connection name.
+network-identity-name = Name
+# Row: cloned MAC address mode.
+network-identity-cloned-mac = Cloned MAC address
+# Row: MTU mode.
+network-identity-mtu = MTU
+# Field label: MAC address.
+network-identity-mac-address = MAC address
+# Field label: MTU size.
+network-identity-mtu-size = MTU size
+# Section title for hardware.
+network-identity-group-hardware = Hardware
+# Row: random MAC address mode.
+network-identity-random-mac = Random MAC address
+# Row: wake on LAN setting.
+network-identity-wake-on-lan = Wake on LAN
+
+## Profile security
+# Validation error for a WEP key phrase.
+network-security-wep-phrase-error = Use 1 to 64 letters, numbers or symbols.
+# Button: open the file chooser.
+network-security-browse = Browse…
+# File filter: every file.
+network-security-all-files = All files
+# File filter name: certificates.
+network-security-cert-filter = Certificates
+# File filter name: private keys.
+network-security-key-filter = Private keys
+# Row: EAP method.
+network-security-method = Method
+# Section title for 802.1X sign-in.
+network-security-auth-group = Authentication
+# Row: inner (phase 2) authentication.
+network-security-inner-auth = Inner authentication
+# Field label: 802.1X identity.
+network-security-identity = Identity
+# Field label: anonymous identity.
+network-security-anon-identity = Anonymous identity
+# Hint under the anonymous identity field.
+network-security-anon-hint = Sent before the secure connection starts. Leave empty unless the network asks for it.
+# Field label: password.
+network-security-password = Password
+# Row: use the system's trusted certificates.
+network-security-system-ca = Use the system's trusted certificates
+# Section title for certificates.
+network-security-certs-group = Certificates
+# Field label: CA certificate.
+network-security-ca-cert = CA certificate
+# Hint under the CA certificate field.
+network-security-ca-hint = Optional. The certificate that signed the network's own. Leave empty to skip this check.
+# Field label: client certificate.
+network-security-client-cert = Client certificate
+# Field label: private key.
+network-security-private-key = Private key
+# Field label: private key password.
+network-security-key-password = Private key password
+# Note on a VPN security page.
+network-security-vpn-none = This connection has no security settings here.
+# Row: 802.1X switch.
+network-security-8021x = Use 802.1X authentication
+# Section title and row label: security.
+network-security-label = Security
+# Description: open network.
+network-security-open-note = Open network: traffic is not encrypted.
+# Description: WEP network.
+network-security-wep-note = WEP is easy to break.
+# Hint under the Wi-Fi password field.
+network-security-psk-hint = Use 8 to 63 characters, or 64 hexadecimal digits.
+# Row: WEP key type.
+network-security-key-type = Key type
+# Field label: WEP key.
+network-security-wep-key = WEP key

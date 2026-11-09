@@ -20,8 +20,9 @@ use crate::ui::{
     page_column, row, status, strip_action, use_overlays, use_page_busy, use_window,
 };
 use bingux_ui::controls::form::validate;
+use bingux_ui::prelude::tr;
 
-const BAND_OPTIONS: [(&str, &str); 3] = [("auto", "Automatic"), ("bg", "2.4 GHz"), ("a", "5 GHz")];
+const BAND_OPTIONS: [(&str, &str); 3] = [("auto", ""), ("bg", "2.4 GHz"), ("a", "5 GHz")];
 const CLIENTS_EVERY: Duration = Duration::from_secs(5);
 /// Letters and digits without the pairs that read alike (0 O, 1 l I).
 const PASSWORD_ALPHABET: &[u8] = b"abcdefghjkmnpqrstuvwxyz23456789";
@@ -245,9 +246,9 @@ impl Component for HotspotPage {
             return page_column().child(PageHead::new()).child(
                 status(Status::Error(plain(
                     &error.0,
-                    "Could not read the hotspot settings. Try again.",
+                    &tr!("network-hotspot-error-read"),
                 )))
-                .action("Try again", move |_| ui.reload_all()),
+                .action(&tr!("network-hotspot-try-again"), move |_| ui.reload_all()),
             );
         }
 
@@ -268,54 +269,55 @@ impl Component for HotspotPage {
                 device: device.clone(),
             }));
             blocks.push(Element::from(action_strip(vec![
-                strip_action(Icon::SendTo, "Share", move |_| {
+                strip_action(Icon::SendTo, &tr!("network-hotspot-share"), move |_| {
                     share::open(window, share_target.clone())
                 }),
-                strip_action(Icon::NetworkWirelessDisabled, "Turn off", move |_| {
-                    let uuid = stop_uuid.clone();
-                    ui.act(
-                        &format!("Turning off {stop_name}…"),
-                        |error| plain(&error.0, "Could not turn off the hotspot. Try again."),
-                        move || nm::disconnect(&uuid),
-                        || {},
-                    );
-                }),
+                strip_action(
+                    Icon::NetworkWirelessDisabled,
+                    &tr!("network-hotspot-turn-off"),
+                    move |_| {
+                        let uuid = stop_uuid.clone();
+                        ui.act(
+                            &tr!("network-hotspot-turning-off", name = stop_name.as_str()),
+                            |error| plain(&error.0, &tr!("network-hotspot-error-stop")),
+                            move || nm::disconnect(&uuid),
+                            || {},
+                        );
+                    },
+                ),
             ])));
         } else {
             match radio {
                 Radio::Missing => blocks.push(Element::from(Group::new(None::<String>).row(
-                    Element::from(status(Status::Empty(
-                        "This computer has no Wi-Fi adapter.".into(),
-                    ))),
+                    Element::from(status(Status::Empty(tr!("network-hotspot-no-adapter")))),
                 ))),
                 Radio::Blocked => blocks.push(Element::from(Group::new(None::<String>).row(
-                    Element::from(status(Status::Info("A hardware switch has turned Wi-Fi off.".into()))),
+                    Element::from(status(Status::Info(tr!("network-hotspot-hardware-switch")))),
                 ))),
                 Radio::Airplane => blocks.push(Element::from(Group::new(None::<String>).row(
                     Element::from(
-                        status(Status::Info(
-                            "Airplane mode has turned Wi-Fi off, so there is no connection to share."
-                                .into(),
-                        ))
-                        .action("Turn off airplane mode", move |_| {
-                            model::toggle_link(ui.ctx, "airplane".to_string(), false, || {
-                                model::set_airplane_mode(false)
-                            })
-                        }),
+                        status(Status::Info(tr!("network-hotspot-airplane"))).action(
+                            &tr!("network-hotspot-turn-off-airplane"),
+                            move |_| {
+                                model::toggle_link(ui.ctx, "airplane".to_string(), false, || {
+                                    model::set_airplane_mode(false)
+                                })
+                            },
+                        ),
                     ),
                 ))),
-                Radio::Off => blocks.push(Element::from(
-                    Group::new(None::<String>).row(Element::from(
-                        status(Status::Info(
-                            "Wi-Fi is off.".into(),
-                        ))
-                        .action("Turn on Wi-Fi", move |_| {
-                            model::toggle_link(ui.ctx, "wifi".to_string(), true, || {
-                                model::set_wifi_radio(true)
-                            })
-                        }),
-                    )),
-                )),
+                Radio::Off => blocks.push(Element::from(Group::new(None::<String>).row(
+                    Element::from(
+                        status(Status::Info(tr!("network-hotspot-wifi-off"))).action(
+                            &tr!("network-hotspot-turn-on-wifi"),
+                            move |_| {
+                                model::toggle_link(ui.ctx, "wifi".to_string(), true, || {
+                                    model::set_wifi_radio(true)
+                                })
+                            },
+                        ),
+                    ),
+                ))),
                 Radio::On => {}
             }
             if radio != Radio::Missing {
@@ -324,7 +326,14 @@ impl Component for HotspotPage {
                     && validate::wpa_passphrase(&password.read()).is_ok();
                 let options: Vec<(String, String)> = BAND_OPTIONS
                     .iter()
-                    .map(|(key, label)| (key.to_string(), label.to_string()))
+                    .map(|(key, label)| {
+                        let label = if label.is_empty() {
+                            tr!("network-hotspot-band-auto")
+                        } else {
+                            label.to_string()
+                        };
+                        (key.to_string(), label)
+                    })
                     .collect();
                 let on_start = {
                     let device = device.clone();
@@ -341,8 +350,8 @@ impl Component for HotspotPage {
                         let device = device.clone();
                         let uuid = uuid.clone();
                         ui.act(
-                            "Turning on the Wi-Fi hotspot…",
-                            |error| plain(&error.0, "Could not turn on the hotspot. Try again."),
+                            &tr!("network-hotspot-turning-on"),
+                            |error| plain(&error.0, &tr!("network-hotspot-error-start")),
                             move || start(&device, uuid.as_deref(), &ssid, &secret, &band),
                             || {},
                         );
@@ -352,18 +361,18 @@ impl Component for HotspotPage {
                 blocks.push(Element::from(
                     Group::new(None::<String>)
                         .row(
-                            form_field("Network name", name)
+                            form_field(&tr!("network-hotspot-field-name"), name)
                                 .validate(validate::ssid)
                                 .on_submit(move |_: ()| on_start()),
                         )
                         .row(
-                            form_field("Password", password)
+                            form_field(&tr!("network-hotspot-field-password"), password)
                                 .password()
-                                .hint("At least 8 characters.")
+                                .hint(&tr!("network-hotspot-hint-password"))
                                 .validate(validate::wpa_passphrase),
                         )
                         .row(choice_row(
-                            "Band",
+                            &tr!("network-hotspot-field-band"),
                             options,
                             &band.read(),
                             move |key: String| band.set(key),
@@ -371,13 +380,13 @@ impl Component for HotspotPage {
                 ));
                 let note = match joined_name(&model) {
                     Some(current) if can_start => {
-                        format!("Turning it on disconnects this computer from {current}.")
+                        tr!("network-hotspot-disconnects", network = current)
                     }
-                    _ => "Devices that join share this computer's connection.".to_string(),
+                    _ => tr!("network-hotspot-shares"),
                 };
                 blocks.push(action_row(
                     Some(&note),
-                    action_button("Turn on", move |_| press())
+                    action_button(&tr!("network-hotspot-turn-on"), move |_| press())
                         .suggested()
                         .enabled(can_start && valid),
                 ));
@@ -425,29 +434,34 @@ impl Component for RunningGroup {
             });
         });
         let password_row = match &*secret.read() {
-            Some(Ok(Some(text))) => share::secret_row("Password", text, shown, overlays),
-            Some(Ok(None)) => row("Password").value("None saved"),
-            Some(Err(error)) => {
-                row("Password").value(plain(&error.0, "Could not read the password"))
-            }
-            None => row("Password").value("—"),
+            Some(Ok(Some(text))) => share::secret_row(
+                &tr!("network-hotspot-field-password"),
+                text,
+                shown,
+                overlays,
+            ),
+            Some(Ok(None)) => row(tr!("network-hotspot-field-password"))
+                .value(tr!("network-hotspot-password-none")),
+            Some(Err(error)) => row(tr!("network-hotspot-field-password"))
+                .value(plain(&error.0, &tr!("network-hotspot-password-error"))),
+            None => row(tr!("network-hotspot-field-password")).value("—"),
         };
         let band = match band_key(&self.ap.band).as_str() {
-            "bg" => "2.4 GHz",
-            "a" => "5 GHz",
-            _ => "Automatic",
+            "bg" => "2.4 GHz".to_string(),
+            "a" => "5 GHz".to_string(),
+            _ => tr!("network-hotspot-band-auto"),
         };
         let people = match *clients.read() {
-            Some(0) => "No devices".to_string(),
-            Some(1) => "1 device".to_string(),
-            Some(count) => format!("{count} devices"),
+            Some(0) => tr!("network-hotspot-devices-none"),
+            Some(1) => tr!("network-hotspot-devices-one"),
+            Some(count) => tr!("network-hotspot-devices-many", count = count.to_string()),
             None => "—".to_string(),
         };
-        Group::titled("Hotspot is on")
-            .row(row("Network name").value(self.ap.ssid.clone()))
+        Group::titled(&tr!("network-hotspot-group-on"))
+            .row(row(tr!("network-hotspot-field-name")).value(self.ap.ssid.clone()))
             .row(password_row)
-            .row(row("Band").value(band))
-            .row(row("Connected devices").value(people))
+            .row(row(tr!("network-hotspot-field-band")).value(band))
+            .row(row(tr!("network-hotspot-row-connected")).value(people))
     }
 }
 

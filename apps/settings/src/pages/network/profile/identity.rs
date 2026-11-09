@@ -8,6 +8,7 @@ use freya::prelude::*;
 
 use bingux_ui::controls::form::validate;
 use bingux_ui::controls::{form_field, pending_bar};
+use bingux_ui::prelude::tr;
 
 use super::super::{Owner, Section};
 use super::advanced::options_with;
@@ -170,7 +171,7 @@ impl Component for IdentityBody {
         let kind = page.kind();
         if kind == Kind::Vpn {
             return page_column().child(crate::ui::status(crate::ui::Status::Empty(
-                "A VPN has no hardware address or MTU of its own.".into(),
+                tr!("network-identity-vpn-no-hardware").into(),
             )));
         }
         // A Wi-Fi profile is found again by its name, so the name stays what the network is called.
@@ -209,12 +210,15 @@ impl Component for IdentityBody {
             move |_: ()| draft.reset(&page.saved)
         };
 
-        let mut identity = Group::titled("Identity");
+        let mut identity = Group::titled(&tr!("network-identity-group"));
         if name_editable {
-            identity =
-                identity.row(form_field("Name", draft.text("name")).validate(connection_name));
+            identity = identity.row(
+                form_field(&tr!("network-identity-name"), draft.text("name"))
+                    .validate(connection_name),
+            );
         } else {
-            identity = identity.row(row("Name").value(page.saved.get("connection.id")));
+            identity = identity
+                .row(row(&tr!("network-identity-name")).value(page.saved.get("connection.id")));
             let bssid = page.saved.get("802-11-wireless.bssid");
             if !bssid.is_empty() {
                 identity = identity.row(row("BSSID").technical_value(bssid));
@@ -224,7 +228,7 @@ impl Component for IdentityBody {
         let mac_row = {
             let (draft, saved) = (draft.clone(), page.saved.clone());
             choice_row(
-                "Cloned MAC address",
+                &tr!("network-identity-cloned-mac"),
                 options(CLONED_MAC_CHOICES),
                 &form.mac_mode,
                 move |value: String| {
@@ -239,7 +243,7 @@ impl Component for IdentityBody {
         let mtu_row = {
             let (draft, saved) = (draft.clone(), page.saved.clone());
             choice_row(
-                "MTU",
+                &tr!("network-identity-mtu"),
                 options(MTU_CHOICES),
                 &form.mtu_mode,
                 move |value: String| {
@@ -252,15 +256,18 @@ impl Component for IdentityBody {
         };
 
         // The fields that depend on a choice slide in under it.
-        let mac_field = form_field("MAC address", draft.text("mac_address"))
-            .placeholder("00:1A:2B:3C:4D:5E")
-            .monospace()
-            .validate(validate::mac);
-        let mtu_field = form_field("MTU size", draft.text("mtu_value"))
+        let mac_field = form_field(
+            &tr!("network-identity-mac-address"),
+            draft.text("mac_address"),
+        )
+        .placeholder("00:1A:2B:3C:4D:5E")
+        .monospace()
+        .validate(validate::mac);
+        let mtu_field = form_field(&tr!("network-identity-mtu-size"), draft.text("mtu_value"))
             .placeholder("1500")
             .suffix("bytes")
             .validate(mtu);
-        let mut hardware = Group::titled("Hardware")
+        let mut hardware = Group::titled(&tr!("network-identity-group-hardware"))
             .row(mac_row.nested(form.mac_mode == "address", vec![mac_field.into()]))
             .row(mtu_row.nested(form.mtu_mode == "custom", vec![mtu_field.into()]));
         hardware = hardware.row(match kind {
@@ -271,7 +278,7 @@ impl Component for IdentityBody {
                 };
                 let page = page.clone();
                 choice_row(
-                    "Random MAC address",
+                    &tr!("network-identity-random-mac"),
                     options(MAC_RANDOMIZATION_CHOICES),
                     selected,
                     move |value: String| {
@@ -286,7 +293,7 @@ impl Component for IdentityBody {
                 let selected = wake_on_lan_of(&page.saved).to_string();
                 let page = page.clone();
                 choice_row(
-                    "Wake on LAN",
+                    &tr!("network-identity-wake-on-lan"),
                     options_with(WAKE_ON_LAN_CHOICES, &selected),
                     &selected,
                     move |value: String| {
