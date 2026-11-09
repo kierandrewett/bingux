@@ -24,6 +24,7 @@ bluetooth-error-timeout = The device did not respond in time. Bring it closer an
 bluetooth-error-no-response = The device did not respond. Turn it on, bring it closer and try again.
 bluetooth-error-generic = Could not finish the action. Try again.
 bluetooth-error-try-later = Try again in a moment.
+bluetooth-error-status-read = Could not read the Bluetooth status. Try again in a moment.
 
 # The toast when an action is requested while another one runs.
 bluetooth-toast-busy = Another action is still running
