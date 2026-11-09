@@ -126,7 +126,7 @@ fn run_tool(program: &str, args: &[&str], timeout: Duration) -> Result<String, C
         // Without bluetoothd, bluetoothctl aborts on a D-Bus assertion and
         // prints a build-flag complaint that means nothing to a user.
         if error.0.contains("D-Bus") || error.0.contains("rdynamic") {
-            CommandError("The Bluetooth service is not running.".into())
+            CommandError("Bluetooth is not available. Restart the computer and try again.".into())
         } else {
             error
         }
@@ -144,7 +144,7 @@ fn field<'a>(text: &'a str, key: &str) -> Option<&'a str> {
 fn flag(text: &str, key: &str) -> Result<bool, CommandError> {
     field(text, key)
         .map(|value| value == "yes")
-        .ok_or_else(|| CommandError("Bluetooth status could not be read.".into()))
+        .ok_or_else(|| CommandError("Could not read Bluetooth status. Restart Settings.".into()))
 }
 
 /// `Battery Percentage` reads `0x5a (90)`; the percentage is in brackets.
@@ -314,7 +314,7 @@ const REASONS: &[(&[&str], &str)] = &[
     ),
     (
         &["d-bus", "rdynamic"],
-        "The Bluetooth service is not running.",
+        "Bluetooth is not available. Restart the computer and try again.",
     ),
     (
         &["inprogress", "in progress"],
@@ -326,7 +326,7 @@ const REASONS: &[(&[&str], &str)] = &[
     ),
     (
         &["notavailable", "not available", "doesnotexist", "not found"],
-        "The device is out of range or turned off.",
+        "The device is out of range or turned off. Turn it on, then try again.",
     ),
     (
         &["timeout", "timed out"],
@@ -351,9 +351,9 @@ fn plain_reason(text: &str) -> String {
         }
     }
     if lower.contains("org.") || lower.contains("bluez") || lower.contains("bluetoothd") {
-        return "The action did not finish.".to_string();
+        return "Could not finish the action. Try again.".to_string();
     }
-    text.trim().to_string()
+    "Try again in a moment.".to_string()
 }
 
 fn run_steps(steps: &[Step]) -> Result<(), String> {
@@ -433,13 +433,25 @@ fn set_switch_job(ctx: Ctx, pending: State<Option<bool>>, job: Job, on: bool) {
 }
 
 fn power_job(on: bool) -> Job {
-    let word = if on { "on" } else { "off" };
+    let (word, busy, failed) = if on {
+        (
+            "on",
+            "Turning Bluetooth on…",
+            "Could not turn on Bluetooth. Restart the computer and try again.",
+        )
+    } else {
+        (
+            "off",
+            "Turning Bluetooth off…",
+            "Could not turn off Bluetooth. Try again.",
+        )
+    };
     Job {
         mac: String::new(),
-        busy: format!("Turning Bluetooth {word}…"),
+        busy: busy.to_string(),
         steps: vec![step(&["power", word], TIMEOUT)],
         done: String::new(),
-        failed: format!("Bluetooth could not be turned {word}."),
+        failed: failed.to_string(),
     }
 }
 
@@ -448,9 +460,9 @@ fn power_job(on: bool) -> Job {
 fn rename_job(device: &Device, alias: &str) -> Job {
     let path = format!("/org/bluez/hci0/dev_{}", device.mac.replace(':', "_"));
     let done = if alias.is_empty() {
-        format!("{} uses its own name again.", device.name)
+        format!("“{}” uses its own name again", device.name)
     } else {
-        format!("Renamed to {alias}.")
+        format!("Renamed to “{alias}”")
     };
     Job {
         mac: device.mac.clone(),
@@ -473,7 +485,7 @@ fn rename_job(device: &Device, alias: &str) -> Job {
             timeout: TIMEOUT,
         }],
         done,
-        failed: format!("Could not rename {}.", device.name),
+        failed: format!("Could not rename “{}”.", device.name),
     }
 }
 
@@ -484,7 +496,10 @@ fn trust_job(device: &Device, on: bool) -> Job {
         busy: "Saving…".to_string(),
         steps: vec![step(&[word, device.mac.as_str()], TIMEOUT)],
         done: String::new(),
-        failed: format!("Could not change automatic connection for {}.", device.name),
+        failed: format!(
+            "Could not change automatic connection for “{}”.",
+            device.name
+        ),
     }
 }
 
@@ -493,8 +508,8 @@ fn remove_job(device: &Device) -> Job {
         mac: device.mac.clone(),
         busy: "Forgetting…".to_string(),
         steps: vec![step(&["remove", device.mac.as_str()], TIMEOUT)],
-        done: format!("{} was forgotten.", device.name),
-        failed: format!("Could not forget {}.", device.name),
+        done: format!("“{}” was forgotten", device.name),
+        failed: format!("Could not forget “{}”.", device.name),
     }
 }
 
@@ -509,16 +524,16 @@ fn device_job(device: &Device) -> Job {
             mac: device.mac.clone(),
             busy: "Disconnecting…".to_string(),
             steps: vec![step(&["disconnect", mac], TIMEOUT)],
-            done: format!("Disconnected from {name}."),
-            failed: format!("Could not disconnect from {name}."),
+            done: format!("Disconnected from “{name}”"),
+            failed: format!("Could not disconnect from “{name}”."),
         }
     } else if device.paired {
         Job {
             mac: device.mac.clone(),
             busy: "Connecting…".to_string(),
             steps: vec![step(&["connect", mac], CONNECT_TIMEOUT)],
-            done: format!("Connected to {name}."),
-            failed: format!("Could not connect to {name}."),
+            done: format!("Connected to “{name}”"),
+            failed: format!("Could not connect to “{name}”."),
         }
     } else {
         Job {
@@ -528,8 +543,8 @@ fn device_job(device: &Device) -> Job {
                 step(&["--timeout", "30", "pair", mac], PAIR_TIMEOUT),
                 step(&["connect", mac], CONNECT_TIMEOUT),
             ],
-            done: format!("Connected to {name}."),
-            failed: format!("Could not set up {name}."),
+            done: format!("Connected to “{name}”"),
+            failed: format!("Could not set up “{name}”."),
         }
     }
 }
@@ -939,7 +954,7 @@ impl Component for BluetoothPage {
                     "A hardware switch has turned Bluetooth off. Turn it on to use Bluetooth."
                 }
                 Block::Software => {
-                    "A system setting has blocked Bluetooth. Turn off \"Airplane mode\" or unblock Bluetooth to use it."
+                    "A system setting has blocked Bluetooth. Turn off “Airplane Mode” or unblock Bluetooth to use it."
                 }
             };
             return page_column()
@@ -1092,8 +1107,8 @@ fn confirm_forget(ctx: Ctx, device: &Device) {
     let job = remove_job(device);
     ctx.overlays.show_dialog(
         dialog(
-            format!("Forget \"{}\"?", device_name(device)),
-            "This computer forgets the pairing. Pair again to use the device.",
+            format!("Forget “{}”?", device_name(device)),
+            "This computer will forget the pairing. Pair again to use the device.",
         )
         .cancel("Cancel")
         .default_action(CANCEL_ID)
