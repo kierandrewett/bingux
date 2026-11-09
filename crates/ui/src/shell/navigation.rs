@@ -1027,6 +1027,7 @@ impl Component for NavigationSplitView {
         };
         let can_back = model.can_go_back();
         let window_title = model.window_title(&self.app_title);
+        crate::app::claim_window_title();
         use_side_effect_with_deps(&window_title, |title| {
             let title = title.clone();
             crate::shell::window::with_window(move |window| window.set_title(&title));
@@ -1525,13 +1526,19 @@ impl Component for NavigationSplitView {
                     // right from where it was, over the screen beneath it.
                     let x = slide.at(time);
                     memory.borrow_mut().shown = Some((slide.motion, x));
-                    let outgoing = slide.outgoing_screen.clone().unwrap_or_else(|| rect().into());
+                    let outgoing = slide
+                        .outgoing_screen
+                        .clone()
+                        .unwrap_or_else(|| rect().into());
                     stage.child(at_rest(screen)).child(slide_frame(
                         x * width,
                         1.0,
                         Some(card_amount(x)),
                         &tokens,
-                        rect().width(Size::fill()).height(Size::fill()).child(outgoing),
+                        rect()
+                            .width(Size::fill())
+                            .height(Size::fill())
+                            .child(outgoing),
                     ))
                 }
                 Some(slide) => {
@@ -1996,9 +2003,10 @@ impl Component for Sidebar {
                         })
                         .children(entries)
                         .maybe_child(no_matches.then(|| {
-                            rect()
-                                .tw(&tokens, &[pt(S3), px(S3)])
-                                .child(BODY.in_ink(Ink::Muted).label(&tokens, crate::tr!("ui-search-no-matches")))
+                            rect().tw(&tokens, &[pt(S3), px(S3)]).child(
+                                BODY.in_ink(Ink::Muted)
+                                    .label(&tokens, crate::tr!("ui-search-no-matches")),
+                            )
                         })),
                 ),
             );

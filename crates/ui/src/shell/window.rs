@@ -171,7 +171,11 @@ impl Component for HeaderBar {
             })
             .child(
                 rect()
-                    .position(Position::new_absolute().top(0.0).left(inset + pad - pad_left.px()))
+                    .position(
+                        Position::new_absolute()
+                            .top(0.0)
+                            .left(inset + pad - pad_left.px()),
+                    )
                     .width(Size::px(centre_width))
                     // Freya does not size an absolute box from top and bottom,
                     // so the row takes the bar's full height to centre the title.
@@ -198,13 +202,7 @@ impl Component for HeaderBar {
             .tw(&tokens, HEADER)
             // A bar that holds tabs is the strip: a tab bar tall, not a header.
             .maybe(tabs, |bar| bar.tw(&tokens, &[h(Dim::TabBar)]))
-            .tw(
-                &tokens,
-                &[
-                    pl(pad_left),
-                    bg(self.background),
-                ],
-            )
+            .tw(&tokens, &[pl(pad_left), bg(self.background)])
             .on_pointer_down(move |event: Event<PointerEventData>| {
                 if !inert && draggable {
                     drag_on_pointer_down(event);
@@ -216,13 +214,20 @@ impl Component for HeaderBar {
             // still take a gap, so it is left out.
             Some(strip) => bar
                 .maybe_child((!self.leading.is_empty() || self.busy).then(|| leading))
-                .child(rect().tw(&tokens, &[w_flex(), h_full()]).child(strip.clone()))
+                .child(
+                    rect()
+                        .tw(&tokens, &[w_flex(), h_full()])
+                        .child(strip.clone()),
+                )
                 .child(trailing),
             None if self.title_start => bar
                 .child(leading)
                 .child(
                     rect()
-                        .tw(&tokens, &[w_flex(), h_full(), flex_row(), items(Align::Center), px(S2)])
+                        .tw(
+                            &tokens,
+                            &[w_flex(), h_full(), flex_row(), items(Align::Center), px(S2)],
+                        )
                         .child(text),
                 )
                 .child(trailing),
@@ -237,7 +242,10 @@ impl Component for HeaderBar {
 
 /// A small spinner with a "Working…" tooltip, shown beside the header title.
 fn busy_indicator() -> Element {
-    hover_tip(spinner(SpinnerSize::Small), crate::tr!("ui-window-busy"))
+    hover_tip(
+        spinner(SpinnerSize::Small),
+        crate::tr!("ui-window-busy-status"),
+    )
 }
 
 /// Provide this below a window that is only a picture of a window (the
@@ -313,7 +321,11 @@ impl Component for WindowControl {
         // Close lights red under the pointer and darker while pressed; the others
         // take the hover layer and then the press layer.
         let danger = self.danger && (hovering() || pressing());
-        let base = if danger { Paint::Danger } else { Paint::Transparent };
+        let base = if danger {
+            Paint::Danger
+        } else {
+            Paint::Transparent
+        };
         rect()
             .component("WindowControl")
             .tw(
@@ -362,7 +374,12 @@ impl Component for WindowControl {
             // Dim::WindowControlTarget (32 px, 44 px at compact density).
             .child({
                 let side = Dim::WindowControlTarget.px();
-                hit_area((Dim::WindowControl.px(), Dim::WindowControl.px()), (side, side), hovering, pressing)
+                hit_area(
+                    (Dim::WindowControl.px(), Dim::WindowControl.px()),
+                    (side, side),
+                    hovering,
+                    pressing,
+                )
             })
             .focusable(focus())
     }

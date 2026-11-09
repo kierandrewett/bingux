@@ -73,13 +73,16 @@ ui-error-details-not-copied = Could not copy the details. Try again.
 
 ## Window controls and the header bar
 
+# The name of an app that did not give one, in "Could not show { $name }".
+ui-app-unnamed = The app
+
 ui-window-minimise = Minimise
 ui-window-maximise = Maximise
 ui-window-restore = Restore
 # Tooltip and screen reader name of the window's close button.
 ui-window-close-button = Close
 # Tooltip of the spinner beside a window title while the app works.
-ui-window-busy = Working…
+ui-window-busy-status = Working…
 ui-nav-back = Back
 ui-nav-forward = Forward
 # Tooltip of the close button of a banner or notice.
@@ -128,7 +131,7 @@ ui-validate-integer = Enter a whole number from { NUMBER($least, useGrouping: "f
 ui-validate-host = Enter a host name such as vpn.example.com, or an IP address.
 ui-validate-url = Enter a full address such as http://example.com/proxy.pac.
 ui-validate-wireguard-key = Enter a WireGuard key: 44 letters, digits, + and /, ending in =.
-ui-validate-ssid-empty = Enter the network name.
+ui-validate-ssid-missing = Enter the network name.
 # A Wi-Fi network name is limited to 32 bytes; a letter with an accent takes two.
 # $bytes (Number) - how many bytes the typed name takes
 ui-validate-ssid-long = Use a shorter name. A network name fits in 32 bytes, and this one takes { $bytes }.
@@ -205,3 +208,305 @@ ui-about-no-authors = { $app } does not list its authors.
 ui-about-no-library-licences = The licences of the libraries { $app } is built from are not listed in this build.
 # $path (String) - a folder on the computer
 ui-about-licence-files = The full licence texts are in { $path }.
+
+## Commands: the menu groups, the command palette and the keyboard
+## shortcuts sheet every window has
+
+ui-command-group-app = General
+ui-command-group-file = File
+ui-command-group-edit = Edit
+ui-command-group-view = View
+# The group of commands that move between pages, folders and tabs.
+ui-command-group-go = Go
+ui-command-group-window = Window
+ui-command-group-help = Help
+# .keywords: words that also find the command in the palette, separated by
+# commas. Translate them as search words, not as a sentence.
+ui-command-palette = Command palette
+    .keywords = commands, actions, find
+ui-command-shortcuts = Keyboard shortcuts
+    .keywords = keys, help
+# The About command; its title is ui-about-title.
+ui-command-about =
+    .keywords = version, licence, credits
+# Title of the command palette dialog.
+ui-palette-title = Commands
+ui-palette-search =
+    .placeholder = Search commands
+    .a11y = Search commands
+ui-palette-list =
+    .a11y = Commands
+# Read out by a screen reader as the person types.
+# $count (Number) - how many commands match the search
+ui-palette-matches-status = { $count ->
+    [0] No commands match
+    [one] { $count } command matches
+   *[other] { $count } commands match
+}
+# $query (String) - what the person typed
+ui-palette-no-match-empty = No commands match “{ $query }”
+ui-shortcuts-title = Keyboard shortcuts
+ui-shortcuts-search =
+    .placeholder = Search shortcuts
+ui-shortcuts-none-empty = No keyboard shortcuts in this window
+# $query (String) - what the person typed
+ui-shortcuts-no-match-empty = No shortcuts match “{ $query }”
+
+## Key names on key caps and in shortcut labels. Use the names printed on
+## keyboards sold for the language (German: Strg, Umschalt, Entf).
+
+ui-key-ctrl = Ctrl
+ui-key-alt = Alt
+ui-key-shift = Shift
+# The key with the system's logo.
+ui-key-super = Super
+ui-key-enter = Enter
+ui-key-escape = Esc
+ui-key-tab = Tab
+ui-key-backspace = Backspace
+ui-key-delete = Delete
+ui-key-insert = Insert
+ui-key-home = Home
+ui-key-end = End
+ui-key-page-up = Page Up
+ui-key-page-down = Page Down
+# The arrow keys.
+ui-key-up = Up
+ui-key-down = Down
+ui-key-left = Left
+ui-key-right = Right
+# The key that opens a context menu.
+ui-key-menu = Menu
+ui-key-plus = Plus
+ui-key-minus = Minus
+ui-key-space = Space
+
+## Undo and Redo. $action is the change's name as the app gave it, first
+## letter in lower case, such as "rename" or "move to Trash".
+
+ui-undo = Undo
+ui-redo = Redo
+# $action (String) - the change, such as "rename"
+ui-undo-named = Undo { $action }
+# $action (String) - the change
+ui-redo-named = Redo { $action }
+# Read out by a screen reader after an undo.
+ui-undo-done-status = Undone
+ui-redo-done-status = Redone
+# $action (String) - the change that was undone
+ui-undo-named-done-status = Undid { $action }
+# $action (String) - the change that was redone
+ui-redo-named-done-status = Redid { $action }
+
+## Copying text
+
+# Toast after text was copied.
+ui-copy-done-status = Copied
+ui-copy-failed-error = Could not copy the text. Try again.
+# Right-click menu of a file path: copies the whole path.
+ui-path-copy-path = Copy path
+# Right-click menu of a file name.
+ui-path-copy-name = Copy name
+
+## The main menu of a window
+
+# Tooltip and screen reader name of the menu button in a header bar.
+ui-main-menu = Main menu
+
+## Lists the person can reorder by dragging
+
+# The name of an item with no title of its own.
+ui-sortable-item = Item
+# Read out after an item moved.
+# $name (String) - the item
+# $position (Number) - where it is now, counting from 1
+# $count (Number) - how many items there are
+ui-sortable-moved-status = { $name } now { $position } of { $count }
+# The drag handle of an item with no title.
+ui-sortable-grip =
+    .a11y = Reorder
+    .description = Press Up or Down to move, Home or End to send to an end.
+# $name (String) - the item the handle moves
+ui-sortable-grip-named =
+    .a11y = Reorder { $name }
+
+## Panes
+
+ui-split-divider =
+    .a11y = Pane divider
+
+## Opening files and links with other apps
+
+ui-open-no-app-error = No app is set up to open this. Install an app that opens this type of file.
+ui-open-not-local-error = Could not open the file. Copy it to this computer, then open it again.
+ui-open-gone-error = Could not open the file. Find where it was moved, then open it again.
+ui-open-bad-address-error = Could not open the address. Check that it is typed correctly.
+# $app (String) - the app's name
+ui-open-app-not-started-error = Could not open { $app }. Try again.
+ui-open-not-started-error = Could not open the app. Try again.
+ui-bus-missing-error = Could not reach the desktop. Log out and back in, then try again.
+ui-bus-timeout-error = The desktop did not answer. Try again in a moment.
+
+## Charts
+
+ui-chart-no-data-empty = No data yet
+# Screen reader names of charts that have no title of their own.
+ui-chart-sparkline = Sparkline
+ui-chart-line = Line chart
+ui-chart-bars = Bar chart
+ui-chart-gauge = Gauge
+ui-chart-donut = Donut chart
+ui-chart-flame = Flame graph
+ui-chart-timeline = Timeline chart
+# Title of the tooltip over a point of a sparkline.
+# $position (Number) - the point, counting from 1
+# $count (Number) - how many points there are
+ui-chart-point = Point { $position } of { $count }
+# The name of a series with no name of its own.
+ui-chart-value = Value
+# The sum of a stacked bar.
+ui-chart-total = Total
+# Short durations on a chart's axis. Use the language's unit abbreviations.
+# $days (Number)
+# $hours (Number)
+ui-chart-days-hours = { $hours ->
+    [0] { $days } d
+   *[other] { $days } d { $hours } h
+}
+# $hours (Number)
+# $minutes (Number)
+ui-chart-hours-minutes = { $minutes ->
+    [0] { $hours } h
+   *[other] { $hours } h { $minutes } min
+}
+# $minutes (Number)
+ui-chart-minutes = { $minutes } min
+# $seconds (Number)
+ui-chart-seconds = { $seconds } s
+# The line under a flame graph while the pointer is on a bar.
+# $share (Number) - percentage of all samples in this call, one decimal
+# $own (Number) - percentage spent in the call itself, one decimal
+# $value (String) - the call's total, already formatted
+# $depth (Number) - how many calls deep the bar is
+ui-flame-bar-description = { $share }% of all  ·  { $own }% in the call itself  ·  { $value }  ·  depth { $depth }
+ui-flame-hint = Point at a bar for its full name and numbers. Click it to zoom in, and press Escape to zoom out.
+# $name (String) - the call zoomed to
+ui-flame-zoomed-hint = Zoomed to { $name }. Press Escape to zoom out, or point at a bar for its full name and numbers.
+# $depth (Number) - how many calls deep the view starts
+ui-flame-split-hint = Showing from { $depth } calls down, where the work splits. Point at a bar for its full name and numbers, or click it to zoom in.
+# Button that zooms back out to the whole graph.
+ui-flame-all-calls = All calls
+ui-flame-none-empty = Nothing sampled in this range
+
+## The colour picker
+
+ui-colour-title = Colour
+ui-colour-done = Done
+ui-colour-hex =
+    .a11y = Hex colour
+ui-colour-opacity = Opacity
+ui-colour-red = Red
+ui-colour-green = Green
+ui-colour-blue = Blue
+ui-colour-hue = Hue
+ui-colour-saturation = Saturation
+ui-colour-lightness = Lightness
+# The V of HSV: how bright the colour is.
+ui-colour-value = Value
+ui-colour-recent = Recent
+ui-colour-picker =
+    .a11y = Colour picker
+ui-colour-plane =
+    .a11y = Saturation and brightness
+# $saturation (Number) - 0 to 100
+# $brightness (Number) - 0 to 100
+ui-colour-plane-value =
+    .a11y = Saturation { $saturation }%, brightness { $brightness }%
+# $old (String) - the colour before, as #rrggbb
+# $new (String) - the colour now
+ui-colour-preview =
+    .a11y = Colour, was { $old }, now { $new }
+# $colour (String) - the colour before, as #rrggbb
+ui-colour-old =
+    .a11y = Restore old colour { $colour }
+# A named swatch, such as "Blue, #3584e4".
+# $name (String) - the colour's name
+# $hex (String) - the colour as #rrggbb
+ui-colour-named = { $name }, { $hex }
+# $colour (String) - the swatch's name and hex value
+ui-colour-swatch =
+    .a11y = Colour { $colour }
+ui-colour-hex-missing-error = Enter a hex colour, such as #3584e4.
+# $digit (String) - the character that is not 0-9 or a-f
+ui-colour-hex-digit-error = “{ $digit }” is not a hex digit. Use 0 to 9 and A to F.
+# $count (Number) - how many digits were typed
+ui-colour-hex-length-error = { $count ->
+    [one] { $count } digit. Use 3, 4, 6 or 8.
+   *[other] { $count } digits. Use 3, 4, 6 or 8.
+}
+
+## File previews (Quick Look)
+
+ui-preview-title = Preview
+ui-preview-nothing = Nothing to preview
+ui-preview-none-empty = No preview for this file
+ui-preview-open =
+    .tooltip = Open (Enter)
+ui-preview-info =
+    .tooltip = Info (I)
+ui-preview-popup =
+    .tooltip = Open as a popup (Alt+P)
+ui-preview-dock =
+    .tooltip = Dock to the side (Alt+P)
+ui-preview-hide =
+    .tooltip = Hide the preview
+ui-preview-close =
+    .tooltip = Close (Space)
+ui-preview-properties = Properties
+ui-preview-edge =
+    .a11y = Preview pane edge
+ui-preview-not-started-error = Could not start the preview. Try again.
+ui-preview-stopped-error = This preview was stopped to make room for another. Open it again to see it.
+# The names in the Info panel of a preview.
+ui-info-name = Name
+ui-info-type = Type
+ui-info-size = Size
+ui-info-modified = Modified
+# The folder the file is in.
+ui-info-location = Location
+ui-info-dimensions = Dimensions
+ui-info-resolution = Resolution
+ui-info-camera = Camera
+ui-info-lens = Lens
+# When a photo was taken.
+ui-info-taken = Taken
+ui-info-exposure = Exposure
+ui-info-software = Software
+# Where a photo was taken.
+ui-info-place = Place
+# How long a song or a video plays.
+ui-info-length = Length
+ui-info-codecs = Codecs
+# The character encoding of a text file.
+ui-info-encoding = Encoding
+ui-info-format = Format
+# What an archive holds.
+ui-info-contents = Contents
+# $count (Number) - how many files the archive holds
+ui-info-files = { $count ->
+    [one] { $count } file
+   *[other] { $count } files
+}
+# The archive was too large to count every file.
+# $count (Number) - how many files were counted
+ui-info-files-at-least = { $count ->
+    [one] { $count } file or more
+   *[other] { $count } files or more
+}
+# The size of an archive's files once unpacked.
+ui-info-unpacked = Unpacked
+ui-info-family = Family
+ui-info-style = Style
+ui-info-version = Version
+ui-info-designer = Designer
+ui-info-glyphs = Glyphs

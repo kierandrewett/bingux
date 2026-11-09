@@ -25,7 +25,10 @@ pub fn card_size(view: (f32, f32)) -> (f32, f32) {
     if view.0 < 1.0 || view.1 < 1.0 {
         return CARD;
     }
-    (view.0.clamp(CARD_MIN.0, CARD.0), (view.1 + 96.0).clamp(CARD_MIN.1, CARD.1))
+    (
+        view.0.clamp(CARD_MIN.0, CARD.0),
+        (view.1 + 96.0).clamp(CARD_MIN.1, CARD.1),
+    )
 }
 
 /// Show `content` in the frame of `mode`. `size` is the card's size (see
@@ -35,9 +38,21 @@ pub fn card_size(view: (f32, f32)) -> (f32, f32) {
 ///
 /// A pane is not a dialog: ask [`PreviewDock`](super::PreviewDock) for that.
 /// Showing in `Mode::Pane` shows a popup.
-pub fn show(overlays: Overlays, mode: Mode, size: (f32, f32), compact: bool, content: impl Into<Element>, on_closed: impl Into<EventHandler<()>>) {
-    let dialog = framed_dialog("Preview", content, size.0, size.1).on_closed(on_closed);
-    let dialog = if compact || mode == Mode::Fullscreen { dialog.fill_window() } else { dialog };
+pub fn show(
+    overlays: Overlays,
+    mode: Mode,
+    size: (f32, f32),
+    compact: bool,
+    content: impl Into<Element>,
+    on_closed: impl Into<EventHandler<()>>,
+) {
+    let dialog =
+        framed_dialog(crate::tr!("ui-preview-title"), content, size.0, size.1).on_closed(on_closed);
+    let dialog = if compact || mode == Mode::Fullscreen {
+        dialog.fill_window()
+    } else {
+        dialog
+    };
     overlays.show_dialog(dialog);
 }
 
@@ -49,7 +64,15 @@ pub fn open(overlays: Overlays, source: PreviewSource) {
 
 fn show_fixed(overlays: Overlays, source: PreviewSource, mode: Mode) {
     let again = source.clone();
-    let nav = PreviewNav::new(move |_| overlays.dismiss_dialog()).on_mode(move |next: Mode| show_fixed(overlays, again.clone(), next));
+    let nav = PreviewNav::new(move |_| overlays.dismiss_dialog())
+        .on_mode(move |next: Mode| show_fixed(overlays, again.clone(), next));
     let host = PreviewHost::new(Some(source), mode, nav);
-    show(overlays, mode, CARD, crate::style::is_compact(), host, |_| {});
+    show(
+        overlays,
+        mode,
+        CARD,
+        crate::style::is_compact(),
+        host,
+        |_| {},
+    );
 }

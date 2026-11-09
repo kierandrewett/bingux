@@ -119,7 +119,10 @@ enum Outgoing {
     Packet(Packet),
     /// Open `file` and send the open request with it. For media, a sidecar
     /// subtitle file beside it (`name.srt`, `name.vtt`) goes along when there is one.
-    OpenFiles { packet: Packet, file: PathBuf },
+    OpenFiles {
+        packet: Packet,
+        file: PathBuf,
+    },
 }
 
 #[derive(Default)]
@@ -155,7 +158,9 @@ pub struct HostLink {
 static LIVE: LazyLock<Mutex<Vec<Weak<Inner>>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// The helper's program, found the way a packaged install lays it out: the
@@ -165,10 +170,18 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 /// cargo target directory the copy beside `deps/` counts too, so `cargo test`
 /// finds the helper built next to it; a release build never looks there.
 pub fn host_program() -> Option<PathBuf> {
-    host_program_from(std::env::var_os("BINGUX_PREVIEW_HOST").map(PathBuf::from), std::env::current_exe().ok(), std::env::var_os("PATH"))
+    host_program_from(
+        std::env::var_os("BINGUX_PREVIEW_HOST").map(PathBuf::from),
+        std::env::current_exe().ok(),
+        std::env::var_os("PATH"),
+    )
 }
 
-fn host_program_from(explicit: Option<PathBuf>, exe: Option<PathBuf>, path: Option<std::ffi::OsString>) -> Option<PathBuf> {
+fn host_program_from(
+    explicit: Option<PathBuf>,
+    exe: Option<PathBuf>,
+    path: Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
     const NAME: &str = "bingux-preview-host";
     if let Some(explicit) = explicit.filter(|path| !path.as_os_str().is_empty()) {
         return explicit.is_file().then_some(explicit);
@@ -182,13 +195,18 @@ fn host_program_from(explicit: Option<PathBuf>, exe: Option<PathBuf>, path: Opti
         #[cfg(debug_assertions)]
         {
             if dir.file_name().is_some_and(|name| name == "deps")
-                && let Some(above) = dir.parent().map(|parent| parent.join(NAME)).filter(|candidate| candidate.is_file())
+                && let Some(above) = dir
+                    .parent()
+                    .map(|parent| parent.join(NAME))
+                    .filter(|candidate| candidate.is_file())
             {
                 return Some(above);
             }
         }
     }
-    std::env::split_paths(&path?).map(|dir| dir.join(NAME)).find(|candidate| candidate.is_file())
+    std::env::split_paths(&path?)
+        .map(|dir| dir.join(NAME))
+        .find(|candidate| candidate.is_file())
 }
 
 /// Whether previews of films, songs and documents can run: the helper is installed.
@@ -203,19 +221,42 @@ impl HostLink {
         let inner = Arc::new(Inner::new());
         make_room(&inner);
         let thread = Arc::clone(&inner);
-        let spawned = std::thread::Builder::new().name("bingux-preview-link".into()).spawn(move || supervise(&thread));
+        let spawned = std::thread::Builder::new()
+            .name("bingux-preview-link".into())
+            .spawn(move || supervise(&thread));
         if let Err(error) = spawned {
-            inner.finish(Failure { code: ErrorCode::Internal, message: format!("The preview could not start ({error}).") });
+            inner.finish(Failure {
+                code: ErrorCode::Internal,
+                message: {
+                    eprintln!("bingux-preview-link: {error}");
+                    crate::tr!("ui-preview-not-started-error")
+                },
+            });
         }
         HostLink { inner }
     }
 
     /// Ask the helper to play `file` with frames at most `max` pixels. A
     /// sidecar subtitle file goes along when there is one.
-    pub fn open_media(&self, file: &Path, want_video: bool, max: (u32, u32), autoplay: bool) -> u32 {
+    pub fn open_media(
+        &self,
+        file: &Path,
+        want_video: bool,
+        max: (u32, u32),
+        autoplay: bool,
+    ) -> u32 {
         let request = 1;
         self.inner.push(Outgoing::OpenFiles {
-            packet: Packet { request, message: Message::OpenMedia { want_video, max_w: max.0, max_h: max.1, autoplay, subtitle_file: false } },
+            packet: Packet {
+                request,
+                message: Message::OpenMedia {
+                    want_video,
+                    max_w: max.0,
+                    max_h: max.1,
+                    autoplay,
+                    subtitle_file: false,
+                },
+            },
             file: file.to_owned(),
         });
         request
@@ -223,7 +264,13 @@ impl HostLink {
 
     pub fn open_document(&self, file: &Path) -> u32 {
         let request = 1;
-        self.inner.push(Outgoing::OpenFiles { packet: Packet { request, message: Message::OpenDocument }, file: file.to_owned() });
+        self.inner.push(Outgoing::OpenFiles {
+            packet: Packet {
+                request,
+                message: Message::OpenDocument,
+            },
+            file: file.to_owned(),
+        });
         request
     }
 
@@ -232,7 +279,13 @@ impl HostLink {
     /// `RenderPage` of page 0.
     pub fn open_image(&self, file: &Path, raw: bool) -> u32 {
         let request = 1;
-        self.inner.push(Outgoing::OpenFiles { packet: Packet { request, message: Message::OpenImage { raw } }, file: file.to_owned() });
+        self.inner.push(Outgoing::OpenFiles {
+            packet: Packet {
+                request,
+                message: Message::OpenImage { raw },
+            },
+            file: file.to_owned(),
+        });
         request
     }
 
@@ -277,7 +330,10 @@ impl HostLink {
             outbox.closing = true;
             // Nothing else matters now: drop what is waiting, say goodbye.
             outbox.queue.clear();
-            outbox.queue.push_back(Outgoing::Packet(Packet { request: 0, message: Message::Close }));
+            outbox.queue.push_back(Outgoing::Packet(Packet {
+                request: 0,
+                message: Message::Close,
+            }));
         }
         drop(outbox);
         self.inner.wake.notify_all();
@@ -314,7 +370,10 @@ impl Inner {
         if let Outgoing::Packet(packet) = &outgoing {
             // A newer value of the same kind makes an older one pointless.
             let same = |waiting: &Outgoing| match (waiting, &packet.message) {
-                (Outgoing::Packet(old), new) => std::mem::discriminant(&old.message) == std::mem::discriminant(new) && is_latest_wins(new),
+                (Outgoing::Packet(old), new) => {
+                    std::mem::discriminant(&old.message) == std::mem::discriminant(new)
+                        && is_latest_wins(new)
+                }
                 _ => false,
             };
             if let Some(at) = outbox.queue.iter().position(same) {
@@ -323,7 +382,15 @@ impl Inner {
         }
         if outbox.queue.len() >= OUTBOX_LIMIT {
             // Page renders are the only thing that piles up, and the viewer asks again.
-            let stale = outbox.queue.iter().position(|waiting| matches!(waiting, Outgoing::Packet(Packet { message: Message::RenderPage { .. } | Message::PageText { .. }, .. })));
+            let stale = outbox.queue.iter().position(|waiting| {
+                matches!(
+                    waiting,
+                    Outgoing::Packet(Packet {
+                        message: Message::RenderPage { .. } | Message::PageText { .. },
+                        ..
+                    })
+                )
+            });
             match stale {
                 Some(at) => {
                     outbox.queue.remove(at);
@@ -347,28 +414,45 @@ impl Inner {
 
     fn deadline_in(&self, time: Duration) {
         let at = self.start.elapsed() + time;
-        self.open_deadline.store(at.as_millis() as u64 + 1, Ordering::Release);
+        self.open_deadline
+            .store(at.as_millis() as u64 + 1, Ordering::Release);
     }
 }
 
 /// Whether a newer packet of this kind replaces an older one still waiting.
 fn is_latest_wins(message: &Message) -> bool {
-    matches!(message, Message::Seek { .. } | Message::SetSize { .. } | Message::SetVolume { .. } | Message::SetRate { .. } | Message::SetMute { .. })
+    matches!(
+        message,
+        Message::Seek { .. }
+            | Message::SetSize { .. }
+            | Message::SetVolume { .. }
+            | Message::SetRate { .. }
+            | Message::SetMute { .. }
+    )
 }
 
 /// A subtitle file beside `media`, named like it: `film.srt` or `film.vtt`.
 fn sidecar_of(media: &Path) -> Option<PathBuf> {
-    ["srt", "vtt"].iter().map(|extension| media.with_extension(extension)).find(|candidate| candidate != media && candidate.is_file())
+    ["srt", "vtt"]
+        .iter()
+        .map(|extension| media.with_extension(extension))
+        .find(|candidate| candidate != media && candidate.is_file())
 }
 
 /// End the oldest helpers until there is room for one more.
 fn make_room(new: &Arc<Inner>) {
     let mut live = lock(&LIVE);
-    live.retain(|link| link.upgrade().is_some_and(|link| !link.over.load(Ordering::Acquire)));
+    live.retain(|link| {
+        link.upgrade()
+            .is_some_and(|link| !link.over.load(Ordering::Acquire))
+    });
     while live.len() >= LIMIT.load(Ordering::Relaxed) {
         let oldest = live.remove(0);
         if let Some(oldest) = oldest.upgrade() {
-            oldest.finish(Failure { code: ErrorCode::Internal, message: "This preview was stopped to make room for another.".to_owned() });
+            oldest.finish(Failure {
+                code: ErrorCode::Internal,
+                message: crate::tr!("ui-preview-stopped-error"),
+            });
         }
     }
     live.push(Arc::downgrade(new));
@@ -386,7 +470,9 @@ fn spawn_host(program: &Path, theirs: &Channel) -> std::io::Result<Child> {
     command.args(["--audio-sink", "fakesink"]);
     command.env_clear();
     for (name, value) in std::env::vars_os() {
-        let keep = name.to_str().is_some_and(|name| ENV_KEEP.contains(&name) || ENV_PREFIXES.iter().any(|prefix| name.starts_with(prefix)));
+        let keep = name.to_str().is_some_and(|name| {
+            ENV_KEEP.contains(&name) || ENV_PREFIXES.iter().any(|prefix| name.starts_with(prefix))
+        });
         if keep {
             command.env(name, value);
         }
@@ -419,20 +505,32 @@ fn spawn_host(program: &Path, theirs: &Channel) -> std::io::Result<Child> {
 /// The supervisor thread: starts the helper and runs until it is gone.
 fn supervise(inner: &Arc<Inner>) {
     let Some(program) = host_program() else {
-        inner.finish(Failure { code: ErrorCode::NoDecoder, message: "The preview helper (bingux-preview-host) is not installed.".to_owned() });
+        inner.finish(Failure {
+            code: ErrorCode::NoDecoder,
+            message: "The preview helper (bingux-preview-host) is not installed.".to_owned(),
+        });
         return;
     };
     let (ours, theirs) = match Channel::pair() {
         Ok(pair) => pair,
         Err(error) => {
-            inner.finish(Failure { code: ErrorCode::Internal, message: format!("The preview could not start ({error}).") });
+            inner.finish(Failure {
+                code: ErrorCode::Internal,
+                message: {
+                    eprintln!("bingux-preview-link: {error}");
+                    crate::tr!("ui-preview-not-started-error")
+                },
+            });
             return;
         }
     };
     let mut child = match spawn_host(&program, &theirs) {
         Ok(child) => child,
         Err(error) => {
-            inner.finish(Failure { code: ErrorCode::Internal, message: format!("The preview helper did not start ({error}).") });
+            inner.finish(Failure {
+                code: ErrorCode::Internal,
+                message: format!("The preview helper did not start ({error})."),
+            });
             return;
         }
     };
@@ -444,20 +542,37 @@ fn supervise(inner: &Arc<Inner>) {
         Err(error) => {
             let _ = child.kill();
             let _ = child.wait();
-            inner.finish(Failure { code: ErrorCode::Internal, message: format!("The preview could not start ({error}).") });
+            inner.finish(Failure {
+                code: ErrorCode::Internal,
+                message: {
+                    eprintln!("bingux-preview-link: {error}");
+                    crate::tr!("ui-preview-not-started-error")
+                },
+            });
             return;
         }
     };
     let reading = Arc::clone(inner);
-    let reader = std::thread::Builder::new().name("bingux-preview-read".into()).spawn(move || read(&reading, &reader_channel));
+    let reader = std::thread::Builder::new()
+        .name("bingux-preview-read".into())
+        .spawn(move || read(&reading, &reader_channel));
     if reader.is_err() {
         let _ = child.kill();
         let _ = child.wait();
-        inner.finish(Failure { code: ErrorCode::Internal, message: "The preview could not start (no thread).".to_owned() });
+        inner.finish(Failure {
+            code: ErrorCode::Internal,
+            message: "The preview could not start (no thread).".to_owned(),
+        });
         return;
     }
 
-    let _ = ours.send(&Packet { request: 0, message: Message::Hello { version: VERSION } }, &[]);
+    let _ = ours.send(
+        &Packet {
+            request: 0,
+            message: Message::Hello { version: VERSION },
+        },
+        &[],
+    );
     let mut leaving: Option<Instant> = None;
     loop {
         let item = {
@@ -466,7 +581,10 @@ fn supervise(inner: &Arc<Inner>) {
                 if let Some(item) = outbox.queue.pop_front() {
                     break Some(item);
                 }
-                if inner.over.load(Ordering::Acquire) || inner.reader_done.load(Ordering::Acquire) || leaving.is_some_and(|at| at.elapsed() > LEAVE_TIME) {
+                if inner.over.load(Ordering::Acquire)
+                    || inner.reader_done.load(Ordering::Acquire)
+                    || leaving.is_some_and(|at| at.elapsed() > LEAVE_TIME)
+                {
                     break None;
                 }
                 if matches!(child.try_wait(), Ok(Some(_)) | Err(_)) {
@@ -474,18 +592,30 @@ fn supervise(inner: &Arc<Inner>) {
                 }
                 let deadline = inner.open_deadline.load(Ordering::Acquire);
                 if deadline != 0 && inner.start.elapsed() > Duration::from_millis(deadline - 1) {
-                    inner.finish(Failure { code: ErrorCode::Internal, message: "The preview took too long to open and was stopped.".to_owned() });
+                    inner.finish(Failure {
+                        code: ErrorCode::Internal,
+                        message: "The preview took too long to open and was stopped.".to_owned(),
+                    });
                     break None;
                 }
                 if outbox.closing && leaving.is_none() {
                     leaving = Some(Instant::now());
                 }
-                let (guard, _) = inner.wake.wait_timeout(outbox, Duration::from_millis(100)).unwrap_or_else(|poisoned| poisoned.into_inner());
+                let (guard, _) = inner
+                    .wake
+                    .wait_timeout(outbox, Duration::from_millis(100))
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
                 outbox = guard;
             }
         };
         let Some(item) = item else { break };
-        let closing = matches!(&item, Outgoing::Packet(Packet { message: Message::Close, .. }));
+        let closing = matches!(
+            &item,
+            Outgoing::Packet(Packet {
+                message: Message::Close,
+                ..
+            })
+        );
         match item {
             Outgoing::Packet(packet) => {
                 if ours.send(&packet, &[]).is_err() {
@@ -500,7 +630,8 @@ fn supervise(inner: &Arc<Inner>) {
                         paths.push(sidecar);
                     }
                 }
-                let opened: Result<Vec<File>, std::io::Error> = paths.iter().map(File::open).collect();
+                let opened: Result<Vec<File>, std::io::Error> =
+                    paths.iter().map(File::open).collect();
                 match opened {
                     Ok(files) => {
                         inner.deadline_in(OPEN_TIME);
@@ -512,7 +643,13 @@ fn supervise(inner: &Arc<Inner>) {
                     Err(error) => {
                         inner.events.push(LinkEvent::Packet(Packet {
                             request: packet.request,
-                            message: Message::Error { code: ErrorCode::NotFound, message: format!("The file could not be opened ({}).", bingux_preview_core::text::plain(&error)) },
+                            message: Message::Error {
+                                code: ErrorCode::NotFound,
+                                message: format!(
+                                    "The file could not be opened ({}).",
+                                    bingux_preview_core::text::plain(&error)
+                                ),
+                            },
                         }));
                     }
                 }
@@ -539,11 +676,16 @@ fn supervise(inner: &Arc<Inner>) {
     let closing = lock(&inner.outbox).closing;
     if !closing {
         let what = match status {
-            Some(status) if status.code() == Some(124) => "The preview took too long and was stopped.".to_owned(),
+            Some(status) if status.code() == Some(124) => {
+                "The preview took too long and was stopped.".to_owned()
+            }
             Some(status) => format!("The preview helper stopped unexpectedly ({status})."),
             None => "The preview helper stopped unexpectedly.".to_owned(),
         };
-        inner.finish(Failure { code: ErrorCode::Internal, message: what });
+        inner.finish(Failure {
+            code: ErrorCode::Internal,
+            message: what,
+        });
     } else {
         inner.over.store(true, Ordering::Release);
         inner.events.close();
@@ -567,17 +709,33 @@ fn read(inner: &Arc<Inner>, channel: &Channel) {
             Ok(received) => received,
             Err(RecvError::Closed) => break,
             Err(error) => {
-                inner.finish(Failure { code: ErrorCode::Internal, message: format!("The preview helper sent something unreadable ({error}).") });
+                inner.finish(Failure {
+                    code: ErrorCode::Internal,
+                    message: format!("The preview helper sent something unreadable ({error})."),
+                });
                 break;
             }
         };
         let Packet { request, message } = received.packet;
         let mut fds = received.fds;
         match message {
-            Message::FrameReady { slot, width, height, stride, size, pts_ns } => {
-                let valid = (slot as usize) < slots.len() && stride == width.saturating_mul(4) && size == stride.saturating_mul(height) && size > 0;
+            Message::FrameReady {
+                slot,
+                width,
+                height,
+                stride,
+                size,
+                pts_ns,
+            } => {
+                let valid = (slot as usize) < slots.len()
+                    && stride == width.saturating_mul(4)
+                    && size == stride.saturating_mul(height)
+                    && size > 0;
                 if !valid {
-                    inner.finish(Failure { code: ErrorCode::Internal, message: "The preview helper sent a frame that does not fit.".to_owned() });
+                    inner.finish(Failure {
+                        code: ErrorCode::Internal,
+                        message: "The preview helper sent a frame that does not fit.".to_owned(),
+                    });
                     break;
                 }
                 let pixels = if let Some(fd) = (!fds.is_empty()).then(|| fds.remove(0)) {
@@ -587,29 +745,64 @@ fn read(inner: &Arc<Inner>, channel: &Channel) {
                         bytes
                     })
                 } else {
-                    slots[slot as usize].as_ref().filter(|shared| shared.len() >= size as usize).map(|shared| shared.copy_to(size as usize))
+                    slots[slot as usize]
+                        .as_ref()
+                        .filter(|shared| shared.len() >= size as usize)
+                        .map(|shared| shared.copy_to(size as usize))
                 };
                 // The pixels are ours now: the host may write the slot again.
-                let _ = channel.send(&Packet { request: 0, message: Message::FrameDone { slot } }, &[]);
+                let _ = channel.send(
+                    &Packet {
+                        request: 0,
+                        message: Message::FrameDone { slot },
+                    },
+                    &[],
+                );
                 let Some(pixels) = pixels else { continue };
-                *lock(&inner.frame) = Some(Frame { width, height, pts_ns, pixels: Bytes::from(pixels) });
+                *lock(&inner.frame) = Some(Frame {
+                    width,
+                    height,
+                    pts_ns,
+                    pixels: Bytes::from(pixels),
+                });
                 if !inner.frame_announced.swap(true, Ordering::AcqRel) {
                     inner.events.push(LinkEvent::Frame);
                 }
                 inner.open_deadline.store(0, Ordering::Release);
             }
-            Message::PageReady { page, width, height, stride, size } => {
-                let valid = stride == width.saturating_mul(4) && size == stride.saturating_mul(height) && size > 0 && !fds.is_empty();
+            Message::PageReady {
+                page,
+                width,
+                height,
+                stride,
+                size,
+            } => {
+                let valid = stride == width.saturating_mul(4)
+                    && size == stride.saturating_mul(height)
+                    && size > 0
+                    && !fds.is_empty();
                 if !valid {
-                    inner.finish(Failure { code: ErrorCode::Internal, message: "The preview helper sent a page that does not fit.".to_owned() });
+                    inner.finish(Failure {
+                        code: ErrorCode::Internal,
+                        message: "The preview helper sent a page that does not fit.".to_owned(),
+                    });
                     break;
                 }
                 if let Some((_, bytes)) = copy_out(fds.remove(0), size) {
-                    inner.events.push(LinkEvent::Page(PageImage { request, page, width, height, pixels: Bytes::from(bytes) }));
+                    inner.events.push(LinkEvent::Page(PageImage {
+                        request,
+                        page,
+                        width,
+                        height,
+                        pixels: Bytes::from(bytes),
+                    }));
                 }
             }
             Message::Ready { version, .. } if version != VERSION => {
-                inner.finish(Failure { code: ErrorCode::Internal, message: "The preview helper speaks another version.".to_owned() });
+                inner.finish(Failure {
+                    code: ErrorCode::Internal,
+                    message: "The preview helper speaks another version.".to_owned(),
+                });
                 break;
             }
             Message::Ready { .. } => {}
@@ -617,7 +810,9 @@ fn read(inner: &Arc<Inner>, channel: &Channel) {
                 if matches!(message, Message::Opened { .. } | Message::Error { .. }) {
                     inner.open_deadline.store(0, Ordering::Release);
                 }
-                inner.events.push(LinkEvent::Packet(Packet { request, message }));
+                inner
+                    .events
+                    .push(LinkEvent::Packet(Packet { request, message }));
             }
         }
     }
@@ -641,24 +836,70 @@ mod tests {
         // Nothing found anywhere.
         // Only a debug build looks above `deps/`: a release build is run from an install.
         #[cfg(debug_assertions)]
-        assert_eq!(host_program_from(None, Some(deps.join("test")), None), Some(program.clone()), "above deps/");
+        assert_eq!(
+            host_program_from(None, Some(deps.join("test")), None),
+            Some(program.clone()),
+            "above deps/"
+        );
         #[cfg(not(debug_assertions))]
-        assert_eq!(host_program_from(None, Some(deps.join("test")), None), None, "a release build does not look above deps/");
-        assert_eq!(host_program_from(None, Some(dir.join("debug/bingux-files")), None), Some(program.clone()), "beside");
-        assert_eq!(host_program_from(Some(program.clone()), None, None), Some(program.clone()), "by variable");
-        assert_eq!(host_program_from(Some(dir.join("missing")), Some(dir.join("debug/bingux-files")), None), None, "an explicit path is not second-guessed");
-        assert_eq!(host_program_from(None, Some(PathBuf::from("/nowhere/app")), Some(dir.join("debug").into())), Some(program), "on PATH");
-        assert_eq!(host_program_from(None, Some(PathBuf::from("/nowhere/app")), None), None);
+        assert_eq!(
+            host_program_from(None, Some(deps.join("test")), None),
+            None,
+            "a release build does not look above deps/"
+        );
+        assert_eq!(
+            host_program_from(None, Some(dir.join("debug/bingux-files")), None),
+            Some(program.clone()),
+            "beside"
+        );
+        assert_eq!(
+            host_program_from(Some(program.clone()), None, None),
+            Some(program.clone()),
+            "by variable"
+        );
+        assert_eq!(
+            host_program_from(
+                Some(dir.join("missing")),
+                Some(dir.join("debug/bingux-files")),
+                None
+            ),
+            None,
+            "an explicit path is not second-guessed"
+        );
+        assert_eq!(
+            host_program_from(
+                None,
+                Some(PathBuf::from("/nowhere/app")),
+                Some(dir.join("debug").into())
+            ),
+            Some(program),
+            "on PATH"
+        );
+        assert_eq!(
+            host_program_from(None, Some(PathBuf::from("/nowhere/app")), None),
+            None
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
     fn newer_seeks_replace_older_ones_and_the_queue_is_bounded() {
         let inner = Inner::new();
-        let packet = |message| Outgoing::Packet(Packet { request: 1, message });
-        inner.push(packet(Message::Seek { ns: 1, accurate: false }));
+        let packet = |message| {
+            Outgoing::Packet(Packet {
+                request: 1,
+                message,
+            })
+        };
+        inner.push(packet(Message::Seek {
+            ns: 1,
+            accurate: false,
+        }));
         inner.push(packet(Message::Play));
-        inner.push(packet(Message::Seek { ns: 2, accurate: false }));
+        inner.push(packet(Message::Seek {
+            ns: 2,
+            accurate: false,
+        }));
         inner.push(packet(Message::SetVolume { permille: 100 }));
         inner.push(packet(Message::SetVolume { permille: 200 }));
         {
@@ -671,17 +912,41 @@ mod tests {
                     Outgoing::OpenFiles { packet, .. } => packet.message.clone(),
                 })
                 .collect();
-            assert_eq!(kinds, vec![Message::Play, Message::Seek { ns: 2, accurate: false }, Message::SetVolume { permille: 200 }]);
+            assert_eq!(
+                kinds,
+                vec![
+                    Message::Play,
+                    Message::Seek {
+                        ns: 2,
+                        accurate: false
+                    },
+                    Message::SetVolume { permille: 200 }
+                ]
+            );
         }
         for page in 0..(OUTBOX_LIMIT as u32 * 2) {
-            inner.push(packet(Message::RenderPage { page, scale_milli: 1000, max_w: 0, max_h: 0 }));
+            inner.push(packet(Message::RenderPage {
+                page,
+                scale_milli: 1000,
+                max_w: 0,
+                max_h: 0,
+            }));
         }
         assert!(lock(&inner.outbox).queue.len() <= OUTBOX_LIMIT);
         // A close drops everything waiting and leaves one packet.
-        let link = HostLink { inner: Arc::new(inner) };
+        let link = HostLink {
+            inner: Arc::new(inner),
+        };
         link.close();
         assert_eq!(lock(&link.inner.outbox).queue.len(), 1);
-        link.send(Packet { request: 1, message: Message::Play });
-        assert_eq!(lock(&link.inner.outbox).queue.len(), 1, "nothing is queued after a close");
+        link.send(Packet {
+            request: 1,
+            message: Message::Play,
+        });
+        assert_eq!(
+            lock(&link.inner.outbox).queue.len(),
+            1,
+            "nothing is queued after a close"
+        );
     }
 }

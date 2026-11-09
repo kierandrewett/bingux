@@ -281,7 +281,7 @@ pub fn wireguard_key(text: &str) -> Check {
 /// A Wi-Fi network name: 1 to 32 bytes.
 pub fn ssid(text: &str) -> Check {
     if text.is_empty() {
-        fail(crate::tr!("ui-validate-ssid-empty"))
+        fail(crate::tr!("ui-validate-ssid-missing"))
     } else if text.len() > 32 {
         Err(crate::tr!("ui-validate-ssid-long", bytes = text.len()))
     } else {

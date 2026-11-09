@@ -76,7 +76,9 @@ number_arg!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize, f32, f64);
 
 impl From<Moment> for Arg {
     fn from(value: Moment) -> Arg {
-        Arg(FluentValue::Custom(Box::new(super::localiser::DateValue::new(value))))
+        Arg(FluentValue::Custom(Box::new(
+            super::localiser::DateValue::new(value),
+        )))
     }
 }
 
@@ -112,6 +114,11 @@ impl Message {
         &self.id
     }
 
+    /// The ID asked for, without the variables.
+    pub fn into_id(self) -> Cow<'static, str> {
+        self.id
+    }
+
     /// The text in the person's language.
     pub fn format(&self) -> String {
         super::localiser::format(&self.id, Some(&self.args))
@@ -131,6 +138,8 @@ impl fmt::Display for Message {
 
 impl fmt::Debug for Message {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Message").field("id", &self.id).finish_non_exhaustive()
+        f.debug_struct("Message")
+            .field("id", &self.id)
+            .finish_non_exhaustive()
     }
 }

@@ -99,7 +99,7 @@ pub fn timeline_chart(bars: impl IntoIterator<Item = Bar>) -> TimelineChart {
         x_unit: Unit::Number,
         y: ValueText::new(Unit::Number),
         limit: None,
-        value_name: "Value".to_string(),
+        value_name: crate::tr!("ui-chart-value"),
         selection: None,
         on_select: None,
         height: 150.0,
@@ -254,10 +254,7 @@ impl Component for TimelineChart {
         // The limit is named in the gutter, in the danger colour; the tick
         // labels that would sit on it, and the zero the x axis already
         // starts from, are left out.
-        let limit_text = self
-            .limit
-            .as_ref()
-            .map(|(value, _)| self.y.value(*value));
+        let limit_text = self.limit.as_ref().map(|(value, _)| self.y.value(*value));
         let gutter = limit_text
             .as_ref()
             .map_or(0.0, |text| text_width(text, TextSize::Sm.px()) + GUTTER_GAP);
@@ -542,7 +539,7 @@ impl Component for TimelineChart {
             .a11y_alt(
                 self.label
                     .clone()
-                    .unwrap_or_else(|| "Timeline chart".to_string()),
+                    .unwrap_or_else(|| crate::tr!("ui-chart-timeline")),
             )
             .on_sized(move |event: Event<SizedEventData>| size.set(event.area))
             .on_pointer_down(on_down)

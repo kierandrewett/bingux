@@ -32,6 +32,10 @@
 //! scanned. A translation that lacks a message is not a problem: the source
 //! language fills it in. `scripts/ftl-check.py` reports the same, plus each
 //! language's coverage, without building.
+//!
+//! An app may use bingux-ui's own messages (`tr!("ui-dialog-cancel")`): an ID
+//! starting `ui-` that the app's catalogue lacks is checked against
+//! bingux-ui's source catalogue instead.
 
 // ftl-check: skip-file (the tests below ask for IDs of their own catalogues)
 
@@ -56,7 +60,10 @@ impl Report {
     /// Panics with every problem when there is one: for a test.
     #[track_caller]
     pub fn assert_clean(&self) {
-        assert!(self.problems.is_empty(), "the catalogue does not match the code:\n{self}");
+        assert!(
+            self.problems.is_empty(),
+            "the catalogue does not match the code:\n{self}"
+        );
     }
 
     fn push(&mut self, kind: &str, text: impl fmt::Display) {
@@ -99,11 +106,19 @@ fn parse(path: &Path, report: &mut Report) -> Option<File> {
             return None;
         }
     };
-    let resource = match fluent_syntax::parser::parse(text.as_str()) {
+    Some(parse_text(path, &text, report))
+}
+
+/// `text`, read from `path`, as a [`File`].
+fn parse_text(path: &Path, text: &str, report: &mut Report) -> File {
+    let resource = match fluent_syntax::parser::parse(text) {
         Ok(resource) => resource,
         Err((resource, errors)) => {
             for error in errors {
-                let line = text[..error.pos.start.min(text.len())].lines().count().max(1);
+                let line = text[..error.pos.start.min(text.len())]
+                    .lines()
+                    .count()
+                    .max(1);
                 report.push("syntax", format!("{}:{line}: {error}", path.display()));
             }
             resource
@@ -112,10 +127,21 @@ fn parse(path: &Path, report: &mut Report) -> Option<File> {
     let mut file = File::default();
     for item in resource.body {
         let (id, value, attributes) = match item {
-            ast::Entry::Message(message) => (message.id.name.to_string(), message.value, message.attributes),
-            ast::Entry::Term(term) => (format!("-{}", term.id.name), Some(term.value), term.attributes),
+            ast::Entry::Message(message) => (
+                message.id.name.to_string(),
+                message.value,
+                message.attributes,
+            ),
+            ast::Entry::Term(term) => (
+                format!("-{}", term.id.name),
+                Some(term.value),
+                term.attributes,
+            ),
             ast::Entry::Junk { content } => {
-                report.push("syntax", format!("{}: cannot read `{}`", path.display(), content.trim()));
+                report.push(
+                    "syntax",
+                    format!("{}: cannot read `{}`", path.display(), content.trim()),
+                );
                 continue;
             }
             _ => continue,
@@ -129,13 +155,15 @@ fn parse(path: &Path, report: &mut Report) -> Option<File> {
         for attribute in &attributes {
             let mut variables = BTreeSet::new();
             walk_pattern(&attribute.value, &mut variables, &mut entry);
-            entry.variables.insert(Some(attribute.id.name.to_string()), variables);
+            entry
+                .variables
+                .insert(Some(attribute.id.name.to_string()), variables);
         }
         if file.entries.insert(id.clone(), entry).is_some() {
             report.push("duplicate", format!("{id} in {}", path.display()));
         }
     }
-    Some(file)
+    file
 }
 
 fn walk_pattern(pattern: &ast::Pattern<&str>, variables: &mut BTreeSet<String>, entry: &mut Entry) {
@@ -146,7 +174,11 @@ fn walk_pattern(pattern: &ast::Pattern<&str>, variables: &mut BTreeSet<String>, 
     }
 }
 
-fn walk_expression(expression: &ast::Expression<&str>, variables: &mut BTreeSet<String>, entry: &mut Entry) {
+fn walk_expression(
+    expression: &ast::Expression<&str>,
+    variables: &mut BTreeSet<String>,
+    entry: &mut Entry,
+) {
     match expression {
         ast::Expression::Select { selector, variants } => {
             walk_inline(selector, variables, entry);
@@ -158,7 +190,11 @@ fn walk_expression(expression: &ast::Expression<&str>, variables: &mut BTreeSet<
     }
 }
 
-fn walk_inline(inline: &ast::InlineExpression<&str>, variables: &mut BTreeSet<String>, entry: &mut Entry) {
+fn walk_inline(
+    inline: &ast::InlineExpression<&str>,
+    variables: &mut BTreeSet<String>,
+    entry: &mut Entry,
+) {
     match inline {
         ast::InlineExpression::VariableReference { id } => {
             variables.insert(id.name.to_string());
@@ -178,8 +214,11 @@ fn walk_inline(inline: &ast::InlineExpression<&str>, variables: &mut BTreeSet<St
             // A term's own variables are its arguments, not the message's.
             entry.terms.insert(format!("-{}", id.name));
         }
-        ast::InlineExpression::Placeable { expression } => walk_expression(expression, variables, entry),
-        ast::InlineExpression::StringLiteral { .. } | ast::InlineExpression::NumberLiteral { .. } => {}
+        ast::InlineExpression::Placeable { expression } => {
+            walk_expression(expression, variables, entry)
+        }
+        ast::InlineExpression::StringLiteral { .. }
+        | ast::InlineExpression::NumberLiteral { .. } => {}
     }
 }
 
@@ -368,7 +407,11 @@ pub fn crate_catalogue(crate_dir: impl AsRef<Path>, domain: &str) -> Report {
             if text.contains(SKIP) {
                 return None;
             }
-            let name = path.strip_prefix(crate_dir).unwrap_or(path).display().to_string();
+            let name = path
+                .strip_prefix(crate_dir)
+                .unwrap_or(path)
+                .display()
+                .to_string();
             Some((name, text))
         })
         .collect();
@@ -385,6 +428,13 @@ pub fn check(locale_dir: &Path, domain: &str, sources: &[(String, String)]) -> R
         return report;
     };
 
+    // An app may ask for bingux-ui's own messages (`ui-`): they are checked
+    // against bingux-ui's source catalogue, which every app has compiled in.
+    let shared = (domain != "bingux-ui").then(|| {
+        let builtin = super::catalogue::builtin();
+        parse_text(Path::new("bingux-ui.ftl"), builtin.source(), &mut report)
+    });
+
     let mut uses = Vec::new();
     let mut dynamic = Vec::new();
     for (path, text) in sources {
@@ -397,8 +447,14 @@ pub fn check(locale_dir: &Path, domain: &str, sources: &[(String, String)]) -> R
             Some((id, attribute)) => (id, Some(attribute)),
             None => (asked.id.as_str(), None),
         };
-        used.insert(id.to_string());
-        let present = source
+        let file = match &shared {
+            Some(shared) if id.starts_with("ui-") && !source.entries.contains_key(id) => shared,
+            _ => {
+                used.insert(id.to_string());
+                &source
+            }
+        };
+        let present = file
             .entries
             .get(id)
             .is_some_and(|entry| entry.variables.contains_key(&attribute.map(str::to_string)));
@@ -407,7 +463,7 @@ pub fn check(locale_dir: &Path, domain: &str, sources: &[(String, String)]) -> R
             continue;
         }
         if let Some(passed) = &asked.variables {
-            let wanted = variables_of(&source, id, attribute);
+            let wanted = variables_of(file, id, attribute);
             if &wanted != passed {
                 report.push(
                     "variables",
@@ -428,7 +484,10 @@ pub fn check(locale_dir: &Path, domain: &str, sources: &[(String, String)]) -> R
         if id.starts_with('-') || used.contains(id) || referenced.contains(id) {
             continue;
         }
-        if dynamic.iter().any(|prefix| !prefix.is_empty() && id.starts_with(prefix.as_str())) {
+        if dynamic
+            .iter()
+            .any(|prefix| !prefix.is_empty() && id.starts_with(prefix.as_str()))
+        {
             continue;
         }
         report.push("unused", format!("{id} in {}", source_path.display()));
@@ -459,14 +518,24 @@ pub fn check(locale_dir: &Path, domain: &str, sources: &[(String, String)]) -> R
             };
             for attribute in entry.variables.keys() {
                 if !original.variables.contains_key(attribute) {
-                    report.push("stale", format!("{id}.{} in {}", attribute.as_deref().unwrap_or(""), path.display()));
+                    report.push(
+                        "stale",
+                        format!(
+                            "{id}.{} in {}",
+                            attribute.as_deref().unwrap_or(""),
+                            path.display()
+                        ),
+                    );
                     continue;
                 }
                 let theirs = variables_of(&translation, id, attribute.as_deref());
                 let ours = variables_of(&source, id, attribute.as_deref());
                 let foreign: Vec<&String> = theirs.difference(&ours).collect();
                 if !foreign.is_empty() {
-                    report.push("foreign variable", format!("{id} uses {foreign:?} in {}", path.display()));
+                    report.push(
+                        "foreign variable",
+                        format!("{id} uses {foreign:?} in {}", path.display()),
+                    );
                 }
             }
         }
@@ -480,7 +549,10 @@ fn references(file: &File, source: &File, path: &Path, report: &mut Report) {
     for (id, entry) in &file.entries {
         for target in entry.messages.iter().chain(entry.terms.iter()) {
             if !file.entries.contains_key(target) && !source.entries.contains_key(target) {
-                report.push("unknown reference", format!("{id} refers to {target} in {}", path.display()));
+                report.push(
+                    "unknown reference",
+                    format!("{id} refers to {target} in {}", path.display()),
+                );
             }
         }
     }
@@ -496,7 +568,8 @@ mod tests {
     }
 
     fn temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("bingux-i18n-check-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("bingux-i18n-check-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }
@@ -524,8 +597,16 @@ mod tests {
     #[test]
     fn every_kind_of_problem_is_found() {
         let dir = temp("problems");
-        write(&dir, "en-GB", "demo-a = A { $name }\ndemo-a = Again\ndemo-unused = U\ndemo-ref = { -nothing }\n");
-        write(&dir, "de", "demo-a = A { $other }\ndemo-old = Alt\ndemo-broken = {\n");
+        write(
+            &dir,
+            "en-GB",
+            "demo-a = A { $name }\ndemo-a = Again\ndemo-unused = U\ndemo-ref = { -nothing }\n",
+        );
+        write(
+            &dir,
+            "de",
+            "demo-a = A { $other }\ndemo-old = Alt\ndemo-broken = {\n",
+        );
         let code = r#"let x = tr!("demo-a", count = 2); let y = tr!("demo-missing"); let z = i18n_id!("demo-ref");"#;
         let report = check(&dir, "demo", &[("src/a.rs".into(), code.into())]);
         let kinds: BTreeSet<&str> = report
@@ -549,8 +630,13 @@ mod tests {
 
     #[test]
     fn arguments_are_read_through_nested_calls() {
-        let names = arguments(r#", name = file.name(), count = items.iter().filter(|x| x == "a,b").count())"#);
-        assert_eq!(names, BTreeSet::from(["count".to_string(), "name".to_string()]));
+        let names = arguments(
+            r#", name = file.name(), count = items.iter().filter(|x| x == "a,b").count())"#,
+        );
+        assert_eq!(
+            names,
+            BTreeSet::from(["count".to_string(), "name".to_string()])
+        );
     }
 
     #[test]

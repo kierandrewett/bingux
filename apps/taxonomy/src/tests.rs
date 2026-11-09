@@ -159,3 +159,10 @@ fn navigating_between_every_page_does_not_panic() {
         }
     }
 }
+
+/// Every `tr!` of the taxonomy has its message, with the right variables, and
+/// the catalogue holds nothing the code does not use.
+#[test]
+fn the_catalogue_matches_the_code() {
+    bingux_ui::i18n::check::crate_catalogue(env!("CARGO_MANIFEST_DIR"), "taxonomy").assert_clean();
+}

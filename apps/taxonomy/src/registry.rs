@@ -9,7 +9,7 @@
 use crate::demos::transfer;
 use crate::demos::{
     accessibility, buttons, commands, containers, data, feedback, files, formats, foundations,
-    icon_set, inputs, inspector, navigation, platform, table,
+    icon_set, inputs, inspector, localisation, navigation, platform, table,
 };
 use crate::model::{Body, Category, Entry};
 
@@ -1057,6 +1057,34 @@ pub static ENTRIES: &[Entry] = &[
         doc: "locale",
         covers: &["Locale", "Category"],
         body: Body::States(formats::LOCALE),
+    },
+    Entry {
+        name: "Localisation",
+        category: Category::Foundations,
+        page: "Localisation",
+        api: "tr!(\"app-id\", count = n); tr!(\"app-id.tooltip\"); i18n::register(catalogue!(\"app\")); Message::new(i18n_id!(..)).arg(name, Arg::number(x, 1, 1)).format(); i18n::text / has; set_locale(Some(Locale)); set_pseudo(Some(Pseudo::Accented | Pseudo::Rtl)); language() / languages() / direction() / revision() / use_language(); check::crate_catalogue(dir, domain) -> Report; Application::title(Title)",
+        doc: "localisation",
+        covers: &[
+            "Arg",
+            "Catalogue",
+            "Message",
+            "Pseudo",
+            "Report",
+            "check",
+            "crate_catalogue",
+            "direction",
+            "has",
+            "language",
+            "languages",
+            "pseudo",
+            "revision",
+            "set_locale",
+            "set_pseudo",
+            "text",
+            "use_language",
+            "Title",
+        ],
+        body: Body::Custom(localisation::localisation),
     },
     // ---- Icons -------------------------------------------------------------
     Entry {
