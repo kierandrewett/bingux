@@ -32,50 +32,64 @@ pub fn title_of(model: &Model) -> String {
                     format!(" {}", end.year)
                 };
                 return if start.month == end.month {
-                    format!(
-                        "{} to {} {}{year}",
-                        start.day,
-                        end.day,
-                        month_short(end.month)
+                    tr!(
+                        "calendar-week-range-same-month",
+                        start = start.day,
+                        end = end.day,
+                        month = format!("{}{year}", month_short(end.month))
                     )
                 } else {
-                    format!(
-                        "{} {} to {} {}{year}",
-                        start.day,
-                        month_short(start.month),
-                        end.day,
-                        month_short(end.month)
+                    tr!(
+                        "calendar-week-range-across-months",
+                        start = start.day,
+                        start_month = month_short(start.month).to_string(),
+                        end = end.day,
+                        end_month = month_short(end.month).to_string(),
+                        year = year
                     )
                 };
             }
             if start.month == end.month {
-                format!("{} to {} {}", start.day, end.day, anchor_month(end))
+                tr!(
+                    "calendar-week-range-same-month",
+                    start = start.day,
+                    end = end.day,
+                    month = anchor_month(end)
+                )
             } else if start.year == end.year {
-                format!(
-                    "{} {} to {} {} {}",
-                    start.day,
-                    month_short(start.month),
-                    end.day,
-                    month_short(end.month),
-                    end.year
+                tr!(
+                    "calendar-week-range-across-months",
+                    start = start.day,
+                    start_month = month_short(start.month).to_string(),
+                    end = end.day,
+                    end_month = month_short(end.month).to_string(),
+                    year = format!(" {}", end.year)
                 )
             } else {
-                format!(
-                    "{} {} {} to {} {} {}",
-                    start.day,
-                    month_short(start.month),
-                    start.year,
-                    end.day,
-                    month_short(end.month),
-                    end.year
+                tr!(
+                    "calendar-week-range-across-years",
+                    start = start.day,
+                    start_month = month_short(start.month).to_string(),
+                    start_year = start.year,
+                    end = end.day,
+                    end_month = month_short(end.month).to_string(),
+                    end_year = end.year
                 )
             }
         }
-        ViewKind::Month if compact => format!("{} {}", month_short(anchor.month), anchor.year),
+        ViewKind::Month if compact => tr!(
+            "calendar-header-month-compact",
+            month = month_short(anchor.month).to_string(),
+            year = anchor.year
+        ),
         ViewKind::Month => anchor.month_year(),
         ViewKind::Year => anchor.year.to_string(),
-        ViewKind::Agenda if compact => format!("From {} {}", anchor.day, month_short(anchor.month)),
-        ViewKind::Agenda => format!("From {}", anchor.long()),
+        ViewKind::Agenda if compact => tr!(
+            "calendar-header-agenda-compact",
+            day = anchor.day,
+            month = month_short(anchor.month).to_string()
+        ),
+        ViewKind::Agenda => tr!("calendar-header-agenda", date = anchor.long()),
     }
 }
 

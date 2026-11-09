@@ -58,6 +58,18 @@ calendar-view-agenda = Agenda
 calendar-main-menu = Main menu
 calendar-calendars = Calendars
 calendar-new-event = New event
+# A week in one month. $start, $end (Number), $month (Text) - the month and year, or its short form and a year when needed.
+calendar-week-range-same-month = { $start } to { $end } { $month }
+# A week across two months of one year. $start, $end (Number), $start_month, $end_month (Text), $year (Text) - empty, or " YYYY" when not this year.
+calendar-week-range-across-months = { $start } { $start_month } to { $end } { $end_month }{ $year }
+# A week across two years. $start, $start_year, $end, $end_year (Number), $start_month, $end_month (Text).
+calendar-week-range-across-years = { $start } { $start_month } { $start_year } to { $end } { $end_month } { $end_year }
+# The month in a narrow window. $month (Text), $year (Number).
+calendar-header-month-compact = { $month } { $year }
+# The agenda heading in a narrow window. $day (Number), $month (Text).
+calendar-header-agenda-compact = From { $day } { $month }
+# The agenda heading in a wide window. $date (Text).
+calendar-header-agenda = From { $date }
 calendar-event-title = Event
 calendar-keyboard-shortcuts = Keyboard shortcuts
 calendar-week-numbers = Week numbers
