@@ -149,35 +149,20 @@ impl Component for Content {
             return rect().into_element();
         };
 
-        let body: Element = files::browse(
-            Browse::new(tab.content.memory.clone())
-                .on_location({
-                    let id = tab.id;
-                    move |at: Where| {
-                        let now = at.clone();
-                        tabs.update_if(id, move |tab| tab.at != now, move |tab| tab.at = at);
-                    }
-                })
-                .on_new_tab(move |path: std::path::PathBuf| {
-                    tabs.open(FileTab::new(Where::Folder(path)));
-                }),
-        );
-
-        // The tabs are the header bar's title: separate rounded tabs from the
-        // left, the window's buttons at the other end. The header bar is the
-        // strip's height, so the window has no row above its tabs.
+        // The tab bar shows once the window has a second tab, as in Finder
+        // and Safari, and while a tab from another window is held over this
+        // one, so there is somewhere to drop it. Its tabs share the width.
         let titles = tab_titles(&shown);
-        let header = HeaderBar::new(title)
-            .trailing(menu_button("Main menu", main_menu(tabs, overlays)).icon(Icon::OpenMenu))
-            .trailing(WindowControls)
-            .tab_slot(
+        let strip = (shown.len() > 1 || tab_window.insertion().is_some()).then(|| {
+            Element::from(
                 tabs.strip(
                     tab_items(&shown, titles, |tab| tab_icon(&tab.at).glyph),
                     &tab_window,
                     move |_: ()| {
-                        tabs.open(FileTab::new(home()));
+                        tabs.open(FileTab::new(here(tabs)));
                     },
                 )
+                .fill(true)
                 .on_hover(move |(id, entered): (u64, bool)| {
                     let mut over_tab = over_tab;
                     let folder = set.peek().content(id).and_then(|tab| match &tab.at {
@@ -200,7 +185,27 @@ impl Component for Content {
                     Some(drag) if drag.active() => *over_tab.read(),
                     _ => None,
                 }),
-            );
+            )
+        });
+
+        // The header bar, the sidebar and the tab bar are the file view's:
+        // the window is laid out as Settings is, with the places down the
+        // whole left side and the header over the files.
+        let body: Element = files::browse(
+            Browse::new(tab.content.memory.clone())
+                .on_location({
+                    let id = tab.id;
+                    move |at: Where| {
+                        let now = at.clone();
+                        tabs.update_if(id, move |tab| tab.at != now, move |tab| tab.at = at);
+                    }
+                })
+                .on_new_tab(move |path: std::path::PathBuf| {
+                    tabs.open(FileTab::new(Where::Folder(path)));
+                })
+                .menu(main_menu(tabs, overlays))
+                .tab_bar(strip),
+        );
 
         let shortcuts = tabs.shortcuts(move |_: ()| {
             tabs.open(FileTab::new(here(tabs)));
@@ -217,7 +222,6 @@ impl Component for Content {
                     remember_size(event.area.width(), event.area.height());
                 }
             })
-            .child(header)
             // Not keyed by tab: one body, mounted once, shows whichever tab
             // is on show (its memory is in `body`).
             .child(

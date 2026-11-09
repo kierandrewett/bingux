@@ -82,14 +82,21 @@ use crate::typography::{Ink, NUMERIC};
 /// The icon sizes, in logical pixels, from the smallest to the largest. The
 /// first is the default.
 pub const LADDER: [u16; 9] = [16, 20, 24, 32, 48, 64, 96, 128, 192];
-/// The level a folder opens at on a desktop: 16 px, in a list.
-pub const DEFAULT_PX: u16 = LADDER[0];
+/// The level a folder opens at on a desktop: 24 px, in a list. At 16 px a
+/// colour icon is a speck of its tone and reads as a grey glyph; 24 px shows
+/// the colour and the type's mark, and still fits the sidebar row's height
+/// (`Dim::NavItem`, 40 px) with its padding, as GNOME Files' list does.
+pub const DEFAULT_PX: u16 = LADDER[2];
 
 /// The level a folder opens at in the current size class: [`DEFAULT_PX`] on a
 /// desktop, [`COMPACT_DEFAULT_PX`] on a phone. Read the size class: call it
 /// while rendering.
 pub fn default_zoom_px() -> u16 {
-    if is_compact() { COMPACT_DEFAULT_PX } else { DEFAULT_PX }
+    if is_compact() {
+        COMPACT_DEFAULT_PX
+    } else {
+        DEFAULT_PX
+    }
 }
 /// The largest icon that is shown in a list. Larger ones are shown in a grid.
 pub const LAST_LIST_PX: u16 = 32;
@@ -590,7 +597,10 @@ impl Pinch {
         let mut fingers = self.fingers;
         {
             let mut slots = fingers.write();
-            let slot = slots.iter_mut().flatten().find(|slot| slot.id == finger.id)?;
+            let slot = slots
+                .iter_mut()
+                .flatten()
+                .find(|slot| slot.id == finger.id)?;
             slot.at = finger.at;
         }
         let [Some(a), Some(b)] = *fingers.peek() else {
@@ -749,8 +759,8 @@ mod tests {
 
     #[test]
     fn the_ladder_climbs_from_the_default() {
-        assert_eq!(DEFAULT_PX, 16);
-        assert_eq!(LADDER[0], DEFAULT_PX);
+        assert_eq!(DEFAULT_PX, 24);
+        assert_eq!(LADDER[2], DEFAULT_PX);
         assert!(LADDER.windows(2).all(|pair| pair[0] < pair[1]));
         assert_eq!(LADDER, [16, 20, 24, 32, 48, 64, 96, 128, 192]);
     }
@@ -766,20 +776,31 @@ mod tests {
         // Once the grid is reached it stays: the kind never goes back to a
         // list on the way up.
         let kinds: Vec<ViewKind> = LADDER.iter().map(|px| kind_of(*px)).collect();
-        assert!(kinds.windows(2).all(|pair| pair[0] == ViewKind::List || pair[1] == ViewKind::Grid));
+        assert!(
+            kinds
+                .windows(2)
+                .all(|pair| pair[0] == ViewKind::List || pair[1] == ViewKind::Grid)
+        );
     }
 
     #[test]
     fn the_jump_from_list_to_grid_keeps_the_icon_about_as_big() {
-        let last_list = LADDER.iter().copied().filter(|px| kind_of(*px) == ViewKind::List).max();
-        let first_grid = LADDER.iter().copied().find(|px| kind_of(*px) == ViewKind::Grid);
+        let last_list = LADDER
+            .iter()
+            .copied()
+            .filter(|px| kind_of(*px) == ViewKind::List)
+            .max();
+        let first_grid = LADDER
+            .iter()
+            .copied()
+            .find(|px| kind_of(*px) == ViewKind::Grid);
         assert_eq!((last_list, first_grid), (Some(32), Some(48)));
     }
 
     #[test]
     fn stepping_walks_the_ladder_and_stops_at_the_ends() {
         let top = LADDER[LADDER.len() - 1];
-        let mut px = DEFAULT_PX;
+        let mut px = LADDER[0];
         let mut seen = vec![px];
         for _ in 0..LADDER.len() + 3 {
             px = step_level(px, 1, top);
@@ -790,7 +811,7 @@ mod tests {
         for _ in 0..LADDER.len() + 3 {
             px = step_level(px, -1, top);
         }
-        assert_eq!(px, DEFAULT_PX);
+        assert_eq!(px, LADDER[0]);
         assert_eq!(step_level(16, -1, top), 16);
         assert_eq!(step_level(192, 1, top), 192);
         assert_eq!(step_level(16, 100, top), 192);
@@ -802,7 +823,11 @@ mod tests {
     fn stepping_respects_the_cap() {
         assert_eq!(step_level(64, 1, 96), 96);
         assert_eq!(step_level(96, 1, 96), 96);
-        assert_eq!(step_level(192, -1, 96), 64, "a level above the cap steps from the cap");
+        assert_eq!(
+            step_level(192, -1, 96),
+            64,
+            "a level above the cap steps from the cap"
+        );
         assert_eq!(step_level(16, 5, 32), 32);
     }
 
@@ -867,7 +892,10 @@ mod tests {
             assert!(cap >= last || width == 0 || last == 192);
             if width > 0 {
                 assert!(cap >= 32);
-                assert!(cap < 48 || 2.0 * tile_width(cap) + 3.0 * TILE_GAP + SCROLLBAR_WIDTH <= width as f32);
+                assert!(
+                    cap < 48
+                        || 2.0 * tile_width(cap) + 3.0 * TILE_GAP + SCROLLBAR_WIDTH <= width as f32
+                );
             }
             last = cap;
         }
@@ -876,7 +904,11 @@ mod tests {
     #[test]
     fn a_tile_is_as_wide_as_its_icon_needs_and_never_narrower_than_a_name() {
         assert_eq!(tile_width(48), MIN_TILE_WIDTH);
-        assert_eq!(tile_width(64), MIN_TILE_WIDTH, "88 would be narrower than a name needs");
+        assert_eq!(
+            tile_width(64),
+            MIN_TILE_WIDTH,
+            "88 would be narrower than a name needs"
+        );
         assert_eq!(tile_width(96), 120.0);
         assert_eq!(tile_width(192), 216.0);
         let widths: Vec<f32> = LADDER.iter().map(|px| tile_width(*px)).collect();
@@ -885,8 +917,14 @@ mod tests {
 
     #[test]
     fn line_wheel_is_one_level_a_notch() {
-        assert_eq!(wheel_to_level_delta(WheelSource::Line, 64.0, 64.0, 0.0), (1, 0.0));
-        assert_eq!(wheel_to_level_delta(WheelSource::Line, -128.0, 64.0, 0.0), (-2, 0.0));
+        assert_eq!(
+            wheel_to_level_delta(WheelSource::Line, 64.0, 64.0, 0.0),
+            (1, 0.0)
+        );
+        assert_eq!(
+            wheel_to_level_delta(WheelSource::Line, -128.0, 64.0, 0.0),
+            (-2, 0.0)
+        );
         // A high-resolution wheel sends a fraction of a notch.
         let (whole, rest) = wheel_to_level_delta(WheelSource::Line, 16.0, 64.0, 0.0);
         assert_eq!(whole, 0);
@@ -895,9 +933,18 @@ mod tests {
 
     #[test]
     fn touchpad_is_one_level_per_forty_eight_pixels() {
-        assert_eq!(wheel_to_level_delta(WheelSource::Pixel, 48.0, 64.0, 0.0), (1, 0.0));
-        assert_eq!(wheel_to_level_delta(WheelSource::Pixel, -96.0, 64.0, 0.0), (-2, 0.0));
-        assert_eq!(wheel_to_level_delta(WheelSource::Pixel, 0.0, 64.0, 0.0), (0, 0.0));
+        assert_eq!(
+            wheel_to_level_delta(WheelSource::Pixel, 48.0, 64.0, 0.0),
+            (1, 0.0)
+        );
+        assert_eq!(
+            wheel_to_level_delta(WheelSource::Pixel, -96.0, 64.0, 0.0),
+            (-2, 0.0)
+        );
+        assert_eq!(
+            wheel_to_level_delta(WheelSource::Pixel, 0.0, 64.0, 0.0),
+            (0, 0.0)
+        );
     }
 
     #[test]
@@ -975,8 +1022,14 @@ mod tests {
         assert_eq!(key_action(&key("-"), Code::Minus), Some(KeyAction::Out));
         assert_eq!(key_action(&key("0"), Code::Digit0), Some(KeyAction::Reset));
         assert_eq!(key_action(&key("a"), Code::KeyA), None);
-        assert_eq!(key_action(&Key::Named(NamedKey::Enter), Code::NumpadAdd), Some(KeyAction::In));
-        assert_eq!(key_action(&key("-"), Code::NumpadSubtract), Some(KeyAction::Out));
+        assert_eq!(
+            key_action(&Key::Named(NamedKey::Enter), Code::NumpadAdd),
+            Some(KeyAction::In)
+        );
+        assert_eq!(
+            key_action(&key("-"), Code::NumpadSubtract),
+            Some(KeyAction::Out)
+        );
         assert_eq!(key_action(&key("0"), Code::Numpad0), Some(KeyAction::Reset));
     }
 

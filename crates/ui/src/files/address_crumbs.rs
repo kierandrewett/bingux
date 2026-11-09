@@ -33,7 +33,7 @@ use crate::shell::{MenuItem, Overlays, menu_item, menu_separator};
 use crate::style::*;
 use crate::surface::{Interaction, use_tokens};
 use crate::task::{spawn_blocking, use_resource};
-use crate::typography::{BODY, Ink};
+use crate::typography::{BODY, EMPHASIS, Ink};
 
 /// How many subfolders a crumb's list shows. More are cut with a note: a
 /// folder of thousands is not browsed in a menu.
@@ -189,7 +189,10 @@ impl Component for Crumbs {
                         }
                         .into(),
                     );
-                    if let Some(path) = &stop.path {
+                    // A chevron between two crumbs opens the folder's other
+                    // subfolders. After the last crumb it would list what the
+                    // file view already shows, and read as a dangling "›".
+                    if let Some(path) = stop.path.as_ref().filter(|_| !current) {
                         row.push(
                             Chevron {
                                 path: path.clone(),
@@ -812,15 +815,21 @@ impl Component for Chevron {
     }
 }
 
+/// Below this width the compact trail leaves its pencil out: the folder's
+/// name and the sheet's chevron need the room.
+const NARROW_TRAIL: f32 = 220.0;
+
 /// The trail on a phone: one row with the name of the folder you are in and
 /// a pencil. The name opens a sheet of the whole trail, and the pencil turns
-/// the row into the text field.
+/// the row into the text field. As a header's title (`title`) it is the name
+/// in the title's type and the chevron, on the bar, with no field around it.
 #[derive(PartialEq)]
 pub(super) struct CompactTrail {
     pub location: Where,
     pub home: PathBuf,
     pub on_open: EventHandler<Where>,
     pub on_edit: EventHandler<()>,
+    pub title: bool,
 }
 
 impl Component for CompactTrail {
@@ -903,6 +912,25 @@ impl Component for CompactTrail {
         // sheet is open, deeper while pressed. Its inset, icon, gap and name
         // are the typed-path field's, so the field replaces it in place.
         let face = Interaction::use_interaction();
+        let title = self.title;
+        // As a title, the name takes all the room the bar has between its
+        // inset and the chevron (the layout measures the run, so nothing here
+        // guesses a width) and is cut with an ellipsis only when the bar is
+        // narrower than the name. No icon and no pencil take room from it.
+        let name_label = if title {
+            EMPHASIS
+                .in_ink(Ink::Text)
+                .label(&tokens, name.clone())
+                .max_lines(1)
+                .text_overflow(TextOverflow::Ellipsis)
+                .width(Size::flex(1.0))
+        } else {
+            BODY.in_ink(Ink::Text)
+                .label(&tokens, name.clone())
+                .max_lines(1)
+                .text_overflow(TextOverflow::Ellipsis)
+                .width(Size::flex(1.0))
+        };
         let content = rect()
             .component("AddressCompact")
             .tw(&tokens, &[w_full(), h_full()])
@@ -916,17 +944,22 @@ impl Component for CompactTrail {
                         gap(S1),
                         w_full(),
                         h_full(),
-                        pr(S3),
+                        pr(if title { S1 } else { S3 }),
                         rounded(Radius::Control),
                         surface(
-                            Paint::Control,
+                            if title {
+                                Paint::Transparent
+                            } else {
+                                Paint::Control
+                            },
                             face.hovering() || open(),
                             face.pressing(),
                             false,
                         ),
                     ],
                 ))
-                .child(
+                .maybe(title, |row| row.tw(&tokens, &[pl(S1)]))
+                .maybe_child((!title).then(|| {
                     rect()
                         .tw(&tokens, &[w(Dim::Control), h_full(), center()])
                         .child(file_icon_view(
@@ -934,15 +967,9 @@ impl Component for CompactTrail {
                             &current_icon,
                             IconSize::Control,
                             false,
-                        )),
-                )
-                .child(
-                    BODY.in_ink(Ink::Text)
-                        .label(&tokens, name.clone())
-                        .max_lines(1)
-                        .text_overflow(TextOverflow::Ellipsis)
-                        .width(Size::flex(1.0)),
-                )
+                        ))
+                }))
+                .child(name_label)
                 .child(icons::icon(
                     Icon::PanDown,
                     IconSize::Row,
@@ -967,7 +994,11 @@ impl Component for CompactTrail {
         );
         let on_edit = self.on_edit.clone();
         // No clip: the trail's ring is drawn outside its box. The pencil sits
-        // where the field's trailing button does.
+        // where the field's trailing button does. In a narrow bar (a phone's
+        // header, beside its buttons) the folder's name needs the room more:
+        // the pencil leaves, and "Type a path" in the trail's sheet stays.
+        let width = area.read().width();
+        let pencil = !title && !(width > 0.0 && width < NARROW_TRAIL);
         rect()
             .component("AddressCompactBar")
             .tw(
@@ -979,12 +1010,16 @@ impl Component for CompactTrail {
                     w_full(),
                     h(Dim::Control),
                     rounded(Radius::Control),
-                    bg(Paint::Control),
+                    bg(if title {
+                        Paint::Transparent
+                    } else {
+                        Paint::Control
+                    }),
                 ],
             )
             .on_sized(move |event: Event<SizedEventData>| area.set_if_modified(event.area))
             .child(rect().tw(&tokens, &[w_flex(), h_full()]).child(trail))
-            .child(
+            .maybe_child(pencil.then(|| {
                 rect()
                     .tw(
                         &tokens,
@@ -993,8 +1028,8 @@ impl Component for CompactTrail {
                     .child(
                         field_action(Icon::Pencil, move |_: ()| on_edit.call(()))
                             .tooltip("Type a path"),
-                    ),
-            )
+                    )
+            }))
             .child(Element::from(panel))
     }
 }

@@ -68,7 +68,7 @@ use super::interaction::{DRAG_SLOP, Hits, Lattice, Span, reveal_offset};
 use super::scroll_memory::{
     Owner, came_from, measure, measured, recall, register, remember, unregister,
 };
-use super::status_line::{StatusInfo, status_line};
+use super::status_line::{StatusInfo, status_bar, status_line};
 use super::view_state;
 use super::zoom::{
     Pinch, ViewKind, Zoom, cap_for_width, default_zoom_px, kind_of, use_pinch, use_zoom, zoom_hud,
@@ -992,6 +992,7 @@ pub struct FileView {
     pane: Option<State<bool>>,
     bookmarks: Arc<Vec<PathBuf>>,
     thumbnails: bool,
+    status_bar: bool,
     owner: Owner,
     placeholder: Option<Element>,
     on_sort: EventHandler<SortKey>,
@@ -1027,6 +1028,7 @@ impl FileView {
             pane: None,
             bookmarks: Arc::new(Vec::new()),
             thumbnails: true,
+            status_bar: false,
             owner: 0,
             placeholder: None,
             on_sort: EventHandler::new(|_: SortKey| {}),
@@ -1104,6 +1106,16 @@ impl FileView {
     /// opens nothing elsewhere; see [`Capabilities`].
     pub fn caps(mut self, caps: Capabilities) -> Self {
         self.caps = caps;
+        self
+    }
+
+    /// Say how many items there are, what is selected and how much room the
+    /// drive has in a bar along the bottom of the view, as Finder's status
+    /// bar does, instead of the pill that floats over the list's corner. A
+    /// window that browses files wants the bar; a file chooser keeps the
+    /// pill, as it has a footer of its own.
+    pub fn status_bar(mut self, docked: bool) -> Self {
+        self.status_bar = docked;
         self
     }
 
@@ -1663,7 +1675,18 @@ impl Component for FileView {
             .into()
         };
 
-        let info = status_info(self, &shared.get());
+        // The free space of the drive the folder is on, for the status bar:
+        // asked on the pool, and only of a drive that answers at once (not a
+        // share, not a disc). Asked again when the folder's count changes, so
+        // a copy into it is reflected.
+        let docked = self.status_bar;
+        let free = crate::task::use_resource(
+            (docked && !self.listing.recent && self.listing.mount.thumbnails())
+                .then(|| (self.listing.path.clone(), self.listing.entries.len())),
+            free_space_of,
+        );
+        let mut info = status_info(self, &shared.get());
+        info.free = free.with(|resource| resource.value().copied().flatten());
         let area = rect()
             .tw(&tokens, &[w_full(), h_flex()])
             .on_sized(move |event: Event<SizedEventData>| {
@@ -1718,7 +1741,7 @@ impl Component for FileView {
                 origin,
             })
             .child(zoom_hud(zoom))
-            .child(status_line(info, ui));
+            .maybe_child((!docked).then(|| status_line(info.clone(), ui)));
 
         let view = rect()
             .component("FileView")
@@ -1739,6 +1762,7 @@ impl Component for FileView {
             .on_key_down(on_key_down)
             .maybe_child(header)
             .child(area)
+            .maybe_child(docked.then(|| status_bar(info, ui)))
             .child(DragChip {
                 drag: gestures.drag,
                 pointer: gestures.pointer,
@@ -1772,6 +1796,12 @@ fn trash_columns_or(with_location: bool, folder: &Option<PathBuf>) -> ColumnSet 
     }
 }
 
+/// The free space of the drive a folder is on, for the status bar. `None`
+/// asks nothing.
+fn free_space_of(at: Option<(PathBuf, usize)>) -> Result<Option<u64>, String> {
+    Ok(at.and_then(|(path, _)| bingux_files::mounts::free_space(&path)))
+}
+
 /// What the status line says about the view.
 fn status_info(view: &FileView, ctx: &Ctx) -> StatusInfo {
     let selected = ctx.selected_refs();
@@ -1801,6 +1831,7 @@ fn status_info(view: &FileView, ctx: &Ctx) -> StatusInfo {
         complete: true,
         unresponsive: false,
         stopped: view.listing.stopped,
+        free: None,
     }
 }
 

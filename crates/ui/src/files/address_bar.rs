@@ -75,6 +75,7 @@ pub struct AddressBar {
     recent: Vec<PathBuf>,
     on_close_edit: Option<EventHandler<()>>,
     on_bookmarks: Option<EventHandler<()>>,
+    title: bool,
 }
 
 impl AddressBar {
@@ -108,7 +109,18 @@ impl AddressBar {
             recent: Vec::new(),
             on_close_edit: None,
             on_bookmarks: None,
+            title: false,
         }
+    }
+
+    /// On a phone, draw the trail as the header's title: the folder's name
+    /// in the title's type with the sheet's chevron, on the bar, with no
+    /// field around it and no pencil, as a phone app names the folder it is
+    /// in. Pressing it opens the sheet of the trail, which has "Type a path".
+    /// A desktop's crumbs are unchanged.
+    pub fn title(mut self, title: bool) -> Self {
+        self.title = title;
+        self
     }
 
     /// Suggest only folders, for choosing a folder.
@@ -230,6 +242,7 @@ impl Component for AddressBar {
                     home: self.home.clone(),
                     on_open: self.on_open.clone(),
                     on_edit,
+                    title: self.title,
                 }
                 .into()
             } else {
