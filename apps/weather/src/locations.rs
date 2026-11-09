@@ -8,6 +8,7 @@
 use std::time::Duration;
 
 use bingux_ui::component::ComponentName;
+use bingux_ui::prelude::tr;
 use bingux_ui::prelude::*;
 use bingux_ui::task::{Resource, use_polled_resource};
 use bingux_weather::codes::{self, Sky};
@@ -39,11 +40,11 @@ pub enum HereView {
 
 impl HereView {
     /// What the source of a position is called to the person.
-    pub fn source_text(here: &Here) -> &'static str {
+    pub fn source_text(here: &Here) -> String {
         if here.source == "portal" {
-            "From the location service"
+            tr!("weather-source-portal")
         } else {
-            "Approximate, from the network address"
+            tr!("weather-source-network")
         }
     }
 }
@@ -95,7 +96,7 @@ impl Component for PlaceRow {
         });
 
         let title = if self.here {
-            "My location".to_string()
+            tr!("weather-my-location")
         } else {
             self.place.name.clone()
         };
@@ -164,7 +165,7 @@ impl Component for PlaceRow {
         if self.here {
             line = line.leading(Icon::LocationArrow);
         } else {
-            line = line.context_menu(vec![menu_item("Remove", {
+            line = line.context_menu(vec![menu_item(tr!("weather-remove"), {
                 let key = key.clone();
                 move |_| hub.remove(&key)
             })]);
@@ -186,11 +187,11 @@ impl Component for PlaceRow {
 }
 
 /// What a lookup that failed says, in a row's subtitle.
-fn why(code: &str) -> &'static str {
+fn why(code: &str) -> String {
     match code {
-        load::DENIED => "Location is turned off for this app",
-        load::OFFLINE => "No connection",
-        _ => "Could not find your location",
+        load::DENIED => tr!("weather-why-denied"),
+        load::OFFLINE => tr!("weather-no-connection"),
+        _ => tr!("weather-why-unknown"),
     }
 }
 
@@ -216,19 +217,19 @@ impl Component for Locations {
             HereView::Locating => {
                 column = column.child(
                     Group::new(None::<String>).row(
-                        row("My location")
+                        row(tr!("weather-my-location"))
                             .leading(Icon::LocationArrow)
-                            .subtitle("Finding your location"),
+                            .subtitle(tr!("weather-locating")),
                     ),
                 );
             }
             HereView::Failed(code) => {
                 column = column.child(
                     Group::new(None::<String>).row(
-                        row("My location")
+                        row(tr!("weather-my-location"))
                             .leading(Icon::LocationArrow)
                             .subtitle(why(code))
-                            .badge("Try again")
+                            .badge(tr!("weather-try-again"))
                             .on_press(move |_| hub.locate_again()),
                     ),
                 );
@@ -258,19 +259,21 @@ impl Component for Locations {
                 .iter()
                 .position(|place| self.selected.as_deref() == Some(place.key().as_str()))
                 .filter(|_| !is_compact());
-            column = column.child(section_label("Saved places")).child(
-                sortable(rows, move |(from, to): (usize, usize)| {
-                    hub.reorder(from, to)
-                })
-                .labels(names)
-                .selected(showing),
-            );
+            column = column
+                .child(section_label(tr!("weather-saved-places")))
+                .child(
+                    sortable(rows, move |(from, to): (usize, usize)| {
+                        hub.reorder(from, to)
+                    })
+                    .labels(names)
+                    .selected(showing),
+                );
         }
 
         let add = self.add.clone();
         column = column.child(
             Group::new(None::<String>).row(
-                row("Add location")
+                row(tr!("weather-add-location"))
                     .leading(Icon::ListAdd)
                     .on_press(move |_| add.call(())),
             ),

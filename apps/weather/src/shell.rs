@@ -204,8 +204,8 @@ impl Component for Shell {
             move || {
                 if let Some(text) = conditions.clone() {
                     match freya::clipboard::Clipboard::set(text) {
-                        Ok(()) => overlays.toast("Conditions copied"),
-                        Err(_) => overlays.toast("Could not copy the conditions"),
+                        Ok(()) => overlays.toast(tr!("weather-toast-copied")),
+                        Err(_) => overlays.toast(tr!("weather-toast-copy-failed")),
                     }
                 }
             }
@@ -242,41 +242,51 @@ impl Component for Shell {
         // days and Delete are keys a view handles itself: listed for the sheet.
         let copy_enabled = conditions.is_some();
         use_window_commands(vec![
-            Command::new("weather.refresh", "Refresh", move |_| hub.refresh_all())
-                .shortcut("Ctrl+R")
-                .shortcut("F5")
-                .group(CommandGroup::File),
-            Command::new("weather.add-location", "Add location…", move |_| {
-                search::open(overlays, hub)
-            })
+            Command::new(
+                "weather.refresh",
+                tr!("weather-command-refresh"),
+                move |_| hub.refresh_all(),
+            )
+            .shortcut("Ctrl+R")
+            .shortcut("F5")
+            .group(CommandGroup::File),
+            Command::new(
+                "weather.add-location",
+                tr!("weather-command-add-location"),
+                move |_| search::open(overlays, hub),
+            )
             .shortcut("Ctrl+N")
             .group(CommandGroup::File),
-            Command::new("weather.copy-conditions", "Copy conditions", move |_| {
-                copy()
-            })
+            Command::new(
+                "weather.copy-conditions",
+                tr!("weather-command-copy"),
+                move |_| copy(),
+            )
             .shortcut("Ctrl+Shift+C")
             .enabled(copy_enabled)
             .group(CommandGroup::Edit),
-            Command::new("weather.next-place", "Next place", {
+            Command::new("weather.next-place", tr!("weather-command-next-place"), {
                 let step = step.clone();
                 move |_| step(1)
             })
             .shortcut("Ctrl+PageDown")
             .group(CommandGroup::Go)
             .hidden_from_menu(),
-            Command::new("weather.previous-place", "Previous place", move |_| {
-                step(-1)
-            })
+            Command::new(
+                "weather.previous-place",
+                tr!("weather-command-previous-place"),
+                move |_| step(-1),
+            )
             .shortcut("Ctrl+PageUp")
             .group(CommandGroup::Go)
             .hidden_from_menu(),
-            Command::key_hint("weather.hours", "Look at each hour", "Left, Right")
+            Command::key_hint("weather.hours", tr!("weather-command-hours"), "Left, Right")
                 .group(CommandGroup::Go),
-            Command::key_hint("weather.days", "Look at each day", "Up, Down")
+            Command::key_hint("weather.days", tr!("weather-command-days"), "Up, Down")
                 .group(CommandGroup::Go),
             Command::key_hint(
                 "weather.remove-place",
-                "Remove the place in the list",
+                tr!("weather-command-remove-place"),
                 "Delete",
             )
             .group(CommandGroup::Edit),
@@ -294,8 +304,8 @@ impl Component for Shell {
         let temperature_set = |temperature: Temperature| {
             menu_item(
                 match temperature {
-                    Temperature::Celsius => "Celsius",
-                    Temperature::Fahrenheit => "Fahrenheit",
+                    Temperature::Celsius => tr!("weather-unit-celsius"),
+                    Temperature::Fahrenheit => tr!("weather-unit-fahrenheit"),
                 },
                 pick(match temperature {
                     Temperature::Celsius => |u| u.temperature = Temperature::Celsius,
@@ -307,9 +317,9 @@ impl Component for Shell {
         let speed_set = |speed: Speed| {
             menu_item(
                 match speed {
-                    Speed::KilometresPerHour => "Kilometres per hour",
-                    Speed::MilesPerHour => "Miles per hour",
-                    Speed::MetresPerSecond => "Metres per second",
+                    Speed::KilometresPerHour => tr!("weather-unit-kmh"),
+                    Speed::MilesPerHour => tr!("weather-unit-mph"),
+                    Speed::MetresPerSecond => tr!("weather-unit-ms"),
                 },
                 pick(match speed {
                     Speed::KilometresPerHour => |u| u.speed = Speed::KilometresPerHour,
@@ -323,8 +333,8 @@ impl Component for Shell {
             use bingux_weather::units::Rain;
             menu_item(
                 match rain {
-                    Rain::Millimetres => "Millimetres",
-                    Rain::Inches => "Inches",
+                    Rain::Millimetres => tr!("weather-unit-mm"),
+                    Rain::Inches => tr!("weather-unit-inches"),
                 },
                 pick(match rain {
                     Rain::Millimetres => |u| u.rain = Rain::Millimetres,
@@ -334,9 +344,9 @@ impl Component for Shell {
             .checked(!automatic && units.rain == rain)
         };
         let units_menu = submenu(
-            "Units",
+            tr!("weather-units"),
             vec![
-                menu_item("Automatic", move |_| hub.units(None)).checked(automatic),
+                menu_item(tr!("weather-automatic"), move |_| hub.units(None)).checked(automatic),
                 menu_separator(),
                 temperature_set(Temperature::Celsius),
                 temperature_set(Temperature::Fahrenheit),
@@ -353,13 +363,16 @@ impl Component for Shell {
         let mut menu = Vec::new();
         menu.push(units_menu);
         menu.push(
-            menu_item("Use my location", move |_| hub.use_location(!use_location))
-                .checked(use_location),
+            menu_item(tr!("weather-use-my-location"), move |_| {
+                hub.use_location(!use_location)
+            })
+            .checked(use_location),
         );
         let lookup_on = settings.network_lookup == Some(true);
-        let mut lookup_item =
-            menu_item("Use network location", move |_| hub.set_network(!lookup_on))
-                .checked(lookup_on);
+        let mut lookup_item = menu_item(tr!("weather-use-network-location"), move |_| {
+            hub.set_network(!lookup_on)
+        })
+        .checked(lookup_on);
         if !use_location {
             lookup_item = lookup_item.disabled();
         }
@@ -371,27 +384,29 @@ impl Component for Shell {
         // window's own title, for the task list, stays "Weather".)
         let showing_list = compact && *hub.list.read();
         let mut header = HeaderBar::new(if showing_list {
-            "Weather".to_string()
+            tr!("weather-title")
         } else {
             String::new()
         })
         .busy(busy && !showing_list)
         .trailing(
             icon_button(Icon::ListAdd, move |_| search::open(overlays, hub))
-                .tooltip("Add location (Ctrl+N)"),
+                .tooltip(&tr!("weather-tooltip-add-location")),
         );
         if !showing_list {
             header = header.trailing(
                 icon_button(Icon::Refresh, move |_| hub.refresh_all())
-                    .tooltip("Refresh (Ctrl+R)")
+                    .tooltip(&tr!("weather-tooltip-refresh"))
                     .busy(busy),
             );
         }
         header = header.trailing(app_menu(menu));
         if compact && !showing_list {
             let mut list = hub.list;
-            header = header
-                .leading(icon_button(Icon::GoPrevious, move |_| list.set(true)).tooltip("Places"));
+            header = header.leading(
+                icon_button(Icon::GoPrevious, move |_| list.set(true))
+                    .tooltip(&tr!("weather-places")),
+            );
         }
         if !compact {
             header = header.trailing(WindowControls);
@@ -413,10 +428,11 @@ impl Component for Shell {
             } => Some(HereView::source_text(here).to_string()),
             _ => None,
         };
-        let page: Element = match &now_showing {
-            Current::Nothing if ask_network => {
-                let stack = if compact { flex_col() } else { flex_row() };
-                status_page(Icon::LocationArrow, "Use your approximate location?")
+        let page: Element =
+            match &now_showing {
+                Current::Nothing if ask_network => {
+                    let stack = if compact { flex_col() } else { flex_row() };
+                    status_page(Icon::LocationArrow, tr!("weather-ask-location-title"))
                     .description(
                         "Find the nearest town from this computer's network address. The address \
                          goes to ipwho.is, GeoJS or ipapi.co.",
@@ -424,31 +440,31 @@ impl Component for Shell {
                     .child(
                         rect()
                             .tw(&tokens, &[stack, gap(S3), mt(S3)])
-                            .child(primary_button("Use approximate location", move |_| {
+                            .child(primary_button(tr!("weather-ask-location-allow"), move |_| {
                                 hub.set_network(true)
                             }))
-                            .child(action_button("Search by city", move |_| {
+                            .child(action_button(tr!("weather-ask-location-search"), move |_| {
                                 hub.change(|settings| settings.network_lookup = Some(false));
                                 search::open(overlays, hub);
                             })),
                     )
                     .into()
-            }
-            Current::Nothing => status_page(Icon::LocationArrow, "Add a city")
-                .description(
-                    "Your location is not available. Search for a city to see its forecast.",
-                )
-                .action("Add location", move |_| search::open(overlays, hub))
+                }
+                Current::Nothing => status_page(Icon::LocationArrow, tr!("weather-add-city"))
+                    .description(tr!("weather-location-unavailable"))
+                    .action(tr!("weather-add-location"), move |_| {
+                        search::open(overlays, hub)
+                    })
+                    .into(),
+                _ => Page {
+                    place: place.clone().unwrap_or_else(|| Place::new("", 0.0, 0.0)),
+                    here: here_text,
+                    units,
+                    load,
+                    retry,
+                }
                 .into(),
-            _ => Page {
-                place: place.clone().unwrap_or_else(|| Place::new("", 0.0, 0.0)),
-                here: here_text,
-                units,
-                load,
-                retry,
-            }
-            .into(),
-        };
+            };
 
         let body: Element = if compact {
             if showing_list {

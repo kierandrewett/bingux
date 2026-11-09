@@ -61,9 +61,9 @@ impl Component for Page {
         match &self.load {
             Load::Loading | Load::Locating => {
                 let words = if matches!(self.load, Load::Locating) {
-                    "Finding your location…"
+                    tr!("weather-finding-location")
                 } else {
-                    "Loading the forecast…"
+                    tr!("weather-loading")
                 };
                 return rect()
                     .component("Page")
@@ -78,12 +78,14 @@ impl Component for Page {
             }
             Load::Failed(failure) => {
                 let page = match failure {
-                    Failure::Offline => status_page(Icon::NetworkOffline, "No connection")
-                        .description(
-                            "Weather needs the internet. Check the connection, then try again.",
-                        ),
-                    Failure::Service => status_page(Icon::NetworkError, "Forecast not available")
-                        .description("The forecast service did not answer. Try again in a moment."),
+                    Failure::Offline => {
+                        status_page(Icon::NetworkOffline, tr!("weather-no-connection"))
+                            .description(tr!("weather-offline-description"))
+                    }
+                    Failure::Service => {
+                        status_page(Icon::NetworkError, tr!("weather-service-title"))
+                            .description(tr!("weather-service-description"))
+                    }
                 };
                 let retry = self.retry.clone();
                 return page
@@ -137,7 +139,7 @@ impl Component for Page {
             })
             .child(section(
                 &tokens,
-                "Hourly forecast",
+                &tr!("weather-hourly-forecast"),
                 vec![
                     HourStrip {
                         forecast: forecast.clone(),
@@ -171,15 +173,15 @@ impl Component for Page {
             });
 
         let mut about = Group::new(None::<String>)
-            .row(row("Updated").value(ago(now - forecast.fetched_at)))
-            .row(row("Place").value(self.place.coordinates()));
+            .row(row(tr!("weather-updated")).value(ago(now - forecast.fetched_at)))
+            .row(row(tr!("weather-place")).value(self.place.coordinates()));
         if let Some(how) = &self.here {
-            about = about.row(row("Position").value(how.clone()));
+            about = about.row(row(tr!("weather-position")).value(how.clone()));
         }
         column = column.child(
             about.row(
-                row("Weather data by Open-Meteo.com")
-                    .subtitle("Licensed CC BY 4.0")
+                row(tr!("weather-data-credit"))
+                    .subtitle(tr!("weather-data-licence"))
                     .navigates()
                     .on_press(|_| open_data_source()),
             ),
