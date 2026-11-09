@@ -458,3 +458,21 @@ weather-clock-hour-12h = { $hour } { $period }
 weather-clock-time-12h = { $hour }:{ $minute } { $period }
 weather-period-am = AM
 weather-period-pm = PM
+
+## Elapsed time: how long ago a forecast was fetched
+weather-ago-just-now = just now
+# $count: whole minutes.
+weather-ago-minutes = { $count ->
+    [one] 1 min ago
+   *[other] { $count } min ago
+}
+# $count: whole hours.
+weather-ago-hours = { $count ->
+    [one] 1 h ago
+   *[other] { $count } h ago
+}
+# $count: whole days.
+weather-ago-days = { $count ->
+    [one] 1 day ago
+   *[other] { $count } days ago
+}

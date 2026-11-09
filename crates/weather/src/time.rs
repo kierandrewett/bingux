@@ -111,22 +111,23 @@ pub enum Clock {
     Twelve,
 }
 
-/// How long ago `then` was, for a "Updated" line: `just now`, `5 min ago`,
-/// `3 h ago`, `2 days ago`.
-pub fn ago(seconds: i64) -> String {
+/// How long ago something was, in the largest whole unit: the app words it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Ago {
+    JustNow,
+    Minutes(i64),
+    Hours(i64),
+    Days(i64),
+}
+
+/// How long ago a moment `seconds` back was.
+pub fn ago(seconds: i64) -> Ago {
     let seconds = seconds.max(0);
     match seconds {
-        0..=59 => "just now".to_string(),
-        60..=3_599 => format!("{} min ago", seconds / 60),
-        3_600..=86_399 => format!("{} h ago", seconds / 3_600),
-        _ => {
-            let days = seconds / DAY;
-            if days == 1 {
-                "1 day ago".to_string()
-            } else {
-                format!("{days} days ago")
-            }
-        }
+        0..=59 => Ago::JustNow,
+        60..=3_599 => Ago::Minutes(seconds / 60),
+        3_600..=86_399 => Ago::Hours(seconds / 3_600),
+        _ => Ago::Days(seconds / DAY),
     }
 }
 
@@ -157,9 +158,9 @@ mod tests {
 
     #[test]
     fn ago_reads_plainly() {
-        assert_eq!(ago(10), "just now");
-        assert_eq!(ago(300), "5 min ago");
-        assert_eq!(ago(7_300), "2 h ago");
-        assert_eq!(ago(3 * DAY), "3 days ago");
+        assert_eq!(ago(10), Ago::JustNow);
+        assert_eq!(ago(300), Ago::Minutes(5));
+        assert_eq!(ago(7_300), Ago::Hours(2));
+        assert_eq!(ago(3 * DAY), Ago::Days(3));
     }
 }

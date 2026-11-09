@@ -7,7 +7,7 @@ use std::time::Duration;
 use bingux_ui::component::ComponentName;
 use bingux_ui::prelude::*;
 use bingux_weather::notices::{self, Severity};
-use bingux_weather::time::{ago, unix_now};
+use bingux_weather::time::{self, unix_now};
 use bingux_weather::{Failure, Loaded, Place, Units};
 use freya::prelude::*;
 
@@ -112,7 +112,7 @@ impl Component for Page {
                 })
                 .title(tr!(
                     "weather-stale-title",
-                    ago = ago(now - forecast.fetched_at)
+                    ago = words::ago(time::ago(now - forecast.fetched_at))
                 ))
                 .kind(BannerKind::Warning)
                 .action(tr!("weather-stale-retry"), move |_| retry.call(())),
@@ -174,7 +174,9 @@ impl Component for Page {
             });
 
         let mut about = Group::new(None::<String>)
-            .row(row(tr!("weather-updated")).value(ago(now - forecast.fetched_at)))
+            .row(
+                row(tr!("weather-updated")).value(words::ago(time::ago(now - forecast.fetched_at))),
+            )
             .row(row(tr!("weather-place")).value(self.place.coordinates()));
         if let Some(how) = &self.here {
             about = about.row(row(tr!("weather-position")).value(how.clone()));

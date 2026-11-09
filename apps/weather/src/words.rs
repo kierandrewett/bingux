@@ -8,7 +8,7 @@ use bingux_weather::notices::{Kind, Span};
 use bingux_weather::text::{
     AqiBand, DewComfort, Point, PressureTrend, UvLevel, Visibility, WindForce,
 };
-use bingux_weather::time::{Clock, day_of, hour_of, minute_of};
+use bingux_weather::time::{Ago, Clock, day_of, hour_of, minute_of};
 use bingux_weather::{Forecast, Place, Units, text};
 
 /// The sky's condition in words: `Light rain`. Sentence case.
@@ -372,6 +372,16 @@ pub fn point_title(point: Point) -> String {
         Point::Wnw => tr!("weather-point-title-wnw"),
         Point::Nw => tr!("weather-point-title-nw"),
         Point::Nnw => tr!("weather-point-title-nnw"),
+    }
+}
+
+/// How long ago something was, for an "Updated" line: `just now`, `5 min ago`.
+pub fn ago(ago: Ago) -> String {
+    match ago {
+        Ago::JustNow => tr!("weather-ago-just-now"),
+        Ago::Minutes(count) => tr!("weather-ago-minutes", count = count),
+        Ago::Hours(count) => tr!("weather-ago-hours", count = count),
+        Ago::Days(count) => tr!("weather-ago-days", count = count),
     }
 }
 
