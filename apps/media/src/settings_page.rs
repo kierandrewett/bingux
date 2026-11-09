@@ -13,7 +13,7 @@ use crate::strings as text;
 
 /// Opens the settings popup.
 pub fn open(window: Window, _overlays: Overlays) {
-    window.open(popup(text::SETTINGS_TITLE, SettingsBody { window }));
+    window.open(popup(text::settings_title(), SettingsBody { window }));
 }
 
 #[derive(PartialEq)]
@@ -28,15 +28,15 @@ enum SignIn {
     Busy,
     /// The person was sent to the Last.fm page with this token.
     Waiting(String),
-    Failed(&'static str),
+    Failed(String),
 }
 
-fn error_text(error: &lastfm::Error) -> &'static str {
+fn error_text(error: &lastfm::Error) -> String {
     match error {
-        lastfm::Error::Offline => text::LASTFM_UNREACHABLE,
-        lastfm::Error::BadKeys => text::LASTFM_BAD_KEYS,
-        lastfm::Error::NotAllowedYet => text::LASTFM_NOT_ALLOWED,
-        lastfm::Error::SignedOut | lastfm::Error::Other(_) => text::LASTFM_FAILED,
+        lastfm::Error::Offline => text::lastfm_unreachable(),
+        lastfm::Error::BadKeys => text::lastfm_bad_keys(),
+        lastfm::Error::NotAllowedYet => text::lastfm_not_allowed(),
+        lastfm::Error::SignedOut | lastfm::Error::Other(_) => text::lastfm_failed(),
     }
 }
 
@@ -63,7 +63,7 @@ impl Component for SettingsBody {
         };
         let current = settings.read().clone();
 
-        let mut library = Group::new(Some(text::LIBRARY_GROUP.to_owned()));
+        let mut library = Group::new(Some(text::library_group().to_owned()));
         for folder in current.library_folders() {
             let shown = folder.to_string_lossy().into_owned();
             let removed = folder.clone();
@@ -88,24 +88,26 @@ impl Component for SettingsBody {
                         }));
                         engine().scan();
                     })
-                    .tooltip(text::REMOVE_FOLDER),
+                    .tooltip(&text::remove_folder()),
                 ),
             );
         }
-        library = library.row(row(text::MENU_ADD_FOLDER).leading(Icon::ListAdd).on_press(
-            move |_| {
-                add_folder(window);
-            },
-        ));
+        library = library.row(
+            row(text::menu_add_folder())
+                .leading(Icon::ListAdd)
+                .on_press(move |_| {
+                    add_folder(window);
+                }),
+        );
 
         let levelling_options = vec![
-            ("off".to_owned(), text::LEVELLING_OFF.to_owned()),
-            ("track".to_owned(), text::LEVELLING_TRACK.to_owned()),
-            ("album".to_owned(), text::LEVELLING_ALBUM.to_owned()),
-            ("automatic".to_owned(), text::LEVELLING_AUTO.to_owned()),
+            ("off".to_owned(), text::levelling_off()),
+            ("track".to_owned(), text::levelling_track()),
+            ("album".to_owned(), text::levelling_album()),
+            ("automatic".to_owned(), text::levelling_auto()),
         ];
-        let playback = Group::new(Some(text::PLAYBACK_GROUP.to_owned()))
-            .row(row(text::LEVELLING).trailing(dropdown(
+        let playback = Group::new(Some(text::playback_group().to_owned()))
+            .row(row(text::levelling()).trailing(dropdown(
                 levelling_options,
                 current.levelling.clone(),
                 {
@@ -123,13 +125,13 @@ impl Component for SettingsBody {
                 },
             )))
             .row(
-                switch_row(text::RESUME, current.resume, {
+                switch_row(text::resume(), current.resume, {
                     let change = change.clone();
                     move |on: bool| change(Box::new(move |settings| settings.resume = on))
                 })
-                .subtitle(text::RESUME_BODY),
+                .subtitle(text::resume_body()),
             )
-            .row(switch_row(text::SUBTITLES_SETTING, current.subtitles, {
+            .row(switch_row(text::subtitles_setting(), current.subtitles, {
                 let change = change.clone();
                 move |on: bool| {
                     if !on {
@@ -140,9 +142,9 @@ impl Component for SettingsBody {
             }));
 
         let saved = account.read().clone().unwrap_or_default();
-        let mut lastfm_group = Group::new(Some(text::LASTFM_GROUP.to_owned()))
-            .description(text::API_HELP)
-            .row(switch_row(text::SCROBBLE, current.scrobble, {
+        let mut lastfm_group = Group::new(Some(text::lastfm_group().to_owned()))
+            .description(text::api_help())
+            .row(switch_row(text::scrobble(), current.scrobble, {
                 let change = change.clone();
                 move |on: bool| change(Box::new(move |settings| settings.scrobble = on))
             }));
@@ -158,8 +160,8 @@ impl Component for SettingsBody {
             };
             if let Some(user) = &saved.user {
                 lastfm_group =
-                    lastfm_group.row(row(text::SIGNED_IN_AS).value(user.clone()).trailing(
-                        action_button(text::SIGN_OUT, {
+                    lastfm_group.row(row(text::signed_in_as()).value(user.clone()).trailing(
+                        action_button(text::sign_out(), {
                             let saved = saved.clone();
                             move |_| {
                                 save_account(lastfm::Account {
@@ -172,7 +174,7 @@ impl Component for SettingsBody {
                     ));
             } else {
                 lastfm_group = lastfm_group
-                    .row(entry_row(text::API_KEY, saved.api_key.clone(), {
+                    .row(entry_row(text::api_key(), saved.api_key.clone(), {
                         let saved = saved.clone();
                         move |value: String| {
                             save_account(lastfm::Account {
@@ -181,7 +183,7 @@ impl Component for SettingsBody {
                             })
                         }
                     }))
-                    .row(entry_row(text::API_SECRET, saved.secret.clone(), {
+                    .row(entry_row(text::api_secret(), saved.secret.clone(), {
                         let saved = saved.clone();
                         move |value: String| {
                             save_account(lastfm::Account {
@@ -195,7 +197,7 @@ impl Component for SettingsBody {
                     SignIn::Waiting(token) => {
                         let token = token.clone();
                         let saved = saved.clone();
-                        action_button(text::FINISH_SIGN_IN, move |_| {
+                        action_button(text::finish_sign_in(), move |_| {
                             let token = token.clone();
                             let saved = saved.clone();
                             sign_in.set(SignIn::Busy);
@@ -218,7 +220,7 @@ impl Component for SettingsBody {
                     _ => {
                         let has_keys = saved.has_keys();
                         let saved = saved.clone();
-                        action_button(text::SIGN_IN, move |_| {
+                        action_button(text::sign_in(), move |_| {
                             let saved = saved.clone();
                             sign_in.set(SignIn::Busy);
                             spawn(async move {
@@ -239,7 +241,7 @@ impl Component for SettingsBody {
                     }
                 };
                 let button = button.loading(state == SignIn::Busy);
-                let mut sign_row = row(text::SIGN_IN.trim_end_matches('…')).trailing(button);
+                let mut sign_row = row(text::sign_in().trim_end_matches('…')).trailing(button);
                 if let SignIn::Failed(message) = state {
                     sign_row = sign_row.subtitle(message);
                 }

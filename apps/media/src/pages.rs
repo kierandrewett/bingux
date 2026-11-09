@@ -57,8 +57,8 @@ fn page(tokens: &Tokens) -> Rect {
 #[derive(PartialEq)]
 struct Empty {
     icon: Icon,
-    title: &'static str,
-    body: &'static str,
+    title: String,
+    body: String,
 }
 
 impl Component for Empty {
@@ -66,20 +66,20 @@ impl Component for Empty {
         let live = use_media();
         let window = use_window();
         if *live.scanning.read() {
-            return status_page(Icon::Refresh, text::SCANNING).into_element();
+            return status_page(Icon::Refresh, text::scanning()).into_element();
         }
         let whole_library_empty = live.library.read().is_empty();
         if !whole_library_empty {
-            return status_page(self.icon, self.title)
-                .description(self.body)
+            return status_page(self.icon, self.title.as_str())
+                .description(self.body.as_str())
                 .into_element();
         }
         // Files dropped here play, as they do anywhere in the window; the
         // page lights up to say it takes them.
         drop_target(
-            status_page(Icon::FolderMusic, text::EMPTY_TITLE)
-                .description(text::EMPTY_BODY)
-                .action(text::EMPTY_ACTION, move |_| add_folder(window)),
+            status_page(Icon::FolderMusic, text::empty_title())
+                .description(text::empty_body())
+                .action(text::empty_action(), move |_| add_folder(window)),
         )
         .accepts([Format::Uris])
         .on_drop(|dropped: Dropped| crate::app::play_paths(dropped.data.files()))
@@ -92,7 +92,7 @@ pub fn add_folder(window: Window) {
     choose(
         window,
         ChooserRequest::select_folder()
-            .title(text::EMPTY_ACTION)
+            .title(text::empty_action())
             .accept_label("Add"),
         |chosen| {
             if let Some(chosen) = chosen {
@@ -139,8 +139,8 @@ impl Component for SongsPage {
         if songs.is_empty() {
             return Empty {
                 icon: Icon::AudioXGeneric,
-                title: text::EMPTY_SECTION_SONGS,
-                body: text::EMPTY_SECTION_SONGS_BODY,
+                title: text::empty_section_songs(),
+                body: text::empty_section_songs_body(),
             }
             .into_element();
         }
@@ -148,7 +148,7 @@ impl Component for SongsPage {
         page(&tokens)
             .child(PageHead::new().subtitle(format!(
                 "{}, {}",
-                text::songs(songs.len()),
+                text::count_songs(songs.len()),
                 text::length(total)
             )))
             .child(play_pair(songs.clone(), ui))
@@ -179,11 +179,11 @@ fn play_pair(songs: Arc<Vec<Track>>, ui: Ui) -> Element {
     };
     hstack(S2)
         .child(
-            action_button(text::PLAY, play_all)
+            action_button(text::play(), play_all)
                 .suggested()
                 .icon(Icon::MediaPlaybackStart),
         )
-        .child(action_button(text::SHUFFLE, shuffle).icon(Icon::MediaPlaylistShuffle))
+        .child(action_button(text::shuffle(), shuffle).icon(Icon::MediaPlaylistShuffle))
         .into_element()
 }
 
@@ -277,13 +277,13 @@ impl Component for AlbumsPage {
         if albums.is_empty() {
             return Empty {
                 icon: Icon::MediaOptical,
-                title: text::EMPTY_SECTION_ALBUMS,
-                body: text::EMPTY_SECTION_ALBUMS_BODY,
+                title: text::empty_section_albums(),
+                body: text::empty_section_albums_body(),
             }
             .into_element();
         }
         page(&tokens)
-            .child(PageHead::new().subtitle(text::albums(albums.len())))
+            .child(PageHead::new().subtitle(text::count_albums(albums.len())))
             .child(AlbumGrid { albums })
             .into_element()
     }
@@ -338,10 +338,14 @@ impl Component for AlbumPage {
         let details = match album.year {
             Some(year) => format!(
                 "{year}, {}, {}",
-                text::songs(tracks.len()),
+                text::count_songs(tracks.len()),
                 text::length(duration)
             ),
-            None => format!("{}, {}", text::songs(tracks.len()), text::length(duration)),
+            None => format!(
+                "{}, {}",
+                text::count_songs(tracks.len()),
+                text::length(duration)
+            ),
         };
         let artist_target = location(&["artists", &album.artist]);
         let side = if is_compact() { 140.0 } else { 200.0 };
@@ -409,8 +413,8 @@ impl Component for ArtistsPage {
         if artists.is_empty() {
             return Empty {
                 icon: Icon::AvatarDefault,
-                title: text::EMPTY_SECTION_ARTISTS,
-                body: text::EMPTY_SECTION_ARTISTS_BODY,
+                title: text::empty_section_artists(),
+                body: text::empty_section_artists_body(),
             }
             .into_element();
         }
@@ -422,8 +426,8 @@ impl Component for ArtistsPage {
                 row(artist.name.clone())
                     .subtitle(format!(
                         "{}, {}",
-                        text::albums(artist.albums.len()),
-                        text::songs(artist.track_count())
+                        text::count_albums(artist.albums.len()),
+                        text::count_songs(artist.track_count())
                     ))
                     .leading(Icon::AvatarDefault)
                     .navigates()
@@ -431,7 +435,7 @@ impl Component for ArtistsPage {
             );
         }
         page(&tokens)
-            .child(PageHead::new().subtitle(text::artists(count)))
+            .child(PageHead::new().subtitle(text::count_artists(count)))
             .child(group)
             .into_element()
     }
@@ -483,18 +487,18 @@ impl Component for ArtistPage {
                                 &tokens,
                                 format!(
                                     "{}, {}",
-                                    text::albums(artist.albums.len()),
-                                    text::songs(artist.track_count())
+                                    text::count_albums(artist.albums.len()),
+                                    text::count_songs(artist.track_count())
                                 ),
                             ))
                             .child(
-                                action_button(text::PLAY, play_all)
+                                action_button(text::play(), play_all)
                                     .suggested()
                                     .icon(Icon::MediaPlaybackStart),
                             ),
                     ),
             )
-            .child(group_head(text::ALBUMS, rect()))
+            .child(group_head(text::albums_heading(), rect()))
             .child(AlbumGrid {
                 albums: artist.albums.clone(),
             })
@@ -609,19 +613,19 @@ impl Component for VideosPage {
         if videos.is_empty() {
             return Empty {
                 icon: Icon::VideoGeneric,
-                title: text::EMPTY_SECTION_VIDEOS,
-                body: text::EMPTY_SECTION_VIDEOS_BODY,
+                title: text::empty_section_videos(),
+                body: text::empty_section_videos_body(),
             }
             .into_element();
         }
         let resume = library.continue_watching();
         let count = videos.len();
-        let mut column = page(&tokens).child(PageHead::new().subtitle(text::videos(count)));
+        let mut column = page(&tokens).child(PageHead::new().subtitle(text::count_videos(count)));
         if !resume.is_empty() {
             column = column
-                .child(group_head(text::CONTINUE_WATCHING, rect()))
+                .child(group_head(text::continue_watching(), rect()))
                 .child(VideoGrid { videos: resume })
-                .child(group_head(text::ALL_VIDEOS, rect()));
+                .child(group_head(text::all_videos(), rect()));
         }
         column.child(VideoGrid { videos }).into_element()
     }
@@ -641,8 +645,8 @@ impl Component for QueuePage {
         let ui = use_ui();
         let queue = live.queue.read().clone();
         let Some(current) = queue.current() else {
-            return status_page(Icon::ViewListOrdered, text::EMPTY_QUEUE)
-                .description(text::EMPTY_QUEUE_BODY)
+            return status_page(Icon::ViewListOrdered, text::empty_queue())
+                .description(text::empty_queue_body())
                 .into_element();
         };
         let item_row = |index: usize, item: &Item| -> Row {
@@ -651,13 +655,13 @@ impl Component for QueuePage {
             } else {
                 Some(item.artist.clone())
             };
-            let mut menu = vec![menu_item(text::REMOVE_FROM_QUEUE, move |_| {
+            let mut menu = vec![menu_item(text::remove_from_queue(), move |_| {
                 engine().player.remove(index)
             })];
             if index > current + 1 {
                 menu.insert(
                     0,
-                    menu_item(text::PLAY_NEXT, move |_| {
+                    menu_item(text::play_next(), move |_| {
                         engine().player.reorder(index, current + 1)
                     }),
                 );
@@ -686,7 +690,7 @@ impl Component for QueuePage {
                 })
         };
         let playing = queue.items()[current].clone();
-        let mut now = Group::new(Some(text::NOW_PLAYING.to_owned()));
+        let mut now = Group::new(Some(text::now_playing().to_owned()));
         now = now.row(item_row(current, &playing).selected(true));
         // Up next is put in order by dragging a row's grip, or with Alt+Up
         // and Alt+Down.
@@ -708,14 +712,14 @@ impl Component for QueuePage {
             rect()
                 .width(Size::fill())
                 .tw(&tokens, &[flex_col()])
-                .child(group_head(text::UP_NEXT, rect()))
+                .child(group_head(text::up_next(), rect()))
                 .child(if long { list.drop_indicator() } else { list })
         });
         page(&tokens)
             .child(
                 PageHead::new()
-                    .subtitle(text::songs(queue.items().len()))
-                    .action(text::CLEAR_UP_NEXT, |_| engine().player.clear_upcoming()),
+                    .subtitle(text::count_songs(queue.items().len()))
+                    .action(text::clear_up_next(), |_| engine().player.clear_upcoming()),
             )
             .child(now)
             .maybe_child(next)
@@ -738,8 +742,8 @@ impl Component for SearchResults {
         let library: Arc<Snapshot> = live.library.read().clone();
         let (songs, videos) = library.search(&query);
         if songs.is_empty() && videos.is_empty() {
-            return status_page(Icon::Search, text::NO_RESULTS)
-                .description(text::NO_RESULTS_BODY)
+            return status_page(Icon::Search, text::no_results())
+                .description(text::no_results_body())
                 .into_element();
         }
         let current = live
@@ -752,7 +756,7 @@ impl Component for SearchResults {
         let mut column = page(&tokens);
         if !songs.is_empty() {
             column = column
-                .child(group_head(text::SONGS, rect()))
+                .child(group_head(text::songs_heading(), rect()))
                 .child(SongList {
                     songs: songs.clone(),
                     current: current.clone(),
@@ -763,7 +767,7 @@ impl Component for SearchResults {
                 });
         }
         if !videos.is_empty() {
-            let mut group = Group::new(Some(text::VIDEOS.to_owned()));
+            let mut group = Group::new(Some(text::videos_heading().to_owned()));
             for video in videos.iter().take(50) {
                 let item = video.item();
                 group = group.row(

@@ -113,8 +113,9 @@ pub fn set_mini(ui: Ui, on: bool) {
 
 fn sleep_items(status: &Status) -> Vec<MenuItem> {
     let on = status.sleep;
-    let mut items =
-        vec![menu_item(text::OFF, |_| engine().player.set_sleep(Sleep::Off)).checked(on.is_none())];
+    let mut items = vec![
+        menu_item(text::off(), |_| engine().player.set_sleep(Sleep::Off)).checked(on.is_none()),
+    ];
     for minutes in [15u32, 30, 45, 60] {
         items.push(menu_item(text::minutes(minutes), move |_| {
             engine()
@@ -123,7 +124,7 @@ fn sleep_items(status: &Status) -> Vec<MenuItem> {
         }));
     }
     items.push(
-        menu_item(text::END_OF_ITEM, |_| {
+        menu_item(text::end_of_item(), |_| {
             engine().player.set_sleep(Sleep::EndOfItem)
         })
         .checked(on == Some(SleepLeft::EndOfItem)),
@@ -144,7 +145,7 @@ fn speed_items(status: &Status) -> Vec<MenuItem> {
 fn subtitle_items(status: &Status, window: Window) -> Vec<MenuItem> {
     let any = status.subtitle_tracks().any(|track| track.selected);
     let mut items =
-        vec![menu_item(text::OFF, |_| engine().player.select_subtitle(None)).checked(!any)];
+        vec![menu_item(text::off(), |_| engine().player.select_subtitle(None)).checked(!any)];
     for track in status.subtitle_tracks() {
         let id = track.id;
         items.push(
@@ -155,7 +156,7 @@ fn subtitle_items(status: &Status, window: Window) -> Vec<MenuItem> {
         );
     }
     items.push(menu_separator());
-    items.push(menu_item(text::ADD_SUBTITLE_FILE, move |_| {
+    items.push(menu_item(text::add_subtitle_file(), move |_| {
         choose(
             window,
             ChooserRequest::open().filter(
@@ -292,7 +293,7 @@ impl Component for FilmStage {
                 .tw(&tokens, &[rounded(Radius::Control), clip()])
                 .width(Size::px(PREVIEW_SIDE as f32 * 0.8))
                 .height(Size::px(PREVIEW_SIDE as f32 * 0.45))
-                .child(video_surface(preview_frames.clone()).label(text::NOW_PLAYING))
+                .child(video_surface(preview_frames.clone()).label(text::now_playing()))
                 .into_element()
         });
         let on_hover = {
@@ -337,43 +338,46 @@ impl Component for FilmStage {
         let mut tools = hstack(S1);
         if status.subtitle_tracks().next().is_some() || !mini {
             tools = tools.child(
-                menu_button(text::SUBTITLES, subtitle_items(&status, window))
+                menu_button(text::subtitles(), subtitle_items(&status, window))
                     .icon(Icon::MediaViewSubtitles),
             );
         }
         if status.audio_tracks().count() > 1 {
-            tools =
-                tools.child(menu_button(text::AUDIO_TRACK, audio_items(&status)).icon(Icon::Sound));
+            tools = tools
+                .child(menu_button(text::audio_track(), audio_items(&status)).icon(Icon::Sound));
         }
         if !status.chapters.is_empty() && !mini {
             tools = tools.child(
-                menu_button(text::CHAPTERS, chapter_items(&status)).icon(Icon::ViewListOrdered),
+                menu_button(text::chapters(), chapter_items(&status)).icon(Icon::ViewListOrdered),
             );
         }
         if !mini {
-            tools = tools
-                .child(menu_button(text::SPEED, speed_items(&status)).icon(Icon::MediaSeekForward));
+            tools = tools.child(
+                menu_button(text::speed_menu(), speed_items(&status)).icon(Icon::MediaSeekForward),
+            );
         }
+        let mini_tip = if mini {
+            text::leave_mini_player()
+        } else {
+            text::mini_player()
+        };
+        let fullscreen_tip = if fullscreen {
+            text::leave_full_screen()
+        } else {
+            text::full_screen()
+        };
         tools = tools
             .child(
                 icon_button(Icon::ViewPip, move |_| toggle_mini(ui))
                     .active(mini)
                     .tooltip_side(TipSide::Above)
-                    .tooltip(if mini {
-                        text::LEAVE_MINI_PLAYER
-                    } else {
-                        text::MINI_PLAYER
-                    }),
+                    .tooltip(&mini_tip),
             )
             .child(
                 icon_button(Icon::ViewFullscreen, move |_| toggle_fullscreen(ui))
                     .morph(Icon::ViewRestore, fullscreen)
                     .tooltip_side(TipSide::Above)
-                    .tooltip(if fullscreen {
-                        text::LEAVE_FULL_SCREEN
-                    } else {
-                        text::FULL_SCREEN
-                    }),
+                    .tooltip(&fullscreen_tip),
             );
         let card = |content: Rect| {
             content.tw(
@@ -421,7 +425,9 @@ impl Component for FilmStage {
                 .child(tools),
         );
         let top = card(rect().tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)]))
-            .child(icon_button(Icon::PanDown, move |_| close_stage(ui)).tooltip(text::CLOSE_PLAYER))
+            .child(
+                icon_button(Icon::PanDown, move |_| close_stage(ui)).tooltip(&text::close_player()),
+            )
             .child(
                 EMPHASIS
                     .label(&tokens, title)
@@ -471,7 +477,7 @@ impl Component for FilmStage {
                     .position(Position::new_absolute().top(0.0).left(0.0))
                     .expanded()
                     .tw(&tokens, &[center()])
-                    .child(card(rect()).child(BODY.label(&tokens, text::CANNOT_PLAY)))
+                    .child(card(rect()).child(BODY.label(&tokens, text::cannot_play())))
             }))
             .maybe_child((fade > 0.01).then(|| {
                 rect()
@@ -520,7 +526,7 @@ impl Component for SongStage {
         let item = status.item.clone();
         let title = status
             .title()
-            .unwrap_or_else(|| text::NOT_PLAYING.to_owned());
+            .unwrap_or_else(|| text::not_playing().to_owned());
         let subtitle = item
             .as_ref()
             .map(
@@ -538,15 +544,20 @@ impl Component for SongStage {
         let close = move |_| close_stage(ui);
         let sleep_label = match status.sleep {
             Some(SleepLeft::Seconds(seconds)) => text::stops_in(f64::from(seconds)),
-            Some(SleepLeft::EndOfItem) => text::STOPS_AT_END.to_owned(),
+            Some(SleepLeft::EndOfItem) => text::stops_at_end().to_owned(),
             None => String::new(),
         };
         let queue_target = Location::new(crate::SCHEME).join("queue");
         // The player covers the library's header, so it has its own: it
         // moves the window and holds the window's buttons.
+        let pip_tip = if mini {
+            text::leave_mini_player()
+        } else {
+            text::mini_player()
+        };
         let header = HeaderBar::new("")
             .fill(Paint::Bg)
-            .leading(icon_button(Icon::PanDown, close).tooltip(text::CLOSE_PLAYER))
+            .leading(icon_button(Icon::PanDown, close).tooltip(&text::close_player()))
             .trailing(
                 rect()
                     .tw(&tokens, &[flex_row(), items(Align::Center), gap(S1)])
@@ -555,7 +566,7 @@ impl Component for SongStage {
                             .then(|| CAPTION.in_ink(Ink::Muted).label(&tokens, sleep_label)),
                     )
                     .child(
-                        menu_button(text::SLEEP_TIMER, sleep_items(&status))
+                        menu_button(text::sleep_timer(), sleep_items(&status))
                             .icon(Icon::WeatherClearNight),
                     )
                     .maybe_child((!mini).then(|| {
@@ -564,16 +575,12 @@ impl Component for SongStage {
                             stage.set(false);
                             router.switch_root(&queue_target);
                         })
-                        .tooltip(text::QUEUE)
+                        .tooltip(&text::queue())
                     }))
                     .child(
                         icon_button(Icon::ViewPip, move |_| toggle_mini(ui))
                             .active(mini)
-                            .tooltip(if mini {
-                                text::LEAVE_MINI_PLAYER
-                            } else {
-                                text::MINI_PLAYER
-                            }),
+                            .tooltip(&pip_tip),
                     ),
             )
             .trailing(WindowControls);

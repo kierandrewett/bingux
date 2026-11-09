@@ -124,6 +124,7 @@ pub fn routes() -> RouteTable {
 }
 
 fn main() {
+    bingux_ui::i18n::register(bingux_ui::catalogue!("media"));
     #[cfg(feature = "snapshot")]
     if std::env::args().nth(1).as_deref() == Some("--snapshot") {
         let dir = std::env::args()
@@ -158,4 +159,14 @@ fn main() {
         ))
         .usage(USAGE)
         .run(|| app::App);
+}
+
+#[cfg(test)]
+mod catalogue_tests {
+    /// Every `tr!` of the app has its message, with the right variables, and
+    /// the catalogue holds nothing the code does not use.
+    #[test]
+    fn the_catalogue_matches_the_code() {
+        bingux_ui::i18n::check::crate_catalogue(env!("CARGO_MANIFEST_DIR"), "media").assert_clean();
+    }
 }

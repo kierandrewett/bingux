@@ -131,7 +131,7 @@ fn columns(
     artist: bool,
 ) -> Vec<Column<Track>> {
     let mut columns = vec![
-        Column::new("title", text::COLUMN_TITLE, move |track: &Track| {
+        Column::new("title", text::column_title(), move |track: &Track| {
             title_cell(track, lead, current)
         })
         .summary(|track: &Track| track.title.clone())
@@ -142,7 +142,7 @@ fn columns(
     ];
     if artist {
         columns.push(
-            Column::text("artist", text::COLUMN_ARTIST, |track: &Track| {
+            Column::text("artist", text::column_artist(), |track: &Track| {
                 track.artist.clone()
             })
             .flex()
@@ -154,7 +154,7 @@ fn columns(
     }
     if album {
         columns.push(
-            Column::text("album", text::COLUMN_ALBUM, |track: &Track| {
+            Column::text("album", text::column_album(), |track: &Track| {
                 track.album.clone()
             })
             .flex()
@@ -165,7 +165,7 @@ fn columns(
         );
     }
     columns.push(
-        Column::text("time", text::COLUMN_TIME, |track: &Track| {
+        Column::text("time", text::column_time(), |track: &Track| {
             track.duration.map(text::clock).unwrap_or_default()
         })
         .width(72.0)
@@ -194,10 +194,10 @@ fn row_menu(keys: &[PathBuf], songs: &[Track], router: Router) -> Vec<MenuItem> 
     }
     let later = items.clone();
     let mut menu = vec![
-        menu_item(text::PLAY_NEXT, move |_| {
+        menu_item(text::play_next(), move |_| {
             engine().player.enqueue(items.clone(), true)
         }),
-        menu_item(text::PLAY_LATER, move |_| {
+        menu_item(text::play_later(), move |_| {
             engine().player.enqueue(later.clone(), false)
         }),
     ];
@@ -205,8 +205,10 @@ fn row_menu(keys: &[PathBuf], songs: &[Track], router: Router) -> Vec<MenuItem> 
         let album = location(&["albums", &track.album_key()]);
         let artist = location(&["artists", track.filed_artist()]);
         menu.push(menu_separator());
-        menu.push(menu_item(text::SHOW_ALBUM, move |_| router.push(&album)));
-        menu.push(menu_item(text::SHOW_ARTIST, move |_| router.push(&artist)));
+        menu.push(menu_item(text::show_album(), move |_| router.push(&album)));
+        menu.push(menu_item(text::show_artist(), move |_| {
+            router.push(&artist)
+        }));
     }
     menu
 }
@@ -268,7 +270,7 @@ impl Component for SongList {
         rect().width(Size::fill()).height(Size::px(height)).child(
             data_table(rows, columns, |track: &Track| track.path.clone())
                 .id(self.id)
-                .label(text::SONGS)
+                .label(text::songs_heading())
                 .chevrons(false)
                 .row_menu(move |keys: &[PathBuf]| row_menu(keys, &menu_songs, router))
                 .on_activate(play_from),

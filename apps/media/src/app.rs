@@ -75,7 +75,7 @@ pub fn open_files(window: Window) {
     choose(
         window,
         ChooserRequest::open()
-            .title(text::MENU_OPEN)
+            .title(text::menu_open())
             .multiple(true)
             .filter(
                 Filter::new("Music and videos")
@@ -111,7 +111,7 @@ fn window_commands(
     status: &Status,
     can_next: bool,
 ) -> Vec<Command> {
-    let controls = CommandGroup::Other(text::CONTROLS_GROUP);
+    let controls = CommandGroup::Other(bingux_ui::prelude::i18n_id!("media-controls-group"));
     let has_item = status.item.is_some();
     let playing = status.state == PlayState::Playing;
     let stage_open = *ui.stage.peek();
@@ -122,27 +122,29 @@ fn window_commands(
     let muted = status.muted;
     let up_next = location(&["queue"]);
     vec![
-        Command::new("file.open", text::MENU_OPEN, move |_| open_files(window))
+        Command::new("file.open", text::menu_open(), move |_| open_files(window))
             .shortcut("Ctrl+O")
             .icon(Icon::DocumentOpen)
             .group(CommandGroup::File)
             .keywords(["play", "file"]),
-        Command::new("file.add-folder", text::MENU_ADD_FOLDER, move |_| {
+        Command::new("file.add-folder", text::menu_add_folder(), move |_| {
             add_folder(window)
         })
         .icon(Icon::FolderMusic)
         .group(CommandGroup::File)
         .keywords(["library", "music"]),
-        Command::new("file.update-library", text::MENU_SCAN, |_| engine().scan())
-            .icon(Icon::Refresh)
-            .group(CommandGroup::File)
-            .keywords(["scan", "refresh", "rescan"]),
+        Command::new("file.update-library", text::menu_scan(), |_| {
+            engine().scan()
+        })
+        .icon(Icon::Refresh)
+        .group(CommandGroup::File)
+        .keywords(["scan", "refresh", "rescan"]),
         Command::new(
             "controls.play-pause",
             if playing {
-                text::COMMAND_PAUSE
+                text::command_pause()
             } else {
-                text::COMMAND_PLAY
+                text::command_play()
             },
             |_| engine().player.toggle(),
         )
@@ -155,7 +157,7 @@ fn window_commands(
         .enabled(has_item)
         .group(controls)
         .section("transport"),
-        Command::new("controls.next", text::COMMAND_NEXT, |_| {
+        Command::new("controls.next", text::command_next(), |_| {
             engine().player.next()
         })
         .shortcut("Ctrl+Right")
@@ -163,7 +165,7 @@ fn window_commands(
         .enabled(can_next)
         .group(controls)
         .section("transport"),
-        Command::new("controls.previous", text::COMMAND_PREVIOUS, |_| {
+        Command::new("controls.previous", text::command_previous(), |_| {
             engine().player.previous()
         })
         .shortcut("Ctrl+Left")
@@ -171,7 +173,7 @@ fn window_commands(
         .enabled(has_item)
         .group(controls)
         .section("transport"),
-        Command::new("controls.louder", text::COMMAND_LOUDER, |_| {
+        Command::new("controls.louder", text::command_louder(), |_| {
             change_volume(5.0)
         })
         .shortcut("Ctrl+Up")
@@ -179,14 +181,14 @@ fn window_commands(
         .group(controls)
         .section("volume")
         .keywords(["louder", "volume up"]),
-        Command::new("controls.quieter", text::COMMAND_QUIETER, |_| {
+        Command::new("controls.quieter", text::command_quieter(), |_| {
             change_volume(-5.0)
         })
         .shortcut("Ctrl+Down")
         .group(controls)
         .section("volume")
         .keywords(["quieter", "volume down"]),
-        Command::new("controls.mute", text::COMMAND_MUTE, move |_| {
+        Command::new("controls.mute", text::command_mute(), move |_| {
             run_volume(VolumeChange::Mute(!muted))
         })
         .shortcut("Ctrl+M")
@@ -194,7 +196,7 @@ fn window_commands(
         .group(controls)
         .section("volume")
         .keywords(["silence", "sound"]),
-        Command::new("controls.shuffle", text::COMMAND_SHUFFLE, move |_| {
+        Command::new("controls.shuffle", text::command_shuffle(), move |_| {
             engine().player.set_shuffle(!shuffle)
         })
         .checked(shuffle)
@@ -202,7 +204,7 @@ fn window_commands(
         .group(controls)
         .section("order")
         .keywords(["random"]),
-        Command::new("controls.repeat", text::COMMAND_REPEAT, move |_| {
+        Command::new("controls.repeat", text::command_repeat(), move |_| {
             engine().player.set_repeat(if repeat == Repeat::All {
                 Repeat::Off
             } else {
@@ -214,18 +216,22 @@ fn window_commands(
         .group(controls)
         .section("order")
         .keywords(["loop"]),
-        Command::new("controls.repeat-one", text::COMMAND_REPEAT_ONE, move |_| {
-            engine().player.set_repeat(if repeat == Repeat::One {
-                Repeat::Off
-            } else {
-                Repeat::One
-            })
-        })
+        Command::new(
+            "controls.repeat-one",
+            text::command_repeat_one(),
+            move |_| {
+                engine().player.set_repeat(if repeat == Repeat::One {
+                    Repeat::Off
+                } else {
+                    Repeat::One
+                })
+            },
+        )
         .checked(repeat == Repeat::One)
         .group(controls)
         .section("order")
         .keywords(["loop"]),
-        Command::new("view.player", text::MENU_PLAYER, move |_| {
+        Command::new("view.player", text::menu_player(), move |_| {
             if *ui.stage.peek() {
                 close_stage(ui)
             } else {
@@ -237,7 +243,7 @@ fn window_commands(
         .enabled(has_item)
         .group(CommandGroup::View)
         .keywords(["now playing"]),
-        Command::new("view.mini-player", text::MENU_MINI, move |_| {
+        Command::new("view.mini-player", text::menu_mini(), move |_| {
             toggle_mini(ui)
         })
         .shortcut("Ctrl+Shift+M")
@@ -245,7 +251,7 @@ fn window_commands(
         .icon(Icon::ViewPip)
         .group(CommandGroup::View)
         .keywords(["picture in picture", "small"]),
-        Command::new("view.full-screen", text::MENU_FULL_SCREEN, move |_| {
+        Command::new("view.full-screen", text::menu_full_screen(), move |_| {
             if !*ui.stage.peek() {
                 open_stage(ui);
             }
@@ -255,7 +261,7 @@ fn window_commands(
         .checked(fullscreen)
         .icon(Icon::ViewFullscreen)
         .group(CommandGroup::View),
-        Command::new("go.up-next", text::MENU_UP_NEXT, move |_| {
+        Command::new("go.up-next", text::menu_up_next(), move |_| {
             close_stage(ui);
             router.switch_root(&up_next);
         })
@@ -263,29 +269,29 @@ fn window_commands(
         .icon(Icon::ViewListOrdered)
         .group(CommandGroup::Go)
         .keywords(["queue"]),
-        Command::new("app.settings", text::MENU_SETTINGS, move |_| {
+        Command::new("app.settings", text::menu_settings(), move |_| {
             crate::settings_page::open(window, overlays)
         })
         .shortcut("Ctrl+,")
         .icon(Icon::PreferencesSystem)
         .keywords(["preferences", "last.fm", "folders"]),
-        Command::key_hint("player.play", text::HINT_PLAY, "Space or K"),
-        Command::key_hint("player.seek", text::HINT_SEEK, "Left and Right"),
+        Command::key_hint("player.play", text::hint_play(), "Space or K"),
+        Command::key_hint("player.seek", text::hint_seek(), "Left and Right"),
         Command::key_hint(
             "player.seek-long",
-            text::HINT_SEEK_LONG,
+            text::hint_seek_long(),
             "Shift+Left and Shift+Right",
         ),
-        Command::key_hint("player.skip", text::HINT_SKIP, "J and L"),
-        Command::key_hint("player.volume", text::HINT_VOLUME, "Up and Down"),
-        Command::key_hint("player.mute", text::HINT_MUTE, "M"),
-        Command::key_hint("player.full-screen", text::HINT_FULL_SCREEN, "F"),
-        Command::key_hint("player.speed", text::HINT_SPEED, "[ and ]"),
-        Command::key_hint("player.subtitles", text::HINT_SUBTITLES, "C"),
-        Command::key_hint("player.frame", text::HINT_FRAME, ", and ."),
-        Command::key_hint("player.loop", text::HINT_LOOP, "Shift+L"),
-        Command::key_hint("player.snapshot", text::HINT_SNAPSHOT, "S"),
-        Command::key_hint("player.leave", text::HINT_LEAVE, "Esc"),
+        Command::key_hint("player.skip", text::hint_skip(), "J and L"),
+        Command::key_hint("player.volume", text::hint_volume(), "Up and Down"),
+        Command::key_hint("player.mute", text::hint_mute(), "M"),
+        Command::key_hint("player.full-screen", text::hint_full_screen(), "F"),
+        Command::key_hint("player.speed", text::hint_speed(), "[ and ]"),
+        Command::key_hint("player.subtitles", text::hint_subtitles(), "C"),
+        Command::key_hint("player.frame", text::hint_frame(), ", and ."),
+        Command::key_hint("player.loop", text::hint_loop(), "Shift+L"),
+        Command::key_hint("player.snapshot", text::hint_snapshot(), "S"),
+        Command::key_hint("player.leave", text::hint_leave(), "Esc"),
     ]
 }
 
@@ -327,9 +333,9 @@ fn save_frame(overlays: Overlays) {
         })
         .await;
         overlays.toast(if saved {
-            text::FRAME_SAVED
+            text::frame_saved()
         } else {
-            text::FRAME_NOT_SAVED
+            text::frame_not_saved()
         });
     });
 }
@@ -507,7 +513,7 @@ impl Component for Content {
                     .on_open(move |_| open_stage(ui))
                     .trailing(
                         icon_button(Icon::ViewPip, move |_| set_mini(ui, true))
-                            .tooltip(text::MINI_PLAYER),
+                            .tooltip(&text::mini_player()),
                     );
                 if video {
                     // The film plays on, small, in the bar.
@@ -563,7 +569,7 @@ impl Component for Content {
                                         py(S3),
                                     ],
                                 )
-                                .child(EMPHASIS.label(&tokens, text::DROP_HERE)),
+                                .child(EMPHASIS.label(&tokens, text::drop_here())),
                         )
                 })),
         )
