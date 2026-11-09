@@ -390,6 +390,10 @@ impl Component for Toolbar {
                     .active(toggled.unwrap_or(false))
                     .enabled(item.enabled)
                     .a11y_id(a11y_id);
+                    // A toggle says whether it is on ("Sidebar, toggle button, pressed").
+                    if let Some(on) = toggled {
+                        button = button.semantics(crate::a11y::Semantics::new().checked(*on));
+                    }
                     if pointer_only {
                         button = button.pointer_only();
                     }
@@ -593,6 +597,10 @@ impl Component for Toolbar {
                 &tokens,
                 &[
                     flex_row(),
+                    // The title's flex share is what the clusters leave: without
+                    // it the flexible middle took the room the trailing items
+                    // needed and pushed them out of the bar.
+                    grow_children(),
                     items(Align::Center),
                     gap(S2),
                     w_full(),
@@ -635,6 +643,7 @@ impl Component for MenuStop {
         let items = self.items.clone();
         let take = self.take.clone();
         let a11y_id = self.a11y_id;
+        let open = overlays.is_some_and(|overlays| overlays.menu_owned_by(a11y_id));
         let mut button = icon_button(
             self.icon,
             EventHandler::new(move |()| {
@@ -652,7 +661,9 @@ impl Component for MenuStop {
         .tooltip(&self.label)
         .size(Dim::Control)
         .enabled(self.enabled)
-        .a11y_id(self.a11y_id);
+        .a11y_id(self.a11y_id)
+        // A menu button: it says it opens a menu, and whether the menu is open.
+        .semantics(crate::a11y::Semantics::new().opens_menu().expanded(open));
         if self.pointer_only {
             button = button.pointer_only();
         }

@@ -78,6 +78,7 @@ pub struct Semantics {
     pub error_message: Option<AccessibilityId>,
     pub controls: Vec<AccessibilityId>,
     pub active_descendant: Option<AccessibilityId>,
+    pub opens_menu: bool,
     pub position: Option<(usize, usize)>,
 }
 
@@ -215,6 +216,13 @@ impl Semantics {
         self
     }
 
+    /// Pressing it opens a menu (WAI-ARIA menu button); pair it with
+    /// [`expanded`](Self::expanded) for whether the menu is open.
+    pub fn opens_menu(mut self) -> Self {
+        self.opens_menu = true;
+        self
+    }
+
     /// The element is item `index` (from 0) of `count` in its list.
     pub fn position(mut self, index: usize, count: usize) -> Self {
         self.position = Some((index, count));
@@ -286,6 +294,9 @@ impl Semantics {
         }
         if let Some(id) = self.active_descendant {
             node.set_active_descendant(id);
+        }
+        if self.opens_menu {
+            node.set_has_popup(accesskit::HasPopup::Menu);
         }
         if let Some((index, count)) = self.position {
             node.set_position_in_set(index + 1);
@@ -437,6 +448,46 @@ impl Announcer {
     }
 }
 
+/// What a collection says when its selection or its order changes: "3
+/// selected", "Nothing selected", "Sorted by Name, ascending". Never its first
+/// state: a list that appears with a selection says nothing. `sort` is the
+/// sorting column's title and whether it ascends. The data table and the list
+/// view call it; a collection of an app's own (a grid of pictures) should too.
+pub fn use_collection_announcements(selected: usize, sort: Option<(String, bool)>) {
+    let announcer = use_announcer();
+    let first = use_hook(|| std::rc::Rc::new(std::cell::Cell::new(true)));
+    let last_sort = use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(None::<(String, bool)>)));
+    use_side_effect_with_deps(&(selected, sort), move |(selected, sort)| {
+        if first.replace(false) {
+            *last_sort.borrow_mut() = sort.clone();
+            return;
+        }
+        let sort_changed = *last_sort.borrow() != *sort;
+        *last_sort.borrow_mut() = sort.clone();
+        if sort_changed {
+            if let Some((title, ascending)) = sort {
+                announcer.announce(sorted_sentence(title, *ascending));
+            }
+        } else {
+            announcer.announce(selected_sentence(*selected));
+        }
+    });
+}
+
+/// "3 selected", whole and plural-aware.
+pub fn selected_sentence(count: usize) -> String {
+    match count {
+        0 => "Nothing selected".to_string(),
+        count => format!("{count} selected"),
+    }
+}
+
+/// "Sorted by Name, ascending".
+pub fn sorted_sentence(column: &str, ascending: bool) -> String {
+    let direction = if ascending { "ascending" } else { "descending" };
+    format!("Sorted by {column}, {direction}")
+}
+
 /// The window's announcer. With no window host above it returns one that
 /// says nothing, so a component works in a snapshot too.
 pub fn use_announcer() -> Announcer {
@@ -550,6 +601,15 @@ mod tests {
         named.set_label("Airplane mode");
         label_from_field(&mut named, Some(&field));
         assert_eq!(named.label(), Some("Airplane mode"));
+    }
+
+    #[test]
+    fn collection_sentences_are_whole() {
+        assert_eq!(selected_sentence(0), "Nothing selected");
+        assert_eq!(selected_sentence(1), "1 selected");
+        assert_eq!(selected_sentence(12), "12 selected");
+        assert_eq!(sorted_sentence("Name", true), "Sorted by Name, ascending");
+        assert_eq!(sorted_sentence("Size", false), "Sorted by Size, descending");
     }
 
     #[test]

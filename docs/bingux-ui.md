@@ -3291,7 +3291,13 @@ named by its title with its shortcut as its keyboard shortcut and its group as
 its description, and how many match is read out once typing pauses. In the
 shortcuts sheet each line is one list item named by the command, its keys its
 shortcut and description. Undo and Redo from the keyboard or a menu say what
-they did ("Undid rename").
+they did ("Undid rename"). A data table and a list view read out a change of
+their selection ("3 selected", "Nothing selected") and of their sort ("Sorted
+by Name, ascending") with `a11y::use_collection_announcements(selected,
+sort)`, which a collection of an app's own should call too. A toolbar's
+toggles say whether they are on, and its menu buttons and the overflow
+button that they open a menu and whether it is open (`IconButton::semantics`
+with `Semantics::checked`, `opens_menu` and `expanded`).
 
 **Notices stay.** A toast does not go while the pointer is over it, a finger
 is on it or one of its buttons has the focus, and while a screen reader runs it
